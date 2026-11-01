@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -859,12 +860,14 @@ export function PromoManagementPage() {
       </div>
 
       {/* Create / Edit Promo Code Modal */}
-      {modalOpen && (
-        <div
-          data-testid="promo-form-modal"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto"
-        >
-          <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden my-8">
+      {modalOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            data-testid="promo-form-modal"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 backdrop-blur-xs p-4 overflow-y-auto"
+          >
+            <div className="w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl my-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
@@ -1202,50 +1205,54 @@ export function PromoManagementPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {/* Delete Confirmation Modal */}
-      {deletingPromo && (
-        <div
-          data-testid="promo-delete-modal"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4"
-        >
-          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 space-y-4">
-            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-              {lang === 'vi'
-                ? `Xóa mã giảm giá ${deletingPromo.code}?`
-                : `Delete promo code ${deletingPromo.code}?`}
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-300">
-              {lang === 'vi'
-                ? 'Hành động này sẽ xóa vĩnh viễn mã giảm giá khỏi hệ thống. Các giao dịch đã thanh toán trước đó vẫn được giữ nguyên lịch sử.'
-                : 'This will permanently remove the promo code. Historical billing transactions that already redeemed this code will remain intact.'}
-            </p>
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDeletingPromo(null)}
-                className="rounded-xl"
-              >
-                {lang === 'vi' ? 'Hủy' : 'Cancel'}
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                data-testid="promo-confirm-delete-btn"
-                disabled={deleting}
-                onClick={() => void handleConfirmDelete()}
-                className="gap-2 rounded-xl cursor-pointer"
-              >
-                {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
-                {lang === 'vi' ? 'Xóa vĩnh viễn' : 'Delete Code'}
-              </Button>
+      {deletingPromo &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            data-testid="promo-delete-modal"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 backdrop-blur-xs p-4"
+          >
+            <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 space-y-4">
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                {lang === 'vi'
+                  ? `Xóa mã giảm giá ${deletingPromo.code}?`
+                  : `Delete promo code ${deletingPromo.code}?`}
+              </h3>
+              <p className="text-xs text-slate-600 dark:text-slate-300">
+                {lang === 'vi'
+                  ? 'Hành động này sẽ xóa vĩnh viễn mã giảm giá khỏi hệ thống. Các giao dịch đã thanh toán trước đó vẫn được giữ nguyên lịch sử.'
+                  : 'This will permanently remove the promo code. Historical billing transactions that already redeemed this code will remain intact.'}
+              </p>
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDeletingPromo(null)}
+                  className="rounded-xl"
+                >
+                  {lang === 'vi' ? 'Hủy' : 'Cancel'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  data-testid="promo-confirm-delete-btn"
+                  disabled={deleting}
+                  onClick={() => void handleConfirmDelete()}
+                  className="gap-2 rounded-xl cursor-pointer"
+                >
+                  {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {lang === 'vi' ? 'Xóa vĩnh viễn' : 'Delete Code'}
+                </Button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

@@ -464,7 +464,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 h-screen supports-[height:100dvh]:h-dvh overflow-hidden relative">
         {/* Subtle Architectural Background Aura */}
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden z-0">
           <div
             className="absolute inset-0 opacity-40 dark:opacity-15"
             style={{
@@ -479,7 +479,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <main
           id="main-content"
           tabIndex={-1}
-          className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden px-3.5 sm:px-6 lg:px-10 pb-6 lg:pb-10 pt-[4.5rem] sm:pt-20 lg:pt-8 focus:outline-none"
+          className="relative flex-1 overflow-y-auto overflow-x-hidden px-3.5 sm:px-6 lg:px-10 pb-6 lg:pb-10 pt-[4.5rem] sm:pt-20 lg:pt-8 focus:outline-none"
         >
           <div className="max-w-6xl mx-auto w-full min-w-0">
             {children}
@@ -487,7 +487,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
 
         {/* Footer */}
-        <footer className="relative z-10 shrink-0 border-t border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-3.5 sm:px-6 py-2.5 sm:py-3">
+        <footer className="relative shrink-0 border-t border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-3.5 sm:px-6 py-2.5 sm:py-3">
           <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1 text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 text-center sm:text-left">
             <p className="flex items-center justify-center sm:justify-start gap-2 font-medium">
               <span className="w-[20px] h-[20px] rounded-[5px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-0.5 shrink-0 transition-colors">
