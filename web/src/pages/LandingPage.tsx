@@ -34,6 +34,7 @@ import {
   Eye,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SolvaFilmSection } from '@/components/landing/CitraFilm';
 import { ThemeToggle } from '@/contexts/ThemeContext';
 import {
   type Lang,
@@ -410,6 +411,7 @@ export function LandingPage() {
       />
       <main id="main-content">
         <SolvaHeroSection lang={lang} isAuthenticated={isAuthenticated} />
+        <SolvaFilmSection lang={lang} />
         <SolvaFeaturesSection lang={lang} />
         <SolvaStickySection lang={lang} isAuthenticated={isAuthenticated} />
         <SolvaInteractiveDebuggerSection lang={lang} />
