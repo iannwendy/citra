@@ -18,6 +18,7 @@ import {
   Globe,
   Sparkles,
   FlaskConical,
+  Tag,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -73,6 +74,7 @@ const SIDEBAR_GROUPS: NavGroup[] = [
     roles: ['admin'],
     items: [
       { path: '/admin/users', labelKey: 'nav.accounts', icon: Users, capability: 'manage_users' },
+      { path: '/admin/promos', labelKey: 'nav.promoCodes', icon: Tag, capability: 'manage_users' },
       { path: '/admin/system', labelKey: 'nav.systemHealth', icon: Activity, capability: 'view_system_health' },
       { path: '/admin/audit', labelKey: 'nav.auditLog', icon: FileText, capability: 'view_audit_log' },
     ],

@@ -10,6 +10,7 @@ import '@/i18n';
 import { PricingPage } from './PricingPage';
 import { StripeDemoCheckoutPage } from './StripeDemoCheckoutPage';
 import { BillingSuccessPage } from './BillingSuccessPage';
+import { PromoManagementPage } from './PromoManagementPage';
 import { UploadPage } from './UploadPage';
 import { SandboxPage } from './SandboxPage';
 import { EssayPage } from './EssayPage';
@@ -1003,5 +1004,126 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     expect(screen.getByTestId('revision-diff-banner').textContent).toContain(
       '#28 — VietDepression_Springer_KAIS.pdf',
     );
+  });
+
+  it('PromoManagementPage lists 6-char promo codes, generates/creates a new 6-char code, toggles status, and deletes', async () => {
+    const initialPromos = [
+      {
+        id: 1,
+        code: 'CITRA2',
+        description: 'CITRA Launch Offer — 20% off',
+        discount_type: 'percent' as const,
+        discount_value: 20,
+        max_discount_usd: 100,
+        min_amount_usd: 0,
+        applicable_tiers: 'all' as const,
+        applicable_cycles: 'all' as const,
+        max_uses: 500,
+        used_count: 14,
+        max_uses_per_user: 1,
+        expires_at: null,
+        is_active: true,
+        is_expired: false,
+        is_exhausted: false,
+        effective_status: 'active' as const,
+        created_by: 1,
+        created_at: '2026-11-01T00:00:00Z',
+        updated_at: '2026-11-01T00:00:00Z',
+      },
+    ];
+
+    vi.spyOn(api, 'listAdminPromoCodes').mockResolvedValue({
+      stats: {
+        total_codes: 1,
+        active_codes: 1,
+        total_redemptions: 14,
+        total_discount_usd: 268.8,
+      },
+      promos: initialPromos,
+    });
+    const genSpy = vi.spyOn(api, 'generateAdminPromoCode').mockResolvedValue({
+      code: 'BIGT50',
+    });
+    const createSpy = vi.spyOn(api, 'createAdminPromoCode').mockResolvedValue({
+      id: 2,
+      code: 'BIGT50',
+      description: 'BigTech 50% Promo',
+      discount_type: 'percent',
+      discount_value: 50,
+      max_discount_usd: 120,
+      min_amount_usd: 15,
+      applicable_tiers: 'all',
+      applicable_cycles: 'all',
+      max_uses: 100,
+      used_count: 0,
+      max_uses_per_user: 1,
+      expires_at: null,
+      is_active: true,
+      is_expired: false,
+      is_exhausted: false,
+      effective_status: 'active',
+      created_by: 1,
+      created_at: '2026-11-01T01:00:00Z',
+      updated_at: '2026-11-01T01:00:00Z',
+    });
+    const toggleSpy = vi.spyOn(api, 'updateAdminPromoCode').mockResolvedValue({
+      ...initialPromos[0],
+      is_active: false,
+      effective_status: 'inactive',
+    });
+    const deleteSpy = vi.spyOn(api, 'deleteAdminPromoCode').mockResolvedValue({
+      message: "Promo code 'CITRA2' deleted.",
+      deleted_id: 1,
+      code: 'CITRA2',
+    });
+
+    renderWithAuth(<PromoManagementPage />, {
+      user: createMockUser({ role: 'admin', plan_tier: 'ultra' }),
+      initialEntries: ['/admin/promos'],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('promo-row-CITRA2')).toBeDefined();
+    });
+
+    // Open Create Promo Modal
+    fireEvent.click(screen.getByTestId('create-promo-btn'));
+    expect(screen.getByTestId('promo-form-modal')).toBeDefined();
+
+    // Auto-generate 6-char code
+    fireEvent.click(screen.getByTestId('promo-generate-btn'));
+    await waitFor(() => {
+      expect(genSpy).toHaveBeenCalled();
+      expect((screen.getByTestId('promo-code-input') as HTMLInputElement).value).toBe('BIGT50');
+    });
+
+    fireEvent.change(screen.getByTestId('promo-description-input'), {
+      target: { value: 'BigTech 50% Promo' },
+    });
+    fireEvent.change(screen.getByTestId('promo-discount-value-input'), {
+      target: { value: '50' },
+    });
+    fireEvent.click(screen.getByTestId('promo-submit-btn'));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalled();
+      expect(screen.getByTestId('promo-row-BIGT50')).toBeDefined();
+    });
+
+    // Toggle active status on CITRA2
+    fireEvent.click(screen.getByTestId('promo-toggle-CITRA2'));
+    await waitFor(() => {
+      expect(toggleSpy).toHaveBeenCalledWith(1, { is_active: false });
+    });
+
+    // Delete CITRA2
+    fireEvent.click(screen.getByTestId('promo-delete-CITRA2'));
+    expect(screen.getByTestId('promo-delete-modal')).toBeDefined();
+    fireEvent.click(screen.getByTestId('promo-confirm-delete-btn'));
+
+    await waitFor(() => {
+      expect(deleteSpy).toHaveBeenCalledWith(1);
+      expect(screen.queryByTestId('promo-row-CITRA2')).toBeNull();
+    });
   });
 });

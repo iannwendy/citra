@@ -73,6 +73,7 @@ const OrphanDetectionPage = lazyWithRetry(() => import('./pages/OrphanDetectionP
 const HistoryPage = lazyWithRetry(() => import('./pages/HistoryPage').then((m) => ({ default: m.HistoryPage })));
 const ProfilePage = lazyWithRetry(() => import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
 const AccountManagementPage = lazyWithRetry(() => import('./pages/AccountManagementPage').then((m) => ({ default: m.AccountManagementPage })));
+const PromoManagementPage = lazyWithRetry(() => import('./pages/PromoManagementPage').then((m) => ({ default: m.PromoManagementPage })));
 const SettingsPage = lazyWithRetry(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })));
 const MyClassesPage = lazyWithRetry(() => import('./pages/MyClassesPage').then((m) => ({ default: m.MyClassesPage })));
 const ClassDetailPage = lazyWithRetry(() => import('./pages/ClassDetailPage').then((m) => ({ default: m.ClassDetailPage })));
@@ -187,6 +188,7 @@ const PAGE_TITLE_ROUTES: Array<{ pattern: string; title: string }> = [
   { pattern: '/history', title: 'History' },
   { pattern: '/profile', title: 'Profile' },
   { pattern: '/admin/users', title: 'Accounts' },
+  { pattern: '/admin/promos', title: 'Promo Codes' },
   { pattern: '/admin/system', title: 'System Health' },
   { pattern: '/admin/audit', title: 'Audit Log' },
   { pattern: '/settings', title: 'Settings' },
@@ -354,6 +356,16 @@ export const router = createBrowserRouter([
               <ProtectedRoute requiredCapabilities={['manage_users']}>
                 <Suspense fallback={<PageSkeleton />}>
                   <AccountManagementPage />
+                </Suspense>
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: '/admin/promos',
+            element: (
+              <ProtectedRoute requiredCapabilities={['manage_users']}>
+                <Suspense fallback={<PageSkeleton />}>
+                  <PromoManagementPage />
                 </Suspense>
               </ProtectedRoute>
             ),
