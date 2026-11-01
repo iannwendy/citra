@@ -427,13 +427,17 @@ class SymbolicRules:
         year_dist = features.year_distance
 
         # Perfect match: fuzzy title >= 0.90, title >= 0.95 AND author >= 0.8 AND year match
+        is_authorless_doi_match = (
+            not citation_authors
+            and author_sim == 0.0
+            and bool(citation_doi)
+            and features.doi_exact_match
+            and features.title_sim_fuzzy >= 0.95
+        )
         if (
             features.title_sim_fuzzy >= 0.90
             and title_sim >= 0.95
-            and (
-                author_sim >= 0.8
-                or (not citation_authors and features.doi_exact_match and features.title_sim_fuzzy >= 0.95)
-            )
+            and (author_sim >= 0.8 or is_authorless_doi_match)
             and (year_dist <= self.year_tolerance or year_dist >= 900)
         ):
             # Calculate confidence
@@ -585,7 +589,14 @@ class SymbolicRules:
         mismatched: list[str] = []
         if title_sim_fuzzy < 0.90:
             mismatched.append("title")
-        if author_sim < 0.50 and not (not citation_authors and doi_match and title_sim_fuzzy >= 0.95):
+        is_authorless_doi_match = (
+            not citation_authors
+            and author_sim == 0.0
+            and bool(citation_doi)
+            and doi_match
+            and title_sim_fuzzy >= 0.95
+        )
+        if author_sim < 0.50 and not is_authorless_doi_match:
             mismatched.append("author")
         if year_dist > self.year_tolerance and year_dist < 900:
             mismatched.append("year")
@@ -1100,7 +1111,12 @@ class SymbolicRules:
             and title_sim >= self.title_sim_verified
             and (
                 author_sim >= self.author_jaccard_verified
-                or (not citation_authors and title_sim >= 0.95)
+                or (
+                    not citation_authors
+                    and author_sim == 0.0
+                    and bool(citation_doi)
+                    and title_sim >= 0.95
+                )
             )
             and (year_dist <= max(self.year_tolerance, 1) or year_dist >= 900)
             and _has_live_source(source, verified_sources)
@@ -1310,6 +1326,41 @@ class SymbolicRules:
                 style_penalty=style_penalty,
             )
 
+        # --- Rule 1d (NEW v2.4): Cross-lingual translated title match → METADATA_ERROR ---
+        # Per TDTU citation guidelines, foreign-language publication titles must be preserved in their
+        # original language without translation.
+        if (
+            getattr(features, "cross_lingual_title_detected", False)
+            and float(getattr(features, "cross_lingual_title_sim", 0.0) or 0.0) >= 0.58
+            and features.title_sim_fuzzy < 0.65
+            and not has_doi_conflict
+            and (
+                doi_match
+                or (author_sim >= 0.50 and (year_dist <= max(self.year_tolerance, 2) or year_dist >= 900))
+            )
+        ):
+            mismatched.append("title")
+            if year_dist > self.year_tolerance and year_dist < 900:
+                mismatched.append("year")
+            if author_sim < self.author_jaccard_verified and not doi_match:
+                mismatched.append("author")
+            triggered_rules.append("R-CROSS-LINGUAL-TITLE-MATCH")
+            xl_t_sim = float(getattr(features, "cross_lingual_title_sim", 0.0) or 0.0)
+            orig_title = best.title if best and best.title else "original publication title"
+            return RuleOutcome(
+                label=ValidationLabel.METADATA_ERROR,
+                confidence=max(0.0, 0.76 - style_penalty),
+                reasoning=(
+                    f"Cross-lingual translated title detected (VI ↔ EN semantic alignment={xl_t_sim:.2f}). "
+                    f"Matched authentic work '{orig_title}', but per academic/TDTU citation standards, "
+                    f"foreign-language titles must be kept in their original language without translation. "
+                    f"Mismatched fields: {', '.join(mismatched)}."
+                ),
+                triggered_rules=triggered_rules,
+                mismatched_fields=mismatched,
+                style_penalty=style_penalty,
+            )
+
         # --- Rule 2: DOI resolves + moderate title similarity → METADATA_ERROR ---
         # Only apply for live sources, not for local_db (which is handled above)
         if (
@@ -1475,6 +1526,8 @@ class SymbolicRules:
 
         if content_alignment_score > 0 and not is_missing_reference:
             triggered_rules.append("R-CONTENT-ALIGNMENT")
+            if getattr(features, "cross_lingual_detected", False) and content_is_aligned:
+                triggered_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
 
             # Rule: High content alignment + moderate title + author/year match = VERIFIED
             # Neural can verify ONLY if:
