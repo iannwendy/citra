@@ -644,41 +644,58 @@ class VancouverFormat:
             matched_pattern="vancouver_fallback",
         )
 
-        # Extract numeric index
-        idx_match = re.search(r'\[\s*(\d+)\s*\]', text)
+        # Extract numeric index and strip it before splitting on periods
+        idx_match = re.search(r'^\s*\[\s*(\d+)\s*\]', text)
         if idx_match:
             citation.numeric_index = int(idx_match.group(1))
         else:
-            num_m = re.match(r'^(\d+)\.\s+', text)
+            num_m = re.match(r'^\s*(?!(?:18|19|20)\d{2}\b)(\d{1,3})\s*[\.\)]\s*', text)
             if num_m:
                 citation.numeric_index = int(num_m.group(1))
 
+        clean_body = re.sub(r'^\s*(?:\[\s*\d+\s*\]\.?|\(\s*\d{1,3}\s*\)|(?!(?:18|19|20)\d{2}\b)\d{1,3}\s*[\.\)])\s*', '', text).strip()
+        if re.match(r'^(?:https?://|www\.)', clean_body, re.IGNORECASE):
+            return None
+
+        # Extract URL if present
+        url_m = re.search(r'https?://[^\s\]\)\,;]+|\bwww\.[a-zA-Z0-9.-]+\.[a-z]{2,}(?:/[^\s\]\)\,;]*)?', clean_body, re.IGNORECASE)
+        if url_m:
+            citation.url = url_m.group(0).rstrip('.,;)')
+
         # Try to extract year
-        yr, yr_suf = extract_publication_year(text, prefer_last=True)
+        yr, yr_suf = extract_publication_year(clean_body, prefer_last=True)
         if yr:
             citation.year = yr
             citation.year_suffix = yr_suf
 
-        # Try to extract title (text between periods)
-        # Strategy: find the longest sentence-like segment
-        parts = text.split('.')
+        # Remove URL before splitting on periods so domain dots (.com, .org) are not split as sentences
+        text_no_url = re.sub(r'https?://\S+|\bwww\.\S+', '', clean_body).strip()
+        parts = [p.strip() for p in text_no_url.split('.') if p.strip()]
         if len(parts) >= 2:
             # Title is usually the second segment (after authors)
-            for i, part in enumerate(parts[1:], start=1):
-                part = part.strip()
-                if len(part) > 20 and len(part) < 200:
-                    # Likely a title - not too short, not too long
+            for part in parts[1:]:
+                if 15 < len(part) < 220 and not re.match(r'^(?:accessed|retrieved|available|published)\b', part, re.IGNORECASE):
                     citation.title = part
                     citation.title_normalized = self._normalize_title(part)
                     break
 
-        # Try to extract authors (first part before first period)
         if parts:
             first_part = parts[0].strip()
-            # Remove numeric index prefix if present
-            first_part = re.sub(r'^\[\s*\d+\s*\]', '', first_part)
-            first_part = re.sub(r'^\d+\.\s*', '', first_part)
-            if first_part:
+            # If first_part is a web title ("Title - Site, accessed..."), use first_part as title
+            if re.search(r'\b(?:accessed|retrieved)\b|\s+[\-|–]\s+', first_part, re.IGNORECASE):
+                clean_t = re.split(r',\s*(?:accessed|retrieved)\b', first_part, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+                if len(clean_t) > 8:
+                    citation.title = clean_t
+                    citation.title_normalized = self._normalize_title(clean_t)
+            elif not citation.title and re.match(r'^[A-ZÀ-Ý]{2,},\s+[A-ZÀ-Ý][a-zà-ỹ]+,\s+(?P<t>.+)$', first_part):
+                m_comma = re.match(r'^(?P<a>[A-ZÀ-Ý]{2,},\s+[A-ZÀ-Ý][a-zà-ỹ]+),\s+(?P<t>.+)$', first_part)
+                if m_comma:
+                    citation.authors = self._parse_authors(m_comma.group('a'))
+                    t_part = m_comma.group('t').split(',')[0].strip()
+                    if len(t_part) > 5:
+                        citation.title = t_part
+                        citation.title_normalized = self._normalize_title(t_part)
+            elif first_part and len(first_part) < 120:
                 citation.authors = self._parse_authors(first_part)
 
         # Extract DOI

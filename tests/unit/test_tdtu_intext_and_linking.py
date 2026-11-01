@@ -194,3 +194,147 @@ class TestTDTUCitationLinking:
         assert [l.reference_id for l in result.links] == expected_ref_ids
         assert all(l.status == CitationMappingStatus.MATCHED for l in result.links)
         assert all(l.method == MappingMethod.AUTHOR_YEAR for l in result.links)
+
+
+class TestTDTUGithubReportsBugRegressions:
+    """Regression tests for BUG-1 through BUG-6 discovered on 75 TDTU GitHub reports."""
+
+    def test_bug1_uncited_references_marked_when_body_citations_empty(self) -> None:
+        ref_parser = ReferenceListParser()
+        ref = ref_parser._parse_entry(
+            "[1] Vaswani, A., et al. (2017). Attention is all you need. NeurIPS.",
+            order_index=1,
+            page_num=5,
+        )
+        assert ref is not None
+        ref.reference_id = "ref-0001"
+        linker = CitationLinker()
+        res = linker.link([], [ref])
+        assert ref.mapping_status == CitationMappingStatus.UNCITED_REFERENCE.value
+        assert res.unmatched_reference_ids == ["ref-0001"]
+
+    def test_bug2_and_bug3_no_false_footnote_or_superscript_in_tdtu_tech_report(self) -> None:
+        from integrity_checker.extraction.document_parser import DocumentParser
+
+        dp = DocumentParser()
+        doc = Document(
+            file_path="tdtu_report.pdf",
+            num_pages=2,
+            pages=[
+                Page(
+                    page_num=1,
+                    text=(
+                        "ĐẠI HỌC TÔN ĐỨC THẮNG\nKHOA CÔNG NGHỆ THÔNG TIN\n"
+                        "BÁO CÁO CUỐI KỲ\nSinh viên thực hiện: Nguyen Van A - MSSV: 52100001\n"
+                        "Mô hình Qwen3 và YOLOv3 kết hợp SPEA2 trên Router1, Switch2, backend1, worker2.\n"
+                        "Dữ liệu Glucose3 được xử lý bằng Google Colab và thư viện Underthesea."
+                    ),
+                    has_text_layer=True,
+                ),
+                Page(
+                    page_num=2,
+                    text=(
+                        "TÀI LIỆU THAM KHẢO\n"
+                        "1. Google. (2023). Google Colab Documentation. https://colab.research.google.com\n"
+                        "2. Nguyen, K. V. (2018). Vietnamese NLP corpus. ACL.\n"
+                        "3. Underthesea NLP Team. (2022). Underthesea toolkit. https://github.com/undertheseanlp\n"
+                    ),
+                    has_text_layer=True,
+                ),
+            ],
+            parser_used="test",
+        )
+        parsed = dp._merge(doc, None)
+        assert len(parsed.references) == 3
+        assert parsed.body_citations == []
+
+    def test_bug4_code_arrays_math_intervals_and_discourse_prefix(self) -> None:
+        ext = CitationExtractor(preserve_occurrences=True)
+        text = (
+            "Ta có X.shape[1] và axs[1].plot() cùng parts[1].trim() và byte[4096], int[100].\n"
+            "Mảng a[1], a[2], ..., a[i] nhận giá trị nhị phân [1, 0] hoặc [1, 0, 1] và ma trận [1 2].\n"
+            "Miền giá trị thuộc khoảng [1,5] và đầu ra có kích thước [1, 5, 64] với màu [10, 255, 255].\n"
+            "Cấu hình mạng (VLAN 10), mô hình (LLaMA 1, 2, 3), bước (Optimization 1) và tập (Itemset X).\n"
+            "Cụ thể, Reimers và Gurevych (2019) đã đề xuất mô hình Sentence-BERT."
+        )
+        cits = ext.extract_from_document(_doc(text))
+        raws = [c.raw_text for c in cits]
+        assert raws == ["Reimers và Gurevych (2019)"]
+
+    def test_bug5_section_segmenter_self_evaluation_and_tham_khao_and_phuluc(self) -> None:
+        from integrity_checker.extraction.section_segmenter import SectionSegmenter, SectionType
+
+        seg = SectionSegmenter()
+        doc = Document(
+            file_path="tdtu_rubric.pdf",
+            num_pages=3,
+            pages=[
+                Page(page_num=1, text="1. Giới thiệu\nNội dung báo cáo đồ án môn học.", has_text_layer=True),
+                Page(
+                    page_num=2,
+                    text=(
+                        "THAM KHẢO:\n"
+                        "[1] https://viblo.asia/p/tim-hieu-ve-bert-12345\n"
+                        "[2] https://geeksforgeeks.org/machine-learning\n"
+                        "PHỤLỤC\n"
+                        "Bảng cấu hình chi tiết."
+                    ),
+                    has_text_layer=True,
+                ),
+                Page(
+                    page_num=3,
+                    text=(
+                        "SELF-EVALUATION\n"
+                        "Criteria | Content | Achievement\n"
+                        "References\n"
+                        "None\n"
+                        "60%"
+                    ),
+                    has_text_layer=True,
+                ),
+            ],
+            parser_used="test",
+        )
+        sections = seg.segment(doc)
+        sec_types = [s.section_type for s in sections]
+        assert SectionType.BIBLIOGRAPHY in sec_types
+        assert SectionType.APPENDIX in sec_types
+        bib_sec = next(s for s in sections if s.section_type == SectionType.BIBLIOGRAPHY)
+        assert "viblo.asia" in bib_sec.text
+        assert "SELF-EVALUATION" not in bib_sec.text
+
+    def test_bug6_reference_parser_oxford_comma_ieee_and_informal_tdtu_refs(self) -> None:
+        ref_parser = ReferenceListParser()
+        # IEEE unquoted book with Oxford comma before 'and'
+        ieee_book = ref_parser._parse_entry(
+            "[3] J. Han, M. Kamber, and J. Pei, Data Mining: Concepts and Techniques, 3rd ed., Morgan Kaufmann, 2012.",
+            order_index=3,
+            page_num=10,
+        )
+        assert ieee_book is not None
+        assert ieee_book.title == "Data Mining: Concepts and Techniques"
+        assert ieee_book.year == "2012"
+
+        # 2-digit numbered reference should not extract '10' as author last_name
+        vanc_10 = ref_parser._parse_entry(
+            "10. Documentation for Scikit-learn machine learning library in Python. 2023.",
+            order_index=10,
+            page_num=10,
+        )
+        assert vanc_10 is not None
+        assert vanc_10.numeric_index == 10
+        assert not any(getattr(a, "last_name", "") == "10" for a in (vanc_10.authors or []))
+
+        # Informal TDTU bibliography with "Title" bởi Author and bare URLs
+        bib_text = (
+            'TÀI LIỆU THAM KHẢO\n'
+            '“Học sâu cho xử lý ngôn ngữ tự nhiên” bởi Nguyễn Văn A ● Ngày xuất bản: 2023\n'
+            '“Phân loại văn bản tiếng Việt với PhoBERT” bởi Trần Thị B ● Ngày xuất bản: 2022\n'
+        )
+        cits = ref_parser.parse_reference_section(_doc(bib_text))
+        assert len(cits) == 2
+        assert cits[0].title == "Học sâu cho xử lý ngôn ngữ tự nhiên"
+        assert cits[0].year == "2023"
+        assert cits[1].title == "Phân loại văn bản tiếng Việt với PhoBERT"
+        assert cits[1].year == "2022"
+

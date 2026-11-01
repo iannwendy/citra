@@ -37,6 +37,7 @@ from integrity_checker.models.citation import Citation, CitationStyle, CitationT
 _UPPER_VN = r"[A-ZÀ-ÝĂÂĐÊÔƠƯĨŨẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼẾỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴỶỸ]"
 _STOPWORDS_AHEAD = (
     r"(?!(?:Theo|Trong|Tại|Với|Như|Của|Bởi|Qua|Từ|Khi|Nếu|Vì|Do|Ở|Hoặc|Và"
+    r"|Cụ\s*thể|Ví\s*dụ|Chẳng\s*hạn|Theo\s*đó|Ngoài\s*ra|Tuy\s*nhiên|Do\s*đó|Như\s*vậy|Mặt\s*khác|Đặc\s*biệt|Tương\s*tự|Ngược\s*lại|Hơn\s*nữa"
     r"|In|For|By|From|See|As|With|According|However|Although|Similarly|Conversely"
     r"|Specifically|Furthermore|Moreover|Notably|Importantly|Additionally|Meanwhile"
     r"|Consequently|Nevertheless|Nonetheless|Therefore|Thus|Hence|Indeed|Instead"

@@ -623,10 +623,10 @@ class IEEEFormat:
                     if len(parts) > 1:
                         citation.venue = ', '.join(parts[1:])
             else:
-                # Unquoted book references: [N] B. Settles, Active Learning. Synthesis...
-                # Ensure authors part does not contain a sentence period (which indicates ACM/Vancouver)
+                # Unquoted book/article references: [N] B. Settles, Active Learning. Synthesis...
+                # or [N] J. Han, M. Kamber, and J. Pei, Data Mining: Concepts and Techniques, 3rd ed., Morgan Kaufmann, 2012.
                 book_m = re.match(
-                    r'^\[\s*\d+\s*\]\s*(?P<authors>(?:[A-Z]\.\s*)+[^,.]+(?:\s*(?:,\s*|\s+and\s+)(?:[A-Z]\.\s*)+[^,.]+)*),\s+(?P<title>[^.]{5,})\.\s+(?P<venue>.*)$',
+                    r'^\[\s*\d+\s*\]\s*(?P<authors>(?:[A-Z](?:-[A-Z])?\.\s*)+[^,.]+(?:\s*(?:,\s*(?:and\s+|&\s*|và\s+)?|\s+(?:and|&|và)\s+)(?:[A-Z](?:-[A-Z])?\.\s*)+[^,.]+)*),\s+(?P<title>(?!and\b|&\b)[A-ZÀ-Ý][^.,]{5,})(?:[.,]\s+)(?P<venue>.*)$',
                     text,
                 )
                 if book_m:
@@ -638,6 +638,11 @@ class IEEEFormat:
                     venue_str = book_m.group('venue').strip()
                     if venue_str:
                         self._parse_venue(citation, venue_str)
+
+        # Extract URL if present
+        url_m = re.search(r'https?://[^\s\]\)\,;]+|\bwww\.[a-zA-Z0-9.-]+\.[a-z]{2,}(?:/[^\s\]\)\,;]*)?', text, re.IGNORECASE)
+        if url_m:
+            citation.url = url_m.group(0).rstrip('.,;)')
 
         # Extract DOI
         doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)

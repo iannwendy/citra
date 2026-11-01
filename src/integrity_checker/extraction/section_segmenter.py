@@ -74,7 +74,7 @@ _BIBLIOGRAPHY_HEADERS = re.compile(
     r"bibliografia(?:/bibliografía/bibliographie/works?\s+cited)?|bibliografía|bibliographie|"
     r"referências(?:\s+bibliográficas)?|referencias(?:\s+bibliográficas)?|daftar\s+pustaka|"
     r"(?:[^/\n]{2,50}/\s*)?list\s+of\s+references|"
-    r"danh\s+mục\s+tài\s+liệu(?:\s+tham\s+khảo)?|tài\s+liệu\s+tham\s+khảo|"
+    r"danh\s+mục\s+tài\s+liệu(?:\s+tham\s+khảo)?|tài\s+liệu\s+tham\s+khảo|tham\s+khảo|"
     r"tài\s+liệu\s+trích\s+dẫn|"
     r"参考文献|参考文献$"
     r")\s*[:.]?\s*$",
@@ -83,8 +83,9 @@ _BIBLIOGRAPHY_HEADERS = re.compile(
 
 _APPENDIX_HEADERS = re.compile(
     r"^\s*(?:(?:\d+|I{1,3}|IV|V|VI{0,3}|IX|X|[A-Z])\.?\s+)?(?:"
-    r"(?:appendix|appendices|phụ\s+lục|annex)"
+    r"(?:appendix|appendices|phụ\s*lục|annex)"
     r"(?:\s+for\b[^,;]*|\s+[A-Z0-9]{1,3}(?:\s*[:.\-—–]?\s*[^,;]{1,80})?|\s*[:.\-—–]\s*[^,;]{1,80})?|"
+    r"self[- ]?evaluation(?:\s+table|\s+form|\s+rubric)?|bảng\s+tự\s+đánh\s+giá|"
     r"supplementary\s+(?:material|materials|information|appendix|experiments?|results?|details?)|"
     r"附件.*"
     r")\s*$",
@@ -449,6 +450,12 @@ class SectionSegmenter:
                         prev_nonempty = [ln.strip() for ln in lines[max(0, idx - 4) : idx] if ln.strip()]
                         if not prev_nonempty or not prev_nonempty[-1].endswith("."):
                             continue
+                    if re.search(
+                        r"self[- ]?evaluation|marking\s+scheme|no\s+reference|grading\s+rubric|bảng\s+tự\s+đánh\s+giá",
+                        prev_window + "\n" + "\n".join(next_nonempty[:8]),
+                        re.IGNORECASE,
+                    ):
+                        continue
                     if re.fullmatch(r"reference\s*[:.]?", stripped, re.IGNORECASE):
                         next_window = "\n".join(lines[idx + 1 : idx + 16])
                         if len(lines) - idx > 5 and not re.search(
@@ -457,6 +464,20 @@ class SectionSegmenter:
                             re.IGNORECASE,
                         ):
                             continue
+                if re.fullmatch(
+                    r"(?:(?:\d+(?:\.\d+)*|I{1,3}|IV|V|VI{0,3}|IX|X|[A-Z])[\.\)]?\s+)?tham\s+khảo\s*[:.]?",
+                    stripped,
+                    re.IGNORECASE,
+                ):
+                    has_ref_items = sum(
+                        1
+                        for ln in next_nonempty[:8]
+                        if re.search(r"^(?:\[\d+\]|\d{1,2}[\.\)])|https?://|\b(?:19|20)\d{2}\b", ln, re.IGNORECASE)
+                    )
+                    if not stripped.endswith(":") and has_ref_items < 2:
+                        continue
+                    if has_ref_items < 1:
+                        continue
                 if re.fullmatch(r"literature\s*[:.]?", stripped, re.IGNORECASE):
                     if re.search(r"\b(?:table|bảng)\s+\d+", prev_window, re.IGNORECASE):
                         continue

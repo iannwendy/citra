@@ -712,21 +712,27 @@ class CSEFormat:
         )
 
         # Extract numeric index
-        idx_match = re.search(r'\[\s*(\d+)\s*\]', text)
+        idx_match = re.search(r'^\s*\[\s*(\d+)\s*\]', text)
         if idx_match:
             citation.numeric_index = int(idx_match.group(1))
         else:
-            num_match = re.match(r'^(\d+)\.?\s', text)
+            num_match = re.match(r'^\s*(?!(?:18|19|20)\d{2}\b)(\d{1,3})\.?\s', text)
             if num_match:
                 citation.numeric_index = int(num_match.group(1))
 
-        # Try to extract year
-        year_m = re.search(r'\b((?:19|20)\d{2})\b', text)
+        clean_body = re.sub(r'^\s*(?:\[\s*\d+\s*\]\.?|\(\s*\d{1,3}\s*\)|(?!(?:18|19|20)\d{2}\b)\d{1,3}\s*[\.\)])\s*', '', text).strip()
+        if re.match(r'^(?:https?://|www\.)', clean_body, re.IGNORECASE):
+            return None
+
+        text_no_url = re.sub(r'https?://\S+|\bwww\.\S+', '', clean_body).strip()
+
+        # Try to extract year (outside URL paths)
+        year_m = re.search(r'\b((?:19|20)\d{2})\b', text_no_url)
         if year_m:
             citation.year = year_m.group(1)
 
         # Try to extract title
-        parts = text.split('.')
+        parts = text_no_url.split('.')
         if len(parts) >= 2:
             for i, part in enumerate(parts[1:], start=1):
                 part = part.strip()

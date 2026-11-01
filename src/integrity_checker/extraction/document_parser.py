@@ -671,6 +671,42 @@ class DocumentParser:
 
         return added
 
+    @staticmethod
+    def _is_non_footnote_student_or_tech_report(
+        source_doc: Document, references: list[Citation]
+    ) -> bool:
+        """Return True when the document is a student/IT/engineering project report
+        that does not cite Vietnamese legal statutes or law-journal footnote literature."""
+        if not source_doc or not source_doc.pages:
+            return False
+        has_vn_legal_or_law_pub = any(
+            r.matched_pattern == "vn_legal_document"
+            or bool(
+                re.search(
+                    r"\b(?:Bộ\s+luật|Hiến\s+pháp|Pháp\s+lệnh|Nghị\s+định|Thông\s+tư|Tạp\s+chí\s+Khoa\s+học\s+Pháp\s+lý|Tạp\s+chí\s+Tòa\s+án|Tạp\s+chí\s+Luật\s+học|Nxb\.|Nhà\s+xuất\s+bản)\b",
+                    r.raw_text or "",
+                    re.IGNORECASE,
+                )
+            )
+            for r in references
+        )
+        if has_vn_legal_or_law_pub:
+            return False
+        first_pages = "\n".join(
+            (p.text or "") for p in source_doc.pages[: min(6, len(source_doc.pages))]
+        )
+        return bool(
+            re.search(
+                r"ĐẠI\s+HỌC\s+TÔN\s+ĐỨC\s+THẮNG|TON\s+DUC\s+THANG\s+UNIVERSITY|"
+                r"VIETNAM\s+GENERAL\s+CONFEDERATION\s+OF\s+LABOU?R|TỔNG\s+LIÊN\s+ĐOÀN\s+LAO\s+ĐỘNG|"
+                r"FACULTY\s+OF\s+(?:INFORMATION\s+TECHNOLOGY|ELECTRICAL)|KHOA\s+(?:CÔNG\s+NGHỆ\s+THÔNG\s+TIN|ĐIỆN|TOÁN)|"
+                r"BÁO\s+CÁO\s+(?:CUỐI\s+KỲ|GIỮA\s+KỲ|ĐỒ\s+ÁN|DỰ\s+ÁN|MÔN\s+HỌC|THỰC\s+TẬP)|"
+                r"\b(?:MIDTERM|FINAL)\s+(?:PROJECT|REPORT)\b|MSSV\s*:|Instructing\s+Lecturer|Giảng\s+viên\s+hướng\s+dẫn",
+                first_pages,
+                re.IGNORECASE,
+            )
+        )
+
     def _extract_chicago_footnote_citations(
         self,
         sections: list[DocumentSection],
@@ -680,6 +716,9 @@ class DocumentParser:
     ) -> list[Citation]:
         """Extract Chicago Notes & Bibliography bottom-of-page footnotes and linkable citations."""
         import unicodedata
+
+        if self._is_non_footnote_student_or_tech_report(source_doc, references):
+            return existing_body
 
         has_numbered_refs = sum(1 for r in references if r.numeric_index is not None) >= 3
         is_notes_bib = any(
@@ -1129,7 +1168,10 @@ class DocumentParser:
                             )
                             page_existing.add(raw_cit.lower())
 
-            elif has_vn_trad or len(existing_body) <= 2 or (has_vn_bib and len(source_doc.pages or []) >= 4):
+            elif (
+                not self._is_non_footnote_student_or_tech_report(source_doc, references)
+                and (has_vn_trad or len(existing_body) <= 2 or (has_vn_bib and len(source_doc.pages or []) >= 4))
+            ):
                 # For Vietnamese footnote-style articles, match bibliography author/title in page text/footnotes
                 first_raw = ""
                 if ref.authors:
@@ -1146,7 +1188,15 @@ class DocumentParser:
                     auth_hit = False
                     if first_raw and len(first_raw) >= 3:
                         auth_cand = first_raw.split(",")[0].strip() if "," in first_raw else first_raw
-                        if len(auth_cand) >= 3 and re.search(rf"\b{re.escape(auth_cand.lower())}\b", p_low):
+                        if (
+                            len(auth_cand) >= 3
+                            and auth_cand.lower() not in {
+                                "wikipedia", "viblo", "geeksforgeeks", "medium", "github",
+                                "kaggle", "google", "microsoft", "opencv", "unity", "python",
+                                "nodejs", "fastapi", "docker", "undefined", "tác giả: chưa xác định",
+                            }
+                            and re.search(rf"\b{re.escape(auth_cand.lower())}\b", p_low)
+                        ):
                             auth_hit = True
                     title_hit = bool(
                         title_prefix
@@ -1209,6 +1259,8 @@ class DocumentParser:
     ) -> list[Citation]:
         """Extract superscript numeric citations flattened by PDF text extraction
         (e.g. 'motility1–9.', 'pathway10.', 'manner14, 15.', 'sepsis.1,2' in Nature/AMA/ACS)."""
+        if self._is_non_footnote_student_or_tech_report(source_doc, references):
+            return existing_body
         numbered_refs = [r for r in references if r.numeric_index is not None]
         if len(numbered_refs) < 3 or len(numbered_refs) < len(references) // 2:
             return existing_body
@@ -1258,10 +1310,27 @@ class DocumentParser:
             "helix", "sheet", "loop", "turn", "fold", "unit", "ring", "bond", "atom",
             "mpeg", "utf", "int", "uint", "float", "base", "sha", "resnet", "vgg",
             "gpt", "llama", "bert", "http", "https", "html", "xxxx",
+            "qwen", "yolo", "yolov", "glucose", "glocose", "router", "switch", "printer",
+            "server", "client", "host", "vlan", "giga", "fast", "serial", "loopback",
+            "duration", "pin", "pins", "led", "motor", "sensor", "servo", "relay",
+            "button", "timer", "spea", "nsga", "moea", "atmega", "arduino", "iperf",
+            "sqlite", "urllib", "dhcp", "dhcpv", "icmp", "ospf", "eigrp",
+            "overlay", "backend", "worker", "frontend", "replica", "container", "service",
+            "instance", "cluster", "redis", "mysql", "mongo", "postgres", "kafka",
+            "broker", "queue", "node", "nodes", "port", "ports", "step", "steps",
+            "fig", "tab", "sec", "vol", "ver", "rgb", "bgr", "hsv", "hex", "cpu", "gpu",
+            "ram", "rom", "usb", "lan", "wan", "mac", "tcp", "udp", "dns", "ssh", "ssl",
+            "tls", "api", "url", "uri", "sql", "csv", "xml", "yml", "pdf", "png", "jpg",
+            "gif", "mp3", "mp4", "wav", "zip", "tar", "jar", "exe", "dll", "lib", "bin",
+            "src", "doc", "txt", "log", "cfg", "ini", "env", "opt", "var", "val", "idx",
+            "cnt", "num", "len", "min", "max", "avg", "std", "sum", "abs", "cos", "sin",
+            "tan", "exp", "pow", "mod", "div", "mul", "add", "sub", "xor", "and", "not",
+            "for", "the", "are", "was", "has", "had", "can", "may", "one", "two", "six",
+            "ten",
         }
 
         sup_re = re.compile(
-            r"(?<![A-Za-z0-9\-/_])(?P<word>[A-Za-z]{4,})(?P<punct>[.,])?(?P<nums>[1-9]\d{0,2}(?:\s*[,–\-]\s*[1-9]\d{0,2})*)(?=[.,;:\s)\]]|$)"
+            r"(?<![A-Za-z0-9\-/_])(?P<word>[A-Za-z]{4,}|[a-z]{3}(?=[1-9]\d{0,2}[.,;:]))(?P<punct>[.,])?(?P<nums>[1-9]\d{0,2}(?:\s*[,–\-]\s*[1-9]\d{0,2})*)(?=[.,;:\s)\]]|$)"
         )
         paren_num_re = re.compile(
             r"(?<![A-Za-z0-9\-/_])(?P<word>[a-z]{4,})\s+\((?P<nums>[1-9]\d{0,2}(?:\s*[,–\-]\s*[1-9]\d{0,2})*)\)(?=\s*[.,;:])"
@@ -1279,16 +1348,24 @@ class DocumentParser:
         has_multi_or_range = False
 
         for p_num, p_text in sorted(body_page_texts.items()):
+            if re.search(r"^\s*(?:LIST\s+OF\s+(?:FIGURES|TABLES)|TABLE\s+OF\s+CONTENTS|DANH\s+MỤC\s+(?:HÌNH|BẢNG)|MỤC\s+LỤC)\b", p_text, re.IGNORECASE | re.MULTILINE):
+                continue
             for pat_re in (sup_re, paren_num_re):
                 for m in pat_re.finditer(p_text):
-                    word = m.group("word").lower()
-                    if word in _EXCLUDED_WORDS or word in {
-                        "equation", "equations", "formula", "formulas", "theorem", "lemma",
-                        "corollary", "definition", "proposition", "condition", "hypothesis",
-                        "expression", "inequality", "relation", "constraint", "problem",
-                        "example", "remark", "property", "axiom", "where", "from", "into",
-                        "with", "than", "over", "under", "between", "through",
-                    }:
+                    word_raw = m.group("word")
+                    word = word_raw.lower()
+                    if (
+                        word in _EXCLUDED_WORDS
+                        or word.endswith("pin")
+                        or word
+                        in {
+                            "equation", "equations", "formula", "formulas", "theorem", "lemma",
+                            "corollary", "definition", "proposition", "condition", "hypothesis",
+                            "expression", "inequality", "relation", "constraint", "problem",
+                            "example", "remark", "property", "axiom", "where", "from", "into",
+                            "with", "than", "over", "under", "between", "through",
+                        }
+                    ):
                         continue
                     nums_raw = re.sub(r"\s+", "", m.group("nums"))
                     # Parse all numbers and ranges in nums_raw
@@ -1333,7 +1410,8 @@ class DocumentParser:
                         )
                     )
 
-        if len(candidates) >= 3 or (has_multi_or_range and len(candidates) >= 1):
+        distinct_raws = len({c.raw_text for c in candidates})
+        if (len(candidates) >= 3 and distinct_raws >= 2) or (has_multi_or_range and len(candidates) >= 1):
             return existing_body + candidates
         return existing_body
 

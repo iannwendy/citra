@@ -24,9 +24,16 @@ class MuPdfParser(BasePDFParser):
         when a 2-column PDF stores right-column text blocks before left-column blocks."""
         raw_text = page.get_text("text") or ""
         try:
-            blocks = [
+            if getattr(page, "rotation", 0) in (90, 270):
+                return raw_text
+            all_blocks = [
                 b for b in page.get_text("blocks")
                 if len(b) >= 7 and b[6] == 0 and (b[4] or "").strip()
+            ]
+            # Exclude narrow vertical margin banners (e.g. rotated journal section strip on outer margin)
+            blocks = [
+                b for b in all_blocks
+                if not ((b[2] - b[0]) < 35 and (b[3] - b[1]) > (b[2] - b[0]) * 2)
             ]
             if len(blocks) < 2:
                 return raw_text

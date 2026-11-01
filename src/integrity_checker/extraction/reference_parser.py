@@ -136,11 +136,12 @@ _BIB_HEADER_LINE_RE = re.compile(
     r"|bibliografia(?:/bibliografía/bibliographie/works?\s+cited)?|bibliografía|bibliographie"
     r"|referências(?:\s+bibliográficas)?|referencias(?:\s+bibliográficas)?|daftar\s+pustaka"
     r"|(?:[^/\n]{2,50}/\s*)?list\s+of\s+references"
-    r"|danh\s+mục\s+tài\s+liệu(?:\s+tham\s+khảo)?|tài\s+liệu\s+tham\s+khảo(?:\s+khác)?"
+    r"|danh\s+mục\s+tài\s+liệu(?:\s+tham\s+khảo)?|tài\s+liệu\s+tham\s+khảo(?:\s+khác)?|tham\s+khảo"
     r"|văn\s+bản\s+(?:quy\s+phạm\s+)?pháp\s+luật(?:\s+việt\s+nam|\s+nước\s+ngoài|\s+quốc\s+tế)?"
     r"|tài\s+liệu\s+trích\s+dẫn|nguồn\s+tài\s+liệu(?:\s+tham\s+khảo)?"
-    r"|(?:tài\s+liệu\s+)?(?:tiếng\s+việt|tiếng\s+anh|tiếng\s+pháp|tiếng\s+đức"
+    r"|(?:tài\s+liệu\s+)?(?:tiếng\s+vi[ệê]t|tiếng\s+anh|tiếng\s+pháp|tiếng\s+đức"
     r"|tiếng\s+nga|tiếng\s+trung|tiếng\s+nhật|nước\s+ngoài|internet|website|trực\s+tuyến)"
+    r"|(?:vietnamese|english)(?:\s+references?)?"
     r")\s*[:.]?\s*$",
     re.IGNORECASE,
 )
@@ -149,9 +150,10 @@ _LEADING_SUBHEADER_RE = re.compile(
     r"^\s*(?:(?:[A-Z]|[IVX]+|\d+)\s*[\.\)]\s*)?(?:"
     r"văn\s+bản\s+(?:quy\s+phạm\s+)?pháp\s+luật(?:\s+việt\s+nam|\s+nước\s+ngoài|\s+quốc\s+tế)?"
     r"|danh\s+mục\s+tài\s+liệu(?:\s+tham\s+khảo)?"
-    r"|tài\s+liệu\s+tham\s+khảo(?:\s+khác)?"
-    r"|(?:tài\s+liệu\s+)?(?:tiếng\s+việt|tiếng\s+anh|tiếng\s+pháp|tiếng\s+đức"
+    r"|tài\s+liệu\s+tham\s+khảo(?:\s+khác)?|tham\s+khảo"
+    r"|(?:tài\s+liệu\s+)?(?:tiếng\s+vi[ệê]t|tiếng\s+anh|tiếng\s+pháp|tiếng\s+đức"
     r"|tiếng\s+nga|tiếng\s+trung|tiếng\s+nhật|nước\s+ngoài|internet|website|trực\s+tuyến)"
+    r"|(?:vietnamese|english)\s+references?"
     r")\s*[:.]?\s+",
     re.IGNORECASE,
 )
@@ -283,7 +285,7 @@ _FAKE_ENTRY_PATTERNS = [
     re.compile(r'(?:\.\s*){5,}'),
     re.compile(r'^\s*:'),
     re.compile(
-        r'^(?:CHAPTER|SECTION|TABLE\s+OF\s+CONTENTS|LIST\s+OF\s+(?:FIGURES|TABLES))\b',
+        r'^(?:CHAPTER\s+\d+\s*[.:]?\s*[A-ZÀ-Ý\s]{0,40}$|SECTION\b|TABLE\s+OF\s+CONTENTS|LIST\s+OF\s+(?:FIGURES|TABLES))\b',
         re.IGNORECASE,
     ),
 ]
@@ -311,22 +313,32 @@ def _is_fake_entry(entry: str) -> bool:
     if is_vn_legal_reference(text_stripped):
         return False
 
-    # Skip very short entries unless they have explicit Author (Year) Title structure
+    # Skip very short entries unless they have explicit Author (Year) Title structure or numbered index
     if len(text_stripped) < 30:
         if len(text_stripped) >= 20 and re.search(
             r"^[A-ZÀ-Ý][A-Za-zÀ-ỹ'\u2019\-]+,\s+[A-Z].*\(\s*(?:19|20)\d{2}[a-z]?\s*\)\s+\S+",
             text_stripped,
         ):
             return False
+        if len(text_stripped) >= 15 and re.match(
+            r"^\s*(?:\[\s*\d{1,3}\s*\]\.?|\d{1,3}\s*[\.\)])\s*(?:https?://|www\.|[A-ZÀ-Ý]\S+)",
+            text_stripped,
+            re.IGNORECASE,
+        ):
+            return False
         return True
 
     # FIX v1.11: Remove [N] prefix for pattern matching
-    text_without_index = re.sub(r'^\[\s*\d+\s*\]\s*', '', text_stripped)
+    text_without_index = re.sub(r'^\[\s*\d+\s*\]\.?\s*', '', text_stripped)
 
     # Check for basic citation structure (author + year)
     has_year = bool(re.search(r'\b(19|20)\d{2}\b', text_stripped))
     has_author_pattern = bool(re.search(r'[A-Z][a-z]+,\s*[A-Z]', text_stripped))
-    has_doi_or_url = bool(_DOI_RE.search(text_stripped) or _URL_RE.search(text_stripped))
+    has_doi_or_url = bool(
+        _DOI_RE.search(text_stripped)
+        or _URL_RE.search(text_stripped)
+        or re.search(r"\b(?:www\.|[a-z0-9\-]+\.(?:org|com|edu|net|gov|io|vn|asia))(?:/\S*|\b)", text_stripped, re.IGNORECASE)
+    )
 
     # Check against fake entry patterns (both with and without [N] prefix)
     for pattern in _FAKE_ENTRY_PATTERNS:
@@ -513,7 +525,7 @@ class ReferenceListParser:
             r"|bibliografia(?:/bibliografía/bibliographie/works?\s+cited)?|bibliografía|bibliographie"
             r"|referências(?:\s+bibliográficas)?|referencias(?:\s+bibliográficas)?|daftar\s+pustaka"
             r"|(?:[^/\n]{2,50}/\s*)?list\s+of\s+references"
-            r"|danh\s+mục\s+tài\s+liệu(?:\s+tham\s+khảo)?|tài\s+liệu\s+tham\s+khảo"
+            r"|danh\s+mục\s+tài\s+liệu(?:\s+tham\s+khảo)?|tài\s+liệu\s+tham\s+khảo|tham\s+khảo"
             r"|works?\s+cited)\s*[:.]?\s*",
             flags=re.IGNORECASE,
         )
@@ -611,7 +623,7 @@ class ReferenceListParser:
         """
         lines = text.splitlines()
         num_line_re = re.compile(
-            r"^\s*(?:(?:\((?P<pnum>\d{1,3})\)|(?P<num>\d{1,3})\s*[\.\)])(?:\s+(?P<rest>\S.*)|(?P<nospace_rest>[A-ZÀ-ÝĂÂĐÊÔƠƯ][A-Za-zÀ-ỹ'\u2019\-]+,\s*\S.*))?|(?P<tnum>\d{1,3})[\t\u2002\u2003]+\s*(?P<trest>[A-ZÀ-Ý]\S.*))$"
+            r"^\s*(?:(?:\((?P<pnum>\d{1,3})\)|(?P<num>\d{1,3})\s*[\.\)])(?:\s+(?P<rest>\S.*)|(?P<nospace_rest>(?:https?://|www\.)\S.*|[A-ZÀ-ÝĂÂĐÊÔƠƯ][A-Za-zÀ-ỹ'\u2019\-]+,\s*\S.*))?|(?P<tnum>\d{1,3})[\t\u2002\u2003]+\s*(?P<trest>[A-ZÀ-Ý]\S.*))$"
         )
         found_nums: list[int] = []
         expected = 1
@@ -1104,8 +1116,108 @@ class ReferenceListParser:
                     plainnat_split = self._split_plainnat_year_end_lines(raw_nonempty)
                     if len(plainnat_split) >= 2:
                         return plainnat_split
-        # Step 1+2: Rejoin hyphen-broken wraps, flatten to a single line, repair broken URLs.
-        flat = re.sub(r"-\s*\n\s*", "-", text)
+        text = text.replace("\u200b", "")
+
+        # Step 0a: Handle "Title" bởi Author ● Ngày xuất bản: YYYY (e.g. 082_tdtu)
+        if re.search(r'["\u201c][^"\u201d]+["\u201d]\s+bởi\s+', text, re.IGNORECASE):
+            boi_parts = [
+                p.strip()
+                for p in re.split(r'(?=["\u201c][^"\u201d]+["\u201d]\s+bởi\s+)', text)
+                if len(self._clean_subheader_prefix(p).strip()) > 15
+            ]
+            if len(boi_parts) >= 2:
+                return [self._clean_subheader_prefix(p).strip() for p in boi_parts]
+
+        # Step 0b: Handle bulleted lists ('- https://...', '• ...', '● ...')
+        raw_lines_clean = [
+            ln.strip()
+            for ln in text.splitlines()
+            if ln.strip() and not _BIB_HEADER_LINE_RE.match(ln.strip())
+        ]
+        bullet_count = sum(1 for ln in raw_lines_clean if re.match(r"^[-•●+]\s*(?:\S|$)", ln))
+        if bullet_count >= 2:
+            bullet_entries: list[str] = []
+            curr_b = ""
+            pending_bullet = False
+            for ln in raw_lines_clean:
+                if re.fullmatch(r"[-•●+]", ln):
+                    if curr_b and len(curr_b) > 15:
+                        bullet_entries.append(curr_b.strip())
+                    curr_b = ""
+                    pending_bullet = True
+                    continue
+                if re.match(r"^[-•●+]\s+\S", ln):
+                    if curr_b and len(curr_b) > 15:
+                        bullet_entries.append(curr_b.strip())
+                    curr_b = re.sub(r"^[-•●+]\s+", "", ln).strip()
+                    pending_bullet = False
+                elif pending_bullet:
+                    curr_b = ln
+                    pending_bullet = False
+                elif curr_b:
+                    curr_b = self._join_wrapped_line(curr_b, ln)
+                else:
+                    curr_b = ln
+            if curr_b and len(curr_b) > 15:
+                bullet_entries.append(curr_b.strip())
+            if len(bullet_entries) >= 2:
+                return bullet_entries
+
+        # Step 0c: Handle unnumbered line-per-item bibliographies where lines are "Title - Author/Site"
+        # or "Slide: ..." / "Website: ..." / "Ebook ..." / "DocName, website: https://..."
+        if len(raw_lines_clean) >= 2 and all(
+            not re.search(r"\b(?:18|19|20)\d{2}[a-z]?\b", ln) for ln in raw_lines_clean
+        ):
+            dash_or_doc_count = sum(
+                1
+                for ln in raw_lines_clean
+                if re.search(
+                    r"(?:\s+[–—-]\s+\S|\bwebsite:\s*https?://|^(?:Slide|Website|Ebook|Chapter\s+\d+|A\s+Comprehensive\s+Guide|IPC-\d+)\b|^https?://\S+$)",
+                    ln,
+                    re.IGNORECASE,
+                )
+            )
+            if dash_or_doc_count >= 2 and dash_or_doc_count >= len(raw_lines_clean) * 0.6:
+                line_entries: list[str] = []
+                for ln in raw_lines_clean:
+                    if (
+                        line_entries
+                        and not re.match(
+                            r"^(?:Slide|Website|Ebook|Chapter\s+\d+|A\s+Comprehensive\s+Guide|IPC-\d+|https?://|[A-ZÀ-Ý].*(?:\s+[–—-]\s+|\bwebsite:\s*https?://))",
+                            ln,
+                            re.IGNORECASE,
+                        )
+                    ):
+                        line_entries[-1] = self._join_wrapped_line(line_entries[-1], ln)
+                    else:
+                        line_entries.append(ln)
+                line_entries = [e.strip() for e in line_entries if len(e.strip()) > 15]
+                if len(line_entries) >= 2:
+                    return line_entries
+
+        # Step 1+2: Rejoin hyphen-broken and line-wrapped URLs BEFORE flattening newlines to spaces.
+        joined_lines: list[str] = []
+        for raw_ln in text.splitlines():
+            s_ln = raw_ln.strip()
+            if not s_ln:
+                continue
+            if joined_lines:
+                prev_ln = joined_lines[-1]
+                # If prev_ln ends inside a URL and s_ln is a single token URL continuation (e.g. ".asia/p/...", "hZJxl0orbEsd&index=3", "um%20loss%20value.")
+                s_first = s_ln.split()[0]
+                if (
+                    re.search(r"https?://\S+$", prev_ln, re.IGNORECASE)
+                    and not s_first.startswith(("---", "--", "—", "–"))
+                    and (
+                        re.match(r"^(?:\.[a-z]{2,10}/|[a-zA-Z0-9_~%#-]*[=&%_][a-zA-Z0-9_~%#=&.-]+)", s_first)
+                        or (len(s_ln.split()) == 1 and re.match(r"^[a-z0-9_~%#/.&=-]+\.?$", s_first))
+                    )
+                ):
+                    joined_lines[-1] = prev_ln + s_ln
+                    continue
+            joined_lines.append(s_ln)
+        text_rejoined = "\n".join(joined_lines)
+        flat = re.sub(r"-\s*\n\s*", "-", text_rejoined)
         flat = re.sub(r"\s+", " ", flat).strip()
         flat = re.sub(r"%\s+([0-9A-Fa-f]{2})", r"%\1", flat)
         flat = re.sub(
@@ -1216,7 +1328,7 @@ class ReferenceListParser:
         running_head_prefix_re = re.compile(r"^\s*Running\s+head\s*:.*$", re.IGNORECASE)
         allcaps_header_page_re = re.compile(r"^[A-Z0-9\s,'\-:]{4,70}\s+\d{1,3}\s*$")
         conf_running_header_re = re.compile(
-            r"^\s*(?:(?:Published|Under\s+review)\s+as\s+a\s+(?:conference|workshop)\s+paper\s+at\s+.+|Preprint\.?(?:\s+Under\s+review\.?)?|Page\s+\d+\s+of\s+\d+|(?:\d{1,3}\s+)?[A-Z][A-Za-zÀ-ÿ\-]+\s+et\s+al\.(?:\s+\d{1,3})?)\s*$",
+            r"^\s*(?:(?:Published|Under\s+review)\s+as\s+a\s+(?:conference|workshop)\s+paper\s+at\s+.+|Preprint\.?(?:\s+Under\s+review\.?)?|Page\s+\d+(?:\s+of\s+\d+)?|(?:\d{1,3}\s+)?[A-Z][A-Za-zÀ-ÿ\-]+\s+et\s+al\.(?:\s+\d{1,3})?)\s*$",
             re.IGNORECASE,
         )
         vn_journal_furniture_re = re.compile(
@@ -1239,6 +1351,7 @@ class ReferenceListParser:
         )
         post_bib_stop_re = re.compile(
             r"^\s*(?:Ngày\s+nhận\s+bài|ABSTRACT|SUMMARY|TÓM\s+TẮT|Thông\s+tin\s+tác\s+giả|Author\s+information"
+            r"|(?:INDIVIDUAL\s+PROJECT\s+)?SELF[- ]?EVALUATION|BẢNG\s+TỰ\s+ĐÁNH\s+GIÁ|PHỤ\s*LỤC"
             r"|Литература|Список\s+литературы|Об\s+авторах)\s*(?::|$)",
             re.IGNORECASE,
         )
@@ -1253,7 +1366,11 @@ class ReferenceListParser:
             if post_bib_stop_re.match(stripped) and len(cleaned) >= 2:
                 break
             # Drop HTML hyperlink return anchors ("return to" / "text") and Australian TEXT journal footers
-            if re.fullmatch(r"(?:return\s+to(?:\s+text)?|TEXT\s+Vol\s+\d+\s+No\s+\d+.*)", stripped, re.IGNORECASE):
+            if re.fullmatch(
+                r"(?:return\s+to(?:\s+text)?|TEXT\s+Vol\s+\d+\s+No\s+\d+.*|.*Revista\s+de\s+Estudios\s+Norteamericanos.*ISSN\s+\d{4}-\d{3,4}.*)",
+                stripped,
+                re.IGNORECASE,
+            ):
                 continue
             if stripped.lower() == "text" and idx_ln > 0 and lines[idx_ln - 1].strip().lower() == "return to":
                 continue
@@ -1536,6 +1653,10 @@ class ReferenceListParser:
             )
         )
 
+        is_ieee_initial_bracket = bool(
+            re.match(r"^\s*\[\s*\d+\s*\]\s*(?:[A-Z](?:-[A-Z])?\.\s*)+[A-Z][a-zA-Z'\-]+", entry)
+        )
+
         for allow_fallback in (False, True):
             if allow_fallback:
                 vn_trad_fallback = self._parse_vn_traditional_entry(
@@ -1548,6 +1669,8 @@ class ReferenceListParser:
                     if is_ama_specific and fmt.name in ("Vancouver", "CSE", "ACS"):
                         continue
                     if is_cse_nameyear_specific and fmt.name in ("Vancouver", "Chicago", "Harvard"):
+                        continue
+                    if is_ieee_initial_bracket and fmt.name in ("Chicago", "MLA"):
                         continue
                 citation = fmt.parse_reference_entry(entry)
                 if not citation:
@@ -1614,9 +1737,22 @@ class ReferenceListParser:
         if vn_trad_fallback is not None:
             return vn_trad_fallback
 
-        # FIX: Fallback - create citation with numeric_index if available
-        # and extract whatever metadata we can from the raw entry
-        if numeric_index is not None:
+        # FIX: Fallback - create citation with numeric_index if available,
+        # or for unnumbered bibliography items with URLs, quotes, or clear title-author structure.
+        if numeric_index is not None or (
+            len(entry) >= 18
+            and (
+                re.search(
+                    r"https?://|\bwww\.|\([a-z0-9.-]+\.(?:com|org|io|vn|asia|net|edu)\)|[\"\u201c][^\"\u201d]+[\"\u201d]\s+bởi\s+|\b(?:Slide|Website|Ebook|Documentation|Chapter\s+\d+|A\s+Comprehensive\s+Guide|IPC-\d+)\b",
+                    entry,
+                    re.IGNORECASE,
+                )
+                or (
+                    re.search(r"\s+[–—-]\s+[A-ZÀ-Ý]", entry)
+                    and not re.search(r"\b(?:ISSN|vol\.|pp\.|(?:18|19|20)\d{2})\b", entry, re.IGNORECASE)
+                )
+            )
+        ):
             citation = self._parse_fallback_entry(
                 entry, numeric_index, order_index, page_num
             )
@@ -2007,37 +2143,90 @@ class ReferenceListParser:
         return citation
 
     def _parse_fallback_entry(
-        self, entry: str, numeric_index: int, order_index: int, page_num: int
+        self, entry: str, numeric_index: int | None, order_index: int, page_num: int
     ) -> Citation | None:
         """Fallback parser: extract whatever metadata possible from an unparseable entry.
 
         Handles IEEE-style entries that lack quoted titles, or have unusual formatting.
-        Extracts: numeric_index, DOI/arXiv, year, authors, venue, and a best-effort title.
+        Extracts: numeric_index, DOI/arXiv, URL, year, authors, venue, and a best-effort title.
         """
-        text = entry.strip()
+        text = re.sub(r"\s*(?:INDIVIDUAL\s+PROJECT\s+)?SELF[- ]?EVALUATION.*$", "", entry.strip(), flags=re.IGNORECASE).strip()
+        text = self._clean_subheader_prefix(text)
 
         # Extract DOI if present
         doi_m = _DOI_RE.search(text)
         doi = doi_m.group(0).rstrip(".").rstrip(",") if doi_m else None
 
+        # Extract URL if present
+        url_m = re.search(
+            r"https?://[^\s\]\)\,;]+|\bwww\.[a-zA-Z0-9.-]+\.[a-z]{2,}(?:/[^\s\]\)\,;]*)?|\(\s*(?P<paren_url>[a-zA-Z0-9.-]+\.(?:org|com|edu|net|gov|io|vn|asia)(?:/[^\s\]\)\,;]*)?)\s*\)",
+            text,
+            re.IGNORECASE,
+        )
+        url: str | None = None
+        if url_m:
+            url = (url_m.group("paren_url") or url_m.group(0)).rstrip(".,;)")
+
         # Extract arXiv ID if present
         arxiv_m = re.search(r"(?:arXiv:|arxiv\.org/abs/)(\d+\.\d+)", text, re.IGNORECASE)
         arxiv_id = arxiv_m.group(1) if arxiv_m else None
 
-        # Extract year
-        year, year_suffix = extract_publication_year(text, prefer_last=True)
+        # Extract authors: everything after [N] / (N) / N. up to first recognizable year/doi
+        after_index = re.sub(r"^\s*(?:\[\s*\d+\s*\]\.?|\(\s*\d{1,3}\s*\)|\d{1,3}\s*[\.\)]|[-•●+])\s*", "", text).strip()
+
+        # Case 1: Bare URL entry (e.g. "[1] https://..." or "1. https://...")
+        if re.fullmatch(r"(?:https?://|www\.)\S+", after_index, re.IGNORECASE):
+            clean_u = after_index.rstrip(".,;)")
+            return Citation(
+                raw_text=text,
+                citation_type=CitationType.REFERENCE_LIST,
+                style=CitationStyle.IEEE,
+                page_num=page_num,
+                matched_pattern="fallback_ieee_entry",
+                order_index=order_index,
+                numeric_index=numeric_index,
+                title=clean_u,
+                title_normalized=_normalize_title(clean_u),
+                url=clean_u,
+                confidence=0.6,
+            )
+
+        # Case 2: '"Title" bởi Author ... Ngày xuất bản: YYYY' (e.g. 082_tdtu)
+        boi_m = re.match(
+            r'^["\u201c](?P<title>[^"\u201d]+)["\u201d]\s+bởi\s+(?P<author>[^●•\n]+?)(?:\s*[●•]?\s*Ngày\s+xuất\s+bản\s*:\s*(?P<year>(?:19|20)\d{2}))?',
+            after_index,
+            re.IGNORECASE,
+        )
+        if boi_m:
+            b_title = boi_m.group("title").strip()
+            b_auth = boi_m.group("author").strip()
+            b_yr = boi_m.group("year")
+            return Citation(
+                raw_text=text,
+                citation_type=CitationType.REFERENCE_LIST,
+                style=CitationStyle.APA,
+                page_num=page_num,
+                matched_pattern="fallback_ieee_entry",
+                order_index=order_index,
+                numeric_index=numeric_index,
+                title=b_title,
+                title_normalized=_normalize_title(b_title),
+                authors=parse_authors(b_auth) or [b_auth],
+                year=b_yr,
+                url=url,
+                confidence=0.8,
+            )
+
+        # Strip URL before extracting year so numbers inside URL paths (e.g. /2017/01/12/) don't become fake years
+        text_without_url = re.sub(r"https?://\S+|\bwww\.\S+", "", after_index).strip()
+        year, year_suffix = extract_publication_year(text_without_url or text, prefer_last=True)
         year_m = (
             re.search(rf"\b{re.escape(year + (year_suffix or ''))}\b", text)
             if year
-            else _YEAR_RE.search(text)
+            else _YEAR_RE.search(text_without_url)
         )
 
-        # Extract authors: everything after [N] / (N) / N. up to first recognizable year/doi
-        # Pattern: [N] Authors, "Title" OR just Authors (year) until next [N]
-        after_index = re.sub(r"^\s*(?:\[\s*\d+\s*\]|\(\s*\d{1,3}\s*\)|\d{1,3}\s*[\.\)])\s*", "", text).strip()
-
         # Remove common metadata patterns that confuse title extraction
-        # "vol. N", "no. N", "pp. N-N", "pp. N", "p. N", "Chapter N"
         clean_text = after_index
         for pattern in [
             r',?\s*vol\.\s*\d+[A-Z]?(?:-\d+)?',      # vol. 5 or vol. 5-7
@@ -2055,7 +2244,7 @@ class ReferenceListParser:
         title_raw = None
         authors_part = ""
         # Quoted title
-        quote_m = re.search(r'[""]([^""]+)[""]', clean_text)
+        quote_m = re.search(r'["\u201c]([^"\u201d]+)["\u201d]', clean_text)
         if quote_m:
             title_raw = quote_m.group(1).strip().rstrip(",")
         else:
@@ -2063,19 +2252,13 @@ class ReferenceListParser:
             remaining = clean_text
             if doi_m:
                 remaining = remaining[:doi_m.start()].strip()
-            if year_m:
-                # Only use year as boundary if it's followed by end or punctuation
-                y_end = year_m.end()
+            if year_m and year_m.start() < len(remaining):
                 remaining = remaining[:year_m.start()].strip()
 
-            # STRATEGY 1: For entries like "[N] Authors. Title." (title after period)
-            # Look for period followed by space and capitalized word (title)
+            # STRATEGY 1: For entries like "[N] Authors. Title." (title after period, not after 1-letter initial)
             if not title_raw:
-                # Unquoted IEEE book entries: ``[N] B. Settles, Active Learning.``
-                # Keep the author initials out of the title by using the comma
-                # immediately before the first sentence-ending period.
                 book_title_m = re.match(
-                    r"^.+?,\s+(?P<title>[^.]{5,})\.\s+",
+                    r"^.+?,\s+(?P<title>(?!and\b|&\b)[A-ZÀ-Ý][^.]{5,})(?<!\b[A-Z])\.\s+",
                     remaining,
                 )
                 if book_title_m:
@@ -2083,19 +2266,16 @@ class ReferenceListParser:
                     authors_part = remaining[: book_title_m.start("title")].rstrip(", ")
 
             if not title_raw:
-                period_title_m = re.search(r"\.\s+(?=[A-Z][a-z])", remaining)
+                period_title_m = re.search(r"(?<!\b[A-Z])\.\s+(?=[A-Z][a-z])", remaining)
                 if period_title_m:
-                    # Title is after the period
                     candidate = remaining[period_title_m.end():].strip()
                     if candidate and len(candidate) > 5:
                         title_raw = candidate.rstrip(".,").strip()
-                        # Authors are everything before the period
                         authors_candidate = remaining[:period_title_m.start()].strip().rstrip(".")
                         if authors_candidate and authors_candidate != remaining:
                             authors_part = authors_candidate
 
-            # STRATEGY 2: Authors end with comma followed by capitalized word (less reliable)
-            # Only use this if Strategy 1 didn't work
+            # STRATEGY 2: Authors end with comma followed by capitalized word
             if not title_raw:
                 author_end = re.search(
                     r",\s*(?=[A-Z][a-z])", remaining
@@ -2105,12 +2285,11 @@ class ReferenceListParser:
                     if candidate and len(candidate) > 10:
                         title_raw = candidate.rstrip(".,").strip()
                 elif "," in remaining:
-                    # Last comma before end is likely the author-title boundary
                     parts = remaining.rsplit(",", 1)
                     if len(parts) >= 2 and len(parts[1].strip()) > 10:
                         title_raw = parts[1].strip().rstrip(".,").strip()
 
-            if remaining and len(remaining) > 10 and not title_raw:
+            if remaining and len(remaining) >= 8 and not title_raw:
                 title_raw = remaining.rstrip(".,").strip()
 
         # Extract authors: everything before the title or year
@@ -2135,7 +2314,6 @@ class ReferenceListParser:
             venue = text[year_m.end():].strip().rstrip(".,")
         elif doi_m:
             venue = text[:doi_m.start()].strip().rstrip(".,")
-            # Try to remove the authors from venue
             if authors_part and venue.startswith(authors_part):
                 venue = venue[len(authors_part):].strip().lstrip(",").rstrip(".,")
 
@@ -2143,7 +2321,7 @@ class ReferenceListParser:
         if not title_raw:
             if arxiv_id:
                 title_raw = f"arXiv:{arxiv_id}"
-            elif len(after_index) > 20:
+            elif len(after_index) >= 8:
                 title_raw = after_index[:100].strip()
 
         citation = Citation(
@@ -2161,6 +2339,7 @@ class ReferenceListParser:
             authors=authors if authors else None,
             venue=venue if venue and len(venue) > 2 else None,
             doi=doi,
+            url=url,
             confidence=0.7,  # Lower confidence for fallback parsing
         )
         return citation

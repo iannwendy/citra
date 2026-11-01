@@ -252,11 +252,10 @@ class CitationLinker:
                 bib.citation_links = list(matched_links)
             else:
                 result.unmatched_reference_ids.append(ref_id)
-                if body_citations:
-                    bib.mapping_status = CitationMappingStatus.UNCITED_REFERENCE.value
-                    bib.mapping_confidence = 1.0
-                    bib.citation_link = None
-                    bib.citation_links = []
+                bib.mapping_status = CitationMappingStatus.UNCITED_REFERENCE.value
+                bib.mapping_confidence = 1.0
+                bib.citation_link = None
+                bib.citation_links = []
 
         return result
 

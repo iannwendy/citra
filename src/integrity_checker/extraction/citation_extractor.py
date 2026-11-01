@@ -22,7 +22,7 @@ from integrity_checker.models.citation import Citation, CitationStyle, CitationT
 # Header / footer keywords để phát hiện reference section
 _REFERENCE_HEADERS = re.compile(
     r"^\s*(?:\d+\.?\s+)?(references?|reference\s+list|bibliography|works?\s+cited|literature(?:\s+cited)?|cited\s+literature|notes(?:\s+and\s+references)?|endnotes?"
-    r"|danh\s+mục\s+tài\s+liệu(?:\s+tham\s+khảo)?|tài\s+liệu\s+tham\s+khảo)\s*[:.]?\s*$",
+    r"|danh\s+mục\s+tài\s+liệu(?:\s+tham\s+khảo)?|tài\s+liệu\s+tham\s+khảo|tham\s+khảo)\s*[:.]?\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -167,11 +167,25 @@ def _is_date_only_citation(extracted_text: str) -> bool:
     # Non-citation range, chemistry/math label, or biblical chapter parenthetical:
     # "(Years 1–3)", "(ages 18-25)", "(Acts 18)", "(Scope 1, 2, 3)", "(Scheme 1)", "(Compound 2)", "(Round 1)"
     if re.match(
-        r"^(?:years?|ages?|grades?|phases?|steps?|stages?|rounds?|cycles?|iterations?|passes?|tiers?|splits?|clusters?|topics?|tasks?|items?|points?|nodes?|edges?|blocks?|heads?|prompts?|queries|query|samples?|users?|comments?|labels?|versions?|drafts?|folds?|epochs?|batches?|layers?|seeds?|scores?|ranks?|rates?|ratios?|indices|index|values?|limits?|codes?|errors?|ports?|weeks?|months?|days?|chapters?|subchapters?|sections?|scopes?|parts?|clauses?|tables?|figures?|figs?\.?|schemes?|charts?|entries|entry|runs?|compounds?|reactions?|pathways?|models?|equations?|eqs?\.?|experiments?|trials?|cases?|groups?|types?|classes|levels?|rules?|theorems?|lemmas?|propositions?|corollaries|definitions?|examples?|algorithms?|listings?|appendices|appendix|supplements?|notes?|acts|genesis|exodus|psalms?|matthew|mark|luke|john|romans|corinthians)\s+\d",
+        r"^(?:years?|ages?|grades?|phases?|steps?|stages?|rounds?|cycles?|iterations?|passes?|tiers?|splits?|clusters?|topics?|tasks?|items?|itemsets?|optimizations?|sites?|points?|nodes?|edges?|blocks?|heads?|prompts?|queries|query|samples?|users?|comments?|labels?|versions?|drafts?|folds?|epochs?|batches?|layers?|seeds?|scores?|ranks?|rates?|ratios?|indices|index|values?|limits?|codes?|errors?|ports?|pins?|leds?|vlans?|vtps?|ospf|rip|nat|acl|dhcp|dns|ssh|llama|qwen|gpt|yolo|bert|resnet|vner|vlsp|weeks?|months?|days?|chapters?|subchapters?|sections?|scopes?|parts?|clauses?|tables?|figures?|figs?\.?|schemes?|charts?|entries|entry|runs?|compounds?|reactions?|pathways?|models?|equations?|eqs?\.?|experiments?|trials?|cases?|groups?|types?|classes|levels?|rules?|theorems?|lemmas?|propositions?|corollaries|definitions?|examples?|algorithms?|listings?|appendices|appendix|supplements?|notes?|acts|genesis|exodus|psalms?|matthew|mark|luke|john|romans|corinthians)\s+(?:\d|[A-Z]\b)",
         inner,
         re.IGNORECASE,
     ):
         return True
+
+    # Reject non-year 4-digit parentheticals like network ports "DB (3306)" or "(8080)"
+    if re.search(r"\(\s*(?!(?:18|19|20)\d{2}\b)\d{4}\s*\)", extracted_text):
+        return True
+
+    # Technical/model acronym or version list parenthetical without a 4-digit year:
+    # "(VLAN 10)", "(LLaMA 1, 2, 3)", "(HTTP 2)"
+    if extracted_text.strip().startswith("(") and not re.search(r"\b(?:18|19|20)\d{2}\b", inner):
+        if re.match(r"^[A-Z][A-Z0-9_-]+\s+\d+(?:\s*,\s*\d+)*$", inner):
+            return True
+        if re.match(r"^[A-Za-z][A-Za-z0-9_-]+\s+\d+(?:\s*,\s*\d+)+$", inner) and any(
+            int(n) <= 20 for n in re.findall(r"\d+", inner)
+        ):
+            return True
 
     # Split by comma to get first word(s)
     first_part = inner.split(',')[0].strip()
@@ -307,6 +321,22 @@ class CitationExtractor:
                 if re.search(r"\b(?:table|bảng)\s+\d+", prev_win, re.IGNORECASE):
                     if not before_lines or not before_lines[-1].endswith("."):
                         continue
+                if re.search(
+                    r"self[- ]?evaluation|marking\s+scheme|no\s+reference|grading\s+rubric|bảng\s+tự\s+đánh\s+giá",
+                    prev_win + "\n" + "\n".join(after_lines[:8]),
+                    re.IGNORECASE,
+                ):
+                    continue
+            if re.fullmatch(r"tham\s+khảo", matched_word, re.IGNORECASE):
+                has_ref_items = sum(
+                    1
+                    for ln in after_lines[:8]
+                    if re.search(r"^(?:\[\d+\]|\d{1,2}[\.\)])|https?://|\b(?:19|20)\d{2}\b", ln, re.IGNORECASE)
+                )
+                if not m.group(0).strip().endswith(":") and has_ref_items < 2:
+                    continue
+                if has_ref_items < 1:
+                    continue
             if re.fullmatch(r"reference", matched_word, re.IGNORECASE):
                 if len(after_lines) > 4 and not re.search(
                     r"\b(?:18|19|20)\d{2}\b|\[\d+\]|https?://|doi:",
@@ -462,6 +492,54 @@ class CitationExtractor:
                 if citation_type == CitationType.NUMERIC or raw.startswith("["):
                     if re.fullmatch(r"\[\s*(?:0|(?:18|19|20)\d{2})\s*\]", raw) or re.match(r"^\[\s*0", raw):
                         continue
+                    # Reject brackets containing 0 as an element (e.g. [1, 0], [1, 0, 1]) or space-separated matrices ([1 2], [1 2 3])
+                    if re.search(r"(?:^\[\s*|[,;\s])0(?:\s*[,;\]\s])", raw) or re.fullmatch(
+                        r"\[\s*\d+(?:\s+\d+)+\s*\]", raw
+                    ):
+                        continue
+                    bracket_nums = [int(n) for n in re.findall(r"\d+", raw)] if raw.startswith("[") else []
+                    if bracket_nums:
+                        # Reject duplicate numbers inside the same bracket ([1, 1], [10, 255, 255]) or large buffer/pixel sizes (>= 300)
+                        if len(bracket_nums) != len(set(bracket_nums)) or any(n >= 300 for n in bracket_nums):
+                            continue
+                    line_start_b = search_text.rfind("\n", 0, raw_start) + 1
+                    line_end_b = search_text.find("\n", m.end())
+                    if line_end_b == -1:
+                        line_end_b = len(search_text)
+                    line_prefix_b = search_text[line_start_b:raw_start]
+                    line_suffix_b = search_text[m.end() : line_end_b]
+                    full_line_b = search_text[line_start_b:line_end_b]
+                    context_prefix_b = re.sub(r"\s+", " ", search_text[max(0, raw_start - 60) : raw_start])
+                    # Reject code array indexing (e.g. X.shape[1], x_train_flat.shape[1], axs[1].plot, parts[1].trim(), doc[1];, byte[4096], int[100], a[1]..a[i])
+                    if (
+                        re.search(
+                            r"(?:[A-Za-z0-9_]\.[A-Za-z_][A-Za-z0-9_]*|[A-Za-z0-9_]+_[A-Za-z0-9_]+|\b(?:byte|int|char|float|double|long|short|uint\d*|int\d*|buffer|arr|array|vec|matrix|tensor|axs|ax|plt|parts|args|argv|df|coefficients|weights|biases|params|dims?))$",
+                            line_prefix_b,
+                        )
+                        or re.match(r"^\.[A-Za-z_][A-Za-z0-9_]*|^\[", line_suffix_b)
+                        or re.search(r"[a-zA-Z_][a-zA-Z0-9_]*\s*\[\s*\d+\s*\]\s*;\s*$", full_line_b)
+                        or re.search(
+                            r"\b[a-zA-Z_]\w*\[\s*(?:0|[ijknm](?:\s*[-+]\s*1)?)\s*\]|\b(?:const|let|var|await|JSON\.parse)\b",
+                            full_line_b,
+                        )
+                    ):
+                        continue
+                    # Reject math/code vector assignments, dict hyperparameter grids, function array args, and Vietnamese math intervals/tensor shapes
+                    if (
+                        (
+                            len(bracket_nums) >= 2
+                            and re.search(
+                                r"(?:=\s*|['\"][\w\-]+['\"]\s*:\s*|[A-Za-z0-9_]\(\s*)$",
+                                line_prefix_b,
+                            )
+                        )
+                        or re.search(
+                            r"\b(?:khoảng|đoạn|miền|kích\s+thước|có\s+dạng|đầu\s+vào\s+là|đầu\s+ra\s+là)\s*$",
+                            context_prefix_b,
+                            re.IGNORECASE,
+                        )
+                    ):
+                        continue
                     if (
                         citation_type == CitationType.NUMERIC
                         or re.match(r"^\[\s*\d+\s*\]$", raw)
@@ -498,7 +576,14 @@ class CitationExtractor:
                     ):
                         continue
                     # Strip leading acronym clause before ", Author (Year)" (e.g. "EI and HRV, Vanuk et al. (2019)")
+                    # and Vietnamese discourse markers ("Cụ thể, Reimers và Gurevych (2019)")
                     raw = re.sub(r"^(?:[A-Z]{2,5}\s+and\s+[A-Z]{2,5},\s+)", "", raw).strip()
+                    raw = re.sub(
+                        r"^(?:Cụ\s*thể|Ví\s*dụ|Chẳng\s*hạn|Theo\s*đó|Ngoài\s*ra|Tuy\s*nhiên|Do\s*đó|Như\s*vậy|Mặt\s*khác|Đặc\s*biệt|Trong\s*đó|Tương\s*tự|Ngược\s*lại|Hơn\s*nữa),\s+",
+                        "",
+                        raw,
+                        flags=re.IGNORECASE,
+                    ).strip()
                     # Skip common-noun page/year parentheticals or pre-1900 historical founding years
                     if re.match(
                         r"^(?:Networks?|Papers?|Tables?|Figures?|Chapters?|Sections?|Parts?|Equations?|Models?|Systems?)\s+\(",
