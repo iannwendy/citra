@@ -96,6 +96,20 @@ class FeatureCalculator:
         for alt_cand in cand_alts:
             semantic_sim = max(semantic_sim, self.semantic.similarity(c_primary, alt_cand))
 
+        cross_lingual_title_detected = False
+        cross_lingual_title_sim = 0.0
+        title_bridged_concepts: list[str] = []
+        if fuzzy_sim < 0.65 and hasattr(self.semantic, "cross_lingual_title_similarity"):
+            is_xl_t, xl_t_sim, xl_t_concepts = self.semantic.cross_lingual_title_similarity(
+                c_primary, cand_primary
+            )
+            if is_xl_t and xl_t_sim >= 0.55:
+                cross_lingual_title_detected = True
+                cross_lingual_title_sim = xl_t_sim
+                title_bridged_concepts = xl_t_concepts
+                # Cap at 0.85 so translated-only titles fall into METADATA_ERROR band [0.60, 0.90)
+                semantic_sim = max(semantic_sim, min(0.85, xl_t_sim))
+
         author_sim = author_match_score(
             cited_authors,
             list(best.authors or []),
@@ -170,7 +184,8 @@ class FeatureCalculator:
         best_cited_sentence = ""
         citation_intent = ""
         stance_label = ""
-        cross_lingual_detected = False
+        cross_lingual_detected = bool(cross_lingual_title_detected)
+        bridged_concepts: list[str] = list(title_bridged_concepts)
         context_source = str(getattr(citation, "_context_source", "") or "")
         occurrence_alignments: list[dict] = []
 
@@ -190,10 +205,21 @@ class FeatureCalculator:
                             best.abstract = cand_abs
                             break
 
+            inferred_marker = citation.raw_in_text_citation
+            if not inferred_marker and citation.authors and citation.year:
+                a0 = citation.authors[0]
+                first_surname = (
+                    getattr(a0, "last_name", None)
+                    or getattr(a0, "family", None)
+                    or str(a0).split(",")[0].split()[0].strip()
+                )
+                if first_surname:
+                    inferred_marker = f"({first_surname}, {citation.year})"
             alignment_result = self.semantic.check_content_alignment(
                 cited_context=citation_context,
                 source_title=best.title or "",
                 source_abstract=resolved_abstract,
+                citation_marker=inferred_marker,
             )
             content_alignment_score = alignment_result.similarity
             content_alignment_confidence = alignment_result.confidence
@@ -205,7 +231,12 @@ class FeatureCalculator:
             best_cited_sentence = getattr(alignment_result, "best_cited_sentence", "")
             citation_intent = getattr(alignment_result, "citation_intent", "")
             stance_label = getattr(alignment_result, "stance_label", "")
-            cross_lingual_detected = bool(getattr(alignment_result, "cross_lingual_detected", False))
+            cross_lingual_detected = bool(
+                cross_lingual_detected or getattr(alignment_result, "cross_lingual_detected", False)
+            )
+            for bc in getattr(alignment_result, "bridged_concepts", None) or []:
+                if bc not in bridged_concepts:
+                    bridged_concepts.append(bc)
 
             # Evaluate multi-occurrence neural alignment when reference is cited multiple times
             occ_contexts = getattr(citation, "_occurrence_contexts", None)
@@ -233,6 +264,12 @@ class FeatureCalculator:
                         stance_label = str(best_occ.get("stance") or stance_label)
                         if best_occ.get("best_evidence_sentence"):
                             best_evidence_sentence = str(best_occ["best_evidence_sentence"])
+                    for occ_item in occurrence_alignments:
+                        if occ_item.get("cross_lingual_detected"):
+                            cross_lingual_detected = True
+                        for bc in occ_item.get("bridged_concepts") or []:
+                            if bc not in bridged_concepts:
+                                bridged_concepts.append(bc)
                     # Preserve polarity contradiction if any occurrence explicitly refutes the paper
                     if any(
                         o.get("stance") == "contradiction_risk" and float(o.get("score") or 0.0) >= 0.30
@@ -261,6 +298,9 @@ class FeatureCalculator:
             citation_intent=citation_intent,
             stance_label=stance_label,
             cross_lingual_detected=cross_lingual_detected,
+            bridged_concepts=bridged_concepts,
+            cross_lingual_title_detected=cross_lingual_title_detected,
+            cross_lingual_title_sim=cross_lingual_title_sim,
             context_source=context_source,
             occurrence_alignments=occurrence_alignments,
         )
@@ -340,6 +380,18 @@ class FeatureCalculator:
             t_sim = self._compute_title_similarity(c_title, cand_title, is_raw_fallback=is_raw)
             a_sim = author_match_score(cited_authors, list(cand.authors or []))
             y_dist = self._year_distance(citation.year, cand.year)
+            if t_sim < 0.55 and a_sim >= 0.60 and y_dist <= 1 and c_title and cand_title:
+                from integrity_checker.matching.vn_en_academic_bridge import (
+                    compute_cross_lingual_concept_overlap,
+                    is_vietnamese_text,
+                )
+
+                if is_vietnamese_text(c_title) != is_vietnamese_text(cand_title):
+                    xl_ov, _ = compute_cross_lingual_concept_overlap(
+                        c_title if is_vietnamese_text(c_title) else cand_title,
+                        cand_title if is_vietnamese_text(c_title) else c_title,
+                    )
+                    t_sim = max(t_sim, xl_ov * 0.85)
             y_bonus = 0.2 if y_dist <= 1 else 0.0
             review_penalty = -0.5 if (not cit_is_choice and self._is_book_review_candidate(cand)) else 0.0
             return doi_bonus + t_sim * 1.0 + a_sim * 0.5 + y_bonus + review_penalty + (cand.confidence or 0.0) * 0.05
@@ -363,21 +415,27 @@ class FeatureCalculator:
         r")\]",
         re.IGNORECASE,
     )
-    _TRANSLATED_BRACKET_RE = re.compile(r"^(?P<main>.+?)\s*\[(?P<alt>[^\]]{10,})\]\s*$")
+    _TRANSLATED_BRACKET_RE = re.compile(r"^(?P<main>.+?)\s*\[(?P<alt>[^\]]{4,})\]\s*$")
+    _TRANSLATED_PAREN_RE = re.compile(
+        r"^(?P<main>.+?)\s*\(\s*(?:bản\s+dịch|dịch|tiếng\s+việt|translated|english\s+title)\s*[:\-–]\s*(?P<alt>[^)]{4,})\)\s*$",
+        re.IGNORECASE,
+    )
+    _PARALLEL_TITLE_EQ_RE = re.compile(r"^(?P<main>[^=]{6,}?)\s+=\s+(?P<alt>[^=]{4,})$")
 
     @classmethod
     def _strip_medium_tags_and_extract_alt_titles(cls, title: str) -> tuple[str, list[str]]:
-        """Strip bracketed medium tags (e.g. [Online], [Computer software]) and extract bracketed translated titles."""
+        """Strip bracketed medium tags (e.g. [Online], [Computer software]) and extract bracketed/parallel translated titles."""
         if not title:
             return "", []
         cleaned = cls._MEDIUM_TAG_RE.sub("", title).strip()
         alts: list[str] = []
-        m = cls._TRANSLATED_BRACKET_RE.match(cleaned)
-        if m:
-            main_part = m.group("main").strip().rstrip(".,;:")
-            alt_part = m.group("alt").strip().rstrip(".,;:")
-            if len(main_part) >= 6 and len(alt_part) >= 10:
-                return main_part, [alt_part]
+        for pat in (cls._TRANSLATED_BRACKET_RE, cls._TRANSLATED_PAREN_RE, cls._PARALLEL_TITLE_EQ_RE):
+            m = pat.match(cleaned)
+            if m:
+                main_part = m.group("main").strip().rstrip(".,;:")
+                alt_part = m.group("alt").strip().rstrip(".,;:")
+                if len(main_part) >= 5 and len(alt_part) >= 4:
+                    return main_part, [alt_part]
         return cleaned, alts
 
     def _fuse_consensus_metadata(

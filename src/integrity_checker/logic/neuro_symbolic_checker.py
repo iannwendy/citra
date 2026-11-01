@@ -19,6 +19,7 @@ from integrity_checker.logging import get_logger
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.models.validation import CitationVerdict, MatchFeatures, ValidationLabel
+from integrity_checker.matching.author_matcher import author_match_score
 from integrity_checker.matching.features import FeatureCalculator
 from integrity_checker.logic.calibration import HybridMLScorer
 from integrity_checker.logic.rules import SymbolicRules, _is_fake_url
@@ -380,8 +381,19 @@ class NeuroSymbolicChecker:
                 str(citation.year)[:4] if citation.year else None
             )
             # Create a synthetic SourceCandidate from known paper info (preserving abstract)
+            known_authors = paper_info.get("authors", [])
+            known_doi = paper_info.get("doi")
             existing_abs = paper_info.get("abstract") or next(
-                (c.abstract for c in source.candidates if getattr(c, "abstract", None)),
+                (
+                    c.abstract
+                    for c in source.candidates
+                    if getattr(c, "abstract", None)
+                    and (
+                        c.source_name == "known_papers"
+                        or (known_doi and c.doi and str(c.doi).lower() == str(known_doi).lower())
+                        or (known_authors and author_match_score(known_authors, list(c.authors or [])) >= 0.50)
+                    )
+                ),
                 None,
             )
             known_candidate = SourceCandidate(
@@ -389,8 +401,9 @@ class NeuroSymbolicChecker:
                 found=True,
                 title=paper_info.get("title"),
                 doi=paper_info.get("doi"),
-                authors=paper_info.get("authors", []),
+                authors=known_authors,
                 year=known_year,
+                venue=paper_info.get("venue"),
                 abstract=existing_abs,
                 confidence=0.95,
                 score=1.0,
@@ -431,13 +444,23 @@ class NeuroSymbolicChecker:
                             citation_title.lower(), cand.title.lower()
                         )
                         >= 0.70
+                        and (
+                            not citation.authors
+                            or author_match_score(citation.authors, list(cand.authors or [])) >= 0.50
+                        )
                         for cand in other_cands
                     )
                     if not has_real_matching_candidate:
                         # Title doesn't match and no other real paper matched → METADATA_ERROR
+                        agreeing_other_cands = [
+                            c
+                            for c in other_cands
+                            if (known_doi and c.doi and str(c.doi).lower() == str(known_doi).lower())
+                            or (known_authors and author_match_score(known_authors, list(c.authors or [])) >= 0.50)
+                        ]
                         enhanced_source = SourceResult(
                             citation_raw=source.citation_raw,
-                            candidates=[known_candidate] + other_cands,
+                            candidates=[known_candidate] + agreeing_other_cands,
                             sources_queried=["known_papers"] + other_queried,
                             sources_succeeded=["known_papers"] + other_succeeded,
                             sources_failed=source.sources_failed,
@@ -448,6 +471,23 @@ class NeuroSymbolicChecker:
                             is_retracted=getattr(source, "is_retracted", False),
                         )
                         features = self.feature_calculator.compute(citation, enhanced_source, citation_context)
+                        kp_rules = ["R-KNOWN-PAPER", "R-TITLE-MISMATCH"]
+                        kp_reason = (
+                            f"Known author '{citation.authors[0] if citation.authors else 'unknown'}' found, "
+                            f"but title '{citation_title}' does not match known paper '{known_title}' "
+                            f"(similarity: {title_sim:.2f}). This appears to be a wrong title attribution."
+                        )
+                        if (
+                            getattr(features, "cross_lingual_title_detected", False)
+                            and float(getattr(features, "cross_lingual_title_sim", 0.0) or 0.0) >= 0.58
+                        ):
+                            kp_rules.append("R-CROSS-LINGUAL-TITLE-MATCH")
+                            xl_sim = float(getattr(features, "cross_lingual_title_sim", 0.0) or 0.0)
+                            kp_reason = (
+                                f"Cross-lingual translated title detected (VI ↔ EN semantic alignment={xl_sim:.2f}). "
+                                f"Matched known publication, but foreign-language titles must be preserved in their "
+                                f"original language without translation."
+                            )
 
                         return self._apply_dead_link_exception(
                             CitationVerdict(
@@ -456,10 +496,8 @@ class NeuroSymbolicChecker:
                                 confidence=0.75,
                                 matched_source=enhanced_source,
                                 features=features,
-                                reasoning=f"Known author '{citation.authors[0] if citation.authors else 'unknown'}' found, "
-                                          f"but title '{citation_title}' does not match known paper '{known_title}' "
-                                          f"(similarity: {title_sim:.2f}). This appears to be a wrong title attribution.",
-                                triggered_rules=["R-KNOWN-PAPER", "R-TITLE-MISMATCH"],
+                                reasoning=kp_reason,
+                                triggered_rules=kp_rules,
                                 mismatched_fields=["title"],
                             ),
                             enhanced_source,
@@ -485,9 +523,15 @@ class NeuroSymbolicChecker:
                         self.enable_content_alignment
                         and citation_context
                         and getattr(features, "stance_label", "") == "contradiction_risk"
-                        and not getattr(features, "cross_lingual_detected", False)
                     ):
                         known_rules.append("R-CONTENT-MISMATCH")
+                    if (
+                        self.enable_content_alignment
+                        and citation_context
+                        and getattr(features, "cross_lingual_detected", False)
+                        and getattr(features, "content_is_aligned", False)
+                    ):
+                        known_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
                     base_reason = (
                         f"Known seminal paper verified via known papers database: '{paper_info.get('title')}'. "
                         "APIs failed but paper is well-documented."
@@ -528,9 +572,15 @@ class NeuroSymbolicChecker:
                     self.enable_content_alignment
                     and citation_context
                     and getattr(features, "stance_label", "") == "contradiction_risk"
-                    and not getattr(features, "cross_lingual_detected", False)
                 ):
                     known_rules.append("R-CONTENT-MISMATCH")
+                if (
+                    self.enable_content_alignment
+                    and citation_context
+                    and getattr(features, "cross_lingual_detected", False)
+                    and getattr(features, "content_is_aligned", False)
+                ):
+                    known_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
                 base_reason = (
                     f"Known seminal paper verified via known papers database: '{paper_info.get('title')}'. "
                     "APIs failed but paper is well-documented."
@@ -577,10 +627,17 @@ class NeuroSymbolicChecker:
             self.enable_content_alignment
             and citation_context
             and getattr(features, "stance_label", "") == "contradiction_risk"
-            and not getattr(features, "cross_lingual_detected", False)
             and "R-CONTENT-MISMATCH" not in final_rules
         ):
             final_rules.append("R-CONTENT-MISMATCH")
+        if (
+            self.enable_content_alignment
+            and citation_context
+            and getattr(features, "cross_lingual_detected", False)
+            and getattr(features, "content_is_aligned", False)
+            and "R-CROSS-LINGUAL-ALIGNMENT" not in final_rules
+        ):
+            final_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
 
         # Enhance reasoning với content alignment info (Neural layer feedback)
         enhanced_reasoning = self._enhance_reasoning_with_neural(
@@ -696,7 +753,11 @@ class NeuroSymbolicChecker:
             if ev_score and ev_score > 0:
                 alignment_info += f", evidence_sim={ev_score:.2f}"
             if getattr(features, "cross_lingual_detected", False):
-                alignment_info += ", cross_lingual=VI->EN"
+                bridged = getattr(features, "bridged_concepts", None) or []
+                if bridged:
+                    alignment_info += f", cross_lingual=VI->EN ({'; '.join(bridged[:3])})"
+                else:
+                    alignment_info += ", cross_lingual=VI->EN"
 
             if stance == "contradiction_risk":
                 alignment_info += " - WARNING: citation claim may contradict or be off-topic from source"

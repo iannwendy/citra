@@ -147,6 +147,9 @@ export interface Verdict {
     citation_intent?: string | null;
     stance_label?: string | null;
     cross_lingual_detected?: boolean;
+    bridged_concepts?: string[];
+    cross_lingual_title_detected?: boolean;
+    cross_lingual_title_sim?: number;
     context_source?: string | null;
     occurrence_alignments?: Array<{
       page: number;
@@ -158,6 +161,8 @@ export interface Verdict {
       intent: string;
       stance: string;
       best_evidence_sentence?: string | null;
+      cross_lingual_detected?: boolean;
+      bridged_concepts?: string[];
     }>;
     url_status?: UrlValidationStatus | null;
     url_status_code?: number | null;

@@ -188,6 +188,15 @@ _KNOWN_PAPERS: dict[tuple[str, str], dict] = {
         "title": "Deep Residual Learning for Image Recognition",
         "doi": "10.1109/CVPR.2016.90",
         "authors": ["He", "Zhang", "Ren", "Sun"],
+        "venue": "CVPR",
+        "abstract": (
+            "Deeper neural networks are more difficult to train. We present a residual learning "
+            "framework to ease the training of convolutional neural networks that are substantially "
+            "deeper than those used previously. We explicitly reformulate the layers as learning "
+            "residual functions with reference to the layer inputs. On the ImageNet dataset we "
+            "evaluate deep residual nets with a depth of up to 152 layers and achieve state-of-the-art "
+            "image recognition, classification, and object detection performance."
+        ),
     },
     ("kingma", "2014"): {
         "title": "Adam: A Method for Stochastic Optimization",
@@ -2078,9 +2087,14 @@ class RetrievalOrchestrator:
                 if citation.authors:
                     first_author = author_key(citation.authors[0])
 
+                from integrity_checker.matching.features import FeatureCalculator
+
+                clean_q_title, _ = FeatureCalculator._strip_medium_tags_and_extract_alt_titles(citation.title)
+                search_title = clean_q_title or citation.title
+
                 # Use FTS5 fuzzy search (without year filter for better recall)
                 results = self._local_db.fuzzy_search(
-                    title=citation.title,
+                    title=search_title,
                     authors=[first_author] if first_author else None,
                     year=citation.year,
                     limit=5,
@@ -2097,9 +2111,9 @@ class RetrievalOrchestrator:
                         if not r_paper.title:
                             continue
                         r_sim = max(
-                            title_similarity(citation.title, r_paper.title),
+                            title_similarity(search_title, r_paper.title),
                             title_similarity(
-                                OpenLibraryClient.strip_edition_suffix(citation.title),
+                                OpenLibraryClient.strip_edition_suffix(search_title),
                                 OpenLibraryClient.strip_edition_suffix(r_paper.title),
                             ),
                         )
@@ -2339,7 +2353,10 @@ class RetrievalOrchestrator:
         # If citation provides a full title that does not match the known paper title,
         # do not short-circuit API retrieval (the author may have published another paper that year).
         if citation.title and paper_info.get("title"):
-            if title_similarity(citation.title, paper_info["title"]) < 0.65:
+            from integrity_checker.matching.features import FeatureCalculator
+
+            clean_kp_title, _ = FeatureCalculator._strip_medium_tags_and_extract_alt_titles(citation.title)
+            if title_similarity(clean_kp_title or citation.title, paper_info["title"]) < 0.65:
                 return None
 
         year_key = str(citation.year)[:4] if citation.year else paper_info.get("year")

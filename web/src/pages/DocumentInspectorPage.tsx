@@ -460,6 +460,11 @@ function CitationPopup({
                             {verdict.features.stance_label}
                           </span>
                         )}
+                        {verdict.features.cross_lingual_detected && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-teal-100/80 text-teal-800 dark:bg-teal-900/70 dark:text-teal-300">
+                            VI↔EN Bridge
+                          </span>
+                        )}
                         {(verdict.features.content_alignment_score ?? 0) > 0 && (
                           <span className="text-[11px] font-mono font-bold text-indigo-700 dark:text-indigo-300">
                             {Math.round((verdict.features.content_alignment_score ?? 0) * 100)}%
@@ -467,6 +472,20 @@ function CitationPopup({
                         )}
                       </div>
                     </div>
+
+                    {verdict.features.bridged_concepts &&
+                      verdict.features.bridged_concepts.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {verdict.features.bridged_concepts.slice(0, 5).map((bc, bIdx) => (
+                            <span
+                              key={`${bc}-${bIdx}`}
+                              className="inline-flex items-center px-1.5 py-0.5 rounded bg-teal-50 dark:bg-teal-950/60 border border-teal-200/80 dark:border-teal-800 text-[10px] font-mono text-teal-800 dark:text-teal-300"
+                            >
+                              {bc}
+                            </span>
+                          ))}
+                        </div>
+                      )}
 
                     {verdict.features.best_evidence_sentence && (
                       <div className="rounded-lg bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 p-2.5">

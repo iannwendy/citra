@@ -176,6 +176,25 @@ export function buildEvidenceGraph(
           : `Context-to-Source semantic alignment score: ${alignPct}%`,
       });
     }
+    if (f.cross_lingual_title_detected) {
+      const crossTitlePct = Math.round((f.cross_lingual_title_sim ?? 0) * 100);
+      similarityChildren.push({
+        id: 'sim-cross-lingual-title',
+        label: `VI ↔ EN Translated Title Match (${crossTitlePct}%)`,
+        type: 'similarity',
+        status: 'warning',
+        detail: `Translated Vietnamese title matches English publication (${crossTitlePct}%), but original foreign-language title should be preserved per TDTU citation rules.`,
+      });
+    }
+    if (f.cross_lingual_detected && f.bridged_concepts && f.bridged_concepts.length > 0) {
+      similarityChildren.push({
+        id: 'sim-cross-lingual-bridge',
+        label: `VI ↔ EN Academic Concept Bridge (${f.bridged_concepts.length} concepts)`,
+        type: 'similarity',
+        status: 'success',
+        detail: `Bridged pairs: ${f.bridged_concepts.slice(0, 5).join('; ')}`,
+      });
+    }
     if (f.citation_intent || f.stance_label || f.cross_lingual_detected) {
       const stance = f.stance_label || 'supported';
       similarityChildren.push({
@@ -191,7 +210,11 @@ export function buildEvidenceGraph(
         detail: [
           f.citation_intent ? `Intent: ${f.citation_intent.toUpperCase()}` : null,
           `Stance: ${stance.toUpperCase()}`,
-          f.cross_lingual_detected ? 'Bridge: VI ↔ EN Cross-Lingual Active' : null,
+          f.cross_lingual_detected
+            ? f.bridged_concepts && f.bridged_concepts.length > 0
+              ? `Bridge (VI↔EN): ${f.bridged_concepts.slice(0, 3).join('; ')}`
+              : 'Bridge: VI ↔ EN Cross-Lingual Active'
+            : null,
         ]
           .filter(Boolean)
           .join(' · '),

@@ -26,134 +26,17 @@ from typing import Any, Optional
 
 from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
+from integrity_checker.matching.vn_en_academic_bridge import (
+    VN_DIACRITIC_RE as _VN_DIACRITIC_RE,
+    VN_EN_ACADEMIC_BRIDGE as _VN_EN_ACADEMIC_BRIDGE,
+    bridge_vn_to_en,
+    compute_cross_lingual_concept_overlap,
+    find_vn_cues_for_en_source,
+    is_vietnamese_text,
+    normalize_vn_spelling,
+)
 
 logger = get_logger(__name__)
-
-# Vietnamese diacritic detector
-_VN_DIACRITIC_RE = re.compile(
-    r"[àáảãạăắằẳẵặâấầẩẫậđèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵ]",
-    re.IGNORECASE,
-)
-
-# Academic Vietnamese -> English concept dictionary for cross-lingual semantic bridging
-_VN_EN_ACADEMIC_BRIDGE: tuple[tuple[str, str], ...] = (
-    ("xử lý ngôn ngữ tự nhiên", "natural language processing NLP"),
-    ("mô hình ngôn ngữ lớn", "large language model LLM"),
-    ("mô hình ngôn ngữ", "language model"),
-    ("mạng nơ-ron tích chập", "convolutional neural network CNN"),
-    ("mạng nơ-ron hồi quy", "recurrent neural network RNN LSTM"),
-    ("mạng nơ-ron", "neural network deep learning"),
-    ("học sâu", "deep learning neural network"),
-    ("học máy", "machine learning classification"),
-    ("học tăng cường", "reinforcement learning"),
-    ("học bán giám sát", "semi-supervised learning"),
-    ("học không giám sát", "unsupervised learning clustering"),
-    ("học có giám sát", "supervised learning classification"),
-    ("cơ chế chú ý", "attention mechanism transformer"),
-    ("biểu diễn từ", "word embeddings vector representations"),
-    ("nhúng câu", "sentence embeddings dense vectors"),
-    ("độ tương đồng ngữ nghĩa", "semantic similarity cosine"),
-    ("trích xuất đặc trưng", "feature extraction representation"),
-    ("phân loại văn bản", "text classification sentiment analysis"),
-    ("phân tích cảm xúc", "sentiment analysis emotion detection"),
-    ("phát hiện trầm cảm", "depression detection mental health social media"),
-    ("trầm cảm", "depression mental health disorder"),
-    ("sức khỏe tâm thần", "mental health psychological"),
-    ("mạng xã hội", "social media online comments"),
-    ("bình luận", "comments user posts"),
-    ("mất cân bằng dữ liệu", "imbalanced data oversampling SMOTE minority class"),
-    ("dữ liệu mất cân bằng", "imbalanced dataset SMOTE"),
-    ("phân cụm mật độ", "density-based clustering HDBSCAN DBSCAN"),
-    ("phân cụm", "clustering topic modeling"),
-    ("giảm chiều dữ liệu", "dimensionality reduction UMAP PCA"),
-    ("ảo giác", "hallucination fabricated reference"),
-    ("kiểm tra trích dẫn", "citation verification bibliographic integrity"),
-    ("tài liệu tham khảo", "bibliographic references citations"),
-    ("liên kết bản ghi", "record linkage entity resolution"),
-    ("hiệu chỉnh xác suất", "probability calibration Platt scaling ECE Brier score"),
-    ("độ tin cậy", "confidence calibration reliability"),
-    ("cơ sở dữ liệu", "database SQLite MySQL relational schema"),
-    ("ứng dụng web", "web application frontend backend HTTP"),
-    ("bất đồng bộ", "asynchronous AJAX Fetch API without page refresh"),
-    ("giao diện người dùng", "user interface DOM responsive frontend"),
-    ("xác thực người dùng", "user authentication login session security"),
-    ("mã hóa mật khẩu", "password hashing security authentication"),
-    ("mạng nơ-ron tích chập", "convolutional neural network CNN deep learning"),
-    ("học chuyển giao", "transfer learning pre-trained fine-tuning"),
-    ("tăng cường dữ liệu", "data augmentation synthetic training"),
-    ("rừng ngẫu nhiên", "random forest ensemble decision trees"),
-    ("cây quyết định", "decision tree classification"),
-    ("hồi quy", "regression linear logistic prediction"),
-    ("thị giác máy tính", "computer vision image recognition object detection"),
-    ("nhận dạng", "recognition detection classification"),
-    ("nghiên cứu lâm sàng", "clinical study trial patients medical"),
-    ("lâm sàng", "clinical medical patients"),
-    ("bệnh nhân", "patients clinical cohort subjects"),
-    ("chẩn đoán", "diagnosis detection screening clinical"),
-    ("điều trị", "treatment therapy intervention"),
-    ("thiếu ngủ", "sleep deprivation restriction insomnia"),
-    ("trí nhớ ngắn hạn", "short-term working memory cognitive retention"),
-    ("trí nhớ", "memory cognitive working memory"),
-    ("khả năng tập trung", "sustained attention cognitive focus"),
-    ("tập trung", "attention concentration cognitive"),
-    ("thanh thiếu niên", "adolescents youth students teenagers"),
-    ("người cao tuổi", "elderly older adults aging"),
-    ("suy giảm", "impairs reduces decline degradation"),
-    ("đột quỵ", "stroke ischemic cerebrovascular"),
-    ("tim mạch", "cardiovascular heart disease"),
-    ("tiểu đường", "diabetes diabetic blood glucose"),
-    ("ung thư", "cancer tumor oncology"),
-    ("tăng trưởng kinh tế", "economic growth GDP macroeconomic"),
-    ("rủi ro tín dụng", "credit risk financial default"),
-    ("gian lận", "fraud detection anomaly"),
-    ("thương mại điện tử", "e-commerce online shopping"),
-    ("quyền sở hữu trí tuệ", "intellectual property rights patent copyright trademark"),
-    ("trách nhiệm hình sự", "criminal liability penal code prosecution"),
-    ("hợp đồng thương mại", "commercial contract breach dispute arbitration"),
-    ("bảo vệ dữ liệu cá nhân", "personal data protection privacy GDPR cybersecurity"),
-    ("quản trị doanh nghiệp", "corporate governance board of directors shareholders"),
-    ("phát triển bền vững", "sustainable development ESG green economy environmental"),
-    ("chuyển đổi số", "digital transformation digitalization e-government"),
-    ("chuỗi cung ứng", "supply chain logistics inventory optimization"),
-    ("chính sách tiền tệ", "monetary policy central bank inflation interest rate"),
-    ("lạm phát", "inflation consumer price index macroeconomic"),
-    ("đầu tư trực tiếp nước ngoài", "foreign direct investment FDI capital inflows"),
-    ("năng lượng tái tạo", "renewable energy solar wind power grid"),
-    ("biến đổi khí hậu", "climate change global warming carbon emissions"),
-    ("đa dạng sinh học", "biodiversity conservation ecosystem species habitat"),
-    ("kháng kháng sinh", "antibiotic resistance antimicrobial bacterial infection"),
-    ("vắc-xin", "vaccine immunization antibody clinical efficacy"),
-    ("tâm lý học nhận thức", "cognitive psychology executive function perception"),
-    ("rối loạn lo âu", "anxiety disorder psychological stress mental health"),
-    ("giáo dục đại học", "higher education university pedagogy student learning"),
-    ("an toàn thông tin", "information security cybersecurity intrusion detection"),
-    ("hợp đồng thông minh", "smart contract blockchain decentralized ledger"),
-    ("trí tuệ nhân tạo tạo sinh", "generative artificial intelligence GenAI LLM"),
-    ("phá sản doanh nghiệp", "corporate bankruptcy insolvency liquidation restructuring"),
-    ("tranh chấp lao động", "labor dispute employment law strike collective bargaining"),
-    ("bồi thường thiệt hại", "damages compensation tort liability civil law"),
-    ("hợp đồng vô hiệu", "void contract invalidity legal transaction restitution"),
-    ("cạnh tranh không lành mạnh", "unfair competition antitrust monopoly market regulation"),
-    ("trái phiếu doanh nghiệp", "corporate bonds private placement debt securities issuance"),
-    ("thuế thu nhập doanh nghiệp", "corporate income tax tax incentives fiscal policy"),
-    ("sáp nhập và mua lại", "mergers and acquisitions M&A corporate control takeover"),
-    ("tài sản trí tuệ", "intellectual property assets valuation patent trademark"),
-    ("tên miền", "domain name cybersquatting trademark dispute Internet"),
-    ("quyền tác giả", "copyright authorship moral rights infringement"),
-    ("kiểm toán độc lập", "independent audit financial statements assurance"),
-    ("báo cáo tài chính", "financial statements accounting disclosure earnings"),
-    ("quản trị rủi ro", "risk management mitigation financial operational risk"),
-    ("thị trường chứng khoán", "stock market equity securities exchange trading"),
-    ("ngân hàng thương mại", "commercial bank credit lending Basel capital adequacy"),
-    ("thương mại quốc tế", "international trade WTO tariff export import"),
-    ("học liên kết", "federated learning privacy-preserving distributed training"),
-    ("mô hình khuếch tán", "diffusion model image generation denoising"),
-    ("điện toán đám mây", "cloud computing distributed systems virtualization"),
-    ("internet vạn vật", "Internet of Things IoT sensor networks edge computing"),
-    ("hệ thống gợi ý", "recommender system collaborative filtering matrix factorization"),
-    ("khai phá dữ liệu", "data mining knowledge discovery pattern recognition"),
-    ("phát hiện bất thường", "anomaly detection outlier intrusion fraud"),
-)
 
 # Canonical Zero-Shot Neural Intent Prototypes (SciCite / ACL-ARC taxonomy)
 _INTENT_PROTOTYPES: dict[str, str] = {
@@ -174,47 +57,56 @@ _INTENT_PROTOTYPES: dict[str, str] = {
 _METHODOLOGY_CUES_RE = re.compile(
     r"\b(?:used\s+by|we\s+use|implemented\s+in|built\s+on|based\s+on|adopted|employs|"
     r"extractor|parser|library|framework|pipeline|module|architecture|algorithm|"
-    r"following\s+[A-Z]|sử\s+dụng|áp\s+dụng|triển\s+khai|xây\s+dựng\s+trên)\b",
+    r"following\s+[A-Z]|sử\s+dụng|áp\s+dụng|triển\s+khai|xây\s+dựng\s+trên|"
+    r"kế\s+thừa|dựa\s+trên|huấn\s+luyện|tiền\s+xử\s+lý|tích\s+hợp|kiến\s+trúc|thuật\s+toán)\b",
     re.IGNORECASE,
 )
 _RESULT_CUES_RE = re.compile(
     r"\b(?:accuracy|precision|recall|f1|brier\s+score|calibration\s+error|ece|outperforms|"
     r"compared\s+with|benchmark|evaluation|measured\s+by|agreement|kappa|alpha|"
-    r"achieved|9\d%|8\d%|0\.\d+|kết\s+quả|độ\s+chính\s+xác|so\s+sánh|thực\s+nghiệm)\b",
+    r"achieved|9\d%|8\d%|0\.\d+|kết\s+quả|độ\s+chính\s+xác|so\s+sánh|thực\s+nghiệm|"
+    r"vượt\s+trội|cải\s+thiện|đạt\s+được|cao\s+hơn|thấp\s+hơn|sai\s+số|hiệu\s+năng)\b",
     re.IGNORECASE,
 )
 
 _NEGATION_CUES_RE = re.compile(
-    r"\b(?:not|never|no\s+longer|fails?\s+to|cannot|ineffective|insufficient|weak|"
+    r"\b(?:not|never|no\s+longer|no\s+evidence|fails?\s+to|cannot|ineffective|insufficient|weak|"
     r"worse\s+than|unreliable|impossible|evaded\s+by|lack\s+of|useless|incapable|"
-    r"contrary\s+to|disproves?|refutes?|invalidates?|"
-    r"không\s+thể|không\s+hiệu\s+quả|thất\s+bại|kém\s+hơn|vô\s+dụng|bác\s+bỏ|trái\s+ngược)\b",
+    r"contrary\s+to|disproves?|refutes?|invalidates?|degrades?|no\s+significant|"
+    r"không\s+thể|không\s+hiệu\s+quả|thất\s+bại|kém\s+hơn|vô\s+dụng|bác\s+bỏ|trái\s+ngược|"
+    r"không\s+cải\s+thiện|làm\s+giảm|suy\s+giảm\s+hiệu\s+năng|không\s+có\s+ý\s+nghĩa|"
+    r"không\s+có\s+bằng\s+chứng)\b",
     re.IGNORECASE,
 )
 _STRONG_POSITIVE_CLAIM_RE = re.compile(
     r"\b(?:always\s+correct|completely\s+solves|100%\s+accurate|guarantees|perfectly|"
     r"never\s+fails|eliminates\s+all|surprisingly\s+effective|highly\s+effective|"
-    r"superior\s+in\s+quality|significantly\s+outperforms|"
-    r"hoàn\s+toàn\s+chính\s+xác|luôn\s+đúng|rất\s+hiệu\s+quả|tối\s+ưu\s+tuyệt\s+đối)\b",
+    r"superior\s+in\s+quality|significantly\s+outperforms|significantly\s+improves|"
+    r"hoàn\s+toàn\s+chính\s+xác|luôn\s+đúng|rất\s+hiệu\s+quả|tối\s+ưu\s+tuyệt\s+đối|"
+    r"cải\s+thiện\s+đáng\s+kể|tăng\s+đáng\s+kể|nâng\s+cao\s+đáng\s+kể|chứng\s+minh\s+rõ\s+ràng|"
+    r"vượt\s+trội\s+hoàn\s+toàn|giải\s+quyết\s+triệt\s+để|hiệu\s+quả\s+vượt\s+trội)\b",
     re.IGNORECASE,
 )
 _DIRECT_REFUTATION_RE = re.compile(
     r"\b(?:completely\s+ineffective|fails?\s+to\s+\w+|useless|does\s+not\s+work|"
     r"cannot\s+improve|worse\s+than\s+random|incapable\s+of|no\s+significant\s+effect|"
-    r"hoàn\s+toàn\s+thất\s+bại|không\s+có\s+tác\s+dụng|hoàn\s+toàn\s+vô\s+dụng|không\s+mang\s+lại\s+hiệu\s+quả)\b",
+    r"degrades?\s+performance|fails?\s+to\s+improve|"
+    r"hoàn\s+toàn\s+thất\s+bại|không\s+có\s+tác\s+dụng|hoàn\s+toàn\s+vô\s+dụng|không\s+mang\s+lại\s+hiệu\s+quả|"
+    r"không\s+thể\s+cải\s+thiện|làm\s+giảm\s+độ\s+chính\s+xác|kém\s+hơn\s+ngẫu\s+nhiên)\b",
     re.IGNORECASE,
 )
 _POSITIVE_EVIDENCE_RE = re.compile(
     r"\b(?:state-of-the-art|outperforms?|effective|improves?|achieves?|successfully|"
     r"we\s+introduce|we\s+present|we\s+propose|we\s+demonstrate|we\s+show|"
-    r"superior|accurate|robust|significant\s+improvement)\b",
+    r"superior|accurate|robust|significant\s+improvement|"
+    r"cải\s+thiện|vượt\s+trội|hiệu\s+quả|độ\s+chính\s+xác\s+cao|thành\s+công)\b",
     re.IGNORECASE,
 )
 
 
 @dataclass
 class SemanticAlignmentResult:
-    """Kết quả semantic alignment check (Neural Layer v2.1).
+    """Kết quả semantic alignment check (Neural Layer v2.4).
 
     Attributes:
         similarity: Cosine similarity score tổng hợp (0.0-1.0)
@@ -229,6 +121,7 @@ class SemanticAlignmentResult:
         citation_intent: Mục đích trích dẫn ('background', 'methodology', 'result_comparison')
         stance_label: Trạng thái đồng thuận ('supported', 'partially_supported', 'neutral', 'contradiction_risk')
         cross_lingual_detected: True nếu phát hiện và bắc cầu ngữ nghĩa Việt ↔ Anh
+        bridged_concepts: Danh sách các cặp thuật ngữ học thuật Việt ↔ Anh đã bắc cầu
         occurrence_alignments: Danh sách kết quả neural cho từng vị trí trích dẫn trong bài
     """
 
@@ -244,6 +137,7 @@ class SemanticAlignmentResult:
     citation_intent: str = ""
     stance_label: str = "supported"
     cross_lingual_detected: bool = False
+    bridged_concepts: list[str] = field(default_factory=list)
     occurrence_alignments: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -264,7 +158,19 @@ class SemanticMatcher:
     def __init__(self, model_name: str | None = None) -> None:
         settings = get_settings().matching
         self.model_name = model_name or settings.embedding_model
+        self.multilingual_model_name = getattr(
+            settings,
+            "multilingual_embedding_model",
+            "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        )
+        self.enable_multilingual_encoder = bool(
+            getattr(settings, "enable_multilingual_encoder", False)
+        )
+        self.cross_lingual_sim_boost = float(
+            getattr(settings, "cross_lingual_sim_boost", 0.08)
+        )
         self._model = None  # lazy load
+        self._multilingual_model = None  # lazy load on-demand
 
     @classmethod
     def get_instance(cls, model_name: str | None = None) -> "SemanticMatcher":
@@ -296,6 +202,32 @@ class SemanticMatcher:
                         return None
                 self._model = self._model_cache[self.model_name]
         return self._model
+
+    def _get_multilingual_model(self):
+        """Lazy Dual-Encoder (Phương án A): trả về multilingual encoder nếu được bật hoặc đã nạp trong cache,
+        ngược lại fallback tức thì về encoder mặc định.
+        """
+        if self._multilingual_model is not None:
+            return self._multilingual_model
+        if self.multilingual_model_name in self._model_cache:
+            self._multilingual_model = self._model_cache[self.multilingual_model_name]
+            return self._multilingual_model
+        if not self.enable_multilingual_encoder:
+            return self._get_model()
+        with self._instance_lock:
+            if self.multilingual_model_name not in self._model_cache:
+                try:
+                    from sentence_transformers import SentenceTransformer  # type: ignore
+
+                    logger.info(f"Loading multilingual sentence-transformers: {self.multilingual_model_name}")
+                    self._model_cache[self.multilingual_model_name] = SentenceTransformer(
+                        self.multilingual_model_name
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"Multilingual encoder fallback to default model: {e}")
+                    return self._get_model()
+            self._multilingual_model = self._model_cache[self.multilingual_model_name]
+        return self._multilingual_model
 
     def _encode(self, model: "object", texts: object, **kwargs: object):
         """Thread-safe model.encode wrapper with torch.no_grad()."""
@@ -407,16 +339,25 @@ class SemanticMatcher:
             for w in re.findall(r"[A-Za-zÀ-ỹ0-9]{3,}", source_title or "")
             if w.lower() not in {"the", "and", "for", "with", "from", "using", "based", "study", "analysis"}
         }
+        vn_title_cues = find_vn_cues_for_en_source(source_title or "") if source_title else []
 
         best_sent = sentences[0]
         best_score = -1.0
         for idx, sent in enumerate(sentences):
+            sent_lower = normalize_vn_spelling(sent).lower()
             sent_words = {w.lower() for w in re.findall(r"[A-Za-zÀ-ỹ0-9]{3,}", sent)}
             overlap = len(title_words & sent_words)
+            vn_cue_hits = sum(1 for vc in vn_title_cues if vc in sent_lower)
             has_marker = bool(re.search(r"\[\d+(?:\s*[,–-]\s*\d+)*\]|\([A-Za-zÀ-ỹ][^)]*(?:19|20)\d{2}[a-z]?\)", sent))
             # Prefer middle complete sentences over chopped boundary fragments
             is_boundary_fragment = (idx == 0 and sent[0].islower()) or (idx == len(sentences) - 1 and not sent.endswith((".", "!", "?", ")")))
-            score = overlap * 2.5 + (2.0 if has_marker else 0.0) + (0.5 if not is_boundary_fragment else -0.5) + min(len(sent), 180) / 300.0
+            score = (
+                overlap * 2.5
+                + vn_cue_hits * 2.2
+                + (2.0 if has_marker else 0.0)
+                + (0.5 if not is_boundary_fragment else -0.5)
+                + min(len(sent), 180) / 300.0
+            )
             if score > best_score:
                 best_score = score
                 best_sent = sent
@@ -489,33 +430,71 @@ class SemanticMatcher:
         """Phát hiện khi khóa luận viết bằng tiếng Việt nhưng trích dẫn tài liệu tiếng Anh,
         và tạo chuỗi ngữ nghĩa bắc cầu (Cross-Lingual Concept Bridge).
         """
-        if not cited_context:
-            return False, ""
-        vn_chars = len(_VN_DIACRITIC_RE.findall(cited_context))
-        if vn_chars < 3:
-            return False, ""
+        is_xl, bridged, _ = bridge_vn_to_en(cited_context, source_title, source_abstract)
+        return is_xl, bridged
 
-        src_text = f"{source_title or ''} {source_abstract or ''}"
-        src_vn_chars = len(_VN_DIACRITIC_RE.findall(src_text))
-        # Cross-lingual when context is Vietnamese and source is predominantly English
-        if src_vn_chars > 5:
-            return False, ""
+    @staticmethod
+    def detect_and_bridge_cross_lingual_detailed(
+        cited_context: str,
+        source_title: str,
+        source_abstract: Optional[str] = None,
+    ) -> tuple[bool, str, list[str]]:
+        """Phát hiện ngữ cảnh xuyên ngôn ngữ Việt ↔ Anh kèm danh sách cặp khái niệm đã ánh xạ."""
+        return bridge_vn_to_en(cited_context, source_title, source_abstract)
 
-        ctx_lower = cited_context.lower()
-        bridged_terms: list[str] = []
-        for vn_phrase, en_equiv in _VN_EN_ACADEMIC_BRIDGE:
-            if vn_phrase in ctx_lower:
-                bridged_terms.append(en_equiv)
+    def cross_lingual_title_similarity(
+        self,
+        cited_title: str,
+        candidate_title: str,
+    ) -> tuple[bool, float, list[str]]:
+        """Kiểm tra và tính điểm căn chỉnh ngữ nghĩa xuyên ngôn ngữ cho cặp tiêu đề (Việt ↔ Anh).
 
-        # Also preserve all technical English tokens/acronyms already present in the Vietnamese sentence
-        en_tokens = re.findall(r"\b[A-Za-z][A-Za-z0-9_+.-]{2,}\b", cited_context)
-        non_vn_tokens = [t for t in en_tokens if not _VN_DIACRITIC_RE.search(t)]
+        Dùng khi sinh viên dịch tiêu đề bài báo/sách tiếng Anh sang tiếng Việt (hoặc ngược lại).
 
-        if not bridged_terms and not non_vn_tokens:
-            return True, cited_context
+        Returns:
+            Tuple (is_cross_lingual_title, xl_title_sim, bridged_concepts)
+        """
+        if not cited_title or not candidate_title:
+            return False, 0.0, []
 
-        bridge_str = " ".join(non_vn_tokens + bridged_terms)
-        return True, f"{cited_context} ({bridge_str})"
+        cit_is_vn = is_vietnamese_text(cited_title, min_diacritics=2)
+        cand_is_vn = is_vietnamese_text(candidate_title, min_diacritics=2)
+        if cit_is_vn == cand_is_vn:
+            return False, 0.0, []
+
+        vn_title = cited_title if cit_is_vn else candidate_title
+        en_title = candidate_title if cit_is_vn else cited_title
+
+        _, bridged_vn_title, bridged_concepts = bridge_vn_to_en(vn_title, en_title, None)
+        overlap_score, overlap_pairs = compute_cross_lingual_concept_overlap(vn_title, en_title)
+
+        merged_concepts = list(bridged_concepts)
+        for pair in overlap_pairs:
+            if pair not in merged_concepts:
+                merged_concepts.append(pair)
+
+        # Extract translated English portion inside bridged_vn_title "(...)" for clean SBERT comparison
+        en_bridge_only = ""
+        m_paren = re.search(r"\(([^()]+)\)\s*$", bridged_vn_title)
+        if m_paren:
+            en_bridge_only = m_paren.group(1).strip()
+
+        dense_sim = self.similarity(bridged_vn_title or vn_title, en_title)
+        if en_bridge_only:
+            dense_sim = max(dense_sim, self.similarity(en_bridge_only, en_title))
+
+        # Optional multilingual encoder boost when enabled/cached
+        multi_model = self._get_multilingual_model()
+        if multi_model is not None and multi_model is not self._get_model():
+            multi_sim = self._compute_similarity(multi_model, vn_title, en_title)
+            dense_sim = max(dense_sim, multi_sim)
+
+        if overlap_score > 0.0:
+            combined_sim = max(dense_sim, 0.45 * dense_sim + 0.55 * overlap_score)
+        else:
+            combined_sim = dense_sim
+
+        return True, round(min(1.0, max(0.0, combined_sim)), 4), merged_concepts
 
     @classmethod
     def classify_citation_intent(
@@ -548,10 +527,11 @@ class SemanticMatcher:
             except Exception:  # noqa: BLE001
                 pass
 
-        # Syntactic / lexical scholarly cues
-        if _METHODOLOGY_CUES_RE.search(focal_sentence):
+        # Syntactic / lexical scholarly cues (normalized for Vietnamese spelling variants)
+        norm_focal = normalize_vn_spelling(focal_sentence)
+        if _METHODOLOGY_CUES_RE.search(norm_focal):
             scores["methodology"] += 0.22
-        if _RESULT_CUES_RE.search(focal_sentence):
+        if _RESULT_CUES_RE.search(norm_focal):
             scores["result_comparison"] += 0.24
 
         return max(scores, key=lambda k: scores[k])
@@ -576,15 +556,18 @@ class SemanticMatcher:
         if not focal_sentence:
             return "neutral"
 
+        norm_focal = normalize_vn_spelling(focal_sentence)
+        norm_ev = normalize_vn_spelling(best_evidence_sentence) if best_evidence_sentence else ""
+
         # Check for severe polarity inversion when discussing the same technical concept
         if best_evidence_sentence and similarity >= 0.30:
-            ctx_neg = bool(_NEGATION_CUES_RE.search(focal_sentence))
-            ev_neg = bool(_NEGATION_CUES_RE.search(best_evidence_sentence))
-            ctx_abs_pos = bool(_STRONG_POSITIVE_CLAIM_RE.search(focal_sentence))
-            ev_abs_pos = bool(_STRONG_POSITIVE_CLAIM_RE.search(best_evidence_sentence))
-            ctx_direct_refute = bool(_DIRECT_REFUTATION_RE.search(focal_sentence))
+            ctx_neg = bool(_NEGATION_CUES_RE.search(norm_focal))
+            ev_neg = bool(_NEGATION_CUES_RE.search(norm_ev))
+            ctx_abs_pos = bool(_STRONG_POSITIVE_CLAIM_RE.search(norm_focal))
+            ev_abs_pos = bool(_STRONG_POSITIVE_CLAIM_RE.search(norm_ev))
+            ctx_direct_refute = bool(_DIRECT_REFUTATION_RE.search(norm_focal))
             ev_pos = bool(
-                _POSITIVE_EVIDENCE_RE.search(best_evidence_sentence)
+                _POSITIVE_EVIDENCE_RE.search(norm_ev)
                 or (source_abstract and _POSITIVE_EVIDENCE_RE.search(source_abstract))
             )
             if (
@@ -602,7 +585,7 @@ class SemanticMatcher:
             return "contradiction_risk"
         return "neutral"
 
-    # === NEURAL LAYER: Content-Context Alignment (v2.1) ===
+    # === NEURAL LAYER: Content-Context Alignment (v2.4) ===
 
     def check_content_alignment(
         self,
@@ -616,7 +599,7 @@ class SemanticMatcher:
 
         Kết hợp:
         - Cả đoạn văn (window context) VÀ câu trọng tâm (focal sentence) đã khử gạch nối PDF.
-        - Bắc cầu ngữ nghĩa Việt ↔ Anh (nếu văn bản trích dẫn là tiếng Việt).
+        - Bắc cầu ngữ nghĩa Việt ↔ Anh (nếu văn bản trích dẫn là tiếng Việt) kèm danh sách `bridged_concepts`.
         - So khớp đa cấp độ: Title + Toàn bộ Abstract + Từng câu trong Abstract (Sentence-level Max Pooling).
         - Trích xuất câu bằng chứng cụ thể (`best_evidence_sentence`) từ Abstract.
         - Phân loại mục đích trích dẫn (`citation_intent`) và kiểm tra Stance (`stance_label`).
@@ -651,11 +634,22 @@ class SemanticMatcher:
                 citation_marker=citation_marker,
                 source_title=source_title,
             )
-            is_cross_lingual, bridged_context = self.detect_and_bridge_cross_lingual(
-                focal_sentence or raw_context_clean,
-                source_title,
-                source_abstract,
+            is_cross_lingual, bridged_context, bridged_concepts = (
+                self.detect_and_bridge_cross_lingual_detailed(
+                    focal_sentence or raw_context_clean,
+                    source_title,
+                    source_abstract,
+                )
             )
+            concept_overlap_score = 0.0
+            if is_cross_lingual:
+                concept_overlap_score, overlap_pairs = compute_cross_lingual_concept_overlap(
+                    focal_sentence or raw_context_clean,
+                    f"{source_title or ''} {source_abstract or ''}",
+                )
+                for pair in overlap_pairs:
+                    if pair not in bridged_concepts:
+                        bridged_concepts.append(pair)
 
             cited_context_trunc = self._truncate_text(raw_context_clean or cited_context, max_length=512)
             source_title_trunc = self._truncate_text(source_title, max_length=256)
@@ -746,9 +740,13 @@ class SemanticMatcher:
                                 abstract_sim = whole_abs_sim
                                 best_evidence_sentence = self._truncate_text(source_abstract or "", max_length=280)
 
-                        # Classify citation intent using cached prototype embeddings
+                        # Classify citation intent using cached prototype embeddings (use bridged embedding for VI->EN)
                         intent_embs = self._get_intent_embeddings(model)
-                        primary_q_emb = embs[focal_idx] if focal_idx is not None else embs[0]
+                        primary_q_emb = (
+                            embs[bridged_idx]
+                            if bridged_idx is not None
+                            else (embs[focal_idx] if focal_idx is not None else embs[0])
+                        )
                         citation_intent = self.classify_citation_intent(
                             focal_sentence or cited_context_trunc,
                             ctx_emb=primary_q_emb,
@@ -825,6 +823,15 @@ class SemanticMatcher:
             else:
                 final_sim = weighted_similarity if scores else 0.0
 
+            # Cross-Lingual Score Calibration (when real tensor batch succeeded and concept overlap exists)
+            if is_cross_lingual and batch_done and concept_overlap_score > 0.0 and final_sim >= 0.25:
+                calibrated_xl = max(
+                    final_sim,
+                    min(0.95, 0.60 * final_sim + 0.40 * concept_overlap_score),
+                    min(0.95, final_sim + self.cross_lingual_sim_boost),
+                )
+                final_sim = calibrated_xl
+
             confidence, is_aligned = self._determine_alignment(final_sim)
             stance_label = self.check_claim_stance(
                 focal_sentence or cited_context_trunc,
@@ -834,6 +841,8 @@ class SemanticMatcher:
                 is_cross_lingual=is_cross_lingual,
                 source_abstract=source_abstract,
             )
+            if stance_label == "contradiction_risk":
+                is_aligned = False
 
             return SemanticAlignmentResult(
                 similarity=round(final_sim, 4),
@@ -853,6 +862,7 @@ class SemanticMatcher:
                 citation_intent=citation_intent,
                 stance_label=stance_label,
                 cross_lingual_detected=is_cross_lingual,
+                bridged_concepts=bridged_concepts,
             )
 
         except Exception as e:  # noqa: BLE001
@@ -914,6 +924,8 @@ class SemanticMatcher:
                     "intent": res.citation_intent,
                     "stance": res.stance_label,
                     "best_evidence_sentence": res.best_evidence_sentence,
+                    "cross_lingual_detected": res.cross_lingual_detected,
+                    "bridged_concepts": res.bridged_concepts,
                 }
             )
         return results
@@ -958,12 +970,7 @@ class SemanticMatcher:
 
         # Build reverse Vietnamese concept cues for English references (so Vietnamese body paragraphs
         # discussing an English paper's concept without English keywords are also discovered)
-        src_full_lower = f"{source_title} {source_abstract or ''}".lower()
-        vn_concept_cues: list[str] = []
-        for vn_phrase, en_equiv in _VN_EN_ACADEMIC_BRIDGE:
-            en_words = [w.lower() for w in re.findall(r"[A-Za-z0-9-]{3,}", en_equiv)]
-            if any(ew in src_full_lower for ew in en_words):
-                vn_concept_cues.append(vn_phrase)
+        vn_concept_cues = find_vn_cues_for_en_source(source_title, source_abstract)
 
         candidate_passages: list[tuple[int, str, float]] = []
         for page_num, page_text in body_pages:

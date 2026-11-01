@@ -69,6 +69,8 @@ const RULE_LABELS: Record<string, string> = {
   'R-FUTURE-YEAR': 'The publication year is in the future',
   'R-FUTURE-YEAR-KNOWN-AUTHOR': 'The publication year needs review',
   'R-CONTENT-ALIGNMENT': 'In-text context aligns semantically with the source abstract',
+  'R-CROSS-LINGUAL-ALIGNMENT': 'Vietnamese–English cross-lingual semantic alignment verified via academic concept bridge',
+  'R-CROSS-LINGUAL-TITLE-MATCH': 'Translated title matches original publication semantically — original foreign-language title must be preserved per TDTU citation rules',
   'R-CONTENT-MISMATCH': 'The citation content does not match the publication',
   'R-STYLE-INCONSISTENT': 'The citation format differs from the document style',
 };
@@ -172,6 +174,20 @@ export function getVerdictExplanation(verdict: Verdict): string {
       return `We found a matching publication in ${sources.join(' and ')}. ${matchedFields} are consistent with the citation.${linkNote}${retractionNote}`;
 
     case 'metadata_error':
+      if (
+        (verdict.triggered_rules ?? []).includes('R-CROSS-LINGUAL-TITLE-MATCH') ||
+        verdict.features?.cross_lingual_title_detected
+      ) {
+        const crossSimPct = verdict.features?.cross_lingual_title_sim
+          ? ` (${Math.round(verdict.features.cross_lingual_title_sim * 100)}% VI↔EN semantic match)`
+          : '';
+        return (
+          `The Vietnamese translated title semantically matches the English publication${crossSimPct}, ` +
+          `but TDTU academic citation rules require preserving the original foreign-language title (optionally followed by [Vietnamese translation] in brackets).` +
+          linkNote +
+          retractionNote
+        );
+      }
       return (sources.length > 0
         ? `We found a likely publication, but ${fields} do not match the citation. Please review these details.`
         : `The citation could not be confirmed because ${fields} do not match the available record.`) + linkNote + retractionNote;

@@ -376,10 +376,11 @@ export function HeroVerificationMockup({
         >
           <div className="flex items-center justify-between gap-2 text-[10px] sm:text-[11px] font-mono">
             <span style={{ color: 'var(--solva-muted)' }} className="truncate">
-              {lang === 'vi' ? 'TRÍCH DẪN BÓC TÁCH' : 'EXTRACTED QUEUE'}
+              {lang === 'vi' ? 'DANH SÁCH TRÍCH DẪN' : 'EXTRACTED QUEUE'}
             </span>
             <span style={{ color: 'var(--solva-ink)' }} className="font-semibold shrink-0">
-              <SolvaLiveNumber value={24} replaySeed={replaySeed} durationMs={1350} /> refs
+              <SolvaLiveNumber value={24} replaySeed={replaySeed} durationMs={1350} />{' '}
+              {lang === 'vi' ? 'mục' : 'refs'}
             </span>
           </div>
 
@@ -450,7 +451,7 @@ export function HeroVerificationMockup({
                 style={{ color: 'var(--solva-muted)' }}
                 className="text-[10px] font-mono uppercase tracking-wider"
               >
-                {lang === 'vi' ? 'KIỂM CHỨNG ĐA NGUỒN' : 'LIVE VERDICT TRACE'}{' '}
+                {lang === 'vi' ? 'HỒ SƠ THẨM ĐỊNH TRỰC TIẾP' : 'LIVE VERDICT TRACE'}{' '}
                 {selected.marker}
               </div>
               <div
@@ -497,11 +498,11 @@ export function HeroVerificationMockup({
                 }`}
               >
                 {selected.tone === 'red' ? (
-                  '404 Ghost'
+                  lang === 'vi' ? '404 Không tồn tại' : '404 Ghost'
                 ) : (
                   <SolvaLiveNumber
                     value={100}
-                    suffix="% Match"
+                    suffix={lang === 'vi' ? '% Khớp chuẩn' : '% Match'}
                     replaySeed={replaySeed}
                     durationMs={1150}
                   />
@@ -510,7 +511,7 @@ export function HeroVerificationMockup({
             </div>
             <div className="flex items-center justify-between">
               <span style={{ color: 'var(--solva-muted)' }} className="font-mono">
-                Rule:
+                {lang === 'vi' ? 'Quy tắc:' : 'Rule:'}
               </span>
               <span style={{ color: 'var(--solva-ink)' }} className="font-mono">
                 {selected.tone === 'emerald'
@@ -522,14 +523,14 @@ export function HeroVerificationMockup({
             </div>
             <div className="flex items-center justify-between">
               <span style={{ color: 'var(--solva-muted)' }} className="font-mono">
-                NLI Stance:
+                {lang === 'vi' ? 'Ngữ cảnh NLI:' : 'NLI Stance:'}
               </span>
               <span className="font-mono text-emerald-700 dark:text-emerald-300 font-medium">
                 {selected.tone === 'red' ? (
-                  'UNVERIFIABLE (No Abstract)'
+                  lang === 'vi' ? 'KHÔNG THỂ XÁC THỰC (Thiếu bài gốc)' : 'UNVERIFIABLE (No Abstract)'
                 ) : (
                   <>
-                    SUPPORTS (DeBERTa{' '}
+                    {lang === 'vi' ? 'ĐỒNG THUẬN (DeBERTa ' : 'SUPPORTS (DeBERTa '}
                     <SolvaLiveNumber
                       value={selected.nliScore}
                       decimals={2}
@@ -550,7 +551,7 @@ export function HeroVerificationMockup({
               className="text-[10px] font-mono uppercase"
             >
               {lang === 'vi'
-                ? 'ĐỐI CHIẾU TRÊN 15+ CSDL HỌC THUẬT'
+                ? 'ĐỐI CHIẾU CHÉO TRÊN 15+ CSDL HỌC THUẬT QUỐC TẾ'
                 : 'FEDERATED SCHOLARLY API WATERFALL'}
             </div>
             <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
@@ -645,7 +646,7 @@ export function FeatureCardWidget({
             className="text-[12px] font-medium flex items-center gap-1.5"
           >
             <Layers className="w-3.5 h-3.5" />
-            {lang === 'vi' ? 'Mô hình 2 Tầng Độc lập' : '2-Layer Orthogonal Output'}
+            {lang === 'vi' ? 'Kiến trúc 2 Tầng Độc lập' : '2-Layer Orthogonal Output'}
           </span>
           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#F4F2EC] dark:bg-[#29261F] text-[#56524A] dark:text-[#A8A296]">
             L1 × L2
@@ -662,16 +663,18 @@ export function FeatureCardWidget({
             className="p-2.5 rounded-[10px] border space-y-1 transition-all duration-500"
           >
             <div className="flex items-center justify-between text-[10px] font-mono">
-              <span style={{ color: 'var(--solva-muted)' }}>LAYER 1 · MAPPING</span>
+              <span style={{ color: 'var(--solva-muted)' }}>
+                {lang === 'vi' ? 'TẦNG 1 · ĐỐI CHIẾU NỘI BỘ' : 'LAYER 1 · MAPPING'}
+              </span>
               <span className="text-emerald-700 dark:text-emerald-400 font-semibold inline-flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 MATCHED
               </span>
             </div>
             <p style={{ color: 'var(--solva-ink)' }} className="text-[12px] font-medium">
-              In-text [
+              {lang === 'vi' ? 'Trong bài [' : 'In-text ['}
               <SolvaLiveNumber value={activeRefNum} replaySeed={replaySeed} durationMs={1150} />
-              ] ↔ Bibliography #
+              {lang === 'vi' ? '] ↔ Danh mục #' : '] ↔ Bibliography #'}
               <SolvaLiveNumber value={activeRefNum} replaySeed={replaySeed} durationMs={1150} />
             </p>
           </div>
@@ -685,13 +688,15 @@ export function FeatureCardWidget({
             className="p-2.5 rounded-[10px] border space-y-1 transition-all duration-500"
           >
             <div className="flex items-center justify-between text-[10px] font-mono">
-              <span style={{ color: 'var(--solva-muted)' }}>LAYER 2 · EXISTENCE</span>
+              <span style={{ color: 'var(--solva-muted)' }}>
+                {lang === 'vi' ? 'TẦNG 2 · XÁC THỰC NGUỒN GỐC' : 'LAYER 2 · EXISTENCE'}
+              </span>
               <span className="text-amber-700 dark:text-amber-400 font-semibold">
                 METADATA_ERROR
               </span>
             </div>
             <p style={{ color: 'var(--solva-ink)' }} className="text-[12px] font-medium">
-              DOI valid · Year drift (
+              {lang === 'vi' ? 'DOI hợp lệ · Lệch năm (' : 'DOI valid · Year drift ('}
               <SolvaLiveNumber
                 value={2020}
                 startValue={2000}
@@ -719,9 +724,9 @@ export function FeatureCardWidget({
         >
           <span style={{ color: 'var(--solva-muted)' }}>
             <SolvaLiveNumber value={7} replaySeed={replaySeed} durationMs={1100} />{' '}
-            {lang === 'vi' ? 'nhãn L1 · ' : 'L1 states · '}
+            {lang === 'vi' ? 'trạng thái T1 · ' : 'L1 states · '}
             <SolvaLiveNumber value={8} replaySeed={replaySeed} durationMs={1250} />{' '}
-            {lang === 'vi' ? 'nhãn L2' : 'L2 verdicts'}
+            {lang === 'vi' ? 'nhãn T2' : 'L2 verdicts'}
           </span>
           <span
             style={{ color: 'var(--solva-ink)' }}
@@ -729,7 +734,7 @@ export function FeatureCardWidget({
           >
             <SolvaLiveNumber
               value={100}
-              suffix="% Orthogonal"
+              suffix={lang === 'vi' ? '% Độc lập' : '% Orthogonal'}
               replaySeed={replaySeed}
               durationMs={1450}
             />
@@ -742,11 +747,37 @@ export function FeatureCardWidget({
   if (index === 1) {
     // Widget 2: 15+ Scholarly APIs Waterfall
     const apis = [
-      { name: 'Crossref REST API', status: 'DOI Exact', baseMs: 38, delta: 2 },
-      { name: 'OpenAlex Works', status: 'Work ID Match', baseMs: 49, delta: -2 },
-      { name: 'Semantic Scholar', status: 'Embedding', score: 0.96, baseMs: 62, delta: 3 },
-      { name: 'PubMed / EuropePMC', status: 'PMID Verified', baseMs: 54, delta: -1 },
-      { name: 'SQLite FTS5 Cache', status: 'Local Hit', baseMs: 3, delta: 0 },
+      {
+        name: 'Crossref REST API',
+        status: lang === 'vi' ? 'Khớp DOI' : 'DOI Exact',
+        baseMs: 38,
+        delta: 2,
+      },
+      {
+        name: 'OpenAlex Works',
+        status: lang === 'vi' ? 'Khớp Work ID' : 'Work ID Match',
+        baseMs: 49,
+        delta: -2,
+      },
+      {
+        name: 'Semantic Scholar',
+        status: lang === 'vi' ? 'Ngữ nghĩa' : 'Embedding',
+        score: 0.96,
+        baseMs: 62,
+        delta: 3,
+      },
+      {
+        name: 'PubMed / EuropePMC',
+        status: lang === 'vi' ? 'Xác thực PMID' : 'PMID Verified',
+        baseMs: 54,
+        delta: -1,
+      },
+      {
+        name: 'SQLite FTS5 Cache',
+        status: lang === 'vi' ? 'Đệm cục bộ' : 'Local Hit',
+        baseMs: 3,
+        delta: 0,
+      },
     ];
     return (
       <div
@@ -764,11 +795,11 @@ export function FeatureCardWidget({
           >
             <Database className="w-3.5 h-3.5" />
             <SolvaLiveNumber value={15} suffix="+" replaySeed={replaySeed} durationMs={1200} />{' '}
-            {lang === 'vi' ? 'Nguồn Học thuật' : 'Scholarly Indexes'}
+            {lang === 'vi' ? 'CSDL Khoa học' : 'Scholarly Indexes'}
           </span>
           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            PARALLEL
+            {lang === 'vi' ? 'SONG SONG' : 'PARALLEL'}
           </span>
         </div>
 
@@ -838,7 +869,7 @@ export function FeatureCardWidget({
           <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
             <SolvaLiveNumber
               value={200}
-              suffix="M+ Works"
+              suffix={lang === 'vi' ? 'M+ Công trình' : 'M+ Works'}
               replaySeed={replaySeed}
               durationMs={1500}
             />
@@ -869,7 +900,7 @@ export function FeatureCardWidget({
           className="text-[12px] font-medium flex items-center gap-1.5"
         >
           <Scale className="w-3.5 h-3.5" />
-          {lang === 'vi' ? 'Neuro-Symbolic & NLI' : 'Neuro-Symbolic & NLI'}
+          {lang === 'vi' ? 'Suy luận Logic & Ngữ nghĩa NLI' : 'Neuro-Symbolic & NLI'}
         </span>
         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:text-[#1C1A15]">
           R01–R<SolvaLiveNumber value={20} padDigits={2} replaySeed={replaySeed} durationMs={1200} />
@@ -886,10 +917,12 @@ export function FeatureCardWidget({
           className="p-2.5 rounded-[10px] border space-y-1 transition-all duration-500"
         >
           <div className="flex items-center justify-between text-[10px] font-mono">
-            <span style={{ color: 'var(--solva-muted)' }}>SYMBOLIC RULE GRAPH</span>
+            <span style={{ color: 'var(--solva-muted)' }}>
+              {lang === 'vi' ? 'ĐỒ THỊ QUY TẮC HÌNH THỨC' : 'SYMBOLIC RULE GRAPH'}
+            </span>
             <span className="text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              PASSED
+              {lang === 'vi' ? 'ĐẠT CHUẨN' : 'PASSED'}
             </span>
           </div>
           <p style={{ color: 'var(--solva-ink)' }} className="text-[11px] font-mono">
@@ -916,9 +949,11 @@ export function FeatureCardWidget({
           className="p-2.5 rounded-[10px] border space-y-1.5 transition-all duration-500"
         >
           <div className="flex items-center justify-between text-[10px] font-mono">
-            <span style={{ color: 'var(--solva-muted)' }}>DeBERTa-v3 CLAIM STANCE</span>
+            <span style={{ color: 'var(--solva-muted)' }}>
+              {lang === 'vi' ? 'NGỮ CẢNH DeBERTa-v3 NLI' : 'DeBERTa-v3 CLAIM STANCE'}
+            </span>
             <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
-              SUPPORTS (
+              {lang === 'vi' ? 'ĐỒNG THUẬN (' : 'SUPPORTS ('}
               <SolvaLiveNumber
                 value={currentStance}
                 suffix="%"
@@ -946,7 +981,7 @@ export function FeatureCardWidget({
       >
         <span style={{ color: 'var(--solva-muted)' }}>MiniLM-L6 + CrossEncoder</span>
         <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
-          Explainable AI
+          {lang === 'vi' ? 'AI Giải thích được' : 'Explainable AI'}
         </span>
       </div>
     </div>
@@ -997,12 +1032,14 @@ export function StickyCardWidget({
               style={{ color: 'var(--solva-ink)' }}
               className="text-[13px] font-medium"
             >
-              GROBID TEI-XML + Cross-Validator
+              {lang === 'vi'
+                ? 'GROBID TEI-XML + Đối soát đa chuẩn'
+                : 'GROBID TEI-XML + Cross-Validator'}
             </span>
           </div>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            ACTIVE
+            {lang === 'vi' ? 'HOẠT ĐỘNG' : 'ACTIVE'}
           </span>
         </div>
 
@@ -1156,7 +1193,7 @@ export function StickyCardWidget({
               className="text-[13px] font-medium"
             >
               {lang === 'vi'
-                ? 'Đồ thị Suy diễn & Quyền Giảng viên'
+                ? 'Chuỗi suy luận & Quyền thẩm định Giảng viên'
                 : 'Symbolic Trace & Instructor Override'}
             </span>
           </div>
@@ -1184,11 +1221,13 @@ export function StickyCardWidget({
                 style={{ color: 'var(--solva-muted)' }}
                 className="text-[11px] truncate"
               >
-                Canonical DOI verified via Crossref
+                {lang === 'vi'
+                  ? 'Đã xác thực mã DOI chuẩn trên Crossref'
+                  : 'Canonical DOI verified via Crossref'}
               </div>
             </div>
             <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300">
-              PASS
+              {lang === 'vi' ? 'ĐẠT' : 'PASS'}
             </span>
           </div>
 
@@ -1213,14 +1252,14 @@ export function StickyCardWidget({
                 style={{ color: 'var(--solva-muted)' }}
                 className="text-[11px] truncate"
               >
-                Cited{' '}
+                {lang === 'vi' ? 'Ghi trong bài ' : 'Cited '}
                 <SolvaLiveNumber
                   value={2018}
                   startValue={2000}
                   replaySeed={replaySeed}
                   durationMs={1250}
                 />{' '}
-                · Published{' '}
+                {lang === 'vi' ? '· Công bố ' : '· Published '}
                 <SolvaLiveNumber
                   value={2019}
                   startValue={2000}
@@ -1229,11 +1268,11 @@ export function StickyCardWidget({
                 />{' '}
                 (Δ=
                 <SolvaLiveNumber value={1} replaySeed={replaySeed} durationMs={1050} />
-                yr)
+                {lang === 'vi' ? ' năm)' : 'yr)'}
               </div>
             </div>
             <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 bg-amber-500/12 text-amber-700 dark:text-amber-300">
-              WARN
+              {lang === 'vi' ? 'LƯU Ý' : 'WARN'}
             </span>
           </div>
 
@@ -1257,7 +1296,9 @@ export function StickyCardWidget({
                 style={{ color: 'var(--solva-muted)' }}
                 className="text-[11px] truncate"
               >
-                Manuscript claim supported by abstract
+                {lang === 'vi'
+                  ? 'Luận điểm trích dẫn được bài gốc củng cố'
+                  : 'Manuscript claim supported by abstract'}
               </div>
             </div>
             <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300">
@@ -1296,7 +1337,7 @@ export function StickyCardWidget({
           <Sparkles className="w-4 h-4 shrink-0" />
           <span className="leading-snug">
             {lang === 'vi'
-              ? 'Theo dõi Tiến độ Chỉnh sửa Bản thảo'
+              ? 'Hành trình Hoàn thiện Chất lượng Bản thảo'
               : 'Revision Progress & Integrity Score'}
           </span>
         </span>
@@ -1320,7 +1361,7 @@ export function StickyCardWidget({
       >
         <div>
           <div style={{ color: 'var(--solva-muted)' }} className="text-[11px]">
-            Draft v1 (Before Audit)
+            {lang === 'vi' ? 'Bản nháp v1 (Trước rà soát)' : 'Draft v1 (Before Audit)'}
           </div>
           <div
             style={{ color: 'var(--solva-ink)' }}
@@ -1346,7 +1387,7 @@ export function StickyCardWidget({
         </div>
         <div className="text-right">
           <div style={{ color: 'var(--solva-muted)' }} className="text-[11px]">
-            Draft v2 (Verified)
+            {lang === 'vi' ? 'Bản nộp v2 (Đã chuẩn hóa)' : 'Draft v2 (Verified)'}
           </div>
           <div className="font-solva-serif text-[26px] leading-tight text-emerald-700 dark:text-emerald-300">
             <SolvaLiveNumber
@@ -1363,7 +1404,9 @@ export function StickyCardWidget({
       <div className="space-y-1.5 text-[11px]">
         <div className="flex items-center justify-between">
           <span style={{ color: 'var(--solva-muted)' }}>
-            Hallucinated / Ghost DOIs resolved
+            {lang === 'vi'
+              ? 'Trích dẫn ảo / DOI hư cấu đã loại bỏ'
+              : 'Hallucinated / Ghost DOIs resolved'}
           </span>
           <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
             <SolvaLiveNumber value={3} replaySeed={replaySeed} durationMs={1050} /> →{' '}
@@ -1377,7 +1420,9 @@ export function StickyCardWidget({
         </div>
         <div className="flex items-center justify-between">
           <span style={{ color: 'var(--solva-muted)' }}>
-            Missing bibliography entries fixed
+            {lang === 'vi'
+              ? 'Mục tham khảo bị khuyết đã bổ sung'
+              : 'Missing bibliography entries fixed'}
           </span>
           <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
             <SolvaLiveNumber value={4} replaySeed={replaySeed} durationMs={1100} /> →{' '}
@@ -1417,51 +1462,101 @@ export function PipelineStageVisual({
 
   const stages = [
     {
-      badge: 'STAGE 01 · GROBID TEI-XML & CROSS-VALIDATOR',
+      badge:
+        lang === 'vi'
+          ? 'GIAI ĐOẠN 01 · GROBID TEI-XML & ĐỐI SOÁT ĐA CHUẨN'
+          : 'STAGE 01 · GROBID TEI-XML & CROSS-VALIDATOR',
       title:
         lang === 'vi'
-          ? 'Phân vùng cấu trúc bản thảo & Bóc tách tham chiếu đa chuẩn'
+          ? 'Phân tách cấu trúc bản thảo & Chuẩn hóa trích dẫn đa quy cách'
           : 'Structural Manuscript Segmentation & Multi-Style Reference Parsing',
       metrics: [
-        { k: 'Engine', v: 'GROBID CRF/DL + Regex Cross-Validator' },
-        { k: 'Supported Styles', v: 'IEEE, APA 7th, Vancouver, Harvard, ACM' },
-        { k: 'Section Filtering', v: 'Body vs. Bibliography Boundary Lock' },
+        {
+          k: lang === 'vi' ? 'Bộ máy phân tích' : 'Engine',
+          v: lang === 'vi' ? 'GROBID Học sâu + Bộ đối soát đa chuẩn' : 'GROBID CRF/DL + Regex Cross-Validator',
+        },
+        {
+          k: lang === 'vi' ? 'Quy chuẩn hỗ trợ' : 'Supported Styles',
+          v: 'IEEE, APA 7th, Vancouver, Harvard, ACM',
+        },
+        {
+          k: lang === 'vi' ? 'Khoanh vùng bố cục' : 'Section Filtering',
+          v: lang === 'vi' ? 'Tách biệt Thân bài & Danh mục tham khảo' : 'Body vs. Bibliography Boundary Lock',
+        },
       ],
     },
     {
-      badge: 'STAGE 02 · 15+ FEDERATED SCHOLARLY INDEXES',
+      badge:
+        lang === 'vi'
+          ? 'GIAI ĐOẠN 02 · LIÊN HỢP 15+ CSDL HỌC THUẬT QUỐC TẾ'
+          : 'STAGE 02 · 15+ FEDERATED SCHOLARLY INDEXES',
       title:
         lang === 'vi'
-          ? 'Truy hồi song song bất đồng bộ kèm bộ nhớ đệm SQLite FTS5'
+          ? 'Truy vấn song song bất đồng bộ kết hợp bộ nhớ đệm SQLite FTS5'
           : 'Async Parallel Bibliographic Retrieval with SQLite FTS5 Cache',
       metrics: [
-        { k: 'Primary Tier', v: 'Crossref, OpenAlex, Semantic Scholar, PubMed' },
-        { k: 'Specialized Tier', v: 'arXiv, DBLP, Europe PMC, DOAJ, ORCID' },
-        { k: 'Cache Hit Latency', v: '3.2 ms (BM25 + Trigram FTS5)' },
+        {
+          k: lang === 'vi' ? 'Tầng CSDL chủ lực' : 'Primary Tier',
+          v: 'Crossref, OpenAlex, Semantic Scholar, PubMed',
+        },
+        {
+          k: lang === 'vi' ? 'Tầng chuyên ngành' : 'Specialized Tier',
+          v: 'arXiv, DBLP, Europe PMC, DOAJ, ORCID',
+        },
+        {
+          k: 'Cache Hit Latency',
+          label: lang === 'vi' ? 'Độ trễ bộ nhớ đệm' : 'Cache Hit Latency',
+          v: '3.2 ms (BM25 + Trigram FTS5)',
+        },
       ],
     },
     {
-      badge: 'STAGE 03 · NEURO-SYMBOLIC RULE GRAPH (R01–R20)',
+      badge:
+        lang === 'vi'
+          ? 'GIAI ĐOẠN 03 · ĐỒ THỊ QUY TẮC NEURO-SYMBOLIC (R01–R20)'
+          : 'STAGE 03 · NEURO-SYMBOLIC RULE GRAPH (R01–R20)',
       title:
         lang === 'vi'
-          ? 'Đối chiếu từng trường Metadata & Suy diễn luật hình thức'
+          ? 'Đối sánh chi tiết từng trường thư mục & Suy luận quy tắc hình thức'
           : 'Field-Level Metadata Verification & Deterministic Rule Graph',
       metrics: [
-        { k: 'Title Similarity', v: 'Token Jaccard + Levenshtein + MiniLM (0.98)' },
-        { k: 'Author & Year Check', v: 'Surname Fuzzy Match · ΔYear Tolerance ±1' },
-        { k: 'Ghost DOI Detection', v: 'HTTP/Handle Resolution + Metadata Cross-Check' },
+        {
+          k: 'Title Similarity',
+          label: lang === 'vi' ? 'Độ tương đồng tiêu đề' : 'Title Similarity',
+          v: 'Token Jaccard + Levenshtein + MiniLM (0.98)',
+        },
+        {
+          k: lang === 'vi' ? 'Đối chiếu Tác giả & Năm' : 'Author & Year Check',
+          v: lang === 'vi' ? 'So khớp mờ họ tác giả · Độ lệch chuẩn ±1 năm' : 'Surname Fuzzy Match · ΔYear Tolerance ±1',
+        },
+        {
+          k: lang === 'vi' ? 'Nhận diện DOI giả mạo' : 'Ghost DOI Detection',
+          v: lang === 'vi' ? 'Phân giải định danh HTTP/Handle + Đối chiếu chéo' : 'HTTP/Handle Resolution + Metadata Cross-Check',
+        },
       ],
     },
     {
-      badge: 'STAGE 04 · SENTENCE-BERT & DeBERTa-v3 NLI STANCE',
+      badge:
+        lang === 'vi'
+          ? 'GIAI ĐOẠN 04 · NGỮ NGHĨA SENTENCE-BERT & DeBERTa-v3 NLI'
+          : 'STAGE 04 · SENTENCE-BERT & DeBERTa-v3 NLI STANCE',
       title:
         lang === 'vi'
-          ? 'Kiểm chứng ngữ nghĩa câu trích dẫn & Thái độ đồng thuận/bác bỏ'
+          ? 'Thẩm định sự tương thích ngữ nghĩa & Mức độ đồng thuận của bài gốc'
           : 'Contextual Claim-to-Abstract Semantic & Stance Verification',
       metrics: [
-        { k: 'Bi-Encoder', v: 'all-MiniLM-L6-v2 Dense Cosine Similarity' },
-        { k: 'Cross-Encoder', v: 'ms-marco-MiniLM-L-6-v2 Precision Re-ranker' },
-        { k: 'Stance Classifier', v: 'DeBERTa-v3 NLI (SUPPORTS / REFUTES / NEUTRAL)' },
+        {
+          k: 'Bi-Encoder',
+          v: lang === 'vi' ? 'Độ tương đồng Cosine sâu all-MiniLM-L6-v2' : 'all-MiniLM-L6-v2 Dense Cosine Similarity',
+        },
+        {
+          k: 'Cross-Encoder',
+          v: lang === 'vi' ? 'Bộ tái xếp hạng chuẩn xác ms-marco-MiniLM-L-6-v2' : 'ms-marco-MiniLM-L-6-v2 Precision Re-ranker',
+        },
+        {
+          k: lang === 'vi' ? 'Phân tích ngữ cảnh NLI' : 'Stance Classifier',
+          v: lang === 'vi' ? 'DeBERTa-v3 NLI (ĐỒNG THUẬN / BÁC BỎ / TRUNG LẬP)' : 'DeBERTa-v3 NLI (SUPPORTS / REFUTES / NEUTRAL)',
+        },
       ],
     },
   ];
@@ -1488,7 +1583,7 @@ export function PipelineStageVisual({
         </span>
         <span className="px-2 py-0.5 rounded bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold inline-flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          LIVE PIPELINE
+          {lang === 'vi' ? 'TRỰC TIẾP' : 'LIVE PIPELINE'}
         </span>
       </div>
 
@@ -1513,7 +1608,7 @@ export function PipelineStageVisual({
               className="px-3.5 py-2.5 rounded-[8px] border flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[12px] transition-all duration-300"
             >
               <span style={{ color: 'var(--solva-muted)' }} className="font-mono">
-                {m.k}
+                {'label' in m && m.label ? m.label : m.k}
               </span>
               <span
                 style={{ color: 'var(--solva-ink)' }}
@@ -1562,13 +1657,13 @@ export function PipelineStageVisual({
         <span style={{ color: 'var(--solva-ink)' }}>
           {tabIndex === 0 && (
             <>
-              Extracted{' '}
-              <SolvaLiveNumber value={28} replaySeed={combinedSeed} durationMs={1200} /> in-text
-              markers ([1]–[
+              {lang === 'vi' ? 'Đã nhận diện ' : 'Extracted '}
               <SolvaLiveNumber value={28} replaySeed={combinedSeed} durationMs={1200} />
-              ]) and mapped{' '}
-              <SolvaLiveNumber value={27} replaySeed={combinedSeed} durationMs={1300} /> canonical
-              bibliography entries in{' '}
+              {lang === 'vi' ? ' trích dẫn trong bài ([1]–[' : ' in-text markers ([1]–['}
+              <SolvaLiveNumber value={28} replaySeed={combinedSeed} durationMs={1200} />
+              {lang === 'vi' ? ']) và liên kết chuẩn xác ' : ']) and mapped '}
+              <SolvaLiveNumber value={27} replaySeed={combinedSeed} durationMs={1300} />
+              {lang === 'vi' ? ' mục tài liệu tham khảo chỉ trong ' : ' canonical bibliography entries in '}
               <SolvaLiveNumber
                 value={340}
                 suffix="ms."
@@ -1579,16 +1674,20 @@ export function PipelineStageVisual({
           )}
           {tabIndex === 1 && (
             <>
-              Queried{' '}
-              <SolvaLiveNumber value={15} replaySeed={combinedSeed} durationMs={1150} /> APIs
-              concurrently · Deduplicated{' '}
-              <SolvaLiveNumber value={64} replaySeed={combinedSeed} durationMs={1350} /> candidate
-              records · Ranked top canonical work.
+              {lang === 'vi' ? 'Truy vấn đồng thời ' : 'Queried '}
+              <SolvaLiveNumber value={15} replaySeed={combinedSeed} durationMs={1150} />
+              {lang === 'vi' ? ' cổng API · Khử trùng lặp ' : ' APIs concurrently · Deduplicated '}
+              <SolvaLiveNumber value={64} replaySeed={combinedSeed} durationMs={1350} />
+              {lang === 'vi'
+                ? ' bản ghi ứng viên · Xác lập hồ sơ học thuật chuẩn nhất.'
+                : ' candidate records · Ranked top canonical work.'}
             </>
           )}
           {tabIndex === 2 && (
             <>
-              Triggered R01_EXACT_DOI &amp; R04_AUTHOR_OVERLAP → Verdict: VERIFIED (Confidence:{' '}
+              {lang === 'vi'
+                ? 'Kích hoạt quy tắc R01_EXACT_DOI & R04_AUTHOR_OVERLAP → Phán quyết: VERIFIED (Độ tin cậy: '
+                : 'Triggered R01_EXACT_DOI & R04_AUTHOR_OVERLAP → Verdict: VERIFIED (Confidence: '}
               <SolvaLiveNumber
                 value={98.4}
                 decimals={1}
@@ -1600,21 +1699,23 @@ export function PipelineStageVisual({
           )}
           {tabIndex === 3 && (
             <>
-              In-text claim entails retrieved abstract (SUPPORTS:{' '}
+              {lang === 'vi'
+                ? 'Luận điểm trích dẫn tương thích chặt chẽ với tóm tắt bài gốc (ĐỒNG THUẬN: '
+                : 'In-text claim entails retrieved abstract (SUPPORTS: '}
               <SolvaLiveNumber
                 value={0.94}
                 decimals={2}
                 replaySeed={combinedSeed}
                 durationMs={1350}
               />{' '}
-              · REFUTES:{' '}
+              · {lang === 'vi' ? 'BÁC BỎ: ' : 'REFUTES: '}
               <SolvaLiveNumber
                 value={0.01}
                 decimals={2}
                 replaySeed={combinedSeed}
                 durationMs={1150}
               />{' '}
-              · NEUTRAL:{' '}
+              · {lang === 'vi' ? 'TRUNG LẬP: ' : 'NEUTRAL: '}
               <SolvaLiveNumber
                 value={0.05}
                 decimals={2}
@@ -1647,19 +1748,19 @@ export function BottomCTAMockup({ lang }: { lang: Lang }) {
 
   const stats = [
     {
-      label: 'VERIFIED',
+      label: lang === 'vi' ? 'ĐÃ XÁC THỰC' : 'VERIFIED',
       val: 34,
       startVal: 0,
       color: 'text-emerald-700 dark:text-emerald-300',
     },
     {
-      label: 'METADATA DRIFT',
+      label: lang === 'vi' ? 'LỆCH THÔNG TIN' : 'METADATA DRIFT',
       val: 2,
       startVal: 0,
       color: 'text-amber-700 dark:text-amber-300',
     },
     {
-      label: 'HALLUCINATED',
+      label: lang === 'vi' ? 'TRÍCH DẪN ẢO' : 'HALLUCINATED',
       val: 0,
       startVal: 3,
       color: 'text-[#1C1A15] dark:text-[#FBFAF6]',
@@ -1755,13 +1856,13 @@ export function BottomCTAMockup({ lang }: { lang: Lang }) {
       >
         <span style={{ color: 'var(--solva-ink)' }} className="font-medium">
           {lang === 'vi'
-            ? 'Sẵn sàng xuất báo cáo PDF / JSON & lưu vết Audit'
+            ? 'Sẵn sàng xuất báo cáo PDF / JSON & lưu vết kiểm toán'
             : 'Ready for PDF / JSON export & instructor sign-off'}
         </span>
         <span className="font-mono text-emerald-700 dark:text-emerald-300 font-semibold shrink-0 ml-2">
           <SolvaLiveNumber
             value={100}
-            suffix="% Traceable"
+            suffix={lang === 'vi' ? '% Truy vết rõ' : '% Traceable'}
             replaySeed={replaySeed}
             durationMs={1450}
           />
@@ -1793,12 +1894,12 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
       id: '#018',
       idNum: 18,
       file: 'Thesis_018_Neural_RAG.pdf',
-      verdict: 'GHOST DOI',
+      verdict: lang === 'vi' ? 'DOI NGỤY TẠO' : 'GHOST DOI',
       tone: 'red' as const,
       rule: 'R12_GHOST_DOI · HTTP 404',
       detail:
         lang === 'vi'
-          ? 'Phát hiện DOI giả 10.1038/s42256-024-99812-x (Ref [14])'
+          ? 'Phát hiện mã DOI hư cấu 10.1038/s42256-024-99812-x (Mục [14])'
           : 'Caught fabricated DOI 10.1038/s42256-024-99812-x (Ref [14])',
       cisNum: 74.2,
     },
@@ -1806,12 +1907,12 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
       id: '#047',
       idNum: 47,
       file: 'Thesis_047_Legal_NLP.pdf',
-      verdict: 'YEAR DRIFT',
+      verdict: lang === 'vi' ? 'LỆCH NĂM XB' : 'YEAR DRIFT',
       tone: 'amber' as const,
       rule: 'R05_YEAR_DRIFT · Δ=1yr',
       detail:
         lang === 'vi'
-          ? 'Lệch năm bản nháp arXiv (2018) so với kỷ yếu NAACL (2019)'
+          ? 'Ghi nhầm năm bản nháp arXiv (2018) thay vì kỷ yếu NAACL (2019)'
           : 'arXiv preprint year (2018) vs. canonical NAACL (2019)',
       cisNum: 88.5,
     },
@@ -1819,12 +1920,12 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
       id: '#104',
       idNum: 104,
       file: 'Thesis_104_BioMed_VLM.pdf',
-      verdict: 'VERIFIED',
+      verdict: lang === 'vi' ? 'ĐÃ XÁC THỰC' : 'VERIFIED',
       tone: 'emerald' as const,
       rule: 'R01_EXACT_DOI ∧ R09_NLI',
       detail:
         lang === 'vi'
-          ? '38/38 trích dẫn khớp chuẩn trên Crossref, PubMed & OpenAlex'
+          ? 'Đồng nhất 38/38 tài liệu tham khảo trên Crossref, PubMed & OpenAlex'
           : '38/38 references verified across Crossref, PubMed & OpenAlex',
       cisNum: 98.4,
     },
@@ -1900,7 +2001,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
             color: 'text-amber-700 dark:text-amber-300',
           },
           {
-            label: lang === 'vi' ? 'DOI ẢO GIÁC' : 'GHOST DOIs',
+            label: lang === 'vi' ? 'DOI NGỤY TẠO' : 'GHOST DOIs',
             val: 42,
             format: false,
             color: 'text-red-600 dark:text-red-400',

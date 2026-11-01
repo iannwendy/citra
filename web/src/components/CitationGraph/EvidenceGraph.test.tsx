@@ -189,5 +189,46 @@ describe('buildEvidenceGraph', () => {
     expect(getRuleDisplayName('R-GITHUB-VERIFIED')).toMatch(/GitHub/i);
     expect(getRuleDisplayName('R-PACKAGE-VERIFIED')).toMatch(/PyPI|NPM/i);
     expect(getRuleDisplayName('R-WIKIDATA-VERIFIED')).toMatch(/Wikidata|OpenCitations/i);
+    expect(getRuleDisplayName('R-CROSS-LINGUAL-ALIGNMENT')).toMatch(/Vietnamese|cross-lingual/i);
+    expect(getRuleDisplayName('R-CROSS-LINGUAL-TITLE-MATCH')).toMatch(/Translated title|TDTU/i);
+  });
+
+  it('builds cross-lingual concept bridge and translated title nodes in EvidenceGraph', () => {
+    const crossLingualVerdict = makeVerdict({
+      label: 'metadata_error',
+      triggered_rules: ['R-CROSS-LINGUAL-TITLE-MATCH', 'R-CROSS-LINGUAL-ALIGNMENT'],
+      mismatched_fields: ['title'],
+      features: {
+        title_sim_fuzzy: 0.22,
+        title_sim_semantic: 0.85,
+        author_jaccard: 1.0,
+        year_distance: 0,
+        doi_exact_match: false,
+        cross_lingual_detected: true,
+        bridged_concepts: ['học sâu → deep learning', 'mạng nơ-ron tích chập → convolutional neural network'],
+        cross_lingual_title_detected: true,
+        cross_lingual_title_sim: 0.92,
+        content_alignment_score: 0.78,
+        content_is_aligned: true,
+        stance_label: 'entails',
+      },
+    });
+
+    const { graph } = buildEvidenceGraph(crossLingualVerdict);
+    const simNode = graph.children!.find((c) => c.id === 'similarity')!;
+    const bridgeNode = simNode.children!.find((c) => c.id === 'sim-cross-lingual-bridge');
+    const titleBridgeNode = simNode.children!.find((c) => c.id === 'sim-cross-lingual-title');
+
+    expect(bridgeNode).toBeDefined();
+    expect(bridgeNode!.status).toBe('success');
+    expect(bridgeNode!.detail).toContain('học sâu → deep learning');
+
+    expect(titleBridgeNode).toBeDefined();
+    expect(titleBridgeNode!.status).toBe('warning');
+    expect(titleBridgeNode!.detail).toContain('92%');
+
+    const explanation = getVerdictExplanation(crossLingualVerdict);
+    expect(explanation).toContain('92% VI↔EN semantic match');
+    expect(explanation).toContain('TDTU academic citation rules');
   });
 });

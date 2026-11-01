@@ -367,6 +367,9 @@ class MatchingConfig(BaseModel):
     author_jaccard_verified: float = 0.5
     year_tolerance: int = 1
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    multilingual_embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    enable_multilingual_encoder: bool = False
+    cross_lingual_sim_boost: float = 0.08
     fuzzy: FuzzyConfig = Field(default_factory=FuzzyConfig)
 
 

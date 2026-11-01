@@ -66,7 +66,7 @@ logger = get_logger(__name__)
 
 # Bump whenever extraction/linking output shape changes so previously cached
 # (and possibly wrong) reports are recomputed instead of served from disk.
-_REPORT_CACHE_VERSION = "report-v13"
+_REPORT_CACHE_VERSION = "report-v15"
 
 # NEW v1.7: Only retrieve + verify REFERENCE_LIST citations (and DOI/URL inline
 # with enough metadata). In-text citations are verified via linking only.
@@ -177,6 +177,9 @@ class AnalysisReport:
                         "citation_intent": getattr(v.features, "citation_intent", "") if v.features else None,
                         "stance_label": getattr(v.features, "stance_label", "") if v.features else None,
                         "cross_lingual_detected": getattr(v.features, "cross_lingual_detected", False) if v.features else False,
+                        "bridged_concepts": list(getattr(v.features, "bridged_concepts", []) or []) if v.features else [],
+                        "cross_lingual_title_detected": getattr(v.features, "cross_lingual_title_detected", False) if v.features else False,
+                        "cross_lingual_title_sim": getattr(v.features, "cross_lingual_title_sim", 0.0) if v.features else 0.0,
                         "context_source": getattr(v.features, "context_source", "") if v.features else None,
                         "occurrence_alignments": getattr(v.features, "occurrence_alignments", []) if v.features else [],
                         "url_status": getattr(v.matched_source, "url_status", None) if v.matched_source else None,
@@ -1917,6 +1920,9 @@ def _match_features_from_dict(data: dict[str, Any]) -> MatchFeatures:
         citation_intent=data.get("citation_intent") or "",
         stance_label=data.get("stance_label") or "",
         cross_lingual_detected=bool(data.get("cross_lingual_detected") or False),
+        bridged_concepts=list(data.get("bridged_concepts") or []),
+        cross_lingual_title_detected=bool(data.get("cross_lingual_title_detected") or False),
+        cross_lingual_title_sim=float(data.get("cross_lingual_title_sim") or 0.0),
         context_source=data.get("context_source") or "",
         occurrence_alignments=list(data.get("occurrence_alignments") or []),
     )
@@ -1976,6 +1982,9 @@ def _serialize_verdict_for_json(v: CitationVerdict) -> dict[str, Any]:
             "citation_intent": getattr(v.features, "citation_intent", "") if v.features else "",
             "stance_label": getattr(v.features, "stance_label", "") if v.features else "",
             "cross_lingual_detected": getattr(v.features, "cross_lingual_detected", False) if v.features else False,
+            "bridged_concepts": list(getattr(v.features, "bridged_concepts", []) or []) if v.features else [],
+            "cross_lingual_title_detected": getattr(v.features, "cross_lingual_title_detected", False) if v.features else False,
+            "cross_lingual_title_sim": getattr(v.features, "cross_lingual_title_sim", 0.0) if v.features else 0.0,
             "context_source": getattr(v.features, "context_source", "") if v.features else "",
             "occurrence_alignments": getattr(v.features, "occurrence_alignments", []) if v.features else [],
             "url_status": getattr(v.matched_source, "url_status", None) if v.matched_source else None,

@@ -302,6 +302,18 @@ const RULE_CATALOG: Record<
     condition: 'IF context_abstract_cosine >= 0.65 THEN PASS',
     status: 'passed',
   },
+  'R-CROSS-LINGUAL-ALIGNMENT': {
+    nameVi: 'Căn chỉnh ngữ nghĩa đa ngôn ngữ Việt ↔ Anh (Cross-Lingual Semantic Alignment)',
+    nameEn: 'Vietnamese ↔ English Cross-Lingual Semantic Alignment',
+    condition: 'IF cross_lingual_detected == TRUE AND content_alignment_score >= 0.35 THEN VERIFIED',
+    status: 'passed',
+  },
+  'R-CROSS-LINGUAL-TITLE-MATCH': {
+    nameVi: 'Tiêu đề bài báo nước ngoài bị dịch sang tiếng Việt (Thiếu tiêu đề gốc)',
+    nameEn: 'Translated Foreign-Language Title Without Original Title (TDTU Guideline)',
+    condition: 'IF cross_lingual_title_detected == TRUE AND cross_lingual_title_sim >= 0.58 THEN METADATA_ERROR (title)',
+    status: 'warning',
+  },
   'R-CONTENT-MISMATCH': {
     nameVi: 'Ngữ cảnh trích dẫn mâu thuẫn với tóm tắt bài gốc',
     nameEn: 'In-Text Claim vs. Source Abstract Mismatch',
@@ -889,13 +901,23 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
           : '';
       mainText = `Trích dẫn khớp chính xác với công trình trong ${srcStr}. Các trường thông tin (${fldStr}) hoàn toàn nhất quán với bản ghi gốc.${brokenLinkNoteVi}${telemetrySuffix}`;
     } else if (verdict.label === 'metadata_error') {
-      const srcStr =
-        sources.length > 0 ? ` trên ${sources.join(' và ')}` : '';
-      const errFldStr =
-        mismatchedFields.length > 0
-          ? mismatchedFields.join(', ')
-          : 'siêu dữ liệu (năm xuất bản / tiêu đề)';
-      mainText = `Tìm thấy công trình học thuật tương ứng${srcStr}, nhưng phát hiện sai lệch ở trường: ${errFldStr}. Vui lòng đối chiếu và hiệu đính lại theo bản ghi gốc.${telemetrySuffix}`;
+      if (
+        (verdict.triggered_rules ?? []).includes('R-CROSS-LINGUAL-TITLE-MATCH') ||
+        verdict.features?.cross_lingual_title_detected
+      ) {
+        const xlSimPct = verdict.features?.cross_lingual_title_sim
+          ? ` (${Math.round(verdict.features.cross_lingual_title_sim * 100)}% tương đồng ngữ nghĩa Việt ↔ Anh)`
+          : '';
+        mainText = `Tiêu đề tiếng Việt dịch thuật khớp ngữ nghĩa với công trình gốc tiếng Anh${xlSimPct}, nhưng theo quy định trích dẫn học thuật TDTU cần giữ nguyên tiêu đề gốc bằng tiếng nước ngoài (có thể kèm [Bản dịch tiếng Việt] trong ngoặc vuông).${telemetrySuffix}`;
+      } else {
+        const srcStr =
+          sources.length > 0 ? ` trên ${sources.join(' và ')}` : '';
+        const errFldStr =
+          mismatchedFields.length > 0
+            ? mismatchedFields.join(', ')
+            : 'siêu dữ liệu (năm xuất bản / tiêu đề)';
+        mainText = `Tìm thấy công trình học thuật tương ứng${srcStr}, nhưng phát hiện sai lệch ở trường: ${errFldStr}. Vui lòng đối chiếu và hiệu đính lại theo bản ghi gốc.${telemetrySuffix}`;
+      }
     } else if (verdict.label === 'suspected_hallucination') {
       mainText = `Không tìm thấy bất kỳ công trình học thuật nào khớp với trích dẫn này trên hệ thống 15+ cơ sở dữ liệu học thuật & kỹ thuật (Local ACL FTS5, Crossref, OpenAlex, DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, Hugging Face, IETF RFC, Global DOI RA). Nghi ngờ trích dẫn suy diễn (hallucination) hoặc thông tin không có thật.${telemetrySuffix}`;
     } else {
@@ -967,12 +989,22 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
         : '';
     mainTextEn = `The citation matches a canonical publication in ${srcStr}. Verified fields (${fldStr}) are consistent with the source record.${brokenLinkNoteEn}${telemetrySuffixEn}`;
   } else if (verdict.label === 'metadata_error') {
-    const srcStr = sources.length > 0 ? ` in ${sources.join(' and ')}` : '';
-    const errFldStr =
-      mismatchedFields.length > 0
-        ? mismatchedFields.join(', ')
-        : 'metadata fields (year / title)';
-    mainTextEn = `Found a corresponding publication${srcStr}, but detected discrepancies in: ${errFldStr}. Please review against the canonical record.${telemetrySuffixEn}`;
+    if (
+      (verdict.triggered_rules ?? []).includes('R-CROSS-LINGUAL-TITLE-MATCH') ||
+      verdict.features?.cross_lingual_title_detected
+    ) {
+      const xlSimPctEn = verdict.features?.cross_lingual_title_sim
+        ? ` (${Math.round(verdict.features.cross_lingual_title_sim * 100)}% VI↔EN semantic match)`
+        : '';
+      mainTextEn = `Translated Vietnamese title semantically matches the canonical English publication${xlSimPctEn}, but TDTU academic citation rules require preserving the original foreign-language title (optionally followed by [Vietnamese translation] in brackets).${telemetrySuffixEn}`;
+    } else {
+      const srcStr = sources.length > 0 ? ` in ${sources.join(' and ')}` : '';
+      const errFldStr =
+        mismatchedFields.length > 0
+          ? mismatchedFields.join(', ')
+          : 'metadata fields (year / title)';
+      mainTextEn = `Found a corresponding publication${srcStr}, but detected discrepancies in: ${errFldStr}. Please review against the canonical record.${telemetrySuffixEn}`;
+    }
   } else if (verdict.label === 'suspected_hallucination') {
     mainTextEn = `No matching publication was found across all 15+ scholarly & technical databases (Local ACL FTS5, Crossref, OpenAlex, DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, Hugging Face, IETF RFC, Global DOI RA). Suspected hallucinated or fabricated reference.${telemetrySuffixEn}`;
   } else {
@@ -2418,6 +2450,27 @@ export function EssayPage() {
                               : 'Neuro-Symbolic Reasoning:'}
                           </span>
                           {activeItem.explanationText}
+                          {Array.isArray(activeItem.verdict.features?.bridged_concepts) &&
+                            activeItem.verdict.features.bridged_concepts.length > 0 && (
+                              <div
+                                data-testid="essay-bridged-concepts"
+                                className="mt-2 pt-2 border-t border-slate-200/70 dark:border-slate-800 flex flex-wrap items-center gap-1.5"
+                              >
+                                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                                  VI ↔ EN Concept Bridge:
+                                </span>
+                                {activeItem.verdict.features.bridged_concepts
+                                  .slice(0, 5)
+                                  .map((pair, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800/70"
+                                    >
+                                      {pair}
+                                    </span>
+                                  ))}
+                              </div>
+                            )}
                         </div>
                       </div>
                     )}

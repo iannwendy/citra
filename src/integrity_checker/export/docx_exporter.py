@@ -265,10 +265,23 @@ def export_report_to_docx(
                 if ev_sent:
                     p.add_run(f"SBERT Best Evidence Sentence: \"{ev_sent}\"\n")
                 intent = feats.get("citation_intent")
-                stance = feats.get("citation_stance")
-                if intent or stance:
+                stance = feats.get("stance_label") or feats.get("citation_stance")
+                xl_det = feats.get("cross_lingual_detected")
+                bridged = feats.get("bridged_concepts") or []
+                xl_title_det = feats.get("cross_lingual_title_detected")
+                xl_title_sim = float(feats.get("cross_lingual_title_sim", 0.0) or 0.0)
+                if intent or stance or xl_det:
+                    xl_note = (
+                        f" | Cross-Lingual Bridge (VI↔EN): {', '.join(str(b) for b in bridged[:4])}"
+                        if xl_det and bridged
+                        else (" | Cross-Lingual Bridge (VI↔EN): Active" if xl_det else "")
+                    )
                     p.add_run(
-                        f"Discourse Analysis: Intent={intent or 'background'}, Stance={stance or 'neutral'}\n"
+                        f"Discourse Analysis: Intent={intent or 'background'}, Stance={stance or 'neutral'}{xl_note}\n"
+                    )
+                if xl_title_det:
+                    p.add_run(
+                        f"Cross-Lingual Title Translation Match (VI↔EN): {xl_title_sim * 100:.0f}% similarity to canonical English title\n"
                     )
 
         # 1-Click Auto-Remediated Bibliography & BibTeX Section

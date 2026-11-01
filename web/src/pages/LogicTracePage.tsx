@@ -125,7 +125,17 @@ function buildTraceSteps(verdict: Verdict, lang: 'vi' | 'en'): TraceStep[] {
     featureParts.push(`stance=${f.stance_label}`);
   }
   if (f?.cross_lingual_detected) {
-    featureParts.push(`cross_lingual=VI↔EN`);
+    const bridged = f.bridged_concepts ?? [];
+    featureParts.push(
+      bridged.length > 0
+        ? `cross_lingual=VI↔EN (${bridged.slice(0, 2).join(', ')})`
+        : `cross_lingual=VI↔EN`
+    );
+  }
+  if (f?.cross_lingual_title_detected) {
+    featureParts.push(
+      `translated_title_sim=${(f.cross_lingual_title_sim ?? 0).toFixed(2)}`
+    );
   }
   if (urlStatus) {
     const codeStr = urlCode ? ` HTTP ${urlCode}` : '';
@@ -409,6 +419,32 @@ function NeuralAlignmentPanel({
       </div>
 
       {/* Side-by-side Cited Focal Sentence vs Best Abstract Evidence Sentence */}
+      {f.bridged_concepts && f.bridged_concepts.length > 0 && (
+        <div
+          data-testid="bridged-concepts-bar"
+          className="rounded-lg border border-teal-200/80 dark:border-teal-900/60 bg-teal-50/50 dark:bg-teal-950/25 p-2.5"
+        >
+          <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-teal-800 dark:text-teal-300 mb-1.5">
+            <Languages className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              {lang === 'vi'
+                ? 'Cầu nối Khái niệm Học thuật Việt ↔ Anh (Cross-Lingual Concept Bridge)'
+                : 'VI ↔ EN Academic Concept Bridge'}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {f.bridged_concepts.map((concept, cIdx) => (
+              <span
+                key={`${concept}-${cIdx}`}
+                className="inline-flex items-center px-2 py-0.5 rounded bg-white/90 dark:bg-slate-900/90 border border-teal-200 dark:border-teal-800 text-[11px] font-mono text-teal-900 dark:text-teal-200"
+              >
+                {concept}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {(citedSentence || evidenceSentence) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {citedSentence && (
