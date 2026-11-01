@@ -106,31 +106,21 @@ test.describe('Toast Integration', () => {
     await expect(toastContainer).toBeAttached();
   });
 
-  test('should trigger Verified, Warning, Error, Stacked, and Live Morph toasts in Settings Preview Studio', async ({
+  test('should trigger stacked toasts on Settings changes and support Clear All', async ({
     page,
   }) => {
     await page.goto('/settings');
     await waitForAuth(page);
 
-    const previewBar = page.getByTestId('settings-toast-preview-bar');
-    await expect(previewBar).toBeVisible();
-
-    // Trigger Verified toast
-    await page.getByTestId('preview-toast-success-btn').click();
+    // Trigger toasts by toggling theme options
+    await page.getByRole('button', { name: 'Dark', exact: true }).click();
     await expect(page.getByTestId('citra-toast-success')).toBeVisible();
 
-    // Trigger Warning and Error toasts to form a 3-card stack
-    await page.getByTestId('preview-toast-warning-btn').click();
-    await page.getByTestId('preview-toast-error-btn').click();
-
+    await page.getByRole('button', { name: 'Light', exact: true }).click();
     await expect(page.getByTestId('toast-stack-toolbar')).toBeVisible();
+
     await page.getByTestId('dismiss-all-toasts-btn').click();
     await expect(page.locator('[role="alert"]')).toHaveCount(0);
-
-    // Trigger Live Morph toast (loading -> success)
-    await page.getByTestId('preview-toast-morph-btn').click();
-    await expect(page.getByTestId('citra-toast-loading')).toBeVisible();
-    await expect(page.getByTestId('citra-toast-success')).toBeVisible({ timeout: 3500 });
   });
 
   test('should open Notification Center drawer and display notification history', async ({
@@ -139,7 +129,7 @@ test.describe('Toast Integration', () => {
     await page.goto('/settings');
     await waitForAuth(page);
 
-    await page.getByTestId('preview-toast-success-btn').click();
+    await page.getByRole('button', { name: 'Dark', exact: true }).click();
     await expect(page.getByTestId('citra-toast-success')).toBeVisible();
 
     // Open Notification Center from desktop sidebar trigger
@@ -153,6 +143,6 @@ test.describe('Toast Integration', () => {
 
     // Clear history inside Notification Center
     await page.getByTestId('notification-clear-history-btn').click();
-    await expect(panel.getByTestId('notification-center-test-ping-btn')).toBeVisible();
+    await expect(panel.getByRole('listitem')).toHaveCount(0);
   });
 });

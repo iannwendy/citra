@@ -21,7 +21,6 @@ import {
   Sparkles,
   Loader2,
   ExternalLink,
-  Zap,
 } from 'lucide-react';
 import { api, type BillingTransactionItem, type SubscriptionSummary } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -402,120 +401,13 @@ export function SettingsPage(): JSX.Element {
           </span>
         </div>
 
-        <div className="p-4 sm:p-6 space-y-4">
+        <div className="p-4 sm:p-6">
           <ToggleSetting
             label={t('settings.enableNotifications')}
             description={t('settings.enableNotificationsDesc')}
             checked={settings.notifications}
             onChange={() => toggleSetting('notifications')}
           />
-
-          <div className="pt-3.5 border-t border-slate-200/70 dark:border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
-              <Zap className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-              <span>
-                {currentLang === 'vi'
-                  ? 'Kiểm thử kênh thông báo 120fps trực tiếp:'
-                  : 'Preview 120fps Notification Channels:'}
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2" data-testid="settings-toast-preview-bar">
-              <button
-                type="button"
-                data-testid="preview-toast-success-btn"
-                onClick={() =>
-                  toast.success(
-                    currentLang === 'vi'
-                      ? 'Đã kích hoạt lại gia hạn'
-                      : 'Subscription Reactivated',
-                    currentLang === 'vi'
-                      ? 'Tự động gia hạn gói CITRA Pro đã được kích hoạt lại thành công.'
-                      : 'Subscription auto-renewal has been reactivated.',
-                    { force: true, category: 'STRIPE · BILLING' }
-                  )
-                }
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 hover:bg-emerald-500/25 hover:-translate-y-[1px] active:translate-y-0 active:scale-95 transition-[transform,background-color] duration-150 cursor-pointer"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                <span>{currentLang === 'vi' ? 'Thành công' : 'Verified'}</span>
-              </button>
-
-              <button
-                type="button"
-                data-testid="preview-toast-warning-btn"
-                onClick={() =>
-                  toast.warning(
-                    currentLang === 'vi'
-                      ? 'Cảnh báo siêu dữ liệu (R03)'
-                      : 'Metadata Discrepancy Detected',
-                    currentLang === 'vi'
-                      ? 'Năm xuất bản trong bài (2022) lệch với bản gốc Crossref (2019).'
-                      : 'In-text year (2022) differs from canonical Crossref record (2019).',
-                    { force: true, category: 'RULE · R03' }
-                  )
-                }
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-semibold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 hover:bg-amber-500/25 hover:-translate-y-[1px] active:translate-y-0 active:scale-95 transition-[transform,background-color] duration-150 cursor-pointer"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                <span>{currentLang === 'vi' ? 'Cảnh báo' : 'Warning'}</span>
-              </button>
-
-              <button
-                type="button"
-                data-testid="preview-toast-error-btn"
-                onClick={() =>
-                  toast.error(
-                    currentLang === 'vi'
-                      ? 'Phát hiện trích dẫn nghi ngờ ảo giác'
-                      : 'Suspected Hallucination Flagged',
-                    currentLang === 'vi'
-                      ? 'DOI 10.9999/fake.2024 không tồn tại trên 18+ CSDL học thuật.'
-                      : 'DOI 10.9999/fake.2024 could not be resolved across 18+ scholarly registries.',
-                    { force: true, category: 'ALERT · R09' }
-                  )
-                }
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-semibold bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/25 hover:bg-red-500/25 hover:-translate-y-[1px] active:translate-y-0 active:scale-95 transition-[transform,background-color] duration-150 cursor-pointer"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                <span>{currentLang === 'vi' ? 'Báo lỗi' : 'Alert'}</span>
-              </button>
-
-              <button
-                type="button"
-                data-testid="preview-toast-morph-btn"
-                onClick={() => {
-                  const id = toast.loading(
-                    currentLang === 'vi'
-                      ? 'Đang đồng bộ 18+ CSDL Học thuật...'
-                      : 'Querying 18+ Scholarly Indexes...',
-                    currentLang === 'vi'
-                      ? 'Đối chiếu Crossref, OpenAlex, DBLP & ACL FTS5'
-                      : 'Cross-checking Crossref, OpenAlex, DBLP & ACL FTS5',
-                    { force: true, category: 'PIPELINE · SYNC' }
-                  );
-                  setTimeout(() => {
-                    toast.updateToast(id, {
-                      type: 'success',
-                      title:
-                        currentLang === 'vi'
-                          ? 'Đồng bộ hoàn tất (CIS 100/100)'
-                          : 'Verification Synced (CIS 100/100)',
-                      message:
-                        currentLang === 'vi'
-                          ? '12/12 trích dẫn đã được xác thực qua 28 luật Neuro-Symbolic.'
-                          : '12/12 citations verified across 28 neuro-symbolic rules.',
-                      category: 'CIS · REPORT',
-                    });
-                  }, 950);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-semibold bg-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:text-[#1C1A15] hover:opacity-90 hover:-translate-y-[1px] active:translate-y-0 active:scale-95 transition-[transform,opacity] duration-150 cursor-pointer shadow-2xs"
-              >
-                <Sparkles className="w-3 h-3" />
-                <span>{currentLang === 'vi' ? 'Tiến trình động' : 'Live Morph'}</span>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 

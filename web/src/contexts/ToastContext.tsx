@@ -1303,7 +1303,7 @@ export function NotificationCenterButton({
                 className="max-h-[340px] overflow-y-auto divide-y divide-[#E7E3D9]/70 dark:divide-[#332F26]/70"
               >
                 {history.length === 0 ? (
-                  <div className="p-7 text-center space-y-3">
+                  <div className="p-7 text-center space-y-2.5">
                     <div className="w-11 h-11 rounded-2xl bg-[#F4F2EC] dark:bg-[#29261F] border border-[#E7E3D9] dark:border-[#332F26] flex items-center justify-center mx-auto">
                       <Bell className="w-5 h-5 text-[#8C887E]" />
                     </div>
@@ -1319,27 +1319,6 @@ export function NotificationCenterButton({
                           : 'System events, Stripe billing updates, and verification alerts will appear here.'}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      data-testid="notification-center-test-ping-btn"
-                      onClick={() => {
-                        success(
-                          lang === 'vi'
-                            ? 'Hệ thống Thông báo 120fps Sẵn sàng'
-                            : '120fps Notification Engine Ready',
-                          lang === 'vi'
-                            ? 'Đồng bộ tức thời với CITRA Solva Editorial Design System.'
-                            : 'Synchronized with CITRA Solva Editorial Design System.',
-                          { force: true }
-                        );
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:text-[#1C1A15] text-xs font-mono font-semibold hover:opacity-90 active:scale-95 transition-[transform,opacity] cursor-pointer"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>
-                        {lang === 'vi' ? 'Gửi thông báo thử nghiệm' : 'Send Test Notification'}
-                      </span>
-                    </button>
                   </div>
                 ) : (
                   history.map((item) => {
