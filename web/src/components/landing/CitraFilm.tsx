@@ -134,8 +134,17 @@ function CitraFilmPlayer({ lang }: { lang: Lang }) {
       },
       { rootMargin: '100% 0px' },
     );
-    io.observe(el);
-    return () => io.disconnect();
+    // Never compete with the critical path: start observing only after window `load` + idle,
+    // so the teaser can't steal bandwidth from hero images/fonts/JS (LCP).
+    let cancelled = false;
+    const arm = () => whenIdle(() => !cancelled && io.observe(el));
+    if (document.readyState === 'complete') arm();
+    else window.addEventListener('load', arm, { once: true });
+    return () => {
+      cancelled = true;
+      window.removeEventListener('load', arm);
+      io.disconnect();
+    };
   }, []);
 
   useEffect(() => {
