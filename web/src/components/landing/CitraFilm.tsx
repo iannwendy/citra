@@ -6,8 +6,9 @@ import { SolvaEyebrow, SolvaPainterlyFrame, SolvaScrollReveal, SolvaTwoToneHeadi
    CITRA 60-SECOND FILM — zero-cost-until-needed video embed
    ------------------------------------------------------------
    Performance contract (keeps the landing page at 120fps):
-   1. Zero video bytes on initial load: only a lazy AVIF/WebP poster inside a
-      fixed 16:9 box (no CLS). The section opts into content-visibility:auto.
+   1. Zero media bytes on the critical path: a CSS placeholder in a fixed 16:9 box
+      (no CLS); the AVIF/WebP poster is requested only after window load + idle.
+      The section opts into content-visibility:auto.
    2. A 4s muted 30fps teaser loop (~0.6MB AV1) is fetched only when the player is about one
       viewport away, plays only while >=35% visible, and is skipped entirely on
       Save-Data, slow connections and prefers-reduced-motion.
@@ -221,6 +222,16 @@ function CitraFilmPlayer({ lang }: { lang: Lang }) {
     >
       {mode !== 'film' && (
         <>
+          {/* Until armed (window load + idle) render only a CSS placeholder: on mobile, Chrome's lazy-load
+              distance is large enough that even a lazy <img> here would compete with the hero LCP image. */}
+          {!near && (
+            <div
+              aria-hidden="true"
+              className="absolute inset-0"
+              style={{ background: 'radial-gradient(60% 60% at 50% 45%, #FBFAF6 0%, #EEF1EA 55%, #C9DCD8 100%)' }}
+            />
+          )}
+          {near && (
           <picture>
             <source
               type="image/avif"
@@ -243,6 +254,7 @@ function CitraFilmPlayer({ lang }: { lang: Lang }) {
               className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
             />
           </picture>
+          )}
 
           {teaserSrc && mode === 'poster' && (
             <video
