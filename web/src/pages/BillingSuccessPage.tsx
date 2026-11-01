@@ -129,6 +129,14 @@ export function BillingSuccessPage() {
                 CITRA {transaction.plan_name} ({transaction.billing_cycle})
               </span>
             </div>
+            {transaction.promo_code && (transaction.discount_usd ?? 0) > 0 && (
+              <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
+                <span>{lang === 'vi' ? 'Mã giảm giá:' : 'Promo code:'}</span>
+                <span className="font-mono font-semibold">
+                  {transaction.promo_code} (-${(transaction.discount_usd ?? 0).toFixed(2)} USD)
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <span className="text-slate-500">{lang === 'vi' ? 'Số tiền đã thanh toán:' : 'Amount paid:'}</span>
               <span className="font-mono font-bold text-slate-900 dark:text-white">
@@ -139,7 +147,11 @@ export function BillingSuccessPage() {
               <span className="text-slate-500">{lang === 'vi' ? 'Phương thức:' : 'Payment method:'}</span>
               <span className="font-mono uppercase text-slate-700 dark:text-slate-300 flex items-center gap-1">
                 <CreditCard className="h-3.5 w-3.5 text-indigo-500" />
-                {transaction.card_brand || 'VISA'} •••• {transaction.card_last4 || '4242'}
+                {transaction.payment_method === 'apple_pay'
+                  ? `APPLE PAY (${(transaction.card_brand || 'VISA').toUpperCase()} •••• ${transaction.card_last4 || '4242'})`
+                  : transaction.payment_method === 'google_pay'
+                    ? `GOOGLE PAY (${(transaction.card_brand || 'VISA').toUpperCase()} •••• ${transaction.card_last4 || '4242'})`
+                    : `${transaction.card_brand || 'VISA'} •••• ${transaction.card_last4 || '4242'}`}
               </span>
             </div>
           </div>

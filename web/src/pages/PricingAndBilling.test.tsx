@@ -249,14 +249,147 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     await waitFor(() => {
       expect(verifySpy).toHaveBeenCalledWith({
         session_id: 'cs_test_demo_pro123',
+        payment_method: 'card',
         card_last4: '4444',
         card_brand: 'mastercard',
+        billing_country: 'VN',
+        billing_zip: '700000',
       });
     });
     expect(refreshUserMock).toHaveBeenCalled();
 
     await waitFor(() => {
       expect(screen.getByTestId('success-dest')).toBeDefined();
+    });
+  });
+
+  it('StripeDemoCheckoutPage supports applying and removing 6-character promo codes and paying via Apple Pay & Google Pay', async () => {
+    const baseDetails = {
+      session_id: 'cs_test_demo_pro123',
+      status: 'pending',
+      payment_mode: 'stripe_demo',
+      merchant_name: 'CITRA (SourceLogic) Inc.',
+      customer_email: 'student@tdtu.edu.vn',
+      customer_name: 'Nguyen Bao Minh',
+      plan_tier: 'pro' as const,
+      plan_name: 'CITRA Pro',
+      billing_cycle: 'annual' as const,
+      subtotal_usd: 192,
+      discount_usd: 0,
+      promo_code: null,
+      promo_details: null,
+      amount_usd: 192,
+      monthly_equivalent_usd: 16,
+      annual_savings_usd: 48,
+      currency: 'usd',
+      features_en: ['50 PDF checks / month'],
+      features_vi: ['50 lượt tải PDF / tháng'],
+    };
+
+    vi.spyOn(api, 'getCheckoutSessionDetails').mockResolvedValue(baseDetails);
+
+    const applyPromoSpy = vi
+      .spyOn(api, 'applyCheckoutSessionPromo')
+      .mockImplementation(async (_sid, code) => {
+        if (code) {
+          return {
+            ...baseDetails,
+            promo_code: code,
+            discount_usd: 38.4,
+            amount_usd: 153.6,
+            promo_details: {
+              code,
+              description: 'Welcome Academic Discount (20% Off)',
+              discount_type: 'percent',
+              discount_value: 20,
+              max_discount_usd: 100,
+              discount_usd: 38.4,
+            },
+          };
+        }
+        return baseDetails;
+      });
+
+    const verifySpy = vi.spyOn(api, 'verifyCheckoutSession').mockResolvedValue({
+      status: 'succeeded',
+      message: 'Upgraded via Apple Pay!',
+      transaction: {
+        id: 2,
+        user_id: 10,
+        stripe_session_id: 'cs_test_demo_pro123',
+        stripe_payment_intent_id: 'pi_demo_apay',
+        plan_tier: 'pro',
+        plan_name: 'Pro',
+        billing_cycle: 'annual',
+        subtotal_usd: 192,
+        discount_usd: 38.4,
+        promo_code: 'CITRA2',
+        amount_usd: 153.6,
+        currency: 'usd',
+        status: 'succeeded',
+        payment_mode: 'stripe_demo',
+        payment_method: 'apple_pay',
+        card_brand: 'visa',
+        card_last4: '4242',
+        created_at: '2026-10-26T00:00:00Z',
+        paid_at: '2026-10-26T00:01:00Z',
+      },
+      subscription: {
+        plan_tier: 'pro',
+        plan_name: 'Pro',
+        billing_cycle: 'annual',
+        subscription_status: 'active',
+        cancel_at_period_end: false,
+        current_period_start: '2026-10-26T00:00:00Z',
+        current_period_end: '2027-10-26T00:00:00Z',
+        quota: createMockUser().quota!,
+      },
+      user: createMockUser({ plan_tier: 'pro', billing_cycle: 'annual' }),
+    });
+
+    renderWithAuth(
+      <Routes>
+        <Route path="/billing/checkout" element={<StripeDemoCheckoutPage />} />
+        <Route path="/billing/success" element={<div data-testid="apay-success">Apple Pay Confirmed</div>} />
+      </Routes>,
+      {
+        user: createMockUser(),
+        initialEntries: ['/billing/checkout?session_id=cs_test_demo_pro123'],
+      },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('stripe-demo-checkout-page')).toBeDefined();
+    });
+
+    // Apply 6-char promo code CITRA2
+    const promoInput = screen.getByTestId('checkout-promo-input') as HTMLInputElement;
+    fireEvent.change(promoInput, { target: { value: 'citra2' } });
+    fireEvent.click(screen.getByTestId('checkout-promo-apply-btn'));
+
+    await waitFor(() => {
+      expect(applyPromoSpy).toHaveBeenCalledWith('cs_test_demo_pro123', 'CITRA2');
+      expect(screen.getByTestId('checkout-amount-display').textContent).toBe('$153.60');
+      expect(screen.getByTestId('checkout-applied-promo-badge')).toBeDefined();
+    });
+
+    // Click Express Apple Pay button -> opens Apple Pay Wallet Modal
+    fireEvent.click(screen.getByTestId('express-apple-pay-btn'));
+    expect(screen.getByTestId('wallet-payment-modal')).toBeDefined();
+
+    // Confirm biometric Apple Pay payment
+    fireEvent.click(screen.getByTestId('wallet-confirm-pay-btn'));
+
+    await waitFor(() => {
+      expect(verifySpy).toHaveBeenCalledWith({
+        session_id: 'cs_test_demo_pro123',
+        payment_method: 'apple_pay',
+        card_last4: '4242',
+        card_brand: 'visa',
+        billing_country: 'VN',
+        billing_zip: '700000',
+      });
+      expect(screen.getByTestId('apay-success')).toBeDefined();
     });
   });
 

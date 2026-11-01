@@ -533,9 +533,9 @@ export function SettingsPage(): JSX.Element {
                 {transactions.slice(0, 5).map((tx) => (
                   <div
                     key={tx.id}
-                    className="px-4 py-2.5 flex items-center justify-between gap-2 bg-white dark:bg-slate-900"
+                    className="px-4 py-2.5 flex items-center justify-between gap-2 bg-white dark:bg-slate-900 flex-wrap"
                   >
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
                       <Badge
                         variant={tx.status === 'succeeded' ? 'default' : 'secondary'}
                         className="font-mono text-[10px] uppercase"
@@ -545,10 +545,19 @@ export function SettingsPage(): JSX.Element {
                       <span className="font-semibold text-slate-800 dark:text-slate-200">
                         CITRA {tx.plan_name} ({tx.billing_cycle})
                       </span>
+                      {tx.promo_code && (
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[10px] font-mono font-semibold text-emerald-700 dark:text-emerald-300">
+                          {tx.promo_code}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-3 font-mono text-slate-600 dark:text-slate-400">
                       <span>
-                        {(tx.card_brand || 'visa').toUpperCase()} •••• {tx.card_last4 || '4242'}
+                        {tx.payment_method === 'apple_pay'
+                          ? `APPLE PAY •••• ${tx.card_last4 || '4242'}`
+                          : tx.payment_method === 'google_pay'
+                            ? `GOOGLE PAY •••• ${tx.card_last4 || '4242'}`
+                            : `${(tx.card_brand || 'visa').toUpperCase()} •••• ${tx.card_last4 || '4242'}`}
                       </span>
                       <span className="font-bold text-slate-900 dark:text-white">
                         ${tx.amount_usd.toFixed(2)}

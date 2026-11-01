@@ -613,6 +613,8 @@ export interface SubscriptionSummary {
   quota: UserQuota;
 }
 
+export type PaymentMethodType = 'card' | 'apple_pay' | 'google_pay';
+
 export interface BillingTransactionItem {
   id: number;
   user_id: number;
@@ -621,12 +623,18 @@ export interface BillingTransactionItem {
   plan_tier: PlanTier;
   plan_name: string;
   billing_cycle: BillingCycle;
+  subtotal_usd?: number;
+  discount_usd?: number;
+  promo_code?: string | null;
   amount_usd: number;
   currency: string;
   status: string;
   payment_mode: string;
+  payment_method?: PaymentMethodType | string;
   card_brand: string | null;
   card_last4: string | null;
+  billing_country?: string | null;
+  billing_zip?: string | null;
   created_at: string | null;
   paid_at: string | null;
 }
@@ -638,8 +646,20 @@ export interface CheckoutSessionResponse {
   plan_tier: PlanTier;
   plan_name: string;
   billing_cycle: BillingCycle;
+  subtotal_usd?: number;
+  discount_usd?: number;
+  promo_code?: string | null;
   amount_usd: number;
   transaction_id: number;
+}
+
+export interface AppliedPromoDetails {
+  code: string;
+  description: string | null;
+  discount_type: 'percent' | 'fixed';
+  discount_value: number;
+  max_discount_usd: number | null;
+  discount_usd: number;
 }
 
 export interface CheckoutSessionDetails {
@@ -652,12 +672,77 @@ export interface CheckoutSessionDetails {
   plan_tier: PlanTier;
   plan_name: string;
   billing_cycle: BillingCycle;
+  subtotal_usd?: number;
+  discount_usd?: number;
+  promo_code?: string | null;
+  promo_details?: AppliedPromoDetails | null;
   amount_usd: number;
   monthly_equivalent_usd: number;
   annual_savings_usd: number;
   currency: string;
+  supported_payment_methods?: string[];
+  supported_card_brands?: string[];
   features_en: string[];
   features_vi: string[];
+}
+
+export interface PromoCodeItem {
+  id: number;
+  code: string;
+  description: string | null;
+  discount_type: 'percent' | 'fixed';
+  discount_value: number;
+  max_discount_usd: number | null;
+  min_amount_usd: number;
+  applicable_tiers: 'all' | 'pro' | 'ultra';
+  applicable_cycles: 'all' | 'monthly' | 'annual';
+  max_uses: number | null;
+  max_uses_per_user: number;
+  used_count: number;
+  is_active: boolean;
+  is_expired: boolean;
+  is_exhausted: boolean;
+  effective_status: 'active' | 'inactive' | 'expired' | 'exhausted';
+  expires_at: string | null;
+  created_by: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface PromoSummaryStats {
+  total_codes: number;
+  active_codes: number;
+  total_redemptions: number;
+  total_discount_usd: number;
+}
+
+export interface PromoCodeCreatePayload {
+  code?: string | null;
+  description?: string | null;
+  discount_type: 'percent' | 'fixed';
+  discount_value: number;
+  max_discount_usd?: number | null;
+  min_amount_usd?: number;
+  applicable_tiers?: 'all' | 'pro' | 'ultra';
+  applicable_cycles?: 'all' | 'monthly' | 'annual';
+  max_uses?: number | null;
+  max_uses_per_user?: number;
+  is_active?: boolean;
+  expires_at?: string | null;
+}
+
+export interface PromoCodeUpdatePayload {
+  description?: string | null;
+  discount_type?: 'percent' | 'fixed';
+  discount_value?: number;
+  max_discount_usd?: number | null;
+  min_amount_usd?: number;
+  applicable_tiers?: 'all' | 'pro' | 'ultra';
+  applicable_cycles?: 'all' | 'monthly' | 'annual';
+  max_uses?: number | null;
+  max_uses_per_user?: number;
+  is_active?: boolean;
+  expires_at?: string | null;
 }
 
 export interface User {
@@ -1279,7 +1364,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  // Billing & Subscriptions (v2.2)
+  // Billing & Subscriptions (v2.2 / v2.4 Multi-Payment & Promo Codes)
   getBillingPlans: () =>
     request<{
       plans: PlanCatalogItem[];
@@ -1294,6 +1379,7 @@ export const api = {
     plan_tier: 'pro' | 'ultra';
     billing_cycle: BillingCycle;
     force_demo?: boolean;
+    promo_code?: string | null;
   }) =>
     request<CheckoutSessionResponse>('/billing/create-checkout-session', {
       method: 'POST',
@@ -1304,10 +1390,53 @@ export const api = {
     request<CheckoutSessionDetails>(
       `/billing/checkout-session/${encodeURIComponent(sessionId)}`,
     ),
+  validatePromoCode: (data: {
+    code: string;
+    plan_tier: 'pro' | 'ultra';
+    billing_cycle: BillingCycle;
+  }) =>
+    authRequest<{
+      valid: boolean;
+      code: string;
+      description: string | null;
+      discount_type: 'percent' | 'fixed';
+      discount_value: number;
+      max_discount_usd: number | null;
+      subtotal_usd: number;
+      discount_usd: number;
+      final_amount_usd: number;
+    }>('/billing/promo/validate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token')
+          ? { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          : {}),
+      },
+      body: JSON.stringify(data),
+    }),
+  applyCheckoutSessionPromo: (sessionId: string, code: string | null) =>
+    authRequest<CheckoutSessionDetails>(
+      `/billing/checkout-session/${encodeURIComponent(sessionId)}/promo`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token')
+            ? { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            : {}),
+        },
+        body: JSON.stringify({ code }),
+      },
+    ),
   verifyCheckoutSession: (data: {
     session_id: string;
+    payment_method?: PaymentMethodType;
     card_last4?: string;
     card_brand?: string;
+    billing_country?: string;
+    billing_zip?: string;
+    promo_code?: string | null;
   }) =>
     request<{
       status: string;
@@ -1338,4 +1467,40 @@ export const api = {
     }>('/billing/reactivate', {
       method: 'POST',
     }),
+
+  // Admin Promo Code Management
+  listAdminPromoCodes: () =>
+    request<{
+      stats: PromoSummaryStats;
+      promos: PromoCodeItem[];
+    }>('/billing/admin/promos'),
+  generateAdminPromoCode: () =>
+    request<{ code: string }>('/billing/admin/promos/generate-code'),
+  createAdminPromoCode: (data: PromoCodeCreatePayload) =>
+    authRequest<PromoCodeItem>('/billing/admin/promos', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token')
+          ? { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          : {}),
+      },
+      body: JSON.stringify(data),
+    }),
+  updateAdminPromoCode: (id: number, data: PromoCodeUpdatePayload) =>
+    authRequest<PromoCodeItem>(`/billing/admin/promos/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token')
+          ? { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          : {}),
+      },
+      body: JSON.stringify(data),
+    }),
+  deleteAdminPromoCode: (id: number) =>
+    request<{ message: string; deleted_id: number; code: string }>(
+      `/billing/admin/promos/${id}`,
+      { method: 'DELETE' },
+    ),
 };
