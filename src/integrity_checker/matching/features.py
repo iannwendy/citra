@@ -58,22 +58,27 @@ class FeatureCalculator:
         cited_authors = list(citation.authors or [])
         if not cited_authors and citation.raw_text:
             # Try to extract first author from raw text like "(Peters et al., 2018)"
+            # Skip when raw_text starts directly with citation.title (title-first / authorless entry)
             raw = citation.raw_text or ""
             raw = re.sub(r'[\r\n]+', ' ', raw)  # Handle line breaks
-            match = re.search(
-                r"^[\(\s]*([A-ZÀ-ÖØ-ÞĐ][a-zà-ÿđ'-]+)",
-                raw,
-            )
-            if match:
-                extracted_author = match.group(1)
-                cited_authors = [extracted_author]
+            raw_no_idx = re.sub(r"^\s*(?:\[\s*\d+\s*\]\.?|\d{1,3}\s*[\.\)])\s*", "", raw).strip()
+            t_prefix = (citation.title or "").strip().lower()[:15]
+            is_title_first = bool(t_prefix and len(t_prefix) >= 6 and raw_no_idx.lower().startswith(t_prefix))
+            if not is_title_first:
+                match = re.search(
+                    r"^[\(\s]*([A-ZÀ-ÖØ-ÞĐ][a-zà-ÿđ'-]+)",
+                    raw,
+                )
+                if match:
+                    extracted_author = match.group(1)
+                    cited_authors = [extracted_author]
 
         best = self._select_best_candidate(citation, source, cited_authors)
         if best is None:
             return MatchFeatures(source_consensus=source.consensus_count())
 
         # Cross-candidate metadata fusion: enrich missing fields on `best` from consensus candidates
-        best = self._fuse_consensus_metadata(best, source)
+        best = self._fuse_consensus_metadata(best, source, cited_authors=cited_authors)
 
         # Title sim
         c_title = (citation.title or citation.raw_text).lower().strip()
@@ -302,6 +307,16 @@ class FeatureCalculator:
                 return True
         return False
 
+    @staticmethod
+    def _is_book_review_candidate(cand: SourceCandidate) -> bool:
+        doi_l = (cand.doi or "").lower()
+        venue_l = (cand.venue or "").lower()
+        return (
+            doi_l.startswith("10.5860/choice")
+            or "choice reviews" in venue_l
+            or "book review" in venue_l
+        )
+
     def _select_best_candidate(
         self,
         citation: Citation,
@@ -317,6 +332,7 @@ class FeatureCalculator:
 
         c_title = (citation.title or citation.raw_text or "").lower().strip()
         is_raw = not bool(citation.title)
+        cit_is_choice = "10.5860/choice" in (citation.doi or "").lower() or "choice reviews" in (citation.venue or "").lower()
 
         def _score_cand(cand: SourceCandidate) -> float:
             doi_bonus = 2.0 if self._doi_matches(citation.doi, cand.doi) else 0.0
@@ -325,11 +341,16 @@ class FeatureCalculator:
             a_sim = author_match_score(cited_authors, list(cand.authors or []))
             y_dist = self._year_distance(citation.year, cand.year)
             y_bonus = 0.2 if y_dist <= 1 else 0.0
-            return doi_bonus + t_sim * 1.0 + a_sim * 0.5 + y_bonus + (cand.confidence or 0.0) * 0.05
+            review_penalty = -0.5 if (not cit_is_choice and self._is_book_review_candidate(cand)) else 0.0
+            return doi_bonus + t_sim * 1.0 + a_sim * 0.5 + y_bonus + review_penalty + (cand.confidence or 0.0) * 0.05
 
         best = max(valid, key=_score_cand)
-        # Ensure source.best_candidate() returns this same candidate downstream without mutating best.confidence
+        # Ensure source.best_candidate() and source.candidates[0] (serialized as matched_sources[0] for the UI)
+        # point to this exact selected best candidate without mutating best.confidence
         source._selected_best = best  # type: ignore[attr-defined]
+        if source.candidates and source.candidates[0] is not best and best in source.candidates:
+            source.candidates.remove(best)
+            source.candidates.insert(0, best)
         return best
 
     _MEDIUM_TAG_RE = re.compile(
@@ -360,7 +381,10 @@ class FeatureCalculator:
         return cleaned, alts
 
     def _fuse_consensus_metadata(
-        self, best: SourceCandidate, source: SourceResult
+        self,
+        best: SourceCandidate,
+        source: SourceResult,
+        cited_authors: list | None = None,
     ) -> SourceCandidate:
         """Fuse missing metadata fields (authors, year, doi, venue, abstract) from agreeing candidates."""
         valid_others = [c for c in source.candidates if c.found and c is not best]
@@ -368,7 +392,10 @@ class FeatureCalculator:
             return best
 
         best_title = (best.title or "").lower().strip()
+        best_is_review = self._is_book_review_candidate(best)
         for cand in valid_others:
+            if not best_is_review and self._is_book_review_candidate(cand):
+                continue
             same_doi = bool(best.doi and cand.doi and self._doi_matches(best.doi, cand.doi))
             cand_title = (cand.title or "").lower().strip()
             t_sim = self._compute_title_similarity(best_title, cand_title) if (best_title and cand_title) else 0.0
@@ -377,13 +404,30 @@ class FeatureCalculator:
             if not (same_doi or (t_sim >= 0.92 and compatible_year)):
                 continue
 
-            if (not best.authors or len(best.authors) < len(cand.authors or [])) and cand.authors and compatible_year:
+            authors_agree = (
+                not best.authors
+                or not cand.authors
+                or author_match_score(list(best.authors), list(cand.authors)) >= 0.50
+            )
+            if not best.authors and cand.authors and compatible_year:
                 best.authors = list(cand.authors)
+            elif (
+                best.authors
+                and cand.authors
+                and len(best.authors) < len(cand.authors)
+                and compatible_year
+                and authors_agree
+            ):
+                if not cited_authors or (
+                    author_match_score(cited_authors, list(cand.authors))
+                    >= author_match_score(cited_authors, list(best.authors))
+                ):
+                    best.authors = list(cand.authors)
             if not best.year and cand.year and same_doi:
                 best.year = cand.year
-            if not best.doi and cand.doi and compatible_year:
+            if not best.doi and cand.doi and compatible_year and authors_agree:
                 best.doi = cand.doi
-            if not best.venue and cand.venue:
+            if not best.venue and cand.venue and authors_agree:
                 best.venue = cand.venue
             if not getattr(best, "abstract", None) and getattr(cand, "abstract", None):
                 best.abstract = cand.abstract

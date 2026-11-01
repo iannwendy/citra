@@ -1795,13 +1795,17 @@ class DocumentParser:
                         old_auth_str, donor_first_author, 1
                     )
 
-            # Fix bleeding co-author into target.title (e.g. Welling, L., & Thomson, L., [2008]
-            # where GROBID sets title=", & Thomson, L" and venue="PHP and MySQL Web Development...")
+            # Fix bleeding co-author or hyphenated initial into target.title (e.g. Welling, L., & Thomson, L., [2008]
+            # where GROBID sets title=", & Thomson, L", or C.-W. Wu, Y.-L. Chen [2019] where GROBID sets title="-L")
             if (
                 target.title
                 and donor.title
                 and len(donor.title.strip()) >= 5
-                and re.match(r"^[,;\s]*(?:&\s*|and\b)", target.title.strip(), re.IGNORECASE)
+                and (
+                    re.match(r"^[,;\s]*(?:&\s*|and\b)", target.title.strip(), re.IGNORECASE)
+                    or re.match(r"^[-–.,;\s]*[A-Za-z]{1,3}\.?$", target.title.strip())
+                    or len(target.title.strip(" -–.,;:")) < 4
+                )
             ):
                 target.title = donor.title
                 target.title_normalized = donor.title_normalized
@@ -1883,7 +1887,7 @@ class DocumentParser:
             donor_is_multi_chunk = len(donor.raw_text or "") > max(
                 len(target.raw_text or "") * 2.2, 320
             )
-            # Restore dropped leading authors when GROBID missed the first author(s) on a page/column break (e.g. 9.pdf [14, 20])
+            # Restore dropped leading or trailing authors when GROBID missed co-authors on a line/hyphen break
             if (
                 donor.authors
                 and target.authors
@@ -1891,12 +1895,35 @@ class DocumentParser:
                 and not donor_is_multi_chunk
             ):
                 first_d = (getattr(donor.authors[0], "raw", None) or str(donor.authors[0])).strip().rstrip(".").lower()
+                t_first = (getattr(target.authors[0], "last_name", None) or str(target.authors[0])).split(",")[0].strip().lower()
+                d_first = (getattr(donor.authors[0], "last_name", None) or str(donor.authors[0])).split(",")[0].strip().lower()
                 t_last = (getattr(target.authors[-1], "last_name", None) or str(target.authors[-1])).split(",")[0].strip().lower()
                 d_last = (getattr(donor.authors[-1], "last_name", None) or str(donor.authors[-1])).split(",")[0].strip().lower()
-                if t_last and t_last == d_last and first_d not in {"iii", "ii", "iv", "jr", "sr"}:
+                if (
+                    ((t_last and t_last == d_last) or (t_first and t_first == d_first))
+                    and first_d not in {"iii", "ii", "iv", "jr", "sr"}
+                ):
+                    old_auth_str = ", ".join(
+                        getattr(a, "raw", None) or str(a) for a in target.authors
+                    )
                     target.authors = [
                         getattr(a, "raw", None) or str(a) for a in donor.authors
                     ]
+                    new_auth_str = ", ".join(target.authors)
+                    if old_auth_str and old_auth_str in (target.raw_text or ""):
+                        target.raw_text = (target.raw_text or "").replace(
+                            old_auth_str, new_auth_str, 1
+                        )
+            if (
+                target.raw_text
+                and target.title
+                and re.search(r"\(\d{4}[a-z]?\)\s+-[A-Za-z]{1,3}\b", target.raw_text)
+            ):
+                target.raw_text = re.sub(
+                    r"(\(\d{4}[a-z]?\))\s+-[A-Za-z]{1,3}\b\s*",
+                    r"\1 ",
+                    target.raw_text,
+                )
 
             if donor.doi and not donor_is_multi_chunk:
                 if (

@@ -127,7 +127,7 @@ export function AuthSplitShell({
             </div>
 
             <h2 className="font-display text-3xl xl:text-4xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.12] mb-3.5">
-              {t('auth.heroTitle1')}
+              {t('auth.heroTitle1')}{' '}
               <br />
               <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-indigo-500 to-emerald-600 dark:from-indigo-400 dark:via-indigo-300 dark:to-emerald-400">
                 {t('auth.heroTitle2')}

@@ -338,3 +338,91 @@ class TestTDTUGithubReportsBugRegressions:
         assert cits[1].title == "Phân loại văn bản tiếng Việt với PhoBERT"
         assert cits[1].year == "2022"
 
+    def test_full_pipeline_regressions_arxiv_url_book_review_and_bare_urls(self) -> None:
+        from integrity_checker.logic.cis import CISCalculator
+        from integrity_checker.matching.features import FeatureCalculator
+        from integrity_checker.models import (
+            CitationVerdict,
+            SourceCandidate,
+            SourceResult,
+            ValidationLabel,
+        )
+        from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
+
+        ref_parser = ReferenceListParser()
+        # Bare Title + arXiv PDF URL (023_tdtu)
+        arxiv_entry = ref_parser._parse_entry(
+            "A Systematic Review of Intermediate Fusion in Multimodal Deep Learning for Biomedical Applications https://arxiv.org/pdf/2408.02686",
+            order_index=9,
+            page_num=48,
+        )
+        assert arxiv_entry is not None
+        assert (
+            arxiv_entry.title
+            == "A Systematic Review of Intermediate Fusion in Multimodal Deep Learning for Biomedical Applications"
+        )
+        assert arxiv_entry.doi == "10.48550/arXiv.2408.02686"
+        assert arxiv_entry.year == "2024"
+        assert arxiv_entry.authors == []
+
+        # Book review candidate ("Choice Reviews Online", DOI 10.5860/choice.*) penalized over real textbook (006_tdtu ref [2])
+        book_cit = Citation(
+            raw_text="[2] Han, J, Kamber, M, Pei, J (2012) Data Mining: Concepts and Techniques",
+            citation_type=CitationType.REFERENCE_LIST,
+            title="Data Mining: Concepts and Techniques",
+            authors=["Han, J", "Kamber, M", "Pei, J"],
+            year="2012",
+        )
+        choice_review = SourceCandidate(
+            source_name="crossref",
+            found=True,
+            title="Data mining: concepts and techniques",
+            authors=["T. T. El-Midany"],
+            year=2012,
+            doi="10.5860/choice.49-3905",
+            venue="Choice Reviews Online",
+        )
+        real_book = SourceCandidate(
+            source_name="openlibrary",
+            found=True,
+            title="Data Mining: Concepts and Techniques",
+            authors=["Jiawei Han", "Micheline Kamber", "Jian Pei"],
+            year=2012,
+            venue="Morgan Kaufmann",
+        )
+        sr = SourceResult(
+            citation_raw=book_cit.raw_text,
+            candidates=[choice_review, real_book],
+            sources_queried=["crossref", "openlibrary"],
+            sources_succeeded=["crossref", "openlibrary"],
+            sources_failed={},
+        )
+        fe = FeatureCalculator()
+        feats = fe.compute(book_cit, sr)
+        assert sr.best_candidate().source_name == "openlibrary"
+        assert sr.best_candidate().doi != "10.5860/choice.49-3905"
+        assert feats.author_jaccard >= 0.65
+
+        # Numbered bare URL (051_tdtu) recognized as web resource
+        numbered_url_cit = Citation(
+            raw_text="[1] https://www.techiedelight.com/single-source-shortest-paths-dijkstras-algorithm/",
+            citation_type=CitationType.REFERENCE_LIST,
+            url="https://www.techiedelight.com/single-source-shortest-paths-dijkstras-algorithm/",
+        )
+        assert RetrievalOrchestrator.is_web_or_legal_resource(numbered_url_cit) is True
+
+        # CISCalculator handles 100% RESOURCE bibliography without returning 0.0
+        cis = CISCalculator().compute(
+            [
+                CitationVerdict(
+                    citation=numbered_url_cit,
+                    label=ValidationLabel.RESOURCE,
+                    confidence=0.95,
+                    reasoning="Web resource",
+                    mapping_status=CitationMappingStatus.UNCITED_REFERENCE,
+                )
+            ]
+        )
+        assert cis.score > 80.0
+
+

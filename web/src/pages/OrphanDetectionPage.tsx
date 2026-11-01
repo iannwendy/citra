@@ -407,18 +407,25 @@ export function OrphanDetectionPage() {
 
         {/* Content */}
         <div className="p-4 sm:p-6">
-          {hasIssues ? (
+          {(activeTab === 'all' &&
+            (hasIssues || stats.correctlyLinked.length > 0)) ||
+          (activeTab === 'orphans' && stats.citationsWithoutReference.length > 0) ||
+          (activeTab === 'uncited' && stats.uncitedReferences.length > 0) ||
+          (activeTab === 'ambiguous' && stats.ambiguousMappings.length > 0) ? (
             <div className="space-y-8">
               {(activeTab === 'all' || activeTab === 'orphans') &&
                 stats.citationsWithoutReference.length > 0 && (
                   <div>
                     <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1.5 flex items-center gap-2">
                       <Link2Off className="h-5 w-5 text-red-600 dark:text-red-400" />
-                      Citations Without Reference
+                      {isVi
+                        ? 'Trích dẫn thiếu mục tham khảo'
+                        : 'Citations Without Reference'}
                     </h2>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                      These citations appear in the document but no matching entry was
-                      found in the bibliography.
+                      {isVi
+                        ? 'Các trích dẫn này xuất hiện trong nội dung bài viết nhưng không tìm thấy mục tương ứng trong danh mục tài liệu tham khảo.'
+                        : 'These citations appear in the document but no matching entry was found in the bibliography.'}
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                       {stats.citationsWithoutReference.map((citation, index) => (
@@ -442,11 +449,14 @@ export function OrphanDetectionPage() {
                   <div>
                     <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1.5 flex items-center gap-2">
                       <FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                      References Never Cited
+                      {isVi
+                        ? 'Tài liệu tham khảo chưa được trích dẫn'
+                        : 'References Never Cited'}
                     </h2>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                      These references exist in the bibliography but are never cited in
-                      the document.
+                      {isVi
+                        ? 'Các tài liệu này nằm trong danh mục tham khảo cuối bài nhưng chưa được trích dẫn trong nội dung văn bản.'
+                        : 'These references exist in the bibliography but are never cited in the document.'}
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                       {stats.uncitedReferences.map((reference, index) => (
@@ -462,27 +472,90 @@ export function OrphanDetectionPage() {
 
               {(activeTab === 'all' || activeTab === 'ambiguous') &&
                 stats.ambiguousMappings.length > 0 && (
+                  <div>
+                    <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1.5 flex items-center gap-2">
+                      <HelpCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      {isVi ? 'Liên kết mơ hồ' : 'Ambiguous Mappings'}
+                    </h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                      {isVi
+                        ? 'Các trích dẫn này khớp với nhiều hơn một mục tài liệu tham khảo.'
+                        : 'These citations have multiple possible reference matches.'}
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                      {stats.ambiguousMappings.map((citation, index) => (
+                        <OrphanCitationCard
+                          key={citation.citation_id}
+                          citation={{
+                            citation_id: citation.citation_id,
+                            citation_raw: citation.citation_raw,
+                            label: citation.label,
+                            mapping_status: citation.mapping_status,
+                          }}
+                          index={index}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {activeTab === 'all' && stats.correctlyLinked.length > 0 && (
                 <div>
                   <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1.5 flex items-center gap-2">
-                    <HelpCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    Ambiguous Mappings
+                    <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    {isVi
+                      ? 'Trích dẫn liên kết chính xác hai chiều'
+                      : 'Correctly Linked Citations'}
                   </h2>
                   <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                    These citations have multiple possible reference matches.
+                    {isVi
+                      ? 'Các mục tài liệu tham khảo này đã được liên kết khớp hoàn toàn với trích dẫn trong bài viết.'
+                      : 'These bibliography entries are properly linked to in-text citations in the manuscript.'}
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    {stats.ambiguousMappings.map((citation, index) => (
-                      <OrphanCitationCard
-                        key={citation.citation_id}
-                        citation={{
-                          citation_id: citation.citation_id,
-                          citation_raw: citation.citation_raw,
-                          label: citation.label,
-                          mapping_status: citation.mapping_status,
-                        }}
-                        index={index}
-                      />
-                    ))}
+                    {stats.correctlyLinked.map((v, index) => {
+                      const rawBracketMatch = (v.citation_raw ?? '').match(
+                        /^\s*\[(\d+)\]/,
+                      );
+                      const refIdNumMatch =
+                        v.citation_link?.reference_id?.match(/^ref-0*(\d+)$/);
+                      const badgeNum =
+                        rawBracketMatch?.[1] ||
+                        refIdNumMatch?.[1] ||
+                        String(index + 1);
+                      return (
+                        <Card
+                          key={v.citation_id}
+                          className="rounded-xl border-emerald-200/80 dark:border-emerald-900/60 p-4 bg-emerald-50/30 dark:bg-emerald-950/20 transition-colors shadow-2xs"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 rounded-xl bg-emerald-100/80 dark:bg-emerald-900/50 border border-emerald-200/60 dark:border-emerald-800/60 shrink-0">
+                              <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400">
+                                  [{String(badgeNum).padStart(2, '0')}]
+                                </span>
+                                <VerdictBadge
+                                  verdict={
+                                    isUrlResource(v) ? 'resource' : v.label
+                                  }
+                                  size="sm"
+                                />
+                                <MappingStatusBadge
+                                  status={v.mapping_status as any}
+                                  size="sm"
+                                />
+                              </div>
+                              <p className="text-sm font-serif text-slate-800 dark:text-slate-200 line-clamp-2 leading-relaxed break-words [overflow-wrap:anywhere]">
+                                {v.citation_raw.replace(/^\s*\[\d+\]\s*/, '')}
+                              </p>
+                            </div>
+                          </div>
+                        </Card>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -495,11 +568,12 @@ export function OrphanDetectionPage() {
                 </div>
               </div>
               <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
-                No Consistency Issues
+                {isVi ? 'Không có vấn đề nhất quán' : 'No Consistency Issues'}
               </h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-                All citations are correctly linked to references and all references are
-                cited in the document.
+                {isVi
+                  ? 'Tất cả trích dẫn trong bài đều khớp với danh mục tài liệu tham khảo và không có mục thừa.'
+                  : 'All citations are correctly linked to references and all references are cited in the document.'}
               </p>
             </div>
           )}
@@ -509,7 +583,9 @@ export function OrphanDetectionPage() {
       {/* Citation Consistency Summary */}
       <Card className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
         <h3 className="font-display text-sm font-semibold mb-4 text-slate-900 dark:text-slate-100">
-          Citation Consistency Summary
+          {isVi
+            ? 'Tổng quan Nhất quán Trích dẫn (Layer 1)'
+            : 'Citation Consistency Summary'}
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="flex items-center gap-3 p-3.5 bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-emerald-200/80 dark:border-emerald-900/70">
@@ -519,7 +595,7 @@ export function OrphanDetectionPage() {
                 {stats.correctlyLinkedCount}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Correctly linked
+                {isVi ? 'Liên kết chính xác' : 'Correctly linked'}
               </p>
             </div>
           </div>
@@ -530,7 +606,7 @@ export function OrphanDetectionPage() {
                 {stats.orphanCount}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Without reference
+                {isVi ? 'Thiếu tham khảo' : 'Without reference'}
               </p>
             </div>
           </div>
@@ -541,7 +617,7 @@ export function OrphanDetectionPage() {
                 {stats.uncitedCount}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Uncited
+                {isVi ? 'Chưa trích dẫn' : 'Uncited'}
               </p>
             </div>
           </div>
@@ -552,7 +628,7 @@ export function OrphanDetectionPage() {
                 {stats.ambiguousCount}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Ambiguous
+                {isVi ? 'Mơ hồ' : 'Ambiguous'}
               </p>
             </div>
           </div>

@@ -147,8 +147,20 @@ function IssueCard({
     }
     if (v.label === 'metadata_error') {
       if (v.mismatched_fields.length > 0) {
+        const fieldViMap: Record<string, string> = {
+          author: 'tác giả',
+          authors: 'tác giả',
+          year: 'năm xuất bản',
+          title: 'tiêu đề',
+          venue: 'nơi công bố',
+          doi: 'DOI',
+        };
+        const localizedFields =
+          lang === 'vi'
+            ? v.mismatched_fields.map((f) => fieldViMap[f.toLowerCase()] || f)
+            : v.mismatched_fields;
         return lang === 'vi'
-          ? `Sai lệch trường: ${v.mismatched_fields.join(', ')}`
+          ? `Sai lệch trường: ${localizedFields.join(', ')}`
           : `${v.mismatched_fields.join(', ')} mismatch`;
       }
       return lang === 'vi'

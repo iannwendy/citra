@@ -264,6 +264,11 @@ export function PendingReviewsPage() {
                           {r.filename}
                         </p>
                       </div>
+                      {r.citation_raw && (
+                        <p className="text-xs font-serif text-slate-700 dark:text-slate-300 mt-1 line-clamp-2 break-words [overflow-wrap:anywhere]">
+                          &ldquo;{r.citation_raw}&rdquo;
+                        </p>
+                      )}
                       {r.reasoning && (
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed">
                           {r.reasoning}

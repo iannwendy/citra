@@ -290,7 +290,7 @@ export function ProfilePage() {
                 size="lg"
               />
               <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 text-center max-w-[9rem]">
-                {t('profile.avatarTypes')}
+                {t('profile.avatarTypes')}{' '}
                 <br />
                 {t('profile.avatarMax')}
               </p>

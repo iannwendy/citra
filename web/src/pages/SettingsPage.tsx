@@ -577,7 +577,7 @@ export function SettingsPage(): JSX.Element {
               {t('settings.about')}
             </h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400">04</span>
+          <span className="text-[11px] font-mono text-slate-400">05</span>
         </div>
 
         <div className="p-6 space-y-3">

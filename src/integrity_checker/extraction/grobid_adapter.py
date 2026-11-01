@@ -171,15 +171,38 @@ def _grobid_bib_to_citation(bib: GrobidBibEntry, order_index: int) -> Citation:
                 title = title.strip()[: suffix_yr_m.start()].strip()
 
     venue = bib.venue
-    if venue and title and venue.strip().rstrip(".,").lower() == title.strip().rstrip(".,").lower():
+    if (
+        title
+        and venue
+        and len(venue.strip()) >= 8
+        and (
+            re.match(r"^[,;\s]*(?:&\s*|and\b)", title.strip(), re.IGNORECASE)
+            or re.match(r"^[-–.,;\s]*[A-Za-z]{1,3}\.?$", title.strip())
+            or len(title.strip(" -–.,;:")) < 4
+        )
+    ):
+        title = venue.strip()
+        venue = None
+    elif venue and title and venue.strip().rstrip(".,").lower() == title.strip().rstrip(".,").lower():
         venue = None
 
     url = getattr(bib, "url", None)
+    if title and not re.match(r"^(?:https?://|www\.)", title.strip(), re.IGNORECASE):
+        trailing_url_m = re.search(r"\s+(https?://\S+)\s*$", title.strip(), re.IGNORECASE)
+        if trailing_url_m:
+            if not url:
+                url = trailing_url_m.group(1)
+            title = title.strip()[: trailing_url_m.start()].strip().rstrip(".,;")
     if url:
         url = re.sub(r"[\(\[](?:ac-?\s*cessed|re-?\s*trieved)\b.*$", "", url, flags=re.IGNORECASE).rstrip(".,;)'\"\u2019\u201d")
         host_m = re.match(r"^https?://([^/\s]+)", url, re.IGNORECASE)
         if not host_m or "." not in host_m.group(1):
             url = None
+    if not year and url:
+        arxiv_yr_m = re.search(r"arxiv\.org/(?:abs|pdf)/(\d{2})\d{2}\.\d{4,5}", url, re.IGNORECASE)
+        if arxiv_yr_m:
+            yy = int(arxiv_yr_m.group(1))
+            year = f"20{yy:02d}" if yy <= 35 else f"19{yy:02d}"
 
     if not title and url:
         slug = url.rstrip("/").split("/")[-1].strip()

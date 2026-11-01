@@ -66,7 +66,7 @@ logger = get_logger(__name__)
 
 # Bump whenever extraction/linking output shape changes so previously cached
 # (and possibly wrong) reports are recomputed instead of served from disk.
-_REPORT_CACHE_VERSION = "report-v12"
+_REPORT_CACHE_VERSION = "report-v13"
 
 # NEW v1.7: Only retrieve + verify REFERENCE_LIST citations (and DOI/URL inline
 # with enough metadata). In-text citations are verified via linking only.
@@ -678,12 +678,23 @@ class IntegrityPipeline:
         )
 
         # Linking summary derived from already-resolved link objects — surface
-        # the matched count to the UI before retrieval starts (the full summary
-        # is rebuilt after the checker runs).
-        _initial_linked = sum(
-            1 for link in linking_result.links
-            if getattr(link, "status", None) is not None
+        # the matched reference count to the UI before retrieval starts (matching
+        # linking_summary.get("matched", 0) at the end of the pipeline).
+        _matched_ref_ids = {
+            link.reference_id
+            for link in linking_result.links
+            if link.reference_id
+            and getattr(link, "status", None) is not None
             and getattr(link.status, "value", link.status) == "matched"
+        }
+        _initial_linked = (
+            len(_matched_ref_ids)
+            if _matched_ref_ids
+            else sum(
+                1 for link in linking_result.links
+                if getattr(link, "status", None) is not None
+                and getattr(link.status, "value", link.status) == "matched"
+            )
         )
         _emit(
             "linking",
@@ -691,7 +702,7 @@ class IntegrityPipeline:
             linked=_initial_linked,
             citations_found=len(in_text_citations),
             references_found=len(ref_citations),
-            message=f"Linked {_initial_linked} of {len(all_citations)} citations",
+            message=f"Linked {_initial_linked} of {len(ref_citations) or len(all_citations)} references",
         )
 
         # 2. Retrieve + check từng citation (PARALLEL cho tốc độ).  Keep one
@@ -722,7 +733,8 @@ class IntegrityPipeline:
         _emit(
             "retrieving",
             4,
-            citations_found=len(all_citations),
+            citations_found=len(in_text_citations) or len(all_citations),
+            references_found=len(ref_citations) or len(unique_list),
             message=f"Querying academic databases for {len(unique_list)} unique papers...",
         )
         # FIX v1.7: Only retrieve for verifiable citations (references, not in-text).
@@ -754,18 +766,37 @@ class IntegrityPipeline:
         _src_status: dict[str, str] = {}
         _src_hits: dict[str, int] = {}
         _src_fails: dict[str, int] = {}
+        _src_misses: dict[str, int] = {}
         for src in unique_sources:
             for name in getattr(src, "sources_succeeded", []):
                 _src_hits[name] = _src_hits.get(name, 0) + 1
             for name, err in getattr(src, "sources_failed", {}).items():
-                _src_fails[name] = _src_fails.get(name, 0) + 1
-        for name in set(list(_src_hits.keys()) + list(_src_fails.keys())):
+                err_l = (err or "").lower()
+                if any(
+                    m in err_l
+                    for m in (
+                        "no results",
+                        "no title match",
+                        "does not exist",
+                        "not found",
+                        "no matching",
+                        "empty title query",
+                        "empty search query",
+                        "skipped (rate-limit backoff active)",
+                    )
+                ):
+                    _src_misses[name] = _src_misses.get(name, 0) + 1
+                else:
+                    _src_fails[name] = _src_fails.get(name, 0) + 1
+        for name in set(list(_src_hits.keys()) + list(_src_fails.keys()) + list(_src_misses.keys())):
             if _src_hits.get(name, 0) > 0 and _src_fails.get(name, 0) == 0:
                 _src_status[name] = "ok"
             elif _src_hits.get(name, 0) > 0 and _src_fails.get(name, 0) > 0:
                 _src_status[name] = "partial"
             elif _src_fails.get(name, 0) > 0:
                 _src_status[name] = f"failed:{_src_fails[name]}"
+            elif _src_misses.get(name, 0) > 0:
+                _src_status[name] = f"queried:{_src_misses[name]}"
             else:
                 _src_status[name] = "pending"
         _source_display_names = {
@@ -829,8 +860,18 @@ class IntegrityPipeline:
                     citation_link = ref_links[0]
                     citation_links_verdict: list = list(ref_links)
                 elif (
-                    in_text_citations
-                    and citation.reference_id
+                    not in_text_citations
+                    and source.best_candidate()
+                    and source.best_candidate().doi
+                    and citation.doi
+                    and source.best_candidate().doi.lower() == citation.doi.lower()
+                ):
+                    mapping_status = CitationMappingStatus.MATCHED
+                    mapping_confidence = 0.95
+                    citation_link = None
+                    citation_links_verdict = []
+                elif (
+                    citation.reference_id
                     and citation.reference_id in (linking_result.unmatched_reference_ids or [])
                 ):
                     mapping_status = CitationMappingStatus.UNCITED_REFERENCE
@@ -838,16 +879,8 @@ class IntegrityPipeline:
                     citation_link = None
                     citation_links_verdict = []
                 else:
-                    # Do not treat every bibliography entry as a verified mapping
-                    # when there are no in-text citations; only an exact DOI match
-                    # provides strong mapping evidence here.
-                    best = source.best_candidate()
-                    if best and best.doi and citation.doi and best.doi.lower() == citation.doi.lower():
-                        mapping_status = CitationMappingStatus.MATCHED
-                        mapping_confidence = 0.95
-                    else:
-                        mapping_status = CitationMappingStatus.UNRESOLVED
-                        mapping_confidence = 0.5
+                    mapping_status = CitationMappingStatus.UNRESOLVED
+                    mapping_confidence = 0.5
                     citation_link = None
                     citation_links_verdict = []
                 citation.mapping_status = mapping_status.value
@@ -1060,7 +1093,8 @@ class IntegrityPipeline:
         _emit(
             "checking",
             6,
-            citations_found=len(verdicts),
+            citations_found=len(in_text_citations) or len(verdicts),
+            references_found=len(ref_citations) or len(verdicts),
             message=f"Applied verification rules to {len(verdicts)} citations",
         )
 
@@ -1079,7 +1113,8 @@ class IntegrityPipeline:
         _emit(
             "scoring",
             7,
-            citations_found=len(all_citations),
+            citations_found=len(in_text_citations) or len(all_citations),
+            references_found=len(ref_citations) or len(verdicts),
             linked=linking_summary.get("matched", 0),
             message=f"CIS calculated: {cis.score:.1f}/100",
         )

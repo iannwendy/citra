@@ -377,7 +377,9 @@ export function UploadPage() {
               variant="outline"
               className="font-mono text-[11px] whitespace-nowrap shrink-0 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-400"
             >
-              {t('upload.maxSize')}
+              {lang === 'vi'
+                ? `Tối đa: ${quota.max_file_size_mb}MB`
+                : `Max size: ${quota.max_file_size_mb}MB`}
             </Badge>
           </div>
         </div>
@@ -419,7 +421,7 @@ export function UploadPage() {
                   </option>
                   {enrolledClasses.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name.length > 16 ? `${c.name.slice(0, 15)}…` : c.name} {c.join_code ? `(${c.join_code})` : ''}
+                      {c.name.length > 36 ? `${c.name.slice(0, 35)}…` : c.name} {c.join_code ? `(${c.join_code})` : ''}
                     </option>
                   ))}
                 </select>

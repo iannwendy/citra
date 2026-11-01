@@ -576,9 +576,19 @@ def build_remediated_bibliography(
         # Only apply candidate canonical metadata for verified or metadata_error entries
         # (Never overwrite suspected_hallucination, unresolved, or resource entries with external candidates)
         if found_candidates and label in ("verified", "metadata_error"):
+            def _remediation_cand_rank(s: dict[str, Any]) -> tuple[int, float]:
+                c_doi = _clean_text(s.get("doi")).lower()
+                c_venue = _clean_text(s.get("venue")).lower()
+                is_review = (
+                    c_doi.startswith("10.5860/choice")
+                    or "choice reviews" in c_venue
+                    or "book review" in c_venue
+                )
+                return (0 if is_review else 1, float(s.get("score") or s.get("confidence") or 0.0))
+
             best = max(
                 found_candidates,
-                key=lambda s: float(s.get("score") or s.get("confidence") or 0.0),
+                key=_remediation_cand_rank,
             )
             best_score = float(best.get("score") or best.get("confidence") or 0.0)
             best_source = str(best.get("source_name") or best.get("source") or "scholarly_db")

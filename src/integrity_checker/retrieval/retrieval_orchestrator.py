@@ -807,7 +807,11 @@ _WEB_RESOURCE_PATTERNS = [
         r"nimh\.nih\.gov|samhsa\.gov|europa\.eu|un\.org|worldbank\.org|imf\.org|oecd\.org|weforum\.org|"
         r"statista\.com|investopedia\.com|pewresearch\.org|gallup\.com|mayoclinic\.org|"
         r"clevelandclinic\.org|webmd\.com|healthline\.com|verywellmind\.com|verywellhealth\.com|"
-        r"medicalnewstoday\.com|psychologytoday\.com)",
+        r"medicalnewstoday\.com|psychologytoday\.com|"
+        r"geeksforgeeks\.org|machinelearningmastery\.com|tutorialspoint\.com|techiedelight\.com|"
+        r"zetcode\.com|tutorialhorizon\.com|colah\.github\.io|towardsdatascience\.com|"
+        r"w3schools\.com|javatpoint\.com|baeldung\.com|freecodecamp\.org|dev\.to|"
+        r"freetuts\.net|v1study\.com|congdongjava\.com|viblo\.asia|topdev\.vn)",
         re.IGNORECASE,
     ),
 ]
@@ -1024,10 +1028,15 @@ class RetrievalOrchestrator:
             re.IGNORECASE,
         ):
             return False
-        stripped = raw_text.strip()
+        stripped = re.sub(r"^(?:\[\d+\]|\(\d+\)|\d+\.)\s*", "", raw_text.strip())
         url_candidate = stripped.rstrip(".,;:)\"'")
         if re.match(r"^(?:https?://|www\.)(\S{10,})$", url_candidate, re.IGNORECASE):
-            return True
+            if not re.search(
+                r"(?:doi\.org|arxiv\.org|aclanthology\.org|ieeexplore\.ieee\.org|dl\.acm\.org|link\.springer\.com|sciencedirect\.com)",
+                url_candidate,
+                re.IGNORECASE,
+            ):
+                return True
         for pattern in _WEB_RESOURCE_PATTERNS:
             if (
                 pattern.search(raw_text)
@@ -2797,11 +2806,20 @@ class RetrievalOrchestrator:
                     )
                 if not primary.abstract and secondary.abstract:
                     primary.abstract = secondary.abstract
-                if not primary.doi and secondary.doi:
+                sec_is_book_review = (
+                    (secondary.doi or "").lower().startswith("10.5860/choice")
+                    or "choice reviews" in (secondary.venue or "").lower()
+                )
+                same_authors = (
+                    not primary.authors
+                    or not secondary.authors
+                    or author_match_score(primary.authors, secondary.authors) >= 0.50
+                )
+                if not primary.doi and secondary.doi and same_authors and not sec_is_book_review:
                     primary.doi = secondary.doi
-                if not primary.venue and secondary.venue:
+                if not primary.venue and secondary.venue and same_authors and not sec_is_book_review:
                     primary.venue = secondary.venue
-                if not primary.url and secondary.url:
+                if not primary.url and secondary.url and same_authors and not sec_is_book_review:
                     primary.url = secondary.url
                 if not primary.authors and secondary.authors:
                     primary.authors = secondary.authors

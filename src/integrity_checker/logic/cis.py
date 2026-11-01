@@ -87,11 +87,44 @@ class CISCalculator:
             verdict for verdict in verdicts if verdict.label != ValidationLabel.RESOURCE
         ]
         if not academic_verdicts:
+            # Resource-only bibliography (e.g. web resources or Vietnamese legal statutes):
+            # evaluate link consistency, format consistency, and identifier validity across all verdicts
+            res_link_consistency = self._compute_link_consistency(verdicts, linking_result)
+            res_format_consistency = self._compute_format_consistency(style_profile, verdicts)
+            invalid_id_rules = {
+                "R-FAKE-URL",
+                "R-FABRICATED-DOI",
+                "R-NONEXISTENT-DOI",
+                "R-DEAD-URL",
+                "R-BROKEN-LINK",
+            }
+            with_id = sum(1 for v in verdicts if v.citation.doi or v.citation.url)
+            valid_id = sum(
+                1
+                for v in verdicts
+                if (v.citation.doi or v.citation.url)
+                and not (set(v.triggered_rules or []) & invalid_id_rules)
+            )
+            res_id_validity = (valid_id / with_id) if with_id > 0 else 1.0
+            res_components = CISComponents(
+                verified_ratio=1.0,
+                metadata_accuracy=1.0,
+                in_text_bib_consistency=res_link_consistency,
+                format_consistency=res_format_consistency,
+                identifier_validity=res_id_validity,
+            )
+            res_score = (
+                res_components.verified_ratio * self.w.verified_ratio
+                + res_components.metadata_accuracy * self.w.metadata_accuracy
+                + res_components.in_text_bib_consistency * self.w.in_text_bib_consistency
+                + res_components.format_consistency * self.w.format_consistency
+                + res_components.identifier_validity * self.w.identifier_validity
+            ) * 100.0
             return CitationIntegrityScore(
-                score=0.0,
-                components=CISComponents(),
+                score=round(res_score, 2),
+                components=res_components,
                 weights_used=self.w.model_dump(),
-                num_citations=0,
+                num_citations=len(verdicts),
                 num_unresolved=0,
             )
 

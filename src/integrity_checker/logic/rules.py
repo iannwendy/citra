@@ -398,13 +398,14 @@ class SymbolicRules:
         features: MatchFeatures,
         style_penalty: float = 0.0,
         citation_doi: str | None = None,
+        citation_authors: list[str] | None = None,
     ) -> RuleOutcome | None:
         """Rule: LOCAL_DB only with perfect match → VERIFIED.
 
         When local_db (optionally with known_papers) is the only source that found
         a match with:
         - title_sim_fuzzy >= 0.90 and title_sim >= 0.95
-        - author_sim >= 0.8
+        - author_sim >= 0.8 (or authorless entry with exact DOI/arXiv + title_sim_fuzzy >= 0.95)
         - year_distance == 0
 
         This is a trusted match because local_db/known_papers are curated knowledge bases.
@@ -429,8 +430,11 @@ class SymbolicRules:
         if (
             features.title_sim_fuzzy >= 0.90
             and title_sim >= 0.95
-            and author_sim >= 0.8
-            and year_dist <= self.year_tolerance
+            and (
+                author_sim >= 0.8
+                or (not citation_authors and features.doi_exact_match and features.title_sim_fuzzy >= 0.95)
+            )
+            and (year_dist <= self.year_tolerance or year_dist >= 900)
         ):
             # Calculate confidence
             if features.doi_exact_match:
@@ -546,6 +550,7 @@ class SymbolicRules:
         features: MatchFeatures,
         style_penalty: float = 0.0,
         citation_doi: str | None = None,
+        citation_authors: list[str] | None = None,
     ) -> RuleOutcome | None:
         """Rule: LOCAL_DB / curated knowledge base match with metadata discrepancy → METADATA_ERROR.
 
@@ -580,7 +585,7 @@ class SymbolicRules:
         mismatched: list[str] = []
         if title_sim_fuzzy < 0.90:
             mismatched.append("title")
-        if author_sim < 0.50:
+        if author_sim < 0.50 and not (not citation_authors and doi_match and title_sim_fuzzy >= 0.95):
             mismatched.append("author")
         if year_dist > self.year_tolerance and year_dist < 900:
             mismatched.append("year")
@@ -902,9 +907,18 @@ class SymbolicRules:
                     style_penalty=style_penalty,
                 )
 
+            is_scholarly_paper_url = bool(
+                citation_url
+                and re.search(
+                    r"(?:doi\.org|arxiv\.org|aclanthology\.org|ieeexplore\.ieee\.org|dl\.acm\.org|link\.springer\.com|sciencedirect\.com)",
+                    citation_url,
+                    re.IGNORECASE,
+                )
+            )
             if (
                 citation_url
                 and not (citation_doi and str(citation_doi).strip())
+                and not is_scholarly_paper_url
                 and url_status == "archived_alive"
             ):
                 archive_url = getattr(source, "archive_url", None) or "https://web.archive.org"
@@ -923,6 +937,7 @@ class SymbolicRules:
             if (
                 citation_url
                 and not (citation_doi and str(citation_doi).strip())
+                and not is_scholarly_paper_url
                 and url_status in ("alive", "restricted_alive")
             ):
                 status_code_str = f"HTTP {url_status_code}" if url_status_code else "HTTP 200 OK"
@@ -1083,7 +1098,10 @@ class SymbolicRules:
         if (
             doi_match
             and title_sim >= self.title_sim_verified
-            and author_sim >= self.author_jaccard_verified
+            and (
+                author_sim >= self.author_jaccard_verified
+                or (not citation_authors and title_sim >= 0.95)
+            )
             and (year_dist <= max(self.year_tolerance, 1) or year_dist >= 900)
             and _has_live_source(source, verified_sources)
         ):
@@ -1211,7 +1229,11 @@ class SymbolicRules:
         # Checked BEFORE R-WELL-LINKED so local_db exact matches get accurate
         # provenance reasoning instead of a generic 'et al.' author-mismatch message.
         local_verified = self._rule_local_db_verified(
-            source, features, style_penalty, citation_doi=citation_doi
+            source,
+            features,
+            style_penalty,
+            citation_doi=citation_doi,
+            citation_authors=citation_authors,
         )
         if local_verified:
             return local_verified
@@ -1567,7 +1589,11 @@ class SymbolicRules:
 
         # --- Rule 4a3: Local ACL / SQLite DB canonical match with metadata discrepancy → METADATA_ERROR ---
         local_meta_err = self._rule_local_db_metadata_error(
-            source, features, style_penalty, citation_doi=citation_doi
+            source,
+            features,
+            style_penalty,
+            citation_doi=citation_doi,
+            citation_authors=citation_authors,
         )
         if local_meta_err:
             return local_meta_err

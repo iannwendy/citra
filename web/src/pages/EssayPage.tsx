@@ -997,7 +997,9 @@ function enrichVerdictItem(
   const verdict: Verdict = isUrlResource(rawVerdict)
     ? { ...rawVerdict, label: 'resource' }
     : rawVerdict;
-  const marker = `[${index + 1}]`;
+  const rawBracketMatch = (verdict.citation_raw ?? '').match(/^\s*\[(\d+)\]/);
+  const refIdNumMatch = verdict.citation_link?.reference_id?.match(/^ref-0*(\d+)$/);
+  const marker = `[${rawBracketMatch?.[1] || refIdNumMatch?.[1] || index + 1}]`;
   const parsedFallback = parseRawCitationMeta(verdict.citation_raw);
 
   // Find corresponding Reference entry if available

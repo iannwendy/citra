@@ -1693,6 +1693,24 @@ class ReferenceListParser:
                 if (has_title and (has_year or citation.doi or citation.url)) or (
                     has_year and has_numeric_index
                 ):
+                    if citation.title and not re.match(r"^https?://\S+$", citation.title.strip(), re.IGNORECASE):
+                        cleaned_t = re.sub(r"\s*https?://\S+\s*$", "", citation.title).strip().rstrip(".,;:")
+                        if len(cleaned_t) >= 5:
+                            citation.title = cleaned_t
+                            citation.title_normalized = _normalize_title(cleaned_t)
+                    if not citation.doi:
+                        arxiv_m = re.search(
+                            r"(?:arxiv[:\s]+|arxiv\.org/(?:abs|pdf)/)(\d{4}\.\d{4,5})(?:v\d+)?(?:\.pdf)?",
+                            entry,
+                            re.IGNORECASE,
+                        )
+                        if arxiv_m:
+                            aid = arxiv_m.group(1)
+                            citation.doi = f"10.48550/arXiv.{aid}"
+                            if not citation.year and len(aid) >= 4 and aid[:2].isdigit():
+                                yy = int(aid[:2])
+                                if 7 <= yy <= 30:
+                                    citation.year = str(2000 + yy)
                     # Set common fields
                     if alpha_key_m:
                         citation.raw_text = original_entry_raw
@@ -2167,9 +2185,11 @@ class ReferenceListParser:
         if url_m:
             url = (url_m.group("paren_url") or url_m.group(0)).rstrip(".,;)")
 
-        # Extract arXiv ID if present
-        arxiv_m = re.search(r"(?:arXiv:|arxiv\.org/abs/)(\d+\.\d+)", text, re.IGNORECASE)
+        # Extract arXiv ID if present (supports arXiv:YYMM.NNNNN, arxiv.org/abs/..., arxiv.org/pdf/...)
+        arxiv_m = re.search(r"(?:arXiv:|arxiv\.org/(?:abs|pdf)/)(\d{4}\.\d{4,5})(?:v\d+)?", text, re.IGNORECASE)
         arxiv_id = arxiv_m.group(1) if arxiv_m else None
+        if not doi and arxiv_id:
+            doi = f"10.48550/arXiv.{arxiv_id}"
 
         # Extract authors: everything after [N] / (N) / N. up to first recognizable year/doi
         after_index = re.sub(r"^\s*(?:\[\s*\d+\s*\]\.?|\(\s*\d{1,3}\s*\)|\d{1,3}\s*[\.\)]|[-•●+])\s*", "", text).strip()
@@ -2221,13 +2241,16 @@ class ReferenceListParser:
         text_without_url = re.sub(r"https?://\S+|\bwww\.\S+", "", after_index).strip()
         year, year_suffix = extract_publication_year(text_without_url or text, prefer_last=True)
         year_m = (
-            re.search(rf"\b{re.escape(year + (year_suffix or ''))}\b", text)
+            re.search(rf"\b{re.escape(year + (year_suffix or ''))}\b", text_without_url)
             if year
             else _YEAR_RE.search(text_without_url)
         )
+        if not year and arxiv_id and len(arxiv_id) >= 4 and arxiv_id[:2].isdigit():
+            yy = int(arxiv_id[:2])
+            year = f"20{yy:02d}" if yy <= 35 else f"19{yy:02d}"
 
-        # Remove common metadata patterns that confuse title extraction
-        clean_text = after_index
+        # Remove common metadata patterns and trailing URLs that confuse title extraction
+        clean_text = text_without_url or after_index
         for pattern in [
             r',?\s*vol\.\s*\d+[A-Z]?(?:-\d+)?',      # vol. 5 or vol. 5-7
             r',?\s*no\.\s*\d+',                       # no. 3
@@ -2281,12 +2304,19 @@ class ReferenceListParser:
                     r",\s*(?=[A-Z][a-z])", remaining
                 )
                 if author_end:
+                    prefix_cand = remaining[:author_end.start()].strip()
                     candidate = remaining[author_end.end():].strip()
-                    if candidate and len(candidate) > 10:
+                    # Guard against splitting a title with a colon or multi-word clause before comma
+                    # (e.g. "Visual Question Answering: Datasets, Algorithms, and Future Challenges")
+                    prefix_looks_like_title = (
+                        ":" in prefix_cand
+                        or (len(prefix_cand.split()) > 4 and not re.search(r"\b(?:and|et\s+al)\b|&|\b[A-Z]\.", prefix_cand))
+                    )
+                    if candidate and len(candidate) > 10 and not prefix_looks_like_title:
                         title_raw = candidate.rstrip(".,").strip()
                 elif "," in remaining:
                     parts = remaining.rsplit(",", 1)
-                    if len(parts) >= 2 and len(parts[1].strip()) > 10:
+                    if len(parts) >= 2 and len(parts[1].strip()) > 10 and ":" not in parts[0]:
                         title_raw = parts[1].strip().rstrip(".,").strip()
 
             if remaining and len(remaining) >= 8 and not title_raw:
@@ -2336,7 +2366,7 @@ class ReferenceListParser:
             title_normalized=_normalize_title(title_raw) if title_raw else None,
             year=year,
             year_suffix=year_suffix,
-            authors=authors if authors else None,
+            authors=authors if authors else [],
             venue=venue if venue and len(venue) > 2 else None,
             doi=doi,
             url=url,

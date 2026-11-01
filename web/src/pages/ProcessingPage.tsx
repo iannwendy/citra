@@ -347,7 +347,13 @@ export function ProcessingPage() {
           icon={
             <Database className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           }
-          value={status?.citations_found ? status.citations_found : '—'}
+          value={
+            status?.references_found
+              ? status.references_found
+              : status?.citations_found
+                ? status.citations_found
+                : '—'
+          }
           label={lang === 'vi' ? 'Cần xác minh' : 'To verify'}
         />
       </div>
@@ -627,6 +633,9 @@ function SourceTile({
   } else if (state === 'partial') {
     color = 'amber';
     label = 'Partial Hit';
+  } else if (state?.startsWith('queried')) {
+    color = 'slate';
+    label = 'Queried · 0 Hits';
   } else if (state?.startsWith('failed')) {
     color = 'red';
     const n = state.split(':')[1];

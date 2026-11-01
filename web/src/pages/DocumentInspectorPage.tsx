@@ -49,6 +49,7 @@ const UNDERLINE_COLORS = {
 interface InlineCitation {
   id: string;
   raw: string;
+  refNum: number;
   label: string;
   mapping_status: string;
   page: number;
@@ -132,9 +133,16 @@ function buildInlineCitations(
   const refs = references ?? [];
   const inTextList = extractedCitations ?? [];
 
-  const items = verdicts.map((v) => {
+  const items = verdicts.map((v, vIdx) => {
     const refId =
       v.citation_link?.reference_id ?? v.citation_links?.[0]?.reference_id;
+    const rawNumMatch = (v.citation_raw ?? '').match(/^\s*\[(\d+)\]/);
+    const refIdNumMatch = refId?.match(/^ref-0*(\d+)$/);
+    const resolvedRefNum = rawNumMatch
+      ? parseInt(rawNumMatch[1], 10)
+      : refIdNumMatch
+        ? parseInt(refIdNumMatch[1], 10)
+        : vIdx + 1;
     let matchedRef: Citation | undefined;
     if (refId) {
       const idxNum = parseInt(refId.replace(/^ref-/, ''), 10);
@@ -175,6 +183,7 @@ function buildInlineCitations(
     return {
       id: v.citation_id,
       raw: v.citation_raw,
+      refNum: resolvedRefNum,
       label: isUrlResource(v) ? 'resource' : v.label,
       mapping_status: v.mapping_status,
       page: resolvedPage,
@@ -196,10 +205,7 @@ function buildInlineCitations(
     const aIsResource = a.label === 'resource' ? 1 : 0;
     const bIsResource = b.label === 'resource' ? 1 : 0;
     if (aIsResource !== bIsResource) return aIsResource - bIsResource;
-    const aHasAlign = (a.alignmentScore ?? 0) > 0 ? 0 : 1;
-    const bHasAlign = (b.alignmentScore ?? 0) > 0 ? 0 : 1;
-    if (aHasAlign !== bHasAlign) return aHasAlign - bHasAlign;
-    return a.page - b.page;
+    return a.refNum - b.refNum;
   });
 }
 
@@ -939,7 +945,7 @@ export function DocumentInspectorPage() {
                                   : 'text-indigo-600 dark:text-indigo-400'
                               }`}
                             >
-                              p{citation.page}:{String(idx + 1).padStart(2, '0')}
+                              p{citation.page}:{String(citation.refNum || idx + 1).padStart(2, '0')}
                             </button>
                             <p className="flex-1 min-w-0 text-slate-700 dark:text-slate-300 font-serif leading-relaxed break-words [overflow-wrap:anywhere]">
                               {citation.context ? (
@@ -1025,7 +1031,7 @@ export function DocumentInspectorPage() {
                             : 'text-slate-400 dark:text-slate-500'
                         }`}
                       >
-                        [{String(index + 1).padStart(2, '0')}]
+                        [{String(citation.refNum || index + 1).padStart(2, '0')}]
                       </span>
                       <div className="flex-1 min-w-0">
                         <p
