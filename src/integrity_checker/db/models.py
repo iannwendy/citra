@@ -282,7 +282,7 @@ class ClassMembership(Base):
 
 
 class BillingTransaction(Base):
-    """Stripe / Demo billing transaction and invoice record (v2.2)."""
+    """Stripe / Demo billing transaction and invoice record (v2.2 / v2.4 Promo & Multi-Payment)."""
 
     __tablename__ = "billing_transactions"
 
@@ -294,18 +294,87 @@ class BillingTransaction(Base):
     stripe_payment_intent_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     plan_tier: Mapped[str] = mapped_column(String(20), nullable=False)  # "pro" | "ultra"
     billing_cycle: Mapped[str] = mapped_column(String(20), nullable=False)  # "monthly" | "annual"
+    subtotal_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    discount_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    promo_code: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
     amount_usd: Mapped[float] = mapped_column(Float, nullable=False)
     currency: Mapped[str] = mapped_column(String(10), default="usd")
     status: Mapped[str] = mapped_column(String(30), default="pending")  # "pending" | "succeeded" | "canceled" | "failed"
     payment_mode: Mapped[str] = mapped_column(String(20), default="stripe_demo")  # "stripe_test" | "stripe_demo"
+    payment_method: Mapped[str] = mapped_column(String(30), default="card")  # "card" | "apple_pay" | "google_pay"
     card_brand: Mapped[str | None] = mapped_column(String(20), default="visa")
     card_last4: Mapped[str | None] = mapped_column(String(4), default="4242")
+    billing_country: Mapped[str | None] = mapped_column(String(10), default="VN")
+    billing_zip: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="billing_transactions")
+
+
+class PromoCode(Base):
+    """6-character promotional discount code managed by Administrators."""
+
+    __tablename__ = "promo_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(6), unique=True, nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    discount_type: Mapped[str] = mapped_column(String(20), default="percent")  # "percent" | "fixed"
+    discount_value: Mapped[float] = mapped_column(Float, nullable=False)
+    max_discount_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    min_amount_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    applicable_tiers: Mapped[str] = mapped_column(String(20), default="all")  # "all" | "pro" | "ultra"
+    applicable_cycles: Mapped[str] = mapped_column(String(20), default="all")  # "all" | "monthly" | "annual"
+    max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_uses_per_user: Mapped[int] = mapped_column(Integer, default=1)
+    used_count: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Integer, default=1)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    redemptions: Mapped[list["PromoRedemption"]] = relationship(
+        back_populates="promo", cascade="all, delete-orphan"
+    )
+
+
+class PromoRedemption(Base):
+    """Audit record of a user redeeming a PromoCode on a BillingTransaction."""
+
+    __tablename__ = "promo_redemptions"
+    __table_args__ = (
+        UniqueConstraint("promo_code_id", "transaction_id", name="uq_promo_redemption_tx"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    promo_code_id: Mapped[int] = mapped_column(
+        ForeignKey("promo_codes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    transaction_id: Mapped[int] = mapped_column(
+        ForeignKey("billing_transactions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    code: Mapped[str] = mapped_column(String(6), nullable=False)
+    discount_usd: Mapped[float] = mapped_column(Float, nullable=False)
+    redeemed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+    promo: Mapped["PromoCode"] = relationship(back_populates="redemptions")
 
 
 # ---------------------------------------------------------------------------
@@ -326,3 +395,4 @@ Index(
 Index("idx_verdicts_label", VerdictRecord.label)
 Index("idx_audit_logs_user_logged", AuditLog.user, AuditLog.logged_at)
 Index("idx_audit_logs_logged_at", AuditLog.logged_at)
+Index("idx_promo_redemptions_promo_user", PromoRedemption.promo_code_id, PromoRedemption.user_id)

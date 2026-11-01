@@ -22,6 +22,8 @@ from integrity_checker.db.models import (
     Class,
     ClassMembership,
     EssayRecord,
+    PromoCode,
+    PromoRedemption,
     Session,
     User,
     VerdictRecord,
@@ -619,23 +621,36 @@ class Repository:
         plan_tier: str,
         billing_cycle: str,
         amount_usd: float,
+        subtotal_usd: float | None = None,
+        discount_usd: float = 0.0,
+        promo_code: str | None = None,
         currency: str = "usd",
         status: str = "pending",
         payment_mode: str = "stripe_demo",
+        payment_method: str = "card",
         card_brand: str | None = "visa",
         card_last4: str | None = "4242",
+        billing_country: str | None = "VN",
+        billing_zip: str | None = None,
     ) -> BillingTransaction:
+        resolved_subtotal = float(subtotal_usd if subtotal_usd is not None else amount_usd)
         tx = BillingTransaction(
             user_id=user_id,
             stripe_session_id=stripe_session_id,
             plan_tier=plan_tier,
             billing_cycle=billing_cycle,
-            amount_usd=amount_usd,
+            subtotal_usd=resolved_subtotal,
+            discount_usd=float(discount_usd or 0.0),
+            promo_code=promo_code,
+            amount_usd=float(amount_usd),
             currency=currency,
             status=status,
             payment_mode=payment_mode,
+            payment_method=payment_method,
             card_brand=card_brand,
             card_last4=card_last4,
+            billing_country=billing_country,
+            billing_zip=billing_zip,
         )
         self.session.add(tx)
         self.session.flush()
@@ -660,6 +675,165 @@ class Repository:
             .limit(limit)
             .all()
         )
+
+    # -- Promo Codes (6-char discount codes) --
+
+    def generate_unique_promo_code(self) -> str:
+        """Generate a unique 6-character uppercase alphanumeric promo code."""
+        alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        for _ in range(50):
+            candidate = "".join(secrets.choice(alphabet) for _ in range(6))
+            if not self.get_promo_code_by_code(candidate):
+                return candidate
+        return secrets.token_hex(3).upper()
+
+    def get_promo_code_by_code(self, code: str) -> PromoCode | None:
+        normalized = (code or "").strip().upper()
+        if not normalized:
+            return None
+        return (
+            self.session.query(PromoCode)
+            .filter(func.upper(PromoCode.code) == normalized)
+            .first()
+        )
+
+    def get_promo_code_by_id(self, promo_id: int) -> PromoCode | None:
+        return self.session.get(PromoCode, promo_id)
+
+    def list_promo_codes(self) -> list[PromoCode]:
+        return list(
+            self.session.query(PromoCode)
+            .order_by(PromoCode.created_at.desc(), PromoCode.id.desc())
+            .all()
+        )
+
+    def create_promo_code(
+        self,
+        code: str,
+        discount_type: str,
+        discount_value: float,
+        description: str | None = None,
+        max_discount_usd: float | None = None,
+        min_amount_usd: float = 0.0,
+        applicable_tiers: str = "all",
+        applicable_cycles: str = "all",
+        max_uses: int | None = None,
+        max_uses_per_user: int = 1,
+        is_active: bool = True,
+        expires_at: datetime | None = None,
+        created_by: int | None = None,
+    ) -> PromoCode:
+        promo = PromoCode(
+            code=code.strip().upper(),
+            description=description,
+            discount_type=discount_type,
+            discount_value=float(discount_value),
+            max_discount_usd=float(max_discount_usd) if max_discount_usd is not None else None,
+            min_amount_usd=float(min_amount_usd or 0.0),
+            applicable_tiers=applicable_tiers,
+            applicable_cycles=applicable_cycles,
+            max_uses=int(max_uses) if max_uses is not None else None,
+            max_uses_per_user=max(1, int(max_uses_per_user or 1)),
+            used_count=0,
+            is_active=1 if is_active else 0,
+            expires_at=expires_at,
+            created_by=created_by,
+        )
+        self.session.add(promo)
+        self.session.flush()
+        return promo
+
+    def update_promo_code(self, promo_id: int, **kwargs: Any) -> PromoCode | None:
+        promo = self.get_promo_code_by_id(promo_id)
+        if not promo:
+            return None
+        nullable_fields = {"description", "max_discount_usd", "max_uses", "expires_at"}
+        for key, value in kwargs.items():
+            if value is None and key not in nullable_fields:
+                continue
+            if key == "is_active" and isinstance(value, bool):
+                value = 1 if value else 0
+            if key == "code" and isinstance(value, str):
+                value = value.strip().upper()
+            if hasattr(promo, key):
+                setattr(promo, key, value)
+        self.session.flush()
+        return promo
+
+    def delete_promo_code(self, promo_id: int) -> bool:
+        promo = self.get_promo_code_by_id(promo_id)
+        if not promo:
+            return False
+        self.session.delete(promo)
+        self.session.flush()
+        return True
+
+    def count_user_promo_redemptions(self, promo_code_id: int, user_id: int) -> int:
+        return (
+            self.session.query(PromoRedemption)
+            .filter(
+                PromoRedemption.promo_code_id == promo_code_id,
+                PromoRedemption.user_id == user_id,
+            )
+            .count()
+        )
+
+    def get_promo_redemption_by_tx(
+        self, promo_code_id: int, transaction_id: int
+    ) -> PromoRedemption | None:
+        return (
+            self.session.query(PromoRedemption)
+            .filter(
+                PromoRedemption.promo_code_id == promo_code_id,
+                PromoRedemption.transaction_id == transaction_id,
+            )
+            .first()
+        )
+
+    def record_promo_redemption(
+        self,
+        promo: PromoCode,
+        user_id: int,
+        transaction_id: int,
+        discount_usd: float,
+    ) -> PromoRedemption:
+        existing = self.get_promo_redemption_by_tx(promo.id, transaction_id)
+        if existing:
+            return existing
+        promo.used_count = int(promo.used_count or 0) + 1
+        redemption = PromoRedemption(
+            promo_code_id=promo.id,
+            user_id=user_id,
+            transaction_id=transaction_id,
+            code=promo.code,
+            discount_usd=round(float(discount_usd), 2),
+        )
+        self.session.add(redemption)
+        self.session.flush()
+        return redemption
+
+    def get_promo_summary_stats(self) -> dict[str, Any]:
+        total_codes = self.session.query(func.count(PromoCode.id)).scalar() or 0
+        active_codes = (
+            self.session.query(func.count(PromoCode.id))
+            .filter(PromoCode.is_active == 1)
+            .scalar()
+            or 0
+        )
+        total_redemptions = int(
+            self.session.query(func.coalesce(func.sum(PromoCode.used_count), 0)).scalar()
+            or 0
+        )
+        total_discount_usd = float(
+            self.session.query(func.coalesce(func.sum(PromoRedemption.discount_usd), 0.0)).scalar()
+            or 0.0
+        )
+        return {
+            "total_codes": int(total_codes),
+            "active_codes": int(active_codes),
+            "total_redemptions": total_redemptions,
+            "total_discount_usd": round(total_discount_usd, 2),
+        }
 
     def update_last_login(self, user_id: int) -> None:
         from datetime import datetime, timezone

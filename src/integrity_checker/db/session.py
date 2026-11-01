@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool, StaticPool
 
 from integrity_checker.config import get_settings, is_main_app_db_url, is_test_runtime
-from integrity_checker.db.models import Base, User
+from integrity_checker.db.models import Base, PromoCode, User
 
 
 _engine: Engine | None = None
@@ -258,6 +258,37 @@ def _run_inline_migrations(engine: Engine) -> None:
                 "ALTER TABLE users ADD COLUMN quota_reset_at DATETIME"
             )
 
+        # --- billing_transactions (v2.4 — Promo Code & Multi-Payment Method fields) ---
+        bt_cols = _col_names("billing_transactions")
+        if bt_cols:
+            if "subtotal_usd" not in bt_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE billing_transactions ADD COLUMN subtotal_usd FLOAT DEFAULT 0"
+                )
+                conn.exec_driver_sql(
+                    "UPDATE billing_transactions SET subtotal_usd = amount_usd WHERE subtotal_usd IS NULL OR subtotal_usd = 0"
+                )
+            if "discount_usd" not in bt_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE billing_transactions ADD COLUMN discount_usd FLOAT DEFAULT 0"
+                )
+            if "promo_code" not in bt_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE billing_transactions ADD COLUMN promo_code VARCHAR(10)"
+                )
+            if "payment_method" not in bt_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE billing_transactions ADD COLUMN payment_method VARCHAR(30) DEFAULT 'card'"
+                )
+            if "billing_country" not in bt_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE billing_transactions ADD COLUMN billing_country VARCHAR(10) DEFAULT 'VN'"
+                )
+            if "billing_zip" not in bt_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE billing_transactions ADD COLUMN billing_zip VARCHAR(20)"
+                )
+
         # --- Clean up any historical orphan rows ---
         conn.exec_driver_sql(
             "DELETE FROM citations WHERE essay_id NOT IN (SELECT id FROM essays)"
@@ -278,6 +309,7 @@ def _run_inline_migrations(engine: Engine) -> None:
             "CREATE INDEX IF NOT EXISTS idx_verdicts_label ON verdicts(label)",
             "CREATE INDEX IF NOT EXISTS idx_audit_logs_user_logged ON audit_logs(user, logged_at)",
             "CREATE INDEX IF NOT EXISTS idx_audit_logs_logged_at ON audit_logs(logged_at)",
+            "CREATE INDEX IF NOT EXISTS idx_promo_redemptions_promo_user ON promo_redemptions(promo_code_id, user_id)",
         ):
             conn.exec_driver_sql(idx_sql)
 
@@ -339,6 +371,85 @@ def _seed_default_users(engine: Engine) -> None:
             session.commit()
 
 
+def _seed_default_promo_codes(engine: Engine) -> None:
+    """Seed starter 6-character promo codes on first initialization (non-test runtime)."""
+    if is_test_runtime() or not is_main_app_db_url(str(engine.url)):
+        return
+
+    starter_promos = [
+        {
+            "code": "CITRA2",
+            "description": "Welcome Academic Discount (20% Off Any Plan)",
+            "discount_type": "percent",
+            "discount_value": 20.0,
+            "max_discount_usd": 100.0,
+            "min_amount_usd": 0.0,
+            "applicable_tiers": "all",
+            "applicable_cycles": "all",
+            "max_uses": 500,
+            "max_uses_per_user": 1,
+        },
+        {
+            "code": "TDTU50",
+            "description": "TDTU Thesis & Research 50% Scholarship (Pro Plan)",
+            "discount_type": "percent",
+            "discount_value": 50.0,
+            "max_discount_usd": 100.0,
+            "min_amount_usd": 0.0,
+            "applicable_tiers": "pro",
+            "applicable_cycles": "all",
+            "max_uses": 200,
+            "max_uses_per_user": 1,
+        },
+        {
+            "code": "SAVE10",
+            "description": "Instant $10 USD Upgrade Voucher",
+            "discount_type": "fixed",
+            "discount_value": 10.0,
+            "max_discount_usd": None,
+            "min_amount_usd": 20.0,
+            "applicable_tiers": "all",
+            "applicable_cycles": "all",
+            "max_uses": 300,
+            "max_uses_per_user": 1,
+        },
+        {
+            "code": "VIP100",
+            "description": "Academic Fellowship 100% Full Fee Waiver (Pro Monthly)",
+            "discount_type": "percent",
+            "discount_value": 100.0,
+            "max_discount_usd": 20.0,
+            "min_amount_usd": 0.0,
+            "applicable_tiers": "pro",
+            "applicable_cycles": "monthly",
+            "max_uses": 50,
+            "max_uses_per_user": 1,
+        },
+    ]
+
+    with Session(bind=engine) as session:
+        if session.query(PromoCode).count() > 0:
+            return
+        for item in starter_promos:
+            session.add(
+                PromoCode(
+                    code=item["code"],
+                    description=item["description"],
+                    discount_type=item["discount_type"],
+                    discount_value=item["discount_value"],
+                    max_discount_usd=item["max_discount_usd"],
+                    min_amount_usd=item["min_amount_usd"],
+                    applicable_tiers=item["applicable_tiers"],
+                    applicable_cycles=item["applicable_cycles"],
+                    max_uses=item["max_uses"],
+                    max_uses_per_user=item["max_uses_per_user"],
+                    used_count=0,
+                    is_active=1,
+                )
+            )
+        session.commit()
+
+
 def _ensure_db_initialized() -> None:
     """Ensure all migrations have run and tables exist.
 
@@ -350,6 +461,7 @@ def _ensure_db_initialized() -> None:
     Base.metadata.create_all(bind=engine)
     _run_inline_migrations(engine)
     _seed_default_users(engine)
+    _seed_default_promo_codes(engine)
 
 
 def init_db() -> None:

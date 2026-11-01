@@ -18,6 +18,8 @@ from integrity_checker.db.models import (
     Class as ClassModel,
     ClassMembership,
     EssayRecord,
+    PromoCode,
+    PromoRedemption,
     Session as SessionModel,
     User,
     VerdictRecord,
@@ -41,6 +43,8 @@ def _make_pdf_bytes(num_pages: int = 1) -> bytes:
 def clean_db():
     """Ensure clean database state before each test."""
     session = get_session()
+    session.query(PromoRedemption).delete()
+    session.query(PromoCode).delete()
     session.query(BillingTransaction).delete()
     session.query(AuditLog).delete()
     session.query(VerdictRecord).delete()
@@ -341,3 +345,275 @@ def test_subscription_cancel_and_reactivate_lifecycle() -> None:
     assert imm_resp.status_code == 200
     assert imm_resp.json()["subscription"]["plan_tier"] == "basic"
     assert imm_resp.json()["subscription"]["quota"]["monthly_uploads_limit"] == 3
+
+
+def test_admin_promo_code_crud_and_rbac_enforcement() -> None:
+    """Admin can generate, create, update, toggle, and delete 6-char promo codes; non-admins get 403."""
+    client = TestClient(app)
+    user_token, _ = _login_user(client, "user", "user123")
+    admin_token, _ = _login_user(client, "admin", "admin123")
+
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # 1. Non-admin is strictly blocked with 403
+    assert client.get("/api/billing/admin/promos", headers=user_headers).status_code == 403
+    assert (
+        client.post(
+            "/api/billing/admin/promos",
+            json={"code": "SAVE20", "discount_type": "percent", "discount_value": 20},
+            headers=user_headers,
+        ).status_code
+        == 403
+    )
+
+    # 2. Admin can auto-generate a random 6-character code
+    gen_resp = client.get("/api/billing/admin/promos/generate-code", headers=admin_headers)
+    assert gen_resp.status_code == 200
+    gen_code = gen_resp.json()["code"]
+    assert len(gen_code) == 6
+    assert gen_code.isalnum() and gen_code.isupper()
+
+    # 3. Invalid code lengths (<6 or >6 or non-alphanumeric) are rejected with 400
+    for invalid_code in ("SHORT", "TOOLONG7", "AB-123", "AB_123"):
+        bad_resp = client.post(
+            "/api/billing/admin/promos",
+            json={"code": invalid_code, "discount_type": "percent", "discount_value": 20},
+            headers=admin_headers,
+        )
+        assert bad_resp.status_code == 400
+        assert "6" in bad_resp.json()["detail"]
+
+    # 4. Admin creates a valid 6-char promo code 'SAVE25' (lowercase input normalized to uppercase)
+    create_resp = client.post(
+        "/api/billing/admin/promos",
+        json={
+            "code": "save25",
+            "description": "Academic Spring 25% Discount",
+            "discount_type": "percent",
+            "discount_value": 25.0,
+            "max_discount_usd": 40.0,
+            "min_amount_usd": 15.0,
+            "applicable_tiers": "all",
+            "applicable_cycles": "all",
+            "max_uses": 10,
+            "max_uses_per_user": 1,
+            "is_active": True,
+        },
+        headers=admin_headers,
+    )
+    assert create_resp.status_code == 201, create_resp.text
+    promo = create_resp.json()
+    promo_id = promo["id"]
+    assert promo["code"] == "SAVE25"
+    assert promo["discount_type"] == "percent"
+    assert promo["discount_value"] == 25.0
+    assert promo["max_discount_usd"] == 40.0
+    assert promo["effective_status"] == "active"
+
+    # 5. Duplicate code creation rejected with 409
+    dup_resp = client.post(
+        "/api/billing/admin/promos",
+        json={"code": "SAVE25", "discount_type": "fixed", "discount_value": 10},
+        headers=admin_headers,
+    )
+    assert dup_resp.status_code == 409
+
+    # 6. Admin toggles is_active=False and updates description
+    patch_resp = client.patch(
+        f"/api/billing/admin/promos/{promo_id}",
+        json={"is_active": False, "description": "Paused Campaign"},
+        headers=admin_headers,
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["is_active"] is False
+    assert patch_resp.json()["effective_status"] == "inactive"
+    assert patch_resp.json()["description"] == "Paused Campaign"
+
+    # 7. Admin lists promos and deletes the code
+    list_resp = client.get("/api/billing/admin/promos", headers=admin_headers)
+    assert list_resp.status_code == 200
+    assert list_resp.json()["stats"]["total_codes"] == 1
+
+    del_resp = client.delete(f"/api/billing/admin/promos/{promo_id}", headers=admin_headers)
+    assert del_resp.status_code == 200
+    assert del_resp.json()["deleted_id"] == promo_id
+
+
+def test_promo_code_checkout_redemption_and_business_rules() -> None:
+    """Test applying/removing 6-char promo codes on checkout, discount caps, limits, expiry, and per-user caps."""
+    client = TestClient(app)
+    admin_token, _ = _login_user(client, "admin", "admin123")
+    user_token, _ = _login_user(client, "user", "user123")
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+
+    # Admin creates:
+    # 1) 'PRO50X' -> 50% off Pro plan, max_discount_usd=$60, max_uses=1, max_uses_per_user=1
+    client.post(
+        "/api/billing/admin/promos",
+        json={
+            "code": "PRO50X",
+            "description": "50% off Pro capped at $60",
+            "discount_type": "percent",
+            "discount_value": 50,
+            "max_discount_usd": 60,
+            "applicable_tiers": "pro",
+            "applicable_cycles": "all",
+            "max_uses": 1,
+            "max_uses_per_user": 1,
+        },
+        headers=admin_headers,
+    )
+    # 2) 'EXPRD1' -> already expired code
+    client.post(
+        "/api/billing/admin/promos",
+        json={
+            "code": "EXPRD1",
+            "discount_type": "fixed",
+            "discount_value": 10,
+            "expires_at": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(),
+        },
+        headers=admin_headers,
+    )
+
+    # User creates a Pro Annual checkout session ($192.00)
+    session_resp = client.post(
+        "/api/billing/create-checkout-session",
+        json={"plan_tier": "pro", "billing_cycle": "annual", "force_demo": True},
+        headers=user_headers,
+    )
+    assert session_resp.status_code == 200
+    session_id = session_resp.json()["session_id"]
+    assert session_resp.json()["subtotal_usd"] == 192.0
+    assert session_resp.json()["amount_usd"] == 192.0
+
+    # Expired promo code is rejected
+    exp_apply = client.post(
+        f"/api/billing/checkout-session/{session_id}/promo",
+        json={"code": "EXPRD1"},
+        headers=user_headers,
+    )
+    assert exp_apply.status_code == 400
+    assert "expired" in exp_apply.json()["detail"].lower()
+
+    # Apply 'PRO50X' on $192.00 -> 50% is $96, capped at $60.00 -> final $132.00
+    apply_resp = client.post(
+        f"/api/billing/checkout-session/{session_id}/promo",
+        json={"code": "pro50x"},
+        headers=user_headers,
+    )
+    assert apply_resp.status_code == 200
+    details = apply_resp.json()
+    assert details["promo_code"] == "PRO50X"
+    assert details["subtotal_usd"] == 192.0
+    assert details["discount_usd"] == 60.0
+    assert details["amount_usd"] == 132.0
+
+    # Remove promo code -> restores $192.00
+    remove_resp = client.post(
+        f"/api/billing/checkout-session/{session_id}/promo",
+        json={"code": ""},
+        headers=user_headers,
+    )
+    assert remove_resp.status_code == 200
+    assert remove_resp.json()["promo_code"] is None
+    assert remove_resp.json()["discount_usd"] == 0.0
+    assert remove_resp.json()["amount_usd"] == 192.0
+
+    # Re-apply 'PRO50X' and finalize payment via Apple Pay
+    client.post(
+        f"/api/billing/checkout-session/{session_id}/promo",
+        json={"code": "PRO50X"},
+        headers=user_headers,
+    )
+    verify_resp = client.post(
+        "/api/billing/verify-session",
+        json={
+            "session_id": session_id,
+            "payment_method": "apple_pay",
+            "card_brand": "visa",
+            "card_last4": "4242",
+            "billing_country": "VN",
+        },
+        headers=user_headers,
+    )
+    assert verify_resp.status_code == 200
+    tx = verify_resp.json()["transaction"]
+    assert tx["promo_code"] == "PRO50X"
+    assert tx["subtotal_usd"] == 192.0
+    assert tx["discount_usd"] == 60.0
+    assert tx["amount_usd"] == 132.0
+    assert tx["payment_method"] == "apple_pay"
+
+    # Trying to use 'PRO50X' again on a new session fails (exhausted / already used)
+    session_2 = client.post(
+        "/api/billing/create-checkout-session",
+        json={"plan_tier": "pro", "billing_cycle": "monthly", "force_demo": True},
+        headers=user_headers,
+    ).json()["session_id"]
+    second_try = client.post(
+        f"/api/billing/checkout-session/{session_2}/promo",
+        json={"code": "PRO50X"},
+        headers=user_headers,
+    )
+    assert second_try.status_code == 400
+
+
+def test_apple_pay_google_pay_and_pci_dss_security_guard() -> None:
+    """Verify Google Pay, Apple Pay, and PCI-DSS guard against raw card numbers or CVV."""
+    client = TestClient(app)
+    token, _ = _login_user(client, "user", "user123")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    checkout = client.post(
+        "/api/billing/create-checkout-session",
+        json={"plan_tier": "ultra", "billing_cycle": "monthly", "force_demo": True},
+        headers=headers,
+    ).json()
+    session_id = checkout["session_id"]
+
+    # 1. PCI-DSS violation: sending raw card_number or cvc in payload must be rejected (HTTP 422)
+    pci_bad_1 = client.post(
+        "/api/billing/verify-session",
+        json={
+            "session_id": session_id,
+            "card_number": "4242424242424242",
+            "cvc": "424",
+        },
+        headers=headers,
+    )
+    assert pci_bad_1.status_code == 422
+
+    # 2. PCI-DSS violation: sending >4 digits in card_last4 must be rejected (HTTP 422)
+    pci_bad_2 = client.post(
+        "/api/billing/verify-session",
+        json={
+            "session_id": session_id,
+            "card_last4": "4242424242424242",
+        },
+        headers=headers,
+    )
+    assert pci_bad_2.status_code == 422
+
+    # 3. Valid Google Pay verification succeeds and records payment_method='google_pay'
+    gpay_ok = client.post(
+        "/api/billing/verify-session",
+        json={
+            "session_id": session_id,
+            "payment_method": "google_pay",
+            "card_brand": "mastercard",
+            "card_last4": "4444",
+            "billing_country": "US",
+            "billing_zip": "94103",
+        },
+        headers=headers,
+    )
+    assert gpay_ok.status_code == 200
+    tx = gpay_ok.json()["transaction"]
+    assert tx["payment_method"] == "google_pay"
+    assert tx["card_brand"] == "mastercard"
+    assert tx["card_last4"] == "4444"
+    assert tx["billing_country"] == "US"
+    assert tx["billing_zip"] == "94103"
+
