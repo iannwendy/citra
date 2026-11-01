@@ -641,9 +641,17 @@ class NatureFormat:
             '',
             text,
         ).strip()
+        # Strip trailing access/retrieval date clauses (e.g. "(Accessed: Oct. 31, 2026)")
+        # so the access year is never mistaken for the publication year.
+        cleaned_text = re.sub(
+            r'\s*(?:[\(\[]\s*(?:Accessed|Retrieved|Last\s+accessed)\b[^)\]]*[\)\]]|\b(?:Accessed|Retrieved)\s*:?\s*[A-Za-z0-9.,\s\-/]+)\.?$',
+            '',
+            cleaned_text,
+            flags=re.IGNORECASE,
+        ).strip()
         # Nature fallback applies when (Year) or (Publisher, Year) appears at the end of the entry (optionally followed by pages or Accessed/URL)
         year_m = re.search(
-            r'\(\s*(?:(?P<pub>[^()]{2,80}),\s*)?(?P<year>(?:18|19|20)\d{2}[a-z]?)\s*\)(?:,?\s*pp?\.\s*[\d–-]+|\.\s*Accessed\b[^()]*|\.\s*https?://\S+|\.\s*doi:\s*\S+)?\.?$',
+            r'\(\s*(?:(?!(?:Accessed|Retrieved)\b)(?P<pub>[^()]{2,80}),\s*)?(?P<year>(?:18|19|20)\d{2}[a-z]?)\s*\)(?:,?\s*pp?\.\s*[\d–-]+|\.\s*Accessed\b[^()]*|(?:\.\s*|\s+)(?:https?://|doi:\s*)\S+(?:;\s*[A-Za-z0-9\s]+:\s*https?://\S+)*)?\.?$',
             cleaned_text,
             re.IGNORECASE,
         )

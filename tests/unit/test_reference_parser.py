@@ -299,3 +299,24 @@ class TestUnquotedBookEntry:
         assert c is not None
         assert c.title == "Active Learning"
         assert c.year == "2012"
+
+    def test_springer_lncs_with_trailing_accessed_date_preserves_publication_year(self):
+        entry = (
+            "25. Platt, J.C.: Probabilistic outputs for support vector machines and "
+            "comparisons to regularized likelihood methods. In: Smola, A.J., Bartlett, P., "
+            "Schölkopf, B., Schuurmans, D. (eds.) Advances in Large Margin Classifiers, "
+            "pp. 61–74. MIT Press, Cambridge, MA (1999). "
+            "https://mitpress.mit.edu/9780262194488/advances-in-large-margin-classifiers/ "
+            "(Accessed: Oct. 31, 2026)"
+        )
+        c = ReferenceListParser()._parse_entry(entry, order_index=25, page_num=19)
+        assert c is not None
+        assert c.year == "1999"
+        assert c.numeric_index == 25
+        assert c.title == (
+            "Probabilistic outputs for support vector machines and "
+            "comparisons to regularized likelihood methods"
+        )
+        assert c.url == "https://mitpress.mit.edu/9780262194488/advances-in-large-margin-classifiers/"
+        assert "1999" not in (c.venue or "")
+        assert "https://" not in (c.venue or "")

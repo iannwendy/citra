@@ -637,8 +637,8 @@ class APAFormat:
             return True
         if re.search(r"\d\s*$", clean_auth) and not re.search(r"\b(?:19|20)\d{2}\b", clean_auth):
             return True
-        # Title in APA cannot start with punctuation like ',' or ':'
-        if not title or title[0] in ",:;":
+        # Title in APA cannot start with punctuation like ',' or ':' or be a bare URL/DOI after (Year).
+        if not title or title[0] in ",:;" or re.match(r"^(?:https?://|www\.|doi\s*:)", title.strip(), re.IGNORECASE):
             return True
         # Harvard check: no period/comma after (Year) AND (quoted title or Harvard edition/pp./Place:Publisher)
         has_vn_diacritics = bool(

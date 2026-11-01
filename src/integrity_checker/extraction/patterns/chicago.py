@@ -149,8 +149,8 @@ _CHICAGO_NB_BOOK = CompiledPattern.create(
     pattern=(
         r"^(?:(?:\[\s*(?P<index>\d+)\s*\]|(?P<num>\d+)\.)\s*)?"
         r"(?P<authors>[A-ZÀ-Ý][^\"“\n]+?)\.\s+(?!(?:[A-ZÀ-Ý]\.|and\b|&|et\s+al\.))"  # Authors.
-        r"(?P<title>[^\"“(\n]+?)(?:\.\s+|\s+\(\s*)"  # Title. or Title (
-        r"(?P<place_pub>[^.:()]+:\s*[^,()]+),\s*"  # Place: Publisher,
+        r"(?P<title>(?!https?://|www\.)[^\"“(\n]+?)(?:\.\s+|\s+\(\s*)"  # Title. or Title (
+        r"(?P<place_pub>(?!(?:Accessed|Retrieved|Last\s+accessed)\b)[^.:()]+:\s*[^,()]+),\s*"  # Place: Publisher,
         r"(?P<year>(?:18|19|20)\d{2}[a-z]?)\)?\.?"  # Year
         r"(?:\s*(?P<rest>.*))?"
         r"$"

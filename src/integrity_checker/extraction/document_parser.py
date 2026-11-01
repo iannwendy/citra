@@ -1932,8 +1932,15 @@ class DocumentParser:
                     or (donor.doi.lower().startswith(target.doi.lower()) and len(donor.doi) > len(target.doi))
                 ):
                     target.doi = donor.doi
-            if not target.url and donor.url and not donor_is_multi_chunk:
-                target.url = donor.url
+            if donor.url and (
+                not donor_is_multi_chunk
+                or (donor.numeric_index is not None and donor.numeric_index == target.numeric_index)
+            ):
+                if not target.url or (
+                    donor.url.lower().startswith(target.url.lower())
+                    and len(donor.url) > len(target.url)
+                ):
+                    target.url = donor.url
             if not target.venue and donor.venue:
                 target.venue = donor.venue
             if not target.year and donor.year:

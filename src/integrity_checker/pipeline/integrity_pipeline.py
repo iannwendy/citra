@@ -66,7 +66,7 @@ logger = get_logger(__name__)
 
 # Bump whenever extraction/linking output shape changes so previously cached
 # (and possibly wrong) reports are recomputed instead of served from disk.
-_REPORT_CACHE_VERSION = "report-v15"
+_REPORT_CACHE_VERSION = "report-v16"
 
 # NEW v1.7: Only retrieve + verify REFERENCE_LIST citations (and DOI/URL inline
 # with enough metadata). In-text citations are verified via linking only.
