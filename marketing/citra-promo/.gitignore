@@ -1,0 +1,5 @@
+node_modules/
+out/
+# Regenerable: node capture/*.mjs (needs local stack) · python3 audio/make_music.py
+public/shots/
+public/audio/

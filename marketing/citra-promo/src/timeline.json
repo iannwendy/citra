@@ -1,0 +1,96 @@
+{
+  "fps": 60,
+  "bpm": 120,
+  "durationSec": 60,
+  "scenes": [
+    {
+      "id": "hook",
+      "start": 0,
+      "end": 10
+    },
+    {
+      "id": "reveal",
+      "start": 10,
+      "end": 14
+    },
+    {
+      "id": "pipeline",
+      "start": 14,
+      "end": 18
+    },
+    {
+      "id": "hallucination",
+      "start": 18,
+      "end": 24
+    },
+    {
+      "id": "metadata",
+      "start": 24,
+      "end": 28
+    },
+    {
+      "id": "trace",
+      "start": 28,
+      "end": 32
+    },
+    {
+      "id": "autofix",
+      "start": 32,
+      "end": 38
+    },
+    {
+      "id": "graph",
+      "start": 38,
+      "end": 42
+    },
+    {
+      "id": "teacher",
+      "start": 42,
+      "end": 48
+    },
+    {
+      "id": "montage",
+      "start": 48,
+      "end": 52
+    },
+    {
+      "id": "stats",
+      "start": 52,
+      "end": 56
+    },
+    {
+      "id": "endcard",
+      "start": 56,
+      "end": 60
+    }
+  ],
+  "sfx": {
+    "typeA": {
+      "start": 0.6,
+      "chars": 53,
+      "cps": 35
+    },
+    "typeB": {
+      "start": 3.0,
+      "chars": 61,
+      "cps": 40
+    },
+    "glitch": 5.1,
+    "impact": [
+      10.0
+    ],
+    "whoosh": [
+      13.75,
+      17.75,
+      23.75,
+      27.75,
+      31.75,
+      37.75,
+      41.75,
+      47.75,
+      51.75,
+      55.75
+    ],
+    "endHit": 56.0
+  }
+}
