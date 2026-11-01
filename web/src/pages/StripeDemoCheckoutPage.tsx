@@ -653,6 +653,12 @@ export function StripeDemoCheckoutPage() {
                         );
                         setPromoError(null);
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void handleApplyPromoCode();
+                        }
+                      }}
                       maxLength={6}
                       placeholder={lang === 'vi' ? 'VD: CITRA2' : 'E.G. CITRA2'}
                       data-testid="checkout-promo-input"
@@ -661,9 +667,9 @@ export function StripeDemoCheckoutPage() {
                     <Button
                       type="button"
                       size="sm"
-                      disabled={promoLoading || promoInput.trim().length === 0}
+                      disabled={promoLoading}
                       data-testid="checkout-promo-apply-btn"
-                      onClick={() => handleApplyPromoCode()}
+                      onClick={() => void handleApplyPromoCode()}
                       className="h-9 px-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shrink-0 cursor-pointer"
                     >
                       {promoLoading ? (

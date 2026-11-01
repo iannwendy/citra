@@ -38,7 +38,13 @@ function GlobalErrorFallback(): JSX.Element {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+const rootElement = document.getElementById('root')!;
+const globalWithRoot = window as unknown as { __citraReactRoot?: ReactDOM.Root };
+if (!globalWithRoot.__citraReactRoot) {
+  globalWithRoot.__citraReactRoot = ReactDOM.createRoot(rootElement);
+}
+
+globalWithRoot.__citraReactRoot.render(
   <React.StrictMode>
     <ErrorBoundary fallback={<GlobalErrorFallback />}>
       <QueryClientProvider client={queryClient}>

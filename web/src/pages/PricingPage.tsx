@@ -232,7 +232,7 @@ function SolvaPlanActionButton({
         disabled ? 'opacity-55 cursor-not-allowed' : 'cursor-pointer hover:opacity-95'
       }`}
     >
-      <span className="relative h-[21px] overflow-hidden flex flex-col items-center">
+      <span className="pointer-events-none relative h-[21px] overflow-hidden flex flex-col items-center">
         <span
           className={`flex flex-col transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
             disabled ? '' : 'group-hover:-translate-y-[21px]'

@@ -373,7 +373,7 @@ def _seed_default_users(engine: Engine) -> None:
 
 def _seed_default_promo_codes(engine: Engine) -> None:
     """Seed starter 6-character promo codes on first initialization (non-test runtime)."""
-    if is_test_runtime() or not is_main_app_db_url(str(engine.url)):
+    if is_test_runtime():
         return
 
     starter_promos = [
