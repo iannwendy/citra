@@ -352,46 +352,121 @@
   }
 
   /* ============================================================
-     BUTTONS — SourceLogic Design System
-     Rounded corners, clear hierarchy
+     BUTTONS — SourceLogic 120fps Tactile Spring System
+     Hardware-accelerated transform3d & specular top-edge sheen
      ============================================================ */
 
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2 rounded-xl font-semibold;
-    @apply bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] text-white;
-    @apply transition-all duration-200 shadow-sm;
-    @apply text-sm py-2 px-4 whitespace-nowrap;
+    @apply bg-indigo-600 hover:bg-indigo-700 text-white;
+    @apply text-sm py-2 px-4 whitespace-nowrap select-none;
+    transition:
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 180ms ease-out,
+      border-color 180ms ease-out,
+      opacity 180ms ease-out;
+    box-shadow:
+      0 1px 2px 0 rgba(28, 26, 21, 0.08),
+      0 4px 12px -2px rgba(28, 26, 21, 0.14),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.22);
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+    backface-visibility: hidden;
   }
 
   .btn-primary:hover {
-    box-shadow: var(--shadow-md);
-    transform: translateY(-1px);
+    box-shadow:
+      0 2px 4px 0 rgba(28, 26, 21, 0.1),
+      0 8px 20px -4px rgba(28, 26, 21, 0.22),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.32);
+    transform: translate3d(0, -1px, 0) scale3d(1, 1, 1);
+  }
+
+  .btn-primary:active {
+    transform: translate3d(0, 0, 0) scale3d(0.968, 0.968, 1);
+    transition-duration: 75ms;
   }
 
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2 rounded-xl font-semibold;
     @apply bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700;
-    @apply text-slate-900 dark:text-slate-100 active:scale-[0.98] transition-all duration-200;
+    @apply text-slate-900 dark:text-slate-100 select-none;
+    transition:
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 180ms ease-out;
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+    backface-visibility: hidden;
+  }
+
+  .btn-secondary:hover {
+    transform: translate3d(0, -1px, 0) scale3d(1, 1, 1);
+  }
+
+  .btn-secondary:active {
+    transform: translate3d(0, 0, 0) scale3d(0.968, 0.968, 1);
+    transition-duration: 75ms;
   }
 
   .btn-outline {
     @apply inline-flex items-center justify-center gap-2 rounded-xl font-semibold;
     @apply bg-transparent text-indigo-600 dark:text-indigo-400;
     @apply border-2 border-indigo-600 dark:border-indigo-400;
-    @apply hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-500 active:scale-[0.98] transition-all duration-200;
+    @apply hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-500 select-none;
+    transition:
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 180ms ease-out,
+      color 180ms ease-out;
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+    backface-visibility: hidden;
+  }
+
+  .btn-outline:hover {
+    transform: translate3d(0, -1px, 0) scale3d(1, 1, 1);
+  }
+
+  .btn-outline:active {
+    transform: translate3d(0, 0, 0) scale3d(0.968, 0.968, 1);
+    transition-duration: 75ms;
   }
 
   .btn-ghost {
     @apply inline-flex items-center justify-center gap-2 rounded-lg font-medium;
     @apply text-slate-600 dark:text-slate-400;
-    @apply hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100;
-    @apply active:scale-[0.98] transition-all duration-200;
+    @apply hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 select-none;
+    transition:
+      transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 160ms ease-out,
+      color 160ms ease-out;
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+    backface-visibility: hidden;
+  }
+
+  .btn-ghost:active {
+    transform: translate3d(0, 0, 0) scale3d(0.965, 0.965, 1);
+    transition-duration: 75ms;
   }
 
   .btn-danger {
     @apply inline-flex items-center justify-center gap-2 rounded-lg font-medium;
-    @apply bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white;
-    @apply transition-all duration-200;
+    @apply bg-red-600 hover:bg-red-700 text-white select-none;
+    transition:
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 180ms ease-out;
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+    backface-visibility: hidden;
+  }
+
+  .btn-danger:hover {
+    transform: translate3d(0, -1px, 0) scale3d(1, 1, 1);
+    box-shadow: 0 6px 16px -4px rgba(220, 38, 38, 0.35);
+  }
+
+  .btn-danger:active {
+    transform: translate3d(0, 0, 0) scale3d(0.968, 0.968, 1);
+    transition-duration: 75ms;
   }
 
   .btn-sm {
@@ -637,12 +712,37 @@
   }
 
   /* ============================================================
-     SKELETON LOADING — SourceLogic Design System
-     Smooth loading placeholders
+     SKELETON LOADING — 120fps GPU-Composited Shimmer Wave
+     Uses transform: translate3d on ::after pseudo-layer for zero main-thread paint
      ============================================================ */
 
   .skeleton {
-    @apply bg-slate-200 dark:bg-slate-700 rounded animate-pulse;
+    @apply relative overflow-hidden bg-slate-200/80 dark:bg-slate-800/90 rounded-xl;
+  }
+
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.55) 50%,
+      transparent 100%
+    );
+    transform: translate3d(-100%, 0, 0);
+    animation: citraShimmerWave 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    will-change: transform;
+    pointer-events: none;
+  }
+
+  .dark .skeleton::after {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(251, 250, 246, 0.08) 50%,
+      transparent 100%
+    );
   }
 
   .skeleton-text {
@@ -897,32 +997,163 @@
 }
 
 @keyframes slideUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from { transform: translate3d(0, 18px, 0) scale3d(0.97, 0.97, 1); opacity: 0; }
+  to { transform: translate3d(0, 0, 0) scale3d(1, 1, 1); opacity: 1; }
 }
 
 @keyframes slideDown {
-  from { transform: translateY(-10px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+  from { transform: translate3d(0, -10px, 0) scale3d(0.98, 0.98, 1); opacity: 0; }
+  to { transform: translate3d(0, 0, 0) scale3d(1, 1, 1); opacity: 1; }
 }
 
 @keyframes slideInRight {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+  from { transform: translate3d(100%, 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
 }
 
 @keyframes scaleIn {
-  from { transform: scale(0.95); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from { transform: scale3d(0.95, 0.95, 1) translate3d(0, 6px, 0); opacity: 0; }
+  to { transform: scale3d(1, 1, 1) translate3d(0, 0, 0); opacity: 1; }
 }
 
 @keyframes pulse-soft {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  0%, 100% { opacity: 1; transform: scale3d(1, 1, 1); }
+  50% { opacity: 0.7; transform: scale3d(0.985, 0.985, 1); }
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to { transform: rotate3d(0, 0, 1, 360deg); }
+}
+
+@keyframes citraToastEnter {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 22px, 0) scale3d(0.92, 0.92, 1);
+  }
+  65% {
+    opacity: 1;
+    transform: translate3d(0, -2px, 0) scale3d(1.008, 1.008, 1);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+  }
+}
+
+@keyframes citraToastExit {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale3d(0.94, 0.94, 1);
+  }
+}
+
+@keyframes citraToastProgress {
+  0% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes citraStrokeDraw {
+  0% {
+    stroke-dashoffset: 32;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes citraIconPop {
+  0% {
+    opacity: 0;
+    transform: scale3d(0.5, 0.5, 1) rotate(-8deg);
+  }
+  65% {
+    opacity: 1;
+    transform: scale3d(1.1, 1.1, 1) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale3d(1, 1, 1) rotate(0deg);
+  }
+}
+
+@keyframes citraErrorShake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(-3px, 0, 0); }
+  40% { transform: translate3d(3px, 0, 0); }
+  60% { transform: translate3d(-2px, 0, 0); }
+  80% { transform: translate3d(2px, 0, 0); }
+}
+
+@keyframes citraShimmerWave {
+  0% {
+    transform: translate3d(-100%, 0, 0);
+  }
+  100% {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+@keyframes citraOrbitalSpin {
+  0% {
+    transform: rotate3d(0, 0, 1, 0deg);
+  }
+  100% {
+    transform: rotate3d(0, 0, 1, 360deg);
+  }
+}
+
+@keyframes citraOrbitalSpinReverse {
+  0% {
+    transform: rotate3d(0, 0, 1, 360deg);
+  }
+  100% {
+    transform: rotate3d(0, 0, 1, 0deg);
+  }
+}
+
+.animate-toast-enter {
+  animation: citraToastEnter 380ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+.animate-toast-exit {
+  animation: citraToastExit 210ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+.animate-stroke-draw {
+  stroke-dasharray: 32;
+  stroke-dashoffset: 32;
+  animation: citraStrokeDraw 420ms cubic-bezier(0.22, 1, 0.36, 1) 90ms forwards;
+}
+
+.animate-icon-pop {
+  animation: citraIconPop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  will-change: transform, opacity;
+}
+
+.animate-error-shake {
+  animation: citraErrorShake 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.animate-orbital-spin {
+  animation: citraOrbitalSpin 950ms linear infinite;
+  will-change: transform;
+}
+
+.animate-orbital-reverse {
+  animation: citraOrbitalSpinReverse 1400ms linear infinite;
+  will-change: transform;
 }
 
 @keyframes floatSlow {

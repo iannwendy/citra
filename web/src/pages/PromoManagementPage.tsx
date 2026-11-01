@@ -22,6 +22,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useRole } from '@/hooks/useRole';
+import { useToast } from '@/contexts/ToastContext';
 import {
   api,
   type PromoCodeItem,
@@ -59,6 +60,7 @@ export function PromoManagementPage() {
   const { i18n } = useTranslation();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const { isAdmin } = useRole();
+  const toast = useToast();
   const navigate = useNavigate();
 
   const [promos, setPromos] = useState<PromoCodeItem[]>([]);
@@ -185,6 +187,11 @@ export function PromoManagementPage() {
       // ignore clipboard errors in headless environments
     }
     setCopiedCode(targetCode);
+    toast.success(
+      lang === 'vi' ? 'Đã sao chép mã khuyến mãi' : 'Promo Code Copied',
+      `${targetCode} · 6-CHAR ISO COUPON`,
+      { category: 'PROMO · CLIPBOARD' }
+    );
     setTimeout(() => {
       setCopiedCode((prev) => (prev === targetCode ? null : prev));
     }, 1800);
@@ -196,6 +203,11 @@ export function PromoManagementPage() {
         is_active: !promo.is_active,
       });
       setPromos((prev) => prev.map((item) => (item.id === promo.id ? updated : item)));
+      toast.success(
+        lang === 'vi' ? 'Đã cập nhật trạng thái mã' : 'Promo Status Updated',
+        `${promo.code} · ${updated.is_active ? 'ACTIVE' : 'PAUSED'}`,
+        { category: 'PROMO · ENGINE' }
+      );
     } catch (err) {
       setError(
         err instanceof Error
@@ -321,6 +333,11 @@ export function PromoManagementPage() {
         };
         const created = await api.createAdminPromoCode(payload);
         setPromos((prev) => [created, ...prev]);
+        toast.success(
+          lang === 'vi' ? 'Đã tạo mã khuyến mãi mới' : 'Promo Code Created',
+          `${created.code} · ${created.discount_type === 'percent' ? `${created.discount_value}% OFF` : `$${created.discount_value} OFF`}`,
+          { category: 'PROMO · ENGINE' }
+        );
       }
       setModalOpen(false);
     } catch (err) {
@@ -340,9 +357,15 @@ export function PromoManagementPage() {
     if (!deletingPromo) return;
     setDeleting(true);
     try {
+      const targetCode = deletingPromo.code;
       await api.deleteAdminPromoCode(deletingPromo.id);
       setPromos((prev) => prev.filter((item) => item.id !== deletingPromo.id));
       setDeletingPromo(null);
+      toast.info(
+        lang === 'vi' ? 'Đã xóa mã giảm giá' : 'Promo Code Deleted',
+        `${targetCode} removed from active campaigns.`,
+        { category: 'PROMO · ENGINE' }
+      );
     } catch (err) {
       setError(
         err instanceof Error

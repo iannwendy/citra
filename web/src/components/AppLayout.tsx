@@ -25,6 +25,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRole, type UserCapability, type UserRole } from '@/hooks/useRole';
 import { ThemeToggle, useTheme } from '@/contexts/ThemeContext';
+import { NotificationCenterButton, useToast } from '@/contexts/ToastContext';
 import { HelpModal } from './HelpModal';
 import { GoogleOnboardingModal } from './GoogleOnboardingModal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -95,6 +96,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { has, role, planTier, isBasic, quota } = useRole();
   const { toggleTheme } = useTheme();
+  const toast = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -108,6 +110,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     void i18n.changeLanguage(next);
     localStorage.setItem('language', next);
     localStorage.setItem('i18nextLng', next);
+    const fixedT = i18n.getFixedT(next);
+    toast.success(
+      fixedT('settings.languageUpdated'),
+      next === 'vi' ? 'Tiếng Việt' : 'English',
+    );
   };
 
   // Keyboard shortcuts: Ctrl+/ (help), Ctrl+U (upload), Ctrl+D (toggle theme)
@@ -202,10 +209,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <span
-            className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-500/15"
-            aria-hidden="true"
-          />
+          <NotificationCenterButton lang={currentLang} compact />
         </div>
       </header>
 
@@ -383,11 +387,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center justify-between px-2 py-1 gap-2">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('nav.theme')}</span>
               <div className="flex items-center gap-1.5">
+                <NotificationCenterButton lang={currentLang} />
                 <button
                   type="button"
                   onClick={handleToggleLanguage}
                   title="Switch language (VI / EN)"
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700 hover:-translate-y-[1px] active:scale-95 transition-[transform,border-color,background-color] duration-200 cursor-pointer"
                 >
                   <Globe className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
                   <span>{currentLang === 'vi' ? 'VI' : 'EN'}</span>

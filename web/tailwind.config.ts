@@ -118,36 +118,73 @@ const config: Config = {
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
       },
 
-      /* Animation */
+      /* Animation — 120fps GPU-Composited Spring & Editorial Curves */
       animation: {
-        'fade-in': 'fadeIn 200ms ease-out',
-        'slide-up': 'slideUp 300ms cubic-bezier(0.16, 1, 0.3, 1)',
-        'slide-down': 'slideDown 200ms ease-out',
-        'scale-in': 'scaleIn 200ms ease-out',
-        'pulse-soft': 'pulse-soft 2s ease-in-out infinite',
+        'fade-in': 'fadeIn 220ms cubic-bezier(0.22, 1, 0.36, 1)',
+        'slide-up': 'slideUp 340ms cubic-bezier(0.22, 1, 0.36, 1)',
+        'slide-down': 'slideDown 240ms cubic-bezier(0.22, 1, 0.36, 1)',
+        'scale-in': 'scaleIn 260ms cubic-bezier(0.22, 1, 0.36, 1)',
+        'pulse-soft': 'pulseSoft 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'toast-enter': 'citraToastEnter 380ms cubic-bezier(0.22, 1, 0.36, 1) forwards',
+        'toast-exit': 'citraToastExit 220ms cubic-bezier(0.4, 0, 1, 1) forwards',
+        'shimmer-wave': 'citraShimmerWave 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite',
+        'icon-pop': 'citraIconPop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both',
       },
 
-      /* Keyframes */
+      /* Keyframes — Pure transform3d & opacity for zero main-thread repaint */
       keyframes: {
         fadeIn: {
           from: { opacity: '0' },
           to: { opacity: '1' },
         },
         slideUp: {
-          from: { transform: 'translateY(20px)', opacity: '0' },
-          to: { transform: 'translateY(0)', opacity: '1' },
+          from: { transform: 'translate3d(0, 18px, 0) scale3d(0.97, 0.97, 1)', opacity: '0' },
+          to: { transform: 'translate3d(0, 0, 0) scale3d(1, 1, 1)', opacity: '1' },
         },
         slideDown: {
-          from: { transform: 'translateY(-10px)', opacity: '0' },
-          to: { transform: 'translateY(0)', opacity: '1' },
+          from: { transform: 'translate3d(0, -10px, 0) scale3d(0.98, 0.98, 1)', opacity: '0' },
+          to: { transform: 'translate3d(0, 0, 0) scale3d(1, 1, 1)', opacity: '1' },
         },
         scaleIn: {
-          from: { transform: 'scale(0.95)', opacity: '0' },
-          to: { transform: 'scale(1)', opacity: '1' },
+          from: { transform: 'scale3d(0.95, 0.95, 1) translate3d(0, 6px, 0)', opacity: '0' },
+          to: { transform: 'scale3d(1, 1, 1) translate3d(0, 0, 0)', opacity: '1' },
         },
         pulseSoft: {
-          '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.7' },
+          '0%, 100%': { opacity: '1', transform: 'scale3d(1, 1, 1)' },
+          '50%': { opacity: '0.68', transform: 'scale3d(0.985, 0.985, 1)' },
+        },
+        citraToastEnter: {
+          '0%': {
+            opacity: '0',
+            transform: 'translate3d(0, 22px, 0) scale3d(0.92, 0.92, 1)',
+          },
+          '65%': {
+            opacity: '1',
+            transform: 'translate3d(0, -2px, 0) scale3d(1.008, 1.008, 1)',
+          },
+          '100%': {
+            opacity: '1',
+            transform: 'translate3d(0, 0, 0) scale3d(1, 1, 1)',
+          },
+        },
+        citraToastExit: {
+          '0%': {
+            opacity: '1',
+            transform: 'translate3d(0, 0, 0) scale3d(1, 1, 1)',
+          },
+          '100%': {
+            opacity: '0',
+            transform: 'translate3d(0, 12px, 0) scale3d(0.94, 0.94, 1)',
+          },
+        },
+        citraShimmerWave: {
+          '0%': { transform: 'translate3d(-100%, 0, 0)' },
+          '100%': { transform: 'translate3d(100%, 0, 0)' },
+        },
+        citraIconPop: {
+          '0%': { opacity: '0', transform: 'scale3d(0.5, 0.5, 1) rotate(-8deg)' },
+          '65%': { opacity: '1', transform: 'scale3d(1.1, 1.1, 1) rotate(2deg)' },
+          '100%': { opacity: '1', transform: 'scale3d(1, 1, 1) rotate(0deg)' },
         },
       },
 

@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/contexts/ToastContext';
 import { AvatarUpload } from '@/components/AvatarUpload';
 import { api } from '@/api/client';
 import { Card } from '@/components/ui/card';
@@ -26,6 +27,7 @@ export function ProfilePage() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const { user: authUser, refreshUser } = useAuth();
+  const toast = useToast();
 
   const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
@@ -91,9 +93,20 @@ export function ProfilePage() {
       setFullName(updated.full_name ?? '');
       setEmail(updated.email ?? '');
       setProfileSuccess(true);
+      toast.success(
+        lang === 'vi' ? 'Đã lưu hồ sơ học thuật' : 'Profile Updated',
+        lang === 'vi'
+          ? 'Thông tin định danh của bạn đã được cập nhật.'
+          : 'Your scholar identity profile has been saved.',
+        { category: 'IDENTITY · SYNC' }
+      );
       setTimeout(() => setProfileSuccess(false), 3000);
     } catch (err) {
-      setProfileError(err instanceof Error ? err.message : t('profile.failedToSave'));
+      const msg = err instanceof Error ? err.message : t('profile.failedToSave');
+      setProfileError(msg);
+      toast.error(lang === 'vi' ? 'Lỗi cập nhật hồ sơ' : 'Update Failed', msg, {
+        category: 'IDENTITY · ERR',
+      });
     } finally {
       setProfileLoading(false);
     }
