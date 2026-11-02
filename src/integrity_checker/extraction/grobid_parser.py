@@ -35,11 +35,14 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from defusedxml.ElementTree import ParseError, fromstring, tostring
 
 from integrity_checker.config import GrobidConfig
+
+if TYPE_CHECKING:
+    import xml.etree.ElementTree as ET  # noqa: N817 - type-only alias
 
 logger = logging.getLogger(__name__)
 

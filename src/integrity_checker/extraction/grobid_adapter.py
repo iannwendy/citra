@@ -29,13 +29,16 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from integrity_checker.extraction.grobid_parser import (
     GrobidBibEntry,
     GrobidCitation,
     GrobidOutput,
 )
+
+if TYPE_CHECKING:
+    from integrity_checker.models.citation import Citation
 
 logger = logging.getLogger(__name__)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from io import BytesIO
+from typing import Any
 
 from docx import Document
 from docx.oxml import parse_xml

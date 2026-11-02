@@ -14,9 +14,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from integrity_checker.models.citation import Citation
+
+if TYPE_CHECKING:
+    from integrity_checker.models.citation import CitationStyle, CitationType
 
 
 class PatternType(str, Enum):
