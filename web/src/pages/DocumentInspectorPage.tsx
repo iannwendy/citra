@@ -209,7 +209,10 @@ function buildInlineCitations(
   });
 }
 
-function getInlineStatusBadge(label: string): {
+function getInlineStatusBadge(
+  label: string,
+  t: (key: string) => string,
+): {
   bg: string;
   text: string;
   label: string;
@@ -220,35 +223,35 @@ function getInlineStatusBadge(label: string): {
       return {
         bg: 'bg-emerald-100/90 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80',
         text: 'text-emerald-700 dark:text-emerald-300',
-        label: 'Verified',
+        label: t('inspector.verified'),
         icon: <CheckCircle className="h-3 w-3" />,
       };
     case 'metadata_error':
       return {
         bg: 'bg-amber-100/90 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80',
         text: 'text-amber-700 dark:text-amber-300',
-        label: 'Meta Error',
+        label: t('inspector.metaError'),
         icon: <AlertTriangle className="h-3 w-3" />,
       };
     case 'suspected_hallucination':
       return {
         bg: 'bg-red-100/90 dark:bg-red-950/80 text-red-700 dark:text-red-300 border border-red-200/80 dark:border-red-800/80',
         text: 'text-red-700 dark:text-red-300',
-        label: 'Suspected',
+        label: t('inspector.suspected'),
         icon: <XCircle className="h-3 w-3" />,
       };
     case 'resource':
       return {
         bg: 'bg-violet-100/90 dark:bg-violet-950/80 text-violet-700 dark:text-violet-300 border border-violet-200/80 dark:border-violet-800/80',
         text: 'text-violet-700 dark:text-violet-300',
-        label: 'URL Resource',
+        label: t('inspector.urlResource'),
         icon: <Link2 className="h-3 w-3" />,
       };
     default:
       return {
         bg: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700',
         text: 'text-slate-700 dark:text-slate-300',
-        label: 'Unverifiable',
+        label: t('inspector.unverifiable'),
         icon: <AlertTriangle className="h-3 w-3" />,
       };
   }
@@ -261,7 +264,8 @@ function InlineCitationMarker({
   citation: InlineCitation;
   onClick?: () => void;
 }) {
-  const status = getInlineStatusBadge(citation.label);
+  const { t } = useTranslation();
+  const status = getInlineStatusBadge(citation.label, t);
   const isFlaggedRed =
     citation.label === 'suspected_hallucination' ||
     citation.label === 'metadata_error';
@@ -293,7 +297,8 @@ function CitationPopup({
   verdict: Verdict | null;
   onClose: () => void;
 }) {
-  const status = getInlineStatusBadge(citation.label);
+  const { t } = useTranslation();
+  const status = getInlineStatusBadge(citation.label, t);
 
   return createPortal(
     <div
@@ -320,7 +325,7 @@ function CitationPopup({
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            aria-label="Close modal"
+            aria-label={t('inspector.closeModalAria')}
           >
             <XCircle className="h-4 w-4" />
           </button>
@@ -331,7 +336,9 @@ function CitationPopup({
             <div className="flex items-center gap-2.5">
               {status.icon}
               <div>
-                <h3 className={`text-sm font-semibold ${status.text}`}>Citation Detail</h3>
+                <h3 className={`text-sm font-semibold ${status.text}`}>
+                  {t('inspector.citationDetail')}
+                </h3>
                 <p className={`text-xs font-mono ${status.text} opacity-85`}>{status.label}</p>
               </div>
             </div>
@@ -344,7 +351,7 @@ function CitationPopup({
         <div className="p-4 sm:p-6 space-y-4 overflow-y-auto">
           <div className="min-w-0 flex-1">
             <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              In-text Citation
+              {t('inspector.inTextCitation')}
             </label>
             <p className="mt-1.5 text-sm text-slate-900 dark:text-slate-100 font-medium font-serif p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/70">
               {citation.raw}
@@ -354,7 +361,7 @@ function CitationPopup({
           <div className="flex flex-wrap gap-4">
             <div>
               <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Verification
+                {t('inspector.verification')}
               </label>
               <div className="mt-1.5">
                 <VerdictBadge verdict={citation.label} size="sm" />
@@ -362,7 +369,7 @@ function CitationPopup({
             </div>
             <div>
               <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Mapping
+                {t('inspector.mapping')}
               </label>
               <div className="mt-1.5">
                 <MappingStatusBadge status={citation.mapping_status as any} size="sm" />
@@ -371,7 +378,7 @@ function CitationPopup({
             {(verdict?.url_status ?? verdict?.features?.url_status) && (
               <div>
                 <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Link Status
+                  {t('inspector.linkStatus')}
                 </label>
                 <div className="mt-1.5">
                   {(() => {
@@ -410,7 +417,7 @@ function CitationPopup({
             <>
               <div>
                 <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  What we found
+                  {t('inspector.whatWeFound')}
                 </label>
                 <p className="mt-1 text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
                   {getVerdictExplanation(verdict)}
@@ -419,7 +426,7 @@ function CitationPopup({
 
               <div>
                 <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  Confidence
+                  {t('inspector.confidence')}
                 </label>
                 <div className="mt-2 flex items-center gap-3">
                   <Progress
@@ -446,7 +453,7 @@ function CitationPopup({
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wider">
                         <Brain className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                        Neural Semantic & Evidence Match
+                        {t('inspector.neuralSemanticMatch')}
                       </span>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {verdict.features.citation_intent && (
@@ -490,7 +497,7 @@ function CitationPopup({
                     {verdict.features.best_evidence_sentence && (
                       <div className="rounded-lg bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 p-2.5">
                         <span className="block text-[10px] font-mono font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-1">
-                          Matched Source Abstract Evidence
+                          {t('inspector.matchedAbstractEvidence')}
                         </span>
                         <p className="text-xs font-serif text-slate-700 dark:text-slate-300 leading-relaxed">
                           “{verdict.features.best_evidence_sentence}”
@@ -503,7 +510,7 @@ function CitationPopup({
               {verdict.mismatched_fields.length > 0 && (
                 <div>
                   <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Mismatched Fields
+                    {t('inspector.mismatchedFields')}
                   </label>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {verdict.mismatched_fields.map((field) => (
@@ -522,7 +529,7 @@ function CitationPopup({
               {verdict.triggered_rules.length > 0 && (
                 <div>
                   <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Triggered Rules
+                    {t('inspector.triggeredRules')}
                   </label>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {verdict.triggered_rules.map((rule) => (
@@ -546,13 +553,13 @@ function CitationPopup({
               className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              View full report
+              {t('inspector.viewFullReport')}
             </Link>
             <button
               onClick={onClose}
               className="px-3 py-1.5 rounded-lg text-xs font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             >
-              Close
+              {t('inspector.close')}
             </button>
           </div>
         </div>
@@ -577,7 +584,7 @@ export function DocumentInspectorPage() {
   const numericId = id ? parseInt(id, 10) : null;
   const { report, error } = useEssayPolling(
     numericId !== null && !Number.isNaN(numericId) && numericId > 0 ? numericId : null,
-    { errorMessage: 'Failed to load document. Please try again.' },
+    { errorMessage: t('inspector.loadError') },
   );
 
   const inlineCitations = report
@@ -646,17 +653,26 @@ export function DocumentInspectorPage() {
     unresolved: inlineCitations.filter((c) => c.label === 'unresolved').length,
   };
 
+  const statusLabelByKey: Record<string, string> = {
+    verified: t('inspector.verified'),
+    metadata_error: t('inspector.metaError'),
+    suspected_hallucination: t('inspector.suspected'),
+    unresolved: t('inspector.unverifiable'),
+  };
+
   if (error) {
     return (
       <Alert variant="destructive" className="card p-6 rounded-2xl">
         <AlertCircle className="h-5 w-5" />
-        <AlertTitle className="font-medium">Error: {error}</AlertTitle>
+        <AlertTitle className="font-medium">
+          {t('common.error')}: {error}
+        </AlertTitle>
         <AlertDescription>
           <Link
             to="/history"
             className="text-indigo-600 dark:text-indigo-400 hover:underline mt-2 inline-block"
           >
-            ← Back to Reports
+            {t('inspector.backToReports')}
           </Link>
         </AlertDescription>
       </Alert>
@@ -691,7 +707,10 @@ export function DocumentInspectorPage() {
         <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
           <BookOpen className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
           <span>
-            Document Inspector · {report.num_pages} pages · {inlineCitations.length} citations
+            {t('inspector.summaryBar', {
+              pages: report.num_pages,
+              citations: inlineCitations.length,
+            })}
           </span>
         </div>
       </div>
@@ -703,7 +722,7 @@ export function DocumentInspectorPage() {
             <div className="flex items-center gap-2">
               <div className="w-3 h-1 rounded-full bg-emerald-500" />
               <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                Verified ({statusCounts.verified})
+                {t('inspector.verified')} ({statusCounts.verified})
               </span>
             </div>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400">
@@ -720,7 +739,7 @@ export function DocumentInspectorPage() {
             <div className="flex items-center gap-2">
               <div className="w-3 h-1 rounded-full bg-amber-500" />
               <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                Meta Error ({statusCounts.metadata_error})
+                {t('inspector.metaError')} ({statusCounts.metadata_error})
               </span>
             </div>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400">
@@ -737,7 +756,7 @@ export function DocumentInspectorPage() {
             <div className="flex items-center gap-2">
               <div className="w-3 h-1 rounded-full bg-red-500" />
               <span className="text-xs font-medium text-red-600 dark:text-red-400">
-                Suspected ({statusCounts.suspected_hallucination})
+                {t('inspector.suspected')} ({statusCounts.suspected_hallucination})
               </span>
             </div>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-50 dark:bg-red-950/80 text-red-600 dark:text-red-400">
@@ -754,7 +773,7 @@ export function DocumentInspectorPage() {
             <div className="flex items-center gap-2">
               <div className="w-3 h-1 rounded-full bg-slate-400" />
               <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                Unverifiable ({statusCounts.unresolved})
+                {t('inspector.unverifiable')} ({statusCounts.unresolved})
               </span>
             </div>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
@@ -795,7 +814,7 @@ export function DocumentInspectorPage() {
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
-              All ({inlineCitations.length})
+              {t('inspector.filterAll')} ({inlineCitations.length})
             </button>
             {Object.entries(statusCounts).map(([label, count]) => (
               <button
@@ -807,7 +826,7 @@ export function DocumentInspectorPage() {
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                 }`}
               >
-                {label.replace(/_/g, ' ')} ({count})
+                {statusLabelByKey[label] ?? label.replace(/_/g, ' ')} ({count})
               </button>
             ))}
           </div>
@@ -821,14 +840,14 @@ export function DocumentInspectorPage() {
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="font-display text-base font-semibold text-slate-900 dark:text-slate-100">
-                  Document View
+                  {t('inspector.documentView')}
                 </h3>
               </div>
 
               <div className="flex items-center gap-2">
                 <div
                   role="group"
-                  aria-label="Document Preview Mode"
+                  aria-label={t('inspector.previewModeAria')}
                   className="inline-flex items-center p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700"
                 >
                   <button
@@ -841,7 +860,7 @@ export function DocumentInspectorPage() {
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
-                    Context Stream
+                    {t('inspector.contextStream')}
                   </button>
                   <button
                     type="button"
@@ -854,7 +873,7 @@ export function DocumentInspectorPage() {
                     }`}
                   >
                     <Eye className="h-3 w-3 text-indigo-500" />
-                    <span>PDF Page Preview</span>
+                    <span>{t('inspector.pdfPagePreview')}</span>
                   </button>
                 </div>
               </div>
@@ -870,12 +889,15 @@ export function DocumentInspectorPage() {
                       disabled={previewPage <= 1}
                       onClick={() => setPreviewPage((p) => Math.max(1, p - 1))}
                       className="p-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:border-indigo-400 transition-colors"
-                      aria-label="Previous page"
+                      aria-label={t('inspector.prevPageAria')}
                     >
                       <ChevronLeft className="h-3.5 w-3.5" />
                     </button>
                     <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-200">
-                      Page {previewPage} / {Math.max(1, report.num_pages || 1)}
+                      {t('inspector.pageOf', {
+                        current: previewPage,
+                        total: Math.max(1, report.num_pages || 1),
+                      })}
                     </span>
                     <button
                       type="button"
@@ -886,7 +908,7 @@ export function DocumentInspectorPage() {
                         )
                       }
                       className="p-1 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:border-indigo-400 transition-colors"
-                      aria-label="Next page"
+                      aria-label={t('inspector.nextPageAria')}
                     >
                       <ChevronRight className="h-3.5 w-3.5" />
                     </button>
@@ -895,11 +917,13 @@ export function DocumentInspectorPage() {
                   {previewHighlight ? (
                     <div className="flex items-center gap-1.5 text-[11px] font-mono text-indigo-700 dark:text-indigo-300 bg-indigo-50/90 dark:bg-indigo-950/70 px-2.5 py-1 rounded-lg border border-indigo-200/80 dark:border-indigo-800 max-w-xs truncate">
                       <Sparkles className="h-3 w-3 shrink-0 text-amber-500" />
-                      <span className="truncate">Highlight: {previewHighlight}</span>
+                      <span className="truncate">
+                        {t('inspector.highlightPrefix', { text: previewHighlight })}
+                      </span>
                     </div>
                   ) : (
                     <span className="text-[11px] font-mono text-slate-400">
-                      Click any citation on the right to highlight its bounding box
+                      {t('inspector.clickCitationToHighlight')}
                     </span>
                   )}
                 </div>
@@ -910,19 +934,22 @@ export function DocumentInspectorPage() {
                     <div className="flex flex-col items-center justify-center py-24 gap-2">
                       <Loader2 className="h-7 w-7 animate-spin text-indigo-600 dark:text-indigo-400" />
                       <span className="text-xs font-mono text-slate-500">
-                        Rendering page {previewPage} with bounding-box overlay...
+                        {t('inspector.renderingPage', { page: previewPage })}
                       </span>
                     </div>
                   ) : previewUrl ? (
                     <img
                       src={previewUrl}
-                      alt={`Page ${previewPage} preview`}
+                      alt={t('inspector.pageOf', {
+                        current: previewPage,
+                        total: Math.max(1, report.num_pages || 1),
+                      })}
                       data-testid="pdf-page-preview-img"
                       className="w-full h-auto rounded-lg shadow-md border border-slate-200/90 dark:border-slate-800 bg-white"
                     />
                   ) : (
                     <div className="py-20 text-center text-xs font-mono text-slate-500">
-                      Unable to render page preview.
+                      {t('inspector.unableToRenderPreview')}
                     </div>
                   )}
                 </div>
@@ -932,7 +959,7 @@ export function DocumentInspectorPage() {
                 <div className="space-y-4 text-sm leading-relaxed max-h-[540px] overflow-y-auto pr-2">
                   {filteredCitations.length === 0 ? (
                     <p className="text-slate-500 dark:text-slate-400 italic py-8 text-center font-mono text-xs">
-                      No citations match the current filter.
+                      {t('inspector.noCitationsMatchFilter')}
                     </p>
                   ) : (
                     filteredCitations.map((citation, idx) => {
@@ -957,7 +984,7 @@ export function DocumentInspectorPage() {
                                 setPreviewHighlight(citation.raw || '');
                                 setDocViewMode('pdf');
                               }}
-                              title="Click to inspect bounding box on PDF page"
+                              title={t('inspector.inspectBboxTooltip')}
                               className={`text-[11px] font-mono hover:underline shrink-0 pt-0.5 select-none font-bold ${
                                 isFlaggedRed
                                   ? 'text-red-600 dark:text-red-400'
@@ -982,7 +1009,7 @@ export function DocumentInspectorPage() {
                               ) : (
                                 <>
                                   <span className="text-slate-500 dark:text-slate-400 italic font-sans text-xs">
-                                    [No surrounding text extracted]
+                                    {t('inspector.noSurroundingText')}
                                   </span>{' '}
                                   <InlineCitationMarker
                                     citation={citation}
@@ -1007,17 +1034,17 @@ export function DocumentInspectorPage() {
               <div className="flex items-center gap-2">
                 <Quote className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="font-display text-base font-semibold text-slate-900 dark:text-slate-100">
-                  Citation List
+                  {t('inspector.citationList')}
                 </h3>
               </div>
               <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                {filteredCitations.length} citations
+                {t('inspector.citationsCount', { count: filteredCitations.length })}
               </span>
             </div>
 
             <div className="space-y-2.5 max-h-[540px] overflow-y-auto pr-1">
               {filteredCitations.map((citation, index) => {
-                const status = getInlineStatusBadge(citation.label);
+                const status = getInlineStatusBadge(citation.label, t);
                 const isFlaggedRed =
                   citation.label === 'suspected_hallucination' ||
                   citation.label === 'metadata_error';
