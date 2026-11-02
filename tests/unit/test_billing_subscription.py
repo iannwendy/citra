@@ -1426,6 +1426,84 @@ def test_get_all_essays_deduped_scopes_citation_counts_to_matched_essay_ids() ->
     session.close()
 
 
+def test_pipeline_run_async_offloads_parser_and_checker_to_thread(monkeypatch, tmp_path) -> None:
+    """Verify IntegrityPipeline.run_async offloads synchronous document_parser.parse and checker.check via asyncio.to_thread."""
+    import asyncio
+    from unittest.mock import MagicMock
+
+    from integrity_checker.extraction.base import Document, Page
+    from integrity_checker.extraction.document_parser import ParsedDocument
+    from integrity_checker.models.citation import Citation, CitationStyle, CitationType
+    from integrity_checker.models.source import SourceResult
+    from integrity_checker.pipeline.integrity_pipeline import IntegrityPipeline
+
+    fake_pdf = tmp_path / "thread_offload.pdf"
+    fake_pdf.write_bytes(b"%PDF-1.4\n%fake\n")
+
+    ref = Citation(
+        raw_text="[1] Ref 1 (2020). Title 1.",
+        title="Title 1",
+        authors=["Author 1"],
+        year=2020,
+        citation_type=CitationType.REFERENCE_LIST,
+        style=CitationStyle.IEEE,
+        reference_id="1",
+    )
+    parsed_doc = ParsedDocument(
+        document=Document(
+            file_path=fake_pdf,
+            num_pages=1,
+            pages=[Page(page_num=1, text="Body [1]")],
+            parser_used="mupdf",
+        ),
+        body_citations=[
+            Citation(
+                raw_text="[1]",
+                citation_type=CitationType.IN_TEXT,
+                style=CitationStyle.IEEE,
+                reference_id="1",
+                page_num=1,
+            )
+        ],
+        references=[ref],
+        appendix_citations=[],
+        parser_warnings=[],
+    )
+
+    mock_doc_parser = MagicMock()
+    mock_doc_parser.parse.return_value = parsed_doc
+
+    class FakeOrchestrator:
+        async def retrieve(self, citation, allow_serpapi=None):
+            return SourceResult(
+                citation_raw=citation.raw_text,
+                candidates=[],
+                sources_queried=["crossref"],
+                sources_succeeded=["crossref"],
+                sources_failed={},
+            )
+
+    offloaded_funcs: list[str] = []
+    real_to_thread = asyncio.to_thread
+
+    async def spy_to_thread(func, /, *args, **kwargs):
+        offloaded_funcs.append(getattr(func, "__name__", str(func)))
+        return await real_to_thread(func, *args, **kwargs)
+
+    monkeypatch.setattr("integrity_checker.pipeline.integrity_pipeline.asyncio.to_thread", spy_to_thread)
+
+    pipeline = IntegrityPipeline(
+        document_parser=mock_doc_parser,
+        orchestrator=FakeOrchestrator(),  # type: ignore[arg-type]
+        use_report_cache=False,
+    )
+    report = asyncio.run(pipeline.run_async(fake_pdf))
+    assert len(report.verdicts) == 1
+    assert len(offloaded_funcs) >= 2
+    assert "check" in offloaded_funcs
+    assert mock_doc_parser.parse.call_count == 1
+
+
 
 
 

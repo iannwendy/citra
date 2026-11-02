@@ -551,7 +551,7 @@ class IntegrityPipeline:
 
         if self._use_document_parser:
             # Modern path: DocumentParser (PyMuPDF + GROBID + SectionSegmenter)
-            parsed = self.document_parser.parse(pdf_path)
+            parsed = await asyncio.to_thread(self.document_parser.parse, pdf_path)
             num_pages = parsed.document.num_pages  # FIX: lấy num_pages từ document gốc
             raw_doc_meta = getattr(parsed.document, "metadata", None)
             doc_metadata = dict(raw_doc_meta) if isinstance(raw_doc_meta, dict) else {}
@@ -571,7 +571,7 @@ class IntegrityPipeline:
             )
         else:
             # Legacy fallback path
-            doc = self.parser.parse(pdf_path)
+            doc = await asyncio.to_thread(self.parser.parse, pdf_path)
             num_pages = doc.num_pages
             raw_doc_meta = getattr(doc, "metadata", None)
             doc_metadata = dict(raw_doc_meta) if isinstance(raw_doc_meta, dict) else {}
@@ -1102,7 +1102,9 @@ class IntegrityPipeline:
                 for key, value in check_kwargs.items()
                 if key in accepted
             }
-            verdict = self.checker.check(citation, source, **check_kwargs)
+            verdict = await asyncio.to_thread(
+                self.checker.check, citation, source, **check_kwargs
+            )
             verdict.mapping_status = mapping_status
             verdict.mapping_confidence = mapping_confidence
             verdict.citation_link = citation_link
