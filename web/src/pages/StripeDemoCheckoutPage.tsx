@@ -300,6 +300,32 @@ export function StripeDemoCheckoutPage() {
   const [promoError, setPromoError] = useState<string | null>(null);
   const [promoSuccessMsg, setPromoSuccessMsg] = useState<string | null>(null);
 
+  // Luxury Post-Payment Loading & "Welcome to Plan" Celebration Overlay State
+  const [celebrationStage, setCelebrationStage] = useState<
+    null | 'verifying' | 'provisioning' | 'welcome'
+  >(null);
+  const [celebrationGateway, setCelebrationGateway] = useState<
+    'stripe' | 'vnpay' | 'apple_pay' | 'google_pay'
+  >('stripe');
+
+  const runPostPaymentCelebration = async (
+    gateway: 'stripe' | 'vnpay' | 'apple_pay' | 'google_pay',
+    targetUrl: string,
+  ) => {
+    const isTestEnv =
+      typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test';
+    const stepMs = isTestEnv ? 12 : 620;
+
+    setCelebrationGateway(gateway);
+    setCelebrationStage('verifying');
+    await new Promise((resolve) => setTimeout(resolve, stepMs));
+    setCelebrationStage('provisioning');
+    await new Promise((resolve) => setTimeout(resolve, stepMs));
+    setCelebrationStage('welcome');
+    await new Promise((resolve) => setTimeout(resolve, isTestEnv ? 12 : 950));
+    navigate(targetUrl);
+  };
+
   useEffect(() => {
     if (!sessionId) {
       setError(
@@ -448,7 +474,15 @@ export function StripeDemoCheckoutPage() {
         billing_zip: billingZip,
       });
       await refreshUser();
-      navigate(`/billing/success?session_id=${encodeURIComponent(sessionId)}`);
+      setWalletModalMethod(null);
+      await runPostPaymentCelebration(
+        params.method === 'apple_pay'
+          ? 'apple_pay'
+          : params.method === 'google_pay'
+            ? 'google_pay'
+            : 'stripe',
+        `/billing/success?session_id=${encodeURIComponent(sessionId)}`,
+      );
     } catch (err) {
       setError(
         err instanceof Error
@@ -621,7 +655,10 @@ export function StripeDemoCheckoutPage() {
 
       await refreshUser();
       setVnpayModalOpen(false);
-      navigate(res.return_url || `/billing/success?session_id=${encodeURIComponent(sessionId)}`);
+      await runPostPaymentCelebration(
+        'vnpay',
+        res.return_url || `/billing/success?session_id=${encodeURIComponent(sessionId)}`,
+      );
     } catch (err) {
       setVnpayModalError(
         err instanceof Error
@@ -685,13 +722,16 @@ export function StripeDemoCheckoutPage() {
         {/* ============================================================
             LEFT COLUMN — Stripe & VNPay Order Summary & 6-Char Promo Code
             ============================================================ */}
-        <div className="lg:col-span-5 bg-slate-950 text-white p-5 sm:p-8 flex flex-col justify-between relative overflow-hidden">
+        <div
+          className="lg:col-span-5 bg-[#F4F2EC]/90 dark:bg-slate-950 text-slate-900 dark:text-white border-b lg:border-b-0 lg:border-r border-[#E7E3D9] dark:border-slate-800 p-5 sm:p-8 flex flex-col justify-between relative overflow-hidden transition-colors"
+          data-testid="checkout-order-summary-panel"
+        >
           <div className="space-y-6 relative z-10">
             {/* Back link & Test Mode Badge */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <Link
                 to="/pricing?canceled=1"
-                className="inline-flex items-center gap-2 text-xs font-medium text-slate-300 hover:text-white transition-colors"
+                className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors"
               >
                 <ArrowLeft className="h-4 w-4" />
                 <span className="w-[24px] h-[24px] rounded-[6px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-0.5 shrink-0">
@@ -703,38 +743,38 @@ export function StripeDemoCheckoutPage() {
                     className="object-contain select-none dark:brightness-150 dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.45)]"
                   />
                 </span>
-                <span className="font-solva-sans text-sm font-medium tracking-[-0.02em] text-white">
+                <span className="font-solva-sans text-sm font-medium tracking-[-0.02em] text-slate-900 dark:text-white">
                   {details.merchant_name}
                 </span>
               </Link>
-              <span className="px-2.5 py-0.5 rounded-md bg-amber-400/20 border border-amber-400/40 text-amber-300 font-mono text-[10px] font-bold uppercase tracking-wider">
+              <span className="px-2.5 py-0.5 rounded-md bg-amber-100/90 dark:bg-amber-400/20 border border-amber-300/90 dark:border-amber-400/40 text-amber-800 dark:text-amber-300 font-mono text-[10px] font-bold uppercase tracking-wider">
                 STRIPE · VNPAY SANDBOX
               </span>
             </div>
 
             {/* Plan Title & Price */}
             <div className="space-y-2 pt-1">
-              <p className="text-xs font-mono uppercase tracking-wider text-indigo-300">
+              <p className="text-xs font-mono uppercase tracking-wider font-semibold text-indigo-600 dark:text-indigo-300">
                 {lang === 'vi'
                   ? `ĐĂNG KÝ GÓI ${details.billing_cycle === 'annual' ? 'THEO NĂM (-20%)' : 'THEO THÁNG'}`
                   : `SUBSCRIBE TO ${details.billing_cycle.toUpperCase()} PLAN`}
               </p>
-              <h1 className="font-display text-2xl sm:text-3xl font-bold text-white">
+              <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
                 {details.plan_name}
               </h1>
               <div className="flex items-baseline gap-2.5 pt-1 flex-wrap">
                 <span
-                  className="font-display text-4xl sm:text-5xl font-bold text-white"
+                  className="font-display text-4xl sm:text-5xl font-bold text-slate-900 dark:text-white"
                   data-testid="checkout-amount-display"
                 >
                   ${details.amount_usd.toFixed(2)}
                 </span>
                 {discountUsd > 0 && (
-                  <span className="text-lg font-mono text-slate-500 line-through">
+                  <span className="text-lg font-mono text-slate-400 dark:text-slate-500 line-through">
                     ${subtotalUsd.toFixed(2)}
                   </span>
                 )}
-                <span className="text-xs text-slate-400 font-mono">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                   USD /{' '}
                   {details.billing_cycle === 'annual'
                     ? lang === 'vi'
@@ -746,19 +786,19 @@ export function StripeDemoCheckoutPage() {
                 </span>
               </div>
               <div
-                className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-400/30 text-sky-200 text-xs font-mono"
+                className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-sky-50 dark:bg-sky-500/15 border border-sky-200/90 dark:border-sky-400/30 text-[#005BAA] dark:text-sky-200 text-xs font-mono font-medium"
                 data-testid="checkout-vnd-amount-display"
               >
                 <VNPayLogo active />
                 <span>
                   ≈ {formatVnd(amountVnd)} VND
                 </span>
-                <span className="text-[10px] text-sky-300/70">
+                <span className="text-[10px] text-sky-700/75 dark:text-sky-300/70">
                   (1 USD = {formatVnd(usdToVndRate)})
                 </span>
               </div>
               {details.billing_cycle === 'annual' && (
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-mono">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-500/20 border border-emerald-200/90 dark:border-emerald-400/30 text-emerald-700 dark:text-emerald-300 text-xs font-mono font-medium">
                   <Sparkles className="h-3.5 w-3.5" />
                   <span>
                     {lang === 'vi'
@@ -771,35 +811,35 @@ export function StripeDemoCheckoutPage() {
 
             {/* 6-Character Promo Code Box */}
             <div
-              className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2.5"
+              className="p-3.5 rounded-2xl bg-white/95 dark:bg-slate-900/90 border border-[#E7E3D9] dark:border-slate-800 shadow-2xs space-y-2.5"
               data-testid="checkout-promo-section"
             >
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-mono uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                  <Tag className="h-3.5 w-3.5 text-indigo-400" />
+                <span className="text-[11px] font-mono uppercase tracking-wider font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Tag className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
                   {lang === 'vi' ? 'Mã giảm giá (6 ký tự)' : 'Promo Code (6 chars)'}
                 </span>
-                <span className="text-[10px] font-mono text-slate-400">
+                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                   A-Z · 0-9
                 </span>
               </div>
 
               {details.promo_code ? (
                 <div
-                  className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300"
+                  className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/15 border border-emerald-200 dark:border-emerald-500/30 text-emerald-800 dark:text-emerald-300"
                   data-testid="checkout-applied-promo-badge"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-emerald-500/25 font-mono text-xs font-bold tracking-wider text-emerald-200">
+                      <span className="px-2 py-0.5 rounded bg-emerald-600 text-white dark:bg-emerald-500/25 font-mono text-xs font-bold tracking-wider dark:text-emerald-200">
                         {details.promo_code}
                       </span>
-                      <span className="text-xs font-mono font-semibold text-emerald-300">
+                      <span className="text-xs font-mono font-semibold text-emerald-700 dark:text-emerald-300">
                         -${discountUsd.toFixed(2)} USD
                       </span>
                     </div>
                     {details.promo_details?.description && (
-                      <p className="text-[11px] text-emerald-300/80 truncate mt-0.5">
+                      <p className="text-[11px] text-emerald-700/80 dark:text-emerald-300/80 truncate mt-0.5">
                         {details.promo_details.description}
                       </p>
                     )}
@@ -809,7 +849,7 @@ export function StripeDemoCheckoutPage() {
                     data-testid="checkout-promo-remove-btn"
                     disabled={promoLoading}
                     onClick={handleRemovePromoCode}
-                    className="p-1.5 rounded-lg hover:bg-emerald-500/20 text-emerald-300 hover:text-white transition-colors cursor-pointer shrink-0"
+                    className="p-1.5 rounded-lg hover:bg-emerald-200/60 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:text-emerald-950 dark:hover:text-white transition-colors cursor-pointer shrink-0"
                     title={lang === 'vi' ? 'Gỡ mã giảm giá' : 'Remove promo code'}
                   >
                     <X className="h-4 w-4" />
@@ -838,7 +878,7 @@ export function StripeDemoCheckoutPage() {
                       maxLength={6}
                       placeholder={lang === 'vi' ? 'VD: CITRA2' : 'E.G. CITRA2'}
                       data-testid="checkout-promo-input"
-                      className="h-9 bg-slate-950 border-slate-700 text-white font-mono text-xs uppercase tracking-widest placeholder:text-slate-600 rounded-xl"
+                      className="h-9 bg-[#FBFAF6] dark:bg-slate-950 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono text-xs uppercase tracking-widest placeholder:text-slate-400 dark:placeholder:text-slate-600 rounded-xl"
                     />
                     <Button
                       type="button"
@@ -860,7 +900,7 @@ export function StripeDemoCheckoutPage() {
 
                   {/* Quick 1-click Demo Promo Chips */}
                   <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                    <span className="text-[10px] font-mono text-slate-400">
+                    <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                       {lang === 'vi' ? 'Thử nhanh:' : 'Try:'}
                     </span>
                     {[
@@ -876,7 +916,7 @@ export function StripeDemoCheckoutPage() {
                           setPromoInput(chip.code);
                           void handleApplyPromoCode(chip.code);
                         }}
-                        className="px-2 py-0.5 rounded-md bg-slate-800/90 hover:bg-indigo-950 border border-slate-700 hover:border-indigo-500/50 text-[10px] font-mono text-slate-300 hover:text-indigo-200 transition-colors cursor-pointer"
+                        className="px-2 py-0.5 rounded-md bg-[#F4F2EC] hover:bg-indigo-50 dark:bg-slate-800/90 dark:hover:bg-indigo-950 border border-slate-300/90 hover:border-indigo-400 dark:border-slate-700 dark:hover:border-indigo-500/50 text-[10px] font-mono text-slate-700 hover:text-indigo-700 dark:text-slate-300 dark:hover:text-indigo-200 transition-colors cursor-pointer"
                       >
                         {chip.code} ({chip.label})
                       </button>
@@ -887,7 +927,7 @@ export function StripeDemoCheckoutPage() {
 
               {promoError && (
                 <p
-                  className="text-[11px] text-red-400 flex items-center gap-1.5 pt-0.5"
+                  className="text-[11px] text-red-600 dark:text-red-400 flex items-center gap-1.5 pt-0.5"
                   data-testid="checkout-promo-error"
                 >
                   <AlertCircle className="h-3.5 w-3.5 shrink-0" />
@@ -897,7 +937,7 @@ export function StripeDemoCheckoutPage() {
 
               {promoSuccessMsg && !promoError && (
                 <p
-                  className="text-[11px] text-emerald-400 flex items-center gap-1.5 pt-0.5"
+                  className="text-[11px] text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5 pt-0.5"
                   data-testid="checkout-promo-success"
                 >
                   <Check className="h-3.5 w-3.5 shrink-0" />
@@ -907,18 +947,18 @@ export function StripeDemoCheckoutPage() {
             </div>
 
             {/* Line Items Summary */}
-            <div className="space-y-2.5 pt-3 border-t border-slate-800 text-xs">
-              <div className="flex items-center justify-between text-slate-300">
+            <div className="space-y-2.5 pt-3 border-t border-[#E7E3D9] dark:border-slate-800 text-xs">
+              <div className="flex items-center justify-between text-slate-600 dark:text-slate-300">
                 <span>
                   {details.plan_name} (
                   {details.billing_cycle === 'annual' ? 'Annual' : 'Monthly'})
                 </span>
-                <span className="font-mono" data-testid="checkout-subtotal-display">
+                <span className="font-mono font-medium text-slate-900 dark:text-slate-200" data-testid="checkout-subtotal-display">
                   ${subtotalUsd.toFixed(2)}
                 </span>
               </div>
               {details.annual_savings_usd > 0 && (
-                <div className="flex items-center justify-between text-emerald-400">
+                <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400 font-medium">
                   <span>
                     {lang === 'vi'
                       ? 'Ưu đãi chu kỳ năm (-20%)'
@@ -931,7 +971,7 @@ export function StripeDemoCheckoutPage() {
               )}
               {discountUsd > 0 && (
                 <div
-                  className="flex items-center justify-between text-emerald-400 font-medium"
+                  className="flex items-center justify-between text-emerald-700 dark:text-emerald-400 font-medium"
                   data-testid="checkout-discount-row"
                 >
                   <span>
@@ -941,7 +981,7 @@ export function StripeDemoCheckoutPage() {
                   <span className="font-mono">-${discountUsd.toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex items-center justify-between pt-3 border-t border-slate-800 text-sm font-bold text-white">
+              <div className="flex items-center justify-between pt-3 border-t border-[#E7E3D9] dark:border-slate-800 text-sm font-bold text-slate-900 dark:text-white">
                 <span>
                   {lang === 'vi' ? 'Tổng thanh toán hôm nay' : 'Total due today'}
                 </span>
@@ -949,7 +989,7 @@ export function StripeDemoCheckoutPage() {
                   ${details.amount_usd.toFixed(2)} USD
                 </span>
               </div>
-              <div className="flex items-center justify-between text-xs text-sky-300 font-mono">
+              <div className="flex items-center justify-between text-xs text-[#005BAA] dark:text-sky-300 font-mono font-medium">
                 <span>
                   {lang === 'vi'
                     ? 'Quy đổi cổng VNPay (VND):'
@@ -964,15 +1004,15 @@ export function StripeDemoCheckoutPage() {
 
             {/* Included Highlights */}
             <div className="space-y-2 pt-1">
-              <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+              <p className="text-[11px] font-mono uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
                 {lang === 'vi'
                   ? 'Quyền lợi kích hoạt ngay:'
                   : 'Instant activation includes:'}
               </p>
-              <ul className="space-y-1.5 text-xs text-slate-300">
+              <ul className="space-y-1.5 text-xs text-slate-700 dark:text-slate-300">
                 {features.map((f) => (
                   <li key={f} className="flex items-start gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                     <span>{f}</span>
                   </li>
                 ))}
@@ -980,11 +1020,11 @@ export function StripeDemoCheckoutPage() {
             </div>
           </div>
 
-          <div className="pt-6 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 relative z-10 flex-wrap gap-2">
+          <div className="pt-6 border-t border-[#E7E3D9] dark:border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 relative z-10 flex-wrap gap-2">
             <span className="flex items-center gap-1.5">
-              <Lock className="h-3.5 w-3.5 text-emerald-400" />
-              Powered by <strong className="text-white">Stripe</strong> &amp;{' '}
-              <strong className="text-sky-300">VNPAY</strong>
+              <Lock className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              Powered by <strong className="text-slate-900 dark:text-white">Stripe</strong> &amp;{' '}
+              <strong className="text-[#005BAA] dark:text-sky-300">VNPAY</strong>
             </span>
             <span className="font-mono text-[10px]">
               PCI-DSS Level 1 · HMAC-SHA512
@@ -1267,8 +1307,11 @@ export function StripeDemoCheckoutPage() {
 
                 {/* Expiry & CVC */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="card-expiry" className="text-xs font-semibold">
+                  <div className="flex flex-col gap-1.5">
+                    <Label
+                      htmlFor="card-expiry"
+                      className="text-xs font-semibold flex items-center gap-1 h-4"
+                    >
                       {lang === 'vi'
                         ? 'Ngày hết hạn (MM/YY)'
                         : 'Expiration (MM/YY)'}
@@ -1286,8 +1329,11 @@ export function StripeDemoCheckoutPage() {
                       required
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="card-cvc" className="text-xs font-semibold">
+                  <div className="flex flex-col gap-1.5">
+                    <Label
+                      htmlFor="card-cvc"
+                      className="text-xs font-semibold flex items-center gap-1 h-4"
+                    >
                       CVC / CVV
                     </Label>
                     <Input
@@ -1308,10 +1354,10 @@ export function StripeDemoCheckoutPage() {
                 </div>
 
                 {/* Cardholder Name */}
-                <div className="space-y-1.5">
+                <div className="flex flex-col gap-1.5">
                   <Label
                     htmlFor="cardholder-name"
-                    className="text-xs font-semibold"
+                    className="text-xs font-semibold flex items-center gap-1 h-4"
                   >
                     {lang === 'vi'
                       ? 'Họ và tên chủ thẻ (in trên thẻ)'
@@ -1333,15 +1379,17 @@ export function StripeDemoCheckoutPage() {
 
                 {/* Billing Country & Postal Code (Stripe Address Element) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
+                  <div className="flex flex-col gap-1.5">
                     <Label
                       htmlFor="billing-country"
-                      className="text-xs font-semibold flex items-center gap-1"
+                      className="text-xs font-semibold flex items-center gap-1 h-4"
                     >
-                      <Globe className="h-3 w-3 text-slate-400" />
-                      {lang === 'vi'
-                        ? 'Quốc gia thanh toán'
-                        : 'Billing country'}
+                      <Globe className="h-3 w-3 text-slate-400 shrink-0" />
+                      <span>
+                        {lang === 'vi'
+                          ? 'Quốc gia thanh toán'
+                          : 'Billing country'}
+                      </span>
                     </Label>
                     <select
                       id="billing-country"
@@ -1357,14 +1405,16 @@ export function StripeDemoCheckoutPage() {
                       ))}
                     </select>
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="flex flex-col gap-1.5">
                     <Label
                       htmlFor="billing-zip"
-                      className="text-xs font-semibold"
+                      className="text-xs font-semibold flex items-center gap-1 h-4"
                     >
-                      {lang === 'vi'
-                        ? 'Mã bưu chính (ZIP / Postal)'
-                        : 'Postal / ZIP code'}
+                      <span>
+                        {lang === 'vi'
+                          ? 'Mã bưu chính (ZIP / Postal)'
+                          : 'Postal / ZIP code'}
+                      </span>
                     </Label>
                     <Input
                       id="billing-zip"
@@ -1411,11 +1461,14 @@ export function StripeDemoCheckoutPage() {
                 {/* Header & Amount in VND */}
                 <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-200/80 dark:border-slate-800">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#005BAA] to-[#ED1C24] p-[1.5px] shrink-0 shadow-xs">
-                      <div className="w-full h-full rounded-[10px] bg-white dark:bg-slate-950 flex items-center justify-center font-black text-[10px] tracking-tighter">
+                    <div
+                      className="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-sky-200/90 dark:border-sky-500/30 shadow-2xs flex items-center justify-center shrink-0"
+                      data-testid="vnpay-panel-logo-badge"
+                    >
+                      <span className="font-sans font-black text-[10px] tracking-tighter leading-none select-none">
                         <span className="text-[#ED1C24]">VN</span>
                         <span className="text-[#005BAA] dark:text-sky-400">PAY</span>
-                      </div>
+                      </span>
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -1441,25 +1494,25 @@ export function StripeDemoCheckoutPage() {
                 </div>
 
                 {/* VND Exchange Breakdown Box */}
-                <div className="p-3 rounded-xl bg-slate-900 text-white flex items-center justify-between gap-2 flex-wrap">
+                <div className="p-3 rounded-xl bg-sky-50/90 dark:bg-slate-900 border border-sky-200/80 dark:border-slate-800 text-slate-900 dark:text-white flex items-center justify-between gap-2 flex-wrap">
                   <div>
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
                       {lang === 'vi'
                         ? 'Số tiền thanh toán qua VNPay (VND)'
                         : 'VNPay Settlement Amount (VND)'}
                     </span>
                     <span
-                      className="font-display text-xl sm:text-2xl font-bold text-emerald-400"
+                      className="font-display text-xl sm:text-2xl font-bold text-emerald-700 dark:text-emerald-400"
                       data-testid="vnpay-panel-amount-vnd"
                     >
                       {formatVnd(amountVnd)}
                     </span>
                   </div>
-                  <div className="text-right font-mono text-[11px] text-slate-300">
+                  <div className="text-right font-mono text-[11px] text-slate-600 dark:text-slate-300">
                     <div>
                       ${details.amount_usd.toFixed(2)} USD × {formatVnd(usdToVndRate)}
                     </div>
-                    <div className="text-[10px] text-sky-300">
+                    <div className="text-[10px] text-[#005BAA] dark:text-sky-300 font-semibold">
                       vnp_Amount = {amountVnd * 100}
                     </div>
                   </div>
@@ -1739,10 +1792,10 @@ export function StripeDemoCheckoutPage() {
               {/* VNPay Gateway Header */}
               <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-2.5">
-                  <div className="px-2.5 py-1.5 rounded-xl bg-slate-950 text-white font-black text-xs tracking-tight flex items-center gap-0.5">
+                  <div className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-2xs font-black text-xs tracking-tight flex items-center gap-0.5">
                     <span className="text-[#ED1C24]">VN</span>
-                    <span className="text-[#3898FF]">PAY</span>
-                    <span className="ml-1 text-[9px] font-mono text-emerald-400">
+                    <span className="text-[#005BAA] dark:text-[#3898FF]">PAY</span>
+                    <span className="ml-1 text-[9px] font-mono text-emerald-600 dark:text-emerald-400">
                       GATEWAY
                     </span>
                   </div>
@@ -1776,38 +1829,40 @@ export function StripeDemoCheckoutPage() {
 
               {/* Order Summary & Cryptographic Checksum Inspector */}
               <div
-                className="p-3.5 rounded-2xl bg-slate-950 text-white space-y-2 text-xs"
+                className="p-3.5 rounded-2xl bg-[#F4F2EC]/90 dark:bg-slate-950 border border-[#E7E3D9] dark:border-slate-800 text-slate-900 dark:text-white space-y-2 text-xs"
                 data-testid="vnpay-signature-inspector"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-slate-400">
+                  <span className="text-slate-600 dark:text-slate-400">
                     {lang === 'vi' ? 'Số tiền thanh toán:' : 'Payment Amount:'}
                   </span>
                   <span
-                    className="font-display text-lg font-bold text-emerald-400"
+                    className="font-display text-lg font-bold text-emerald-700 dark:text-emerald-400"
                     data-testid="vnpay-modal-amount-vnd"
                   >
                     {formatVnd(vnpayGatewayData.amount_vnd)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400">
                   <span>vnp_Amount (×100):</span>
-                  <span className="text-sky-300">{vnpayGatewayData.vnp_amount}</span>
+                  <span className="text-[#005BAA] dark:text-sky-300 font-semibold">
+                    {vnpayGatewayData.vnp_amount}
+                  </span>
                 </div>
-                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400">
                   <span>vnp_TmnCode / Hash:</span>
-                  <span className="text-emerald-300">
+                  <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
                     {vnpayGatewayData.tmn_code} · HMAC-SHA512
                   </span>
                 </div>
 
                 {/* Toggle Signed URL Inspector */}
-                <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                <div className="pt-1.5 border-t border-[#E7E3D9] dark:border-slate-800 flex items-center justify-between gap-2 flex-wrap">
                   <button
                     type="button"
                     data-testid="vnpay-toggle-signed-url-btn"
                     onClick={() => setVnpayShowSignedUrl((prev) => !prev)}
-                    className="text-[11px] font-mono text-sky-400 hover:text-sky-300 underline cursor-pointer"
+                    className="text-[11px] font-mono text-[#005BAA] hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300 underline cursor-pointer"
                   >
                     {vnpayShowSignedUrl
                       ? lang === 'vi'
@@ -1821,7 +1876,7 @@ export function StripeDemoCheckoutPage() {
                     <button
                       type="button"
                       onClick={handleCopySignedUrl}
-                      className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                      className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer"
                     >
                       <Copy className="h-3 w-3" />
                       {vnpayCopiedUrl
@@ -1834,7 +1889,7 @@ export function StripeDemoCheckoutPage() {
                       href={vnpayGatewayData.payment_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-sky-900/70 hover:bg-sky-800 text-sky-200"
+                      className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-sky-100 hover:bg-sky-200 dark:bg-sky-900/70 dark:hover:bg-sky-800 text-[#005BAA] dark:text-sky-200"
                     >
                       <ExternalLink className="h-3 w-3" />
                       sandbox.vnpayment.vn
@@ -1844,7 +1899,7 @@ export function StripeDemoCheckoutPage() {
 
                 {vnpayShowSignedUrl && (
                   <div
-                    className="p-2 rounded-xl bg-slate-900 border border-slate-800 font-mono text-[10px] text-slate-300 break-all max-h-28 overflow-y-auto"
+                    className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 font-mono text-[10px] text-slate-700 dark:text-slate-300 break-all max-h-28 overflow-y-auto"
                     data-testid="vnpay-signed-url-box"
                   >
                     {vnpayGatewayData.payment_url}
@@ -1952,8 +2007,11 @@ export function StripeDemoCheckoutPage() {
                   </div>
 
                   {/* Card Number */}
-                  <div className="space-y-1">
-                    <Label htmlFor="vnpay-card-number" className="text-xs font-semibold">
+                  <div className="flex flex-col gap-1">
+                    <Label
+                      htmlFor="vnpay-card-number"
+                      className="text-xs font-semibold flex items-center gap-1 h-4"
+                    >
                       {lang === 'vi'
                         ? 'Số thẻ ATM nội địa (Ngân hàng NCB Sandbox)'
                         : 'Domestic ATM Card Number (NCB Sandbox)'}
@@ -1972,8 +2030,11 @@ export function StripeDemoCheckoutPage() {
 
                   {/* Card Holder & Issue Date */}
                   <div className="grid grid-cols-2 gap-2.5">
-                    <div className="space-y-1">
-                      <Label htmlFor="vnpay-card-holder" className="text-xs font-semibold">
+                    <div className="flex flex-col gap-1">
+                      <Label
+                        htmlFor="vnpay-card-holder"
+                        className="text-xs font-semibold flex items-center gap-1 h-4"
+                      >
                         {lang === 'vi' ? 'Tên chủ thẻ (Không dấu)' : 'Cardholder Name'}
                       </Label>
                       <Input
@@ -1985,8 +2046,11 @@ export function StripeDemoCheckoutPage() {
                         className="font-mono text-xs h-10 rounded-xl uppercase"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="vnpay-issue-date" className="text-xs font-semibold">
+                    <div className="flex flex-col gap-1">
+                      <Label
+                        htmlFor="vnpay-issue-date"
+                        className="text-xs font-semibold flex items-center gap-1 h-4"
+                      >
                         {lang === 'vi' ? 'Ngày phát hành (MM/YY)' : 'Issue Date (MM/YY)'}
                       </Label>
                       <Input
@@ -2002,11 +2066,11 @@ export function StripeDemoCheckoutPage() {
                   </div>
 
                   {/* OTP Input */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between h-4">
                       <Label
                         htmlFor="vnpay-otp"
-                        className="text-xs font-semibold flex items-center gap-1"
+                        className="text-xs font-semibold flex items-center gap-1 h-4"
                       >
                         <KeyRound className="h-3.5 w-3.5 text-[#005BAA]" />
                         {lang === 'vi'
@@ -2305,6 +2369,179 @@ export function StripeDemoCheckoutPage() {
                 >
                   {lang === 'vi' ? 'Hủy giao dịch' : 'Cancel'}
                 </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* ============================================================
+          POST-PAYMENT LUXURY LOADING & "WELCOME TO PLAN" CELEBRATION OVERLAY
+          3-stage cinematic transition:
+          1. 'verifying' -> Cryptographic & Bank Settlement Handshake
+          2. 'provisioning' -> Unlocking CITRA Pro / Ultra Quotas
+          3. 'welcome' -> Celebration Reveal ("Welcome to CITRA Pro / Ultra!")
+          ============================================================ */}
+      {celebrationStage &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[120] bg-[#FBFAF6]/92 dark:bg-[#141310]/92 backdrop-blur-md flex items-center justify-center p-4"
+            data-testid="checkout-payment-celebration-overlay"
+          >
+            <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-[#E7E3D9] dark:border-slate-800 shadow-2xl p-7 sm:p-9 text-center space-y-6 overflow-hidden">
+              {/* Ambient Radial Celebration Glow */}
+              <div
+                className={`pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full blur-3xl transition-all duration-700 ${
+                  celebrationStage === 'welcome'
+                    ? 'bg-emerald-400/25 dark:bg-emerald-500/20 scale-110'
+                    : 'bg-indigo-400/20 dark:bg-sky-500/15 scale-95'
+                }`}
+              />
+
+              {/* Visual Stage Icon / Orbital Spinner / Stroke-Draw Checkmark */}
+              <div className="relative z-10 flex items-center justify-center pt-1">
+                {celebrationStage !== 'welcome' ? (
+                  <div className="relative w-20 h-20 flex items-center justify-center">
+                    {/* Outer Orbital Ring */}
+                    <div className="absolute inset-0 rounded-full border-2 border-dashed border-indigo-500/40 dark:border-sky-400/40 animate-orbital-spin" />
+                    {/* Inner Reverse Orbital Ring */}
+                    <div className="absolute inset-2 rounded-full border-2 border-transparent border-t-emerald-500 border-r-[#005BAA] dark:border-t-emerald-400 dark:border-r-sky-400 animate-orbital-reverse" />
+                    {/* Center Icon */}
+                    <div className="w-12 h-12 rounded-2xl bg-[#F4F2EC] dark:bg-slate-800 border border-[#E7E3D9] dark:border-slate-700 flex items-center justify-center shadow-sm">
+                      {celebrationStage === 'verifying' ? (
+                        <ShieldCheck className="h-6 w-6 text-[#005BAA] dark:text-sky-400 animate-pulse" />
+                      ) : (
+                        <Sparkles className="h-6 w-6 text-emerald-600 dark:text-emerald-400 animate-pulse" />
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative w-20 h-20 flex items-center justify-center">
+                    <div className="w-20 h-20 rounded-3xl bg-emerald-500/15 dark:bg-emerald-500/20 border-2 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-lg ring-8 ring-emerald-500/10 animate-icon-pop">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        className="w-10 h-10 stroke-current"
+                        strokeWidth={2.6}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M20 6 9 17l-5-5" className="animate-stroke-draw" />
+                      </svg>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Gateway Badge */}
+              <div className="relative z-10">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F4F2EC] dark:bg-slate-800 border border-[#E7E3D9] dark:border-slate-700 text-[11px] font-mono font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                  {celebrationGateway === 'vnpay' ? (
+                    <>
+                      <VNPayLogo active />
+                      <span>VNPAY HMAC-SHA512 VERIFIED</span>
+                    </>
+                  ) : celebrationGateway === 'apple_pay' ? (
+                    <>
+                      <AppleLogoSvg className="w-3.5 h-3.5" />
+                      <span>APPLE PAY BIOMETRIC TOKEN</span>
+                    </>
+                  ) : celebrationGateway === 'google_pay' ? (
+                    <>
+                      <GooglePaySvg className="w-3.5 h-3.5" />
+                      <span>GOOGLE PAY EMVCO TOKEN</span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                      <span>STRIPE PCI-DSS LEVEL 1</span>
+                    </>
+                  )}
+                </span>
+              </div>
+
+              {/* Dynamic Headline & Subtitle */}
+              <div className="relative z-10 space-y-2">
+                <h2
+                  className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight"
+                  data-testid="celebration-stage-title"
+                >
+                  {celebrationStage === 'verifying'
+                    ? lang === 'vi'
+                      ? 'Đang xác thực giao dịch bảo mật...'
+                      : 'Verifying Secure Transaction...'
+                    : celebrationStage === 'provisioning'
+                      ? lang === 'vi'
+                        ? `Đang kích hoạt gói ${details.plan_name}...`
+                        : `Provisioning ${details.plan_name} Workspace...`
+                      : lang === 'vi'
+                        ? `Chào mừng đến với ${details.plan_name}!`
+                        : `Welcome to ${details.plan_name}!`}
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 max-w-sm mx-auto">
+                  {celebrationStage === 'verifying'
+                    ? lang === 'vi'
+                      ? 'Đối chiếu chữ ký mật mã & xác nhận thanh toán từ ngân hàng phát hành.'
+                      : 'Validating cryptographic signature and confirming settlement with issuing bank.'
+                    : celebrationStage === 'provisioning'
+                      ? lang === 'vi'
+                        ? 'Mở khóa hạn mức tải tài liệu, xuất báo cáo PDF/DOCX và 15+ nguồn học thuật.'
+                        : 'Unlocking elevated document quotas, PDF/DOCX exports, and 15+ scholarly APIs.'
+                      : lang === 'vi'
+                        ? 'Tài khoản của bạn đã được nâng cấp thành công. Đang mở biên lai điện tử...'
+                        : 'Your workspace is now upgraded. Opening your official payment receipt...'}
+                </p>
+              </div>
+
+              {/* 3-Step Progress Bar & Milestones */}
+              <div className="relative z-10 space-y-3 pt-1">
+                <div className="h-2 w-full rounded-full bg-[#ECE9E0] dark:bg-slate-800 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ease-out ${
+                      celebrationStage === 'welcome'
+                        ? 'w-full bg-gradient-to-r from-emerald-500 to-teal-500'
+                        : celebrationStage === 'provisioning'
+                          ? 'w-2/3 bg-gradient-to-r from-[#005BAA] to-emerald-500'
+                          : 'w-1/3 bg-gradient-to-r from-indigo-600 to-[#005BAA]'
+                    }`}
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
+                  <div
+                    className={`py-1 px-2 rounded-lg border flex items-center justify-center gap-1 ${
+                      celebrationStage === 'verifying'
+                        ? 'bg-sky-50 dark:bg-sky-950/60 border-sky-300 dark:border-sky-700 text-[#005BAA] dark:text-sky-300 font-bold'
+                        : 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-semibold'
+                    }`}
+                  >
+                    <Check className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{lang === 'vi' ? 'Xác thực' : 'Verified'}</span>
+                  </div>
+                  <div
+                    className={`py-1 px-2 rounded-lg border flex items-center justify-center gap-1 ${
+                      celebrationStage === 'verifying'
+                        ? 'bg-[#F4F2EC] dark:bg-slate-800/60 border-[#E7E3D9] dark:border-slate-800 text-slate-400'
+                        : celebrationStage === 'provisioning'
+                          ? 'bg-sky-50 dark:bg-sky-950/60 border-sky-300 dark:border-sky-700 text-[#005BAA] dark:text-sky-300 font-bold'
+                          : 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-semibold'
+                    }`}
+                  >
+                    <Sparkles className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{lang === 'vi' ? 'Mở khóa' : 'Quotas'}</span>
+                  </div>
+                  <div
+                    className={`py-1 px-2 rounded-lg border flex items-center justify-center gap-1 ${
+                      celebrationStage === 'welcome'
+                        ? 'bg-emerald-600 border-emerald-600 text-white font-bold shadow-xs'
+                        : 'bg-[#F4F2EC] dark:bg-slate-800/60 border-[#E7E3D9] dark:border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    <CheckCircle2 className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{lang === 'vi' ? 'Hoàn tất' : 'Welcome'}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>,

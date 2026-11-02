@@ -8,7 +8,6 @@ import {
   Settings,
   CreditCard,
   ShieldCheck,
-  Loader2,
 } from 'lucide-react';
 import { api, type BillingTransactionItem, type SubscriptionSummary } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -92,13 +91,24 @@ export function BillingSuccessPage() {
 
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
-        <p className="text-sm font-mono text-slate-500">
-          {lang === 'vi'
-            ? 'Đang xác nhận giao dịch và mở khóa hạn mức Premium...'
-            : 'Confirming payment and unlocking Premium quotas...'}
-        </p>
+      <div className="min-h-[65vh] flex flex-col items-center justify-center gap-4 px-4 text-center">
+        <div className="relative w-16 h-16 flex items-center justify-center">
+          <div className="absolute inset-0 rounded-full border-2 border-dashed border-indigo-500/40 dark:border-sky-400/40 animate-orbital-spin" />
+          <div className="absolute inset-1.5 rounded-full border-2 border-transparent border-t-emerald-500 border-r-[#005BAA] animate-orbital-reverse" />
+          <Sparkles className="h-6 w-6 text-emerald-600 dark:text-emerald-400 animate-pulse" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-display font-bold text-slate-900 dark:text-white">
+            {lang === 'vi'
+              ? 'Đang hoàn tất nâng cấp gói cước...'
+              : 'Finalizing your plan upgrade...'}
+          </p>
+          <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
+            {lang === 'vi'
+              ? 'Đang xác nhận giao dịch và mở khóa hạn mức Premium...'
+              : 'Confirming payment and unlocking Premium quotas...'}
+          </p>
+        </div>
       </div>
     );
   }
@@ -116,14 +126,29 @@ export function BillingSuccessPage() {
     `${Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} ₫`;
 
   return (
-    <div className="max-w-2xl mx-auto py-8 space-y-6" data-testid="billing-success-page">
-      <Card className="rounded-3xl border-2 border-emerald-500/40 bg-white dark:bg-slate-900 p-6 sm:p-10 shadow-xl text-center space-y-6">
-        <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto ring-4 ring-emerald-500/10">
-          <CheckCircle2 className="h-9 w-9" />
+    <div className="max-w-2xl mx-auto py-6 sm:py-8 space-y-6 animate-hero-reveal" data-testid="billing-success-page">
+      <Card className="relative overflow-hidden rounded-3xl border-2 border-emerald-500/40 bg-white dark:bg-slate-900 p-6 sm:p-10 shadow-2xl text-center space-y-6">
+        {/* Ambient Celebration Glow */}
+        <div className="pointer-events-none absolute -top-28 left-1/2 -translate-x-1/2 w-96 h-64 rounded-full bg-gradient-to-b from-emerald-400/20 via-sky-400/10 to-transparent blur-3xl" />
+
+        {/* Animated Stroke-Draw Checkmark Badge */}
+        <div className="relative z-10 flex items-center justify-center pt-1">
+          <div className="w-20 h-20 rounded-3xl bg-emerald-500/15 dark:bg-emerald-500/20 border-2 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto ring-8 ring-emerald-500/10 shadow-lg animate-icon-pop">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              className="w-10 h-10 stroke-current"
+              strokeWidth={2.6}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M20 6 9 17l-5-5" className="animate-stroke-draw" />
+            </svg>
+          </div>
         </div>
 
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 text-xs font-mono font-bold text-indigo-700 dark:text-indigo-300">
+        <div className="relative z-10 space-y-2.5">
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 text-xs font-mono font-bold text-emerald-700 dark:text-emerald-300 shadow-2xs">
             <Sparkles className="h-3.5 w-3.5" />
             {isVNPay
               ? lang === 'vi'
@@ -133,7 +158,7 @@ export function BillingSuccessPage() {
                 ? 'THANH TOÁN THÀNH CÔNG · STRIPE VERIFIED'
                 : 'PAYMENT SUCCEEDED · STRIPE VERIFIED'}
           </div>
-          <h1 className="font-display text-2xl sm:text-4xl font-bold text-slate-900 dark:text-white">
+          <h1 className="font-display text-2xl sm:text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
             {lang === 'vi'
               ? `Chào mừng bạn đến với CITRA ${tier.toUpperCase()}!`
               : `Welcome to CITRA ${tier.toUpperCase()}!`}
@@ -143,6 +168,22 @@ export function BillingSuccessPage() {
               ? 'Tài khoản của bạn đã được nâng cấp ngay lập tức. Toàn bộ hạn mức tải tài liệu, xuất báo cáo PDF/DOCX và các chuyên trang phân tích sâu đã sẵn sàng.'
               : 'Your account has been upgraded immediately. All elevated upload quotas, PDF/DOCX exports, and deep verification tabs are now unlocked.'}
           </p>
+
+          {/* Celebratory Unlocked Feature Pills */}
+          <div className="flex items-center justify-center gap-2 flex-wrap pt-1">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F4F2EC] dark:bg-slate-800 border border-[#E7E3D9] dark:border-slate-700 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-200">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              {lang === 'vi' ? 'Xuất PDF & DOCX' : 'PDF & DOCX Export'}
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F4F2EC] dark:bg-slate-800 border border-[#E7E3D9] dark:border-slate-700 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-200">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              {lang === 'vi' ? '15+ Nguồn học thuật' : '15+ Scholarly APIs'}
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F4F2EC] dark:bg-slate-800 border border-[#E7E3D9] dark:border-slate-700 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-200">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              {lang === 'vi' ? '28 Luật Symbolic' : '28 Symbolic Rules'}
+            </span>
+          </div>
         </div>
 
         {/* Receipt Summary Box */}
