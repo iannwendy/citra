@@ -33,6 +33,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { Badge } from '@/components/ui/badge';
 
 /* ============================================================
@@ -276,6 +277,16 @@ export function StripeDemoCheckoutPage() {
   const [vnpayBankCode, setVnpayBankCode] = useState<string>('NCB');
   const [vnpayGatewayData, setVnpayGatewayData] = useState<VNPayPaymentUrlResponse | null>(null);
   const [vnpayModalOpen, setVnpayModalOpen] = useState(false);
+  // Accessible dialog semantics (Escape, focus trap/restore) for the custom
+  // VNPay gateway + wallet sheets. Escape is ignored while a payment submits.
+  const vnpayDialog = useModalA11y<HTMLDivElement>(vnpayModalOpen, () => setVnpayModalOpen(false), {
+    disableEscape: submitting,
+  });
+  const walletDialog = useModalA11y<HTMLDivElement>(
+    walletModalMethod !== null,
+    () => setWalletModalMethod(null),
+    { disableEscape: submitting },
+  );
   const [vnpayModalTab, setVnpayModalTab] = useState<'atm' | 'qr'>('atm');
   const [vnpayCardNumber, setVnpayCardNumber] = useState('9704198526191432198');
   const [vnpayCardHolder, setVnpayCardHolder] = useState('NGUYEN VAN A');
@@ -1785,7 +1796,10 @@ export function StripeDemoCheckoutPage() {
               }
             }}
           >
-            <div className="w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] space-y-4">
+            <div
+              {...vnpayDialog.dialogProps}
+              className="w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] space-y-4 outline-none"
+            >
               {/* Mobile Drag Handle Pill */}
               <div className="sm:hidden w-10 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 mx-auto -mt-1 mb-1" />
 
@@ -1800,7 +1814,10 @@ export function StripeDemoCheckoutPage() {
                     </span>
                   </div>
                   <div>
-                    <h3 className="font-display text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                    <h3
+                      id={vnpayDialog.titleId}
+                      className="font-display text-sm sm:text-base font-bold text-slate-900 dark:text-white"
+                    >
                       {lang === 'vi'
                         ? 'Cổng Thanh Toán VNPAY Sandbox v2.1.0'
                         : 'VNPAY Sandbox Payment Gateway v2.1.0'}
@@ -2213,7 +2230,10 @@ export function StripeDemoCheckoutPage() {
               }
             }}
           >
-            <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] space-y-4 sm:space-y-5">
+            <div
+              {...walletDialog.dialogProps}
+              className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] space-y-4 sm:space-y-5 outline-none"
+            >
               {/* Mobile Drag Handle Pill */}
               <div className="sm:hidden w-10 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 mx-auto -mt-1 mb-1" />
 
@@ -2228,7 +2248,10 @@ export function StripeDemoCheckoutPage() {
                     )}
                   </div>
                   <div>
-                    <h3 className="font-display text-base font-bold text-slate-900 dark:text-white">
+                    <h3
+                      id={walletDialog.titleId}
+                      className="font-display text-base font-bold text-slate-900 dark:text-white"
+                    >
                       {walletModalMethod === 'apple_pay'
                         ? 'Apple Pay'
                         : 'Google Pay'}

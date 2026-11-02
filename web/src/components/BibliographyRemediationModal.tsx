@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { isDocxFilename } from '@/lib/fileKind';
+import { useModalA11y } from '@/hooks/useModalA11y';
 
 interface BibliographyRemediationModalProps {
   open: boolean;
@@ -56,6 +57,7 @@ export function BibliographyRemediationModal({
   const [healedError, setHealedError] = useState<string | null>(null);
   // The healed-DOCX endpoint only works for original Word uploads (HTTP 400 for PDFs).
   const isDocxSource = isDocxFilename(filename);
+  const { dialogProps, titleId } = useModalA11y<HTMLDivElement>(open, onClose);
 
   useEffect(() => {
     if (!open || !essayId) return;
@@ -161,7 +163,8 @@ export function BibliographyRemediationModal({
       data-testid="bibliography-remediation-modal"
     >
       <div
-        className="w-full max-w-5xl max-h-[90dvh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden"
+        {...dialogProps}
+        className="w-full max-w-5xl max-h-[90dvh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header */}
@@ -172,7 +175,7 @@ export function BibliographyRemediationModal({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-display font-bold tracking-tight">
+                <h2 id={titleId} className="text-base sm:text-lg font-display font-bold tracking-tight">
                   {lang === 'vi'
                     ? '1-Click Chuẩn hóa & Sửa lỗi Danh mục Tài liệu Tham khảo'
                     : '1-Click Bibliography Auto-Remediation & Export Studio'}

@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useModalA11y } from '@/hooks/useModalA11y';
 
 export function GoogleOnboardingModal() {
   const { i18n } = useTranslation();
@@ -53,12 +54,15 @@ export function GoogleOnboardingModal() {
     setOpen(true);
   }, [user, location.pathname]);
 
-  if (!open || !user) return null;
-
-  const handleDismiss = () => {
-    sessionStorage.setItem(`google_onboarding_dismissed_${user.id}`, '1');
+  const dismiss = () => {
+    if (user) sessionStorage.setItem(`google_onboarding_dismissed_${user.id}`, '1');
     setOpen(false);
   };
+  const { dialogProps, titleId } = useModalA11y<HTMLDivElement>(open && !!user, dismiss);
+
+  if (!open || !user) return null;
+
+  const handleDismiss = dismiss;
 
   const handleSendEmailLink = async () => {
     setError('');
@@ -150,11 +154,12 @@ export function GoogleOnboardingModal() {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4"
-      role="dialog"
-      aria-modal="true"
       data-testid="google-onboarding-modal"
     >
-      <div className="relative w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+      <div
+        {...dialogProps}
+        className="relative w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden outline-none"
+      >
         {/* Top gradient bar */}
         <div className="h-1.5 w-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-emerald-500" />
 
@@ -175,7 +180,7 @@ export function GoogleOnboardingModal() {
                 ? 'THIẾT LẬP TÀI KHOẢN GOOGLE LẦN ĐẦU'
                 : 'FIRST-TIME GOOGLE ACCOUNT SETUP'}
             </span>
-            <h2 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100">
+            <h2 id={titleId} className="font-display text-xl font-bold text-slate-900 dark:text-slate-100">
               {lang === 'vi'
                 ? 'Hoàn tất hồ sơ CITRA của bạn'
                 : 'Complete your CITRA profile'}
