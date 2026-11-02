@@ -25,6 +25,7 @@ from integrity_checker.config import Settings, get_settings
 from integrity_checker.extraction.base import Document, Page
 from integrity_checker.extraction.citation_extractor import CitationExtractor
 from integrity_checker.extraction.docx_parser import DocxParser
+from integrity_checker.extraction.grobid_adapter import link_body_citations_to_grobid
 from integrity_checker.extraction.grobid_parser import (
     GrobidOutput,
     call_grobid_fulltext,
@@ -436,6 +437,14 @@ class DocumentParser:
             body_citations = self._extract_alpha_bracket_citations(
                 sections, text_doc, body_citations, references
             )
+
+        # 3.3d GROBID TEI targets → regex body citations (Stage 1 TEI_LINK in
+        # CitationLinker). No-op when GROBID output is unavailable.
+        if grobid is not None and grobid.is_available and body_citations:
+            try:
+                link_body_citations_to_grobid(body_citations, grobid, references)
+            except Exception as exc:  # noqa: BLE001 — never break parsing
+                logger.warning("GROBID TEI body linking failed: %s", exc)
 
         # 3.4 Appendix citations (chỉ track, không analyse)
         appendix_citations = self._extract_appendix_citations(sections)

@@ -777,6 +777,196 @@ def resolve_tei_links(
 
 
 # ===========================================================================
+# Enrich regex body citations with GROBID TEI targets (Stage 1 linking)
+# ===========================================================================
+
+_MARKER_TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
+_YEAR_TOKEN_RE = re.compile(r"\b((?:18|19|20)\d{2})([a-z])?\b")
+_NUMERIC_INDEX_RE = re.compile(r"\d+")
+
+
+def _fold(text: str) -> str:
+    import unicodedata
+
+    t = unicodedata.normalize("NFKD", text or "").replace("đ", "d").replace("Đ", "D")
+    return "".join(ch for ch in t if not unicodedata.combining(ch)).lower()
+
+
+def _marker_tokens(text: str) -> list[str]:
+    toks = _MARKER_TOKEN_RE.findall(_fold(text))
+    # Connector words carry no identity ("et al.", "and", "&", "và cộng sự").
+    stop = {"et", "al", "and", "va", "cong", "su", "cs", "ctv", "p", "pp", "tr"}
+    return [t for t in toks if t not in stop]
+
+
+def _is_single_key_citation(cit: Citation) -> bool:
+    """Only single-target occurrences may carry one ``grobid_ref_id``.
+
+    Multi-key parentheticals ("(A, 2020; B, 2019)") and multi-index numeric
+    markers ("[1, 2]", "[3-5]") resolve to several references; a single TEI
+    target would hide the others, so they keep the regex linking path.
+    """
+    from integrity_checker.models.citation import CitationType
+
+    raw = cit.raw_text or ""
+    if cit.citation_type == CitationType.NUMERIC:
+        return len(_NUMERIC_INDEX_RE.findall(raw)) == 1
+    if cit.citation_type != CitationType.IN_TEXT:
+        return False
+    return ";" not in raw and len(_YEAR_TOKEN_RE.findall(raw)) <= 1
+
+
+def _target_consistent(cit: Citation, bib: Citation) -> bool:
+    """Sanity check: never let a misaligned TEI link override the regex path."""
+    from integrity_checker.models.citation import CitationType
+
+    raw = cit.raw_text or ""
+    if cit.citation_type == CitationType.NUMERIC:
+        nums = _NUMERIC_INDEX_RE.findall(raw)
+        if bib.numeric_index is None:
+            return True
+        return bool(nums) and int(nums[0]) == int(bib.numeric_index)
+    cit_year = _YEAR_TOKEN_RE.search(raw)
+    bib_year = _YEAR_TOKEN_RE.search(f"{bib.year or ''} {bib.raw_text or ''}")
+    if cit_year and bib_year:
+        if cit_year.group(1) != bib_year.group(1):
+            return False
+        cit_suffix = cit_year.group(2)
+        bib_suffix = (bib.year_suffix or "").strip().lower() or next(
+            (m.group(2) for m in _YEAR_TOKEN_RE.finditer(f"{bib.year or ''} {bib.raw_text or ''}")
+             if m.group(2)),
+            None,
+        )
+        if cit_suffix and bib_suffix and cit_suffix != bib_suffix:
+            return False
+    return True
+
+
+def _attach_reference_grobid_ids(references: list, grobid_output: GrobidOutput) -> None:
+    """Give regex-derived references the TEI xml:id of their GROBID twin.
+
+    References built by the regex parser (e.g. Vietnamese bibliographies, or
+    entries GROBID merged away) carry no ``grobid_ref_id``. Match them to a
+    GROBID biblStruct by normalized DOI, then by normalized title.
+    """
+    entries = [b for b in grobid_output.bibliography if getattr(b, "id", None)]
+    if not entries:
+        return
+    taken = {
+        normalize_grobid_id(str(r.grobid_ref_id)) for r in references if r.grobid_ref_id
+    }
+
+    def _norm_doi(d: str | None) -> str:
+        d = re.sub(r"^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)", "", (d or "").strip(), flags=re.I)
+        return d.rstrip(".,;)").lower()
+
+    def _norm_title(t: str | None) -> str:
+        return " ".join(_MARKER_TOKEN_RE.findall(_fold(t or "")))
+
+    by_doi = {_norm_doi(b.doi): b for b in entries if _norm_doi(b.doi)}
+    by_title = {_norm_title(b.title): b for b in entries if len(_norm_title(b.title)) >= 12}
+    for ref in references:
+        if ref.grobid_ref_id:
+            continue
+        match = by_doi.get(_norm_doi(ref.doi)) if _norm_doi(ref.doi) else None
+        if match is None:
+            key = _norm_title(ref.title)
+            match = by_title.get(key) if len(key) >= 12 else None
+        if match is None:
+            continue
+        gid = normalize_grobid_id(str(match.id))
+        if gid in taken:
+            continue
+        ref.grobid_ref_id = gid
+        taken.add(gid)
+
+
+def link_body_citations_to_grobid(
+    body_citations: list,
+    grobid_output: GrobidOutput | None,
+    references: list | None = None,
+) -> int:
+    """Enrich regex body citations with GROBID TEI targets (Stage 1 linking).
+
+    For each GROBID in-text ``<ref type="bibr" target="#bN">`` the matching
+    regex occurrence is found by marker text (token containment, e.g. GROBID
+    "Smith, 2020" ⊆ regex "(Smith, 2020)"; numeric "3" ⊆ "[3]" but not "[13]"),
+    preferring the same page and document order. A regex citation gets
+    ``grobid_ref_id`` + ``is_grobid_linked=True`` only when:
+
+        * it is a single-key occurrence (multi-key / multi-index markers keep
+          the regex path so no target is lost);
+        * every GROBID marker mapped onto it points to the same target;
+        * the target exists among ``references`` (when given) and is
+          consistent with the occurrence (numeric index / year / suffix).
+
+    When GROBID output is missing/unavailable this is a no-op, so the regex
+    path is untouched.
+
+    Returns:
+        Number of body citations enriched.
+    """
+    if not body_citations or grobid_output is None or not grobid_output.is_available:
+        return 0
+    grobid_cits = [c for c in (grobid_output.citations or []) if c.ref_id]
+    if not grobid_cits:
+        return 0
+
+    bib_by_gid: dict[str, Citation] = {}
+    if references is not None:
+        _attach_reference_grobid_ids(references, grobid_output)
+        for ref in references:
+            if ref.grobid_ref_id:
+                bib_by_gid.setdefault(normalize_grobid_id(str(ref.grobid_ref_id)), ref)
+
+    body_tokens = [set(_marker_tokens(c.raw_text or "")) for c in body_citations]
+    assigned: dict[int, set[str]] = {}
+
+    for gcit in grobid_cits:
+        marker = _marker_tokens(gcit.raw_text or "")
+        if not marker:
+            continue
+        has_alpha = any(not t.isdigit() for t in marker)
+        if all(t.isdigit() and len(t) == 4 for t in marker):
+            # A bare "2020" (narrative "Smith (2020)") is too ambiguous.
+            continue
+        marker_set = set(marker)
+        candidates = []
+        for idx, (cit, toks) in enumerate(zip(body_citations, body_tokens, strict=True)):
+            if not marker_set <= toks:
+                continue
+            if not has_alpha and getattr(cit.citation_type, "value", "") != "numeric":
+                continue
+            candidates.append(idx)
+        if not candidates:
+            continue
+        same_page = [
+            i for i in candidates
+            if gcit.page and body_citations[i].page_num == gcit.page
+        ]
+        pool = same_page or candidates
+        chosen = next((i for i in pool if i not in assigned), pool[0])
+        assigned.setdefault(chosen, set()).add(normalize_grobid_id(str(gcit.ref_id)))
+
+    enriched = 0
+    for idx, gids in assigned.items():
+        cit = body_citations[idx]
+        if len(gids) != 1 or cit.grobid_ref_id or not _is_single_key_citation(cit):
+            continue
+        gid = next(iter(gids))
+        if references is not None:
+            bib = bib_by_gid.get(gid)
+            if bib is None or not _target_consistent(cit, bib):
+                continue
+        cit.grobid_ref_id = gid
+        cit.is_grobid_linked = True
+        enriched += 1
+    if enriched:
+        logger.info("GROBID TEI: enriched %d regex body citations with ref targets", enriched)
+    return enriched
+
+
+# ===========================================================================
 # Sample TEI fixtures for testing
 # ===========================================================================
 
@@ -819,6 +1009,7 @@ __all__ = [
     "merge_extraction_results",
     "resolve_tei_links",
     "normalize_grobid_id",
+    "link_body_citations_to_grobid",
     # Data Models
     "ProvenanceInfo",
     "MergeResult",
