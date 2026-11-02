@@ -1194,20 +1194,14 @@ export function NotificationCenterButton({
         }
         aria-label={lang === 'vi' ? 'Trung tâm thông báo' : 'Notification Center'}
         title={lang === 'vi' ? 'Trung tâm thông báo' : 'Notification Center'}
-        className={`relative inline-flex items-center justify-center rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 hover:-translate-y-[1px] active:translate-y-0 active:scale-95 transition-[transform,background-color,border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer shadow-2xs ${
-          compact ? 'h-9 w-9' : 'h-8 px-2.5 gap-1.5 text-[11px] font-mono font-semibold'
+        className={`relative inline-flex items-center justify-center rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 hover:-translate-y-[1px] active:translate-y-0 active:scale-95 transition-[transform,background-color,border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer shadow-2xs shrink-0 ${
+          compact ? 'h-9 w-9' : 'h-8 w-8'
         }`}
       >
         {notificationsEnabled ? (
-          <Bell className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <Bell className="w-4 h-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
         ) : (
-          <BellOff className="w-4 h-4 text-slate-400" />
-        )}
-
-        {!compact && (
-          <span className="hidden sm:inline">
-            {unreadCount > 0 ? unreadCount : ''}
-          </span>
+          <BellOff className="w-4 h-4 shrink-0 text-slate-400" />
         )}
 
         {/* Live Status / Unread Badge */}

@@ -202,6 +202,8 @@ describe('120fps Solva Editorial Notification Engine (ToastContext)', () => {
 
     // Open Notification Center
     const ncTrigger = screen.getByTestId('notification-center-trigger-desktop');
+    expect(ncTrigger.className).toContain('h-8 w-8');
+    expect(ncTrigger.querySelectorAll('span')).toHaveLength(1);
     fireEvent.click(ncTrigger);
 
     const panel = screen.getByTestId('notification-center-panel');

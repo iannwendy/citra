@@ -112,11 +112,12 @@ test.describe('Toast Integration', () => {
     await page.goto('/settings');
     await waitForAuth(page);
 
-    // Trigger toasts by toggling theme options
-    await page.getByRole('button', { name: 'Dark', exact: true }).click();
-    await expect(page.getByTestId('citra-toast-success')).toBeVisible();
+    // Trigger toasts by toggling language options
+    const langBtn = page.locator('button[title="Switch language (VI / EN)"]');
+    await langBtn.click();
+    await expect(page.getByTestId('citra-toast-success').first()).toBeVisible();
 
-    await page.getByRole('button', { name: 'Light', exact: true }).click();
+    await langBtn.click();
     await expect(page.getByTestId('toast-stack-toolbar')).toBeVisible();
 
     await page.getByTestId('dismiss-all-toasts-btn').click();
@@ -129,12 +130,27 @@ test.describe('Toast Integration', () => {
     await page.goto('/settings');
     await waitForAuth(page);
 
-    await page.getByRole('button', { name: 'Dark', exact: true }).click();
-    await expect(page.getByTestId('citra-toast-success')).toBeVisible();
+    const langBtn = page.locator('button[title="Switch language (VI / EN)"]');
+    await langBtn.click();
+    await expect(page.getByTestId('citra-toast-success').first()).toBeVisible();
 
-    // Open Notification Center from desktop sidebar trigger
+    // Verify notification icon is geometrically centered inside its trigger button
     const trigger = page.getByTestId('notification-center-trigger-desktop');
     await expect(trigger).toBeVisible();
+    const btnBox = await trigger.boundingBox();
+    const svgBox = await trigger.locator('svg').boundingBox();
+    expect(btnBox).not.toBeNull();
+    expect(svgBox).not.toBeNull();
+    if (btnBox && svgBox) {
+      const btnCx = btnBox.x + btnBox.width / 2;
+      const btnCy = btnBox.y + btnBox.height / 2;
+      const svgCx = svgBox.x + svgBox.width / 2;
+      const svgCy = svgBox.y + svgBox.height / 2;
+      expect(Math.abs(btnCx - svgCx)).toBeLessThanOrEqual(0.5);
+      expect(Math.abs(btnCy - svgCy)).toBeLessThanOrEqual(0.5);
+    }
+
+    // Open Notification Center from desktop sidebar trigger
     await trigger.click();
 
     const panel = page.getByTestId('notification-center-panel');
