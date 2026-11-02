@@ -20,7 +20,6 @@ import {
   CreditCard,
   Sparkles,
   Loader2,
-  ExternalLink,
 } from 'lucide-react';
 import { api, type BillingTransactionItem, type SubscriptionSummary } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -600,18 +599,6 @@ export function SettingsPage(): JSX.Element {
             label={t('settings.buildDate')}
             value={APP_BUILD_DATE}
           />
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-sm">
-            <span className="text-slate-600 dark:text-slate-400">Repository</span>
-            <a
-              href="https://github.com/iannwendy/citra"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
-            >
-              <span>{t('settings.viewSourceCode')}</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          </div>
         </div>
       </div>
     </div>

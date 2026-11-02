@@ -492,7 +492,6 @@
     "about": "About",
     "version": "Version",
     "buildDate": "Build Date",
-    "viewSourceCode": "View Source Code",
     "dangerZone": "Danger Zone",
     "clearLocalCache": "Clear Local Cache",
     "clearCacheConfirmTitle": "Clear local cache?",

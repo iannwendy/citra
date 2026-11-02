@@ -111,7 +111,7 @@ test.describe('Settings Page', () => {
     expect(pageContent).toContain('Version');
   });
 
-  test('should have about section and point View Source Code to citra', async ({ page }) => {
+  test('should have about section without source code link', async ({ page }) => {
     await page.goto('/settings');
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
@@ -120,10 +120,7 @@ test.describe('Settings Page', () => {
     expect(pageContent.toLowerCase()).toContain('about');
 
     const sourceLink = page.getByRole('link', { name: /View Source Code|Xem mã nguồn/i });
-    await expect(sourceLink).toHaveAttribute(
-      'href',
-      'https://github.com/iannwendy/citra'
-    );
+    await expect(sourceLink).toHaveCount(0);
   });
 
   test('should suppress action toasts when notifications are disabled', async ({ page }) => {
