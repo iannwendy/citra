@@ -127,3 +127,60 @@ async def test_existing_doi_in_local_db_skips_all_external_clients(tmp_path) -> 
     assert result.best_candidate() is not None
     assert result.best_candidate().paper_id == paper_id
     assert all(client.lookup.await_count == 0 for client in clients)
+
+
+def test_local_db_lru_query_cache_and_single_transaction_bulk_insert(monkeypatch, tmp_path) -> None:
+    """Verify OrderedDict LRU eviction in LocalDatabase._query_cache and single-connection add_papers_bulk."""
+    import integrity_checker.database.local_db as local_db_mod
+
+    db = LocalDatabase(tmp_path / "bulk_lru.db")
+    db._query_cache.clear()
+    monkeypatch.setattr(local_db_mod, "_QUERY_CACHE_MAX_SIZE", 3)
+
+    # 1. Verify add_papers_bulk executes all inserts in a single connection
+    papers = [
+        Paper(
+            doi=f"10.1000/bulk-{i}",
+            title=f"Bulk Paper Number {i}",
+            authors=[f"Author {i}"],
+            year=2020 + i,
+            venue="ACL",
+        )
+        for i in range(5)
+    ]
+
+    conn_open_count = 0
+    orig_get_conn = db._get_conn
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def counting_get_conn():
+        nonlocal conn_open_count
+        conn_open_count += 1
+        with orig_get_conn() as c:
+            yield c
+
+    monkeypatch.setattr(db, "_get_conn", counting_get_conn)
+    added = db.add_papers_bulk(papers)
+    assert added == 5
+    assert conn_open_count == 1
+
+    # 2. Verify OrderedDict LRU eviction preserves recently accessed entry and evicts oldest
+    db._query_cache.clear()
+    assert db.find_by_doi("10.1000/bulk-0") is not None
+    assert db.find_by_doi("10.1000/bulk-1") is not None
+    assert db.find_by_doi("10.1000/bulk-2") is not None
+    assert len(db._query_cache) == 3
+
+    # Touch bulk-0 so it moves to the most-recently-used end; bulk-1 becomes the oldest
+    assert db.find_by_doi("10.1000/bulk-0") is not None
+    # Insert bulk-3 into cache -> bulk-1 should be evicted, while bulk-0 remains cached
+    assert db.find_by_doi("10.1000/bulk-3") is not None
+    assert len(db._query_cache) == 3
+
+    cached_dois = [k[-1] for k in db._query_cache]
+    assert "10.1000/bulk-0" in cached_dois
+    assert "10.1000/bulk-2" in cached_dois
+    assert "10.1000/bulk-3" in cached_dois
+    assert "10.1000/bulk-1" not in cached_dois

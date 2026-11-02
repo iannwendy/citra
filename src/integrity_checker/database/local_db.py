@@ -16,6 +16,7 @@ import json
 import sqlite3
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
@@ -41,7 +42,7 @@ _DB_CACHE_LOCK = threading.Lock()
 _INITIALIZED_DB_INODES: dict[str, int] = {}
 _STATS_CACHE: dict[str, tuple[float, int, int, int, dict[str, Any]]] = {}
 _STATS_CACHE_TTL_SECONDS = 3600.0
-_QUERY_CACHE: dict[tuple[Any, ...], Any] = {}
+_QUERY_CACHE: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
 _QUERY_CACHE_MAX_SIZE = 2048
 _MUTATION_VERSION = 0
 
@@ -97,6 +98,7 @@ class LocalDatabase:
             db_path: Path to SQLite database file. Defaults to ./data/local_papers.db
         """
         self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+        self._query_cache = _QUERY_CACHE
         self._init_db()
 
     def _init_db(self) -> None:
@@ -309,14 +311,17 @@ class LocalDatabase:
     def _cache_get(self, key: tuple[Any, ...]) -> tuple[bool, Any]:
         with _DB_CACHE_LOCK:
             if key in _QUERY_CACHE:
+                _QUERY_CACHE.move_to_end(key)
                 return True, copy.deepcopy(_QUERY_CACHE[key])
         return False, None
 
     def _cache_set(self, key: tuple[Any, ...], value: Any) -> None:
         with _DB_CACHE_LOCK:
-            if len(_QUERY_CACHE) >= _QUERY_CACHE_MAX_SIZE:
-                _QUERY_CACHE.clear()
+            if key in _QUERY_CACHE:
+                _QUERY_CACHE.move_to_end(key)
             _QUERY_CACHE[key] = copy.deepcopy(value)
+            while len(_QUERY_CACHE) > _QUERY_CACHE_MAX_SIZE:
+                _QUERY_CACHE.popitem(last=False)
 
     def find_by_doi(self, doi: str | None) -> Paper | None:
         """Find paper by DOI.
@@ -678,7 +683,7 @@ class LocalDatabase:
     # ==================== Bulk Operations ====================
 
     def add_papers_bulk(self, papers: list[Paper]) -> int:
-        """Add multiple papers safely with DOI/arXiv normalization and conflict guards.
+        """Add multiple papers in a single SQLite connection and transaction.
 
         Args:
             papers: List of papers to add
@@ -686,10 +691,101 @@ class LocalDatabase:
         Returns:
             Number of papers added
         """
+        if not papers:
+            return 0
+
         added = 0
-        for p in papers:
-            self.add_paper(p)
-            added += 1
+        now_iso = datetime.now().isoformat()
+        with self._get_conn() as conn:
+            for paper in papers:
+                paper.doi = normalize_doi(paper.doi)
+                paper.arxiv_id = normalize_arxiv_id(paper.arxiv_id)
+
+                if not paper.doi:
+                    existing = self._find_existing_metadata_paper(paper)
+                    if existing is not None:
+                        if (
+                            paper.abstract
+                            and paper.abstract.strip()
+                            and not (existing.abstract and existing.abstract.strip())
+                        ):
+                            conn.execute(
+                                "UPDATE papers SET abstract = ? WHERE id = ?",
+                                (paper.abstract.strip(), existing.id),
+                            )
+                        added += 1
+                        continue
+
+                if paper.arxiv_id:
+                    row = conn.execute(
+                        "SELECT * FROM papers WHERE arxiv_id = ? COLLATE NOCASE",
+                        (paper.arxiv_id,),
+                    ).fetchone()
+                    if row is not None:
+                        existing_arxiv = Paper.from_dict(dict(row))
+                        if not paper.doi or normalize_doi(existing_arxiv.doi) != paper.doi:
+                            if (
+                                paper.abstract
+                                and paper.abstract.strip()
+                                and not (
+                                    existing_arxiv.abstract
+                                    and existing_arxiv.abstract.strip()
+                                )
+                            ):
+                                conn.execute(
+                                    "UPDATE papers SET abstract = ? WHERE id = ?",
+                                    (paper.abstract.strip(), existing_arxiv.id),
+                                )
+                            added += 1
+                            continue
+
+                conn.execute(
+                    """
+                    INSERT INTO papers (doi, arxiv_id, title, authors, year, venue,
+                                       abstract, categories, external_ids, source, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(doi) DO UPDATE SET
+                        title = CASE
+                            WHEN excluded.title IS NULL OR TRIM(excluded.title) = ''
+                                THEN papers.title ELSE excluded.title END,
+                        authors = CASE
+                            WHEN excluded.authors IN ('[]', '') OR excluded.authors IS NULL
+                                THEN papers.authors ELSE excluded.authors END,
+                        year = COALESCE(excluded.year, papers.year),
+                        venue = COALESCE(NULLIF(excluded.venue, ''), papers.venue),
+                        abstract = COALESCE(NULLIF(excluded.abstract, ''), papers.abstract),
+                        categories = CASE
+                            WHEN excluded.categories IN ('[]', '') OR excluded.categories IS NULL
+                                THEN papers.categories ELSE excluded.categories END,
+                        external_ids = CASE
+                            WHEN excluded.external_ids IN ('{}', '') OR excluded.external_ids IS NULL
+                                THEN papers.external_ids ELSE excluded.external_ids END,
+                        source = CASE
+                            WHEN excluded.source IN ('local_db', 'known_papers')
+                                 AND papers.source NOT IN ('local_db', 'known_papers')
+                                THEN papers.source
+                            WHEN papers.source = 'acl' AND excluded.source <> 'acl'
+                                THEN papers.source
+                            ELSE excluded.source END,
+                        created_at = papers.created_at
+                    """,
+                    (
+                        paper.doi,
+                        paper.arxiv_id,
+                        paper.title,
+                        json.dumps(paper.authors),
+                        paper.year,
+                        paper.venue,
+                        paper.abstract,
+                        json.dumps(paper.categories),
+                        json.dumps(paper.external_ids),
+                        paper.source,
+                        now_iso,
+                    ),
+                )
+                added += 1
+            conn.commit()
+        _bump_mutation_version()
         return added
 
     def get_all_papers(self, limit: int = 100, offset: int = 0) -> list[Paper]:
