@@ -106,8 +106,20 @@ export function ActivateAccountPage() {
 
   return (
     <AuthSplitShell>
-      <Card className="p-0 overflow-hidden border-slate-200/90 dark:border-slate-800/90 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-xl shadow-slate-900/5 dark:shadow-black/30 rounded-2xl">
-        <div className="h-1.5 w-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-emerald-500" />
+      <Card
+        style={{
+          backgroundColor: 'var(--solva-card-elevated)',
+          borderColor: 'var(--solva-border)',
+        }}
+        className="solva-glass-ring p-0 overflow-hidden border rounded-[18px]"
+      >
+        <div
+          style={{
+            background:
+              'linear-gradient(90deg, var(--solva-ink) 0%, #10B981 55%, var(--solva-border) 100%)',
+          }}
+          className="h-[3px] w-full opacity-85"
+        />
 
         <CardHeader className="space-y-2 pb-4 pt-5 sm:pt-6 px-4 sm:px-7">
           <div className="flex items-center justify-between gap-2">

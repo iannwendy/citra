@@ -136,4 +136,29 @@ describe('LoginPage', () => {
       ).toBeDefined();
     });
   });
+
+  it('switches live debugger trace preview tabs and detects email vs username input format', () => {
+    renderLoginPage();
+
+    // Initially shows trace [1] Vaswani et al. (2017)
+    expect(screen.getByText(/R01_DOI_MATCH/i)).toBeDefined();
+
+    // Click second trace tab [4] Nguyen & Tran
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs.length).toBe(3);
+    fireEvent.click(tabs[1]);
+    expect(screen.getByText(/R05_YEAR_DRIFT/i)).toBeDefined();
+
+    // Click third trace tab [7] Robertson & Walker
+    fireEvent.click(tabs[2]);
+    expect(screen.getByText(/R12_GHOST_DOI/i)).toBeDefined();
+
+    // Typing a username shows USERNAME pill, typing an email shows EMAIL pill
+    const usernameInput = screen.getByLabelText(/username|tên đăng nhập/i);
+    fireEvent.change(usernameInput, { target: { value: 'scholar_user' } });
+    expect(screen.getByText('USERNAME')).toBeDefined();
+
+    fireEvent.change(usernameInput, { target: { value: 'scholar@tdtu.edu.vn' } });
+    expect(screen.getByText('EMAIL')).toBeDefined();
+  });
 });

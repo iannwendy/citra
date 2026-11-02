@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
@@ -17,11 +17,11 @@ import {
   Check,
   CheckCircle2,
   Mail,
+  ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -30,7 +30,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export function LoginPage() {
@@ -41,16 +40,25 @@ export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [focusedField, setFocusedField] = useState<'username' | 'password' | null>(null);
+  const [capsLockOn, setCapsLockOn] = useState(false);
   const [error, setError] = useState('');
   const [needsActivation, setNeedsActivation] = useState(false);
   const [resending, setResending] = useState(false);
   const [resentSuccess, setResentSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [copiedDemo, setCopiedDemo] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const raf = window.requestAnimationFrame(() => setMounted(true));
+    return () => window.cancelAnimationFrame(raf);
+  }, []);
 
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const activatedParam = searchParams.get('activated') === '1';
   const resetParam = searchParams.get('reset') === '1';
+  const isEmailFormat = username.includes('@');
 
   const handleFillDemo = () => {
     setUsername('admin');
@@ -60,6 +68,12 @@ export function LoginPage() {
     setResentSuccess('');
     setCopiedDemo(true);
     window.setTimeout(() => setCopiedDemo(false), 1800);
+  };
+
+  const handlePasswordKeyEvent = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (typeof e.getModifierState === 'function') {
+      setCapsLockOn(e.getModifierState('CapsLock'));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -107,35 +121,77 @@ export function LoginPage() {
 
   return (
     <AuthSplitShell>
-      <Card className="p-0 overflow-hidden border-slate-200/90 dark:border-slate-800/90 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-xl shadow-slate-900/5 dark:shadow-black/30 rounded-2xl">
-        {/* Top Gradient Accent Bar */}
-        <div className="h-1.5 w-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-emerald-500" />
+      <Card
+        style={{
+          backgroundColor: 'var(--solva-card-elevated)',
+          borderColor: 'var(--solva-border)',
+        }}
+        className="solva-glass-ring p-0 overflow-hidden border rounded-[18px] transition-all duration-300"
+      >
+        {/* Top Solva Editorial Hairline Accent */}
+        <div
+          style={{
+            background:
+              'linear-gradient(90deg, var(--solva-ink) 0%, #10B981 55%, var(--solva-border) 100%)',
+          }}
+          className="h-[3px] w-full opacity-85"
+        />
 
-        <CardHeader className="space-y-2 pb-4 sm:pb-5 pt-5 sm:pt-6 px-4 sm:px-7">
+        <CardHeader className="space-y-2.5 pb-4 sm:pb-5 pt-5 sm:pt-6 px-5 sm:px-7">
+          {/* Eyebrow Row */}
           <div className="flex items-center justify-between gap-2">
-            <Badge
-              variant="outline"
-              className="font-mono text-[10px] uppercase tracking-wider px-2.5 py-0.5 bg-indigo-50/80 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border-indigo-200/70 dark:border-indigo-800/70 whitespace-nowrap"
+            <div
+              style={{
+                backgroundColor: 'var(--solva-surface)',
+                borderColor: 'var(--solva-border)',
+                color: 'var(--solva-ink)',
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] border font-mono text-[10px] uppercase tracking-wider font-semibold whitespace-nowrap"
             >
-              <Lock className="h-3 w-3 mr-1 shrink-0" />
-              {lang === 'vi' ? 'Xác thực Hệ thống' : 'Workspace Sign In'}
-            </Badge>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <Lock className="h-3 w-3 shrink-0 opacity-80" />
+              <span>
+                {lang === 'vi' ? 'Xác thực Hệ thống' : 'Workspace Sign In'}
+              </span>
+            </div>
+
+            <span
+              style={{ color: 'var(--solva-muted)' }}
+              className="inline-flex items-center gap-1 font-mono text-[10px]"
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>SSO · RBAC</span>
+            </span>
           </div>
 
-          <CardTitle className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white pt-1">
+          {/* Sentient Light Editorial Title */}
+          <CardTitle
+            style={{
+              color: 'var(--solva-ink)',
+              opacity: mounted ? 1 : 0.01,
+              transform: mounted ? 'translate3d(0, 0, 0)' : 'translate3d(0, 12px, 0)',
+              transition:
+                'opacity 520ms cubic-bezier(0.22, 1, 0.36, 1), transform 520ms cubic-bezier(0.22, 1, 0.36, 1)',
+            }}
+            className="font-solva-serif font-light text-[30px] sm:text-[34px] leading-[1.08] tracking-[-0.04em] pt-0.5"
+          >
             {t('auth.welcomeBack')}
           </CardTitle>
-          <CardDescription className="text-sm text-slate-600 dark:text-slate-400">
+
+          <CardDescription
+            style={{ color: 'var(--solva-muted)' }}
+            className="font-solva-sans text-[14px] sm:text-[15px] leading-relaxed"
+          >
             {t('auth.signInSubtitle')}
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="px-4 sm:px-7 pb-5 sm:pb-6">
+        <CardContent className="px-5 sm:px-7 pb-5 sm:pb-6">
           {/* Activated or Password Reset Success Banner */}
           {(activatedParam || resetParam || resentSuccess) && !error && (
-            <Alert className="mb-5 border-emerald-200/90 dark:border-emerald-800/80 bg-emerald-50/90 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-200">
+            <Alert className="mb-4 rounded-[12px] border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 animate-debugger-switch">
               <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              <AlertDescription className="text-xs sm:text-sm font-medium text-emerald-800 dark:text-emerald-200">
+              <AlertDescription className="text-xs sm:text-sm font-medium text-emerald-900 dark:text-emerald-200">
                 {resentSuccess
                   ? resentSuccess
                   : activatedParam
@@ -147,7 +203,10 @@ export function LoginPage() {
 
           {/* Error Message */}
           {error && (
-            <Alert variant="destructive" className="mb-5">
+            <Alert
+              variant="destructive"
+              className="mb-4 rounded-[12px] animate-error-shake"
+            >
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="text-xs sm:text-sm font-medium">
                 {error}
@@ -155,66 +214,148 @@ export function LoginPage() {
             </Alert>
           )}
 
-          {/* Login Form */}
+          {/* Login Form (Contains ZERO <button><svg> before #password Eye toggle) */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label
-                htmlFor="username"
-                className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300"
-              >
-                {t('auth.username')}
-              </Label>
+            {/* Username / Email Input */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <Label
+                  htmlFor="username"
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="font-mono text-[11px] font-semibold uppercase tracking-wider"
+                >
+                  {t('auth.username')}
+                </Label>
+                {username.trim().length > 0 && (
+                  <span
+                    style={{
+                      backgroundColor: 'var(--solva-surface)',
+                      borderColor: 'var(--solva-border)',
+                      color: 'var(--solva-muted)',
+                    }}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold border"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    {isEmailFormat ? 'EMAIL' : 'USERNAME'}
+                  </span>
+                )}
+              </div>
+
               <div className="relative">
-                <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
-                  <User className="h-4 w-4" />
+                <div
+                  style={{
+                    color:
+                      focusedField === 'username'
+                        ? 'var(--solva-ink)'
+                        : 'var(--solva-muted)',
+                  }}
+                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors duration-200"
+                >
+                  {isEmailFormat ? (
+                    <Mail className="h-4 w-4" />
+                  ) : (
+                    <User className="h-4 w-4" />
+                  )}
                 </div>
                 <Input
                   id="username"
                   type="text"
                   value={username}
+                  onFocus={() => setFocusedField('username')}
+                  onBlur={() => setFocusedField(null)}
                   onChange={(e) => setUsername(e.target.value)}
                   required
                   autoComplete="username"
-                  className="h-11 pl-10 bg-slate-50/60 dark:bg-slate-950/60 focus-visible:bg-white dark:focus-visible:bg-slate-900"
+                  style={{
+                    backgroundColor:
+                      focusedField === 'username'
+                        ? 'var(--solva-card-elevated)'
+                        : 'var(--solva-surface)',
+                    borderColor:
+                      focusedField === 'username'
+                        ? 'var(--solva-ink)'
+                        : 'var(--solva-border)',
+                    color: 'var(--solva-ink)',
+                  }}
+                  className="h-11 pl-10 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20"
                   placeholder={t('auth.usernamePlaceholder')}
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
+            {/* Password Input */}
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <Label
                   htmlFor="password"
-                  className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300"
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="font-mono text-[11px] font-semibold uppercase tracking-wider"
                 >
                   {t('auth.password')}
                 </Label>
-                <Link
-                  to="/forgot-password"
-                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline transition-colors"
-                >
-                  {t('auth.forgotPasswordLink')}
-                </Link>
+                <div className="flex items-center gap-2">
+                  {capsLockOn && (
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 font-mono text-[9px] font-semibold">
+                      CAPS LOCK
+                    </span>
+                  )}
+                  <Link
+                    to="/forgot-password"
+                    style={{ color: 'var(--solva-muted)' }}
+                    className="font-solva-sans text-xs font-medium hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] hover:underline underline-offset-4 transition-colors"
+                  >
+                    {t('auth.forgotPasswordLink')}
+                  </Link>
+                </div>
               </div>
+
               <div className="relative">
-                <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
+                <div
+                  style={{
+                    color:
+                      focusedField === 'password'
+                        ? 'var(--solva-ink)'
+                        : 'var(--solva-muted)',
+                  }}
+                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors duration-200"
+                >
                   <KeyRound className="h-4 w-4" />
                 </div>
                 <Input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => {
+                    setFocusedField(null);
+                    setCapsLockOn(false);
+                  }}
+                  onKeyDown={handlePasswordKeyEvent}
+                  onKeyUp={handlePasswordKeyEvent}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
-                  className="h-11 pl-10 pr-11 bg-slate-50/60 dark:bg-slate-950/60 focus-visible:bg-white dark:focus-visible:bg-slate-900"
+                  style={{
+                    backgroundColor:
+                      focusedField === 'password'
+                        ? 'var(--solva-card-elevated)'
+                        : 'var(--solva-surface)',
+                    borderColor:
+                      focusedField === 'password'
+                        ? 'var(--solva-ink)'
+                        : 'var(--solva-border)',
+                    color: 'var(--solva-ink)',
+                  }}
+                  className="h-11 pl-10 pr-11 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20"
                   placeholder={t('auth.passwordPlaceholder')}
                 />
+                {/* IMPORTANT: First <button> with <svg> in DOM for E2E test compatibility */}
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? 'Hide characters' : 'Show characters'}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  style={{ color: 'var(--solva-muted)' }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-[8px] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] transition-colors cursor-pointer"
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -227,8 +368,8 @@ export function LoginPage() {
 
             {/* Resend Activation Action Box (placed after #password toggle in DOM) */}
             {needsActivation && (
-              <div className="rounded-xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-800/70 p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
-                <div className="text-xs text-amber-800 dark:text-amber-200 font-medium">
+              <div className="rounded-[12px] bg-amber-500/10 border border-amber-500/25 p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 animate-debugger-switch">
+                <div className="text-xs text-amber-900 dark:text-amber-200 font-medium">
                   {t('auth.accountNotActivatedTitle')}
                 </div>
                 <Button
@@ -237,7 +378,7 @@ export function LoginPage() {
                   size="sm"
                   disabled={resending}
                   onClick={handleResendActivation}
-                  className="h-8 px-3 text-xs font-semibold border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-100 hover:bg-amber-100 dark:hover:bg-amber-900/60 cursor-pointer shrink-0"
+                  className="h-8 px-3 text-xs font-semibold border-amber-400/60 dark:border-amber-700 text-amber-900 dark:text-amber-100 hover:bg-amber-500/15 cursor-pointer shrink-0"
                 >
                   <Mail className="h-3.5 w-3.5 mr-1.5" />
                   <span>
@@ -249,86 +390,141 @@ export function LoginPage() {
               </div>
             )}
 
-            <Button
+            {/* Primary Solva Vertical Slot-Roll Submit Button */}
+            <button
               type="submit"
               disabled={loading}
-              size="lg"
-              className="w-full h-11 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 mt-2 cursor-pointer"
+              style={{
+                backgroundColor: 'var(--solva-btn-bg)',
+                color: 'var(--solva-btn-fg)',
+              }}
+              className="group relative w-full h-[46px] px-5 rounded-[11px] font-solva-sans text-[14px] font-medium flex items-center justify-center shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.985] disabled:opacity-55 disabled:pointer-events-none cursor-pointer select-none mt-2"
             >
               {loading ? (
-                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="h-5 w-5 border-2 border-current/30 border-t-current rounded-full animate-spin" />
               ) : (
-                <>
-                  <span>{t('auth.signIn')}</span>
-                  <ArrowRight className="h-4 w-4" />
-                </>
+                <span className="relative h-[22px] overflow-hidden flex flex-col items-center">
+                  <span className="flex flex-col transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-y-[22px]">
+                    <span className="h-[22px] flex items-center justify-center whitespace-nowrap gap-2">
+                      <span>{t('auth.signIn')}</span>
+                      <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+                    </span>
+                    <span
+                      className="h-[22px] flex items-center justify-center whitespace-nowrap gap-2"
+                      aria-hidden="true"
+                    >
+                      <span>{t('auth.signIn')}</span>
+                      <ArrowRight className="h-4 w-4 translate-x-0.5" />
+                    </span>
+                  </span>
+                </span>
               )}
-            </Button>
+            </button>
           </form>
 
           {/* Google OAuth Sign-In (placed after form so #password Eye toggle remains first SVG button) */}
           <GoogleAuthButton onError={setError} disabled={loading} />
 
           {/* Create Account Link */}
-          <div className="mt-5 pt-4 border-t border-slate-200/70 dark:border-slate-800/70 text-center text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+          <div
+            style={{
+              borderColor: 'var(--solva-border)',
+              color: 'var(--solva-muted)',
+            }}
+            className="mt-5 pt-4 border-t text-center font-solva-sans text-xs sm:text-sm"
+          >
             <span>{t('auth.noAccountPrompt')} </span>
             <Link
               to="/register"
-              className="font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline transition-colors"
+              style={{ color: 'var(--solva-ink)' }}
+              className="font-semibold underline underline-offset-4 decoration-[#1C1A15]/35 dark:decoration-[#FBFAF6]/35 hover:decoration-current transition-colors"
             >
               {t('auth.createAccountLink')}
             </Link>
           </div>
         </CardContent>
 
-        {/* Demo Credentials Hint (Interactive Quick-Fill) */}
+        {/* Demo Credentials Dock (Interactive Role Workspace Quick-Fill) */}
         {import.meta.env.VITE_DEMO_MODE === 'true' && (
-          <>
-            <Separator className="bg-slate-200/80 dark:bg-slate-800/80" />
-            <CardFooter className="px-6 sm:px-7 py-4 bg-slate-50/80 dark:bg-slate-950/60 flex flex-col items-stretch gap-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
-                  <Terminal className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                  <span>{t('auth.demoCredentials')}</span>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleFillDemo}
-                  className="h-7 px-2.5 text-[11px] font-mono rounded-lg border-indigo-200 dark:border-indigo-800/80 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 cursor-pointer shrink-0"
-                >
-                  {copiedDemo ? (
-                    <>
-                      <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                      <span>{lang === 'vi' ? 'Đã điền' : 'Filled'}</span>
-                    </>
-                  ) : (
-                    <span>{lang === 'vi' ? 'Điền nhanh' : 'Quick Fill'}</span>
-                  )}
-                </Button>
+          <CardFooter
+            style={{
+              backgroundColor: 'var(--solva-surface)',
+              borderColor: 'var(--solva-border)',
+            }}
+            className="px-5 sm:px-7 py-3.5 border-t flex flex-col items-stretch gap-2.5"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div
+                style={{ color: 'var(--solva-ink)' }}
+                className="flex items-center gap-1.5 text-xs font-solva-sans font-semibold"
+              >
+                <Terminal className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                <span>{t('auth.demoCredentials')}</span>
               </div>
+              <button
+                type="button"
+                onClick={handleFillDemo}
+                style={{
+                  backgroundColor: 'var(--solva-card-elevated)',
+                  borderColor: 'var(--solva-border)',
+                  color: 'var(--solva-ink)',
+                }}
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-[11px] font-mono font-semibold rounded-[7px] border hover:opacity-85 transition-opacity cursor-pointer shrink-0 shadow-2xs"
+              >
+                {copiedDemo ? (
+                  <>
+                    <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                    <span>{lang === 'vi' ? 'Đã điền' : 'Filled'}</span>
+                  </>
+                ) : (
+                  <span>{lang === 'vi' ? 'Điền nhanh' : 'Quick Fill'}</span>
+                )}
+              </button>
+            </div>
 
-              <div className="grid grid-cols-2 gap-2.5 font-mono">
-                <div className="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex flex-col gap-0.5">
-                  <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    {t('auth.username')}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                    admin
-                  </span>
-                </div>
-                <div className="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex flex-col gap-0.5">
-                  <span className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    {t('auth.password')}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-                    admin123
-                  </span>
-                </div>
+            <div className="grid grid-cols-2 gap-2 font-mono">
+              <div
+                style={{
+                  backgroundColor: 'var(--solva-card-elevated)',
+                  borderColor: 'var(--solva-border)',
+                }}
+                className="px-3 py-2 rounded-[9px] border flex flex-col gap-0.5"
+              >
+                <span
+                  style={{ color: 'var(--solva-muted)' }}
+                  className="text-[10px] uppercase tracking-wider"
+                >
+                  {t('auth.username')}
+                </span>
+                <span
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="text-xs font-semibold"
+                >
+                  admin
+                </span>
               </div>
-            </CardFooter>
-          </>
+              <div
+                style={{
+                  backgroundColor: 'var(--solva-card-elevated)',
+                  borderColor: 'var(--solva-border)',
+                }}
+                className="px-3 py-2 rounded-[9px] border flex flex-col gap-0.5"
+              >
+                <span
+                  style={{ color: 'var(--solva-muted)' }}
+                  className="text-[10px] uppercase tracking-wider"
+                >
+                  {t('auth.password')}
+                </span>
+                <span
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="text-xs font-semibold"
+                >
+                  admin123
+                </span>
+              </div>
+            </div>
+          </CardFooter>
         )}
       </Card>
     </AuthSplitShell>

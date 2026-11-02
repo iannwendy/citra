@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AuthContext } from '@/contexts/AuthContext';
 import { api } from '@/api/client';
-import { Button } from '@/components/ui/button';
 
 interface GoogleTokenResponse {
   access_token?: string;
@@ -71,7 +70,7 @@ function loadGoogleIdentityScript(): Promise<void> {
 function GoogleLogoIcon() {
   return (
     <svg
-      className="h-4 w-4 shrink-0"
+      className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110"
       viewBox="0 0 24 24"
       aria-hidden="true"
       focusable="false"
@@ -231,25 +230,37 @@ export function GoogleAuthButton({ onError, disabled = false }: GoogleAuthButton
     <div className="mt-4 space-y-3.5">
       <div className="relative flex items-center justify-center">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-slate-200/80 dark:border-slate-800/80" />
+          <div
+            style={{ borderColor: 'var(--solva-border)' }}
+            className="w-full border-t"
+          />
         </div>
-        <span className="relative bg-white dark:bg-slate-900 px-3 text-[11px] font-mono uppercase tracking-wider text-slate-400 dark:text-slate-500">
+        <span
+          style={{
+            backgroundColor: 'var(--solva-card-elevated)',
+            color: 'var(--solva-muted)',
+          }}
+          className="relative px-3 text-[11px] font-mono uppercase tracking-wider"
+        >
           {t('auth.orContinueWith')}
         </span>
       </div>
 
-      <Button
+      <button
         type="button"
-        variant="outline"
-        size="lg"
         disabled={disabled || googleLoading}
         onClick={handleGoogleClick}
         data-testid="google-auth-button"
-        className="w-full h-11 rounded-xl text-sm font-semibold border-slate-200/90 dark:border-slate-700/90 bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/80 text-slate-700 dark:text-slate-200 shadow-2xs transition-colors flex items-center justify-center gap-2.5 cursor-pointer"
+        style={{
+          backgroundColor: 'var(--solva-surface)',
+          borderColor: 'var(--solva-border)',
+          color: 'var(--solva-ink)',
+        }}
+        className="group relative w-full h-[44px] px-4 rounded-[11px] border font-solva-sans text-[14px] font-medium flex items-center justify-center gap-2.5 transition-all duration-200 hover:-translate-y-[1px] hover:shadow-sm active:scale-[0.985] disabled:opacity-50 disabled:pointer-events-none cursor-pointer select-none"
       >
         {googleLoading ? (
           <>
-            <div className="h-4 w-4 border-2 border-slate-300 dark:border-slate-600 border-t-indigo-600 rounded-full animate-spin" />
+            <div className="h-4 w-4 border-2 border-[#D6D0C4] dark:border-[#332F26] border-t-[#1C1A15] dark:border-t-[#FBFAF6] rounded-full animate-spin" />
             <span>{t('auth.connectingGoogle')}</span>
           </>
         ) : (
@@ -258,7 +269,7 @@ export function GoogleAuthButton({ onError, disabled = false }: GoogleAuthButton
             <span>{t('auth.continueWithGoogle')}</span>
           </>
         )}
-      </Button>
+      </button>
     </div>
   );
 }
