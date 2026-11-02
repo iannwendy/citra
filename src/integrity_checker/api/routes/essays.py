@@ -458,9 +458,14 @@ def get_essay_status(
             return resumed_state.to_snapshot()
         return state.to_snapshot()
 
-    # No tracker entry — fall back to DB state
+    # No tracker entry — fall back to DB state (verdicts/CIS or persisted progress snapshot)
     verdicts = repo.get_verdicts(essay_id)
-    if verdicts or essay.cis_json is not None:
+    persisted_snap = tracker.load_persisted_snapshot(essay_id, essay)
+    if (
+        verdicts
+        or essay.cis_json is not None
+        or (persisted_snap is not None and persisted_snap.get("status") == "completed")
+    ):
         extracted = repo.get_citations(essay_id)
         doc_diag = None
         if essay.style_profile_json:
@@ -471,7 +476,7 @@ def get_essay_status(
                     doc_diag = sp_parsed.get("document_diagnostics")
             except Exception:
                 doc_diag = None
-        # Pipeline completed (possibly via cache hit or prior run)
+        # Pipeline completed (possibly via cache hit, prior run, or another worker)
         return {
             "status": "completed",
             "step": "done",
@@ -481,12 +486,19 @@ def get_essay_status(
             "citations_found": sum(c.citation_type in {"in_text", "numeric"} for c in extracted),
             "references_found": sum(c.citation_type == "reference_list" for c in extracted),
             "linked": sum(v.mapping_status == "matched" for v in verdicts),
-            "sources_queried": {},
-            "elapsed_seconds": 0.0,
-            "finished_at": None,
+            "sources_queried": (persisted_snap or {}).get("sources_queried", {}),
+            "elapsed_seconds": float((persisted_snap or {}).get("elapsed_seconds", 0.0) or 0.0),
+            "finished_at": (persisted_snap or {}).get("finished_at"),
             "error": None,
             "document_diagnostics": doc_diag,
         }
+
+    if persisted_snap is not None and persisted_snap.get("status") in (
+        "failed",
+        "processing",
+        "queued",
+    ):
+        return persisted_snap
 
     # Server restarted before background analysis finished: auto-resume at most once
     # if the uploaded PDF is persisted on disk.

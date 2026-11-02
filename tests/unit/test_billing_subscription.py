@@ -1504,6 +1504,50 @@ def test_pipeline_run_async_offloads_parser_and_checker_to_thread(monkeypatch, t
     assert mock_doc_parser.parse.call_count == 1
 
 
+def test_essay_status_falls_back_to_db_when_in_memory_tracker_cleared() -> None:
+    """Verify GET /api/essays/{id}/status recovers completed and failed status from DB when in-memory tracker is cleared."""
+    from integrity_checker.api.progress import get_tracker
+
+    client = TestClient(app)
+    token, user_data = _login_user(client, "user", "user123")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    session = get_session()
+    repo = Repository(session)
+    essay_done = repo.create_essay_with_user("multi_worker_done.pdf", 2, user_data["id"])
+    essay_failed = repo.create_essay_with_user("multi_worker_failed.pdf", 1, user_data["id"])
+    session.commit()
+    done_id = essay_done.id
+    failed_id = essay_failed.id
+    session.close()
+
+    tracker = get_tracker()
+    tracker.init(done_id)
+    tracker.update(done_id, sources_queried={"crossref": "ok"})
+    tracker.complete(done_id)
+    # Simulate another worker process where in-memory tracker does not have done_id
+    tracker.clear(done_id)
+    assert tracker.get(done_id) is None
+
+    done_resp = client.get(f"/api/essays/{done_id}/status", headers=headers)
+    assert done_resp.status_code == 200
+    done_data = done_resp.json()
+    assert done_data["status"] == "completed"
+    assert done_data["step"] == "done"
+    assert done_data["sources_queried"] == {"crossref": "ok"}
+
+    tracker.init(failed_id)
+    tracker.fail(failed_id, "Analysis failed due to an internal processing error.")
+    tracker.clear(failed_id)
+    assert tracker.get(failed_id) is None
+
+    fail_resp = client.get(f"/api/essays/{failed_id}/status", headers=headers)
+    assert fail_resp.status_code == 200
+    fail_data = fail_resp.json()
+    assert fail_data["status"] == "failed"
+    assert "Analysis failed" in (fail_data["error"] or "")
+
+
 
 
 

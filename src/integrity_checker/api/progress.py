@@ -10,6 +10,7 @@ losses heal naturally on the next call.
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import asdict, dataclass, field
 from threading import Lock
@@ -81,6 +82,57 @@ class ProgressTracker:
             self._states.pop(eid, None)
             self._retry_counts.pop(eid, None)
 
+    def _persist_snapshot(self, essay_id: int, snapshot: dict[str, Any]) -> None:
+        """Best-effort persistence of progress snapshot to EssayRecord for multi-worker fallback."""
+        try:
+            from integrity_checker.db.models import EssayRecord
+            from integrity_checker.db.session import get_session
+
+            session = get_session()
+            try:
+                essay = session.get(EssayRecord, essay_id)
+                if essay is not None:
+                    existing: dict[str, Any] = {}
+                    if essay.style_profile_json:
+                        try:
+                            parsed = json.loads(essay.style_profile_json)
+                            if isinstance(parsed, dict):
+                                existing = parsed
+                        except Exception:
+                            existing = {}
+                    existing["_progress_snapshot"] = dict(snapshot)
+                    essay.style_profile_json = json.dumps(existing)
+                    session.commit()
+            finally:
+                session.close()
+        except Exception:
+            pass
+
+    def load_persisted_snapshot(
+        self, essay_id: int, essay_record: Any | None = None
+    ) -> dict[str, Any] | None:
+        """Load persisted progress snapshot from EssayRecord when in-memory state is absent."""
+        try:
+            raw_json = getattr(essay_record, "style_profile_json", None) if essay_record is not None else None
+            if raw_json is None and essay_record is None:
+                from integrity_checker.db.models import EssayRecord
+                from integrity_checker.db.session import get_session
+
+                session = get_session()
+                try:
+                    row = session.get(EssayRecord, essay_id)
+                    raw_json = getattr(row, "style_profile_json", None) if row is not None else None
+                finally:
+                    session.close()
+            if not raw_json:
+                return None
+            parsed = json.loads(raw_json)
+            if isinstance(parsed, dict) and isinstance(parsed.get("_progress_snapshot"), dict):
+                return dict(parsed["_progress_snapshot"])
+        except Exception:
+            return None
+        return None
+
     def init(self, essay_id: int, is_retry: bool = False) -> ProgressState:
         """Create a fresh state for an essay (overwrites any prior state)."""
         with self._lock:
@@ -100,7 +152,9 @@ class ProgressTracker:
                 retry_count=self._retry_counts.get(essay_id, 0),
             )
             self._states[essay_id] = state
-            return state
+            snapshot = state.to_snapshot()
+        self._persist_snapshot(essay_id, snapshot)
+        return state
 
     def can_auto_retry(self, essay_id: int) -> bool:
         """Return True if essay_id has not exceeded MAX_AUTO_RETRIES."""
@@ -113,14 +167,28 @@ class ProgressTracker:
 
     def update(self, essay_id: int, **fields: Any) -> ProgressState | None:
         """Merge ``fields`` into the state. Returns None if essay unknown."""
+        snapshot: dict[str, Any] | None = None
+        should_persist = False
         with self._lock:
             state = self._states.get(essay_id)
             if state is None:
                 return None
+            prev_status = state.status
+            prev_step = state.step
             for key, value in fields.items():
                 if hasattr(state, key):
                     setattr(state, key, value)
-            return state
+            if (
+                state.status != prev_status
+                or state.step != prev_step
+                or "finished_at" in fields
+                or "error" in fields
+            ):
+                should_persist = True
+                snapshot = state.to_snapshot()
+        if should_persist and snapshot is not None:
+            self._persist_snapshot(essay_id, snapshot)
+        return state
 
     def complete(self, essay_id: int) -> ProgressState | None:
         """Mark complete; keep state around briefly so frontend can read it."""
