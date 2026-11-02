@@ -20,9 +20,7 @@ import { useModalA11y } from '@/hooks/useModalA11y';
 
 export function GoogleOnboardingModal() {
   const { i18n } = useTranslation();
-  const lang = (i18n.resolvedLanguage || i18n.language || 'vi').startsWith('vi')
-    ? 'vi'
-    : 'en';
+  const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const location = useLocation();
   const { user, refreshUser } = useAuth();
 

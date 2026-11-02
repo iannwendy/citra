@@ -1556,7 +1556,7 @@ export function EssayPage() {
   const { has } = useRole();
   const canViewDeepTrace = has('view_logic_trace');
   const canOverride = has('override_verdict');
-  const lang: 'vi' | 'en' = i18n.language?.startsWith('en') ? 'en' : 'vi';
+  const lang: 'vi' | 'en' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
 
   const { id } = useParams<{ id: string }>();
   const numericId = id ? parseInt(id, 10) : null;

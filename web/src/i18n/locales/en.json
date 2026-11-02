@@ -191,8 +191,8 @@
     "noDocumentsMatch": "No documents match \"{{query}}\"",
     "clearSearch": "Clear search",
     "noDocumentsStudent": "Upload your first document to start verifying citations",
-    "noDocumentsAdmin": "Chưa có bài nộp nào trong hệ thống.",
-    "noDocumentsTeacher": "Chưa có bài nộp nào trong lớp bạn phụ trách.",
+    "noDocumentsAdmin": "No submissions in the system yet.",
+    "noDocumentsTeacher": "No submissions in your classes yet.",
     "uploadDocument": "Upload Document",
     "tableDocument": "Document",
     "tablePages": "Pages",
@@ -444,7 +444,8 @@
     "confirm": "Confirm Override",
     "overrideBtn": "Override",
     "overriddenBtn": "Overridden",
-    "successToast": "Verdict overridden & logged in audit trail"
+    "successToast": "Verdict overridden & logged in audit trail",
+    "errorToast": "Failed to update verdict override. Please try again."
   },
   "admin": {
     "accountManagement": "Account Management",

@@ -444,7 +444,8 @@
     "confirm": "Xác nhận ghi đè",
     "overrideBtn": "Ghi đè",
     "overriddenBtn": "Đã ghi đè",
-    "successToast": "Đã ghi đè verdict & ghi nhật ký kiểm toán"
+    "successToast": "Đã ghi đè verdict & ghi nhật ký kiểm toán",
+    "errorToast": "Không thể cập nhật phán quyết ghi đè. Vui lòng thử lại."
   },
   "admin": {
     "accountManagement": "Quản lý tài khoản",
