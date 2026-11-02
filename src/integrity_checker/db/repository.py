@@ -624,6 +624,7 @@ class Repository:
         subtotal_usd: float | None = None,
         discount_usd: float = 0.0,
         promo_code: str | None = None,
+        amount_vnd: int | None = None,
         currency: str = "usd",
         status: str = "pending",
         payment_mode: str = "stripe_demo",
@@ -643,6 +644,7 @@ class Repository:
             discount_usd=float(discount_usd or 0.0),
             promo_code=promo_code,
             amount_usd=float(amount_usd),
+            amount_vnd=int(amount_vnd) if amount_vnd is not None else None,
             currency=currency,
             status=status,
             payment_mode=payment_mode,
@@ -664,6 +666,22 @@ class Repository:
             .filter(BillingTransaction.stripe_session_id == stripe_session_id)
             .first()
         )
+
+    def get_billing_transaction_by_vnp_txn_ref(
+        self, vnp_txn_ref: str
+    ) -> BillingTransaction | None:
+        normalized = (vnp_txn_ref or "").strip()
+        if not normalized:
+            return None
+        tx = (
+            self.session.query(BillingTransaction)
+            .filter(BillingTransaction.vnp_txn_ref == normalized)
+            .first()
+        )
+        if tx is not None:
+            return tx
+        # Fallback: check if vnp_TxnRef matches stripe_session_id directly
+        return self.get_billing_transaction_by_session(normalized)
 
     def list_billing_transactions_for_user(
         self, user_id: int, limit: int = 50

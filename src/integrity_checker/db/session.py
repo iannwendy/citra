@@ -288,6 +288,33 @@ def _run_inline_migrations(engine: Engine) -> None:
                 conn.exec_driver_sql(
                     "ALTER TABLE billing_transactions ADD COLUMN billing_zip VARCHAR(20)"
                 )
+            if "amount_vnd" not in bt_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE billing_transactions ADD COLUMN amount_vnd INTEGER"
+                )
+            if "vnp_txn_ref" not in bt_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE billing_transactions ADD COLUMN vnp_txn_ref VARCHAR(120)"
+                )
+                conn.exec_driver_sql(
+                    "CREATE INDEX IF NOT EXISTS idx_billing_transactions_vnp_txn_ref ON billing_transactions(vnp_txn_ref)"
+                )
+            if "vnp_transaction_no" not in bt_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE billing_transactions ADD COLUMN vnp_transaction_no VARCHAR(64)"
+                )
+            if "vnp_bank_code" not in bt_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE billing_transactions ADD COLUMN vnp_bank_code VARCHAR(32)"
+                )
+            if "vnp_card_type" not in bt_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE billing_transactions ADD COLUMN vnp_card_type VARCHAR(32)"
+                )
+            if "vnp_response_code" not in bt_cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE billing_transactions ADD COLUMN vnp_response_code VARCHAR(10)"
+                )
 
         # --- Clean up any historical orphan rows ---
         conn.exec_driver_sql(

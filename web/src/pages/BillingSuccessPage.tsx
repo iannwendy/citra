@@ -37,7 +37,24 @@ export function BillingSuccessPage() {
     let active = true;
     async function finalize() {
       try {
-        if (sessionId) {
+        // Collect any vnp_* parameters if redirected from VNPay ReturnURL
+        const vnpParams: Record<string, string> = {};
+        searchParams.forEach((value, key) => {
+          if (key.startsWith('vnp_')) {
+            vnpParams[key] = value;
+          }
+        });
+
+        if (vnpParams.vnp_SecureHash && vnpParams.vnp_TxnRef) {
+          const vnpRes = await api.verifyVNPayReturn({
+            vnp_params: vnpParams,
+            session_id: sessionId || null,
+          });
+          if (active) {
+            setSubscription(vnpRes.subscription);
+            setTransaction(vnpRes.transaction);
+          }
+        } else if (sessionId) {
           const res = await api.verifyCheckoutSession({ session_id: sessionId });
           if (active) {
             setSubscription(res.subscription);
@@ -88,6 +105,15 @@ export function BillingSuccessPage() {
 
   const tier = subscription?.plan_tier || 'pro';
   const quota = subscription?.quota;
+  const isVNPay =
+    transaction?.payment_method === 'vnpay' ||
+    transaction?.payment_mode?.startsWith('vnpay') ||
+    Boolean(transaction?.vnp_txn_ref);
+  const amountVnd =
+    transaction?.amount_vnd ??
+    Math.round((transaction?.amount_usd ?? 0) * (transaction?.usd_to_vnd_rate ?? 25000));
+  const formatVndStr = (v: number) =>
+    `${Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} ₫`;
 
   return (
     <div className="max-w-2xl mx-auto py-8 space-y-6" data-testid="billing-success-page">
@@ -99,7 +125,13 @@ export function BillingSuccessPage() {
         <div className="space-y-2">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 text-xs font-mono font-bold text-indigo-700 dark:text-indigo-300">
             <Sparkles className="h-3.5 w-3.5" />
-            {lang === 'vi' ? 'THANH TOÁN THÀNH CÔNG · STRIPE VERIFIED' : 'PAYMENT SUCCEEDED · STRIPE VERIFIED'}
+            {isVNPay
+              ? lang === 'vi'
+                ? 'THANH TOÁN THÀNH CÔNG · VNPAY VERIFIED'
+                : 'PAYMENT SUCCEEDED · VNPAY VERIFIED'
+              : lang === 'vi'
+                ? 'THANH TOÁN THÀNH CÔNG · STRIPE VERIFIED'
+                : 'PAYMENT SUCCEEDED · STRIPE VERIFIED'}
           </div>
           <h1 className="font-display text-2xl sm:text-4xl font-bold text-slate-900 dark:text-white">
             {lang === 'vi'
@@ -120,7 +152,15 @@ export function BillingSuccessPage() {
             data-testid="billing-receipt-box"
           >
             <div className="flex items-center justify-between font-mono text-slate-500 pb-2 border-b border-slate-200 dark:border-slate-700">
-              <span>{lang === 'vi' ? 'BIÊN LAI THANH TOÁN STRIPE' : 'STRIPE PAYMENT RECEIPT'}</span>
+              <span>
+                {isVNPay
+                  ? lang === 'vi'
+                    ? 'BIÊN LAI THANH TOÁN VNPAY (HMAC-SHA512)'
+                    : 'VNPAY PAYMENT RECEIPT (HMAC-SHA512)'
+                  : lang === 'vi'
+                    ? 'BIÊN LAI THANH TOÁN STRIPE'
+                    : 'STRIPE PAYMENT RECEIPT'}
+              </span>
               <Badge className="bg-emerald-600 text-white text-[10px]">PAID</Badge>
             </div>
             <div className="flex items-center justify-between">
@@ -139,21 +179,42 @@ export function BillingSuccessPage() {
             )}
             <div className="flex items-center justify-between">
               <span className="text-slate-500">{lang === 'vi' ? 'Số tiền đã thanh toán:' : 'Amount paid:'}</span>
-              <span className="font-mono font-bold text-slate-900 dark:text-white">
-                ${transaction.amount_usd.toFixed(2)} USD
+              <span
+                className="font-mono font-bold text-slate-900 dark:text-white"
+                data-testid="receipt-amount-paid"
+              >
+                {isVNPay
+                  ? `${formatVndStr(amountVnd)} VND ($${transaction.amount_usd.toFixed(2)} USD)`
+                  : `$${transaction.amount_usd.toFixed(2)} USD`}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-slate-500">{lang === 'vi' ? 'Phương thức:' : 'Payment method:'}</span>
-              <span className="font-mono uppercase text-slate-700 dark:text-slate-300 flex items-center gap-1">
+              <span
+                className="font-mono uppercase text-slate-700 dark:text-slate-300 flex items-center gap-1"
+                data-testid="receipt-payment-method"
+              >
                 <CreditCard className="h-3.5 w-3.5 text-indigo-500" />
-                {transaction.payment_method === 'apple_pay'
-                  ? `APPLE PAY (${(transaction.card_brand || 'VISA').toUpperCase()} •••• ${transaction.card_last4 || '4242'})`
-                  : transaction.payment_method === 'google_pay'
-                    ? `GOOGLE PAY (${(transaction.card_brand || 'VISA').toUpperCase()} •••• ${transaction.card_last4 || '4242'})`
-                    : `${transaction.card_brand || 'VISA'} •••• ${transaction.card_last4 || '4242'}`}
+                {isVNPay
+                  ? `VNPAY · ${(transaction.vnp_bank_code || transaction.card_brand || 'NCB').toUpperCase()} •••• ${transaction.card_last4 || '2198'}`
+                  : transaction.payment_method === 'apple_pay'
+                    ? `APPLE PAY (${(transaction.card_brand || 'VISA').toUpperCase()} •••• ${transaction.card_last4 || '4242'})`
+                    : transaction.payment_method === 'google_pay'
+                      ? `GOOGLE PAY (${(transaction.card_brand || 'VISA').toUpperCase()} •••• ${transaction.card_last4 || '4242'})`
+                      : `${transaction.card_brand || 'VISA'} •••• ${transaction.card_last4 || '4242'}`}
               </span>
             </div>
+            {isVNPay && transaction.vnp_txn_ref && (
+              <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 pt-1 border-t border-slate-200/70 dark:border-slate-700/70">
+                <span>vnp_TxnRef / vnp_TransactionNo:</span>
+                <span data-testid="receipt-vnp-txn-ref">
+                  {transaction.vnp_txn_ref}
+                  {transaction.vnp_transaction_no
+                    ? ` · #${transaction.vnp_transaction_no}`
+                    : ''}
+                </span>
+              </div>
+            )}
           </div>
         )}
 

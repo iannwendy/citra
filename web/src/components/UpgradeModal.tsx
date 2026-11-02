@@ -359,8 +359,8 @@ export function UpgradeModal({
             <span className="flex items-center gap-1.5">
               <ShieldCheck className="h-4 w-4 text-emerald-500" />
               {lang === 'vi'
-                ? 'Thanh toán bảo mật qua Stripe Demo · Hủy gia hạn bất cứ lúc nào'
-                : 'Secure checkout via Stripe Demo · Cancel anytime with 1 click'}
+                ? 'Thanh toán bảo mật qua Stripe & VNPay-QR/ATM · Hủy gia hạn bất cứ lúc nào'
+                : 'Secure checkout via Stripe & VNPay-QR/ATM · Cancel anytime with 1 click'}
             </span>
             <button
               type="button"

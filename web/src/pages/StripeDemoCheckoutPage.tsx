@@ -17,11 +17,17 @@ import {
   Fingerprint,
   Globe,
   Smartphone,
+  QrCode,
+  Building2,
+  KeyRound,
+  ExternalLink,
+  Copy,
 } from 'lucide-react';
 import {
   api,
   type CheckoutSessionDetails,
   type PaymentMethodType,
+  type VNPayPaymentUrlResponse,
 } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -190,6 +196,39 @@ function GooglePaySvg({ className = 'w-4 h-4' }: { className?: string }) {
   );
 }
 
+function VNPayLogo({ active = true }: { active?: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded-md border text-[9px] font-black tracking-tight select-none transition-all ${
+        active
+          ? 'bg-white dark:bg-slate-900 border-[#005BAA]/40 shadow-2xs'
+          : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 opacity-65'
+      }`}
+      title="VNPAY Payment Gateway"
+    >
+      <span className="text-[#ED1C24] font-black">VN</span>
+      <span className="text-[#005BAA] dark:text-[#3898FF] font-black">PAY</span>
+    </span>
+  );
+}
+
+/** Format integer VND amount with dot thousands separator (e.g. 500.000 ₫) */
+export function formatVnd(amountVnd: number): string {
+  const rounded = Math.round(amountVnd || 0);
+  return `${rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} ₫`;
+}
+
+const VNPAY_BANKS_UI = [
+  { code: 'NCB', short: 'NCB', name_vi: 'NH Quốc Dân (NCB Sandbox)', name_en: 'NCB Bank (Official Sandbox)' },
+  { code: 'VIETCOMBANK', short: 'VCB', name_vi: 'Vietcombank', name_en: 'Vietcombank' },
+  { code: 'TECHCOMBANK', short: 'TCB', name_vi: 'Techcombank', name_en: 'Techcombank' },
+  { code: 'BIDV', short: 'BIDV', name_vi: 'BIDV', name_en: 'BIDV' },
+  { code: 'VIETINBANK', short: 'CTG', name_vi: 'VietinBank', name_en: 'VietinBank' },
+  { code: 'MBBANK', short: 'MB', name_vi: 'MB Bank', name_en: 'MB Bank' },
+  { code: 'ACB', short: 'ACB', name_vi: 'ACB', name_en: 'ACB' },
+  { code: 'VPBANK', short: 'VPB', name_vi: 'VPBank', name_en: 'VPBank' },
+];
+
 const BILLING_COUNTRIES = [
   { code: 'VN', name_vi: 'Việt Nam (VN)', name_en: 'Vietnam (VN)' },
   { code: 'US', name_vi: 'Hoa Kỳ (US)', name_en: 'United States (US)' },
@@ -217,7 +256,7 @@ export function StripeDemoCheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Selected Payment Method tab: 'card' | 'apple_pay' | 'google_pay'
+  // Selected Payment Method tab: 'card' | 'vnpay' | 'apple_pay' | 'google_pay'
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('card');
 
   // Interactive Apple Pay / Google Pay Wallet Modal state
@@ -231,6 +270,20 @@ export function StripeDemoCheckoutPage() {
     last4: '4242',
     label: 'Visa Signature •••• 4242',
   });
+
+  // VNPay Payment Gateway state (vnpay.js.org / sandbox.vnpayment.vn v2.1.0)
+  const [vnpayChannel, setVnpayChannel] = useState<'atm' | 'qr' | 'intcard'>('atm');
+  const [vnpayBankCode, setVnpayBankCode] = useState<string>('NCB');
+  const [vnpayGatewayData, setVnpayGatewayData] = useState<VNPayPaymentUrlResponse | null>(null);
+  const [vnpayModalOpen, setVnpayModalOpen] = useState(false);
+  const [vnpayModalTab, setVnpayModalTab] = useState<'atm' | 'qr'>('atm');
+  const [vnpayCardNumber, setVnpayCardNumber] = useState('9704198526191432198');
+  const [vnpayCardHolder, setVnpayCardHolder] = useState('NGUYEN VAN A');
+  const [vnpayIssueDate, setVnpayIssueDate] = useState('07/15');
+  const [vnpayOtpCode, setVnpayOtpCode] = useState('123456');
+  const [vnpayModalError, setVnpayModalError] = useState<string | null>(null);
+  const [vnpayShowSignedUrl, setVnpayShowSignedUrl] = useState(false);
+  const [vnpayCopiedUrl, setVnpayCopiedUrl] = useState(false);
 
   // Card form state (pre-filled with Stripe official test card 4242 for instant sandbox testing)
   const [cardNumber, setCardNumber] = useState('4242 4242 4242 4242');
@@ -481,14 +534,121 @@ export function StripeDemoCheckoutPage() {
     });
   };
 
+  const handleLaunchVNPayGateway = async (
+    overrideBankCode?: string,
+    overrideChannel?: 'atm' | 'qr' | 'intcard',
+  ) => {
+    if (!sessionId) return;
+    setError(null);
+    setVnpayModalError(null);
+    setSubmitting(true);
+
+    const activeChannel = overrideChannel ?? vnpayChannel;
+    const effectiveBankCode =
+      overrideBankCode ??
+      (activeChannel === 'qr'
+        ? 'VNPAYQR'
+        : activeChannel === 'intcard'
+          ? 'INTCARD'
+          : vnpayBankCode || 'NCB');
+
+    try {
+      const res = await api.createVNPayPaymentUrl({
+        session_id: sessionId,
+        bank_code: effectiveBankCode,
+        locale: lang === 'vi' ? 'vn' : 'en',
+        return_url: `${window.location.origin}/billing/success?session_id=${encodeURIComponent(sessionId)}`,
+      });
+      setVnpayGatewayData(res);
+      setVnpayModalTab(activeChannel === 'qr' ? 'qr' : 'atm');
+      if (res.external_redirect && res.payment_url) {
+        window.location.href = res.payment_url;
+        return;
+      }
+      setVnpayModalOpen(true);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : lang === 'vi'
+            ? 'Không thể khởi tạo URL thanh toán VNPay.'
+            : 'Failed to create VNPay payment URL.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAutofillVNPayTestCard = (scenario: '00' | '51' | '12') => {
+    setVnpayModalError(null);
+    setVnpayBankCode('NCB');
+    setVnpayCardHolder('NGUYEN VAN A');
+    setVnpayIssueDate('07/15');
+    setVnpayOtpCode('123456');
+    if (scenario === '00') {
+      setVnpayCardNumber('9704198526191432198');
+    } else if (scenario === '51') {
+      setVnpayCardNumber('9704195798621412');
+    } else {
+      setVnpayCardNumber('9704193360968149');
+    }
+  };
+
+  const handleConfirmVNPayAuthorize = async () => {
+    if (!sessionId) return;
+    setVnpayModalError(null);
+    setSubmitting(true);
+
+    try {
+      const res = await api.authorizeVNPaySandbox({
+        session_id: sessionId,
+        bank_code: vnpayModalTab === 'qr' ? 'VNPAYQR' : vnpayBankCode || 'NCB',
+        payment_channel: vnpayModalTab === 'qr' ? 'qr' : vnpayChannel,
+        card_number: vnpayCardNumber,
+        card_holder: vnpayCardHolder,
+        issue_date: vnpayIssueDate,
+        otp_code: vnpayOtpCode,
+      });
+
+      if (!res.is_success) {
+        const msg = lang === 'vi' ? res.message_vi : res.message_en;
+        setVnpayModalError(
+          `[vnp_ResponseCode: ${res.vnp_response_code}] ${msg}`,
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      await refreshUser();
+      setVnpayModalOpen(false);
+      navigate(res.return_url || `/billing/success?session_id=${encodeURIComponent(sessionId)}`);
+    } catch (err) {
+      setVnpayModalError(
+        err instanceof Error
+          ? err.message
+          : lang === 'vi'
+            ? 'Xác thực giao dịch VNPay thất bại.'
+            : 'VNPay transaction authorization failed.',
+      );
+      setSubmitting(false);
+    }
+  };
+
+  const handleCopySignedUrl = () => {
+    if (!vnpayGatewayData?.payment_url) return;
+    void navigator.clipboard?.writeText(vnpayGatewayData.payment_url);
+    setVnpayCopiedUrl(true);
+    setTimeout(() => setVnpayCopiedUrl(false), 2000);
+  };
+
   if (loading) {
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
         <p className="text-sm font-mono text-slate-500">
           {lang === 'vi'
-            ? 'Đang kết nối cổng thanh toán bảo mật Stripe...'
-            : 'Connecting to Stripe Secure Checkout...'}
+            ? 'Đang kết nối cổng thanh toán bảo mật Stripe & VNPay...'
+            : 'Connecting to Secure Checkout (Stripe & VNPay)...'}
         </p>
       </div>
     );
@@ -512,6 +672,9 @@ export function StripeDemoCheckoutPage() {
   const features = lang === 'vi' ? details.features_vi : details.features_en;
   const subtotalUsd = details.subtotal_usd ?? details.amount_usd;
   const discountUsd = details.discount_usd ?? 0;
+  const usdToVndRate = details.usd_to_vnd_rate ?? details.vnpay?.usd_to_vnd_rate ?? 25000;
+  const amountVnd = details.amount_vnd ?? Math.round(details.amount_usd * usdToVndRate);
+  const discountVnd = details.discount_vnd ?? Math.round(discountUsd * usdToVndRate);
 
   return (
     <div
@@ -520,7 +683,7 @@ export function StripeDemoCheckoutPage() {
     >
       <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[640px]">
         {/* ============================================================
-            LEFT COLUMN — Stripe Order Summary & 6-Char Promo Code Engine
+            LEFT COLUMN — Stripe & VNPay Order Summary & 6-Char Promo Code
             ============================================================ */}
         <div className="lg:col-span-5 bg-slate-950 text-white p-5 sm:p-8 flex flex-col justify-between relative overflow-hidden">
           <div className="space-y-6 relative z-10">
@@ -545,7 +708,7 @@ export function StripeDemoCheckoutPage() {
                 </span>
               </Link>
               <span className="px-2.5 py-0.5 rounded-md bg-amber-400/20 border border-amber-400/40 text-amber-300 font-mono text-[10px] font-bold uppercase tracking-wider">
-                STRIPE SANDBOX
+                STRIPE · VNPAY SANDBOX
               </span>
             </div>
 
@@ -580,6 +743,18 @@ export function StripeDemoCheckoutPage() {
                     : lang === 'vi'
                       ? 'tháng'
                       : 'month'}
+                </span>
+              </div>
+              <div
+                className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-sky-500/15 border border-sky-400/30 text-sky-200 text-xs font-mono"
+                data-testid="checkout-vnd-amount-display"
+              >
+                <VNPayLogo active />
+                <span>
+                  ≈ {formatVnd(amountVnd)} VND
+                </span>
+                <span className="text-[10px] text-sky-300/70">
+                  (1 USD = {formatVnd(usdToVndRate)})
                 </span>
               </div>
               {details.billing_cycle === 'annual' && (
@@ -774,6 +949,17 @@ export function StripeDemoCheckoutPage() {
                   ${details.amount_usd.toFixed(2)} USD
                 </span>
               </div>
+              <div className="flex items-center justify-between text-xs text-sky-300 font-mono">
+                <span>
+                  {lang === 'vi'
+                    ? 'Quy đổi cổng VNPay (VND):'
+                    : 'VNPay Gateway Equivalent (VND):'}
+                </span>
+                <span data-testid="checkout-total-vnd-line">
+                  {formatVnd(amountVnd)}
+                  {discountVnd > 0 ? ` (-${formatVnd(discountVnd)})` : ''}
+                </span>
+              </div>
             </div>
 
             {/* Included Highlights */}
@@ -797,16 +983,17 @@ export function StripeDemoCheckoutPage() {
           <div className="pt-6 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 relative z-10 flex-wrap gap-2">
             <span className="flex items-center gap-1.5">
               <Lock className="h-3.5 w-3.5 text-emerald-400" />
-              Powered by <strong className="text-white">Stripe</strong>
+              Powered by <strong className="text-white">Stripe</strong> &amp;{' '}
+              <strong className="text-sky-300">VNPAY</strong>
             </span>
             <span className="font-mono text-[10px]">
-              PCI-DSS Level 1 · 256-bit TLS
+              PCI-DSS Level 1 · HMAC-SHA512
             </span>
           </div>
         </div>
 
         {/* ============================================================
-            RIGHT COLUMN — Express Wallets (Apple/Google Pay) + Card Form
+            RIGHT COLUMN — Express Wallets + VNPay + International Card
             ============================================================ */}
         <div className="lg:col-span-7 p-5 sm:p-8 lg:p-10 flex flex-col justify-center">
           <div className="max-w-lg mx-auto w-full space-y-5">
@@ -818,11 +1005,12 @@ export function StripeDemoCheckoutPage() {
                     ? 'Phương thức thanh toán'
                     : 'Payment Method'}
                 </h2>
-                <div className="flex items-center gap-1">
-                  <VisaLogo active={cardBrand === 'visa'} />
-                  <MastercardLogo active={cardBrand === 'mastercard'} />
-                  <AmexLogo active={cardBrand === 'amex'} />
-                  <JcbLogo active={cardBrand === 'jcb'} />
+                <div className="flex items-center gap-1 flex-wrap">
+                  <VNPayLogo active={paymentMethod === 'vnpay'} />
+                  <VisaLogo active={paymentMethod === 'card' && cardBrand === 'visa'} />
+                  <MastercardLogo active={paymentMethod === 'card' && cardBrand === 'mastercard'} />
+                  <AmexLogo active={paymentMethod === 'card' && cardBrand === 'amex'} />
+                  <JcbLogo active={paymentMethod === 'card' && cardBrand === 'jcb'} />
                 </div>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -832,7 +1020,7 @@ export function StripeDemoCheckoutPage() {
               </p>
             </div>
 
-            {/* Express Checkout Buttons (Apple Pay & Google Pay) */}
+            {/* Express Checkout Buttons (VNPay QR, Apple Pay & Google Pay) */}
             <div
               className="space-y-2"
               data-testid="express-checkout-section"
@@ -841,14 +1029,31 @@ export function StripeDemoCheckoutPage() {
                 <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
                   {lang === 'vi'
                     ? 'Thanh toán nhanh 1 chạm (Express)'
-                    : 'Express One-Click Wallets'}
+                    : 'Express One-Click Checkout'}
                 </span>
                 <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
-                  Biometric Tokenized
+                  VNPAY-QR · Biometric
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {/* Express VNPAY-QR / ATM Button */}
+                <button
+                  type="button"
+                  data-testid="express-vnpay-btn"
+                  disabled={submitting}
+                  onClick={() => {
+                    setPaymentMethod('vnpay');
+                    void handleLaunchVNPayGateway('NCB', 'atm');
+                  }}
+                  className="h-11 rounded-xl bg-gradient-to-r from-[#005BAA] to-[#0072CE] hover:from-[#004A8F] hover:to-[#005BAA] text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-[0.99] px-3"
+                >
+                  <QrCode className="w-4 h-4 shrink-0" />
+                  <span className="tracking-tight font-sans font-bold">
+                    VNPAY-QR / ATM
+                  </span>
+                </button>
+
                 {/* Apple Pay Button */}
                 <button
                   type="button"
@@ -884,15 +1089,15 @@ export function StripeDemoCheckoutPage() {
               <div className="flex-grow border-t border-slate-200 dark:border-slate-800" />
               <span className="flex-shrink mx-3 text-[11px] font-mono uppercase text-slate-400">
                 {lang === 'vi'
-                  ? 'Hoặc thanh toán bằng thẻ'
-                  : 'Or pay with card'}
+                  ? 'Hoặc chọn cổng thanh toán'
+                  : 'Or select payment method'}
               </span>
               <div className="flex-grow border-t border-slate-200 dark:border-slate-800" />
             </div>
 
-            {/* Payment Method Tabs */}
+            {/* Payment Method Tabs (4 methods: Card, VNPay, Apple Pay, Google Pay) */}
             <div
-              className="grid grid-cols-3 gap-2 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-800"
+              className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-800"
               role="tablist"
             >
               <button
@@ -901,14 +1106,30 @@ export function StripeDemoCheckoutPage() {
                 aria-selected={paymentMethod === 'card'}
                 data-testid="method-tab-card"
                 onClick={() => setPaymentMethod('card')}
-                className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                className={`py-2 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   paymentMethod === 'card'
                     ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                 }`}
               >
-                <CreditCard className="h-3.5 w-3.5" />
-                <span>{lang === 'vi' ? 'Thẻ Quốc Tế' : 'Card'}</span>
+                <CreditCard className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{lang === 'vi' ? 'Thẻ Quốc Tế' : 'Card'}</span>
+              </button>
+
+              <button
+                type="button"
+                role="tab"
+                aria-selected={paymentMethod === 'vnpay'}
+                data-testid="method-tab-vnpay"
+                onClick={() => setPaymentMethod('vnpay')}
+                className={`py-2 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  paymentMethod === 'vnpay'
+                    ? 'bg-white dark:bg-slate-900 text-[#005BAA] dark:text-sky-400 shadow-2xs ring-1 ring-[#005BAA]/25'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+              >
+                <VNPayLogo active={paymentMethod === 'vnpay'} />
+                <span className="truncate">VNPay</span>
               </button>
 
               <button
@@ -917,14 +1138,14 @@ export function StripeDemoCheckoutPage() {
                 aria-selected={paymentMethod === 'apple_pay'}
                 data-testid="method-tab-apple-pay"
                 onClick={() => setPaymentMethod('apple_pay')}
-                className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                className={`py-2 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   paymentMethod === 'apple_pay'
                     ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                 }`}
               >
-                <AppleLogoSvg className="w-3.5 h-3.5" />
-                <span>Apple Pay</span>
+                <AppleLogoSvg className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Apple Pay</span>
               </button>
 
               <button
@@ -933,14 +1154,14 @@ export function StripeDemoCheckoutPage() {
                 aria-selected={paymentMethod === 'google_pay'}
                 data-testid="method-tab-google-pay"
                 onClick={() => setPaymentMethod('google_pay')}
-                className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                className={`py-2 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   paymentMethod === 'google_pay'
                     ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                 }`}
               >
-                <GooglePaySvg className="w-3.5 h-3.5" />
-                <span>Google Pay</span>
+                <GooglePaySvg className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Google Pay</span>
               </button>
             </div>
 
@@ -1181,6 +1402,248 @@ export function StripeDemoCheckoutPage() {
                   )}
                 </Button>
               </form>
+            ) : paymentMethod === 'vnpay' ? (
+              /* Dedicated VNPay Payment Gateway Panel (v2.1.0 HMAC-SHA512) */
+              <div
+                className="p-4 sm:p-5 rounded-2xl border border-[#005BAA]/30 dark:border-sky-500/30 bg-gradient-to-b from-sky-50/70 to-white dark:from-slate-900 dark:to-slate-900/90 space-y-4"
+                data-testid="vnpay-tab-panel"
+              >
+                {/* Header & Amount in VND */}
+                <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-200/80 dark:border-slate-800">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#005BAA] to-[#ED1C24] p-[1.5px] shrink-0 shadow-xs">
+                      <div className="w-full h-full rounded-[10px] bg-white dark:bg-slate-950 flex items-center justify-center font-black text-[10px] tracking-tighter">
+                        <span className="text-[#ED1C24]">VN</span>
+                        <span className="text-[#005BAA] dark:text-sky-400">PAY</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h3 className="font-display text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                          {lang === 'vi'
+                            ? 'Cổng thanh toán VNPAY-QR & ATM'
+                            : 'VNPAY-QR & Domestic ATM Gateway'}
+                        </h3>
+                        <Badge
+                          variant="secondary"
+                          className="text-[9px] font-mono bg-sky-100 dark:bg-sky-950 text-[#005BAA] dark:text-sky-300 border-sky-300/60"
+                        >
+                          v2.1.0 · HMAC-SHA512
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {lang === 'vi'
+                          ? 'Hỗ trợ 40+ Ngân hàng Việt Nam (VietQR, NCB, Vietcombank, BIDV, Techcombank...)'
+                          : 'Supports 40+ Vietnamese banks via VNPAY-QR, Domestic ATM & International Cards'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* VND Exchange Breakdown Box */}
+                <div className="p-3 rounded-xl bg-slate-900 text-white flex items-center justify-between gap-2 flex-wrap">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block">
+                      {lang === 'vi'
+                        ? 'Số tiền thanh toán qua VNPay (VND)'
+                        : 'VNPay Settlement Amount (VND)'}
+                    </span>
+                    <span
+                      className="font-display text-xl sm:text-2xl font-bold text-emerald-400"
+                      data-testid="vnpay-panel-amount-vnd"
+                    >
+                      {formatVnd(amountVnd)}
+                    </span>
+                  </div>
+                  <div className="text-right font-mono text-[11px] text-slate-300">
+                    <div>
+                      ${details.amount_usd.toFixed(2)} USD × {formatVnd(usdToVndRate)}
+                    </div>
+                    <div className="text-[10px] text-sky-300">
+                      vnp_Amount = {amountVnd * 100}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Channel Selector */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">
+                    {lang === 'vi'
+                      ? '1. Chọn kênh thanh toán VNPay:'
+                      : '1. Select VNPay Payment Channel:'}
+                  </Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      data-testid="vnpay-channel-atm"
+                      onClick={() => {
+                        setVnpayChannel('atm');
+                        if (vnpayBankCode === 'VNPAYQR' || vnpayBankCode === 'INTCARD') {
+                          setVnpayBankCode('NCB');
+                        }
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        vnpayChannel === 'atm'
+                          ? 'border-[#005BAA] bg-sky-50/90 dark:bg-sky-950/60 text-[#005BAA] dark:text-sky-300 ring-1 ring-[#005BAA]/30'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <Building2 className="h-4 w-4 text-[#005BAA] dark:text-sky-400" />
+                        <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
+                          VNBANK
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold">
+                        {lang === 'vi' ? 'Thẻ ATM Nội Địa' : 'Domestic ATM Card'}
+                      </p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                        {lang === 'vi' ? 'NCB, VCB, TCB, BIDV...' : '40+ Vietnam Banks'}
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      data-testid="vnpay-channel-qr"
+                      onClick={() => {
+                        setVnpayChannel('qr');
+                        setVnpayBankCode('VNPAYQR');
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        vnpayChannel === 'qr'
+                          ? 'border-[#005BAA] bg-sky-50/90 dark:bg-sky-950/60 text-[#005BAA] dark:text-sky-300 ring-1 ring-[#005BAA]/30'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <QrCode className="h-4 w-4 text-[#ED1C24]" />
+                        <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
+                          VNPAYQR
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold">
+                        {lang === 'vi' ? 'Quét Mã VNPAY-QR' : 'Scan VNPAY-QR'}
+                      </p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                        {lang === 'vi' ? 'App Banking / Ví VNPay' : 'Banking App / VietQR'}
+                      </p>
+                    </button>
+
+                    <button
+                      type="button"
+                      data-testid="vnpay-channel-intcard"
+                      onClick={() => {
+                        setVnpayChannel('intcard');
+                        setVnpayBankCode('INTCARD');
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        vnpayChannel === 'intcard'
+                          ? 'border-[#005BAA] bg-sky-50/90 dark:bg-sky-950/60 text-[#005BAA] dark:text-sky-300 ring-1 ring-[#005BAA]/30'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <CreditCard className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                        <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
+                          INTCARD
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold">
+                        {lang === 'vi' ? 'Thẻ Quốc Tế VNPay' : 'Intl Card via VNPay'}
+                      </p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                        Visa / MC / JCB
+                      </p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Bank Grid Selector (for ATM channel) */}
+                {vnpayChannel === 'atm' && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold">
+                        {lang === 'vi'
+                          ? '2. Chọn ngân hàng thanh toán:'
+                          : '2. Select Issuing Bank:'}
+                      </Label>
+                      <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
+                        {lang === 'vi'
+                          ? 'Khuyên dùng: NCB (Thẻ Test Sandbox)'
+                          : 'Recommended: NCB (Official Sandbox)'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {VNPAY_BANKS_UI.map((bank) => {
+                        const selected = vnpayBankCode === bank.code;
+                        return (
+                          <button
+                            key={bank.code}
+                            type="button"
+                            data-testid={`vnpay-bank-${bank.code}`}
+                            onClick={() => setVnpayBankCode(bank.code)}
+                            className={`py-2 px-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-1 ${
+                              selected
+                                ? 'border-[#005BAA] bg-[#005BAA] text-white font-bold shadow-2xs'
+                                : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-sky-400'
+                            }`}
+                          >
+                            <span className="text-xs font-mono truncate">
+                              {bank.short}
+                            </span>
+                            {selected && <Check className="h-3.5 w-3.5 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Official VNPay Sandbox Test Card Hint */}
+                <div className="p-3 rounded-xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/70 text-[11px] text-amber-900 dark:text-amber-200 space-y-1">
+                  <div className="font-semibold flex items-center justify-between">
+                    <span>
+                      {lang === 'vi'
+                        ? 'Thông tin thẻ Test chuẩn VNPay Sandbox (Ngân hàng NCB):'
+                        : 'Official VNPay Sandbox Test Credentials (NCB Bank):'}
+                    </span>
+                    <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-amber-200/70 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
+                      NCB SANDBOX
+                    </span>
+                  </div>
+                  <div className="font-mono text-[11px] grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-amber-800 dark:text-amber-300">
+                    <span>• Số thẻ: 9704198526191432198</span>
+                    <span>• Chủ thẻ: NGUYEN VAN A</span>
+                    <span>• Ngày phát hành: 07/15</span>
+                    <span>• Mã OTP: 123456</span>
+                  </div>
+                </div>
+
+                {/* Launch VNPay Gateway Button */}
+                <Button
+                  type="button"
+                  disabled={submitting}
+                  data-testid="vnpay-launch-gateway-btn"
+                  onClick={() => void handleLaunchVNPayGateway()}
+                  className="w-full h-12 rounded-xl bg-gradient-to-r from-[#005BAA] to-[#0072CE] hover:from-[#004A8F] hover:to-[#005BAA] text-white font-semibold text-sm shadow-lg cursor-pointer"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      {lang === 'vi'
+                        ? 'Đang tạo chữ ký HMAC-SHA512 & kết nối VNPay...'
+                        : 'Generating HMAC-SHA512 Signature & Opening VNPay...'}
+                    </>
+                  ) : (
+                    <>
+                      <QrCode className="h-4 w-4 mr-2" />
+                      {lang === 'vi'
+                        ? `Thanh toán qua VNPay · ${formatVnd(amountVnd)}`
+                        : `Pay with VNPay · ${formatVnd(amountVnd)} ($${details.amount_usd.toFixed(2)})`}
+                    </>
+                  )}
+                </Button>
+              </div>
             ) : (
               /* Dedicated Apple Pay / Google Pay Tab Panel */
               <div
@@ -1244,12 +1707,430 @@ export function StripeDemoCheckoutPage() {
             <p className="text-[11px] text-center text-slate-500 flex items-center justify-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
               {lang === 'vi'
-                ? 'Chuẩn bảo mật PCI-DSS: Không lưu số thẻ/CVV. Nâng cấp tài khoản tức thì.'
-                : 'PCI-DSS Compliant: Raw card/CVV never stored. Instant plan upgrade.'}
+                ? 'Chuẩn bảo mật PCI-DSS & HMAC-SHA512: Không lưu số thẻ/OTP. Nâng cấp tức thì.'
+                : 'PCI-DSS & HMAC-SHA512 Verified: Raw PAN/OTP never stored. Instant upgrade.'}
             </p>
           </div>
         </div>
       </div>
+
+      {/* ============================================================
+          VNPAY v2.1.0 INTERACTIVE SANDBOX PAYMENT GATEWAY MODAL
+          Implements official NCB ATM card + OTP flow & VNPAY-QR scan
+          with live HMAC-SHA512 signed URL inspection and ReturnURL verification.
+          ============================================================ */}
+      {vnpayModalOpen &&
+        vnpayGatewayData &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+            data-testid="vnpay-gateway-modal"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !submitting) {
+                setVnpayModalOpen(false);
+              }
+            }}
+          >
+            <div className="w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] space-y-4">
+              {/* Mobile Drag Handle Pill */}
+              <div className="sm:hidden w-10 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 mx-auto -mt-1 mb-1" />
+
+              {/* VNPay Gateway Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="px-2.5 py-1.5 rounded-xl bg-slate-950 text-white font-black text-xs tracking-tight flex items-center gap-0.5">
+                    <span className="text-[#ED1C24]">VN</span>
+                    <span className="text-[#3898FF]">PAY</span>
+                    <span className="ml-1 text-[9px] font-mono text-emerald-400">
+                      GATEWAY
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="font-display text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                      {lang === 'vi'
+                        ? 'Cổng Thanh Toán VNPAY Sandbox v2.1.0'
+                        : 'VNPAY Sandbox Payment Gateway v2.1.0'}
+                    </h3>
+                    <p className="text-[11px] font-mono text-slate-500">
+                      Mã đơn (vnp_TxnRef):{' '}
+                      <strong
+                        className="text-slate-800 dark:text-slate-200"
+                        data-testid="vnpay-modal-txn-ref"
+                      >
+                        {vnpayGatewayData.vnp_txn_ref}
+                      </strong>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  data-testid="vnpay-modal-close-btn"
+                  disabled={submitting}
+                  onClick={() => setVnpayModalOpen(false)}
+                  className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Order Summary & Cryptographic Checksum Inspector */}
+              <div
+                className="p-3.5 rounded-2xl bg-slate-950 text-white space-y-2 text-xs"
+                data-testid="vnpay-signature-inspector"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-slate-400">
+                    {lang === 'vi' ? 'Số tiền thanh toán:' : 'Payment Amount:'}
+                  </span>
+                  <span
+                    className="font-display text-lg font-bold text-emerald-400"
+                    data-testid="vnpay-modal-amount-vnd"
+                  >
+                    {formatVnd(vnpayGatewayData.amount_vnd)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                  <span>vnp_Amount (×100):</span>
+                  <span className="text-sky-300">{vnpayGatewayData.vnp_amount}</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                  <span>vnp_TmnCode / Hash:</span>
+                  <span className="text-emerald-300">
+                    {vnpayGatewayData.tmn_code} · HMAC-SHA512
+                  </span>
+                </div>
+
+                {/* Toggle Signed URL Inspector */}
+                <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    data-testid="vnpay-toggle-signed-url-btn"
+                    onClick={() => setVnpayShowSignedUrl((prev) => !prev)}
+                    className="text-[11px] font-mono text-sky-400 hover:text-sky-300 underline cursor-pointer"
+                  >
+                    {vnpayShowSignedUrl
+                      ? lang === 'vi'
+                        ? 'Ẩn URL chữ ký số vnp_SecureHash'
+                        : 'Hide signed vnp_SecureHash URL'
+                      : lang === 'vi'
+                        ? 'Xem URL chuẩn VNPay & vnp_SecureHash'
+                        : 'Inspect signed VNPay URL & vnp_SecureHash'}
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCopySignedUrl}
+                      className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                    >
+                      <Copy className="h-3 w-3" />
+                      {vnpayCopiedUrl
+                        ? lang === 'vi'
+                          ? 'Đã chép'
+                          : 'Copied'
+                        : 'Copy URL'}
+                    </button>
+                    <a
+                      href={vnpayGatewayData.payment_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-sky-900/70 hover:bg-sky-800 text-sky-200"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      sandbox.vnpayment.vn
+                    </a>
+                  </div>
+                </div>
+
+                {vnpayShowSignedUrl && (
+                  <div
+                    className="p-2 rounded-xl bg-slate-900 border border-slate-800 font-mono text-[10px] text-slate-300 break-all max-h-28 overflow-y-auto"
+                    data-testid="vnpay-signed-url-box"
+                  >
+                    {vnpayGatewayData.payment_url}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Payment Mode Switcher: ATM Card vs VNPAY-QR */}
+              <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-100 dark:bg-slate-800">
+                <button
+                  type="button"
+                  data-testid="vnpay-modal-tab-atm"
+                  onClick={() => {
+                    setVnpayModalTab('atm');
+                    setVnpayModalError(null);
+                  }}
+                  className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    vnpayModalTab === 'atm'
+                      ? 'bg-white dark:bg-slate-900 text-[#005BAA] dark:text-sky-400 shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  <Building2 className="h-3.5 w-3.5" />
+                  <span>
+                    {lang === 'vi'
+                      ? `Thẻ ATM (${vnpayBankCode === 'VNPAYQR' ? 'NCB' : vnpayBankCode})`
+                      : `ATM Card (${vnpayBankCode === 'VNPAYQR' ? 'NCB' : vnpayBankCode})`}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="vnpay-modal-tab-qr"
+                  onClick={() => {
+                    setVnpayModalTab('qr');
+                    setVnpayModalError(null);
+                  }}
+                  className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    vnpayModalTab === 'qr'
+                      ? 'bg-white dark:bg-slate-900 text-[#ED1C24] dark:text-rose-400 shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  <QrCode className="h-3.5 w-3.5" />
+                  <span>{lang === 'vi' ? 'Quét mã VNPAY-QR' : 'Scan VNPAY-QR'}</span>
+                </button>
+              </div>
+
+              {vnpayModalError && (
+                <div
+                  className="p-3 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300 flex items-start gap-2"
+                  data-testid="vnpay-modal-error"
+                >
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{vnpayModalError}</span>
+                </div>
+              )}
+
+              {vnpayModalTab === 'atm' ? (
+                <div className="space-y-3">
+                  {/* 1-Click VNPay Sandbox Test Scenarios */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 block">
+                      {lang === 'vi'
+                        ? 'Chọn nhanh kịch bản Thẻ Test NCB Sandbox:'
+                        : 'Quick-Fill NCB Sandbox Test Card Scenarios:'}
+                    </span>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        data-testid="vnpay-testcard-00"
+                        onClick={() => handleAutofillVNPayTestCard('00')}
+                        className={`py-1.5 px-2 rounded-lg text-[11px] font-mono font-semibold border transition-all cursor-pointer ${
+                          vnpayCardNumber === '9704198526191432198'
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        ✓ NCB ••2198 (00)
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="vnpay-testcard-51"
+                        onClick={() => handleAutofillVNPayTestCard('51')}
+                        className={`py-1.5 px-2 rounded-lg text-[11px] font-mono font-semibold border transition-all cursor-pointer ${
+                          vnpayCardNumber === '9704195798621412'
+                            ? 'bg-amber-600 text-white border-amber-600'
+                            : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        ⚠ Hết tiền (51)
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="vnpay-testcard-12"
+                        onClick={() => handleAutofillVNPayTestCard('12')}
+                        className={`py-1.5 px-2 rounded-lg text-[11px] font-mono font-semibold border transition-all cursor-pointer ${
+                          vnpayCardNumber === '9704193360968149'
+                            ? 'bg-rose-600 text-white border-rose-600'
+                            : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        ✕ Khóa thẻ (12)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card Number */}
+                  <div className="space-y-1">
+                    <Label htmlFor="vnpay-card-number" className="text-xs font-semibold">
+                      {lang === 'vi'
+                        ? 'Số thẻ ATM nội địa (Ngân hàng NCB Sandbox)'
+                        : 'Domestic ATM Card Number (NCB Sandbox)'}
+                    </Label>
+                    <Input
+                      id="vnpay-card-number"
+                      data-testid="vnpay-card-number-input"
+                      value={vnpayCardNumber}
+                      onChange={(e) =>
+                        setVnpayCardNumber(e.target.value.replace(/\D/g, '').slice(0, 19))
+                      }
+                      placeholder="9704198526191432198"
+                      className="font-mono text-sm h-10 rounded-xl"
+                    />
+                  </div>
+
+                  {/* Card Holder & Issue Date */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <Label htmlFor="vnpay-card-holder" className="text-xs font-semibold">
+                        {lang === 'vi' ? 'Tên chủ thẻ (Không dấu)' : 'Cardholder Name'}
+                      </Label>
+                      <Input
+                        id="vnpay-card-holder"
+                        data-testid="vnpay-card-holder-input"
+                        value={vnpayCardHolder}
+                        onChange={(e) => setVnpayCardHolder(e.target.value.toUpperCase())}
+                        placeholder="NGUYEN VAN A"
+                        className="font-mono text-xs h-10 rounded-xl uppercase"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="vnpay-issue-date" className="text-xs font-semibold">
+                        {lang === 'vi' ? 'Ngày phát hành (MM/YY)' : 'Issue Date (MM/YY)'}
+                      </Label>
+                      <Input
+                        id="vnpay-issue-date"
+                        data-testid="vnpay-issue-date-input"
+                        value={vnpayIssueDate}
+                        onChange={(e) => setVnpayIssueDate(formatExpiryInput(e.target.value))}
+                        placeholder="07/15"
+                        maxLength={5}
+                        className="font-mono text-xs h-10 rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  {/* OTP Input */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label
+                        htmlFor="vnpay-otp"
+                        className="text-xs font-semibold flex items-center gap-1"
+                      >
+                        <KeyRound className="h-3.5 w-3.5 text-[#005BAA]" />
+                        {lang === 'vi'
+                          ? 'Mã xác thực OTP Sandbox (Mặc định: 123456)'
+                          : 'Sandbox OTP Code (Default: 123456)'}
+                      </Label>
+                      <span className="text-[10px] font-mono text-emerald-600">
+                        OTP = 123456
+                      </span>
+                    </div>
+                    <Input
+                      id="vnpay-otp"
+                      data-testid="vnpay-otp-input"
+                      value={vnpayOtpCode}
+                      onChange={(e) =>
+                        setVnpayOtpCode(e.target.value.replace(/\D/g, '').slice(0, 8))
+                      }
+                      placeholder="123456"
+                      className="font-mono text-sm tracking-widest h-10 rounded-xl"
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* VNPAY-QR / VietQR Interactive Scanner View */
+                <div
+                  className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 text-center space-y-3"
+                  data-testid="vnpay-qr-scanner-view"
+                >
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-100 dark:bg-sky-950 text-[#005BAA] dark:text-sky-300 text-[11px] font-semibold">
+                    <QrCode className="h-3.5 w-3.5" />
+                    <span>VietQR · VNPAY-QR EMVCo Dynamic Code</span>
+                  </div>
+
+                  {/* Stylized QR Code Frame */}
+                  <div className="w-44 h-44 mx-auto p-3 rounded-2xl bg-white border-2 border-[#005BAA] shadow-md flex flex-col items-center justify-center relative">
+                    <svg
+                      viewBox="0 0 120 120"
+                      className="w-full h-full text-slate-900"
+                      aria-label="VNPAY-QR Code"
+                    >
+                      {/* Top-left finder */}
+                      <rect x="6" y="6" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="6" />
+                      <rect x="14" y="14" width="14" height="14" fill="currentColor" />
+                      {/* Top-right finder */}
+                      <rect x="84" y="6" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="6" />
+                      <rect x="92" y="14" width="14" height="14" fill="currentColor" />
+                      {/* Bottom-left finder */}
+                      <rect x="6" y="84" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="6" />
+                      <rect x="14" y="92" width="14" height="14" fill="currentColor" />
+                      {/* Data modules */}
+                      <rect x="44" y="10" width="8" height="8" fill="currentColor" />
+                      <rect x="60" y="10" width="12" height="8" fill="currentColor" />
+                      <rect x="44" y="24" width="12" height="8" fill="currentColor" />
+                      <rect x="64" y="24" width="8" height="12" fill="currentColor" />
+                      <rect x="10" y="44" width="12" height="8" fill="currentColor" />
+                      <rect x="28" y="48" width="8" height="12" fill="currentColor" />
+                      <rect x="84" y="46" width="10" height="10" fill="currentColor" />
+                      <rect x="100" y="52" width="12" height="8" fill="currentColor" />
+                      <rect x="12" y="64" width="16" height="8" fill="currentColor" />
+                      <rect x="44" y="84" width="12" height="8" fill="currentColor" />
+                      <rect x="64" y="88" width="8" height="16" fill="currentColor" />
+                      <rect x="84" y="80" width="14" height="10" fill="currentColor" />
+                      <rect x="102" y="96" width="12" height="14" fill="currentColor" />
+                      <rect x="46" y="102" width="14" height="10" fill="currentColor" />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <span className="px-1.5 py-0.5 rounded bg-white border border-[#005BAA] text-[9px] font-black shadow-xs">
+                        <span className="text-[#ED1C24]">VN</span>
+                        <span className="text-[#005BAA]">PAY</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-600 dark:text-slate-400 max-w-xs mx-auto">
+                    {lang === 'vi'
+                      ? 'Trong môi trường Sandbox, nhấn nút bên dưới để giả lập quét mã VNPAY-QR thành công và nhận callback chữ ký số.'
+                      : 'In Sandbox mode, click confirm below to simulate an instant VNPAY-QR mobile banking scan and signed callback.'}
+                  </p>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-1 space-y-2">
+                <Button
+                  type="button"
+                  disabled={submitting}
+                  data-testid="vnpay-confirm-pay-btn"
+                  onClick={() => void handleConfirmVNPayAuthorize()}
+                  className="w-full h-12 rounded-xl bg-gradient-to-r from-[#005BAA] to-[#0072CE] hover:from-[#004A8F] hover:to-[#005BAA] text-white font-semibold text-sm shadow-lg cursor-pointer"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      {lang === 'vi'
+                        ? 'Đang xác thực chữ ký HMAC-SHA512 & kích hoạt gói...'
+                        : 'Verifying HMAC-SHA512 Signature & Activating Plan...'}
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      {vnpayModalTab === 'qr'
+                        ? lang === 'vi'
+                          ? `Xác nhận đã quét VNPAY-QR · ${formatVnd(vnpayGatewayData.amount_vnd)}`
+                          : `Simulate VNPAY-QR Scan · ${formatVnd(vnpayGatewayData.amount_vnd)}`
+                        : lang === 'vi'
+                          ? `Xác nhận OTP & Thanh toán ${formatVnd(vnpayGatewayData.amount_vnd)}`
+                          : `Verify OTP & Pay ${formatVnd(vnpayGatewayData.amount_vnd)}`}
+                    </>
+                  )}
+                </Button>
+                <button
+                  type="button"
+                  data-testid="vnpay-cancel-btn"
+                  disabled={submitting}
+                  onClick={() => setVnpayModalOpen(false)}
+                  className="w-full text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 py-1 cursor-pointer text-center"
+                >
+                  {lang === 'vi' ? 'Hủy giao dịch VNPay' : 'Cancel Transaction'}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {/* ============================================================
           APPLE PAY / GOOGLE PAY INTERACTIVE BIOMETRIC WALLET SHEET MODAL

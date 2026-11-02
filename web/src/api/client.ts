@@ -613,7 +613,76 @@ export interface SubscriptionSummary {
   quota: UserQuota;
 }
 
-export type PaymentMethodType = 'card' | 'apple_pay' | 'google_pay';
+export type PaymentMethodType = 'card' | 'apple_pay' | 'google_pay' | 'vnpay';
+
+export interface VNPayBankOption {
+  code: string;
+  name: string;
+  type: 'qr' | 'atm' | 'intcard';
+  logo_label?: string;
+}
+
+export interface VNPaySandboxTestCard {
+  bank: string;
+  card_number: string;
+  card_holder: string;
+  issue_date: string;
+  otp: string;
+  scenario: string;
+  expected_response_code: string;
+}
+
+export interface VNPayCheckoutMetadata {
+  enabled: boolean;
+  version: string;
+  tmn_code: string;
+  curr_code: string;
+  usd_to_vnd_rate: number;
+  amount_vnd: number;
+  vnp_amount: number;
+  vnp_txn_ref: string | null;
+  external_redirect?: boolean;
+  supported_banks: VNPayBankOption[];
+  sandbox_test_cards: VNPaySandboxTestCard[];
+}
+
+export interface VNPayPaymentUrlResponse {
+  session_id: string;
+  payment_url: string;
+  vnp_txn_ref: string;
+  vnp_amount: number;
+  amount_vnd: number;
+  amount_usd: number;
+  usd_to_vnd_rate: number;
+  bank_code: string | null;
+  tmn_code: string;
+  create_date: string;
+  expire_date: string;
+  order_info: string;
+  external_redirect: boolean;
+  vnp_params: Record<string, string>;
+  supported_banks: VNPayBankOption[];
+  sandbox_test_cards: VNPaySandboxTestCard[];
+}
+
+export interface VNPaySandboxAuthorizeResponse {
+  status: string;
+  is_verified: boolean;
+  is_success: boolean;
+  vnp_response_code: string;
+  message_vi: string;
+  message_en: string;
+  vnp_txn_ref: string;
+  vnp_transaction_no: string;
+  vnp_bank_code: string;
+  vnp_card_type: string;
+  amount_vnd: number;
+  vnp_params: Record<string, string>;
+  return_url: string;
+  transaction: BillingTransactionItem;
+  subscription?: SubscriptionSummary;
+  user?: User;
+}
 
 export interface BillingTransactionItem {
   id: number;
@@ -627,6 +696,10 @@ export interface BillingTransactionItem {
   discount_usd?: number;
   promo_code?: string | null;
   amount_usd: number;
+  amount_vnd?: number;
+  subtotal_vnd?: number;
+  discount_vnd?: number;
+  usd_to_vnd_rate?: number;
   currency: string;
   status: string;
   payment_mode: string;
@@ -635,6 +708,11 @@ export interface BillingTransactionItem {
   card_last4: string | null;
   billing_country?: string | null;
   billing_zip?: string | null;
+  vnp_txn_ref?: string | null;
+  vnp_transaction_no?: string | null;
+  vnp_bank_code?: string | null;
+  vnp_card_type?: string | null;
+  vnp_response_code?: string | null;
   created_at: string | null;
   paid_at: string | null;
 }
@@ -650,6 +728,8 @@ export interface CheckoutSessionResponse {
   discount_usd?: number;
   promo_code?: string | null;
   amount_usd: number;
+  amount_vnd?: number;
+  usd_to_vnd_rate?: number;
   transaction_id: number;
 }
 
@@ -677,11 +757,16 @@ export interface CheckoutSessionDetails {
   promo_code?: string | null;
   promo_details?: AppliedPromoDetails | null;
   amount_usd: number;
+  subtotal_vnd?: number;
+  discount_vnd?: number;
+  amount_vnd?: number;
+  usd_to_vnd_rate?: number;
   monthly_equivalent_usd: number;
   annual_savings_usd: number;
   currency: string;
   supported_payment_methods?: string[];
   supported_card_brands?: string[];
+  vnpay?: VNPayCheckoutMetadata;
   features_en: string[];
   features_vi: string[];
 }
@@ -1447,6 +1532,70 @@ export const api = {
     }>('/billing/verify-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  createVNPayPaymentUrl: (data: {
+    session_id: string;
+    bank_code?: string | null;
+    locale?: 'vn' | 'en';
+    return_url?: string | null;
+  }) =>
+    authRequest<VNPayPaymentUrlResponse>('/billing/vnpay/create-payment-url', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token')
+          ? { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          : {}),
+      },
+      body: JSON.stringify(data),
+    }),
+  authorizeVNPaySandbox: (data: {
+    session_id: string;
+    bank_code?: string;
+    payment_channel?: 'atm' | 'qr' | 'intcard';
+    card_number?: string;
+    card_holder?: string;
+    issue_date?: string;
+    otp_code?: string;
+    simulate_response_code?: string | null;
+  }) =>
+    authRequest<VNPaySandboxAuthorizeResponse>(
+      '/billing/vnpay/sandbox-authorize',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token')
+            ? { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            : {}),
+        },
+        body: JSON.stringify(data),
+      },
+    ),
+  verifyVNPayReturn: (data: {
+    vnp_params: Record<string, string>;
+    session_id?: string | null;
+  }) =>
+    authRequest<{
+      status: string;
+      is_verified: boolean;
+      is_success: boolean;
+      vnp_response_code: string;
+      message: string;
+      message_vi: string;
+      message_en: string;
+      transaction: BillingTransactionItem;
+      subscription: SubscriptionSummary;
+      user: User;
+    }>('/billing/vnpay/verify-return', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(localStorage.getItem('token')
+          ? { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          : {}),
+      },
       body: JSON.stringify(data),
     }),
   cancelSubscription: (immediate: boolean = false) =>

@@ -426,8 +426,8 @@ export function SettingsPage(): JSX.Element {
             <CreditCard className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
             <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
               {currentLang === 'vi'
-                ? 'Gói Cước & Thanh Toán Stripe'
-                : 'Subscription & Stripe Billing'}
+                ? 'Gói Cước & Thanh Toán (Stripe · VNPay)'
+                : 'Subscription & Billing (Stripe · VNPay)'}
             </h2>
           </div>
           <span className="text-[11px] font-mono text-slate-400">04</span>
@@ -530,8 +530,8 @@ export function SettingsPage(): JSX.Element {
             <div className="space-y-2" data-testid="settings-transactions-list">
               <p className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
                 {currentLang === 'vi'
-                  ? 'Lịch sử thanh toán Stripe gần đây'
-                  : 'Recent Stripe Billing Transactions'}
+                  ? 'Lịch sử giao dịch gần đây (Stripe & VNPay)'
+                  : 'Recent Billing Transactions (Stripe & VNPay)'}
               </p>
               <div className="divide-y divide-slate-200/70 dark:divide-slate-800 border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden text-xs">
                 {transactions.slice(0, 5).map((tx) => (
@@ -557,14 +557,18 @@ export function SettingsPage(): JSX.Element {
                     </div>
                     <div className="flex items-center gap-3 font-mono text-slate-600 dark:text-slate-400">
                       <span>
-                        {tx.payment_method === 'apple_pay'
-                          ? `APPLE PAY •••• ${tx.card_last4 || '4242'}`
-                          : tx.payment_method === 'google_pay'
-                            ? `GOOGLE PAY •••• ${tx.card_last4 || '4242'}`
-                            : `${(tx.card_brand || 'visa').toUpperCase()} •••• ${tx.card_last4 || '4242'}`}
+                        {tx.payment_method === 'vnpay'
+                          ? `VNPAY · ${(tx.vnp_bank_code || tx.card_brand || 'NCB').toUpperCase()} •••• ${tx.card_last4 || '2198'}`
+                          : tx.payment_method === 'apple_pay'
+                            ? `APPLE PAY •••• ${tx.card_last4 || '4242'}`
+                            : tx.payment_method === 'google_pay'
+                              ? `GOOGLE PAY •••• ${tx.card_last4 || '4242'}`
+                              : `${(tx.card_brand || 'visa').toUpperCase()} •••• ${tx.card_last4 || '4242'}`}
                       </span>
                       <span className="font-bold text-slate-900 dark:text-white">
-                        ${tx.amount_usd.toFixed(2)}
+                        {tx.payment_method === 'vnpay' && tx.amount_vnd
+                          ? `${Math.round(tx.amount_vnd).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.')} ₫ ($${tx.amount_usd.toFixed(2)})`
+                          : `$${tx.amount_usd.toFixed(2)}`}
                       </span>
                     </div>
                   </div>

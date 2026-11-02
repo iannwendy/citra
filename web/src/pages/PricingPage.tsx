@@ -353,8 +353,8 @@ export function PricingPage() {
             <div className="flex flex-col items-center text-center gap-[16px] max-w-[760px]">
               <SolvaEyebrow centered>
                 {lang === 'vi'
-                  ? 'Bảng giá học thuật minh bạch · Thanh toán Stripe'
-                  : 'Transparent academic pricing · Powered by Stripe'}
+                  ? 'Bảng giá học thuật minh bạch · Thanh toán Stripe & VNPay'
+                  : 'Transparent academic pricing · Powered by Stripe & VNPay'}
               </SolvaEyebrow>
 
               <SolvaTwoToneHeading

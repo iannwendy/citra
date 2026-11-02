@@ -617,3 +617,298 @@ def test_apple_pay_google_pay_and_pci_dss_security_guard() -> None:
     assert tx["billing_country"] == "US"
     assert tx["billing_zip"] == "94103"
 
+
+def test_vnpay_payment_url_cryptographic_signing_and_promo_vnd_conversion() -> None:
+    """Verify VNPay v2.1.0 URL generation, HMAC-SHA512 checksum signing, and USD->VND conversion with promo codes."""
+    from integrity_checker.billing.vnpay import get_vnpay_service
+
+    client = TestClient(app)
+    admin_token, _ = _login_user(client, "admin", "admin123")
+    token, _ = _login_user(client, "user", "user123")
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Seed 'CITRA2' (-20% off) via admin endpoint
+    client.post(
+        "/api/billing/admin/promos",
+        json={
+            "code": "CITRA2",
+            "description": "20% off academic research plan",
+            "discount_type": "percent",
+            "discount_value": 20,
+            "applicable_tiers": "all",
+            "applicable_cycles": "all",
+        },
+        headers=admin_headers,
+    )
+
+    # 1. Create Pro Annual checkout session ($192.00 USD = 4,800,000 VND)
+    checkout = client.post(
+        "/api/billing/create-checkout-session",
+        json={"plan_tier": "pro", "billing_cycle": "annual", "force_demo": True},
+        headers=headers,
+    ).json()
+    session_id = checkout["session_id"]
+    assert checkout["amount_usd"] == 192.0
+    assert checkout["amount_vnd"] == 4800000
+
+    # 2. Apply default seeded promo code 'CITRA2' (-20% off -> -$38.40 -> $153.60 USD = 3,840,000 VND)
+    promo_resp = client.post(
+        f"/api/billing/checkout-session/{session_id}/promo",
+        json={"code": "CITRA2"},
+        headers=headers,
+    )
+    assert promo_resp.status_code == 200
+    promo_details = promo_resp.json()
+    assert promo_details["amount_usd"] == 153.6
+    assert promo_details["amount_vnd"] == 3840000
+    assert promo_details["vnpay"]["vnp_amount"] == 384000000
+
+    # 3. Generate signed VNPay Payment URL
+    url_resp = client.post(
+        "/api/billing/vnpay/create-payment-url",
+        json={"session_id": session_id, "bank_code": "NCB", "locale": "vn"},
+        headers=headers,
+    )
+    assert url_resp.status_code == 200, url_resp.text
+    vnp_data = url_resp.json()
+    assert vnp_data["amount_vnd"] == 3840000
+    assert vnp_data["vnp_amount"] == 384000000
+    assert vnp_data["bank_code"] == "NCB"
+    assert vnp_data["vnp_txn_ref"].startswith("CITRA")
+    assert vnp_data["payment_url"].startswith("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?")
+    assert "vnp_SecureHash=" in vnp_data["payment_url"]
+    assert len(vnp_data["vnp_params"]["vnp_SecureHash"]) == 128
+
+    # 4. Verify signature authenticity using VNPayService
+    vnpay = get_vnpay_service()
+    check = vnpay.verify_return_url(vnp_data["vnp_params"])
+    assert check.is_verified is True
+
+    # 5. Tampering with vnp_Amount invalidates HMAC-SHA512 signature immediately
+    tampered_params = dict(vnp_data["vnp_params"])
+    tampered_params["vnp_Amount"] = "100000"
+    tampered_check = vnpay.verify_return_url(tampered_params)
+    assert tampered_check.is_verified is False
+
+
+def test_vnpay_sandbox_authorize_cards_and_return_url_verification() -> None:
+    """Test VNPay Sandbox ATM cards (00, 51, 12, wrong OTP 13), VNPAY-QR, ReturnURL verification, and PCI guard."""
+    client = TestClient(app)
+    token, user_data = _login_user(client, "user", "user123")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    checkout = client.post(
+        "/api/billing/create-checkout-session",
+        json={"plan_tier": "pro", "billing_cycle": "monthly", "force_demo": True},
+        headers=headers,
+    ).json()
+    session_id = checkout["session_id"]
+
+    # Initialize VNPay payment URL first
+    client.post(
+        "/api/billing/vnpay/create-payment-url",
+        json={"session_id": session_id, "bank_code": "NCB"},
+        headers=headers,
+    )
+
+    # 1. Test NCB Insufficient Funds Card (9704195798621412 -> code '51')
+    insufficient_resp = client.post(
+        "/api/billing/vnpay/sandbox-authorize",
+        json={
+            "session_id": session_id,
+            "bank_code": "NCB",
+            "payment_channel": "atm",
+            "card_number": "9704195798621412",
+            "card_holder": "NGUYEN VAN A",
+            "issue_date": "07/15",
+            "otp_code": "123456",
+        },
+        headers=headers,
+    )
+    assert insufficient_resp.status_code == 200
+    ins_data = insufficient_resp.json()
+    assert ins_data["is_success"] is False
+    assert ins_data["vnp_response_code"] == "51"
+    assert ins_data["transaction"]["status"] == "pending"
+
+    # 2. Test NCB Locked Card (9704193360968149 -> code '12')
+    locked_resp = client.post(
+        "/api/billing/vnpay/sandbox-authorize",
+        json={
+            "session_id": session_id,
+            "bank_code": "NCB",
+            "payment_channel": "atm",
+            "card_number": "9704193360968149",
+            "card_holder": "NGUYEN VAN A",
+            "issue_date": "07/15",
+            "otp_code": "123456",
+        },
+        headers=headers,
+    )
+    assert locked_resp.status_code == 200
+    assert locked_resp.json()["is_success"] is False
+    assert locked_resp.json()["vnp_response_code"] == "12"
+
+    # 3. Test Wrong OTP ('999999' != '123456' -> code '13')
+    wrong_otp_resp = client.post(
+        "/api/billing/vnpay/sandbox-authorize",
+        json={
+            "session_id": session_id,
+            "bank_code": "NCB",
+            "payment_channel": "atm",
+            "card_number": "9704198526191432198",
+            "card_holder": "NGUYEN VAN A",
+            "issue_date": "07/15",
+            "otp_code": "999999",
+        },
+        headers=headers,
+    )
+    assert wrong_otp_resp.status_code == 200
+    assert wrong_otp_resp.json()["is_success"] is False
+    assert wrong_otp_resp.json()["vnp_response_code"] == "13"
+
+    # 4. Test Official NCB Success Card (9704198526191432198 + OTP 123456 -> code '00')
+    ok_resp = client.post(
+        "/api/billing/vnpay/sandbox-authorize",
+        json={
+            "session_id": session_id,
+            "bank_code": "NCB",
+            "payment_channel": "atm",
+            "card_number": "9704198526191432198",
+            "card_holder": "NGUYEN VAN A",
+            "issue_date": "07/15",
+            "otp_code": "123456",
+        },
+        headers=headers,
+    )
+    assert ok_resp.status_code == 200, ok_resp.text
+    ok_data = ok_resp.json()
+    assert ok_data["is_verified"] is True
+    assert ok_data["is_success"] is True
+    assert ok_data["vnp_response_code"] == "00"
+    assert ok_data["amount_vnd"] == 500000
+    assert ok_data["transaction"]["status"] == "succeeded"
+    assert ok_data["transaction"]["payment_method"] == "vnpay"
+    assert ok_data["transaction"]["vnp_bank_code"] == "NCB"
+    assert ok_data["transaction"]["card_last4"] == "2198"
+    assert ok_data["subscription"]["plan_tier"] == "pro"
+
+    # Ensure raw 19-digit ATM card number is NEVER persisted in DB
+    db_session = get_session()
+    db_tx = (
+        db_session.query(BillingTransaction)
+        .filter(BillingTransaction.stripe_session_id == session_id)
+        .first()
+    )
+    assert db_tx is not None
+    assert db_tx.card_last4 == "2198"
+    assert "9704198526191432198" not in str(db_tx.__dict__)
+    db_session.close()
+
+    # 5. Verify signed ReturnURL parameters via POST /api/billing/vnpay/verify-return
+    verify_ret = client.post(
+        "/api/billing/vnpay/verify-return",
+        json={"vnp_params": ok_data["vnp_params"], "session_id": session_id},
+        headers=headers,
+    )
+    assert verify_ret.status_code == 200
+    assert verify_ret.json()["status"] == "succeeded"
+    assert verify_ret.json()["is_verified"] is True
+
+    # 6. Verify GET /api/billing/vnpay/return redirects (302) to /billing/success
+    get_ret = client.get(
+        "/api/billing/vnpay/return",
+        params=ok_data["vnp_params"],
+        follow_redirects=False,
+    )
+    assert get_ret.status_code == 302
+    assert "/billing/success" in get_ret.headers["location"]
+
+
+def test_vnpay_ipn_webhook_security_tamper_and_idempotency_guards() -> None:
+    """Verify VNPay IPN GET endpoint RspCodes: 97 (Checksum), 01 (NotFound), 04 (InvalidAmount), 00 (Success), 02 (AlreadyConfirmed)."""
+    from integrity_checker.billing.vnpay import get_vnpay_service
+
+    vnpay = get_vnpay_service()
+    client = TestClient(app)
+    token, _ = _login_user(client, "user", "user123")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Create a Pro Monthly session ($20 = 500,000 VND -> vnp_Amount = 50000000)
+    checkout = client.post(
+        "/api/billing/create-checkout-session",
+        json={"plan_tier": "pro", "billing_cycle": "monthly", "force_demo": True},
+        headers=headers,
+    ).json()
+    session_id = checkout["session_id"]
+    url_data = client.post(
+        "/api/billing/vnpay/create-payment-url",
+        json={"session_id": session_id, "bank_code": "NCB"},
+        headers=headers,
+    ).json()
+    vnp_txn_ref = url_data["vnp_txn_ref"]
+
+    # 1. Invalid Checksum -> RspCode '97'
+    bad_hash_params = vnpay.build_signed_return_params(
+        vnp_txn_ref=vnp_txn_ref,
+        amount_vnd=500000,
+        response_code="00",
+    )
+    bad_hash_params["vnp_SecureHash"] = "0" * 128
+    ipn_97 = client.get("/api/billing/vnpay/ipn", params=bad_hash_params)
+    assert ipn_97.status_code == 200
+    assert ipn_97.json() == {"RspCode": "97", "Message": "Invalid Checksum"}
+
+    # 2. Hash Algorithm Downgrade Attack (vnp_SecureHashType=MD5) -> RspCode '97'
+    downgrade_params = vnpay.build_signed_return_params(
+        vnp_txn_ref=vnp_txn_ref,
+        amount_vnd=500000,
+        response_code="00",
+    )
+    downgrade_params["vnp_SecureHashType"] = "MD5"
+    ipn_downgrade = client.get("/api/billing/vnpay/ipn", params=downgrade_params)
+    assert ipn_downgrade.status_code == 200
+    assert ipn_downgrade.json()["RspCode"] == "97"
+
+    # 3. Unknown Order vnp_TxnRef (with valid signature) -> RspCode '01'
+    unknown_order_params = vnpay.build_signed_return_params(
+        vnp_txn_ref="CITRA999999UNKNOWN",
+        amount_vnd=500000,
+        response_code="00",
+    )
+    ipn_01 = client.get("/api/billing/vnpay/ipn", params=unknown_order_params)
+    assert ipn_01.status_code == 200
+    assert ipn_01.json() == {"RspCode": "01", "Message": "Order not found"}
+
+    # 4. Amount Tampering Attack (signed 10,000 VND instead of 500,000 VND) -> RspCode '04'
+    wrong_amount_params = vnpay.build_signed_return_params(
+        vnp_txn_ref=vnp_txn_ref,
+        amount_vnd=10000,
+        response_code="00",
+    )
+    ipn_04 = client.get("/api/billing/vnpay/ipn", params=wrong_amount_params)
+    assert ipn_04.status_code == 200
+    assert ipn_04.json() == {"RspCode": "04", "Message": "Invalid amount"}
+
+    # 5. Valid IPN Call -> RspCode '00' and activates Pro subscription
+    valid_ipn_params = vnpay.build_signed_return_params(
+        vnp_txn_ref=vnp_txn_ref,
+        amount_vnd=500000,
+        response_code="00",
+        bank_code="VIETCOMBANK",
+        card_type="QRCODE",
+    )
+    ipn_00 = client.get("/api/billing/vnpay/ipn", params=valid_ipn_params)
+    assert ipn_00.status_code == 200
+    assert ipn_00.json() == {"RspCode": "00", "Message": "Confirm Success"}
+
+    me_resp = client.get("/api/users/me", headers=headers)
+    assert me_resp.json()["plan_tier"] == "pro"
+
+    # 6. Duplicate/Replay IPN Call on already-confirmed order -> RspCode '02'
+    ipn_02 = client.get("/api/billing/vnpay/ipn", params=valid_ipn_params)
+    assert ipn_02.status_code == 200
+    assert ipn_02.json() == {"RspCode": "02", "Message": "Order already confirmed"}
+
+

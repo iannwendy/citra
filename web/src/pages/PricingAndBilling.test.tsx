@@ -1126,4 +1126,261 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       expect(screen.queryByTestId('promo-row-CITRA2')).toBeNull();
     });
   });
+
+  it('StripeDemoCheckoutPage supports VNPay v2.1.0 Payment Gateway (NCB ATM test cards 51/00, VNPAY-QR, and signed URL inspector)', async () => {
+    vi.spyOn(api, 'getCheckoutSessionDetails').mockResolvedValue({
+      session_id: 'cs_test_demo_vnpay99',
+      status: 'pending',
+      payment_mode: 'stripe_demo',
+      merchant_name: 'CITRA (SourceLogic) Inc.',
+      customer_email: 'student@tdtu.edu.vn',
+      customer_name: 'Nguyen Van A',
+      plan_tier: 'pro',
+      plan_name: 'CITRA Pro',
+      billing_cycle: 'monthly',
+      amount_usd: 20,
+      amount_vnd: 500000,
+      usd_to_vnd_rate: 25000,
+      monthly_equivalent_usd: 20,
+      annual_savings_usd: 0,
+      currency: 'usd',
+      features_en: ['50 PDF checks / month'],
+      features_vi: ['50 lượt tải PDF / tháng'],
+    });
+
+    const createUrlSpy = vi.spyOn(api, 'createVNPayPaymentUrl').mockResolvedValue({
+      session_id: 'cs_test_demo_vnpay99',
+      payment_url:
+        'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=50000000&vnp_BankCode=NCB&vnp_TxnRef=CITRA99VNP&vnp_SecureHash=' +
+        'a'.repeat(128),
+      vnp_txn_ref: 'CITRA99VNP',
+      vnp_amount: 50000000,
+      amount_vnd: 500000,
+      amount_usd: 20,
+      usd_to_vnd_rate: 25000,
+      bank_code: 'NCB',
+      tmn_code: 'CITRAVNP',
+      create_date: '20261102073000',
+      expire_date: '20261102074500',
+      order_info: 'Thanh toan goi CITRA Pro monthly Ref CITRA99VNP',
+      external_redirect: false,
+      vnp_params: {
+        vnp_Amount: '50000000',
+        vnp_BankCode: 'NCB',
+        vnp_TxnRef: 'CITRA99VNP',
+        vnp_SecureHash: 'a'.repeat(128),
+      },
+      supported_banks: [],
+      sandbox_test_cards: [],
+    });
+
+    const authorizeSpy = vi
+      .spyOn(api, 'authorizeVNPaySandbox')
+      .mockImplementation(async (payload) => {
+        if (payload.card_number === '9704195798621412') {
+          return {
+            status: 'failed',
+            is_verified: true,
+            is_success: false,
+            vnp_response_code: '51',
+            message_vi: 'Tài khoản của quý khách không đủ số dư để thực hiện giao dịch.',
+            message_en: 'Insufficient account balance to complete the transaction.',
+            vnp_txn_ref: 'CITRA99VNP',
+            vnp_transaction_no: '14999999',
+            vnp_bank_code: 'NCB',
+            vnp_card_type: 'ATM',
+            amount_vnd: 500000,
+            vnp_params: {} as Record<string, string>,
+            return_url: '/billing/checkout?session_id=cs_test_demo_vnpay99',
+            transaction: {
+              id: 99,
+              user_id: 10,
+              stripe_session_id: 'cs_test_demo_vnpay99',
+              stripe_payment_intent_id: null,
+              plan_tier: 'pro',
+              plan_name: 'Pro',
+              billing_cycle: 'monthly',
+              amount_usd: 20,
+              amount_vnd: 500000,
+              currency: 'usd',
+              status: 'pending',
+              payment_mode: 'stripe_demo',
+              card_brand: 'ncb',
+              card_last4: '1412',
+              created_at: null,
+              paid_at: null,
+            },
+          };
+        }
+        return {
+          status: 'succeeded',
+          is_verified: true,
+          is_success: true,
+          vnp_response_code: '00',
+          message_vi: 'Giao dịch thành công',
+          message_en: 'Transaction successful',
+          vnp_txn_ref: 'CITRA99VNP',
+          vnp_transaction_no: '14888888',
+          vnp_bank_code: 'NCB',
+          vnp_card_type: 'ATM',
+          amount_vnd: 500000,
+          vnp_params: {
+            vnp_Amount: '50000000',
+            vnp_BankCode: 'NCB',
+            vnp_ResponseCode: '00',
+            vnp_TransactionNo: '14888888',
+            vnp_TxnRef: 'CITRA99VNP',
+            vnp_SecureHash: 'b'.repeat(128),
+          },
+          return_url: '/billing/success?session_id=cs_test_demo_vnpay99&vnp_ResponseCode=00',
+          transaction: {
+            id: 99,
+            user_id: 10,
+            stripe_session_id: 'cs_test_demo_vnpay99',
+            stripe_payment_intent_id: 'vnp_14888888',
+            plan_tier: 'pro',
+            plan_name: 'Pro',
+            billing_cycle: 'monthly',
+            amount_usd: 20,
+            amount_vnd: 500000,
+            currency: 'usd',
+            status: 'succeeded',
+            payment_mode: 'vnpay_sandbox',
+            payment_method: 'vnpay',
+            card_brand: 'ncb',
+            card_last4: '2198',
+            vnp_txn_ref: 'CITRA99VNP',
+            vnp_transaction_no: '14888888',
+            vnp_bank_code: 'NCB',
+            vnp_card_type: 'ATM',
+            vnp_response_code: '00',
+            created_at: null,
+            paid_at: '2026-11-02T07:31:00Z',
+          },
+        };
+      });
+
+    renderWithAuth(
+      <Routes>
+        <Route path="/billing/checkout" element={<StripeDemoCheckoutPage />} />
+        <Route path="/billing/success" element={<div data-testid="vnpay-success-dest">VNPay Success</div>} />
+      </Routes>,
+      {
+        user: createMockUser(),
+        initialEntries: ['/billing/checkout?session_id=cs_test_demo_vnpay99'],
+      },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('stripe-demo-checkout-page')).toBeDefined();
+    });
+    expect(screen.getByTestId('checkout-vnd-amount-display').textContent).toContain('500.000 ₫');
+
+    // Switch to VNPay tab
+    fireEvent.click(screen.getByTestId('method-tab-vnpay'));
+    expect(screen.getByTestId('vnpay-tab-panel')).toBeDefined();
+    expect(screen.getByTestId('vnpay-panel-amount-vnd').textContent).toContain('500.000 ₫');
+
+    // Launch VNPay Gateway Modal
+    fireEvent.click(screen.getByTestId('vnpay-launch-gateway-btn'));
+    await waitFor(() => {
+      expect(createUrlSpy).toHaveBeenCalled();
+      expect(screen.getByTestId('vnpay-gateway-modal')).toBeDefined();
+    });
+    expect(screen.getByTestId('vnpay-modal-txn-ref').textContent).toBe('CITRA99VNP');
+
+    // Inspect signed URL
+    fireEvent.click(screen.getByTestId('vnpay-toggle-signed-url-btn'));
+    expect(screen.getByTestId('vnpay-signed-url-box').textContent).toContain(
+      'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
+    );
+
+    // 1. Test NCB Insufficient Funds scenario (code 51) -> displays error inside modal
+    fireEvent.click(screen.getByTestId('vnpay-testcard-51'));
+    fireEvent.click(screen.getByTestId('vnpay-confirm-pay-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('vnpay-modal-error').textContent).toContain('51');
+    });
+
+    // 2. Switch back to Official NCB Success card (9704198526191432198 + OTP 123456) -> succeeds
+    fireEvent.click(screen.getByTestId('vnpay-testcard-00'));
+    fireEvent.click(screen.getByTestId('vnpay-confirm-pay-btn'));
+    await waitFor(() => {
+      expect(authorizeSpy).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId('vnpay-success-dest')).toBeDefined();
+    });
+  });
+
+  it('BillingSuccessPage verifies signed VNPay ReturnURL parameters and displays VND receipt details', async () => {
+    const verifyVnpSpy = vi.spyOn(api, 'verifyVNPayReturn').mockResolvedValue({
+      status: 'succeeded',
+      is_verified: true,
+      is_success: true,
+      vnp_response_code: '00',
+      message: 'Upgraded via VNPay!',
+      message_vi: 'Giao dịch thành công',
+      message_en: 'Transaction successful',
+      transaction: {
+        id: 100,
+        user_id: 10,
+        stripe_session_id: 'cs_test_demo_vnpay100',
+        stripe_payment_intent_id: 'vnp_14777777',
+        plan_tier: 'pro',
+        plan_name: 'Pro',
+        billing_cycle: 'annual',
+        amount_usd: 192,
+        amount_vnd: 4800000,
+        usd_to_vnd_rate: 25000,
+        currency: 'usd',
+        status: 'succeeded',
+        payment_mode: 'vnpay_sandbox',
+        payment_method: 'vnpay',
+        card_brand: 'ncb',
+        card_last4: '2198',
+        vnp_txn_ref: 'CITRA100VNP',
+        vnp_transaction_no: '14777777',
+        vnp_bank_code: 'NCB',
+        vnp_card_type: 'ATM',
+        vnp_response_code: '00',
+        created_at: '2026-11-02T07:30:00Z',
+        paid_at: '2026-11-02T07:31:00Z',
+      },
+      subscription: {
+        plan_tier: 'pro',
+        plan_name: 'Pro',
+        billing_cycle: 'annual',
+        subscription_status: 'active',
+        cancel_at_period_end: false,
+        current_period_start: '2026-11-02T00:00:00Z',
+        current_period_end: '2027-11-02T00:00:00Z',
+        quota: {
+          ...createMockUser().quota!,
+          monthly_uploads_limit: 50,
+          max_file_size_mb: 25,
+          max_pages_per_pdf: 100,
+        },
+      },
+      user: createMockUser({ plan_tier: 'pro', billing_cycle: 'annual' }),
+    });
+
+    renderWithAuth(
+      <Routes>
+        <Route path="/billing/success" element={<BillingSuccessPage />} />
+      </Routes>,
+      {
+        user: createMockUser({ plan_tier: 'pro' }),
+        initialEntries: [
+          `/billing/success?session_id=cs_test_demo_vnpay100&vnp_Amount=480000000&vnp_BankCode=NCB&vnp_ResponseCode=00&vnp_TxnRef=CITRA100VNP&vnp_SecureHash=${'c'.repeat(128)}`,
+        ],
+      },
+    );
+
+    await waitFor(() => {
+      expect(verifyVnpSpy).toHaveBeenCalled();
+      expect(screen.getByTestId('billing-success-page')).toBeDefined();
+    });
+    expect(screen.getByTestId('receipt-amount-paid').textContent).toContain('4.800.000 ₫ VND');
+    expect(screen.getByTestId('receipt-payment-method').textContent).toContain('VNPAY · NCB •••• 2198');
+    expect(screen.getByTestId('receipt-vnp-txn-ref').textContent).toContain('CITRA100VNP');
+  });
 });

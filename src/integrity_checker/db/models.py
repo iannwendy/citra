@@ -282,7 +282,7 @@ class ClassMembership(Base):
 
 
 class BillingTransaction(Base):
-    """Stripe / Demo billing transaction and invoice record (v2.2 / v2.4 Promo & Multi-Payment)."""
+    """Stripe / VNPay / Demo billing transaction and invoice record (v2.2 / v2.5 Multi-Payment & VNPay)."""
 
     __tablename__ = "billing_transactions"
 
@@ -298,14 +298,20 @@ class BillingTransaction(Base):
     discount_usd: Mapped[float] = mapped_column(Float, default=0.0)
     promo_code: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
     amount_usd: Mapped[float] = mapped_column(Float, nullable=False)
+    amount_vnd: Mapped[int | None] = mapped_column(Integer, nullable=True)
     currency: Mapped[str] = mapped_column(String(10), default="usd")
     status: Mapped[str] = mapped_column(String(30), default="pending")  # "pending" | "succeeded" | "canceled" | "failed"
-    payment_mode: Mapped[str] = mapped_column(String(20), default="stripe_demo")  # "stripe_test" | "stripe_demo"
-    payment_method: Mapped[str] = mapped_column(String(30), default="card")  # "card" | "apple_pay" | "google_pay"
+    payment_mode: Mapped[str] = mapped_column(String(20), default="stripe_demo")  # "stripe_test" | "stripe_demo" | "vnpay_sandbox" | "vnpay_live"
+    payment_method: Mapped[str] = mapped_column(String(30), default="card")  # "card" | "apple_pay" | "google_pay" | "vnpay"
     card_brand: Mapped[str | None] = mapped_column(String(20), default="visa")
     card_last4: Mapped[str | None] = mapped_column(String(4), default="4242")
     billing_country: Mapped[str | None] = mapped_column(String(10), default="VN")
     billing_zip: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    vnp_txn_ref: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    vnp_transaction_no: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    vnp_bank_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    vnp_card_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    vnp_response_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )
