@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import secrets
 from typing import Any
 
@@ -81,12 +82,17 @@ class Repository:
                 if isinstance(a, str):
                     out.append(a)
                 elif hasattr(a, "last_name"):
-                    # Author object - extract name parts
-                    parts = [a.last_name]
+                    # Author object - extract name parts and normalize display casing
+                    raw_ln = str(getattr(a, "last_name", "") or "").strip()
+                    if raw_ln and raw_ln == raw_ln.lower():
+                        raw_ln = " ".join(w.capitalize() for w in raw_ln.split())
+                    parts = [raw_ln]
                     if getattr(a, "first_name", None):
-                        parts.append(a.first_name)
+                        fn = re.sub(r"\.{2,}", ".", str(a.first_name).strip())
+                        parts.append(fn)
                     if getattr(a, "middle_name", None):
-                        parts.append(a.middle_name)
+                        mn = re.sub(r"\.{2,}", ".", str(a.middle_name).strip())
+                        parts.append(mn)
                     out.append(" ".join(p for p in parts if p))
                 else:
                     out.append(str(a))

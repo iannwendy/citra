@@ -81,11 +81,12 @@ def _clean_venue_str(venue: str) -> str:
     v = _clean_text(venue).strip(" .,;:")
     v = re.sub(r"^(?:in|trong)\s+", "", v, flags=re.IGNORECASE).strip(" .,;:")
     v = re.sub(
-        r"(?:,\s*)?\b(?:retrieved\s+from|available\s+(?:online\s+)?at:?|truy\s+cập\s+(?:tại|từ|ngày|lần).*|accessed\s+.*)$",
+        r"(?:[,;.]?\s*)?\b(?:retrieved\s+from|available\s+(?:online\s+)?at:?|truy\s+cập\s+(?:tại|từ|ngày|lần).*|accessed\s+.*)$",
         "",
         v,
         flags=re.IGNORECASE,
     ).strip(" .,;:")
+    v = re.sub(r"\s*(?:https?://\S+|doi:\s*\S+).*$", "", v, flags=re.IGNORECASE).strip(" .,;:")
     v = re.sub(r",\s*(?:vol\.|no\.|pp\.|p\.)\s*\d.*$", "", v, flags=re.IGNORECASE).strip(" .,;:")
     if re.fullmatch(r"(?:retrieved(?:\s+from)?|available(?:\s+at)?|online|truy\s+cập|n\.?d\.?)", v, flags=re.IGNORECASE):
         return ""
@@ -185,11 +186,12 @@ def _extract_raw_fallback_metadata(raw_text: str) -> dict[str, Any]:
             parts = [p.strip() for p in cleaned_no_num.split(". ") if p.strip()]
             if len(parts) >= 2:
                 authors = _split_raw_authors_str(parts[0])
-                title = parts[1].strip(" .")
+                title = re.sub(r"\s*(?:https?://\S+|doi:\s*\S+).*$", "", parts[1], flags=re.IGNORECASE).strip(" .")
                 if len(parts) >= 3:
                     venue = _clean_venue_str(parts[2])
             else:
-                title = cleaned_no_num[:160]
+                no_url_tail = re.sub(r"\s*(?:https?://\S+|doi:\s*\S+).*$", "", cleaned_no_num, flags=re.IGNORECASE).strip(" .,;")
+                title = (no_url_tail or cleaned_no_num)[:160]
 
     # Supplement missing fields from ReferenceListParser if needed
     if not title or not authors:
@@ -198,7 +200,7 @@ def _extract_raw_fallback_metadata(raw_text: str) -> dict[str, Any]:
 
             parsed_cit = ReferenceListParser()._parse_entry(cleaned, order_index=1, page_num=1)
             if parsed_cit:
-                if not title and parsed_cit.title:
+                if parsed_cit.title and (not title or not authors):
                     title = _clean_text(parsed_cit.title).strip(" .\"“”'")
                 if not authors and parsed_cit.authors:
                     authors = _normalize_author_list(parsed_cit.authors)
@@ -513,6 +515,13 @@ def build_remediated_bibliography(
     hallucination_count = 0
     error_count = 0
 
+    cit_by_raw: dict[str, Any] = {}
+    if citations:
+        for c in citations:
+            c_raw = _clean_text(getattr(c, "raw_text", "") if not isinstance(c, dict) else c.get("raw_text", ""))
+            if c_raw and c_raw not in cit_by_raw:
+                cit_by_raw[c_raw] = c
+
     for idx, v in enumerate(verdicts, start=1):
         raw_text = _clean_text(getattr(v, "citation_raw", "") if not isinstance(v, dict) else v.get("citation_raw", ""))
         label = _clean_text(getattr(v, "label", "") if not isinstance(v, dict) else v.get("label", "")).lower()
@@ -555,6 +564,32 @@ def build_remediated_bibliography(
             matched_sources = features_dict.get("matched_sources", [])
 
         fallback_meta = _extract_raw_fallback_metadata(raw_text)
+        matched_cit = cit_by_raw.get(raw_text)
+        if matched_cit is not None:
+            c_title = _clean_text(getattr(matched_cit, "title", "") if not isinstance(matched_cit, dict) else matched_cit.get("title", ""))
+            c_authors_raw = getattr(matched_cit, "authors", None) if not isinstance(matched_cit, dict) else matched_cit.get("authors")
+            if isinstance(c_authors_raw, str) and c_authors_raw.strip().startswith("["):
+                try:
+                    c_authors_raw = json.loads(c_authors_raw)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            c_authors = _normalize_author_list(c_authors_raw)
+            c_year = _clean_text(getattr(matched_cit, "year", "") if not isinstance(matched_cit, dict) else matched_cit.get("year", ""))
+            c_venue = _clean_venue_str(getattr(matched_cit, "venue", "") if not isinstance(matched_cit, dict) else matched_cit.get("venue", ""))
+            c_doi = _clean_text(getattr(matched_cit, "doi", "") if not isinstance(matched_cit, dict) else matched_cit.get("doi", ""))
+            c_url = _clean_text(getattr(matched_cit, "url", "") if not isinstance(matched_cit, dict) else matched_cit.get("url", ""))
+            if c_authors and not fallback_meta["authors"]:
+                fallback_meta["authors"] = c_authors
+            if c_title and (not fallback_meta["title"] or len(c_title) < len(fallback_meta["title"])):
+                fallback_meta["title"] = c_title
+            if c_year and not fallback_meta["year"]:
+                fallback_meta["year"] = c_year
+            if c_venue and not fallback_meta["venue"]:
+                fallback_meta["venue"] = c_venue
+            if c_doi and not fallback_meta["doi"]:
+                fallback_meta["doi"] = c_doi
+            if c_url and not fallback_meta["url"]:
+                fallback_meta["url"] = c_url
         canonical_meta = dict(fallback_meta)
         diff_fields: list[str] = list(mismatched_fields)
         source_used: str | None = None

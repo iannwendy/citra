@@ -94,7 +94,11 @@ class Author:
         if self.full_first_names:
             return " ".join(self.full_first_names)
         if self.initials:
-            return " ".join(f"{i.upper()}." for i in self.initials if i)
+            return " ".join(
+                f"{i.rstrip('.').upper()}."
+                for i in self.initials
+                if i and i.rstrip(".")
+            )
         return ""
 
 
