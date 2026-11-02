@@ -312,6 +312,23 @@ def get_vnpay_response_message(code: str) -> tuple[str, str]:
     return entry["en"], entry["vi"]
 
 
+def validate_vnpay_production_secret(app_env: str | None = None) -> None:
+    """Raise ValueError in production when VNPAY_HASH_SECRET uses VNPAY_DEFAULT_HASH_SECRET with VNPAY_EXTERNAL_REDIRECT=true."""
+    effective_env = (app_env or os.getenv("APP_ENV", "")).strip().lower()
+    is_prod = effective_env in ("production", "prod", "live")
+    env_ext = os.getenv("VNPAY_EXTERNAL_REDIRECT", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    raw_secret = os.getenv("VNPAY_HASH_SECRET", "").strip()
+    if is_prod and env_ext and (not raw_secret or raw_secret == VNPAY_DEFAULT_HASH_SECRET):
+        raise ValueError(
+            "VNPAY_HASH_SECRET cannot use VNPAY_DEFAULT_HASH_SECRET in production when VNPAY_EXTERNAL_REDIRECT=true."
+        )
+
+
 class VNPayService:
     """Cryptographic VNPay Payment Gateway v2.1.0 service (modeled after vnpay.js.org)."""
 

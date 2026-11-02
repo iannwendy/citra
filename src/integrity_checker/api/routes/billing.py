@@ -1088,6 +1088,16 @@ def authorize_vnpay_sandbox_payment(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Authorize a payment in the Built-in Interactive VNPay v2.1.0 Sandbox Gateway and return signed ReturnURL params."""
+    if _is_production_runtime() and os.getenv("ALLOW_VNPAY_SANDBOX_IN_PROD", "").strip().lower() not in (
+        "1",
+        "true",
+        "yes",
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="VNPay sandbox simulator is disabled in production.",
+        )
+
     repo = Repository(db)
     tx = repo.get_billing_transaction_by_session(payload.session_id)
     if not tx:
@@ -1218,7 +1228,7 @@ def authorize_vnpay_sandbox_payment(
         tx=tx,
         target_user=target_user,
         payment_method="vnpay",
-        payment_mode="vnpay_sandbox",
+        payment_mode="vnpay_live" if vnpay.external_redirect else "vnpay_sandbox",
         card_brand=brand_key,
         card_last4=card_last4,
         billing_country="VN",
@@ -1330,7 +1340,7 @@ def _process_vnpay_return_verification(
         tx=tx,
         target_user=target_user,
         payment_method="vnpay",
-        payment_mode="vnpay_sandbox",
+        payment_mode="vnpay_live" if vnpay.external_redirect else "vnpay_sandbox",
         card_brand=brand_key,
         card_last4=default_last4,
         billing_country="VN",

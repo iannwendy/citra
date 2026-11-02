@@ -1002,4 +1002,74 @@ def test_production_rejects_demo_sessions_and_verifies_stripe_api(monkeypatch: p
         mock_get_paid.assert_called_once()
 
 
+def test_vnpay_sandbox_disabled_in_prod_and_default_secret_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In production, VNPay sandbox simulator is disabled (403) and default VNPay secret with external redirect is rejected."""
+    from integrity_checker.billing.vnpay import (
+        VNPAY_DEFAULT_HASH_SECRET,
+        VNPayService,
+        validate_vnpay_production_secret,
+    )
+
+    client = TestClient(app)
+    token, _ = _login_user(client, "user", "user123")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    checkout = client.post(
+        "/api/billing/create-checkout-session",
+        json={"plan_tier": "pro", "billing_cycle": "monthly", "force_demo": True},
+        headers=headers,
+    ).json()
+    session_id = checkout["session_id"]
+
+    # 1. Production runtime blocks /api/billing/vnpay/sandbox-authorize with 403
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("ALLOW_VNPAY_SANDBOX_IN_PROD", raising=False)
+    with patch("integrity_checker.api.routes.billing.is_test_runtime", return_value=False):
+        resp_sandbox = client.post(
+            "/api/billing/vnpay/sandbox-authorize",
+            json={
+                "session_id": session_id,
+                "bank_code": "NCB",
+                "payment_channel": "qr",
+            },
+            headers=headers,
+        )
+        assert resp_sandbox.status_code == 403
+        assert "VNPay sandbox simulator is disabled in production" in resp_sandbox.json()["detail"]
+
+    # 2. validate_vnpay_production_secret raises ValueError when VNPAY_HASH_SECRET == VNPAY_DEFAULT_HASH_SECRET and VNPAY_EXTERNAL_REDIRECT=true
+    monkeypatch.setenv("VNPAY_EXTERNAL_REDIRECT", "true")
+    monkeypatch.setenv("VNPAY_HASH_SECRET", VNPAY_DEFAULT_HASH_SECRET)
+    with pytest.raises(ValueError, match="VNPAY_HASH_SECRET"):
+        validate_vnpay_production_secret("production")
+
+    # Custom secret passes validation
+    monkeypatch.setenv("VNPAY_HASH_SECRET", "CUSTOMPRODVNPAYSECRETKEY2026HMACSHA512OK")
+    validate_vnpay_production_secret("production")
+
+    # 3. Verify payment_mode is set to 'vnpay_live' when external_redirect=True
+    vnpay_live = VNPayService()
+    assert vnpay_live.external_redirect is True
+    url_data = client.post(
+        "/api/billing/vnpay/create-payment-url",
+        json={"session_id": session_id, "bank_code": "NCB"},
+        headers=headers,
+    ).json()
+    signed_params = vnpay_live.build_signed_return_params(
+        vnp_txn_ref=url_data["vnp_txn_ref"],
+        amount_vnd=500000,
+        response_code="00",
+    )
+    ret_resp = client.post(
+        "/api/billing/vnpay/verify-return",
+        json={"vnp_params": signed_params, "session_id": session_id},
+        headers=headers,
+    )
+    assert ret_resp.status_code == 200
+    assert ret_resp.json()["transaction"]["payment_mode"] == "vnpay_live"
+
+
+
 
