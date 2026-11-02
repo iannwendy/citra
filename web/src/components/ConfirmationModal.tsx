@@ -78,6 +78,7 @@ export function ConfirmationModal({
             variant="outline"
             onClick={onCancel}
             disabled={submitting}
+            data-testid="confirmation-cancel-btn"
             className="w-full sm:w-auto"
           >
             {cancelLabel}
@@ -87,6 +88,7 @@ export function ConfirmationModal({
             variant={variant === 'danger' ? 'destructive' : 'default'}
             onClick={handleConfirm}
             disabled={submitting}
+            data-testid="confirmation-confirm-btn"
             className="w-full sm:w-auto"
           >
             {submitting ? 'Working...' : confirmLabel}

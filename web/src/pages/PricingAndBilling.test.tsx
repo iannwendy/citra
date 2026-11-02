@@ -588,8 +588,9 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     });
     expect(screen.getByTestId('settings-active-tier-badge').textContent).toContain('CITRA PRO');
 
-    // Click Cancel Auto-Renew
+    // Click Cancel Auto-Renew, then confirm in the confirmation dialog
     fireEvent.click(screen.getByTestId('settings-cancel-sub-btn'));
+    fireEvent.click(await screen.findByTestId('confirmation-confirm-btn'));
     await waitFor(() => {
       expect(cancelSpy).toHaveBeenCalledWith(false);
     });

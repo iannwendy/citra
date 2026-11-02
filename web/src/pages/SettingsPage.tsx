@@ -24,6 +24,7 @@ import {
 import { api, type BillingTransactionItem, type SubscriptionSummary } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRole } from '@/hooks/useRole';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { getQuotaView } from '@/lib/quotaDisplay';
 import { useTheme, type Theme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
@@ -62,6 +63,7 @@ export function SettingsPage(): JSX.Element {
   const [subscription, setSubscription] = useState<SubscriptionSummary | null>(null);
   const [transactions, setTransactions] = useState<BillingTransactionItem[]>([]);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -536,7 +538,7 @@ export function SettingsPage(): JSX.Element {
                       size="sm"
                       disabled={billingLoading}
                       data-testid="settings-cancel-sub-btn"
-                      onClick={() => handleCancelSubscription(false)}
+                      onClick={() => setConfirmCancelOpen(true)}
                       className="rounded-xl text-xs text-red-600 border-red-200 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30"
                     >
                       {billingLoading && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
@@ -628,6 +630,33 @@ export function SettingsPage(): JSX.Element {
           />
         </div>
       </div>
+      <ConfirmationModal
+        isOpen={confirmCancelOpen}
+        variant="danger"
+        title={
+          currentLang === 'vi' ? 'Tắt tự động gia hạn?' : 'Turn off auto-renewal?'
+        }
+        message={
+          currentLang === 'vi'
+            ? `Gói ${planTier.toUpperCase()} sẽ không được gia hạn. Bạn vẫn giữ toàn bộ quyền lợi đến ${
+                subscription?.current_period_end
+                  ? new Date(subscription.current_period_end).toLocaleDateString('vi-VN')
+                  : 'hết chu kỳ hiện tại'
+              }, sau đó tài khoản chuyển về gói Basic.`
+            : `Your ${planTier.toUpperCase()} plan will not renew. You keep all paid benefits until ${
+                subscription?.current_period_end
+                  ? new Date(subscription.current_period_end).toLocaleDateString('en-US')
+                  : 'the end of the current billing cycle'
+              }, then the account moves to Basic.`
+        }
+        confirmLabel={currentLang === 'vi' ? 'Tắt gia hạn' : 'Turn off auto-renew'}
+        cancelLabel={currentLang === 'vi' ? 'Giữ gói' : 'Keep my plan'}
+        onConfirm={async () => {
+          setConfirmCancelOpen(false);
+          await handleCancelSubscription(false);
+        }}
+        onCancel={() => setConfirmCancelOpen(false)}
+      />
     </div>
   );
 }
