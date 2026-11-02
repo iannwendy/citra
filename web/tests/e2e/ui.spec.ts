@@ -3,7 +3,7 @@
  * Complete UI coverage with Playwright
  * Run: npx playwright test
  *
- * NOTE: App uses App.tsx routes with ProtectedRoute
+ * NOTE: routes are defined in src/router.tsx (ProtectedRoute guards)
  * Routes: /login, /dashboard, /upload, /history, /essay/:id, /admin
  */
 

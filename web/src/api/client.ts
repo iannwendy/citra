@@ -1105,8 +1105,6 @@ export interface RemediatedBibliographyResponse {
 }
 
 export const api = {
-  health: () => request<HealthResponse>('/health'),
-
   // Public authentication flows (register, activate, forgot/reset password, google oauth)
   getGoogleConfig: () =>
     authRequest<GoogleConfigResponse>('/auth/google/config'),
@@ -1169,7 +1167,6 @@ export const api = {
     request<{ message: string }>(`/users/${id}`, { method: 'DELETE' }),
 
   // Self-service
-  getMe: () => request<User>('/users/me'),
   updateMe: (data: UserSelfUpdate) =>
     request<User>('/users/me', {
       method: 'PATCH',
@@ -1290,23 +1287,16 @@ export const api = {
   getEssayStatus: (id: number, options?: { signal?: AbortSignal }) =>
     request<EssayStatus>(`/essays/${id}/status`, { signal: options?.signal }),
 
-  getVerdicts: (id: number) => request<Verdict[]>(`/essays/${id}/verdicts`),
-
   // Essay list & delete (used by Dashboard, History)
   listEssays: () => request<EssaySummary[]>('/essays'),
-  listAllEssays: () => request<EssaySummary[]>('/essays/all'),
   /** Server-side aggregate over every essay visible to the caller (contract C2). */
   getEssayStats: () => request<EssayStats>('/essays/stats'),
   deleteEssay: (id: number) =>
     request<{ message: string }>(`/essays/${id}`, { method: 'DELETE' }),
 
   // Cache management (admin)
-  getCacheStats: () => request<CacheStats>('/cache/stats'),
   clearCache: () =>
     request<CacheClearResponse>('/cache', { method: 'DELETE' }),
-
-  downloadReport: (id: number, format: 'json' | 'csv' | 'pdf' | 'docx' = 'json') =>
-    `${BASE_URL}/essays/${id}/report?format=${format}`,
 
   getRemediatedBibliography: (
     id: number,
