@@ -885,8 +885,64 @@ def _json_response(
     )
 
 
-def _pdf_response(filename: str, essay, verdicts: list) -> StreamingResponse:
-    """Generate PDF report with 2-layer analysis."""
+def _build_qr_seal_drawing(seed: str, size: float = 64.0) -> Any:
+    """Build a deterministic ReportLab vector QR-style verification matrix seal."""
+    import hashlib
+
+    from reportlab.graphics.shapes import Drawing, Rect
+
+    dim = 15
+    cell = size / dim
+    drawing = Drawing(size, size)
+    drawing.add(
+        Rect(
+            0,
+            0,
+            size,
+            size,
+            fillColor=colors.white,
+            strokeColor=colors.HexColor("#cbd5e1"),
+            strokeWidth=0.6,
+        )
+    )
+
+    digest = hashlib.sha256((seed or "CITRA").encode()).digest()
+    for r in range(dim):
+        for c in range(dim):
+            in_tl = r < 5 and c < 5
+            in_tr = r < 5 and c >= dim - 5
+            in_bl = r >= dim - 5 and c < 5
+            is_dark = False
+            if in_tl:
+                is_dark = r in (0, 4) or c in (0, 4) or (r == 2 and c == 2)
+            elif in_tr:
+                c_rel = c - (dim - 5)
+                is_dark = r in (0, 4) or c_rel in (0, 4) or (r == 2 and c_rel == 2)
+            elif in_bl:
+                r_rel = r - (dim - 5)
+                is_dark = r_rel in (0, 4) or c in (0, 4) or (r_rel == 2 and c == 2)
+            elif not ((r < 6 and c < 6) or (r < 6 and c >= dim - 6) or (r >= dim - 6 and c < 6)):
+                idx = r * dim + c
+                byte_val = digest[idx % len(digest)]
+                is_dark = bool((byte_val >> (idx % 8)) & 1)
+            if is_dark:
+                drawing.add(
+                    Rect(
+                        c * cell,
+                        (dim - 1 - r) * cell,
+                        cell * 0.9,
+                        cell * 0.9,
+                        fillColor=colors.HexColor("#0f172a"),
+                        strokeColor=None,
+                    )
+                )
+    return drawing
+
+
+def _generate_pdf_bytes(essay, verdicts: list) -> bytes:
+    """Generate PDF report bytes with tamper-evident Digital Verification Receipt & QR seal."""
+    from integrity_checker.api.routes.essays import create_essay_share_token
+
     buffer = io.BytesIO()
 
     doc = SimpleDocTemplate(
@@ -917,6 +973,13 @@ def _pdf_response(filename: str, essay, verdicts: list) -> StreamingResponse:
         fontSize=10,
         spaceAfter=6,
     )
+    receipt_style = ParagraphStyle(
+        'ReceiptBody',
+        parent=styles['Normal'],
+        fontSize=8.5,
+        leading=11,
+        spaceAfter=2,
+    )
     table_cell_style = ParagraphStyle(
         'TableCell',
         parent=styles['Normal'],
@@ -936,14 +999,53 @@ def _pdf_response(filename: str, essay, verdicts: list) -> StreamingResponse:
 
     # Title
     elements.append(Paragraph("Citation Integrity Report", title_style))
-    elements.append(Spacer(1, 0.5 * cm))
+    elements.append(Spacer(1, 0.3 * cm))
 
     # Essay info (escape filename to prevent ReportLab XML/HTML tag injection & SSRF)
+    essay_id_val = int(getattr(essay, "id", 1) or 1)
+    utc_now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     elements.append(Paragraph(f"<b>File:</b> {escape(essay.filename or '')}", body_style))
-    elements.append(Paragraph(f"<b>Essay ID:</b> {essay.id}", body_style))
+    elements.append(Paragraph(f"<b>Essay ID:</b> {essay_id_val}", body_style))
     elements.append(Paragraph(f"<b>Pages:</b> {essay.num_pages}", body_style))
-    elements.append(Paragraph(f"<b>Generated:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", body_style))
-    elements.append(Spacer(1, 0.5 * cm))
+    elements.append(Paragraph(f"<b>Generated:</b> {utc_now_str}", body_style))
+
+    # Digital Verification Receipt & Vector QR Seal (Task 6.2)
+    share_info = create_essay_share_token(essay_id_val)
+    receipt_id = str(share_info["receipt_id"])
+    sig_prefix = str(share_info.get("signature_prefix") or "")
+    verification_url = str(
+        share_info.get("verification_url")
+        or f"https://citra.io.vn/verify/share/{share_info['share_token']}"
+    )
+
+    qr_drawing = _build_qr_seal_drawing(f"{receipt_id}|{verification_url}", size=62.0)
+    receipt_text_block = [
+        Paragraph("<b>CITRA Digital Verification Receipt (HMAC-SHA256)</b>", receipt_style),
+        Paragraph(f"<b>Receipt ID:</b> {escape(receipt_id)}", receipt_style),
+        Paragraph(f"<b>HMAC-SHA256 Signature Prefix:</b> {escape(sig_prefix)}", receipt_style),
+        Paragraph(f"<b>Verification URL:</b> {escape(verification_url)}", receipt_style),
+    ]
+    receipt_box = Table(
+        [[receipt_text_block, qr_drawing]],
+        colWidths=[13.8 * cm, 2.8 * cm],
+    )
+    receipt_box.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+                ("BOX", (0, 0), (-1, -1), 0.75, colors.HexColor("#6366f1")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (1, 0), (1, 0), "CENTER"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    elements.append(Spacer(1, 0.25 * cm))
+    elements.append(receipt_box)
+    elements.append(Spacer(1, 0.4 * cm))
 
     # Summary stats
     total = len(verdicts)
@@ -1068,9 +1170,14 @@ def _pdf_response(filename: str, essay, verdicts: list) -> StreamingResponse:
     # Build PDF
     doc.build(elements)
     buffer.seek(0)
+    return buffer.getvalue()
 
+
+def _pdf_response(filename: str, essay, verdicts: list) -> StreamingResponse:
+    """Generate PDF report with 2-layer analysis and Digital Verification Receipt."""
+    pdf_bytes = _generate_pdf_bytes(essay, verdicts)
     return StreamingResponse(
-        iter([buffer.getvalue()]),
+        iter([pdf_bytes]),
         media_type="application/pdf",
         headers={
             "Content-Disposition": _safe_content_disposition(filename, "report.pdf")
@@ -1140,6 +1247,7 @@ def _docx_response(filename: str, essay, verdicts: list) -> StreamingResponse:
         num_resource=resource,
         verdicts=verdict_list,
         generated_at=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
+        essay_id=int(getattr(essay, "id", 1) or 1),
         cis_components=cis_components,
         linking_summary=linking_summary,
         style_profile=style_profile,

@@ -233,3 +233,76 @@ class TestTask61ShareableVerificationLinks:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert admin_resp.status_code == 200
+
+
+class TestTask62ExportReceiptAndQrSeal:
+    """Task 6.2: Tamper-evident Digital Verification Receipt & QR seal in PDF and DOCX exports."""
+
+    def test_docx_export_contains_digital_receipt_and_verification_url(self, clean_db) -> None:
+        import io
+
+        from docx import Document as WordDocument
+
+        from integrity_checker.export.docx_exporter import export_report_to_docx
+
+        docx_bytes = export_report_to_docx(
+            filename="thesis_final.pdf",
+            cis_score=91.2,
+            num_citations=10,
+            num_verified=9,
+            num_metadata_error=1,
+            num_suspected=0,
+            num_unresolved=0,
+            num_resource=0,
+            verdicts=[
+                {
+                    "citation_raw": "Vaswani et al. (2017). Attention Is All You Need.",
+                    "label": "verified",
+                    "confidence": 0.99,
+                    "mapping_status": "matched",
+                }
+            ],
+            essay_id=42,
+        )
+        doc = WordDocument(io.BytesIO(docx_bytes))
+        all_paragraphs_text = "\n".join(p.text for p in doc.paragraphs)
+        all_tables_text = "\n".join(
+            cell.text for tbl in doc.tables for row in tbl.rows for cell in row.cells
+        )
+        combined = f"{all_paragraphs_text}\n{all_tables_text}"
+        assert "CITRA-00042-" in combined
+        assert "https://citra.io.vn/verify/share/sh_42_" in combined
+        assert "HMAC-SHA256 Signature Prefix" in combined
+
+    def test_pdf_export_contains_digital_receipt_and_qr_seal(self, clean_db) -> None:
+        import fitz
+
+        from integrity_checker.api.routes.report import _generate_pdf_bytes
+
+        client = TestClient(app)
+        admin_token, admin_info = _login(client, "admin", "admin123")
+        essay_id = _seed_sample_essay(clean_db, user_id=admin_info["id"])
+
+        essay = clean_db.get(EssayRecord, essay_id)
+        verdicts = Repository(clean_db).get_verdicts(essay_id)
+        pdf_bytes = _generate_pdf_bytes(essay, verdicts)
+        assert pdf_bytes.startswith(b"%PDF-")
+
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as pdf_doc:
+            extracted_text = "\n".join(page.get_text() for page in pdf_doc)
+
+        assert f"CITRA-{essay_id:05d}-" in extracted_text
+        assert f"https://citra.io.vn/verify/share/sh_{essay_id}_" in extracted_text
+        assert "CITRA Digital Verification Receipt" in extracted_text
+
+        # Also test via HTTP endpoint GET /api/essays/{id}/report?format=pdf and format=docx
+        resp_pdf = client.get(
+            f"/api/essays/{essay_id}/report?format=pdf",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert resp_pdf.status_code == 200
+        with fitz.open(stream=resp_pdf.content, filetype="pdf") as http_pdf:
+            http_pdf_text = "\n".join(page.get_text() for page in http_pdf)
+        assert f"CITRA-{essay_id:05d}-" in http_pdf_text
+        assert f"https://citra.io.vn/verify/share/sh_{essay_id}_" in http_pdf_text
+

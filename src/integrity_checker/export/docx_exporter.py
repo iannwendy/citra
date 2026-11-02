@@ -90,6 +90,7 @@ def export_report_to_docx(
     verdicts: list[dict],
     generated_at: str | None = None,
     *,
+    essay_id: int = 1,
     cis_components: dict[str, float] | None = None,
     linking_summary: dict[str, int] | None = None,
     style_profile: dict | None = None,
@@ -121,16 +122,55 @@ def export_report_to_docx(
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     # Metadata
+    utc_ts = generated_at or datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     doc.add_paragraph()
     meta = doc.add_paragraph()
     meta.add_run("Essay: ").bold = True
     meta.add_run(filename)
     meta = doc.add_paragraph()
     meta.add_run("Generated: ").bold = True
-    meta.add_run(generated_at or datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"))
+    meta.add_run(utc_ts)
     meta = doc.add_paragraph()
     meta.add_run("System: ").bold = True
     meta.add_run("Essay Integrity Checker (DATN)")
+
+    # Digital Verification Receipt (Chứng chỉ Xác thực Số CITRA) — Task 6.2
+    from integrity_checker.api.routes.essays import create_essay_share_token
+
+    share_info = create_essay_share_token(int(essay_id or 1))
+    receipt_id = str(share_info["receipt_id"])
+    sig_prefix = str(share_info.get("signature_prefix") or "")
+    verification_url = str(
+        share_info.get("verification_url")
+        or f"https://citra.io.vn/verify/share/{share_info['share_token']}"
+    )
+
+    doc.add_heading("Digital Verification Receipt (Chứng chỉ Xác thực Số CITRA)", level=2)
+    receipt_summary_p = doc.add_paragraph()
+    r_rec_lbl = receipt_summary_p.add_run("Receipt ID: ")
+    r_rec_lbl.bold = True
+    receipt_summary_p.add_run(f"{receipt_id}  |  ")
+    r_url_lbl = receipt_summary_p.add_run("Verification URL: ")
+    r_url_lbl.bold = True
+    receipt_summary_p.add_run(verification_url)
+
+    receipt_table = doc.add_table(rows=5, cols=2)
+    receipt_table.style = "Table Grid"
+    receipt_rows = [
+        ("Receipt ID", receipt_id),
+        ("UTC Timestamp", utc_ts),
+        ("CIS Score", f"{cis_score:.2f}%"),
+        ("HMAC-SHA256 Signature Prefix", sig_prefix),
+        ("Verification URL", verification_url),
+    ]
+    for r_idx, (r_label, r_val) in enumerate(receipt_rows):
+        row = receipt_table.rows[r_idx]
+        row.cells[0].text = r_label
+        row.cells[1].text = r_val
+        _set_cell_background(row.cells[0], "EEF2FF")
+        for paragraph in row.cells[0].paragraphs:
+            for run in paragraph.runs:
+                run.font.bold = True
 
     # CIS Score Section
     doc.add_heading("Citation Integrity Score (CIS)", level=1)
