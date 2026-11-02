@@ -791,6 +791,237 @@ def get_essay_stats(
     }
 
 
+# ---------------------------------------------------------------------------
+# Phase 6.1: Cryptographic Shareable Verification Links & Digital Receipt API
+# ---------------------------------------------------------------------------
+
+def create_essay_share_token(essay_id: int, expires_days: int | float = 30) -> dict[str, Any]:
+    """Create an HMAC-SHA256 signed shareable verification token and Digital Receipt ID."""
+    import hashlib
+    import hmac
+    from datetime import UTC, datetime, timedelta
+
+    from integrity_checker.config import get_settings
+
+    eid = int(essay_id)
+    exp_dt = datetime.now(UTC) + timedelta(days=float(expires_days))
+    exp_unix = int(exp_dt.timestamp())
+    secret = (get_settings().auth.jwt_secret or "change-me-in-production-use-env-var").encode()
+    payload = f"citra:share:{eid}:{exp_unix}".encode()
+    hmac_hex = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+    sig24 = hmac_hex[:24]
+    token = f"sh_{eid}_{exp_unix}_{sig24}"
+    receipt_id = f"CITRA-{eid:05d}-{hmac_hex[:8].upper()}"
+    return {
+        "essay_id": eid,
+        "share_token": token,
+        "share_url": f"/verify/share/{token}",
+        "verification_url": f"https://citra.io.vn/verify/share/{token}",
+        "receipt_id": receipt_id,
+        "signature_prefix": sig24,
+        "expires_at": exp_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+
+def verify_essay_share_token(token: str) -> int:
+    """Verify HMAC-SHA256 signature and expiration of a share token, returning essay_id."""
+    import hashlib
+    import hmac
+    from datetime import UTC, datetime
+
+    from integrity_checker.config import get_settings
+
+    raw = (token or "").strip()
+    parts = raw.split("_")
+    if len(parts) != 4 or parts[0] != "sh":
+        raise HTTPException(status_code=403, detail="Invalid share token format")
+    _, essay_id_str, exp_str, sig_part = parts
+    if not essay_id_str.isdigit() or not exp_str.lstrip("-").isdigit() or len(sig_part) != 24:
+        raise HTTPException(status_code=403, detail="Invalid share token structure")
+
+    essay_id = int(essay_id_str)
+    exp_unix = int(exp_str)
+    secret = (get_settings().auth.jwt_secret or "change-me-in-production-use-env-var").encode()
+    payload = f"citra:share:{essay_id}:{exp_unix}".encode()
+    expected_hex = hmac.new(secret, payload, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig_part.lower(), expected_hex[:24].lower()):
+        raise HTTPException(status_code=403, detail="Invalid or tampered share token signature")
+
+    now_unix = int(datetime.now(UTC).timestamp())
+    if exp_unix < now_unix:
+        raise HTTPException(status_code=403, detail="Share token has expired")
+    return essay_id
+
+
+@router.post("/{essay_id}/share")
+def create_essay_share_link(
+    essay_id: int,
+    expires_days: int = 30,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Generate a cryptographic HMAC-SHA256 shareable verification link (owner, teacher, or admin)."""
+    repo = Repository(db)
+    essay = repo.get_essay(essay_id)
+    if not essay:
+        raise HTTPException(status_code=404, detail="Essay not found")
+    if not repo.can_user_access_essay(current_user, essay):
+        raise HTTPException(status_code=403, detail="Access denied")
+    clamped_days = max(1, min(365, int(expires_days or 30)))
+    return create_essay_share_token(essay.id, expires_days=clamped_days)
+
+
+@router.get("/shared/{share_token}")
+def get_shared_essay_report(
+    share_token: str,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Public (unauthenticated) verification report for a cryptographically signed share token."""
+    import json
+    from datetime import UTC, datetime
+
+    from integrity_checker.config import get_settings
+
+    essay_id = verify_essay_share_token(share_token)
+    repo = Repository(db)
+    essay = repo.get_essay(essay_id)
+    if not essay:
+        raise HTTPException(status_code=404, detail="Essay not found")
+
+    parts = share_token.strip().split("_")
+    exp_unix = int(parts[2])
+    sig_part = parts[3]
+    receipt_id = f"CITRA-{essay.id:05d}-{sig_part[:8].upper()}"
+    expires_at = datetime.fromtimestamp(exp_unix, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    verdicts = sorted(repo.get_verdicts(essay.id), key=lambda v: v.id or 0)
+    citations = repo.get_citations(essay.id)
+    in_text_count = sum(1 for c in citations if c.citation_type in {"in_text", "numeric"})
+    num_citations = in_text_count or len(verdicts)
+
+    verdict_counts: dict[str, int] = {
+        "verified": 0,
+        "metadata_error": 0,
+        "suspected_hallucination": 0,
+        "unresolved": 0,
+        "resource": 0,
+    }
+    public_verdicts: list[dict[str, Any]] = []
+    for idx, v in enumerate(verdicts, start=1):
+        lbl = str(v.label or "unresolved").lower()
+        if lbl in verdict_counts:
+            verdict_counts[lbl] += 1
+        try:
+            features_dict = json.loads(v.features or "{}")
+        except Exception:
+            features_dict = {}
+        try:
+            triggered_rules = json.loads(v.triggered_rules or "[]")
+        except Exception:
+            triggered_rules = []
+        try:
+            mismatched_fields = json.loads(v.mismatched_fields or "[]")
+        except Exception:
+            mismatched_fields = []
+        matched_sources = features_dict.get("matched_sources", [])
+        if not isinstance(matched_sources, list):
+            matched_sources = []
+        matched_source = matched_sources[0] if matched_sources else None
+        ref_id = f"ref-{idx:04d}"
+        public_verdicts.append({
+            "reference_id": ref_id,
+            "citation_id": f"v{v.id}",
+            "raw_text": v.citation_raw,
+            "citation_raw": v.citation_raw,
+            "label": lbl,
+            "confidence": float(v.confidence or 0.0),
+            "mapping_status": v.mapping_status or "matched",
+            "explanation": v.reasoning or "",
+            "reasoning": v.reasoning or "",
+            "triggered_rules": triggered_rules,
+            "mismatched_fields": mismatched_fields,
+            "matched_source": matched_source,
+            "matched_sources": matched_sources,
+        })
+
+    style_profile_dict = None
+    if essay.style_profile_json:
+        try:
+            style_profile_dict = json.loads(essay.style_profile_json)
+        except Exception:
+            style_profile_dict = None
+    if not isinstance(style_profile_dict, dict):
+        style_profile_dict = {
+            "style": "UNKNOWN",
+            "confidence": 0.0,
+            "apa_count": 0,
+            "ieee_count": 0,
+            "mixed_count": 0,
+            "features": {},
+            "ratios": {},
+            "explanation": "",
+        }
+
+    cis_dict = None
+    if essay.cis_json:
+        try:
+            cis_dict = json.loads(essay.cis_json)
+        except Exception:
+            cis_dict = None
+    academic_total = sum(1 for v in verdicts if v.label != "resource")
+    verified_cnt = verdict_counts["verified"]
+    matched_cnt = sum(1 for v in verdicts if (v.mapping_status or "matched") == "matched")
+    if not isinstance(cis_dict, dict):
+        fallback_score = round((verified_cnt / academic_total * 100.0) if academic_total > 0 else 0.0, 1)
+        cis_dict = {
+            "score": fallback_score,
+            "components": {
+                "verified_ratio": round(verified_cnt / academic_total, 4) if academic_total > 0 else 0.0,
+                "metadata_accuracy": round(verified_cnt / academic_total, 4) if academic_total > 0 else 0.0,
+                "in_text_bib_consistency": round(matched_cnt / academic_total, 4) if academic_total > 0 else 0.0,
+                "format_consistency": 1.0 if academic_total > 0 else 0.0,
+                "identifier_validity": round(verified_cnt / academic_total, 4) if academic_total > 0 else 0.0,
+            },
+            "weights_used": {},
+            "num_citations": academic_total,
+            "num_unresolved": verdict_counts["unresolved"],
+            "disclaimer": get_settings().disclaimer.long,
+        }
+    elif "components" not in cis_dict or not isinstance(cis_dict.get("components"), dict):
+        cis_dict["components"] = {
+            "verified_ratio": round(verified_cnt / academic_total, 4) if academic_total > 0 else 0.0,
+            "metadata_accuracy": 0.0,
+            "in_text_bib_consistency": round(matched_cnt / academic_total, 4) if academic_total > 0 else 0.0,
+            "format_consistency": 0.0,
+            "identifier_validity": 0.0,
+        }
+
+    created_iso = (
+        essay.uploaded_at.isoformat()
+        if essay.uploaded_at
+        else datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    )
+    return {
+        "essay_id": essay.id,
+        "filename": essay.filename,
+        "created_at": created_iso,
+        "num_pages": essay.num_pages or 0,
+        "num_citations": num_citations,
+        "cis": cis_dict,
+        "style_profile": style_profile_dict,
+        "receipt_id": receipt_id,
+        "share_token": share_token,
+        "share_url": f"/verify/share/{share_token}",
+        "verification_url": f"https://citra.io.vn/verify/share/{share_token}",
+        "signature_prefix": sig_part,
+        "verified_at": created_iso,
+        "expires_at": expires_at,
+        "disclaimer": get_settings().disclaimer.long,
+        "verdict_counts": verdict_counts,
+        "verdicts": public_verdicts,
+    }
+
+
 @router.get("/{essay_id}")
 def get_essay(
     essay_id: int,

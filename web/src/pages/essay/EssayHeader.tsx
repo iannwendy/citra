@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Quote, Clock, Download, ShieldCheck, Lock, Sparkles, Loader2 } from 'lucide-react';
-import { api } from '@/api/client';
+import { ArrowLeft, Quote, Clock, Download, ShieldCheck, Lock, Sparkles, Loader2, Share2, ExternalLink } from 'lucide-react';
+import { api, type EssayShareLinkResponse } from '@/api/client';
 import { useRole } from '@/hooks/useRole';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
@@ -37,7 +37,8 @@ export function EssayHeader({
   const toast = useToast();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [lockedFormat, setLockedFormat] = useState<string>('PDF');
-  const [busy, setBusy] = useState<ExportFormat | 'healed' | null>(null);
+  const [busy, setBusy] = useState<ExportFormat | 'healed' | 'share' | null>(null);
+  const [shareInfo, setShareInfo] = useState<EssayShareLinkResponse | null>(null);
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
 
   // Export permissions come from the plan quota (backend `/auth/me`), never
@@ -94,6 +95,37 @@ export function EssayHeader({
     void runDownload('healed', 'AUTO-HEALED DOCX', () =>
       api.downloadAutoHealedDocx(essayId, targetStyle, filename),
     );
+  };
+
+  const handleShareReceipt = async () => {
+    if (busy) return;
+    setBusy('share');
+    try {
+      const res = await api.createEssayShareLink(essayId);
+      setShareInfo(res);
+      const origin =
+        typeof window !== 'undefined' && window.location?.origin
+          ? window.location.origin
+          : 'https://citra.io.vn';
+      const fullUrl = `${origin}/verify/share/${res.share_token}`;
+      try {
+        await navigator.clipboard?.writeText(fullUrl);
+      } catch {
+        // Ignore clipboard errors in headless environments
+      }
+      toast.success(
+        t('essay.share.toastTitle'),
+        `${res.receipt_id} — ${t('essay.share.toastCopied')}`,
+      );
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : '';
+      toast.error(
+        t('essay.share.failedTitle'),
+        detail || t('essay.share.failedMessage'),
+      );
+    } finally {
+      setBusy(null);
+    }
   };
 
   const renderFormatButton = (fmt: ExportFormat, primary = false) => {
@@ -242,7 +274,41 @@ export function EssayHeader({
                 )}
               </Button>
             </Tooltip>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void handleShareReceipt()}
+              disabled={busy === 'share'}
+              aria-busy={busy === 'share'}
+              data-testid="share-receipt-btn"
+              className="h-8 font-mono text-xs rounded-xl border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 w-full sm:w-auto"
+            >
+              {busy === 'share' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Share2 className="h-3.5 w-3.5" />
+              )}
+              {t('essay.share.buttonLabel')}
+            </Button>
           </div>
+          {shareInfo && (
+            <div
+              data-testid="shared-receipt-banner"
+              className="flex items-center gap-2 text-xs font-mono text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 rounded-lg px-2.5 py-1 mt-1"
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+              <span className="font-bold">{shareInfo.receipt_id}</span>
+              <Link
+                to={`/verify/share/${shareInfo.share_token}`}
+                data-testid="shared-receipt-link"
+                className="inline-flex items-center gap-1 underline hover:text-indigo-900 dark:hover:text-indigo-100"
+              >
+                {t('essay.share.openPublicReceipt')}
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            </div>
+          )}
         </div>
       </div>
 

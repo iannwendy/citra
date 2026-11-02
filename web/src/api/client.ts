@@ -467,6 +467,60 @@ export interface EssayStats {
   resource: number;
 }
 
+// --- Phase 6.1: Cryptographic Shareable Verification Links & Public Audit Receipt ---
+
+export interface EssayShareLinkResponse {
+  essay_id: number;
+  share_token: string;
+  share_url: string;
+  verification_url?: string;
+  receipt_id: string;
+  signature_prefix?: string;
+  expires_at: string;
+}
+
+export interface SharedVerdictItem {
+  reference_id: string;
+  citation_id?: string;
+  raw_text: string;
+  citation_raw?: string;
+  label: ValidationLabel;
+  confidence: number;
+  mapping_status?: string;
+  explanation: string;
+  reasoning?: string;
+  triggered_rules: string[];
+  mismatched_fields?: string[];
+  matched_source?: MatchedSource | null;
+  matched_sources?: MatchedSource[];
+}
+
+export interface SharedEssayReport {
+  essay_id: number;
+  filename: string;
+  created_at: string;
+  num_pages: number;
+  num_citations: number;
+  cis: CIS;
+  style_profile: StyleProfile;
+  receipt_id: string;
+  share_token?: string;
+  share_url?: string;
+  verification_url?: string;
+  signature_prefix?: string;
+  verified_at: string;
+  expires_at?: string;
+  disclaimer: string;
+  verdict_counts: {
+    verified: number;
+    metadata_error: number;
+    suspected_hallucination: number;
+    unresolved: number;
+    resource: number;
+  };
+  verdicts: SharedVerdictItem[];
+}
+
 // --- Cache stats (admin) ---
 
 export interface CacheStats {
@@ -1300,6 +1354,17 @@ export const api = {
   getEssayStats: () => request<EssayStats>('/essays/stats'),
   deleteEssay: (id: number) =>
     request<{ message: string }>(`/essays/${id}`, { method: 'DELETE' }),
+
+  // Cryptographic Shareable Verification Links & Public Digital Receipt (Task 6.1)
+  createEssayShareLink: (essayId: number, expiresDays: number = 30) =>
+    request<EssayShareLinkResponse>(
+      `/essays/${essayId}/share?expires_days=${encodeURIComponent(String(expiresDays))}`,
+      { method: 'POST' },
+    ),
+  getSharedEssayReport: (shareToken: string) =>
+    authRequest<SharedEssayReport>(
+      `/essays/shared/${encodeURIComponent(shareToken)}`,
+    ),
 
   // Cache management (admin)
   clearCache: () =>

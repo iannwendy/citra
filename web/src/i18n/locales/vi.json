@@ -398,6 +398,14 @@
       "upgradeFeature": "Xuất báo cáo {{format}}",
       "upgradeTitle": "Mở khóa xuất báo cáo học thuật định dạng {{format}}",
       "upgradeDescription": "Gói hiện tại không hỗ trợ xuất {{format}}. Nâng cấp lên gói Pro ($16/tháng khi trả năm) để tải báo cáo PDF, Word (DOCX), JSON và CSV đầy đủ."
+    },
+    "share": {
+      "buttonLabel": "Chia sẻ Chứng chỉ",
+      "toastTitle": "Đã tạo Chứng chỉ Xác thực Số",
+      "toastCopied": "Đã sao chép liên kết xác thực vào bộ nhớ tạm",
+      "openPublicReceipt": "Mở Chứng chỉ Công khai",
+      "failedTitle": "Không thể tạo liên kết chia sẻ",
+      "failedMessage": "Vui lòng thử lại sau giây lát."
     }
   },
   "teacher": {
@@ -674,5 +682,32 @@
     "closeModalAria": "Đóng hộp thoại",
     "backToReports": "← Quay lại danh sách báo cáo",
     "loadError": "Không thể tải tài liệu. Vui lòng thử lại."
+  },
+  "sharedReport": {
+    "publicAuditBadge": "CHỨNG CHỈ KIỂM TOÁN CÔNG KHAI",
+    "copyVerificationLink": "Sao chép liên kết",
+    "copied": "Đã sao chép!",
+    "hmacVerifiedSeal": "Đã xác thực HMAC-SHA256",
+    "receiptHeading": "Chứng chỉ Xác thực Số & Báo cáo Kiểm toán Công khai CITRA",
+    "pagesLabel": "Số trang",
+    "citationsLabel": "Trích dẫn",
+    "styleLabel": "Chuẩn trích dẫn",
+    "verifiedAtLabel": "Ngày xác thực",
+    "qrSealTitle": "Con dấu Mật mã",
+    "qrSealSubtitle": "Liên kết xác thực chống giả mạo chữ ký HMAC-SHA256",
+    "compVerifiedRatio": "Tỷ lệ xác minh nguồn (Tầng 2)",
+    "compMetadataAccuracy": "Độ chính xác Metadata",
+    "compLinkingConsistency": "Nhất quán Trích dẫn <-> Tham khảo (Tầng 1)",
+    "compFormatConsistency": "Nhất quán Chuẩn định dạng",
+    "compIdentifierValidity": "Tính hợp lệ của DOI / Định danh",
+    "verdictDistributionTitle": "Phân bố Phán quyết",
+    "verdictDistributionSubtitle": "Tổng hợp Xác minh Neuro-Symbolic 2 Tầng",
+    "noVerdicts": "Không có phán quyết tài liệu tham khảo nào cho bản thảo này.",
+    "explanationLabel": "Lý giải Chẩn đoán",
+    "matchedSourceLabel": "Nguồn Khớp",
+    "verifyingSignature": "Đang kiểm tra chữ ký mật mã HMAC-SHA256...",
+    "invalidOrExpiredTitle": "Liên kết Xác thực Không hợp lệ hoặc Đã hết hạn",
+    "invalidOrExpiredDesc": "Mã chia sẻ mật mã này không hợp lệ, đã bị thay đổi hoặc đã hết hạn.",
+    "returnHome": "Về trang chủ CITRA"
   }
 }

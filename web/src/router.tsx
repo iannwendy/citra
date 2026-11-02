@@ -83,6 +83,7 @@ const AuditLogPage = lazyWithRetry(() => import('./pages/AuditLogPage').then((m)
 const PricingPage = lazyWithRetry(() => import('./pages/PricingPage').then((m) => ({ default: m.PricingPage })));
 const StripeDemoCheckoutPage = lazyWithRetry(() => import('./pages/StripeDemoCheckoutPage').then((m) => ({ default: m.StripeDemoCheckoutPage })));
 const BillingSuccessPage = lazyWithRetry(() => import('./pages/BillingSuccessPage').then((m) => ({ default: m.BillingSuccessPage })));
+const SharedReportPage = lazyWithRetry(() => import('./pages/SharedReportPage').then((m) => ({ default: m.SharedReportPage })));
 
 // Route-level ErrorBoundary that overrides React Router's raw "Unexpected Application Error!"
 // screen and automatically recovers from stale dynamic import chunk errors after deployments.
@@ -198,6 +199,7 @@ const PAGE_TITLE_ROUTES: Array<{ pattern: string; title: string }> = [
   { pattern: '/teacher/classes', title: 'My Classes' },
   { pattern: '/teacher/classes/:classId', title: 'Class Detail' },
   { pattern: '/teacher/reviews', title: 'Pending Reviews' },
+  { pattern: '/verify/share/:token', title: 'Digital Verification Receipt' },
 ];
 
 export function getDocumentTitle(pathname: string): string {
@@ -287,6 +289,10 @@ export const router = createBrowserRouter([
       {
         path: '/pricing',
         element: <HybridPricingRoute />,
+      },
+      {
+        path: '/verify/share/:token',
+        element: withSuspense(SharedReportPage),
       },
 
       // Protected routes with AppLayout (sidebar navigation)

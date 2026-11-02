@@ -398,6 +398,14 @@
       "upgradeFeature": "Export {{format}} Report",
       "upgradeTitle": "Unlock Academic Report Export ({{format}})",
       "upgradeDescription": "Your current plan does not include {{format}} export. Upgrade to Pro ($16/mo billed annually) to export formatted PDF, Word (DOCX), JSON and CSV reports."
+    },
+    "share": {
+      "buttonLabel": "Share Receipt",
+      "toastTitle": "Digital Verification Receipt Created",
+      "toastCopied": "Verification link copied to clipboard",
+      "openPublicReceipt": "Open Public Receipt",
+      "failedTitle": "Could not create share link",
+      "failedMessage": "Please try again in a moment."
     }
   },
   "teacher": {
@@ -674,5 +682,32 @@
     "closeModalAria": "Close modal",
     "backToReports": "← Back to Reports",
     "loadError": "Failed to load document. Please try again."
+  },
+  "sharedReport": {
+    "publicAuditBadge": "PUBLIC AUDIT RECEIPT",
+    "copyVerificationLink": "Copy Link",
+    "copied": "Copied!",
+    "hmacVerifiedSeal": "HMAC-SHA256 Verified",
+    "receiptHeading": "CITRA Digital Verification Receipt & Public Audit Report",
+    "pagesLabel": "Pages",
+    "citationsLabel": "Citations",
+    "styleLabel": "Style",
+    "verifiedAtLabel": "Verified Date",
+    "qrSealTitle": "Cryptographic Seal",
+    "qrSealSubtitle": "Tamper-evident HMAC-SHA256 verification link",
+    "compVerifiedRatio": "Verified Ratio (Layer 2)",
+    "compMetadataAccuracy": "Metadata Accuracy",
+    "compLinkingConsistency": "In-Text <-> Bibliography Consistency (Layer 1)",
+    "compFormatConsistency": "Citation Style Consistency",
+    "compIdentifierValidity": "DOI / Identifier Validity",
+    "verdictDistributionTitle": "Verdict Distribution",
+    "verdictDistributionSubtitle": "Neuro-Symbolic 2-Layer Verification Summary",
+    "noVerdicts": "No reference verdicts recorded for this manuscript.",
+    "explanationLabel": "Diagnostic Reasoning",
+    "matchedSourceLabel": "Matched Source",
+    "verifyingSignature": "Verifying cryptographic HMAC-SHA256 signature...",
+    "invalidOrExpiredTitle": "Verification Link Invalid or Expired",
+    "invalidOrExpiredDesc": "This cryptographic share token is invalid, tampered with, or has expired.",
+    "returnHome": "Return to CITRA Home"
   }
 }
