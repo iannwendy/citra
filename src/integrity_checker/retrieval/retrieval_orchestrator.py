@@ -20,6 +20,7 @@ v1.3 (tuần 9):
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import hashlib
 import re
 from typing import TYPE_CHECKING
@@ -62,6 +63,10 @@ if TYPE_CHECKING:
     from integrity_checker.retrieval.cache import DiskCache
 
 logger = get_logger(__name__)
+
+_ALLOW_SERPAPI_OVERRIDE: contextvars.ContextVar[bool | None] = contextvars.ContextVar(
+    "_allow_serpapi_override", default=None
+)
 
 
 # Known NLP/ML papers - không bao giờ là hallucination
@@ -1536,7 +1541,12 @@ class RetrievalOrchestrator:
 
         return None
 
-    async def retrieve(self, citation: Citation) -> SourceResult:
+    async def retrieve(
+        self,
+        citation: Citation,
+        *,
+        allow_serpapi: bool | None = None,
+    ) -> SourceResult:
         """Main retrieval entry point with smart domain-aware staged execution.
 
         Flow:
@@ -1859,12 +1869,21 @@ class RetrievalOrchestrator:
 
         serpapi_candidate = None
         min_failed_for_serpapi = 1 if len(sources_queried) <= 1 else 2
+        effective_allow_serpapi = (
+            allow_serpapi
+            if allow_serpapi is not None
+            else _ALLOW_SERPAPI_OVERRIDE.get()
+        )
+        serpapi_enabled = (
+            bool(get_settings().retrieval.sources.serpapi)
+            and (effective_allow_serpapi is not False)
+        )
         if (
             not any(c.found for c in deduped)
             and not nonexistent_registry_confirmed
             and not serpapi_quota_guard_skip
             and len(failed) >= min_failed_for_serpapi
-            and get_settings().retrieval.sources.serpapi
+            and serpapi_enabled
         ):
             serpapi_candidate = await self._lookup_serpapi_fallback(citation)
             if serpapi_candidate:

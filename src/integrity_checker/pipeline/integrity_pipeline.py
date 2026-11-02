@@ -463,9 +463,22 @@ class IntegrityPipeline:
 
     # -- sync entry (CLI / tests) --
 
-    def run(self, pdf_path: str, essay_id: int = 0) -> AnalysisReport:
+    def run(
+        self,
+        pdf_path: str,
+        essay_id: int = 0,
+        max_citations: int | None = None,
+        allow_serpapi: bool | None = None,
+    ) -> AnalysisReport:
         """Sync wrapper quanh async run_async."""
-        return asyncio.run(self.run_async(pdf_path, essay_id=essay_id))
+        return asyncio.run(
+            self.run_async(
+                pdf_path,
+                essay_id=essay_id,
+                max_citations=max_citations,
+                allow_serpapi=allow_serpapi,
+            )
+        )
 
     # -- async entry (FastAPI) --
 
@@ -474,6 +487,8 @@ class IntegrityPipeline:
         pdf_path: str,
         essay_id: int = 0,
         progress_callback: Any | None = None,
+        max_citations: int | None = None,
+        allow_serpapi: bool | None = None,
     ) -> AnalysisReport:
         """Full pipeline async.
 
@@ -723,7 +738,23 @@ class IntegrityPipeline:
             cit = unique_citations[key]
             if _is_verifiable(cit):
                 verifiable_keys.append(key)
+        citations_truncated_by_plan = False
+        original_verifiable_count = len(verifiable_keys)
+        if max_citations is not None and max_citations > 0 and len(verifiable_keys) > max_citations:
+            verifiable_keys = verifiable_keys[:max_citations]
+            citations_truncated_by_plan = True
         unique_list = [unique_citations[key] for key in verifiable_keys]
+        if style_profile_dict is not None:
+            style_profile_dict["citations_truncated_by_plan"] = citations_truncated_by_plan
+            if isinstance(style_profile_dict.get("document_diagnostics"), dict):
+                style_profile_dict["document_diagnostics"]["citations_truncated_by_plan"] = (
+                    citations_truncated_by_plan
+                )
+                if citations_truncated_by_plan:
+                    style_profile_dict["document_diagnostics"]["max_citations_limit"] = max_citations
+                    style_profile_dict["document_diagnostics"]["total_verifiable_citations"] = (
+                        original_verifiable_count
+                    )
 
         _emit(
             "retrieving",
@@ -735,10 +766,23 @@ class IntegrityPipeline:
         # FIX v1.7: Only retrieve for verifiable citations (references, not in-text).
         # Limit concurrent paper retrievals to avoid HTTP 429 bursts on scholarly APIs.
         retrieval_sem = asyncio.Semaphore(8)
+        from integrity_checker.retrieval.retrieval_orchestrator import _ALLOW_SERPAPI_OVERRIDE
+
+        retrieve_params = inspect.signature(self.orchestrator.retrieve).parameters
+        supports_allow_serpapi_kwarg = (
+            "allow_serpapi" in retrieve_params
+            or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in retrieve_params.values())
+        )
 
         async def _bounded_retrieve(cit: Citation) -> SourceResult:
             async with retrieval_sem:
-                return await self.orchestrator.retrieve(cit)
+                token = _ALLOW_SERPAPI_OVERRIDE.set(allow_serpapi)
+                try:
+                    if supports_allow_serpapi_kwarg and allow_serpapi is not None:
+                        return await self.orchestrator.retrieve(cit, allow_serpapi=allow_serpapi)
+                    return await self.orchestrator.retrieve(cit)
+                finally:
+                    _ALLOW_SERPAPI_OVERRIDE.reset(token)
 
         unique_sources = await asyncio.gather(
             *(_bounded_retrieve(c) for c in unique_list),
@@ -761,6 +805,8 @@ class IntegrityPipeline:
             source_by_key = dict(zip(verifiable_keys, unique_sources, strict=True))
             in_verdicts = {id(c) for c in unique_list}
             for ref in ref_citations:
+                if max_citations is not None and max_citations > 0 and len(verdict_pairs) >= max_citations:
+                    break
                 if id(ref) in in_verdicts or ref.reference_id not in duplicate_ref_ids:
                     continue
                 shared_source = source_by_key.get(citation_key(ref))

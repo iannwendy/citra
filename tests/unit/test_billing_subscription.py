@@ -1127,6 +1127,143 @@ def test_sandbox_generate_pdf_enforces_upload_quota_and_reanalyze_uses_backgroun
             assert mock_pipe.call_count == 4
 
 
+@pytest.mark.asyncio
+async def test_pipeline_enforces_max_citations_and_allow_serpapi_fallback(tmp_path) -> None:
+    """IntegrityPipeline.run_async caps verifiable citations to max_citations and disables SerpApi when allow_serpapi=False."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from integrity_checker.extraction.base import Document, Page
+    from integrity_checker.extraction.document_parser import ParsedDocument
+    from integrity_checker.models.citation import Citation, CitationStyle, CitationType
+    from integrity_checker.models.source import SourceCandidate, SourceResult
+    from integrity_checker.models.validation import CitationVerdict, ValidationLabel
+    from integrity_checker.pipeline.integrity_pipeline import IntegrityPipeline
+
+    refs = [
+        Citation(
+            raw_text=f"[{idx}] Author{idx} (2020). Paper Title Number {idx}.",
+            citation_type=CitationType.REFERENCE_LIST,
+            style=CitationStyle.IEEE,
+            authors=[f"Author{idx}"],
+            year=2020,
+            title=f"Paper Title Number {idx}",
+            numeric_index=idx,
+        )
+        for idx in range(1, 6)
+    ]
+    body_cits = [
+        Citation(
+            raw_text=f"[{idx}]",
+            citation_type=CitationType.IN_TEXT,
+            style=CitationStyle.IEEE,
+            numeric_index=idx,
+            page_num=1,
+        )
+        for idx in range(1, 6)
+    ]
+    parsed_doc = ParsedDocument(
+        document=Document(
+            file_path=str(tmp_path / "test.pdf"),
+            num_pages=1,
+            pages=[Page(page_num=1, text="Body [1] [2] [3] [4] [5]")],
+            parser_used="mupdf",
+        ),
+        body_citations=body_cits,
+        references=refs,
+        appendix_citations=[],
+        parser_warnings=[],
+    )
+
+    mock_doc_parser = MagicMock()
+    mock_doc_parser.parse.return_value = parsed_doc
+
+    seen_allow_serpapi: list[bool | None] = []
+
+    class DummyOrchestrator:
+        async def retrieve(self, citation: Citation, *, allow_serpapi: bool | None = None) -> SourceResult:
+            seen_allow_serpapi.append(allow_serpapi)
+            return SourceResult(
+                citation_raw=citation.raw_text,
+                candidates=[
+                    SourceCandidate(
+                        source_name="crossref",
+                        found=True,
+                        title=citation.title,
+                        authors=citation.authors or [],
+                        year=str(citation.year or 2020),
+                        confidence=0.95,
+                    )
+                ],
+                sources_queried=["crossref"],
+                sources_succeeded=["crossref"],
+                sources_failed={},
+            )
+
+    mock_checker = MagicMock()
+    mock_checker.check.side_effect = lambda cit, src, **kw: CitationVerdict(
+        citation=cit,
+        label=ValidationLabel.VERIFIED,
+        confidence=0.95,
+        matched_source=src,
+    )
+
+    pdf_file = tmp_path / "test.pdf"
+    pdf_file.write_bytes(b"%PDF-1.4 dummy")
+
+    pipeline = IntegrityPipeline(
+        document_parser=mock_doc_parser,
+        orchestrator=DummyOrchestrator(),  # type: ignore[arg-type]
+        checker=mock_checker,
+        use_document_parser=True,
+        use_report_cache=False,
+    )
+
+    report = await pipeline.run_async(
+        str(pdf_file),
+        essay_id=1,
+        max_citations=2,
+        allow_serpapi=False,
+    )
+
+    # Verdicts are capped at max_citations=2, while extracted_citations retains all 10 (5 in-text + 5 refs)
+    assert len(report.verdicts) == 2
+    assert len(report.extracted_citations) == 10
+    assert report.style_profile is not None
+    assert report.style_profile["citations_truncated_by_plan"] is True
+    assert report.style_profile["document_diagnostics"]["citations_truncated_by_plan"] is True
+    assert report.style_profile["document_diagnostics"]["max_citations_limit"] == 2
+    assert report.style_profile["document_diagnostics"]["total_verifiable_citations"] == 5
+    assert seen_allow_serpapi == [False, False]
+
+    # Also verify _run_pipeline_task forwards user plan policy max_citations & allow_serpapi
+    from integrity_checker.api.routes.essays import _run_pipeline_task
+
+    client = TestClient(app)
+    _, user_data = _login_user(client, "user", "user123")
+    user_id = user_data["id"]
+
+    session = get_session()
+    repo = Repository(session)
+    essay_row = repo.create_essay_with_user("plan_cap.pdf", 1, user_id)
+    session.commit()
+    essay_id = essay_row.id
+    session.close()
+
+    spy_pipeline = MagicMock()
+    spy_pipeline.run_async = AsyncMock(return_value=report)
+    await _run_pipeline_task(
+        essay_id=essay_id,
+        tmp_path=str(pdf_file),
+        user_id=user_id,
+        pipeline=spy_pipeline,
+        cleanup_file=False,
+    )
+    spy_pipeline.run_async.assert_called_once()
+    call_kwargs = spy_pipeline.run_async.call_args.kwargs
+    assert call_kwargs["max_citations"] == 30
+    assert call_kwargs["allow_serpapi"] is False
+
+
 
 
 

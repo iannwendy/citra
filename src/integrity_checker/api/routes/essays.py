@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 import tempfile
 from pathlib import Path
@@ -71,6 +72,19 @@ async def _run_pipeline_task(
         )
 
     try:
+        max_citations: int | None = None
+        allow_serpapi: bool | None = None
+        if user_id:
+            policy_session = get_session()
+            try:
+                user_obj = Repository(policy_session).get_user_by_id(user_id)
+                if user_obj is not None:
+                    policy = get_user_plan_policy(user_obj)
+                    max_citations = policy.max_citations_per_essay
+                    allow_serpapi = policy.allow_serpapi_fallback
+            finally:
+                policy_session.close()
+
         # Offload heavy CPU work to the default executor so the event loop
         # stays free to serve other requests (status polls, etc.).
         # run_in_executor requires a sync callable; we wrap run_async in a
@@ -78,11 +92,22 @@ async def _run_pipeline_task(
         loop = asyncio.get_running_loop()
 
         def _run_pipeline_sync() -> Any:
+            call_kwargs: dict[str, Any] = {
+                "essay_id": essay_id,
+                "progress_callback": _progress_to_threadlocal,
+            }
+            sig_params = inspect.signature(pipeline.run_async).parameters
+            has_var_kw = any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in sig_params.values()
+            )
+            if "max_citations" in sig_params or has_var_kw:
+                call_kwargs["max_citations"] = max_citations
+            if "allow_serpapi" in sig_params or has_var_kw:
+                call_kwargs["allow_serpapi"] = allow_serpapi
             return asyncio.run(
                 pipeline.run_async(
                     tmp_path,
-                    essay_id=essay_id,
-                    progress_callback=_progress_to_threadlocal,
+                    **call_kwargs,
                 )
             )
 
@@ -122,6 +147,7 @@ async def _run_pipeline_task(
                         "ratios": evidence.get("ratios", {}),
                         "explanation": evidence.get("explanation", ""),
                         "document_diagnostics": sp.get("document_diagnostics"),
+                        "citations_truncated_by_plan": bool(sp.get("citations_truncated_by_plan", False)),
                     }
                 else:
                     style_profile_dict = {
