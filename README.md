@@ -597,14 +597,14 @@ cd web && npx tsc --noEmit && npm test -- --run && npm run build
 
 ### Architectural & Engineering Documentation (`docs/`)
 - [**`docs/BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md`**](./docs/BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md) — Complete 120,000-sample Neuro-Symbolic benchmark methodology, international standards alignment, ablation study, confusion matrix, and 95% bootstrap confidence intervals (ready for thesis/publication inclusion).
-- [**`CLAUDE.md`**](./CLAUDE.md) — Developer & AI Agent quick-reference guide to the v2.3 architecture.
-- [**`docs/DEVELOPER_QUICKSTART.md`**](./docs/DEVELOPER_QUICKSTART.md) — Environment setup, configuration variables, and debugging recipes.
-- [**`docs/NEURO_SYMBOLIC_ANALYSIS_AND_DESIGN_PHASES.md`**](./docs/NEURO_SYMBOLIC_ANALYSIS_AND_DESIGN_PHASES.md) — Detailed specification of the Two-Layer Data Model, 8D Feature Vector, and Neuro-Symbolic scoring rules.
-- [**`docs/THESIS_PIPELINE_ANALYSIS_AND_FIX_PLAN.md`**](./docs/THESIS_PIPELINE_ANALYSIS_AND_FIX_PLAN.md) — Root-cause analysis and engineering fixes for real-world thesis verification.
+- [**`docs/BAO_CAO_TIEN_DO_TUAN_25_10_01_11.md`**](./docs/BAO_CAO_TIEN_DO_TUAN_25_10_01_11.md) — Production v3.5.0 engineering report covering the 284-concept VI↔EN Cross-Lingual Bridge, 15+ federated scholarly APIs, and stress-test evaluations across 848 real-world PDFs.
+- [**`CLAUDE.md`**](./CLAUDE.md) — Developer & AI Agent quick-reference guide to the CITRA Neuro-Symbolic architecture.
 - [**`docs/SOURCELOGIC_CONCEPT.md`**](./docs/SOURCELOGIC_CONCEPT.md) — Design system specification for the *SourceLogic Scholarly* UI.
-- [**`docs/ROLES_PLAN.md`**](./docs/ROLES_PLAN.md) — Role-Based Access Control (User / Teacher / Admin) & classroom workflow architecture.
-- [**`docs/IMPLEMENTATION_ROADMAP.md`**](./docs/IMPLEMENTATION_ROADMAP.md) — Phased implementation history from v1.0 prototype to v2.0 production platform.
-- [**`docs/reference/tai_lieu_tham_khao_TDTU.md`**](./docs/reference/tai_lieu_tham_khao_TDTU.md) — Ton Duc Thang University (TDTU) official citation and bibliography formatting guidelines.
+- [**`docs/TEACHER_SYSTEM.md`**](./docs/TEACHER_SYSTEM.md) — Role-Based Access Control (`user` / `teacher` / `admin`), classroom cohort management, and pending review workflows.
+- [**`docs/PREMIUM_SUBSCRIPTION_PLAN.md`**](./docs/PREMIUM_SUBSCRIPTION_PLAN.md) — SaaS tier architecture (`Basic` / `Pro` / `Ultra`), quota gating, and dual-mode Stripe billing specification.
+- [**`docs/PERFORMANCE_AND_SEO_OPTIMIZATION.md`**](./docs/PERFORMANCE_AND_SEO_OPTIMIZATION.md) — 5-layer production performance optimization (TanStack Query cache sharing, SQLite FTS5 RAM cache, composite B-Tree indexes, N+1 batch loading, and Technical SEO).
+- [**`docs/format_development_guide.md`**](./docs/format_development_guide.md) — Developer guide for extending modular citation format patterns in `src/integrity_checker/extraction/patterns/`.
+- [**`docs/reference/tai_lieu_tham_khao_TDTU.md`**](./docs/reference/tai_lieu_tham_khao_TDTU.md) & [**`docs/reference/citation-styles.md`**](./docs/reference/citation-styles.md) — Ton Duc Thang University (TDTU) official citation guidelines and 12 international citation style specifications.
 
 ### Contributors — Capstone Graduation Thesis (ĐATN)
 **Faculty of Information Technology — Ton Duc Thang University (TDTU)**

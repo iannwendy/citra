@@ -1361,6 +1361,53 @@ class Repository:
             .all()
         )
 
+    def search_students_for_teacher(
+        self,
+        teacher_id: int,
+        q: str | None = None,
+        limit: int = 20,
+    ) -> list[User]:
+        """Search students for a teacher per Contract C1.
+
+        When ``q`` is None or shorter than 2 chars after stripping, returns only
+        students already enrolled in classes owned by ``teacher_id``.
+        When ``len(q.strip()) >= 2``, performs a case-insensitive substring search
+        across username, email, and full_name for users with ``role == 'user'``.
+        """
+        from sqlalchemy import or_
+
+        safe_limit = max(1, min(50, int(limit or 20)))
+        cleaned_q = (q or "").strip()
+        if len(cleaned_q) < 2:
+            return list(
+                self.session.query(User)
+                .join(ClassMembership, ClassMembership.student_id == User.id)
+                .join(Class, Class.id == ClassMembership.class_id)
+                .filter(
+                    User.role == "user",
+                    Class.teacher_id == teacher_id,
+                )
+                .distinct()
+                .order_by(User.username.asc())
+                .limit(safe_limit)
+                .all()
+            )
+        pattern = f"%{cleaned_q}%"
+        return list(
+            self.session.query(User)
+            .filter(
+                User.role == "user",
+                or_(
+                    User.username.ilike(pattern),
+                    User.email.ilike(pattern),
+                    User.full_name.ilike(pattern),
+                ),
+            )
+            .order_by(User.username.asc())
+            .limit(safe_limit)
+            .all()
+        )
+
     def count_students_in_class(self, class_id: int) -> int:
         return (
             self.session.query(ClassMembership)

@@ -396,7 +396,32 @@ class TestClassStudents:
         _make_user("other_teacher", role="teacher")
         _make_user("other_admin", role="admin")
 
-        resp = client.get("/api/teacher/students", headers=auth_header(token))
+        # Without query (or < 2 chars), only enrolled students in teacher's classes are returned
+        resp_empty = client.get("/api/teacher/students", headers=auth_header(token))
+        assert resp_empty.status_code == 200, resp_empty.text
+        assert resp_empty.json() == []
+
+        # Enroll alice in teacher's class -> returned when q is empty or < 2 chars
+        class_id = client.post(
+            "/api/teacher/classes", json={"name": "ContractC1Class"}, headers=auth_header(token),
+        ).json()["id"]
+        client.post(
+            f"/api/teacher/classes/{class_id}/students",
+            json={"student_id": s1},
+            headers=auth_header(token),
+        )
+
+        resp_enrolled = client.get("/api/teacher/students", headers=auth_header(token))
+        assert resp_enrolled.status_code == 200
+        enrolled_usernames = [u["username"] for u in resp_enrolled.json()]
+        assert enrolled_usernames == ["alice"]
+
+        resp_short_q = client.get("/api/teacher/students?q=b", headers=auth_header(token))
+        assert resp_short_q.status_code == 200
+        assert [u["username"] for u in resp_short_q.json()] == ["alice"]
+
+        # With q >= 2 chars, searches across username, email, and full_name for role='user'
+        resp = client.get("/api/teacher/students?q=@x.com", headers=auth_header(token))
         assert resp.status_code == 200, resp.text
         data = resp.json()
         usernames = [u["username"] for u in data]
@@ -406,6 +431,13 @@ class TestClassStudents:
         assert "other_teacher" not in usernames
         assert "other_admin" not in usernames
         assert "teacher" not in usernames
+
+        # Limit parameter is respected and clamped to 1..50
+        resp_limited = client.get(
+            "/api/teacher/students?q=@x.com&limit=1", headers=auth_header(token),
+        )
+        assert resp_limited.status_code == 200
+        assert len(resp_limited.json()) == 1
 
     def test_user_cannot_list_available_students(self, clean_db):
         token = get_user_token()

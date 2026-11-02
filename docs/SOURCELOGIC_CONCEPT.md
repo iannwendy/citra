@@ -15,7 +15,7 @@ Ba mục tiêu cốt lõi:
 2. **Explainable Debugger UX:** Mô hình hóa quy trình kiểm tra như một **“IDE / Debugger cho trích dẫn”** — đi từ tài liệu gốc → trích xuất citation/reference → liên kết hai chiều → truy hồi nguồn học thuật → suy diễn Neuro-Symbolic → giải thích bằng chứng.
 3. **Academic & Thesis Compliance:** Tuân thủ nghiêm ngặt định hướng **Decision-Support Tool** của đồ án tốt nghiệp: chỉ đánh giá tính toàn vẹn trích dẫn (**Citation Integrity**), tuyệt đối không tự động kết luận gian lận học thuật và không chấm điểm văn phong/ngữ pháp toàn bài.
 
-> **Nguyên tắc ưu tiên:** Tài liệu đặc tả đồ án (**CLAUDE.md**, **README.md**, **ROLES_PLAN.md**) là nguồn yêu cầu nghiệp vụ bắt buộc. Tài liệu concept này định hướng thương hiệu, hệ thống thiết kế **shadcn/ui**, trải nghiệm UX/UI theo role và kiến trúc frontend/backend. Nếu có xung đột, luôn ưu tiên logic nghiệp vụ của đồ án gốc.
+> **Nguyên tắc ưu tiên:** Tài liệu đặc tả đồ án (**CLAUDE.md**, **README.md**, **docs/TEACHER_SYSTEM.md**) là nguồn yêu cầu nghiệp vụ bắt buộc. Tài liệu concept này định hướng thương hiệu, hệ thống thiết kế **shadcn/ui**, trải nghiệm UX/UI theo role và kiến trúc frontend/backend. Nếu có xung đột, luôn ưu tiên logic nghiệp vụ của đồ án gốc.
 >
 > Mọi quyết định của hệ thống phải kèm theo **Decision-Support Disclaimer** và khả năng truy ngược về **evidence (nguồn đối chiếu)** cùng **symbolic rule (luật suy diễn)**; giảng viên và hội đồng là người đưa ra kết luận cuối cùng.
 
@@ -830,7 +830,7 @@ Requirements:
 
 ## Chỉ dẫn dành cho AI Coding Agent
 
-1. **Đọc kỹ `CLAUDE.md`, `ROLES_PLAN.md` và `SOURCELOGIC_CONCEPT.md` trước khi chỉnh sửa giao diện.**
+1. **Đọc kỹ `CLAUDE.md`, `docs/TEACHER_SYSTEM.md` và `docs/SOURCELOGIC_CONCEPT.md` trước khi chỉnh sửa giao diện.**
 2. Xem tài liệu này là **kim chỉ nam về thiết kế UX/UI và kiến trúc component `shadcn/ui`** cho dự án Essay Integrity Checker.
 3. Không tự ý thay đổi công thức tính **CIS**, cấu trúc 5 nhãn **Verdict**, 7 trạng thái **Mapping** hoặc các luật suy diễn **Neuro-Symbolic** ở backend.
 4. Khi nâng cấp giao diện sang `shadcn/ui`, phải giữ nguyên các `aria-label`, `role`, và cấu trúc dữ liệu trả về từ `web/src/api/client.ts` để không làm gãy hệ thống test.

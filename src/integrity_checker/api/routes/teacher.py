@@ -326,12 +326,19 @@ def join_class_by_code(
 
 @router.get("/students", response_model=list[StudentInClass])
 def list_available_students(
+    q: str | None = None,
+    limit: int = 20,
     teacher: User = Depends(require_teacher),
     db: Session = Depends(get_db),
 ):
-    """List all users with role='user' so teachers can search and add them to a class."""
+    """List enrolled students or search users with role='user' by query >= 2 chars (Contract C1)."""
     repo = Repository(db)
-    students = repo.list_all_students()
+    safe_limit = max(1, min(50, limit))
+    students = repo.search_students_for_teacher(
+        teacher_id=teacher.id,
+        q=q,
+        limit=safe_limit,
+    )
     return [_student_to_response(s) for s in students]
 
 
