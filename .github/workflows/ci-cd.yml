@@ -61,6 +61,10 @@ jobs:
           cp -n configs/config.example.yaml configs/config.yaml || true
           python scripts/gen_sample_essays.py
 
+      - name: Lint backend (ruff)
+        run: |
+          ruff check src/ tests/
+
       - name: Run Backend Unit Test Suite
         run: |
           pytest tests/unit/ -q
