@@ -8,7 +8,12 @@ import {
   Terminal,
   Loader2,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useDebounce } from '@/hooks/useDebounce';
+import { Button } from '@/components/ui/button';
 import { api, type AuditLogEntry } from '@/api/client';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -30,33 +35,48 @@ import {
  * Lists override events recorded by `Repository.log_audit`.
  * Filter by username; default limit 100 newest-first.
  */
+export const AUDIT_PAGE_SIZE = 25;
+
 export function AuditLogPage() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [userFilter, setUserFilter] = useState('');
+  const debouncedUserFilter = useDebounce(userFilter.trim(), 300);
+  const [offset, setOffset] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // A new filter always starts from the first page.
+  useEffect(() => {
+    setOffset(0);
+  }, [debouncedUserFilter]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
+      // Fetch one extra row to know whether a next page exists.
       const data = await api.listAuditLog({
-        limit: 100,
-        user: userFilter.trim() || undefined,
+        limit: AUDIT_PAGE_SIZE + 1,
+        offset,
+        user: debouncedUserFilter || undefined,
       });
-      setEntries(data);
+      setHasNext(data.length > AUDIT_PAGE_SIZE);
+      setEntries(data.slice(0, AUDIT_PAGE_SIZE));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load audit log');
     } finally {
       setLoading(false);
     }
-  }, [userFilter]);
+  }, [debouncedUserFilter, offset]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const page = Math.floor(offset / AUDIT_PAGE_SIZE) + 1;
 
   const uniqueActors = new Set(entries.map((e) => e.user)).size;
 
@@ -237,9 +257,21 @@ export function AuditLogPage() {
                       {e.user}
                     </TableCell>
                     <TableCell className="block sm:table-cell p-0 sm:px-4 sm:py-3 text-slate-500 font-mono text-xs">
-                      <Badge variant="outline" className="font-mono text-xs">
-                        #{e.verdict_id}
-                      </Badge>
+                      {e.essay_id ? (
+                        <Link
+                          to={`/verification/report/${e.essay_id}?citation=${e.verdict_id}`}
+                          data-testid={`audit-verdict-link-${e.id}`}
+                          className="hover:underline"
+                        >
+                          <Badge variant="outline" className="font-mono text-xs text-indigo-600 dark:text-indigo-400">
+                            #{e.verdict_id}
+                          </Badge>
+                        </Link>
+                      ) : (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          #{e.verdict_id}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="block sm:table-cell p-0 sm:px-4 sm:py-3">
                       <span className="font-mono text-xs break-all sm:break-normal">
@@ -261,6 +293,39 @@ export function AuditLogPage() {
             </TableBody>
           </Table>
         )}
+
+        <div
+          className="px-4 py-3 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 text-xs font-mono text-slate-500"
+          data-testid="audit-pagination"
+        >
+          <span>
+            {lang === 'vi' ? `Trang ${page}` : `Page ${page}`}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || offset === 0}
+              onClick={() => setOffset((o) => Math.max(0, o - AUDIT_PAGE_SIZE))}
+              data-testid="audit-prev-page"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              {lang === 'vi' ? 'Trước' : 'Prev'}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={loading || !hasNext}
+              onClick={() => setOffset((o) => o + AUDIT_PAGE_SIZE)}
+              data-testid="audit-next-page"
+            >
+              {lang === 'vi' ? 'Sau' : 'Next'}
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Activity,
@@ -11,7 +11,11 @@ import {
   Loader2,
   UserCheck,
   GraduationCap,
+  Trash2,
 } from 'lucide-react';
+import { useToast } from '@/contexts/ToastContext';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
+import { Button } from '@/components/ui/button';
 import { api, type SystemHealth } from '@/api/client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -19,18 +23,73 @@ import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
+type HealthLevel = 'healthy' | 'degraded' | 'down';
+
+const HEALTHY_WORDS = new Set(['ok', 'healthy', 'up', 'alive', 'ready', 'pass']);
+
+function normalizeLevel(raw: unknown): HealthLevel {
+  const value = String(raw ?? '').trim().toLowerCase();
+  if (HEALTHY_WORDS.has(value)) return 'healthy';
+  if (value === 'degraded' || value === 'partial' || value === 'warn' || value === 'warning') {
+    return 'degraded';
+  }
+  return 'down';
+}
+
+/** Derive overall status + list of non-healthy services from the health payload. */
+export function summarizeHealth(data: Pick<SystemHealth, 'status' | 'services'>): {
+  level: HealthLevel;
+  degradedServices: string[];
+} {
+  const degradedServices = Object.entries(data.services ?? {})
+    .filter(([, v]) => normalizeLevel(typeof v === 'string' ? v : v?.status) !== 'healthy')
+    .map(([name]) => name);
+  let level = normalizeLevel(data.status);
+  if (level === 'healthy' && degradedServices.length > 0) level = 'degraded';
+  return { level, degradedServices };
+}
+
 export function SystemHealthPage() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const toast = useToast();
   const [data, setData] = useState<SystemHealth | null>(null);
   const [error, setError] = useState('');
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api
       .getSystemHealth()
       .then(setData)
       .catch((e) => setError(String(e)));
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleClearCache = async () => {
+    setConfirmClearOpen(false);
+    setClearing(true);
+    try {
+      const res = await api.clearCache();
+      toast.success(
+        lang === 'vi' ? 'Đã xóa bộ nhớ đệm' : 'Cache cleared',
+        lang === 'vi'
+          ? `Đã xóa ${res.deleted_count} mục khỏi bộ nhớ đệm tra cứu.`
+          : `Removed ${res.deleted_count} cached lookup entries.`,
+      );
+      load();
+    } catch (e) {
+      toast.error(
+        lang === 'vi' ? 'Không thể xóa bộ nhớ đệm' : 'Failed to clear cache',
+        e instanceof Error ? e.message : String(e),
+      );
+    } finally {
+      setClearing(false);
+    }
+  };
 
   if (error) {
     return (
@@ -54,6 +113,35 @@ export function SystemHealthPage() {
   }
 
   const totalVerdicts = Math.max(data.totals.verdicts, 1);
+  const health = summarizeHealth(data);
+  const pillTone =
+    health.level === 'healthy'
+      ? 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-200/70 dark:border-emerald-800/70 text-emerald-700 dark:text-emerald-300'
+      : health.level === 'degraded'
+        ? 'bg-amber-50 dark:bg-amber-950/70 border-amber-200/70 dark:border-amber-800/70 text-amber-700 dark:text-amber-300'
+        : 'bg-red-50 dark:bg-red-950/70 border-red-200/70 dark:border-red-800/70 text-red-700 dark:text-red-300';
+  const dotTone =
+    health.level === 'healthy'
+      ? 'bg-emerald-500'
+      : health.level === 'degraded'
+        ? 'bg-amber-500'
+        : 'bg-red-500';
+  const degradedList = health.degradedServices.join(', ');
+  const pillText =
+    health.level === 'healthy'
+      ? lang === 'vi'
+        ? 'TẤT CẢ DỊCH VỤ ỔN ĐỊNH'
+        : 'ALL SERVICES HEALTHY'
+      : health.level === 'degraded'
+        ? lang === 'vi'
+          ? `SUY GIẢM${degradedList ? `: ${degradedList}` : ''}`
+          : `DEGRADED${degradedList ? `: ${degradedList}` : ''}`
+        : lang === 'vi'
+          ? `SỰ CỐ (${String(data.status).toUpperCase()})${degradedList ? `: ${degradedList}` : ''}`
+          : `OUTAGE (${String(data.status).toUpperCase()})${degradedList ? `: ${degradedList}` : ''}`;
+  const cacheEntries = Object.entries(data.cache_stats ?? {}).filter(
+    ([, v]) => v === null || ['string', 'number', 'boolean'].includes(typeof v),
+  );
 
   return (
     <div className="space-y-6 pb-10">
@@ -66,9 +154,13 @@ export function SystemHealthPage() {
                 <ShieldCheck className="h-3.5 w-3.5" />
                 {lang === 'vi' ? 'GIÁM SÁT HẠ TẦNG HỆ THỐNG' : 'PLATFORM TELEMETRY MONITOR'}
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/70 dark:border-emerald-800/70 text-[11px] font-mono text-emerald-700 dark:text-emerald-300">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                ALL SERVICES HEALTHY
+              <span
+                data-testid="health-status-pill"
+                data-level={health.level}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono ${pillTone}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${dotTone}`} />
+                {pillText}
               </span>
             </div>
 
@@ -86,6 +178,22 @@ export function SystemHealthPage() {
               </div>
             </div>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={clearing}
+            onClick={() => setConfirmClearOpen(true)}
+            data-testid="clear-cache-btn"
+            className="rounded-xl text-xs shrink-0"
+          >
+            {clearing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
+            {lang === 'vi' ? 'Xóa bộ nhớ đệm' : 'Clear cache'}
+          </Button>
         </div>
       </div>
 
@@ -256,6 +364,44 @@ export function SystemHealthPage() {
           </div>
         </div>
       </div>
+      {cacheEntries.length > 0 && (
+        <div
+          data-testid="cache-stats"
+          className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-4 sm:p-6"
+        >
+          <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-white mb-3">
+            {lang === 'vi' ? 'Thống kê bộ nhớ đệm' : 'Cache statistics'}
+          </h2>
+          <dl className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {cacheEntries.map(([key, value]) => (
+              <div
+                key={key}
+                className="p-3 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800"
+              >
+                <dt className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{key}</dt>
+                <dd className="text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100">
+                  {String(value)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+
+      <ConfirmationModal
+        isOpen={confirmClearOpen}
+        variant="danger"
+        title={lang === 'vi' ? 'Xóa toàn bộ bộ nhớ đệm?' : 'Clear the lookup cache?'}
+        message={
+          lang === 'vi'
+            ? 'Mọi kết quả tra cứu học thuật đã lưu sẽ bị xóa; các lần phân tích tiếp theo sẽ gọi lại API nguồn và có thể chậm hơn.'
+            : 'All cached scholarly lookups will be deleted; upcoming analyses will re-query source APIs and may be slower.'
+        }
+        confirmLabel={lang === 'vi' ? 'Xóa bộ nhớ đệm' : 'Clear cache'}
+        cancelLabel={lang === 'vi' ? 'Hủy' : 'Cancel'}
+        onConfirm={handleClearCache}
+        onCancel={() => setConfirmClearOpen(false)}
+      />
     </div>
   );
 }

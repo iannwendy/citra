@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   api,
@@ -1531,6 +1531,26 @@ function enrichVerdictItem(
    SourceLogic — Real Interactive Citation Debugger IDE Page
    ============================================================ */
 
+/**
+ * Resolve a `?citation=` deep-link value against report verdicts. Accepts the
+ * report citation id (`v123`) or the raw DB verdict id (`123`) that teacher
+ * endpoints such as pending-reviews return.
+ */
+export function findVerdictByCitationParam(
+  verdicts: Verdict[],
+  param: string | null | undefined,
+): Verdict | undefined {
+  if (!param) return undefined;
+  const raw = param.trim();
+  if (!raw) return undefined;
+  const bare = raw.replace(/^v/i, '');
+  return (
+    verdicts.find((v) => v.citation_id === raw) ||
+    verdicts.find((v) => v.citation_id === `v${bare}`) ||
+    verdicts.find((v) => v.citation_id.replace(/^v/i, '') === bare)
+  );
+}
+
 export function EssayPage() {
   const { t, i18n } = useTranslation();
   const { has } = useRole();
@@ -1586,6 +1606,34 @@ export function EssayPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Deep link: /verification/report/:id?citation=<verdict id> (e.g. from the
+  // teacher Pending Reviews queue) selects and scrolls to that citation once.
+  const [searchParams] = useSearchParams();
+  const citationParam = searchParams.get('citation');
+  const appliedCitationParamRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!report || !citationParam) return;
+    const key = `${report.essay_id}:${citationParam}`;
+    if (appliedCitationParamRef.current === key) return;
+    const target = findVerdictByCitationParam(report.verdicts, citationParam);
+    if (!target) return;
+    appliedCitationParamRef.current = key;
+    setFilterLabel('all');
+    setSearchQuery('');
+    setWorkspaceMode('debugger');
+    setSelectedCitationId(target.citation_id);
+    const scroll = () => {
+      const el = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-citation-id]'),
+      ).find((node) => node.dataset.citationId === target.citation_id);
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+      el?.focus?.({ preventScroll: true });
+    };
+    requestAnimationFrame(() => requestAnimationFrame(scroll));
+  }, [report, citationParam]);
 
   const errorMessage =
     essayId === null
@@ -2250,6 +2298,7 @@ export function EssayPage() {
                           role="option"
                           aria-selected={isSelected}
                           data-verdict-label={cit.verdict.label}
+                          data-citation-id={cit.verdict.citation_id}
                           onClick={() => setSelectedCitationId(cit.verdict.citation_id)}
                           className={`w-full text-left p-3.5 rounded-xl border transition-all duration-150 ${
                             isSelected

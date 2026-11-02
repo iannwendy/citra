@@ -1033,11 +1033,15 @@ export interface SystemHealth {
   };
   verdict_label_counts: Record<string, number>;
   cache_stats: Record<string, unknown>;
+  /** Optional per-service status map (e.g. grobid: "ok" | "degraded" | "down"). */
+  services?: Record<string, string | { status?: string; detail?: string }>;
 }
 
 export interface AuditLogEntry {
   id: number;
   verdict_id: number;
+  /** Essay owning the verdict (newer backends); enables deep links to the report. */
+  essay_id?: number | null;
   original_label: string;
   new_label: string;
   user: string;
