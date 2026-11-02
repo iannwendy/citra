@@ -85,7 +85,7 @@
     "featureExtraction": "Trích xuất trích dẫn",
     "featureExtractionDesc": "Tự động trích xuất trích dẫn trong bài và danh mục tài liệu tham khảo",
     "featureRetrieval": "Truy vấn đa nguồn",
-    "featureRetrievalDesc": "Truy vấn phân tầng từ Crossref, OpenAlex, DBLP, arXiv, OpenLibrary và Europe PMC",
+    "featureRetrievalDesc": "Truy vấn phân tầng trên 15+ CSDL học thuật & kỹ thuật (Crossref, OpenAlex, DataCite, DOAJ, DBLP, arXiv, Europe PMC...)",
     "featureVerification": "Xác minh Neuro-Symbolic",
     "featureVerificationDesc": "Logic suy luận có thể giải thích kèm truy vết dẫn chứng và tập luật",
     "footerNote": "Hệ thống hỗ trợ quyết định — Không chấm điểm tự động",

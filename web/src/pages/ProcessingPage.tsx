@@ -17,6 +17,10 @@ import {
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, type EssayStatus } from '@/api/client';
+import {
+  SCHOLARLY_APIS_LABEL,
+  SYMBOLIC_RULES_COUNT,
+} from '@/lib/productFacts';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -65,11 +69,11 @@ const STEP_LABELS: Array<{
     tag: 'LINKING GRAPH',
   },
   {
-    labelEn: 'Retrieving source metadata across 18+ registries',
-    labelVi: 'Truy hồi dữ liệu từ hệ thống 18+ CSDL học thuật & tri thức liên hợp',
+    labelEn: `Retrieving source metadata across ${SCHOLARLY_APIS_LABEL} registries`,
+    labelVi: `Truy hồi dữ liệu từ hệ thống ${SCHOLARLY_APIS_LABEL} CSDL học thuật & tri thức liên hợp`,
     detailsEn: 'Querying Crossref, OpenAlex, DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, Hugging Face, GitHub, NPM/PyPI, Wikidata/OpenCitations, IETF RFC & ACL FTS5',
     detailsVi: 'Truy vấn phân tầng Crossref, OpenAlex, DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, Hugging Face, GitHub, NPM/PyPI, Wikidata/OpenCitations, IETF RFC & ACL FTS5',
-    tag: '18+ INDEXES',
+    tag: `${SCHOLARLY_APIS_LABEL} INDEXES`,
   },
   {
     labelEn: 'Comparing candidate publications & neural evidence',
@@ -79,11 +83,11 @@ const STEP_LABELS: Array<{
     tag: 'NEURAL DIFF',
   },
   {
-    labelEn: 'Applying 28 neuro-symbolic rules & Platt calibration',
-    labelVi: 'Kích hoạt hệ 28 luật suy diễn hình thức & hiệu chỉnh Platt',
+    labelEn: `Applying ${SYMBOLIC_RULES_COUNT} neuro-symbolic rules & Platt calibration`,
+    labelVi: `Kích hoạt hệ ${SYMBOLIC_RULES_COUNT} luật suy diễn hình thức & hiệu chỉnh Platt`,
     detailsEn: 'Explainable verification logic, Retraction Watch & Wayback Machine checks',
     detailsVi: 'Suy diễn nhãn xác minh có giải thích, kiểm tra bài rút lại (Retraction Watch) & Wayback Machine',
-    tag: '28 SYMBOLIC RULES',
+    tag: `${SYMBOLIC_RULES_COUNT} SYMBOLIC RULES`,
   },
   {
     labelEn: 'Generating verification report',
@@ -498,8 +502,8 @@ export function ProcessingPage() {
             <Database className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
             <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
               {lang === 'vi'
-                ? 'Trạng thái Truy vấn 18+ CSDL Học thuật & Tri thức Liên hợp'
-                : 'Federated 18+ Source Retrieval'}
+                ? `Trạng thái Truy vấn ${SCHOLARLY_APIS_LABEL} CSDL Học thuật & Tri thức Liên hợp`
+                : `Federated ${SCHOLARLY_APIS_LABEL} Source Retrieval`}
             </h3>
           </div>
           {!isDone && !isFailed && (

@@ -23,6 +23,11 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  SCHOLARLY_APIS_LABEL,
+  SYMBOLIC_RULES_COUNT,
+  SYMBOLIC_RULES_RANGE,
+} from '@/lib/productFacts';
 
 interface HelpModalProps {
   isOpen: boolean;
@@ -234,7 +239,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                 </span>
               </div>
               <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                Crossref · OpenAlex · DBLP · arXiv · OpenLibrary · Europe PMC
+                {SCHOLARLY_APIS_LABEL} Scholarly APIs · {SYMBOLIC_RULES_COUNT} Symbolic Rules ({SYMBOLIC_RULES_RANGE})
               </p>
             </div>
           </div>

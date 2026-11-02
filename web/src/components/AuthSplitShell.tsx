@@ -2,6 +2,11 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ThemeToggle } from '@/contexts/ThemeContext';
+import {
+  LOCAL_PAPERS_LABEL,
+  SCHOLARLY_APIS_LABEL,
+  SYMBOLIC_RULES_RANGE,
+} from '@/lib/productFacts';
 import { SolvaLiveNumber } from '@/components/landing/SolvaMockupWidgets';
 import { ScholarlySourceLogo } from '@/components/landing/ScholarlySourceLogos';
 import {
@@ -192,7 +197,7 @@ export function AuthSplitShell({
       icon: Database,
       title: t('auth.featureRetrieval'),
       desc: t('auth.featureRetrievalDesc'),
-      tag: '127K ACL · 15+ APIs',
+      tag: `${LOCAL_PAPERS_LABEL} ACL · ${SCHOLARLY_APIS_LABEL} APIs`,
       accentClass:
         'bg-[#1C1A15]/8 text-[#1C1A15] dark:bg-[#FBFAF6]/10 dark:text-[#FBFAF6] border-[#1C1A15]/15 dark:border-[#FBFAF6]/20',
     },
@@ -200,7 +205,7 @@ export function AuthSplitShell({
       icon: GitBranch,
       title: t('auth.featureVerification'),
       desc: t('auth.featureVerificationDesc'),
-      tag: 'Rules R01–R28 · CIS',
+      tag: `Rules ${SYMBOLIC_RULES_RANGE} · CIS`,
       accentClass:
         'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20',
     },

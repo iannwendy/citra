@@ -3,6 +3,10 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AuthContext } from '@/contexts/AuthContext';
 import {
+  SYMBOLIC_RULES_COUNT,
+  SYMBOLIC_RULES_RANGE,
+} from '@/lib/productFacts';
+import {
   FileSearch,
   Database,
   Shield,
@@ -483,7 +487,7 @@ function SolvaHeader({
           },
           {
             title: 'Trình thẩm định trích dẫn',
-            desc: 'Đối chiếu thư mục & bộ quy tắc R01–R20',
+            desc: `Đối chiếu thư mục & bộ quy tắc ${SYMBOLIC_RULES_RANGE}`,
             href: '#interactive-demo',
             icon: FileSearch,
           },
@@ -515,7 +519,7 @@ function SolvaHeader({
           },
           {
             title: 'Citation Debugger',
-            desc: 'Live metadata diff & rules R01–R20',
+            desc: `Live metadata diff & rules ${SYMBOLIC_RULES_RANGE}`,
             href: '#interactive-demo',
             icon: FileSearch,
           },
@@ -1268,8 +1272,8 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       code: 'Proposed · Neuro-Symbolic',
       name:
         lang === 'vi'
-          ? 'CITRA Neuro-Symbolic (Đa nguồn + Đối sánh Tóm tắt + 28 Luật + Khoanh vùng Nghi vấn)'
-          : 'CITRA Neuro-Symbolic (Multi-Source + Abstract Evidence + 28 Rules + Abstention)',
+          ? `CITRA Neuro-Symbolic (Đa nguồn + Đối sánh Tóm tắt + ${SYMBOLIC_RULES_COUNT} Luật + Khoanh vùng Nghi vấn)`
+          : `CITRA Neuro-Symbolic (Multi-Source + Abstract Evidence + ${SYMBOLIC_RULES_COUNT} Rules + Abstention)`,
       note:
         lang === 'vi'
           ? 'Giải trình tường minh từng quy tắc · Đạt chuẩn xác tuyệt đối 100% trên cả VERIFIED và HALLUCINATION'
@@ -2058,8 +2062,8 @@ function SolvaFeaturesSection({ lang }: { lang: Lang }) {
           : 'Combine symbolic rules with neural stance',
       desc:
         lang === 'vi'
-          ? 'Kết hợp 20 quy tắc suy diễn hình thức (R01–R20) cùng mô hình Sentence-BERT và DeBERTa-v3 NLI để làm rõ liệu nội dung bài báo gốc có thực sự hậu thuẫn cho nhận định đang trích dẫn hay không.'
-          : 'Pairs 20 formal symbolic rules (R01–R20) with Sentence-BERT embeddings and DeBERTa-v3 NLI to verify whether cited abstracts actually support the claim.',
+          ? `Kết hợp ${SYMBOLIC_RULES_COUNT} quy tắc suy diễn hình thức (${SYMBOLIC_RULES_RANGE}) cùng mô hình Sentence-BERT và DeBERTa-v3 NLI để làm rõ liệu nội dung bài báo gốc có thực sự hậu thuẫn cho nhận định đang trích dẫn hay không.`
+          : `Pairs ${SYMBOLIC_RULES_COUNT} formal symbolic rules (${SYMBOLIC_RULES_RANGE}) with Sentence-BERT embeddings and DeBERTa-v3 NLI to verify whether cited abstracts actually support the claim.`,
     },
   ];
 
@@ -2163,8 +2167,8 @@ function SolvaStickySection({
           : 'Formal rule traces for reviewers, instant feedback for authors',
       desc:
         lang === 'vi'
-          ? 'Mọi phán quyết đều đính kèm vết suy diễn hình thức R01–R20 và bảng đối chiếu chi tiết từng trường thư mục (Tiêu đề, Tác giả, Năm, Tạp chí, DOI). Giảng viên có toàn quyền điều chỉnh kết luận (Override) kèm lưu vết kiểm toán bất biến.'
-          : 'Every verdict includes a deterministic R01–R20 rule trace and field-level edit distances. Instructors can override verdicts with mandatory rationale logged to an immutable audit trail.',
+          ? `Mọi phán quyết đều đính kèm vết suy diễn hình thức ${SYMBOLIC_RULES_RANGE} và bảng đối chiếu chi tiết từng trường thư mục (Tiêu đề, Tác giả, Năm, Tạp chí, DOI). Giảng viên có toàn quyền điều chỉnh kết luận (Override) kèm lưu vết kiểm toán bất biến.`
+          : `Every verdict includes a deterministic ${SYMBOLIC_RULES_RANGE} rule trace and field-level edit distances. Instructors can override verdicts with mandatory rationale logged to an immutable audit trail.`,
       cta: lang === 'vi' ? 'Khám phá hệ quy tắc' : 'Explore rules',
     },
     {
@@ -3099,8 +3103,8 @@ function SolvaUseCasesSection({
       painting: '/solva/usecase-3-bg.webp',
       headline:
         lang === 'vi'
-          ? 'Suy diễn tất định, minh bạch trên nền tảng 20 quy tắc hình thức R01–R20'
-          : 'Deterministic verification grounded in formal rules R01–R20',
+          ? `Suy diễn tất định, minh bạch trên nền tảng ${SYMBOLIC_RULES_COUNT} quy tắc hình thức ${SYMBOLIC_RULES_RANGE}`
+          : `Deterministic verification grounded in formal rules ${SYMBOLIC_RULES_RANGE}`,
       subFeatures: [
         {
           title:
@@ -4168,8 +4172,8 @@ function SolvaFAQSection({ lang }: { lang: Lang }) {
           : 'Does CITRA automatically accuse students of academic misconduct?',
       a:
         lang === 'vi'
-          ? 'Tuyệt đối không. CITRA được thiết kế nhất quán theo triết lý Hệ thống Hỗ trợ Ra Quyết định (Decision-Support System). Hệ thống cung cấp bằng chứng đối chiếu thư mục khách quan cùng vết suy diễn hình thức R01–R20 để giảng viên và hội đồng xem xét; quyền phán quyết cuối cùng luôn thuộc về con người.'
-          : 'Never. CITRA is strictly a Decision-Support System. It surfaces verifiable bibliographic evidence and formal R01–R20 rule traces for human reviewers. Instructors can override any verdict with an audited rationale.',
+          ? `Tuyệt đối không. CITRA được thiết kế nhất quán theo triết lý Hệ thống Hỗ trợ Ra Quyết định (Decision-Support System). Hệ thống cung cấp bằng chứng đối chiếu thư mục khách quan cùng vết suy diễn hình thức ${SYMBOLIC_RULES_RANGE} để giảng viên và hội đồng xem xét; quyền phán quyết cuối cùng luôn thuộc về con người.`
+          : `Never. CITRA is strictly a Decision-Support System. It surfaces verifiable bibliographic evidence and formal ${SYMBOLIC_RULES_RANGE} rule traces for human reviewers. Instructors can override any verdict with an audited rationale.`,
     },
     {
       id: 'faq-4',

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
+import { SCHOLARLY_APIS_LABEL } from '@/lib/productFacts';
 import {
   FileFormatIcon,
   getDocumentFormat,
@@ -142,7 +143,10 @@ export function DashboardPage() {
       idx: '04',
       label: t('dashboard.verifiedRate'),
       value: stats.verified_rate > 0 ? `${stats.verified_rate}%` : 'N/A',
-      sub: lang === 'vi' ? 'Xác thực trên 7 CSDL học thuật' : 'Verified across 7 scholarly indexes',
+      sub:
+        lang === 'vi'
+          ? `Xác thực trên ${SCHOLARLY_APIS_LABEL} CSDL học thuật`
+          : `Verified across ${SCHOLARLY_APIS_LABEL} scholarly indexes`,
       icon: CheckCircle2,
       color: 'text-sky-600 dark:text-sky-400',
       iconBox:

@@ -18,6 +18,7 @@ import { UpgradeModal } from '@/components/UpgradeModal';
 import { BibliographyRemediationModal } from '@/components/BibliographyRemediationModal';
 import { useEssayReport, useOverrideVerdict } from '@/hooks/useEssayReport';
 import { isUrlResource } from '@/lib/verdictExplanation';
+import { SYMBOLIC_RULES_COUNT } from '@/lib/productFacts';
 import { useRole } from '@/hooks/useRole';
 import {
   Loader2,
@@ -2573,8 +2574,8 @@ export function EssayPage() {
                               onClick={() => {
                                 setLockedFeatureName(
                                   lang === 'vi'
-                                    ? 'Tập Luật Suy diễn Hình thức (28 Symbolic Rules)'
-                                    : '28 Deterministic Symbolic Rules Trace'
+                                    ? `Tập Luật Suy diễn Hình thức (${SYMBOLIC_RULES_COUNT} Symbolic Rules)`
+                                    : `${SYMBOLIC_RULES_COUNT} Deterministic Symbolic Rules Trace`
                                 );
                                 setUpgradeOpen(true);
                               }}

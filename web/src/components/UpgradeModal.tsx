@@ -13,6 +13,7 @@ import {
   CreditCard,
 } from 'lucide-react';
 import { api, type BillingCycle } from '@/api/client';
+import { SCHOLARLY_APIS_LABEL } from '@/lib/productFacts';
 import {
   Dialog,
   DialogContent,
@@ -224,14 +225,14 @@ export function UpgradeModal({
                         'Kiểm chứng tới 200 trích dẫn / bài + Batch 10 files',
                         'Mở khóa Document Inspector, Logic Trace & Đồ thị',
                         'Xuất báo cáo chuẩn học thuật PDF, DOCX (Word), CSV',
-                        'Đầy đủ 7 nguồn học thuật + Deep Neural Sentence-BERT',
+                        `Đầy đủ ${SCHOLARLY_APIS_LABEL} nguồn học thuật + Deep Neural Sentence-BERT`,
                       ]
                     : [
                         '50 PDF checks / month (Up to 25MB, 100 pages/doc)',
                         'Up to 200 citations / doc + 10-file Batch Upload',
                         'Unlock Document Inspector, Logic Trace & Evidence Graph',
                         'Export academic reports in PDF, DOCX (Word) & CSV',
-                        'All 7 Scholarly APIs + Deep Neural Sentence-BERT',
+                        `All ${SCHOLARLY_APIS_LABEL} Scholarly APIs + Deep Neural Sentence-BERT`,
                       ]
                   ).map((item) => (
                     <li key={item} className="flex items-start gap-2">

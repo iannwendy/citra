@@ -14,6 +14,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { formatLimit } from '@/lib/quotaDisplay';
+import {
+  SCHOLARLY_APIS_LABEL,
+  SYMBOLIC_RULES_COUNT,
+} from '@/lib/productFacts';
 import { Badge } from '@/components/ui/badge';
 
 /* ============================================================
@@ -178,11 +182,15 @@ export function BillingSuccessPage() {
             </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F4F2EC] dark:bg-slate-800 border border-[#E7E3D9] dark:border-slate-700 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-200">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              {lang === 'vi' ? '15+ Nguồn học thuật' : '15+ Scholarly APIs'}
+              {lang === 'vi'
+                ? `${SCHOLARLY_APIS_LABEL} Nguồn học thuật`
+                : `${SCHOLARLY_APIS_LABEL} Scholarly APIs`}
             </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#F4F2EC] dark:bg-slate-800 border border-[#E7E3D9] dark:border-slate-700 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-200">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              {lang === 'vi' ? '28 Luật Symbolic' : '28 Symbolic Rules'}
+              {lang === 'vi'
+                ? `${SYMBOLIC_RULES_COUNT} Luật Symbolic`
+                : `${SYMBOLIC_RULES_COUNT} Symbolic Rules`}
             </span>
           </div>
         </div>

@@ -21,6 +21,11 @@ import { api, type Class } from '../api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRole } from '@/hooks/useRole';
 import { getQuotaView } from '@/lib/quotaDisplay';
+import {
+  SCHOLARLY_APIS_LABEL,
+  SYMBOLIC_RULES_COUNT,
+  SYMBOLIC_RULES_RANGE,
+} from '@/lib/productFacts';
 import { useToast } from '@/contexts/ToastContext';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
@@ -230,7 +235,7 @@ export function UploadPage() {
       icon: Database,
       title: t('auth.featureRetrieval'),
       desc: t('auth.featureRetrievalDesc'),
-      tag: '7 Scholarly DBs',
+      tag: `${SCHOLARLY_APIS_LABEL} Scholarly APIs`,
       tone: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
     },
     {
@@ -238,7 +243,7 @@ export function UploadPage() {
       icon: GitBranch,
       title: t('auth.featureVerification'),
       desc: t('auth.featureVerificationDesc'),
-      tag: 'Rules R01–R12 · CIS',
+      tag: `Rules ${SYMBOLIC_RULES_RANGE} · CIS`,
       tone: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
     },
   ];
@@ -561,8 +566,8 @@ export function UploadPage() {
           <div className="mt-6 pt-5 border-t border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="text-xs font-mono text-slate-500 dark:text-slate-400 min-w-0">
               {lang === 'vi'
-                ? 'Pipeline: Bóc tách PDF/DOCX → 28+ CSDL Học thuật → 28 Luật Neuro-Symbolic'
-                : 'Pipeline: PDF/DOCX Extraction → 28+ Scholarly Indexes → 28 Symbolic Rules'}
+                ? `Pipeline: Bóc tách PDF/DOCX → ${SCHOLARLY_APIS_LABEL} CSDL Học thuật → ${SYMBOLIC_RULES_COUNT} Luật Neuro-Symbolic`
+                : `Pipeline: PDF/DOCX Extraction → ${SCHOLARLY_APIS_LABEL} Scholarly Indexes → ${SYMBOLIC_RULES_COUNT} Symbolic Rules`}
             </div>
 
             <Button

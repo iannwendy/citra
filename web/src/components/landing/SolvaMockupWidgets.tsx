@@ -12,6 +12,7 @@ import {
   GraduationCap,
 } from 'lucide-react';
 import { type Lang } from './SolvaPrimitives';
+import { SYMBOLIC_RULES_RANGE } from '@/lib/productFacts';
 import { ScholarlySourceLogo, getScholarlySourceUrl } from './ScholarlySourceLogos';
 
 /* ============================================================
@@ -1517,8 +1518,8 @@ export function PipelineStageVisual({
     {
       badge:
         lang === 'vi'
-          ? 'GIAI ĐOẠN 03 · ĐỒ THỊ QUY TẮC NEURO-SYMBOLIC (R01–R20)'
-          : 'STAGE 03 · NEURO-SYMBOLIC RULE GRAPH (R01–R20)',
+          ? `GIAI ĐOẠN 03 · ĐỒ THỊ QUY TẮC NEURO-SYMBOLIC (${SYMBOLIC_RULES_RANGE})`
+          : `STAGE 03 · NEURO-SYMBOLIC RULE GRAPH (${SYMBOLIC_RULES_RANGE})`,
       title:
         lang === 'vi'
           ? 'Đối sánh chi tiết từng trường thư mục & Suy luận quy tắc hình thức'

@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
+  SCHOLARLY_APIS_LABEL,
+  SYMBOLIC_RULES_RANGE,
+} from '@/lib/productFacts';
+import {
   Check,
   X,
   Sparkles,
@@ -1395,8 +1399,8 @@ export function PricingPage() {
                         </span>
                         <span style={{ color: 'var(--solva-muted)' }}>
                           {lang === 'vi'
-                            ? 'kèm bằng chứng truy vết quy tắc R01–R28 minh bạch.”'
-                            : 'with verifiable R01–R28 symbolic rule traces.”'}
+                            ? `kèm bằng chứng truy vết quy tắc ${SYMBOLIC_RULES_RANGE} minh bạch.”`
+                            : `with verifiable ${SYMBOLIC_RULES_RANGE} symbolic rule traces.”`}
                         </span>
                       </blockquote>
 
@@ -1494,10 +1498,8 @@ export function PricingPage() {
                   icon: HelpCircle,
                   title_vi: 'Đảm bảo Tính Toàn vẹn Học thuật',
                   title_en: 'Academic Decision-Support',
-                  desc_vi:
-                    'Mọi kết quả kiểm chứng đều đi kèm bằng chứng truy xuất từ 15+ cơ sở dữ liệu khoa học quốc tế uy tín và luật suy diễn R01–R28.',
-                  desc_en:
-                    'Every verdict is backed by explainable symbolic rules (R01–R28) and live scholarly metadata.',
+                  desc_vi: `Mọi kết quả kiểm chứng đều đi kèm bằng chứng truy xuất từ ${SCHOLARLY_APIS_LABEL} cơ sở dữ liệu khoa học quốc tế uy tín và luật suy diễn ${SYMBOLIC_RULES_RANGE}.`,
+                  desc_en: `Every verdict is backed by explainable symbolic rules (${SYMBOLIC_RULES_RANGE}) and live scholarly metadata.`,
                 },
               ].map((item, idx) => {
                 const Icon = item.icon;
@@ -1664,7 +1666,7 @@ function PricingSolvaHeader({
           },
           {
             title: 'Trình gỡ lỗi trích dẫn',
-            desc: 'Soi chiếu metadata & luật R01–R20',
+            desc: `Soi chiếu metadata & luật ${SYMBOLIC_RULES_RANGE}`,
             href: '/#interactive-demo',
             icon: FileSearch,
           },
@@ -1696,7 +1698,7 @@ function PricingSolvaHeader({
           },
           {
             title: 'Citation Debugger',
-            desc: 'Live metadata diff & rules R01–R20',
+            desc: `Live metadata diff & rules ${SYMBOLIC_RULES_RANGE}`,
             href: '/#interactive-demo',
             icon: FileSearch,
           },

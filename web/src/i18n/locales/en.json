@@ -85,7 +85,7 @@
     "featureExtraction": "Citation Extraction",
     "featureExtractionDesc": "Automatically extract in-text citations and references from documents",
     "featureRetrieval": "Multi-Source Retrieval",
-    "featureRetrievalDesc": "Smart-route queries across Crossref, OpenAlex, DBLP, arXiv, OpenLibrary, and Europe PMC",
+    "featureRetrievalDesc": "Smart-route queries across 15+ scholarly & technical APIs (Crossref, OpenAlex, DataCite, DOAJ, DBLP, arXiv, Europe PMC, and more)",
     "featureVerification": "Neuro-Symbolic Verification",
     "featureVerificationDesc": "Explainable decision logic with evidence and rule tracing",
     "footerNote": "Decision Support System — Not an automated grader",
