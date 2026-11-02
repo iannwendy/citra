@@ -7,17 +7,17 @@
 
 from __future__ import annotations
 
+import zipfile
 from io import BytesIO
 from pathlib import Path
-import zipfile
 
 from docx import Document as WordDocument
 from fastapi.testclient import TestClient
 
 from integrity_checker.config import PROJECT_ROOT
+from integrity_checker.export.docx_exporter import export_report_to_docx
 from integrity_checker.extraction.document_parser import DocumentParser
 from integrity_checker.extraction.docx_parser import DocxParser
-from integrity_checker.export.docx_exporter import export_report_to_docx
 from integrity_checker.linking.citation_linker import CitationLinker, CitationMappingStatus
 
 
@@ -113,9 +113,10 @@ def test_upload_endpoint_validates_docx_magic_bytes() -> None:
     login = client.post("/api/auth/login", json={"username": "admin", "password": "admin123"})
     if login.status_code != 200:
         # Ensure default admin exists in test DB
-        from integrity_checker.db.session import get_session
-        from integrity_checker.db.models import User
         import bcrypt
+
+        from integrity_checker.db.models import User
+        from integrity_checker.db.session import get_session
 
         s = get_session()
         if not s.query(User).filter(User.username == "admin").first():
@@ -146,7 +147,9 @@ def test_upload_endpoint_validates_docx_magic_bytes() -> None:
 def test_class_join_code_and_cohort_analytics() -> None:
     """Verify teacher class creation generates CITRA-XXXX join_code, student self-enrolls, and cohort analytics detects shared hallucinations."""
     import json
+
     import bcrypt
+
     from integrity_checker.api.main import app
     from integrity_checker.db.models import EssayRecord, User, VerdictRecord
     from integrity_checker.db.session import get_session

@@ -14,10 +14,10 @@ from pathlib import Path
 
 from integrity_checker.extraction.document_parser import DocumentParser
 from integrity_checker.extraction.section_segmenter import SectionType
+from integrity_checker.extraction.style_detector import StyleDetector
 from integrity_checker.linking.citation_linker import CitationLinker
 from integrity_checker.linking.duplicate_detector import DuplicateDetector
 from integrity_checker.linking.statuses import CitationMappingStatus
-from integrity_checker.extraction.style_detector import StyleDetector
 
 STYLES = [
     "APA",

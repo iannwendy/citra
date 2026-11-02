@@ -18,9 +18,8 @@ import pytest
 
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate, SourceResult
-from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
 from integrity_checker.retrieval.cache import DiskCache
-
+from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
 
 # ---------- Fixtures ----------
 

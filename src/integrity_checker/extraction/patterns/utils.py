@@ -17,7 +17,6 @@ from typing import Optional
 
 from integrity_checker.extraction.patterns.base import CompiledPattern, PatternType
 
-
 # =============================================================================
 # DOI Pattern
 # =============================================================================
@@ -41,7 +40,7 @@ DOI_PATTERN = CompiledPattern.create(
 _DOI_REGEX = re.compile(r"10\.\d{4,9}/(?:[^\s\]\)\,;()]|\([^\s\]\)\,;()]*\))+")
 
 
-def extract_doi(text: str) -> Optional[str]:
+def extract_doi(text: str) -> str | None:
     """Extract DOI from text.
 
     Args:
@@ -92,7 +91,7 @@ URL_PATTERN = CompiledPattern.create(
 _URL_REGEX = re.compile(r"https?://[^\s\]\)\,;]+")
 
 
-def extract_url(text: str) -> Optional[str]:
+def extract_url(text: str) -> str | None:
     """Extract URL from text.
 
     Args:
@@ -189,7 +188,7 @@ def extract_publication_year(
     *,
     prefer_last: bool = True,
     allow_1800s: bool = False,
-) -> tuple[Optional[str], Optional[str]]:
+) -> tuple[str | None, str | None]:
     """Extract (year, year_suffix) from reference/venue text while ignoring page numbers,
     volume/issue/article numbers, DOIs, URLs, arXiv IDs, and preferring publication
     dates over access/retrieval dates.
@@ -244,7 +243,7 @@ def extract_publication_year(
     return None, None
 
 
-def extract_year(text: str) -> Optional[str]:
+def extract_year(text: str) -> str | None:
     """Extract publication year from text.
 
     Args:

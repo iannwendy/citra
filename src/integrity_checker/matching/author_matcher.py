@@ -108,9 +108,7 @@ def _strip_leading_particles(tokens: list[str]) -> list[str]:
     res = list(tokens)
     while res:
         head = res[0]
-        if head in _PURE_PARTICLES:
-            res.pop(0)
-        elif head in _AMBIGUOUS_PARTICLES and len(res) > 1:
+        if head in _PURE_PARTICLES or head in _AMBIGUOUS_PARTICLES and len(res) > 1:
             res.pop(0)
         else:
             break
@@ -203,7 +201,7 @@ def _canonicalize_last_name(name: str, *, fold_diacritics: bool = True) -> str:
     return last_non_initial if last_non_initial else (fallback_tokens[-1] if fallback_tokens else "")
 
 
-def _author_to_last_name(author: Union[Author, str], *, fold_diacritics: bool = True) -> str:
+def _author_to_last_name(author: Author | str, *, fold_diacritics: bool = True) -> str:
     """Extract last_name string từ Author or str.
 
     Args:
@@ -234,7 +232,7 @@ def _to_last_name_set(authors: list, *, fold_diacritics: bool = True) -> set[str
 
 
 def _extract_author_signature(
-    author: Union[Author, str], *, fold_diacritics: bool = True
+    author: Author | str, *, fold_diacritics: bool = True
 ) -> tuple[str, list[str], set[str]]:
     """Extract (primary_last_name, full_word_tokens, initial_letters) for East-Asian/swapped matching."""
     primary = _author_to_last_name(author, fold_diacritics=fold_diacritics)
@@ -336,7 +334,7 @@ _CORP_STOPWORDS = {
 }
 
 
-def _extract_corporate_keys(author: Union[Author, str], *, fold_diacritics: bool = True) -> set[str]:
+def _extract_corporate_keys(author: Author | str, *, fold_diacritics: bool = True) -> set[str]:
     """Extract normalized corporate/institutional keys and initialisms (e.g. 'World Health Organization' <-> 'who')."""
     if isinstance(author, Author) or hasattr(author, "last_name"):
         raw_str = getattr(author, "raw", "") or getattr(author, "last_name", "") or ""
@@ -456,7 +454,7 @@ def author_match_details(
     candidate: list,
     *,
     fold_diacritics: bool = True,
-) -> "AuthorMatchResult":
+) -> AuthorMatchResult:
     """Trả về chi tiết match (để debug/log).
 
     Args:

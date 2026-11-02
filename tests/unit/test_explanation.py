@@ -1,13 +1,13 @@
 """Unit tests for ExplanationGenerator — Task 1.2."""
 
-import pytest
 from dataclasses import dataclass, field
 
-from integrity_checker.models.validation import CitationVerdict, ValidationLabel, MatchFeatures
-from integrity_checker.models.source import SourceResult, SourceCandidate
+import pytest
+
 from integrity_checker.linking.statuses import CitationMappingStatus
 from integrity_checker.logic.explanation import ExplanationGenerator
-
+from integrity_checker.models.source import SourceCandidate, SourceResult
+from integrity_checker.models.validation import CitationVerdict, MatchFeatures, ValidationLabel
 
 # =============================================================================
 # Fixtures

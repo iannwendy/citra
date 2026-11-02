@@ -24,10 +24,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from integrity_checker.config import get_settings
+from integrity_checker.logging import get_logger
+from integrity_checker.matching.fuzzy import FuzzyMatcher
 from integrity_checker.models.source import SourceResult
 from integrity_checker.models.validation import MatchFeatures, ValidationLabel
-from integrity_checker.matching.fuzzy import FuzzyMatcher
-from integrity_checker.logging import get_logger
 
 if TYPE_CHECKING:
     from integrity_checker.linking.statuses import CitationMappingStatus, StyleProfile
@@ -704,8 +704,8 @@ class SymbolicRules:
         self,
         features: MatchFeatures,
         source: SourceResult,
-        mapping_status: "CitationMappingStatus | None" = None,
-        style_profile: "StyleProfile | None" = None,
+        mapping_status: CitationMappingStatus | None = None,
+        style_profile: StyleProfile | None = None,
         citation_doi: str | None = None,
         citation_url: str | None = None,
         # NEW v1.3: Provenance tracking

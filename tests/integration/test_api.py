@@ -3,20 +3,25 @@
 from __future__ import annotations
 
 import os
+
 import pytest
 from fastapi.testclient import TestClient
+
 from integrity_checker.db.models import (
     AuditLog,
     CitationRecord,
-    Class as ClassModel,
     ClassMembership,
     EssayRecord,
-    Session as SessionModel,
     User,
     VerdictRecord,
 )
+from integrity_checker.db.models import (
+    Class as ClassModel,
+)
+from integrity_checker.db.models import (
+    Session as SessionModel,
+)
 from integrity_checker.db.session import get_session
-
 
 # Test credentials - intentionally simple for testing per plan spec
 # Override with environment variables in CI/CD if needed
@@ -77,8 +82,9 @@ def test_get_essay_404() -> None:
 
 def test_upload_rejects_non_pdf() -> None:
     """Upload file không phải PDF → 400 (requires auth)."""
-    from integrity_checker.api.main import app
     from io import BytesIO
+
+    from integrity_checker.api.main import app
 
     client = TestClient(app)
     # Login first
@@ -116,6 +122,7 @@ def test_report_and_verdicts_require_authentication() -> None:
 def test_upload_rejects_pdf_without_magic_bytes() -> None:
     """File .pdf nhưng không có %PDF- magic header -> 400."""
     from io import BytesIO
+
     from integrity_checker.api.main import app
 
     client = TestClient(app)
@@ -137,6 +144,7 @@ def test_upload_rejects_pdf_without_magic_bytes() -> None:
 def test_upload_rejects_oversized_pdf(monkeypatch) -> None:
     """Upload PDF vượt quá ngưỡng dung lượng -> 413 Payload Too Large."""
     from io import BytesIO
+
     import integrity_checker.api.routes.essays as essays_route
     from integrity_checker.api.main import app
 

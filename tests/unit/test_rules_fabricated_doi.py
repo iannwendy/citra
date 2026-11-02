@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from integrity_checker.logic.rules import SymbolicRules, _is_fake_url, _FABRICATED_DOI_PATTERNS
+from integrity_checker.logic.rules import _FABRICATED_DOI_PATTERNS, SymbolicRules, _is_fake_url
 from integrity_checker.models.source import SourceResult
 from integrity_checker.models.validation import MatchFeatures, ValidationLabel
 

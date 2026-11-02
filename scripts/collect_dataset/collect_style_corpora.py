@@ -18,22 +18,22 @@ Usage:
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
 import threading
 import time
-from urllib.parse import quote
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from urllib.parse import quote
 
-from dotenv import load_dotenv
 import fitz  # PyMuPDF
 import requests
+from dotenv import load_dotenv
 
 STYLES: list[str] = [
     "APA",
@@ -342,9 +342,7 @@ def analyze_pdf_bytes(pdf_bytes: bytes, hint_style: str | None = None) -> dict |
         if hint_style in scores:
             numeric_styles = {"IEEE", "ACM", "Vancouver", "AMA", "Nature", "ACS"}
             author_styles = {"APA", "Harvard", "Chicago", "MLA", "CSE"}
-            if hint_style in numeric_styles and (has_numbered_refs or counts["intext_bracket_num"] >= 2 or total_bib_entries >= 2):
-                scores[hint_style] += 7.5
-            elif hint_style in author_styles and (has_author_refs or has_ref_header or counts["footnote_chicago"] >= 2 or total_bib_entries >= 2):
+            if hint_style in numeric_styles and (has_numbered_refs or counts["intext_bracket_num"] >= 2 or total_bib_entries >= 2) or hint_style in author_styles and (has_author_refs or has_ref_header or counts["footnote_chicago"] >= 2 or total_bib_entries >= 2):
                 scores[hint_style] += 7.5
             else:
                 scores[hint_style] += 4.0

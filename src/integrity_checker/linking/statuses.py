@@ -53,12 +53,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+# Re-export StyleProfile từ extraction (old tests + pipeline)
+from integrity_checker.extraction.style_detector import StyleProfile  # noqa: F401
+
 # Re-export CitationLink + MappingMethod từ models/validation
 # (backward compatibility — pipeline + old tests import từ đây)
 from integrity_checker.models.validation import CitationLink, MappingMethod
-
-# Re-export StyleProfile từ extraction (old tests + pipeline)
-from integrity_checker.extraction.style_detector import StyleProfile  # noqa: F401
 
 # --- Stubs cho backward compatibility với old tests + pipeline ---
 # Pipeline gốc dùng CitationOccurrence/ReferenceEntry wrappers.
@@ -246,7 +246,7 @@ class LinkingResult:
     total_references: int = 0
     matched_count: int = 0
 
-    def add_link(self, link: "CitationLink") -> None:
+    def add_link(self, link: CitationLink) -> None:
         """Thêm 1 link và update counters."""
         from integrity_checker.models.validation import CitationLink as _CitationLink
         if not isinstance(link, _CitationLink):

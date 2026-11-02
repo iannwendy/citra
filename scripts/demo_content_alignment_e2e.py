@@ -7,10 +7,11 @@ This script demonstrates the Neural layer integration:
 """
 
 import asyncio
-from integrity_checker.matching.semantic import SemanticMatcher, SemanticAlignmentResult
-from integrity_checker.models.validation import MatchFeatures
-from integrity_checker.models.source import SourceCandidate, SourceResult
+
 from integrity_checker.logic.rules import SymbolicRules
+from integrity_checker.matching.semantic import SemanticAlignmentResult, SemanticMatcher
+from integrity_checker.models.source import SourceCandidate, SourceResult
+from integrity_checker.models.validation import MatchFeatures
 
 
 def demo_semantic_content_alignment():

@@ -9,11 +9,11 @@ import re
 from typing import Optional
 
 from integrity_checker.matching.author_matcher import author_match_score
+from integrity_checker.matching.fuzzy import FuzzyMatcher
+from integrity_checker.matching.semantic import SemanticMatcher
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.models.validation import MatchFeatures
-from integrity_checker.matching.fuzzy import FuzzyMatcher
-from integrity_checker.matching.semantic import SemanticMatcher
 
 
 class FeatureCalculator:
@@ -44,7 +44,7 @@ class FeatureCalculator:
         self,
         citation: Citation,
         source: SourceResult,
-        citation_context: Optional[str] = None,
+        citation_context: str | None = None,
     ) -> MatchFeatures:
         """Tính features dựa trên candidate tốt nhất (highest confidence).
 

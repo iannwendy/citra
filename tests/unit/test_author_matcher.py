@@ -6,9 +6,9 @@ import pytest
 
 from integrity_checker.matching.author_matcher import (
     AuthorMatchResult,
+    _canonicalize_last_name,
     author_match_details,
     author_match_score,
-    _canonicalize_last_name,
 )
 from integrity_checker.matching.author_parser import Author
 

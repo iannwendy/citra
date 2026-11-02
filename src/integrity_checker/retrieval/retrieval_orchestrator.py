@@ -863,7 +863,7 @@ class RetrievalOrchestrator:
         cache: DiskCache | None = None,
         local_db: LocalDatabase | None = None,
         use_local_db: bool | None = None,
-        link_validator: "object | None" = None,
+        link_validator: object | None = None,
         enable_link_validation: bool | None = None,
     ) -> None:
         settings_global = get_settings()
@@ -1804,6 +1804,7 @@ class RetrievalOrchestrator:
             and not any(c.found for c in deduped)
         ):
             from datetime import datetime
+
             from integrity_checker.logic.rules import _is_fake_author_name
 
             current_year = datetime.now().year

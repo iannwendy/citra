@@ -15,7 +15,6 @@ from dataclasses import asdict, dataclass, field
 from threading import Lock
 from typing import Any
 
-
 # Step keys must match the 8 steps surfaced by the ProcessingPage stepper.
 STEP_KEYS: list[str] = [
     "parsing",

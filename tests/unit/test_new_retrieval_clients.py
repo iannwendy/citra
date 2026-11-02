@@ -378,6 +378,7 @@ class TestSmartDomainOrchestratorRouting:
 
     def _make_mock_client(self, name: str, found: bool = False, **kwargs):
         from unittest.mock import AsyncMock
+
         from integrity_checker.models.source import SourceCandidate
 
         client = AsyncMock()

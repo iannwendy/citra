@@ -5,6 +5,7 @@ for the 9 free scholarly & technical API integrations.
 from __future__ import annotations
 
 from pathlib import Path
+
 import fitz  # PyMuPDF
 import pytest
 

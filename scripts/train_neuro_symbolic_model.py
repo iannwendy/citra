@@ -80,7 +80,6 @@ from integrity_checker.matching.venue_normalizer import VenueNormalizer
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.models.validation import MatchFeatures
 
-
 TOTAL_SAMPLES = 120_000
 FULL_ABSTRACT_QUOTA = 80_000
 METADATA_ONLY_QUOTA = TOTAL_SAMPLES - FULL_ABSTRACT_QUOTA  # 40,000

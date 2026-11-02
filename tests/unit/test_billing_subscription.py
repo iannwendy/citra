@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from io import BytesIO
 from unittest.mock import patch
 
@@ -15,14 +15,18 @@ from integrity_checker.db.models import (
     AuditLog,
     BillingTransaction,
     CitationRecord,
-    Class as ClassModel,
     ClassMembership,
     EssayRecord,
     PromoCode,
     PromoRedemption,
-    Session as SessionModel,
     User,
     VerdictRecord,
+)
+from integrity_checker.db.models import (
+    Class as ClassModel,
+)
+from integrity_checker.db.models import (
+    Session as SessionModel,
 )
 from integrity_checker.db.repository import Repository
 from integrity_checker.db.session import get_session
@@ -226,7 +230,7 @@ def test_stripe_demo_checkout_upgrade_to_pro_and_ultra() -> None:
     db_user = session.get(User, user_data["id"])
     assert db_user is not None
     db_user.monthly_uploads_used = 3
-    db_user.quota_reset_at = datetime.now(timezone.utc) + timedelta(days=20)
+    db_user.quota_reset_at = datetime.now(UTC) + timedelta(days=20)
     essay = Repository(session).create_essay_with_user("essay.pdf", 5, user_id=db_user.id)
     essay_id = essay.id
     session.commit()
@@ -472,7 +476,7 @@ def test_promo_code_checkout_redemption_and_business_rules() -> None:
             "code": "EXPRD1",
             "discount_type": "fixed",
             "discount_value": 10,
-            "expires_at": (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(),
+            "expires_at": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
         },
         headers=admin_headers,
     )

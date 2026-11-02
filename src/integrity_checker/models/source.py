@@ -24,19 +24,19 @@ class SourceCandidate:
     source_name: str
     found: bool = False
 
-    doi: Optional[str] = None
-    title: Optional[str] = None
+    doi: str | None = None
+    title: str | None = None
     authors: list[str] = field(default_factory=list)
-    year: Optional[str] = None
-    venue: Optional[str] = None
-    url: Optional[str] = None
-    abstract: Optional[str] = None
+    year: str | None = None
+    venue: str | None = None
+    url: str | None = None
+    abstract: str | None = None
     external_ids: dict[str, str] = field(default_factory=dict)
 
     score: float = 0.0
     confidence: float = 0.0
 
-    error: Optional[str] = None
+    error: str | None = None
     cached: bool = False
     paper_id: int | None = None  # local_papers.db row id, when available
 
@@ -85,9 +85,9 @@ class SourceResult:
     sources_succeeded: list[str] = field(default_factory=list)
     sources_failed: dict[str, str] = field(default_factory=dict)  # source → error
     api_exhausted: bool = False
-    url_status: Optional[str] = None
-    url_status_code: Optional[int] = None
-    archive_url: Optional[str] = None
+    url_status: str | None = None
+    url_status_code: int | None = None
+    archive_url: str | None = None
     is_retracted: bool = False
 
     def has_retracted_candidate(self) -> bool:
@@ -99,7 +99,7 @@ class SourceResult:
                 return True
         return False
 
-    def best_candidate(self) -> Optional[SourceCandidate]:
+    def best_candidate(self) -> SourceCandidate | None:
         """Trả về candidate tốt nhất (highest confidence hoặc được chọn bởi FeatureCalculator) trong số found=True."""
         selected = getattr(self, "_selected_best", None)
         if selected is not None and selected in self.candidates and selected.found:

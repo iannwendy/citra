@@ -209,7 +209,7 @@ class DuplicateDetector:
 
         return score / total if total > 0 else 0.0
 
-    def _first_author_last_name(self, cit: Citation) -> Optional[str]:
+    def _first_author_last_name(self, cit: Citation) -> str | None:
         """Trả first author last name.
 
         Citation.authors là list[str] (raw strings như "Smith, J." hoặc "Smith J.").
@@ -267,7 +267,7 @@ class DuplicateDetector:
         max_len = max(m, n)
         return 1.0 - (edit_dist / max_len)
 
-    def _extract_arxiv_id(self, text: str) -> Optional[str]:
+    def _extract_arxiv_id(self, text: str) -> str | None:
         """Trích arXiv ID từ text."""
         m = _ARXIV_RE.search(text)
         if m:

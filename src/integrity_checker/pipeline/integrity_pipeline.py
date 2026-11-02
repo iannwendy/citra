@@ -22,7 +22,7 @@ import inspect
 import json
 import re
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -231,7 +231,7 @@ class AnalysisReport:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "AnalysisReport":
+    def from_dict(cls, payload: dict[str, Any]) -> AnalysisReport:
         """Rehydrate a report from the persistent JSON report cache."""
         verdicts: list[CitationVerdict] = []
         for raw_verdict in payload.get("verdicts", []):
@@ -1735,7 +1735,7 @@ class IntegrityPipeline:
     @staticmethod
     def _build_linking_summary(
         verdicts: list[CitationVerdict],
-        linking_result: "LinkingResult | None" = None,
+        linking_result: LinkingResult | None = None,
     ) -> dict[str, int]:
         """Build linking summary for Web UI dashboard.
 
@@ -2127,7 +2127,7 @@ def _serialize_matched_sources(source: Any) -> list[dict[str, Any]]:
         out.append({
             "source": getattr(c, "source_name", "unknown"),
             "matched_fields": matched_fields,
-            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "checked_at": datetime.now(UTC).isoformat(),
             "url": getattr(c, "url", None),
             "doi": getattr(c, "doi", None),
             "title": getattr(c, "title", None),
@@ -2233,7 +2233,7 @@ def main() -> None:
     # Show GROBID status if requested
     if args.grobid_status:
         try:
-            from integrity_checker.extraction import get_grobid_manager, GROBID_STATUS
+            from integrity_checker.extraction import GROBID_STATUS, get_grobid_manager
 
             manager = get_grobid_manager()
             status = manager.check_health()

@@ -35,7 +35,6 @@ from integrity_checker.extraction.patterns.registry import register_format
 from integrity_checker.matching.author_parser import parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
-
 # =============================================================================
 # Nature Pattern Definitions
 # =============================================================================
@@ -249,7 +248,7 @@ class NatureFormat:
             _NATURE_WEBSITE,
         ]
 
-    def parse_reference_entry(self, text: str) -> Optional[Citation]:
+    def parse_reference_entry(self, text: str) -> Citation | None:
         """Parse Nature reference entry into Citation object.
 
         Args:
@@ -322,42 +321,42 @@ class NatureFormat:
         # Fallback
         return self._parse_nature_fallback(text)
 
-    def _try_parse_article_doi(self, text: str) -> Optional[Citation]:
+    def _try_parse_article_doi(self, text: str) -> Citation | None:
         """Try to parse Nature article with DOI format."""
         match = _NATURE_REFERENCE_DOI.search(text)
         if match:
             return self._parse_article_doi_entry(match, text)
         return None
 
-    def _try_parse_numbered(self, text: str) -> Optional[Citation]:
+    def _try_parse_numbered(self, text: str) -> Citation | None:
         """Try to parse Nature numbered format."""
         match = _NATURE_NUMBERED.search(text)
         if match:
             return self._parse_numbered_entry(match, text)
         return None
 
-    def _try_parse_compact(self, text: str) -> Optional[Citation]:
+    def _try_parse_compact(self, text: str) -> Citation | None:
         """Try to parse Nature compact format."""
         match = _NATURE_REFERENCE_COMPACT.search(text)
         if match:
             return self._parse_compact_entry(match, text)
         return None
 
-    def _try_parse_book(self, text: str) -> Optional[Citation]:
+    def _try_parse_book(self, text: str) -> Citation | None:
         """Try to parse Nature book format."""
         match = _NATURE_BOOK.search(text)
         if match:
             return self._parse_book_entry(match, text)
         return None
 
-    def _try_parse_book_chapter(self, text: str) -> Optional[Citation]:
+    def _try_parse_book_chapter(self, text: str) -> Citation | None:
         """Try to parse Nature book chapter format."""
         match = _NATURE_BOOK_CHAPTER.search(text)
         if match:
             return self._parse_book_chapter_entry(match, text)
         return None
 
-    def _try_parse_website(self, text: str) -> Optional[Citation]:
+    def _try_parse_website(self, text: str) -> Citation | None:
         """Try to parse Nature website format."""
         match = _NATURE_WEBSITE.search(text)
         if match:
@@ -366,7 +365,7 @@ class NatureFormat:
 
     def _parse_article_doi_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Nature article with DOI entry."""
         citation = Citation(
             raw_text=text,
@@ -414,7 +413,7 @@ class NatureFormat:
 
     def _parse_numbered_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Nature numbered entry."""
         citation = Citation(
             raw_text=text,
@@ -467,7 +466,7 @@ class NatureFormat:
 
     def _parse_compact_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Nature compact entry."""
         citation = Citation(
             raw_text=text,
@@ -515,7 +514,7 @@ class NatureFormat:
 
     def _parse_book_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Nature book entry."""
         citation = Citation(
             raw_text=text,
@@ -553,7 +552,7 @@ class NatureFormat:
 
     def _parse_book_chapter_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Nature book chapter entry."""
         citation = Citation(
             raw_text=text,
@@ -596,7 +595,7 @@ class NatureFormat:
 
     def _parse_website_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Nature website entry."""
         citation = Citation(
             raw_text=text,
@@ -633,7 +632,7 @@ class NatureFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
-    def _parse_nature_fallback(self, text: str) -> Optional[Citation]:
+    def _parse_nature_fallback(self, text: str) -> Citation | None:
         """Fallback parser: extract whatever metadata possible."""
         # Strip trailing Springer LNCS running header ("8 Ide et al.", "Ide et al. 8", or "Ide et al.")
         cleaned_text = re.sub(

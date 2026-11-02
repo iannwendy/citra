@@ -25,14 +25,17 @@ from integrity_checker.api.main import app
 from integrity_checker.db.models import (
     AuditLog,
     CitationRecord,
-    Class as ClassModel,
     ClassMembership,
     EssayRecord,
-    Session as SessionModel,
     User,
     VerdictRecord,
 )
-
+from integrity_checker.db.models import (
+    Class as ClassModel,
+)
+from integrity_checker.db.models import (
+    Session as SessionModel,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -64,8 +67,9 @@ def auth_header(token: str) -> dict:
 def _make_user(username: str, role: str = "user", email: str | None = None) -> int:
     """Create a user directly via DB and return id. Mirrors test_teacher_role helper."""
     import bcrypt
-    from integrity_checker.db.session import get_session
+
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     session = get_session()
     repo = Repository(session)
@@ -157,8 +161,8 @@ def test_export_class_csv_returns_one_row_per_essay(clean_db):
     """Class with 3 essays, 2 with verdicts → 4 CSV lines total
     (1 header + 3 data rows: 2 verdicts + 1 essay with no verdicts).
     """
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     # setup: hardcoded teacher owns a class with a student
     teacher_id = _hardcoded_teacher_id()
@@ -237,8 +241,8 @@ def test_export_class_csv_rejects_other_teachers(clean_db):
     """Teacher B (not the owner of the class) must get 403 on a class
     owned by teacher A.
     """
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     teacher_a_id = _hardcoded_teacher_id()
     teacher_b_id = _make_user("exp_teacher_b", role="teacher")
@@ -276,8 +280,8 @@ def test_pdf_and_csv_exports_prevent_xml_ssrf_and_csv_formula_injection(clean_db
     """PDF export must escape XML/HTML in essay.filename (preventing ReportLab SSRF/crash),
     and CSV exports must neutralize leading formula characters (=, +, -, @).
     """
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     teacher_id = _hardcoded_teacher_id()
     student_id = _make_user("inj_student", role="user")

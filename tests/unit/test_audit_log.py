@@ -7,6 +7,8 @@ the new label, the acting user, and the override reason.
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -14,14 +16,17 @@ from integrity_checker.api.main import app
 from integrity_checker.db.models import (
     AuditLog,
     CitationRecord,
-    Class as ClassModel,
     ClassMembership,
     EssayRecord,
-    Session as SessionModel,
     User,
     VerdictRecord,
 )
-
+from integrity_checker.db.models import (
+    Class as ClassModel,
+)
+from integrity_checker.db.models import (
+    Session as SessionModel,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -53,8 +58,9 @@ def auth_header(token: str) -> dict:
 def _make_user(username: str, role: str = "user", email: str | None = None) -> int:
     """Create a user directly via DB and return id. Mirrors test_teacher_role helper."""
     import bcrypt
-    from integrity_checker.db.session import get_session
+
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     session = get_session()
     repo = Repository(session)
@@ -76,8 +82,8 @@ def _create_essay_with_verdict(
     user_id: int, label: str = "metadata_error",
 ) -> tuple[int, int]:
     """Create an essay (owned by user_id) with one VerdictRecord. Returns (essay_id, verdict_id)."""
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     session = get_session()
     try:
@@ -159,8 +165,8 @@ def test_override_writes_audit_log(clean_db):
 
 def test_list_audit_log_requires_admin(clean_db):
     """Non-admin (teacher) calling GET /api/audit/log must be rejected (403)."""
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     # Seed one audit row so the test would pass if auth were bypassed.
     session = get_session()
@@ -183,12 +189,12 @@ def test_list_audit_log_returns_recent_first(clean_db):
     """GET /api/audit/log must return rows ordered by logged_at DESC."""
     from datetime import datetime, timedelta, timezone
 
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     # Seed three audit rows with explicit, distinct logged_at values.
     session = get_session()
-    base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
     repo = Repository(session)
     repo.session.add(AuditLog(
         verdict_id=1, original_label="metadata_error", new_label="verified",

@@ -284,6 +284,7 @@ class TestPlattCalibratorAndHybridMLScorer:
 
     def test_default_120k_benchmark_artifacts_and_leakage_audit(self) -> None:
         import json
+
         from integrity_checker.logic.calibration import DEFAULT_WEIGHTS_PATH
 
         scorer = HybridMLScorer.load_default()

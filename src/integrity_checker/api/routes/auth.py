@@ -9,7 +9,7 @@ import secrets
 import threading
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import bcrypt
@@ -313,7 +313,7 @@ def _verify_password(password: str, hashed: str) -> bool:
 
 def _ensure_utc(dt: datetime) -> datetime:
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -354,8 +354,8 @@ def _to_response_dict(user: User) -> dict:
 
 def _create_token(user: User) -> tuple[str, datetime]:
     settings = get_settings()
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.auth.token_expire_hours)
-    now = datetime.now(timezone.utc)
+    expires_at = datetime.now(UTC) + timedelta(hours=settings.auth.token_expire_hours)
+    now = datetime.now(UTC)
     payload = {
         "sub": str(user.id),  # JWT requires sub to be a string
         "username": user.username,
@@ -460,6 +460,7 @@ def _get_google_client_config() -> tuple[str, str]:
     if not client_id and not is_test_runtime():
         try:
             from dotenv import dotenv_values
+
             from integrity_checker.config import PROJECT_ROOT
 
             for candidate_env in (PROJECT_ROOT / ".env", Path(".env")):
@@ -724,7 +725,7 @@ def google_login(request: GoogleLoginRequest, db=Depends(get_db)):
         if (getattr(user, "auth_provider", None) == "google") and user.email:
             latest_tok = repo.get_latest_auth_token_for_user(user.id, "password_reset")
             if not latest_tok:
-                setup_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+                setup_expires = datetime.now(UTC) + timedelta(hours=24)
                 setup_token, _ = repo.create_auth_token(
                     user.id, "password_reset", setup_expires
                 )
@@ -762,7 +763,7 @@ def google_login(request: GoogleLoginRequest, db=Depends(get_db)):
             username_customized=False,
         )
         # Issue a 24-hour initial password setup token and email the link to the user's Google email
-        setup_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+        setup_expires = datetime.now(UTC) + timedelta(hours=24)
         setup_token, _ = repo.create_auth_token(user.id, "password_reset", setup_expires)
         try:
             get_email_service().send_google_welcome_email(
@@ -821,7 +822,7 @@ def register(request: RegisterRequest, db=Depends(get_db)):
     )
 
     settings = get_settings()
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.auth.activation_expire_hours)
+    expires_at = datetime.now(UTC) + timedelta(hours=settings.auth.activation_expire_hours)
     raw_token, _ = repo.create_auth_token(user.id, "activation", expires_at)
     repo.commit()
 
@@ -872,7 +873,7 @@ def _perform_account_activation(raw_token: str, db) -> ActivateAccountResponse:
             detail="This activation link has already been used. Please request a new activation email.",
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if _ensure_utc(token_row.expires_at) < now:
         raise HTTPException(
             status_code=400,
@@ -926,7 +927,7 @@ def resend_activation(request: ResendActivationRequest, db=Depends(get_db)):
             detail="Account is already activated. You can sign in now.",
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if not is_test_runtime():
         latest = repo.get_latest_auth_token_for_user(user.id, "activation")
         if latest and (now - _ensure_utc(latest.created_at)).total_seconds() < 60:
@@ -968,7 +969,7 @@ def forgot_password(request: ForgotPasswordRequest, db=Depends(get_db)):
     if not user or not user.email:
         return MessageResponse(message=generic_msg)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if not is_test_runtime():
         latest = repo.get_latest_auth_token_for_user(user.id, "password_reset")
         if latest and (now - _ensure_utc(latest.created_at)).total_seconds() < 30:
@@ -1013,7 +1014,7 @@ def verify_reset_token(token: str = Query(..., min_length=1), db=Depends(get_db)
             message="This password reset link has already been used.",
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if _ensure_utc(token_row.expires_at) < now:
         return VerifyResetTokenResponse(
             valid=False,
@@ -1051,7 +1052,7 @@ def reset_password(request: ResetPasswordRequest, db=Depends(get_db)):
             detail="This password reset link has already been used.",
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if _ensure_utc(token_row.expires_at) < now:
         raise HTTPException(
             status_code=400,

@@ -10,16 +10,16 @@ from pydantic import BaseModel, Field
 class CitationSchema(BaseModel):
     """Citation sau khi extract — trả về cho client."""
 
-    id: Optional[int] = None
+    id: int | None = None
     raw_text: str
     citation_type: str
     style: str
     authors: list[str] = Field(default_factory=list)
-    year: Optional[str] = None
-    title: Optional[str] = None
-    venue: Optional[str] = None
-    doi: Optional[str] = None
-    url: Optional[str] = None
+    year: str | None = None
+    title: str | None = None
+    venue: str | None = None
+    doi: str | None = None
+    url: str | None = None
     page_num: int = 0
     confidence: float = 0.0
 
@@ -27,7 +27,7 @@ class CitationSchema(BaseModel):
 class VerdictSchema(BaseModel):
     """Verdict cho 1 citation — đầu ra chính của API."""
 
-    citation_id: Optional[str] = None
+    citation_id: str | None = None
     citation_raw: str
     citation_type: str = "unknown"
     label: str                                  # ValidationLabel value
@@ -36,15 +36,15 @@ class VerdictSchema(BaseModel):
     triggered_rules: list[str] = Field(default_factory=list)
     mismatched_fields: list[str] = Field(default_factory=list)
     matched_sources: list[dict] = Field(default_factory=list)
-    features: Optional[dict] = None
-    url_status: Optional[str] = None
-    url_status_code: Optional[int] = None
-    archive_url: Optional[str] = None
+    features: dict | None = None
+    url_status: str | None = None
+    url_status_code: int | None = None
+    archive_url: str | None = None
     is_retracted: bool = False
-    citation_link: Optional[dict] = None
+    citation_link: dict | None = None
     mapping_status: str = "matched"
     mapping_confidence: float = 0.0
-    style_penalty: Optional[float] = None
+    style_penalty: float | None = None
     domain_exception: bool = False
     is_overridden: bool = False
 
@@ -88,7 +88,7 @@ class HealthResponse(BaseModel):
     status: str = "ok"
     version: str
     disclaimer: str
-    grobid: Optional["GrobidHealthStatus"] = None
+    grobid: GrobidHealthStatus | None = None
 
 
 class GrobidHealthStatus(BaseModel):
@@ -97,8 +97,8 @@ class GrobidHealthStatus(BaseModel):
     available: bool
     status: str  # available, unavailable, starting, unknown
     container_running: bool
-    container_id: Optional[str] = None
+    container_id: str | None = None
     parser_mode: str  # grobid, regex, hybrid
     cache_enabled: bool = True
-    stats: Optional[dict] = None
-    message: Optional[str] = None
+    stats: dict | None = None
+    message: str | None = None

@@ -113,8 +113,8 @@ class TestComputeSha256:
 
 class TestCallGrobidFulltext:
     def test_missing_pdf(self, tmp_path):
-        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
         # File không tồn tại → return "" (fallback graceful)
         cfg = GrobidConfig(url="http://localhost:8070")
         result = call_grobid_fulltext("/nonexistent/file.pdf", cfg)
@@ -122,8 +122,8 @@ class TestCallGrobidFulltext:
 
     def test_injectable_http_post(self, tmp_path):
         """Test với mock HTTP post function."""
-        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
 
         f = tmp_path / "test.pdf"
         f.write_bytes(b"%PDF-1.4\n%fake content\n")

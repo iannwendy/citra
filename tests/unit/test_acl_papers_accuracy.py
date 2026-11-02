@@ -26,7 +26,6 @@ from integrity_checker.database import LocalDatabase
 from integrity_checker.models.citation import Citation
 from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
 
-
 # Test configuration
 TEST_SAMPLE_SIZE = 500
 RANDOM_SEED = 42
@@ -176,19 +175,19 @@ class TestACLPapersAccuracy:
         metrics = calculate_metrics(tp, fn)
 
         print(f"\n{'='*60}")
-        print(f"RESULTS (Papers WITH DOI)")
+        print("RESULTS (Papers WITH DOI)")
         print(f"{'='*60}")
         print(f"Total tested:    {metrics['total']}")
         print(f"Found (TP):     {metrics['true_positives']}")
         print(f"Not found (FN): {metrics['false_negatives']}")
-        print(f"")
+        print("")
         print(f"Accuracy:       {metrics['accuracy']:.2f}%")
         print(f"Recall:         {metrics['recall']:.2f}%")
         print(f"Precision:      {metrics['precision']:.2f}%")
         print(f"F1 Score:       {metrics['f1']:.2f}%")
 
         if errors:
-            print(f"\nFailed papers (first 10):")
+            print("\nFailed papers (first 10):")
             for e in errors[:10]:
                 print(f"  - [{e['id']}] {e['title']}... (DOI: {e.get('doi')})")
                 print(f"    Sources: {e['sources_queried']}")
@@ -244,19 +243,19 @@ class TestACLPapersAccuracy:
         metrics = calculate_metrics(tp, fn)
 
         print(f"\n{'='*60}")
-        print(f"RESULTS (Papers WITHOUT DOI)")
+        print("RESULTS (Papers WITHOUT DOI)")
         print(f"{'='*60}")
         print(f"Total tested:    {metrics['total']}")
         print(f"Found (TP):     {metrics['true_positives']}")
         print(f"Not found (FN): {metrics['false_negatives']}")
-        print(f"")
+        print("")
         print(f"Accuracy:       {metrics['accuracy']:.2f}%")
         print(f"Recall:         {metrics['recall']:.2f}%")
         print(f"Precision:      {metrics['precision']:.2f}%")
         print(f"F1 Score:       {metrics['f1']:.2f}%")
 
         if errors:
-            print(f"\nFailed papers (first 10):")
+            print("\nFailed papers (first 10):")
             for e in errors[:10]:
                 print(f"  - [{e['id']}] {e['title']}...")
                 print(f"    Authors: {e.get('authors', 'N/A')}, Year: {e.get('year')}")
@@ -269,7 +268,7 @@ class TestACLPapersAccuracy:
     def test_local_db_lookup_methods(self):
         """Test individual lookup methods in local database."""
         print(f"\n{'='*60}")
-        print(f"Testing Local DB Lookup Methods")
+        print("Testing Local DB Lookup Methods")
         print(f"{'='*60}")
 
         papers = get_acl_papers(DB_PATH, 100)

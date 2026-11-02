@@ -35,7 +35,6 @@ from integrity_checker.extraction.patterns.registry import register_format
 from integrity_checker.matching.author_parser import parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
-
 # =============================================================================
 # ACS Pattern Definitions
 # =============================================================================
@@ -259,7 +258,7 @@ class ACSFormat:
             _ACS_TECH_REPORT,
         ]
 
-    def parse_reference_entry(self, text: str) -> Optional[Citation]:
+    def parse_reference_entry(self, text: str) -> Citation | None:
         """Parse ACS reference entry into Citation object.
 
         Args:
@@ -330,42 +329,42 @@ class ACSFormat:
         # Fallback
         return self._parse_acs_fallback(text)
 
-    def _try_parse_article(self, text: str) -> Optional[Citation]:
+    def _try_parse_article(self, text: str) -> Citation | None:
         """Try to parse ACS article format."""
         match = _ACS_REFERENCE_ARTICLE.search(text)
         if match:
             return self._parse_article_entry(match, text)
         return None
 
-    def _try_parse_article_doi(self, text: str) -> Optional[Citation]:
+    def _try_parse_article_doi(self, text: str) -> Citation | None:
         """Try to parse ACS article with DOI format."""
         match = _ACS_REFERENCE_DOI.search(text)
         if match:
             return self._parse_article_doi_entry(match, text)
         return None
 
-    def _try_parse_journal_abbrev(self, text: str) -> Optional[Citation]:
+    def _try_parse_journal_abbrev(self, text: str) -> Citation | None:
         """Try to parse ACS journal abbreviation format."""
         match = _ACS_REFERENCE_JOURNAL_ABBREV.search(text)
         if match:
             return self._parse_journal_abbrev_entry(match, text)
         return None
 
-    def _try_parse_book(self, text: str) -> Optional[Citation]:
+    def _try_parse_book(self, text: str) -> Citation | None:
         """Try to parse ACS book format."""
         match = _ACS_BOOK.search(text)
         if match:
             return self._parse_book_entry(match, text)
         return None
 
-    def _try_parse_book_chapter(self, text: str) -> Optional[Citation]:
+    def _try_parse_book_chapter(self, text: str) -> Citation | None:
         """Try to parse ACS book chapter format."""
         match = _ACS_BOOK_CHAPTER.search(text)
         if match:
             return self._parse_book_chapter_entry(match, text)
         return None
 
-    def _try_parse_tech_report(self, text: str) -> Optional[Citation]:
+    def _try_parse_tech_report(self, text: str) -> Citation | None:
         """Try to parse ACS tech report format."""
         match = _ACS_TECH_REPORT.search(text)
         if match:
@@ -374,7 +373,7 @@ class ACSFormat:
 
     def _parse_article_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse ACS article entry."""
         citation = Citation(
             raw_text=text,
@@ -433,7 +432,7 @@ class ACSFormat:
 
     def _parse_article_doi_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse ACS article with DOI entry."""
         citation = Citation(
             raw_text=text,
@@ -496,7 +495,7 @@ class ACSFormat:
 
     def _parse_journal_abbrev_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse ACS journal abbreviation entry."""
         citation = Citation(
             raw_text=text,
@@ -555,7 +554,7 @@ class ACSFormat:
 
     def _parse_book_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse ACS book entry."""
         citation = Citation(
             raw_text=text,
@@ -604,7 +603,7 @@ class ACSFormat:
 
     def _parse_book_chapter_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse ACS book chapter entry."""
         citation = Citation(
             raw_text=text,
@@ -660,7 +659,7 @@ class ACSFormat:
 
     def _parse_tech_report_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse ACS tech report entry."""
         citation = Citation(
             raw_text=text,
@@ -701,7 +700,7 @@ class ACSFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
-    def _parse_acs_fallback(self, text: str) -> Optional[Citation]:
+    def _parse_acs_fallback(self, text: str) -> Citation | None:
         """Fallback parser: extract whatever metadata possible."""
         # ACS fallback only applies if entry starts with (N)
         idx_match = re.match(r'^\(\s*(\d+)\s*\)', text)

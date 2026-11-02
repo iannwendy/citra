@@ -1,21 +1,26 @@
 """Auth integration tests."""
 import os
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+
 from integrity_checker.api.main import app
 from integrity_checker.db.models import (
     AuditLog,
     CitationRecord,
-    Class as ClassModel,
     ClassMembership,
     EssayRecord,
-    Session as SessionModel,
     User,
     VerdictRecord,
 )
+from integrity_checker.db.models import (
+    Class as ClassModel,
+)
+from integrity_checker.db.models import (
+    Session as SessionModel,
+)
 from integrity_checker.db.session import get_session
-
 
 # Test credentials - intentionally simple for testing per plan spec
 TEST_ADMIN_USER = os.environ.get("TEST_ADMIN_USER", "admin")

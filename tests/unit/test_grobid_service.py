@@ -12,8 +12,8 @@ class TestGrobidServiceManager:
 
     def test_initialization(self):
         """Test manager initialization."""
-        from integrity_checker.extraction.grobid_service import GrobidServiceManager
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
 
         config = GrobidConfig(enabled=True, url="http://localhost:8070")
         with patch("os.path.exists", return_value=False):
@@ -25,11 +25,11 @@ class TestGrobidServiceManager:
 
     def test_status_unknown_when_no_docker(self):
         """Test status is unknown when Docker not available."""
-        from integrity_checker.extraction.grobid_service import (
-            GrobidServiceManager,
-            GROBID_STATUS,
-        )
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import (
+            GROBID_STATUS,
+            GrobidServiceManager,
+        )
 
         config = GrobidConfig(enabled=True)
 
@@ -41,11 +41,11 @@ class TestGrobidServiceManager:
 
     def test_is_available_property(self):
         """Test is_available property."""
-        from integrity_checker.extraction.grobid_service import (
-            GrobidServiceManager,
-            GROBID_STATUS,
-        )
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import (
+            GROBID_STATUS,
+            GrobidServiceManager,
+        )
 
         config = GrobidConfig()
 
@@ -67,8 +67,8 @@ class TestGrobidServiceManager:
 
     def test_stats_initialization(self):
         """Test stats are initialized correctly."""
-        from integrity_checker.extraction.grobid_service import GrobidServiceManager
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
 
         config = GrobidConfig()
         manager = GrobidServiceManager(config=config)
@@ -81,11 +81,11 @@ class TestGrobidServiceManager:
 
     def test_get_stats(self):
         """Test get_stats returns correct format."""
-        from integrity_checker.extraction.grobid_service import (
-            GrobidServiceManager,
-            GROBID_STATUS,
-        )
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import (
+            GROBID_STATUS,
+            GrobidServiceManager,
+        )
 
         config = GrobidConfig()
         manager = GrobidServiceManager(config=config)
@@ -117,9 +117,8 @@ class TestCacheOperations:
 
     def test_get_cache_path(self, tmp_path):
         """Test cache path generation."""
+        from integrity_checker.config import GrobidConfig, Settings
         from integrity_checker.extraction.grobid_service import GrobidServiceManager
-        from integrity_checker.config import GrobidConfig
-        from integrity_checker.config import Settings
 
         config = GrobidConfig()
         manager = GrobidServiceManager(config=config)
@@ -140,9 +139,10 @@ class TestCacheOperations:
 
     def test_cache_hit(self, tmp_path):
         """Test cache hit returns content."""
-        from integrity_checker.extraction.grobid_service import GrobidServiceManager
-        from integrity_checker.config import GrobidConfig
         import hashlib
+
+        from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
 
         config = GrobidConfig(cache_by_file_sha256=True)
         manager = GrobidServiceManager(config=config)
@@ -175,8 +175,8 @@ class TestCacheOperations:
 
     def test_cache_miss(self, tmp_path):
         """Test cache miss returns None."""
-        from integrity_checker.extraction.grobid_service import GrobidServiceManager
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
 
         config = GrobidConfig(cache_by_file_sha256=True)
         manager = GrobidServiceManager(config=config)
@@ -198,8 +198,8 @@ class TestCacheOperations:
 
     def test_cache_disabled(self, tmp_path):
         """Test cache disabled returns None."""
-        from integrity_checker.extraction.grobid_service import GrobidServiceManager
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
 
         config = GrobidConfig(cache_by_file_sha256=False)
         manager = GrobidServiceManager(config=config)
@@ -211,8 +211,8 @@ class TestCacheOperations:
 
     def test_save_to_cache(self, tmp_path):
         """Test saving to cache."""
-        from integrity_checker.extraction.grobid_service import GrobidServiceManager
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
 
         config = GrobidConfig(cache_by_file_sha256=True)
         manager = GrobidServiceManager(config=config)
@@ -236,8 +236,8 @@ class TestCacheOperations:
 
     def test_invalidate_cache(self, tmp_path):
         """Test cache invalidation."""
-        from integrity_checker.extraction.grobid_service import GrobidServiceManager
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
 
         config = GrobidConfig()
         manager = GrobidServiceManager(config=config)
@@ -267,11 +267,11 @@ class TestSingleton:
 
     def test_get_grobid_manager_creates_singleton(self):
         """Test get_grobid_manager returns same instance."""
+        from integrity_checker.config import GrobidConfig
         from integrity_checker.extraction.grobid_service import (
             get_grobid_manager,
             reset_grobid_manager,
         )
-        from integrity_checker.config import GrobidConfig
 
         reset_grobid_manager()
 
@@ -286,11 +286,11 @@ class TestSingleton:
 
     def test_reset_clears_singleton(self):
         """Test reset clears singleton."""
+        from integrity_checker.config import GrobidConfig
         from integrity_checker.extraction.grobid_service import (
             get_grobid_manager,
             reset_grobid_manager,
         )
-        from integrity_checker.config import GrobidConfig
 
         reset_grobid_manager()
 
@@ -307,11 +307,11 @@ class TestHealthCheck:
 
     def test_check_health_with_mock(self):
         """Test health check with mocked container."""
-        from integrity_checker.extraction.grobid_service import (
-            GrobidServiceManager,
-            GROBID_STATUS,
-        )
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import (
+            GROBID_STATUS,
+            GrobidServiceManager,
+        )
 
         config = GrobidConfig()
         manager = GrobidServiceManager(config=config)
@@ -334,11 +334,11 @@ class TestHealthCheck:
 
     def test_check_health_container_stopped(self):
         """Test health check when container stopped."""
-        from integrity_checker.extraction.grobid_service import (
-            GrobidServiceManager,
-            GROBID_STATUS,
-        )
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import (
+            GROBID_STATUS,
+            GrobidServiceManager,
+        )
 
         config = GrobidConfig()
         manager = GrobidServiceManager(config=config)
@@ -359,12 +359,12 @@ class TestAutoStart:
 
     def test_auto_start_when_not_available(self):
         """Test auto_start starts container when not available."""
+        from integrity_checker.config import GrobidConfig
         from integrity_checker.extraction.grobid_service import (
             GROBID_STATUS,
             get_grobid_manager,
             reset_grobid_manager,
         )
-        from integrity_checker.config import GrobidConfig
 
         reset_grobid_manager()
 
@@ -386,11 +386,11 @@ class TestAutoStart:
 
     def test_start_reuses_existing_exited_container(self):
         """start() should call existing.start() instead of containers.run() when container exists in exited state."""
+        from integrity_checker.config import GrobidConfig
         from integrity_checker.extraction.grobid_service import (
             GROBID_STATUS,
             GrobidServiceManager,
         )
-        from integrity_checker.config import GrobidConfig
 
         config = GrobidConfig()
         manager = GrobidServiceManager(config=config)
@@ -423,8 +423,8 @@ class TestProcessPDF:
 
     def test_process_pdf_increments_stats(self):
         """Test process_pdf increments stats."""
-        from integrity_checker.extraction.grobid_service import GrobidServiceManager
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
 
         config = GrobidConfig()
         manager = GrobidServiceManager(config=config)
@@ -443,8 +443,8 @@ class TestProcessPDF:
 
     def test_process_pdf_handles_failure(self):
         """Test process_pdf handles failures."""
-        from integrity_checker.extraction.grobid_service import GrobidServiceManager
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
 
         config = GrobidConfig()
         manager = GrobidServiceManager(config=config)
@@ -466,8 +466,8 @@ class TestProductionConfig:
 
     def test_initialization_with_local_url(self):
         """Test manager initializes with local URL by default."""
-        from integrity_checker.extraction.grobid_service import GrobidServiceManager
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
 
         config = GrobidConfig(enabled=True, url="http://localhost:8070")
         with patch("os.path.exists", return_value=False):
@@ -479,8 +479,8 @@ class TestProductionConfig:
 
     def test_initialization_with_docker_url(self):
         """Test manager initializes with Docker URL when specified."""
-        from integrity_checker.extraction.grobid_service import GrobidServiceManager
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
 
         config = GrobidConfig(enabled=True, url="http://grobid:8070")
         manager = GrobidServiceManager(config=config)
@@ -489,8 +489,8 @@ class TestProductionConfig:
 
     def test_auto_detect_in_docker_env(self):
         """Test auto-detection when running inside Docker."""
-        from integrity_checker.extraction.grobid_service import GrobidServiceManager
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
 
         config = GrobidConfig(enabled=True, url="http://localhost:8070")
         manager = GrobidServiceManager(config=config)
@@ -502,11 +502,11 @@ class TestProductionConfig:
 
     def test_healthcheck_with_docker_url(self):
         """Test healthcheck works with Docker internal URL."""
-        from integrity_checker.extraction.grobid_service import (
-            GrobidServiceManager,
-            GROBID_STATUS,
-        )
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import (
+            GROBID_STATUS,
+            GrobidServiceManager,
+        )
 
         config = GrobidConfig()
         manager = GrobidServiceManager(config=config)

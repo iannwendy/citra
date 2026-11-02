@@ -16,10 +16,11 @@ import json
 import sqlite3
 import threading
 import time
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
 from integrity_checker.retrieval.normalization import (
     author_keys,

@@ -21,11 +21,12 @@ from typing import Optional
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from evaluation.evaluator import FakeDetectionEvaluator
+
 from integrity_checker.logic.neuro_symbolic_checker import NeuroSymbolicChecker
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.validation import ValidationLabel
 from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
-from evaluation.evaluator import FakeDetectionEvaluator
 
 
 def load_ground_truth() -> list[dict]:
@@ -87,7 +88,7 @@ async def evaluate_single_citation(
         return "UNRESOLVED", 0.0, {"error": str(e)}
 
 
-async def run_evaluation(limit: Optional[int] = None) -> dict:
+async def run_evaluation(limit: int | None = None) -> dict:
     """Run full evaluation on ground truth dataset."""
     print("=" * 70)
     print("GROUND TRUTH EVALUATION - ACTUAL PIPELINE")

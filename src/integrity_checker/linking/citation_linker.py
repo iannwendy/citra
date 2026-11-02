@@ -166,7 +166,7 @@ class CitationLinker:
         # occurrences (and multiple indices inside one "[9, 10]") may point
         # at the same entry, which is valid.
         bib_matched: set[int] = set()
-        prev_matched_links: Optional[list[CitationLink]] = None
+        prev_matched_links: list[CitationLink] | None = None
 
         for i, cit in enumerate(body_citations):
             occ_id = cit.reference_id or f"occ-{i:04d}"
@@ -273,7 +273,7 @@ class CitationLinker:
         bib_by_author_year: dict[tuple[str, str], list[Citation]],
         bib_by_author_year_suffix: dict[tuple[str, str, str], list[Citation]],
         bib_citations: list[Citation],
-    ) -> Optional[list[CitationLink]]:
+    ) -> list[CitationLink] | None:
         """Try matching in priority: TEI_LINK → DOI → NUMERIC → AUTHOR_YEAR → FUZZY.
 
         TEI_LINK (v1.10 GROBID adapter): Sử dụng grobid_ref_id từ TEI XML
@@ -589,7 +589,7 @@ class CitationLinker:
         author: str,
         year: str,
         bib_citations: list[Citation],
-    ) -> Optional[CitationLink]:
+    ) -> CitationLink | None:
         """Fallback for 1-edit/transposition surname typos on same year, (n.d.) bibs, or year slip on unique personal author."""
         author_folded = self._fold_author_key(author)
         if not author_folded or len(author_folded) < 3:
@@ -680,7 +680,7 @@ class CitationLinker:
         raw_text: str,
         occ_id: str,
         bib_citations: list[Citation],
-        cit_authors: Optional[list] = None,
+        cit_authors: list | None = None,
     ) -> list[CitationLink]:
         """Match an MLA author-page citation against bibliography entries."""
         mla_m = _MLA_AUTHOR_PAGE_RE.match(raw_text.strip())
@@ -701,18 +701,12 @@ class CitationLinker:
                 continue
             first_last = self._fold_author_key(self._normalize_last_name(bib.authors[0]))
             short_last = first_last.split()[-1] if " " in first_last else first_last
-            if norm_mla_author in (first_last, short_last):
-                matched_bibs.append(bib)
-            elif (
+            if norm_mla_author in (first_last, short_last) or (
                 len(norm_mla_author) >= 5
                 and len(first_last) >= 5
                 and norm_mla_author[0] == first_last[0]
                 and difflib.SequenceMatcher(None, norm_mla_author, first_last).ratio() >= 0.85
-            ):
-                matched_bibs.append(bib)
-            elif bib.title_normalized and norm_mla_author == bib.title_normalized.strip():
-                matched_bibs.append(bib)
-            elif (
+            ) or bib.title_normalized and norm_mla_author == bib.title_normalized.strip() or (
                 bib.title
                 and len(norm_mla_author) >= 4
                 and re.search(rf"\b{re.escape(norm_mla_author)}\b", bib.title.lower())
@@ -741,7 +735,7 @@ class CitationLinker:
         author: str,
         year: str,
         bib_citations: list[Citation],
-    ) -> Optional[CitationLink]:
+    ) -> CitationLink | None:
         """Match an organization or title-first in-text name against entry title/venue/authors/raw_text."""
         token = re.sub(r"^the\s+", "", author.strip(), flags=re.IGNORECASE).lower().strip()
         if not token or len(token) < 2:
@@ -848,7 +842,7 @@ class CitationLinker:
         occ_id: str,
         bib_by_doi: dict[str, Citation],
         bib_citations: list[Citation],
-    ) -> Optional[CitationLink]:
+    ) -> CitationLink | None:
         """Fuzzy match: normalized title similarity."""
         if not cit.title_normalized:
             return None
@@ -1052,7 +1046,7 @@ class CitationLinker:
 
     # -- extractors --
 
-    def _extract_doi(self, text: str) -> Optional[str]:
+    def _extract_doi(self, text: str) -> str | None:
         """Trích DOI từ raw text."""
         doi_match = re.search(
             r"10\.\d{4,}/[^\s\])\"'>]+", text, re.IGNORECASE
@@ -1122,7 +1116,7 @@ class CitationLinker:
         return self._normalize_last_name(author_stripped)
 
     @staticmethod
-    def _parse_year_token(year_raw: str) -> tuple[str, Optional[str]]:
+    def _parse_year_token(year_raw: str) -> tuple[str, str | None]:
         """Normalize year token ('2020a' -> ('2020', 'a'), 'n.d.-a' -> ('n.d.', 'a'))."""
         yr = re.sub(r"\s+", "", year_raw.strip().lower())
         nd_m = re.match(r"^n\.?d\.?(?:-([a-z]))?$", yr)
@@ -1132,7 +1126,7 @@ class CitationLinker:
             return yr[:4], yr[4]
         return yr[:4] if len(yr) >= 4 and yr[:4].isdigit() else yr, None
 
-    def _extract_author_year(self, text: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    def _extract_author_year(self, text: str) -> tuple[str | None, str | None, str | None]:
         """Trích (author, year, year_suffix) từ APA-style (Author, Year) hoặc (Author, n.d.)."""
         # Normalize newlines to spaces to handle line breaks in extracted text
         text_normalized = text.replace("\n", " ").replace("\r", " ")

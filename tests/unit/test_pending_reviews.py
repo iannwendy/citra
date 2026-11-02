@@ -18,14 +18,17 @@ from integrity_checker.api.main import app
 from integrity_checker.db.models import (
     AuditLog,
     CitationRecord,
-    Class as ClassModel,
     ClassMembership,
     EssayRecord,
-    Session as SessionModel,
     User,
     VerdictRecord,
 )
-
+from integrity_checker.db.models import (
+    Class as ClassModel,
+)
+from integrity_checker.db.models import (
+    Session as SessionModel,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -66,8 +69,9 @@ def auth_header(token: str) -> dict:
 def _make_user(username: str, role: str = "user", email: str | None = None) -> int:
     """Create a user directly via DB and return id. Mirrors test_teacher_role helper."""
     import bcrypt
-    from integrity_checker.db.session import get_session
+
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     session = get_session()
     repo = Repository(session)
@@ -108,8 +112,8 @@ def _create_essay_with_verdict(
     is_overridden: int = 0,
 ) -> tuple[int, int]:
     """Create an essay (owned by user_id) with one VerdictRecord. Returns (essay_id, verdict_id)."""
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     session = get_session()
     try:
@@ -146,8 +150,8 @@ def test_list_pending_reviews_for_class(clean_db):
     """Class with two essays: one metadata_error verdict (returned) and one
     verified verdict (excluded). Endpoint should return exactly 1 item.
     """
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     # setup: hardcoded teacher owns a class with a student who has 2 essays
     teacher_id = _hardcoded_teacher_id()
@@ -196,8 +200,8 @@ def test_list_pending_reviews_for_class(clean_db):
 
 def test_pending_reviews_excludes_overridden(clean_db):
     """Once a verdict is overridden, it must be excluded from pending-reviews."""
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     teacher_id = _hardcoded_teacher_id()
     student_id = _make_user("pr_ovr_student", role="user")
@@ -244,8 +248,8 @@ def test_teacher_cannot_view_other_teachers_class_pending(clean_db):
     """Teacher B (not the owner of the class) must get 403 on a class owned
     by teacher A.
     """
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     teacher_a_id = _hardcoded_teacher_id()
     teacher_b_id = _make_user("pr_teacher_b", role="teacher")

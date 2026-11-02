@@ -34,7 +34,6 @@ from integrity_checker.extraction.patterns.utils import extract_publication_year
 from integrity_checker.matching.author_parser import parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
-
 # =============================================================================
 # ACM Pattern Definitions
 # =============================================================================
@@ -284,7 +283,7 @@ class ACMFormat:
             return True
         return False
 
-    def parse_reference_entry(self, text: str) -> Optional[Citation]:
+    def parse_reference_entry(self, text: str) -> Citation | None:
         """Parse ACM reference entry into Citation object.
 
         Args:
@@ -372,7 +371,7 @@ class ACMFormat:
         # Fallback
         return self._parse_acm_fallback(text)
 
-    def _try_parse_year_first(self, text: str) -> Optional[Citation]:
+    def _try_parse_year_first(self, text: str) -> Citation | None:
         """Try to parse ACM 2017+ official year-first format."""
         match = _ACM_YEAR_FIRST.search(text)
         if not match:
@@ -401,7 +400,7 @@ class ACMFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
-    def _parse_acm_quote_based(self, text: str) -> Optional[Citation]:
+    def _parse_acm_quote_based(self, text: str) -> Citation | None:
         """Parse ACM entry using quote-based heuristic."""
         # Match [N] at start
         idx_m = re.match(r'\[\s*(\d+)\s*\]\s*', text)
@@ -472,42 +471,42 @@ class ACMFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
-    def _try_parse_conference(self, text: str) -> Optional[Citation]:
+    def _try_parse_conference(self, text: str) -> Citation | None:
         """Try to parse ACM conference format."""
         match = _ACM_CONFERENCE.search(text)
         if match:
             return self._parse_conference_entry(match, text)
         return None
 
-    def _try_parse_journal(self, text: str) -> Optional[Citation]:
+    def _try_parse_journal(self, text: str) -> Citation | None:
         """Try to parse ACM journal format."""
         match = _ACM_JOURNAL.search(text)
         if match:
             return self._parse_journal_entry(match, text)
         return None
 
-    def _try_parse_full_name(self, text: str) -> Optional[Citation]:
+    def _try_parse_full_name(self, text: str) -> Citation | None:
         """Try to parse ACM full name format."""
         match = _ACM_FULL_NAME.search(text)
         if match:
             return self._parse_full_name_entry(match, text)
         return None
 
-    def _try_parse_book(self, text: str) -> Optional[Citation]:
+    def _try_parse_book(self, text: str) -> Citation | None:
         """Try to parse ACM book format."""
         match = _ACM_BOOK.search(text)
         if match:
             return self._parse_book_entry(match, text)
         return None
 
-    def _try_parse_book_chapter(self, text: str) -> Optional[Citation]:
+    def _try_parse_book_chapter(self, text: str) -> Citation | None:
         """Try to parse ACM book chapter format."""
         match = _ACM_BOOK_CHAPTER.search(text)
         if match:
             return self._parse_book_chapter_entry(match, text)
         return None
 
-    def _try_parse_tech_report(self, text: str) -> Optional[Citation]:
+    def _try_parse_tech_report(self, text: str) -> Citation | None:
         """Try to parse ACM tech report format."""
         match = _ACM_TECH_REPORT.search(text)
         if match:
@@ -516,7 +515,7 @@ class ACMFormat:
 
     def _parse_conference_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse ACM conference entry."""
         citation = Citation(
             raw_text=text,
@@ -585,7 +584,7 @@ class ACMFormat:
 
     def _parse_journal_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse ACM journal entry."""
         citation = Citation(
             raw_text=text,
@@ -658,7 +657,7 @@ class ACMFormat:
 
     def _parse_full_name_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse ACM full name entry."""
         citation = Citation(
             raw_text=text,
@@ -731,7 +730,7 @@ class ACMFormat:
 
     def _parse_book_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse ACM book entry."""
         citation = Citation(
             raw_text=text,
@@ -794,7 +793,7 @@ class ACMFormat:
 
     def _parse_book_chapter_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse ACM book chapter entry."""
         citation = Citation(
             raw_text=text,
@@ -844,7 +843,7 @@ class ACMFormat:
 
     def _parse_tech_report_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse ACM tech report entry."""
         citation = Citation(
             raw_text=text,
@@ -907,7 +906,7 @@ class ACMFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
-    def _parse_acm_fallback(self, text: str) -> Optional[Citation]:
+    def _parse_acm_fallback(self, text: str) -> Citation | None:
         """Fallback parser: extract whatever metadata possible."""
         idx_match = re.match(r'^\[\s*(\d+)\s*\]', text)
         if not idx_match:

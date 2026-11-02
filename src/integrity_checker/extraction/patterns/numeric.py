@@ -21,7 +21,6 @@ from integrity_checker.extraction.patterns.base import CompiledPattern, PatternT
 from integrity_checker.extraction.patterns.registry import register_format
 from integrity_checker.models.citation import Citation, CitationStyle
 
-
 # =============================================================================
 # Numeric Pattern Definitions
 # =============================================================================
@@ -83,7 +82,7 @@ class NumericFormat:
         """Reference patterns (not typically used for numeric)."""
         return []
 
-    def parse_reference_entry(self, text: str) -> Optional[Citation]:
+    def parse_reference_entry(self, text: str) -> Citation | None:
         """Parse numeric reference entry (not applicable for numeric style).
 
         Numeric citations don't parse reference entries in the same way
@@ -106,7 +105,6 @@ class NumericFormat:
         Returns:
             True if text matches numeric citation pattern, False otherwise
         """
-        import re
 
         # Check for bracketed number pattern
         bracket_pattern = r"\[\d+(?:[,\s\-]+\d+)*\]"

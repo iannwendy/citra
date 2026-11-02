@@ -92,7 +92,7 @@ class StyleProfile:
 class StyleDetector:
     """Phân lớp document-level citation style."""
 
-    def __init__(self, config: Optional[StyleDetectionConfig] = None) -> None:
+    def __init__(self, config: StyleDetectionConfig | None = None) -> None:
         self.config = config or StyleDetectionConfig()
 
     def detect(
@@ -121,7 +121,7 @@ class StyleDetector:
 
     # -- internals --
 
-    def _detect_style_from_registry(self, text: str) -> Optional[CitationStyle]:
+    def _detect_style_from_registry(self, text: str) -> CitationStyle | None:
         """Detect citation style using patterns registry (if available)."""
         if not REGISTRY_AVAILABLE or get_all_formats is None:
             return None

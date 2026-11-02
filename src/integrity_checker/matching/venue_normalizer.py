@@ -25,7 +25,6 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
-
 # ----- Static dictionary (top venues) -----
 # Map: canonical_full_name → [abbreviations].
 # Dữ liệu từ Wikipedia "List of academic journals by abbreviation" +

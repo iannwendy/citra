@@ -13,14 +13,17 @@ from fastapi.testclient import TestClient
 from integrity_checker.api.main import app
 from integrity_checker.db.models import (
     CitationRecord,
-    Class as ClassModel,
     ClassMembership,
     EssayRecord,
-    Session as SessionModel,
     User,
     VerdictRecord,
 )
-
+from integrity_checker.db.models import (
+    Class as ClassModel,
+)
+from integrity_checker.db.models import (
+    Session as SessionModel,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -52,8 +55,9 @@ def auth_header(token: str) -> dict:
 def _make_user(username: str, role: str = "user", email: str | None = None) -> int:
     """Create a user directly via DB and return id."""
     import bcrypt
-    from integrity_checker.db.session import get_session
+
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     session = get_session()
     repo = Repository(session)
@@ -77,8 +81,8 @@ def _create_essay_with_verdict(
     label: str = "verified",
 ) -> tuple[int, int]:
     """Create an essay (owned by user_id) with one VerdictRecord."""
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     session = get_session()
     try:

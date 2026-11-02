@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import threading
-from typing import Generator
+from collections.abc import Generator
+from datetime import UTC, datetime, timezone
 
 import jwt
 from fastapi import Depends, Header, HTTPException
@@ -90,12 +90,12 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Session not found")
 
     # Compare datetimes - handle naive vs aware
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = session_record.expires_at
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        expires_at = expires_at.replace(tzinfo=UTC)
     if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
+        now = now.replace(tzinfo=UTC)
 
     if expires_at < now:
         repo.delete_session(token)

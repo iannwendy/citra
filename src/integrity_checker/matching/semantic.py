@@ -28,7 +28,11 @@ from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
 from integrity_checker.matching.vn_en_academic_bridge import (
     VN_DIACRITIC_RE as _VN_DIACRITIC_RE,
+)
+from integrity_checker.matching.vn_en_academic_bridge import (
     VN_EN_ACADEMIC_BRIDGE as _VN_EN_ACADEMIC_BRIDGE,
+)
+from integrity_checker.matching.vn_en_academic_bridge import (
     bridge_vn_to_en,
     compute_cross_lingual_concept_overlap,
     find_vn_cues_for_en_source,
@@ -146,9 +150,9 @@ class SemanticMatcher:
 
     _instance_lock = threading.Lock()
     _encode_lock = threading.Lock()
-    _model_cache: dict[str, "object"] = {}
+    _model_cache: dict[str, object] = {}
     _intent_emb_cache: dict[str, Any] = {}
-    _singleton: "SemanticMatcher | None" = None
+    _singleton: SemanticMatcher | None = None
 
     # Thresholds cho content alignment
     ALIGNMENT_THRESHOLD_HIGH = 0.70  # High confidence alignment
@@ -173,7 +177,7 @@ class SemanticMatcher:
         self._multilingual_model = None  # lazy load on-demand
 
     @classmethod
-    def get_instance(cls, model_name: str | None = None) -> "SemanticMatcher":
+    def get_instance(cls, model_name: str | None = None) -> SemanticMatcher:
         """Get singleton instance -- model loads only once per process."""
         if cls._singleton is None:
             with cls._instance_lock:
@@ -229,7 +233,7 @@ class SemanticMatcher:
             self._multilingual_model = self._model_cache[self.multilingual_model_name]
         return self._multilingual_model
 
-    def _encode(self, model: "object", texts: object, **kwargs: object):
+    def _encode(self, model: object, texts: object, **kwargs: object):
         """Thread-safe model.encode wrapper with torch.no_grad()."""
         with self._encode_lock:
             try:
@@ -425,7 +429,7 @@ class SemanticMatcher:
     def detect_and_bridge_cross_lingual(
         cited_context: str,
         source_title: str,
-        source_abstract: Optional[str] = None,
+        source_abstract: str | None = None,
     ) -> tuple[bool, str]:
         """Phát hiện khi khóa luận viết bằng tiếng Việt nhưng trích dẫn tài liệu tiếng Anh,
         và tạo chuỗi ngữ nghĩa bắc cầu (Cross-Lingual Concept Bridge).
@@ -437,7 +441,7 @@ class SemanticMatcher:
     def detect_and_bridge_cross_lingual_detailed(
         cited_context: str,
         source_title: str,
-        source_abstract: Optional[str] = None,
+        source_abstract: str | None = None,
     ) -> tuple[bool, str, list[str]]:
         """Phát hiện ngữ cảnh xuyên ngôn ngữ Việt ↔ Anh kèm danh sách cặp khái niệm đã ánh xạ."""
         return bridge_vn_to_en(cited_context, source_title, source_abstract)
@@ -543,7 +547,7 @@ class SemanticMatcher:
         similarity: float,
         has_abstract: bool,
         is_cross_lingual: bool = False,
-        source_abstract: Optional[str] = None,
+        source_abstract: str | None = None,
     ) -> str:
         """Kiểm tra tính đồng thuận / mâu thuẫn ngữ nghĩa (Stance & Polarity Verification).
 
@@ -591,9 +595,9 @@ class SemanticMatcher:
         self,
         cited_context: str,
         source_title: str,
-        source_abstract: Optional[str] = None,
-        source_body: Optional[str] = None,
-        citation_marker: Optional[str] = None,
+        source_abstract: str | None = None,
+        source_body: str | None = None,
+        citation_marker: str | None = None,
     ) -> SemanticAlignmentResult:
         """Kiểm tra semantic alignment đa tầng giữa đoạn văn trích dẫn và bài báo nguồn.
 
@@ -878,7 +882,7 @@ class SemanticMatcher:
         self,
         occurrence_contexts: list[dict[str, Any]],
         source_title: str,
-        source_abstract: Optional[str] = None,
+        source_abstract: str | None = None,
     ) -> list[dict[str, Any]]:
         """Đánh giá Neural Alignment trên TẤT CẢ các vị trí trích dẫn của cùng 1 tài liệu trong bài.
 
@@ -934,8 +938,8 @@ class SemanticMatcher:
         self,
         body_pages: list[tuple[int, str]],
         source_title: str,
-        source_abstract: Optional[str] = None,
-        source_authors: Optional[list[str]] = None,
+        source_abstract: str | None = None,
+        source_authors: list[str] | None = None,
     ) -> tuple[int, str, float] | None:
         """Tự động dò tìm đoạn văn trong phần thân bài (Body Pages) khớp ngữ nghĩa nhất với
         tài liệu tham khảo khi sinh viên quên đặt marker trích dẫn trực tiếp trong bài.
@@ -1059,7 +1063,7 @@ class SemanticMatcher:
             return top_windows[0][0], top_windows[0][1], 0.5
 
     @staticmethod
-    def _sanitize_abstract(text: Optional[str]) -> Optional[str]:
+    def _sanitize_abstract(text: str | None) -> str | None:
         """Clean XML/JATS/HTML tags, entities, and leading 'Abstract:' prefix from source abstracts."""
         if not text or not isinstance(text, str):
             return None
@@ -1071,7 +1075,7 @@ class SemanticMatcher:
         cleaned = re.sub(r"^(?:abstract|summary)\s*[:.\-—]?\s+", "", cleaned, flags=re.IGNORECASE)
         return cleaned if cleaned else None
 
-    def _get_intent_embeddings(self, model: "object") -> Any:
+    def _get_intent_embeddings(self, model: object) -> Any:
         """Lazy-compute and cache embeddings for the 3 citation intent prototypes."""
         key = self.model_name
         if key not in self._intent_emb_cache:
@@ -1090,7 +1094,7 @@ class SemanticMatcher:
 
     def _compute_similarity(
         self,
-        model: "object",
+        model: object,
         text1: str,
         text2: str,
     ) -> float:
@@ -1110,7 +1114,7 @@ class SemanticMatcher:
 
     def _compute_similarity_with_long_text(
         self,
-        model: "object",
+        model: object,
         short_text: str,
         long_text: str,
         max_sample_length: int = 512,

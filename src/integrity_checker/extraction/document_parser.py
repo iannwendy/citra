@@ -25,13 +25,13 @@ from typing import Optional
 from integrity_checker.config import Settings, get_settings
 from integrity_checker.extraction.base import Document, Page
 from integrity_checker.extraction.citation_extractor import CitationExtractor
+from integrity_checker.extraction.docx_parser import DocxParser
 from integrity_checker.extraction.grobid_parser import (
     GrobidOutput,
     call_grobid_fulltext,
     parse_tei,
 )
 from integrity_checker.extraction.grobid_service import get_grobid_manager
-from integrity_checker.extraction.docx_parser import DocxParser
 from integrity_checker.extraction.mupdf_parser import MuPdfParser
 from integrity_checker.extraction.reference_parser import ReferenceListParser
 from integrity_checker.extraction.section_segmenter import (
@@ -88,7 +88,7 @@ class ParsedDocument:
     body_citations: list[Citation] = field(default_factory=list)
     references: list[Citation] = field(default_factory=list)
     appendix_citations: list[Citation] = field(default_factory=list)
-    grobid: Optional[GrobidOutput] = None
+    grobid: GrobidOutput | None = None
     parser_warnings: list[str] = field(default_factory=list)
     parser_used: str = "unknown"
     grobid_status: str = "unknown"
@@ -233,7 +233,7 @@ class DocumentParser:
             grobid_status = "unavailable"
 
         # 2. GROBID (optional, skipped for native .docx XML)
-        grobid_out: Optional[GrobidOutput] = None
+        grobid_out: GrobidOutput | None = None
 
         # Try to use GrobidServiceManager for better integration
         grobid_manager = None
@@ -349,7 +349,7 @@ class DocumentParser:
         self,
         pdf_path: str,
         grobid_manager=None,
-    ) -> Optional[GrobidOutput]:
+    ) -> GrobidOutput | None:
         """Gọi GROBID → parse TEI XML → GrobidOutput.
 
         Args:
@@ -387,7 +387,7 @@ class DocumentParser:
     def _merge(
         self,
         text_doc: Document,
-        grobid: Optional[GrobidOutput],
+        grobid: GrobidOutput | None,
     ) -> ParsedDocument:
         """Fuse text + GROBID → ParsedDocument.
 
@@ -814,7 +814,7 @@ class DocumentParser:
         for p_num in body_page_nums:
             lines = [ln.strip() for ln in by_page[p_num].text.splitlines() if ln.strip()]
             in_fn_zone = False
-            curr_num: Optional[int] = None
+            curr_num: int | None = None
             curr_lines: list[str] = []
 
             for l_idx, ln in enumerate(lines):
@@ -1122,7 +1122,7 @@ class DocumentParser:
                     ):
                         continue
 
-                    matched_term: Optional[str] = None
+                    matched_term: str | None = None
                     for term in legal_terms:
                         has_doc_code = bool(re.search(r"\d+/\d+|\d+\s*-[A-ZĐ]{2,}|\d+/[A-ZĐ]{2,}", term, re.I))
                         if has_doc_code:
@@ -1345,9 +1345,8 @@ class DocumentParser:
             "button", "timer", "spea", "nsga", "moea", "atmega", "arduino", "iperf",
             "sqlite", "urllib", "dhcp", "dhcpv", "icmp", "ospf", "eigrp",
             "overlay", "backend", "worker", "frontend", "replica", "container", "service",
-            "instance", "cluster", "redis", "mysql", "mongo", "postgres", "kafka",
-            "broker", "queue", "node", "nodes", "port", "ports", "step", "steps",
-            "fig", "tab", "sec", "vol", "ver", "rgb", "bgr", "hsv", "hex", "cpu", "gpu",
+            "instance", "redis", "mysql", "mongo", "postgres", "kafka",
+            "broker", "queue", "ports", "fig", "tab", "sec", "vol", "ver", "rgb", "bgr", "hsv", "hex", "cpu", "gpu",
             "ram", "rom", "usb", "lan", "wan", "mac", "tcp", "udp", "dns", "ssh", "ssl",
             "tls", "api", "url", "uri", "sql", "csv", "xml", "yml", "pdf", "png", "jpg",
             "gif", "mp3", "mp4", "wav", "zip", "tar", "jar", "exe", "dll", "lib", "bin",
@@ -1521,8 +1520,8 @@ class DocumentParser:
     def _extract_references(
         self,
         sections: list[DocumentSection],
-        grobid: Optional[GrobidOutput],
-        source_doc: Optional[Document] = None,
+        grobid: GrobidOutput | None,
+        source_doc: Document | None = None,
     ) -> list[Citation]:
         """Trích references — GROBID + regex merge với deduplication.
 
@@ -2171,7 +2170,7 @@ class DocumentParser:
             c_url_norm = (c.url or "").strip().rstrip("/.,;").lower()
             c_title_norm = re.sub(r"[^\w\s]", " ", (c.title or "").lower())
             c_title_norm = re.sub(r"\s+", " ", c_title_norm).strip()
-            overlap_g: Optional[Citation] = None
+            overlap_g: Citation | None = None
             for g in grobid_refs:
                 g_url_norm = (g.url or "").strip().rstrip("/.,;").lower()
                 if c_url_norm and g_url_norm and (c_url_norm == g_url_norm or c_url_norm in g_url_norm or g_url_norm in c_url_norm):

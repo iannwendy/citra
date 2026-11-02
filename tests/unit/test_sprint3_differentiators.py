@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import bcrypt
 from fastapi.testclient import TestClient
@@ -172,7 +172,7 @@ class TestSprint3APIEndpoints:
     def test_remediate_and_page_preview_endpoints(self) -> None:
         init_db()
         session = get_session()
-        suffix = int(datetime.now(timezone.utc).timestamp() * 1000) % 1000000
+        suffix = int(datetime.now(UTC).timestamp() * 1000) % 1000000
         pw_hash = bcrypt.hashpw(b"Pass123!", bcrypt.gensalt()).decode()
         try:
             basic_user = User(

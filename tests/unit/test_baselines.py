@@ -6,7 +6,6 @@ import pytest
 
 from integrity_checker.evaluation.baselines import BaselineRunner
 
-
 SAMPLE_DATASET = [
     {
         "id": "c1",

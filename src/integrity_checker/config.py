@@ -16,7 +16,6 @@ import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MAIN_APP_DB_PATH = (PROJECT_ROOT / "data" / "app.db").resolve()
 
@@ -493,7 +492,7 @@ class Settings(BaseSettings):
     )
 
     @model_validator(mode="after")
-    def _validate_weights_sum(self) -> "Settings":
+    def _validate_weights_sum(self) -> Settings:
         """CIS weights PHẢI tổng = 1.0 (±0.01). Raise nếu sai."""
         import os
 

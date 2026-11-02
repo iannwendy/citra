@@ -316,7 +316,7 @@ def main():
 
     # Show stats
     stats = db.get_stats()
-    print(f"\nDatabase stats:")
+    print("\nDatabase stats:")
     print(f"  Total papers: {stats['total_papers']}")
     for source, count in stats['source_counts'].items():
         print(f"  {source}: {count}")

@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from io import BytesIO
 from typing import Any
 
 from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
 from docx.shared import Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 
 def _set_cell_background(cell, hex_color: str) -> None:
@@ -68,7 +68,7 @@ def export_report_to_docx(
     meta.add_run(filename)
     meta = doc.add_paragraph()
     meta.add_run("Generated: ").bold = True
-    meta.add_run(generated_at or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"))
+    meta.add_run(generated_at or datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"))
     meta = doc.add_paragraph()
     meta.add_run("System: ").bold = True
     meta.add_run("Essay Integrity Checker (DATN)")
@@ -287,7 +287,9 @@ def export_report_to_docx(
 
         # 1-Click Auto-Remediated Bibliography & BibTeX Section
         try:
-            from integrity_checker.export.bibliography_formatter import build_remediated_bibliography
+            from integrity_checker.export.bibliography_formatter import (
+                build_remediated_bibliography,
+            )
 
             rem_data = build_remediated_bibliography(essay_id=0, verdicts=verdicts, style="apa")
             rem_entries = rem_data.get("entries") or []
@@ -392,6 +394,7 @@ def export_auto_healed_docx(
     and BibTeX appendix.
     """
     from pathlib import Path
+
     from integrity_checker.export.bibliography_formatter import build_remediated_bibliography
 
     norm_style = "ieee" if (style or "").strip().lower() == "ieee" else "apa"
@@ -434,9 +437,7 @@ def export_auto_healed_docx(
                 orig_raw = str(entry.get("original_raw") or "").strip()
                 cited_title = str((entry.get("cited") or {}).get("title") or "").strip()
                 matched = False
-                if orig_raw and len(orig_raw) >= 18 and orig_raw[:45].lower() in p_lower:
-                    matched = True
-                elif cited_title and len(cited_title) >= 18 and cited_title.lower() in p_lower:
+                if orig_raw and len(orig_raw) >= 18 and orig_raw[:45].lower() in p_lower or cited_title and len(cited_title) >= 18 and cited_title.lower() in p_lower:
                     matched = True
                 if not matched:
                     continue

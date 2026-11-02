@@ -20,13 +20,16 @@ from fastapi.testclient import TestClient
 from integrity_checker.api.main import app
 from integrity_checker.db.models import (
     CitationRecord,
-    Class as ClassModel,
     ClassMembership,
     EssayRecord,
-    Session as SessionModel,
     User,
 )
-
+from integrity_checker.db.models import (
+    Class as ClassModel,
+)
+from integrity_checker.db.models import (
+    Session as SessionModel,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -67,8 +70,9 @@ def auth_header(token: str) -> dict:
 def _make_user(username: str, role: str = "user", email: str | None = None) -> int:
     """Create a user directly via DB and return id. Bypasses API for test setup speed."""
     import bcrypt
-    from integrity_checker.db.session import get_session
+
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     session = get_session()
     repo = Repository(session)
@@ -234,8 +238,8 @@ class TestClassCrud:
         )
         # Login as teacher2 directly (hardcoded only has "teacher" — login as that then switch)
         # Use the second teacher token
-        from integrity_checker.db.session import get_session
         from integrity_checker.db.repository import Repository
+        from integrity_checker.db.session import get_session
         s = get_session()
         t2_user = Repository(s).get_user_by_id(t2_id)
         # Manually create class for teacher2 via DB (no API login as teacher2)
@@ -278,8 +282,8 @@ class TestClassCrud:
 
 class TestClassOwnership:
     def test_teacher_cannot_view_other_teachers_class_students(self, clean_db):
-        from integrity_checker.db.session import get_session
         from integrity_checker.db.repository import Repository
+        from integrity_checker.db.session import get_session
 
         # Create teacher2 and a class owned by teacher2
         t2_id = _make_user("teacherbob", role="teacher")
@@ -307,8 +311,8 @@ class TestClassOwnership:
 
     def test_teacher_cannot_add_student_to_other_teachers_class(self, clean_db):
         # Create 2 teachers + 2 classes
-        from integrity_checker.db.session import get_session
         from integrity_checker.db.repository import Repository
+        from integrity_checker.db.session import get_session
 
         t1_id = _make_user("teacher_a", role="teacher")
         t2_id = _make_user("teacher_b", role="teacher")
@@ -506,8 +510,8 @@ class TestClassEssays:
         assert resp.json() == []
 
     def test_teacher_lists_class_essays_with_data(self, clean_db):
-        from integrity_checker.db.session import get_session
         from integrity_checker.db.repository import Repository
+        from integrity_checker.db.session import get_session
 
         token = get_teacher_token()
         client = TestClient(app)
@@ -555,8 +559,8 @@ class TestTeacherDashboard:
         assert data["classes"] == []
 
     def test_teacher_dashboard_with_data(self, clean_db):
-        from integrity_checker.db.session import get_session
         from integrity_checker.db.repository import Repository
+        from integrity_checker.db.session import get_session
 
         token = get_teacher_token()
         client = TestClient(app)
@@ -802,7 +806,9 @@ class TestFreshDbMigration:
         TABLE ran before Base.metadata.create_all, breaking first-time setup.
         """
         import sqlite3
+
         from sqlalchemy import create_engine as sa_create_engine
+
         from integrity_checker.db.models import Base
         from integrity_checker.db.session import _run_inline_migrations
 
@@ -830,7 +836,9 @@ class TestFreshDbMigration:
     def test_old_migration_order_would_fail(self, tmp_path):
         """Demonstrates the bug: if ALTER ran before create_all, fresh DB fails."""
         import sqlite3
+
         from sqlalchemy import create_engine as sa_create_engine
+
         from integrity_checker.db.session import _run_inline_migrations
 
         db_path = tmp_path / "fresh_bug.db"

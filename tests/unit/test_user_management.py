@@ -15,8 +15,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from integrity_checker.api.main import app
-from integrity_checker.db.models import User, Session as SessionModel
-
+from integrity_checker.db.models import Session as SessionModel
+from integrity_checker.db.models import User
 
 # ---------------------------------------------------------------------------
 # Helpers

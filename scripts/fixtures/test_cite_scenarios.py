@@ -9,15 +9,15 @@ PDF 2: test_cite_scenario_b.pdf - 10 cite/ref scenarios (IEEE style + mixed)
 FIX v2: Sửa format để không chứa [N] markers trong body text gây confusion.
 """
 
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
-from reportlab.lib import colors
 import json
 from pathlib import Path
 
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 # ==============================================================================
 # PDF 1: APA Style Scenarios

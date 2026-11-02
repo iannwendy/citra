@@ -21,12 +21,12 @@ import re
 import subprocess
 import sys
 import unicodedata
-import urllib3
 from pathlib import Path
 from urllib.parse import quote
 
 import fitz  # PyMuPDF
 import requests
+import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 

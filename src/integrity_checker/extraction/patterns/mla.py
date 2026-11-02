@@ -33,7 +33,6 @@ from integrity_checker.extraction.patterns.utils import extract_publication_year
 from integrity_checker.matching.author_parser import parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
-
 # =============================================================================
 # MLA Pattern Definitions
 # =============================================================================
@@ -222,7 +221,7 @@ class MLAFormat:
             _MLA_WEBSITE,
         ]
 
-    def parse_reference_entry(self, text: str) -> Optional[Citation]:
+    def parse_reference_entry(self, text: str) -> Citation | None:
         """Parse MLA reference entry into Citation object.
 
         Args:
@@ -279,28 +278,28 @@ class MLAFormat:
         # Fallback
         return self._parse_mla_fallback(text)
 
-    def _try_parse_article(self, text: str) -> Optional[Citation]:
+    def _try_parse_article(self, text: str) -> Citation | None:
         """Try to parse MLA article format."""
         match = _MLA_ARTICLE.search(text)
         if match:
             return self._parse_article_entry(match, text)
         return None
 
-    def _try_parse_book(self, text: str) -> Optional[Citation]:
+    def _try_parse_book(self, text: str) -> Citation | None:
         """Try to parse MLA book format."""
         match = _MLA_BOOK.search(text)
         if match:
             return self._parse_book_entry(match, text)
         return None
 
-    def _try_parse_book_chapter(self, text: str) -> Optional[Citation]:
+    def _try_parse_book_chapter(self, text: str) -> Citation | None:
         """Try to parse MLA book chapter format."""
         match = _MLA_BOOK_CHAPTER.search(text)
         if match:
             return self._parse_book_chapter_entry(match, text)
         return None
 
-    def _try_parse_website(self, text: str) -> Optional[Citation]:
+    def _try_parse_website(self, text: str) -> Citation | None:
         """Try to parse MLA website format."""
         match = _MLA_WEBSITE.search(text)
         if match:
@@ -309,7 +308,7 @@ class MLAFormat:
 
     def _parse_article_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse MLA article entry."""
         citation = Citation(
             raw_text=text,
@@ -349,7 +348,7 @@ class MLAFormat:
 
     def _parse_book_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse MLA book entry."""
         citation = Citation(
             raw_text=text,
@@ -397,7 +396,7 @@ class MLAFormat:
 
     def _parse_book_chapter_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse MLA book chapter entry."""
         citation = Citation(
             raw_text=text,
@@ -457,7 +456,7 @@ class MLAFormat:
 
     def _parse_website_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse MLA website entry."""
         citation = Citation(
             raw_text=text,
@@ -509,7 +508,7 @@ class MLAFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
-    def _parse_mla_fallback(self, text: str) -> Optional[Citation]:
+    def _parse_mla_fallback(self, text: str) -> Citation | None:
         """Fallback parser: only match when MLA-specific cues exist."""
         if not (
             re.search(r'["\u201c][^"\u201d]+["\u201d]', text)

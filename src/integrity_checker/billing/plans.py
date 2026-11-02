@@ -12,7 +12,7 @@ Defines the 3 tiers for CITRA (SourceLogic):
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any, Literal
 
 PlanTierLiteral = Literal["basic", "pro", "ultra"]
@@ -283,7 +283,7 @@ def _ensure_utc(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -294,7 +294,7 @@ def ensure_user_quota_current(user: Any) -> bool:
     billing period has ended.
     Returns True if any field on ``user`` was mutated.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     mutated = False
 
     # Ensure plan_tier is populated
@@ -334,7 +334,7 @@ def get_user_subscription_summary(user: Any) -> dict[str, Any]:
 
     reset_at = _ensure_utc(getattr(user, "quota_reset_at", None))
     if reset_at is None:
-        reset_at = datetime.now(timezone.utc) + timedelta(days=30)
+        reset_at = datetime.now(UTC) + timedelta(days=30)
 
     period_start = _ensure_utc(getattr(user, "current_period_start", None))
     period_end = _ensure_utc(getattr(user, "current_period_end", None))

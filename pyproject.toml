@@ -69,7 +69,15 @@ extend-exclude = ["web/", "node_modules/", "build/", "dist/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "N", "ASYNC", "SIM"]
-ignore = ["E501"]  # line-length handled by formatter
+ignore = [
+    "E501",    # line-length handled by formatter
+    "B008",    # FastAPI dependency injection idiom: `x = Depends(...)` / `File(...)` defaults
+    "UP042",   # `str, Enum` kept for Pydantic/JSON serialization compatibility
+    "SIM108",  # ternary rewrites hurt readability of multi-branch rule logic
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["N802", "N806", "E741"]
 
 [tool.black]
 line-length = 100

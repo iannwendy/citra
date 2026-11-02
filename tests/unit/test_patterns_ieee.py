@@ -19,13 +19,13 @@ from integrity_checker.extraction.patterns import (
     get_reference_patterns,
 )
 from integrity_checker.extraction.patterns.ieee import (
+    _IEEE_BOOK_CHAPTER,
+    _IEEE_BRACKET_RE,
+    _IEEE_CONFERENCE,
     _IEEE_NUMERIC,
     _IEEE_REFERENCE_ENTRY,
     _IEEE_REFERENCE_YEAR_END,
-    _IEEE_BOOK_CHAPTER,
     _IEEE_TECH_REPORT,
-    _IEEE_CONFERENCE,
-    _IEEE_BRACKET_RE,
     IEEE_IN_TEXT_PATTERNS,
     IEEE_REFERENCE_PATTERNS,
 )
@@ -307,7 +307,6 @@ class TestIEEEVenueParsing:
 
     def test_parse_journal_with_volume_issue(self):
         """Test parsing journal with volume and issue."""
-        from integrity_checker.models.citation import Citation
 
         format_obj = IEEEFormat()
         citation = Citation(
@@ -325,7 +324,6 @@ class TestIEEEVenueParsing:
 
     def test_parse_conference_venue(self):
         """Test parsing conference venue."""
-        from integrity_checker.models.citation import Citation
 
         format_obj = IEEEFormat()
         citation = Citation(

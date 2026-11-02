@@ -28,7 +28,6 @@ from integrity_checker.extraction.patterns.utils import extract_publication_year
 from integrity_checker.matching.author_parser import parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
-
 # =============================================================================
 # IEEE Pattern Definitions
 # =============================================================================
@@ -190,7 +189,7 @@ class IEEEFormat:
             _IEEE_CONFERENCE,
         ]
 
-    def parse_reference_entry(self, text: str) -> Optional[Citation]:
+    def parse_reference_entry(self, text: str) -> Citation | None:
         """Parse IEEE reference entry into Citation object.
 
         Args:
@@ -247,7 +246,7 @@ class IEEEFormat:
         # Fallback: try to extract whatever we can
         return self._parse_ieee_fallback(text)
 
-    def _parse_ieee_quote_based(self, text: str) -> Optional[Citation]:
+    def _parse_ieee_quote_based(self, text: str) -> Citation | None:
         """Parse IEEE entry using quote-based heuristic.
 
         Strategy: Split on quote marks (regex title extraction may fail because
@@ -339,7 +338,7 @@ class IEEEFormat:
 
     def _parse_ieee_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse standard IEEE reference entry."""
         citation = Citation(
             raw_text=text,
@@ -381,7 +380,7 @@ class IEEEFormat:
 
     def _parse_ieee_year_end_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse IEEE entry with year at end."""
         citation = Citation(
             raw_text=text,
@@ -427,7 +426,7 @@ class IEEEFormat:
 
     def _parse_ieee_book_chapter_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse IEEE book chapter entry."""
         citation = Citation(
             raw_text=text,
@@ -474,7 +473,7 @@ class IEEEFormat:
 
     def _parse_ieee_tech_report_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse IEEE technical report entry."""
         citation = Citation(
             raw_text=text,
@@ -523,7 +522,7 @@ class IEEEFormat:
 
     def _parse_ieee_conference_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse IEEE conference paper entry."""
         citation = Citation(
             raw_text=text,
@@ -570,7 +569,7 @@ class IEEEFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
-    def _parse_ieee_fallback(self, text: str) -> Optional[Citation]:
+    def _parse_ieee_fallback(self, text: str) -> Citation | None:
         """Fallback parser: extract whatever metadata possible from unstructured text."""
         # IEEE entries in fallback must start with [N] marker; otherwise quoted non-IEEE
         # entries (Chicago, MLA) would be hijacked by IEEE fallback.

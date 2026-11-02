@@ -5,12 +5,12 @@ from __future__ import annotations
 import csv
 import io
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from html import escape
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Header
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -24,7 +24,7 @@ from reportlab.platypus import (
 )
 from sqlalchemy.orm import Session
 
-from integrity_checker.api.deps import get_db, get_current_user
+from integrity_checker.api.deps import get_current_user, get_db
 from integrity_checker.api.progress import get_tracker
 from integrity_checker.billing.plans import get_user_plan_policy
 from integrity_checker.config import get_settings
@@ -873,7 +873,7 @@ def _json_response(
             else None
         ),
         "disclaimer": settings.disclaimer.long,
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     body = json.dumps(payload, ensure_ascii=False, indent=2)
     return StreamingResponse(
@@ -1060,9 +1060,7 @@ def _pdf_response(filename: str, essay, verdicts: list) -> StreamingResponse:
         status_label = _format_label(v.label)
         if raw_lbl in ("verified", "resource") or status_label in ("Verified", "Valid"):
             verdict_table_styles.append(('TEXTCOLOR', (2, row_idx), (2, row_idx), colors.HexColor('#15803d')))
-        elif raw_lbl == "metadata_error" or status_label == "Metadata Error":
-            verdict_table_styles.append(('TEXTCOLOR', (1, row_idx), (2, row_idx), colors.HexColor('#dc2626')))
-        elif raw_lbl == "suspected_hallucination" or status_label in ("Suspected", "Suspected Hallucination"):
+        elif raw_lbl == "metadata_error" or status_label == "Metadata Error" or raw_lbl == "suspected_hallucination" or status_label in ("Suspected", "Suspected Hallucination"):
             verdict_table_styles.append(('TEXTCOLOR', (1, row_idx), (2, row_idx), colors.HexColor('#dc2626')))
     verdict_table.setStyle(TableStyle(verdict_table_styles))
     elements.append(verdict_table)
@@ -1139,7 +1137,7 @@ def _docx_response(filename: str, essay, verdicts: list) -> StreamingResponse:
         num_unresolved=unresolved,
         num_resource=resource,
         verdicts=verdict_list,
-        generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+        generated_at=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
         cis_components=cis_components,
         linking_summary=linking_summary,
         style_profile=style_profile,

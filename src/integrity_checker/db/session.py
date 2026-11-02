@@ -13,7 +13,6 @@ from sqlalchemy.pool import NullPool, StaticPool
 from integrity_checker.config import get_settings, is_main_app_db_url, is_test_runtime
 from integrity_checker.db.models import Base, PromoCode, User
 
-
 _engine: Engine | None = None
 _engine_url: str | None = None
 _SessionLocal: sessionmaker[Session] | None = None

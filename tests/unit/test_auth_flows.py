@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
 
 from integrity_checker.api.main import app
 from integrity_checker.api.services.email_service import get_email_service
-from integrity_checker.db.models import AuthToken, Session as SessionModel, User
+from integrity_checker.db.models import AuthToken, User
+from integrity_checker.db.models import Session as SessionModel
 from integrity_checker.db.repository import Repository
 from integrity_checker.db.session import get_session
 
@@ -216,7 +217,7 @@ class TestRegisterAndActivateFlow:
         repo = Repository(session)
         row = repo.get_auth_token(tok, "activation")
         assert row is not None
-        row.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        row.expires_at = datetime.now(UTC) - timedelta(hours=1)
         session.commit()
         session.close()
 

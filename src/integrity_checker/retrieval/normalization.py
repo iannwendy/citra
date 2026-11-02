@@ -145,7 +145,9 @@ def author_match_score(
                 return 0.8
     # Swapped East Asian / 2-token fallback (via author_matcher)
     try:
-        from integrity_checker.matching.author_matcher import author_match_score as _full_author_score
+        from integrity_checker.matching.author_matcher import (
+            author_match_score as _full_author_score,
+        )
 
         q_list = [query_authors] if isinstance(query_authors, str) else list(query_authors)  # type: ignore[arg-type]
         c_list = [candidate_authors] if isinstance(candidate_authors, str) else list(candidate_authors)  # type: ignore[arg-type]

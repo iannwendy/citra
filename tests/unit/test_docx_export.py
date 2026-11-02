@@ -1,6 +1,7 @@
 """Tests for DOCX export functionality."""
 
 import pytest
+
 from integrity_checker.export.docx_exporter import export_report_to_docx
 
 

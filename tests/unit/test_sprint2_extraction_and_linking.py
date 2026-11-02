@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from integrity_checker.database.local_db import LocalDatabase, _QUERY_CACHE
+from integrity_checker.database.local_db import _QUERY_CACHE, LocalDatabase
 from integrity_checker.database.models import Paper
 from integrity_checker.extraction.base import Document, Page
 from integrity_checker.extraction.reference_parser import ReferenceListParser

@@ -27,7 +27,6 @@ from integrity_checker.extraction.patterns.registry import register_format
 from integrity_checker.matching.author_parser import Author, parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
-
 # =============================================================================
 # APA Pattern Definitions
 # =============================================================================
@@ -272,7 +271,7 @@ def _make_corp_author(name: str) -> Author:
     return Author(last_name=low, initials=[], full_first_names=[], normalized=low, raw=clean)
 
 
-def parse_vn_legal_reference(text: str) -> Optional[Citation]:
+def parse_vn_legal_reference(text: str) -> Citation | None:
     """Parse a Vietnamese legal document reference entry per TDTU §2.6.1.
 
     Supports:
@@ -430,8 +429,8 @@ def parse_vn_legal_reference(text: str) -> Optional[Citation]:
         doc_code = re.sub(r"\s+", "", sublaw_m.group("doc_code").strip().rstrip(".,;"))
 
         # Extract issuing agency after "của ..." and from official code suffix
-        agency: Optional[str] = None
-        mapped_suffix_agency: Optional[str] = None
+        agency: str | None = None
+        mapped_suffix_agency: str | None = None
         code_upper = doc_code.upper()
         for suffix_key, mapped_agency in _SUBLAW_AGENCY_SUFFIX_MAP.items():
             if suffix_key in code_upper:
@@ -582,7 +581,7 @@ class APAFormat:
             _APA_SIMPLE_ENTRY,
         ]
 
-    def parse_reference_entry(self, text: str) -> Optional[Citation]:
+    def parse_reference_entry(self, text: str) -> Citation | None:
         """Parse APA reference entry into Citation object.
 
         Args:
@@ -668,7 +667,7 @@ class APAFormat:
 
     def _parse_apa_vn_comma_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Vietnamese APA entry where title and venue are separated by quotes or commas."""
         authors_raw = match.group("authors") or ""
         title_raw = (
@@ -715,7 +714,7 @@ class APAFormat:
 
     def _parse_apa_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse standard APA reference entry."""
         authors_raw = match.group("authors") or ""
         title_raw = (match.group("title") or "").strip()
@@ -843,7 +842,7 @@ class APAFormat:
 
     def _parse_apa_numbered_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse numbered APA reference entry like [1] Author (Year). Title."""
         # Extract numeric index
         idx_match = re.search(r"\[\s*(\d+)\s*\]", text)
@@ -856,7 +855,7 @@ class APAFormat:
 
     def _parse_apa_book_chapter_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse APA book chapter entry."""
         citation = Citation(
             raw_text=text,
@@ -901,7 +900,7 @@ class APAFormat:
 
     def _parse_apa_simple_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse simple APA reference entry."""
         authors_raw = match.group("authors") or ""
         title_raw = (match.group("title") or "").strip()
@@ -948,7 +947,7 @@ class APAFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
-    def _parse_apa_fallback(self, text: str) -> Optional[Citation]:
+    def _parse_apa_fallback(self, text: str) -> Citation | None:
         """Fallback parser: extract whatever metadata possible from unstructured text."""
         citation = Citation(
             raw_text=text,

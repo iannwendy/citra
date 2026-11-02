@@ -15,14 +15,17 @@ from integrity_checker.api.main import app
 from integrity_checker.db.models import (
     AuditLog,
     CitationRecord,
-    Class as ClassModel,
     ClassMembership,
     EssayRecord,
-    Session as SessionModel,
     User,
     VerdictRecord,
 )
-
+from integrity_checker.db.models import (
+    Class as ClassModel,
+)
+from integrity_checker.db.models import (
+    Session as SessionModel,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -63,8 +66,9 @@ def auth_header(token: str) -> dict:
 def _make_user(username: str, role: str = "user", email: str | None = None) -> int:
     """Create a user directly via DB and return id. Mirrors test_teacher_role helper."""
     import bcrypt
-    from integrity_checker.db.session import get_session
+
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     session = get_session()
     repo = Repository(session)
@@ -105,8 +109,8 @@ def _create_essay_with_verdict(
     user_id: int, label: str = "metadata_error",
 ) -> tuple[int, int]:
     """Create an essay (owned by user_id) with one VerdictRecord. Returns (essay_id, verdict_id)."""
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     session = get_session()
     try:
@@ -142,8 +146,8 @@ def test_teacher_can_override_verdict_on_class_essay(clean_db):
     """A teacher may override a verdict on an essay belonging to a student
     enrolled in one of the teacher's classes.
     """
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     # setup: hardcoded teacher owns a class, a new student is enrolled in it,
     # and the student uploads an essay with one verdict.
@@ -182,8 +186,8 @@ def test_teacher_cannot_override_essay_outside_their_class(clean_db):
     """A teacher must NOT be able to override a verdict on an essay that
     belongs to a student who is not in any of the teacher's classes.
     """
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     # setup: the hardcoded teacher owns class X. A new teacher (B) owns
     # class Y. A new student is enrolled in class Y (NOT class X) and
@@ -269,8 +273,8 @@ def test_student_cannot_override_own_essay_verdict(clean_db):
 
 def test_can_override_verdicts_flag_enforced(clean_db):
     """When can_override_verdicts is False on a teacher account, override returns 403."""
-    from integrity_checker.db.session import get_session
     from integrity_checker.db.repository import Repository
+    from integrity_checker.db.session import get_session
 
     teacher_id = _hardcoded_teacher_id()
     student_id = _make_user("flag_student", role="user")

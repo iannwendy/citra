@@ -229,6 +229,7 @@ def test_sandbox_instant_verify_endpoint_logic() -> None:
     """Feature #1 (Instant 3s Verify): Verify verify_sandbox_citations_instant executes end-to-end without error."""
     import asyncio
     from unittest.mock import AsyncMock, MagicMock
+
     from integrity_checker.api.routes.essays import verify_sandbox_citations_instant
     from integrity_checker.models.source import SourceCandidate, SourceResult
     from integrity_checker.pipeline.integrity_pipeline import IntegrityPipeline

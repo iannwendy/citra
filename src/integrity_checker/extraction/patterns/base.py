@@ -122,7 +122,7 @@ class CompiledPattern:
         return self.compiled_regex.match(text)
 
     @property
-    def type(self) -> "CitationType":
+    def type(self) -> CitationType:
         """Pattern type as CitationType enum for backward compatibility.
 
         Converts PatternType to the corresponding CitationType.
@@ -158,7 +158,7 @@ class CompiledPattern:
             return CitationType.UNKNOWN
 
     @property
-    def style(self) -> "CitationStyle":
+    def style(self) -> CitationStyle:
         """Infer CitationStyle from pattern name.
 
         Returns CitationStyle based on the pattern name prefix.

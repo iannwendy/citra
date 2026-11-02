@@ -20,7 +20,6 @@ import pytest
 
 from scripts.import_acl_xml import _parse_xml_file
 
-
 MULTI_VOLUME_XML = """<?xml version='1.0' encoding='UTF-8'?>
 <collection id="2019.ws">
   <volume id="1" type="proceedings">

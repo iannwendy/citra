@@ -61,7 +61,7 @@ def build_acl_database(db_path: Path, limit: int | None = None) -> int:
 
     # Parse and import
     print("Parsing BibTeX...")
-    with open(bibtex_path, 'r', encoding='utf-8') as f:
+    with open(bibtex_path, encoding='utf-8') as f:
         bibtex_content = f.read()
 
     papers = parse_bibtex(bibtex_content)
@@ -212,13 +212,13 @@ def main():
 
     # S2ORC
     if args.s2orc_path:
-        print(f"\nBuilding database from S2ORC...")
+        print("\nBuilding database from S2ORC...")
         count = build_s2orc_database(args.db_path, args.s2orc_path, args.limit)
         total_added += count
 
     # Summary
     print(f"\n{'=' * 50}")
-    print(f"Database build complete!")
+    print("Database build complete!")
     print(f"Total papers added: {total_added}")
     print(f"Database location: {args.db_path}")
     print(f"{'=' * 50}")

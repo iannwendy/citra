@@ -25,13 +25,13 @@ v1.2 §2.6 — Sprint 2.
 
 from __future__ import annotations
 
-from collections import defaultdict
-from dataclasses import dataclass, field
 import json
 import math
+from collections import defaultdict
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
-
+from typing import Any
 
 
 def compute_brier(
@@ -383,7 +383,7 @@ class PlattCalibrator:
         labels: Sequence[int],
         *,
         l2_reg: float = 0.05,
-    ) -> "PlattCalibrator":
+    ) -> PlattCalibrator:
         """Fit Platt scaling parameters (a, b) using L-BFGS-B optimization."""
         if len(scores) != len(labels):
             raise ValueError("scores and labels must have the same length")
@@ -426,7 +426,7 @@ class PlattCalibrator:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "PlattCalibrator":
+    def from_dict(cls, data: dict[str, Any]) -> PlattCalibrator:
         return cls(
             a=float(data.get("a", 1.0)),
             b=float(data.get("b", 0.0)),
@@ -686,7 +686,7 @@ class HybridMLScorer:
         *,
         c_reg: float = 2.0,
         max_iter: int = 1000,
-    ) -> "HybridMLScorer":
+    ) -> HybridMLScorer:
         """Fit multinomial logistic regression weights + Platt calibrator on labeled samples."""
         if len(feature_records) != len(labels):
             raise ValueError("feature_records and labels must have the same length")
@@ -759,7 +759,7 @@ class HybridMLScorer:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "HybridMLScorer":
+    def from_dict(cls, data: dict[str, Any]) -> HybridMLScorer:
         platt_data = data.get("platt_calibrator") or {}
         return cls(
             weights=data.get("weights"),
@@ -778,14 +778,14 @@ class HybridMLScorer:
         return target
 
     @classmethod
-    def load(cls, path: Path | str = DEFAULT_WEIGHTS_PATH) -> "HybridMLScorer":
+    def load(cls, path: Path | str = DEFAULT_WEIGHTS_PATH) -> HybridMLScorer:
         target = Path(path)
         with open(target, encoding="utf-8") as f:
             data = json.load(f)
         return cls.from_dict(data)
 
     @classmethod
-    def load_default(cls, path: Path | str = DEFAULT_WEIGHTS_PATH) -> "HybridMLScorer":
+    def load_default(cls, path: Path | str = DEFAULT_WEIGHTS_PATH) -> HybridMLScorer:
         target = Path(path)
         if target.exists():
             try:

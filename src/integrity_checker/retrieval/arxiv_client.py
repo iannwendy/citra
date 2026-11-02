@@ -400,15 +400,14 @@ class ArxivClient(BaseScholarClient):
         try:
             async for attempt in retryer:
                 with attempt:
-                    async with sem:
-                        async with httpx.AsyncClient(
-                            timeout=self.timeout, follow_redirects=True
-                        ) as client:
-                            resp = await client.get(
-                                self.BASE_URL,
-                                params=params,
-                                headers=self._headers,
-                            )
+                    async with sem, httpx.AsyncClient(
+                        timeout=self.timeout, follow_redirects=True
+                    ) as client:
+                        resp = await client.get(
+                            self.BASE_URL,
+                            params=params,
+                            headers=self._headers,
+                        )
                     self._last_status_code = resp.status_code
                     _ARXIV_CONSECUTIVE_TIMEOUTS[loop_id] = 0
                     if resp.status_code == 404:

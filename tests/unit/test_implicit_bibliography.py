@@ -4,12 +4,13 @@ Covers Fix 1 from PLAN_fix_ref_extraction.md.
 """
 
 import pytest
+
+from integrity_checker.extraction.base import Document, Page
 from integrity_checker.extraction.section_segmenter import (
     DocumentSection,
     SectionSegmenter,
     SectionType,
 )
-from integrity_checker.extraction.base import Document, Page
 
 
 class TestImplicitBibliographyDetection:
@@ -175,8 +176,8 @@ class TestNumericCitationMetadataPopulation:
 
     def test_metadata_populated_for_numeric_citation(self):
         """Numeric in-text citation should get metadata from matched reference."""
-        from integrity_checker.models.citation import Citation, CitationStyle, CitationType
         from integrity_checker.linking.statuses import CitationMappingStatus, MappingMethod
+        from integrity_checker.models.citation import Citation, CitationStyle, CitationType
         from integrity_checker.models.validation import CitationLink
         from integrity_checker.pipeline.integrity_pipeline import IntegrityPipeline
 
@@ -223,8 +224,8 @@ class TestNumericCitationMetadataPopulation:
 
     def test_no_overwrite_existing_metadata(self):
         """Existing title/author/year should NOT be overwritten."""
-        from integrity_checker.models.citation import Citation, CitationStyle, CitationType
         from integrity_checker.linking.statuses import CitationMappingStatus, MappingMethod
+        from integrity_checker.models.citation import Citation, CitationStyle, CitationType
         from integrity_checker.models.validation import CitationLink
         from integrity_checker.pipeline.integrity_pipeline import IntegrityPipeline
 

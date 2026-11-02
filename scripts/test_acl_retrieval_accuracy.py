@@ -34,7 +34,6 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from integrity_checker.database import LocalDatabase
-from integrity_checker.database import LocalDatabase
 from integrity_checker.models.citation import Citation
 from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
 
@@ -43,11 +42,11 @@ from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestr
 class TestCase:
     """Một test case cho một paper trong database."""
     paper_id: int
-    doi: Optional[str]
+    doi: str | None
     title: str
     authors: str  # JSON string
-    year: Optional[int]
-    venue: Optional[str]
+    year: int | None
+    venue: str | None
 
     # Citation simulation params
     citation_type: str = "full"  # "full", "partial", "title_only", "no_year"
@@ -57,10 +56,10 @@ class TestCase:
 
     # Ground truth
     ground_truth_found: bool = False
-    retrieval_result: Optional[dict] = None
+    retrieval_result: dict | None = None
     retrieval_time_ms: float = 0
     match_score: float = 0.0
-    matched_paper_id: Optional[int] = None
+    matched_paper_id: int | None = None
     false_positive: bool = False
     false_negative: bool = False
 
@@ -430,7 +429,7 @@ async def main():
         for paper in papers:
             paper.citation_type = "full"
 
-    print(f"\n🚀 Running retrieval tests...")
+    print("\n🚀 Running retrieval tests...")
     start_time = time.time()
     results, metrics = await run_retrieval_test(papers, args.db_path)
     elapsed = time.time() - start_time

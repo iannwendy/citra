@@ -25,20 +25,20 @@ warnings.warn(
 
 # Re-export from patterns module for backward compatibility
 from integrity_checker.extraction.patterns import (
+    DOI_PATTERN,
+    URL_PATTERN,
+    YEAR_PATTERN,
+    CitationFormat,
+    CompiledPattern,
+    PatternType,
+    extract_doi,
+    extract_url,
+    extract_year,
     get_all_formats,
     get_format,
     get_in_text_patterns,
     get_reference_patterns,
     get_utility_patterns,
-    PatternType,
-    CompiledPattern,
-    CitationFormat,
-    DOI_PATTERN,
-    URL_PATTERN,
-    YEAR_PATTERN,
-    extract_doi,
-    extract_url,
-    extract_year,
 )
 
 # Import CitationStyle and CitationType for backward compatibility

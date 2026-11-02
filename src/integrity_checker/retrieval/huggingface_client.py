@@ -256,9 +256,7 @@ class HuggingFaceClient(BaseScholarClient):
                     authors_list = list(paper_cand.authors) + ([author] if author and author not in paper_cand.authors else [])
                 if not description and paper_cand.abstract:
                     description = paper_cand.abstract
-                if citation and citation.year and paper_cand.year and str(citation.year)[:4] == str(paper_cand.year)[:4]:
-                    year = paper_cand.year
-                elif not year and paper_cand.year:
+                if citation and citation.year and paper_cand.year and str(citation.year)[:4] == str(paper_cand.year)[:4] or not year and paper_cand.year:
                     year = paper_cand.year
                 if paper_cand.title:
                     if citation and citation.title and canonical_id.lower() in citation.title.lower():

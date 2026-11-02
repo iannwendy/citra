@@ -6,7 +6,7 @@ import logging
 import os
 import re
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -31,16 +31,16 @@ from integrity_checker.billing.plans import (
     get_user_subscription_summary,
 )
 from integrity_checker.billing.vnpay import (
+    VNPAY_SANDBOX_TEST_CARDS,
+    VNPAY_SUPPORTED_BANKS,
+    VNPAY_VALID_BANK_CODES,
+    VNPAY_VERSION,
     IpnFailChecksum,
     IpnInvalidAmount,
     IpnOrderAlreadyConfirmed,
     IpnOrderNotFound,
     IpnSuccess,
     IpnUnknownError,
-    VNPAY_SANDBOX_TEST_CARDS,
-    VNPAY_SUPPORTED_BANKS,
-    VNPAY_VALID_BANK_CODES,
-    VNPAY_VERSION,
     VNPayService,
     get_vnpay_response_message,
 )
@@ -86,7 +86,7 @@ def _ensure_utc(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -229,7 +229,7 @@ class PromoCodeUpdateRequest(BaseModel):
 
 
 def _serialize_promo(promo: PromoCode) -> dict[str, Any]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = _ensure_utc(promo.expires_at)
     is_expired = bool(expires_at is not None and now >= expires_at)
     is_exhausted = bool(
@@ -298,7 +298,7 @@ def _validate_and_calculate_promo(
             detail=f"Promo code '{normalized}' is currently inactive.",
         )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = _ensure_utc(promo.expires_at)
     if expires_at is not None and now >= expires_at:
         raise HTTPException(
@@ -799,7 +799,7 @@ def _activate_paid_transaction(
     if tx.status == "succeeded":
         return
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     vnpay = VNPayService()
     policy = get_plan_policy(tx.plan_tier)
     subtotal_usd = float(

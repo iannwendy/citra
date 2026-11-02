@@ -64,11 +64,11 @@ class GrobidAuthor:
     """
 
     full_name: str
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    middle_name: Optional[str] = None
-    email: Optional[str] = None
-    affiliation: Optional[str] = None
+    first_name: str | None = None
+    last_name: str | None = None
+    middle_name: str | None = None
+    email: str | None = None
+    affiliation: str | None = None
 
 
 @dataclass
@@ -89,11 +89,11 @@ class GrobidBibEntry:
 
     id: str
     authors: list[GrobidAuthor] = field(default_factory=list)
-    title: Optional[str] = None
-    year: Optional[str] = None
-    venue: Optional[str] = None
-    doi: Optional[str] = None
-    url: Optional[str] = None
+    title: str | None = None
+    year: str | None = None
+    venue: str | None = None
+    doi: str | None = None
+    url: str | None = None
     raw_reference: str = ""
     raw_xml: str = ""
 
@@ -109,8 +109,8 @@ class GrobidCitation:
     """
 
     raw_text: str
-    ref_id: Optional[str] = None
-    page: Optional[int] = None
+    ref_id: str | None = None
+    page: int | None = None
 
 
 @dataclass
@@ -126,7 +126,7 @@ class GrobidSection:
 
     section_type: str
     text: str
-    page_start: Optional[int] = None
+    page_start: int | None = None
 
 
 @dataclass
@@ -135,14 +135,14 @@ class GrobidOutput:
 
     header: dict = field(default_factory=dict)
     authors: list[GrobidAuthor] = field(default_factory=list)
-    abstract: Optional[str] = None
+    abstract: str | None = None
     sections: list[GrobidSection] = field(default_factory=list)
     citations: list[GrobidCitation] = field(default_factory=list)
     bibliography: list[GrobidBibEntry] = field(default_factory=list)
     is_available: bool = True     # False nếu GROBID fail
-    error_message: Optional[str] = None
-    sha256: Optional[str] = None
-    raw_tei_xml: Optional[str] = None  # cache để debug
+    error_message: str | None = None
+    sha256: str | None = None
+    raw_tei_xml: str | None = None  # cache để debug
 
 
 # --- HTTP client (caller wrap requests/httpx) ---
@@ -308,7 +308,7 @@ def _extract_authors(header: ET.Element) -> list[GrobidAuthor]:
     return authors
 
 
-def _extract_abstract(header: ET.Element) -> Optional[str]:
+def _extract_abstract(header: ET.Element) -> str | None:
     """Trích abstract từ <profileDesc>/<abstract>."""
     abstract_el = header.find(f".//{_TEI}abstract")
     if abstract_el is None:
@@ -445,10 +445,10 @@ def _normalize_raw_ref_text(raw_ref_text: str) -> str:
 
 def _extract_url_and_doi_from_raw(
     raw_ref_text: str, bibl=None
-) -> tuple[Optional[str], Optional[str]]:
+) -> tuple[str | None, str | None]:
     """Extract clean URL and DOI from TEI element or raw_reference text."""
-    doi: Optional[str] = None
-    url: Optional[str] = None
+    doi: str | None = None
+    url: str | None = None
 
     if bibl is not None:
         doi_el = bibl.find(f".//{_TEI}idno[@type='DOI']")
@@ -625,9 +625,9 @@ def _parse_raw_bib_segment(raw_seg: str, entry_id: str) -> GrobidBibEntry:
     url, doi = _extract_url_and_doi_from_raw(seg)
 
     authors: list[GrobidAuthor] = []
-    title: Optional[str] = None
-    venue: Optional[str] = None
-    year: Optional[str] = None
+    title: str | None = None
+    venue: str | None = None
+    year: str | None = None
 
     # Strip URL/DOI from a working copy for cleaner text parsing
     seg_no_url = re.sub(r"\s*(?:https?://|www\.)\S+\s*", " ", seg).strip()

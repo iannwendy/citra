@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 
 from rapidfuzz import fuzz
 
-
 _PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)
 _WS_RE = re.compile(r"\s+", re.UNICODE)
 

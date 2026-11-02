@@ -59,7 +59,7 @@ def import_acl_from_json(
 
     for vol_file in volume_files:
         try:
-            with open(vol_file, 'r', encoding='utf-8') as f:
+            with open(vol_file, encoding='utf-8') as f:
                 data = json.load(f)
 
             # Process each volume
@@ -266,7 +266,7 @@ def main():
 
     # Show stats
     stats = db.get_stats()
-    print(f"\nDatabase stats:")
+    print("\nDatabase stats:")
     print(f"  Total papers: {stats['total_papers']}")
     print(f"  ACL papers: {stats['source_counts'].get('acl', 0)}")
 

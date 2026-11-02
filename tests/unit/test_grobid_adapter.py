@@ -13,22 +13,21 @@ from __future__ import annotations
 import pytest
 
 from integrity_checker.extraction.grobid_adapter import (
-    grobid_to_references,
-    grobid_to_in_text_citations,
+    SAMPLE_GROBID_OUTPUT,
+    MergeResult,
+    ProvenanceInfo,
     build_grobid_id_map,
+    grobid_to_in_text_citations,
+    grobid_to_references,
     merge_extraction_results,
     normalize_grobid_id,
     resolve_tei_links,
-    ProvenanceInfo,
-    MergeResult,
-    SAMPLE_GROBID_OUTPUT,
 )
 from integrity_checker.extraction.grobid_parser import (
     GrobidBibEntry,
     GrobidCitation,
     GrobidOutput,
 )
-
 
 # ===========================================================================
 # Fixtures

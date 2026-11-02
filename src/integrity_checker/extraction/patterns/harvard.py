@@ -36,7 +36,6 @@ from integrity_checker.extraction.patterns.registry import register_format
 from integrity_checker.matching.author_parser import parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
-
 # =============================================================================
 # Harvard Pattern Definitions
 # =============================================================================
@@ -228,7 +227,7 @@ class HarvardFormat:
             _HARVARD_NUMBERED,
         ]
 
-    def parse_reference_entry(self, text: str) -> Optional[Citation]:
+    def parse_reference_entry(self, text: str) -> Citation | None:
         """Parse Harvard reference entry into Citation object.
 
         Args:
@@ -290,7 +289,7 @@ class HarvardFormat:
         # Fallback
         return self._parse_harvard_fallback(text)
 
-    def _try_parse_article_quoted(self, text: str) -> Optional[Citation]:
+    def _try_parse_article_quoted(self, text: str) -> Citation | None:
         """Try to parse Harvard quoted article format."""
         match = _HARVARD_ARTICLE_QUOTED.search(text)
         if match:
@@ -303,28 +302,28 @@ class HarvardFormat:
             return citation
         return None
 
-    def _try_parse_article(self, text: str) -> Optional[Citation]:
+    def _try_parse_article(self, text: str) -> Citation | None:
         """Try to parse Harvard article format."""
         match = _HARVARD_ARTICLE.search(text)
         if match:
             return self._parse_article_entry(match, text)
         return None
 
-    def _try_parse_book(self, text: str) -> Optional[Citation]:
+    def _try_parse_book(self, text: str) -> Citation | None:
         """Try to parse Harvard book format."""
         match = _HARVARD_BOOK.search(text)
         if match:
             return self._parse_book_entry(match, text)
         return None
 
-    def _try_parse_book_chapter(self, text: str) -> Optional[Citation]:
+    def _try_parse_book_chapter(self, text: str) -> Citation | None:
         """Try to parse Harvard book chapter format."""
         match = _HARVARD_BOOK_CHAPTER.search(text)
         if match:
             return self._parse_book_chapter_entry(match, text)
         return None
 
-    def _try_parse_numbered(self, text: str) -> Optional[Citation]:
+    def _try_parse_numbered(self, text: str) -> Citation | None:
         """Try to parse Harvard numbered format."""
         match = _HARVARD_NUMBERED.search(text)
         if match:
@@ -361,7 +360,7 @@ class HarvardFormat:
 
     def _parse_article_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Harvard article entry."""
         if match.groupdict().get("year2") and self._is_invalid_year2_match(
             match.group("authors"), match.group("title")
@@ -405,7 +404,7 @@ class HarvardFormat:
 
     def _parse_book_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Harvard book entry."""
         if match.groupdict().get("year2") and self._is_invalid_year2_match(
             match.group("authors"), match.group("title")
@@ -455,7 +454,7 @@ class HarvardFormat:
 
     def _parse_book_chapter_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Harvard book chapter entry."""
         if match.groupdict().get("year2") and self._is_invalid_year2_match(
             match.group("authors"), match.group("chapter_title")
@@ -506,7 +505,7 @@ class HarvardFormat:
 
     def _parse_numbered_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Harvard numbered entry."""
         citation = Citation(
             raw_text=text,
@@ -543,7 +542,7 @@ class HarvardFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
-    def _parse_harvard_fallback(self, text: str) -> Optional[Citation]:
+    def _parse_harvard_fallback(self, text: str) -> Citation | None:
         """Fallback parser: extract whatever metadata possible."""
         citation = Citation(
             raw_text=text,

@@ -41,7 +41,6 @@ from integrity_checker.extraction.patterns.registry import register_format
 from integrity_checker.matching.author_parser import parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
-
 # =============================================================================
 # CSE Pattern Definitions
 # =============================================================================
@@ -286,7 +285,7 @@ class CSEFormat:
             _CSE_BOOK,
         ]
 
-    def parse_reference_entry(self, text: str) -> Optional[Citation]:
+    def parse_reference_entry(self, text: str) -> Citation | None:
         """Parse CSE reference entry into Citation object.
 
         Args:
@@ -378,42 +377,42 @@ class CSEFormat:
             return True
         return False
 
-    def _try_parse_numbered_doi(self, text: str) -> Optional[Citation]:
+    def _try_parse_numbered_doi(self, text: str) -> Citation | None:
         """Try to parse CSE numbered with DOI format."""
         match = _CSE_NUMBERED_DOI.search(text)
         if match:
             return self._parse_numbered_doi_entry(match, text)
         return None
 
-    def _try_parse_bracketed_reference(self, text: str) -> Optional[Citation]:
+    def _try_parse_bracketed_reference(self, text: str) -> Citation | None:
         """Try to parse CSE bracketed reference."""
         match = _CSE_BRACKETED_REFERENCE.search(text)
         if match:
             return self._parse_bracketed_entry(match, text)
         return None
 
-    def _try_parse_numbered_article(self, text: str) -> Optional[Citation]:
+    def _try_parse_numbered_article(self, text: str) -> Citation | None:
         """Try to parse CSE numbered article format."""
         match = _CSE_NUMBERED_ARTICLE.search(text)
         if match:
             return self._parse_numbered_article_entry(match, text)
         return None
 
-    def _try_parse_nameyear_article(self, text: str) -> Optional[Citation]:
+    def _try_parse_nameyear_article(self, text: str) -> Citation | None:
         """Try to parse CSE Name-Year article format."""
         match = _CSE_NAMEYEAR_ARTICLE.search(text)
         if match:
             return self._parse_nameyear_article_entry(match, text)
         return None
 
-    def _try_parse_nameyear_book(self, text: str) -> Optional[Citation]:
+    def _try_parse_nameyear_book(self, text: str) -> Citation | None:
         """Try to parse CSE Name-Year book format."""
         match = _CSE_NAMEYEAR_BOOK.search(text)
         if match:
             return self._parse_nameyear_book_entry(match, text)
         return None
 
-    def _try_parse_book(self, text: str) -> Optional[Citation]:
+    def _try_parse_book(self, text: str) -> Citation | None:
         """Try to parse CSE book format."""
         match = _CSE_BOOK.search(text)
         if match:
@@ -422,7 +421,7 @@ class CSEFormat:
 
     def _parse_numbered_doi_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse CSE numbered with DOI entry."""
         citation = Citation(
             raw_text=text,
@@ -475,7 +474,7 @@ class CSEFormat:
 
     def _parse_bracketed_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse CSE bracketed entry."""
         citation = Citation(
             raw_text=text,
@@ -529,7 +528,7 @@ class CSEFormat:
 
     def _parse_numbered_article_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse CSE numbered article entry."""
         citation = Citation(
             raw_text=text,
@@ -578,7 +577,7 @@ class CSEFormat:
 
     def _parse_nameyear_article_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse CSE Name-Year article entry."""
         citation = Citation(
             raw_text=text,
@@ -616,7 +615,7 @@ class CSEFormat:
 
     def _parse_nameyear_book_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse CSE Name-Year book entry."""
         citation = Citation(
             raw_text=text,
@@ -660,7 +659,7 @@ class CSEFormat:
 
     def _parse_book_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse CSE book entry."""
         citation = Citation(
             raw_text=text,
@@ -702,7 +701,7 @@ class CSEFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
-    def _parse_cse_fallback(self, text: str) -> Optional[Citation]:
+    def _parse_cse_fallback(self, text: str) -> Citation | None:
         """Fallback parser: extract whatever metadata possible."""
         citation = Citation(
             raw_text=text,

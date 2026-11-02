@@ -40,7 +40,7 @@ def test_truncated_download_is_rejected(tmp_path, monkeypatch) -> None:
     target = tmp_path / "anthology.bib"
     try:
         mod.download_acl_anthology(target)
-    except IOError:
+    except OSError:
         pass
     else:  # pragma: no cover
         raise AssertionError("expected truncated download to raise IOError")

@@ -52,28 +52,28 @@ from integrity_checker.extraction.patterns.base import (
     PatternType,
 )
 
-# Import utility functions and patterns
-from integrity_checker.extraction.patterns.utils import (
-    DOI_PATTERN,
-    URL_PATTERN,
-    YEAR_PATTERN,
-    UTILITY_PATTERNS,
-    extract_doi,
-    extract_url,
-    extract_year,
-    extract_publication_year,
-)
-
 # Import registry functions
 from integrity_checker.extraction.patterns.registry import (
+    clear_registry,
     get_all_formats,
     get_format,
     get_in_text_patterns,
     get_reference_patterns,
-    get_utility_patterns,
     get_registry_info,
+    get_utility_patterns,
     register_format,
-    clear_registry,
+)
+
+# Import utility functions and patterns
+from integrity_checker.extraction.patterns.utils import (
+    DOI_PATTERN,
+    URL_PATTERN,
+    UTILITY_PATTERNS,
+    YEAR_PATTERN,
+    extract_doi,
+    extract_publication_year,
+    extract_url,
+    extract_year,
 )
 
 # Auto-register built-in formats

@@ -19,7 +19,6 @@ import re
 import unicodedata
 from typing import Any
 
-
 _YEAR_RE = re.compile(r"\b((?:19|20)\d{2})[a-z]?\b")
 _DOI_RE = re.compile(r"10\.\d{4,9}/[^\s\]\)\,;]+", re.IGNORECASE)
 _URL_RE = re.compile(r"https?://[^\s\]\)\,;]+", re.IGNORECASE)
@@ -116,7 +115,10 @@ def _extract_raw_fallback_metadata(raw_text: str) -> dict[str, Any]:
 
     # Try Vietnamese legal reference parser first
     try:
-        from integrity_checker.extraction.patterns.apa import is_vn_legal_reference, parse_vn_legal_reference
+        from integrity_checker.extraction.patterns.apa import (
+            is_vn_legal_reference,
+            parse_vn_legal_reference,
+        )
 
         if is_vn_legal_reference(cleaned):
             legal_cit = parse_vn_legal_reference(cleaned)

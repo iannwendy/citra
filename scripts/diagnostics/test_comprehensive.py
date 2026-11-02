@@ -80,7 +80,7 @@ class TestResult:
     sources_found: int
     api_used: list[str] = field(default_factory=list)
     db_used: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
 
 async def test_citation(
@@ -169,14 +169,14 @@ async def run_thesis_test():
     PDF KHÔNG được track trong git — đặt file bất kỳ ở repo root và trỏ
     biến môi trường SAMPLE_PDF tới nó (mặc định: thesis.pdf).
     """
-    from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
-    from integrity_checker.retrieval.crossref_client import CrossrefClient
-    from integrity_checker.retrieval.openalex_client import OpenAlexClient
-    from integrity_checker.retrieval.semantic_scholar_client import SemanticScholarClient
-    from integrity_checker.retrieval.arxiv_client import ArxivClient
-    from integrity_checker.logic.neuro_symbolic_checker import NeuroSymbolicChecker
     from integrity_checker.extraction.citation_extractor import CitationExtractor
     from integrity_checker.extraction.document_parser import DocumentParser
+    from integrity_checker.logic.neuro_symbolic_checker import NeuroSymbolicChecker
+    from integrity_checker.retrieval.arxiv_client import ArxivClient
+    from integrity_checker.retrieval.crossref_client import CrossrefClient
+    from integrity_checker.retrieval.openalex_client import OpenAlexClient
+    from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
+    from integrity_checker.retrieval.semantic_scholar_client import SemanticScholarClient
 
     print("\n" + "="*70)
     print("TEST 1: VietDepression_Research_Article.pdf")
@@ -237,13 +237,13 @@ async def run_thesis_test():
 
 async def run_scenario_test(scenario_file: str, scenario_name: str):
     """Test on a specific scenario."""
-    from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
+    from integrity_checker.extraction.document_parser import DocumentParser
+    from integrity_checker.logic.neuro_symbolic_checker import NeuroSymbolicChecker
+    from integrity_checker.retrieval.arxiv_client import ArxivClient
     from integrity_checker.retrieval.crossref_client import CrossrefClient
     from integrity_checker.retrieval.openalex_client import OpenAlexClient
+    from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
     from integrity_checker.retrieval.semantic_scholar_client import SemanticScholarClient
-    from integrity_checker.retrieval.arxiv_client import ArxivClient
-    from integrity_checker.logic.neuro_symbolic_checker import NeuroSymbolicChecker
-    from integrity_checker.extraction.document_parser import DocumentParser
 
     print("\n" + "="*70)
     print(f"TEST: {scenario_name}")
@@ -322,7 +322,7 @@ def analyze_results(results: list, api_calls: list, db_calls: list, name: str):
     for r in results:
         verdicts[r.predicted] = verdicts.get(r.predicted, 0) + 1
 
-    print(f"\n📊 Verdict Distribution:")
+    print("\n📊 Verdict Distribution:")
     for v, count in sorted(verdicts.items()):
         pct = 100 * count / len(results) if results else 0
         print(f"   {v}: {count} ({pct:.1f}%)")
@@ -332,7 +332,7 @@ def analyze_results(results: list, api_calls: list, db_calls: list, name: str):
     api_calls_count = sum(1 for c in api_calls if c['type'] == 'API')
     db_misses = sum(1 for c in api_calls if c['type'] == 'DB_MISS')
 
-    print(f"\n🔍 Database vs API Usage:")
+    print("\n🔍 Database vs API Usage:")
     print(f"   Known Papers (fast lookup): {db_hits}/{len(results)} ({100*db_hits/len(results):.1f}%)")
     print(f"   API calls made: {api_calls_count}")
     print(f"   Local DB misses: {db_misses}")

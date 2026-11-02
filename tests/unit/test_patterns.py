@@ -5,13 +5,14 @@ from __future__ import annotations
 import pytest
 
 from integrity_checker.extraction.patterns import (
-    PatternType,
-    CompiledPattern,
-    CitationFormat,
     DOI_PATTERN,
     URL_PATTERN,
-    YEAR_PATTERN,
     UTILITY_PATTERNS,
+    YEAR_PATTERN,
+    CitationFormat,
+    CompiledPattern,
+    PatternType,
+    clear_registry,
     extract_doi,
     extract_url,
     extract_year,
@@ -19,10 +20,9 @@ from integrity_checker.extraction.patterns import (
     get_format,
     get_in_text_patterns,
     get_reference_patterns,
-    get_utility_patterns,
     get_registry_info,
+    get_utility_patterns,
     register_format,
-    clear_registry,
 )
 from integrity_checker.extraction.patterns.base import CompiledPattern as BaseCompiledPattern
 from integrity_checker.models.citation import Citation, CitationStyle

@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from integrity_checker.extraction.patterns.base import CompiledPattern, CitationFormat
+from integrity_checker.extraction.patterns.base import CitationFormat, CompiledPattern
 
 if TYPE_CHECKING:
     pass

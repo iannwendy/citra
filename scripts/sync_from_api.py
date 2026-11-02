@@ -179,7 +179,7 @@ def main():
         print(f"  Total papers: {stats['total_papers']}")
         print(f"  Total queries: {stats['total_queries']}")
         print(f"  Hit rate: {stats['hit_rate_percent']:.1f}%")
-        print(f"\nPapers by source:")
+        print("\nPapers by source:")
         for source, count in stats['source_counts'].items():
             print(f"    {source}: {count}")
 

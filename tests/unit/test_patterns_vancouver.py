@@ -21,15 +21,15 @@ from integrity_checker.extraction.patterns import (
     get_reference_patterns,
 )
 from integrity_checker.extraction.patterns.vancouver import (
+    _VANCOUVER_BRACKET_RE,
+    _VANCOUVER_NARRATIVE,
+    _VANCOUVER_NUMBERED_REFERENCE,
     _VANCOUVER_NUMERIC,
     _VANCOUVER_PARENTHETICAL,
-    _VANCOUVER_NARRATIVE,
+    _VANCOUVER_PERIOD_NUMBERED,
     _VANCOUVER_REFERENCE_ENTRY,
-    _VANCOUVER_NUMBERED_REFERENCE,
     _VANCOUVER_YEAR_FIRST,
     _VANCOUVER_YEAR_FIRST_NUMBERED,
-    _VANCOUVER_PERIOD_NUMBERED,
-    _VANCOUVER_BRACKET_RE,
     VANCOUVER_IN_TEXT_PATTERNS,
     VANCOUVER_REFERENCE_PATTERNS,
 )
@@ -118,21 +118,21 @@ class TestVancouverReferenceEntry:
         match = _VANCOUVER_REFERENCE_ENTRY.search(text)
         assert match is not None
         assert "Smith" in match.group("authors")
-        assert "2020" == match.group("year")
+        assert match.group("year") == "2020"
 
     def test_vancouver_without_volume(self):
         """Test Vancouver entry without volume."""
         text = "Smith J. Article title. J Clin Med. 2020."
         match = _VANCOUVER_REFERENCE_ENTRY.search(text)
         assert match is not None
-        assert "2020" == match.group("year")
+        assert match.group("year") == "2020"
 
     def test_year_first_pattern(self):
         """Test year-first Vancouver regex."""
         text = "Smith J, Jones A. 2020. Article title. J Clin Med. 10:123-145."
         match = _VANCOUVER_YEAR_FIRST.search(text)
         assert match is not None
-        assert "2020" == match.group("year")
+        assert match.group("year") == "2020"
         assert "Article title" in match.group("title")
 
     def test_period_numbered_pattern(self):
@@ -383,7 +383,6 @@ class TestVancouverVenueParsing:
 
     def test_parse_journal_with_volume_issue_pages(self):
         """Test parsing journal with volume, issue, and pages."""
-        from integrity_checker.models.citation import Citation
 
         format_obj = VancouverFormat()
         citation = Citation(
@@ -399,7 +398,6 @@ class TestVancouverVenueParsing:
 
     def test_parse_journal_with_pages_only(self):
         """Test parsing journal with pages only."""
-        from integrity_checker.models.citation import Citation
 
         format_obj = VancouverFormat()
         citation = Citation(

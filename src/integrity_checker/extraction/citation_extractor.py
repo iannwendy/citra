@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import warnings
-from typing import Iterable
+from collections.abc import Iterable
 
 from integrity_checker.extraction.base import Document
 from integrity_checker.extraction.patterns import get_in_text_patterns
@@ -17,7 +17,6 @@ with warnings.catch_warnings():
 
 from integrity_checker.extraction.text_preprocessor import TextPreprocessor
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
-
 
 # Header / footer keywords để phát hiện reference section
 _REFERENCE_HEADERS = re.compile(
@@ -261,7 +260,10 @@ class CitationExtractor:
         self.preserve_occurrences = preserve_occurrences
         if patterns is None:
             # Use patterns from the new modular registry
-            from integrity_checker.extraction.patterns import get_in_text_patterns, get_utility_patterns
+            from integrity_checker.extraction.patterns import (
+                get_in_text_patterns,
+                get_utility_patterns,
+            )
             self.patterns = get_in_text_patterns()
             if include_utility:
                 self.patterns = self.patterns + get_utility_patterns()
@@ -697,7 +699,11 @@ class CitationExtractor:
 
     def _populate_fields(self, citation: Citation, raw: str) -> None:
         """Best-effort trích DOI / URL / year từ raw text."""
-        from integrity_checker.extraction.patterns.utils import extract_doi, extract_url, extract_year
+        from integrity_checker.extraction.patterns.utils import (
+            extract_doi,
+            extract_url,
+            extract_year,
+        )
 
         if not citation.doi:
             citation.doi = extract_doi(raw)

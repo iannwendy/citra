@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import csv
 import io
+from datetime import UTC
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -629,7 +630,7 @@ def get_class_analytics(
         "resource": 0,
     }
     rule_counts: dict[str, int] = {}
-    current_year = datetime.now(timezone.utc).year
+    current_year = datetime.now(UTC).year
     years_found: list[int] = []
 
     # Group flagged citations by normalized text to detect shared AI hallucinations across students

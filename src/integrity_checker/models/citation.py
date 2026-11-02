@@ -41,7 +41,7 @@ _DOI_RE = re.compile(r"10\.\d{4,9}/(?:[^\s\]\)\,;()]|\([^\s\]\)\,;()]*\))+")
 _URL_RE = re.compile(r"https?://[^\s\]\)\,;]+")
 
 
-def parse_year_safe(raw: str) -> Optional[str]:
+def parse_year_safe(raw: str) -> str | None:
     """Trích xuất năm (4 chữ số, 19xx hoặc 20xx) từ chuỗi. Trả None nếu không có."""
     if not raw:
         return None
@@ -74,44 +74,44 @@ class Citation:
     style: CitationStyle = CitationStyle.UNKNOWN
 
     authors: list[str] = field(default_factory=list)
-    year: Optional[str] = None
-    title: Optional[str] = None
-    venue: Optional[str] = None
-    doi: Optional[str] = None
-    url: Optional[str] = None
-    volume: Optional[str] = None
-    issue: Optional[str] = None
-    pages: Optional[str] = None
+    year: str | None = None
+    title: str | None = None
+    venue: str | None = None
+    doi: str | None = None
+    url: str | None = None
+    volume: str | None = None
+    issue: str | None = None
+    pages: str | None = None
 
     # NEW v1.2 — cho bidirectional linker + duplicate detector
-    title_normalized: Optional[str] = None
-    year_suffix: Optional[str] = None
+    title_normalized: str | None = None
+    year_suffix: str | None = None
     order_index: int = 0
-    numeric_index: Optional[int] = None
+    numeric_index: int | None = None
 
     page_num: int = 0
     paragraph_num: int = 0
 
-    matched_pattern: Optional[str] = None
-    raw_in_text_citation: Optional[str] = None
+    matched_pattern: str | None = None
+    raw_in_text_citation: str | None = None
     confidence: float = 0.0
 
     # NEW v1.2 — optional reference_id cho bidirectional linker output.
     # None trước khi chạy CitationLinker; được set thành str ('ref-0007')
     # sau khi linker match occurrence ↔ reference entry.
     # Backward compatible: callers cũ không truyền field này vẫn chạy bình thường.
-    reference_id: Optional[str] = None
+    reference_id: str | None = None
 
     # NEW v1.3 — citation context: đoạn văn xung quanh citation
     # Dùng cho Neural content alignment check
-    context: Optional[str] = None
+    context: str | None = None
 
     # NEW v1.7 — linking layer cho in-text citations (gắn sau CitationLinker chạy).
     # Cho phép UI Citations tab hiển thị mapping_status thật cho mỗi in-text.
     # None cho reference_list entries (chúng có mapping_status từ verdict).
-    mapping_status: Optional[str] = None        # CitationMappingStatus.value
+    mapping_status: str | None = None        # CitationMappingStatus.value
     mapping_confidence: float = 0.0
-    citation_link: Optional[object] = None     # CitationLink
+    citation_link: object | None = None     # CitationLink
 
     # NEW v1.9 — MỌI link của occurrence này, không chỉ cái đầu.
     #
@@ -128,8 +128,8 @@ class Citation:
     # is_grobid_linked: True nếu citation có TEI link đến bibliography entry
     # conflict_fields: list các fields bị conflict khi merge GROBID + regex
     source: str = "regex"
-    source_confidence: Optional[float] = None
-    grobid_ref_id: Optional[str] = None
+    source_confidence: float | None = None
+    grobid_ref_id: str | None = None
     is_grobid_linked: bool = False
     conflict_fields: list = field(default_factory=list)
 
@@ -165,7 +165,7 @@ class Citation:
         return " ".join(parts)
 
     @classmethod
-    def from_raw(cls, raw: str, extract_title: bool = True) -> "Citation":
+    def from_raw(cls, raw: str, extract_title: bool = True) -> Citation:
         """Constructor tiện dụng — trích DOI/URL/year/title từ raw text.
 
         Args:
@@ -190,7 +190,7 @@ class Citation:
         return c
 
     @staticmethod
-    def _extract_title_from_citation(text: str) -> Optional[str]:
+    def _extract_title_from_citation(text: str) -> str | None:
         """Trích title từ formatted citation.
 
         Handles patterns:

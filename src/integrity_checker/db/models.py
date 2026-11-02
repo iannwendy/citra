@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from typing import Literal
 
-from sqlalchemy import Index, JSON, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
 
 # Role literals (v1.15 — Phase 3 teacher role).
 # Backward compat: giữ "user" cho student, thêm "teacher" mới.
@@ -34,11 +43,11 @@ class User(Base):
     avatar_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_active: Mapped[bool] = mapped_column(Integer, default=1)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
     # v1.15 (Phase 3) — teacher-specific fields
     institution: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -62,18 +71,18 @@ class User(Base):
     monthly_uploads_used: Mapped[int] = mapped_column(Integer, default=0)
     quota_reset_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    sessions: Mapped[list["Session"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    auth_tokens: Mapped[list["AuthToken"]] = relationship(
+    sessions: Mapped[list[Session]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    auth_tokens: Mapped[list[AuthToken]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    billing_transactions: Mapped[list["BillingTransaction"]] = relationship(
+    billing_transactions: Mapped[list[BillingTransaction]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    essays: Mapped[list["EssayRecord"]] = relationship(back_populates="user")
-    taught_classes: Mapped[list["Class"]] = relationship(
+    essays: Mapped[list[EssayRecord]] = relationship(back_populates="user")
+    taught_classes: Mapped[list[Class]] = relationship(
         "Class", back_populates="teacher", foreign_keys="Class.teacher_id"
     )
-    memberships: Mapped[list["ClassMembership"]] = relationship(
+    memberships: Mapped[list[ClassMembership]] = relationship(
         "ClassMembership", back_populates="student", foreign_keys="ClassMembership.student_id",
         cascade="all, delete-orphan",
     )
@@ -88,9 +97,9 @@ class Session(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
-    user: Mapped["User"] = relationship(back_populates="sessions")
+    user: Mapped[User] = relationship(back_populates="sessions")
 
 
 class AuthToken(Base):
@@ -107,10 +116,10 @@ class AuthToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(UTC)
     )
 
-    user: Mapped["User"] = relationship(back_populates="auth_tokens")
+    user: Mapped[User] = relationship(back_populates="auth_tokens")
 
 
 class CitationCache(Base):
@@ -123,7 +132,7 @@ class CitationCache(Base):
     source: Mapped[str] = mapped_column(String(20), nullable=False)
     raw_response: Mapped[str] = mapped_column(Text, nullable=False)
     matched_fields: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     last_hit_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     hit_count: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -140,19 +149,19 @@ class EssayRecord(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     filename: Mapped[str] = mapped_column(String, nullable=False)
     num_pages: Mapped[int] = mapped_column(Integer, default=0)
-    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     class_id: Mapped[int | None] = mapped_column(ForeignKey("classes.id", ondelete="SET NULL"), nullable=True, index=True)
     # v1.2 — full pipeline output (JSON serialized)
     style_profile_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     cis_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    user: Mapped["User | None"] = relationship(back_populates="essays")
+    user: Mapped[User | None] = relationship(back_populates="essays")
 
-    citations: Mapped[list["CitationRecord"]] = relationship(
+    citations: Mapped[list[CitationRecord]] = relationship(
         back_populates="essay", cascade="all, delete-orphan", passive_deletes=True
     )
-    verdicts: Mapped[list["VerdictRecord"]] = relationship(
+    verdicts: Mapped[list[VerdictRecord]] = relationship(
         back_populates="essay", cascade="all, delete-orphan", passive_deletes=True
     )
 
@@ -202,7 +211,7 @@ class VerdictRecord(Base):
     triggered_rules: Mapped[str] = mapped_column(Text, default="[]")  # JSON array
     mismatched_fields: Mapped[str] = mapped_column(Text, default="[]")
     features: Mapped[str] = mapped_column(Text, default="{}")  # JSON object
-    validated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    validated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     # v1.2 — Citation Integrity (linking layer)
     mapping_status: Mapped[str | None] = mapped_column(String, nullable=True, default="matched")
@@ -233,7 +242,7 @@ class AuditLog(Base):
     new_label: Mapped[str] = mapped_column(String, nullable=False)
     user: Mapped[str] = mapped_column(String, nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    logged_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    logged_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
 # ---------------------------------------------------------------------------
@@ -251,15 +260,15 @@ class Class(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     join_code: Mapped[str | None] = mapped_column(String(20), unique=True, nullable=True, index=True)
     teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
-    teacher: Mapped["User"] = relationship("User", foreign_keys=[teacher_id], back_populates="taught_classes")
-    memberships: Mapped[list["ClassMembership"]] = relationship(
+    teacher: Mapped[User] = relationship("User", foreign_keys=[teacher_id], back_populates="taught_classes")
+    memberships: Mapped[list[ClassMembership]] = relationship(
         back_populates="class_", cascade="all, delete-orphan"
     )
 
@@ -275,10 +284,10 @@ class ClassMembership(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     class_id: Mapped[int] = mapped_column(ForeignKey("classes.id", ondelete="CASCADE"), nullable=False, index=True)
     student_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    joined_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
-    class_: Mapped["Class"] = relationship(back_populates="memberships")
-    student: Mapped["User"] = relationship("User", foreign_keys=[student_id], back_populates="memberships")
+    class_: Mapped[Class] = relationship(back_populates="memberships")
+    student: Mapped[User] = relationship("User", foreign_keys=[student_id], back_populates="memberships")
 
 
 class BillingTransaction(Base):
@@ -313,11 +322,11 @@ class BillingTransaction(Base):
     vnp_card_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     vnp_response_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(UTC)
     )
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    user: Mapped["User"] = relationship(back_populates="billing_transactions")
+    user: Mapped[User] = relationship(back_populates="billing_transactions")
 
 
 class PromoCode(Base):
@@ -343,15 +352,15 @@ class PromoCode(Base):
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
 
-    redemptions: Mapped[list["PromoRedemption"]] = relationship(
+    redemptions: Mapped[list[PromoRedemption]] = relationship(
         back_populates="promo", cascade="all, delete-orphan"
     )
 
@@ -377,10 +386,10 @@ class PromoRedemption(Base):
     code: Mapped[str] = mapped_column(String(6), nullable=False)
     discount_usd: Mapped[float] = mapped_column(Float, nullable=False)
     redeemed_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime, default=lambda: datetime.now(UTC)
     )
 
-    promo: Mapped["PromoCode"] = relationship(back_populates="redemptions")
+    promo: Mapped[PromoCode] = relationship(back_populates="redemptions")
 
 
 # ---------------------------------------------------------------------------

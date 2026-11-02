@@ -16,9 +16,16 @@ from integrity_checker.extraction.base import BasePDFParser, Document
 from integrity_checker.extraction.citation_extractor import CitationExtractor
 from integrity_checker.extraction.document_parser import DocumentParser, ParsedDocument
 from integrity_checker.extraction.docx_parser import DocxParser
-from integrity_checker.extraction.mupdf_parser import MuPdfParser
-from integrity_checker.extraction.pdfplumber_parser import PdfPlumberParser
-from integrity_checker.extraction.reference_parser import ReferenceListParser
+from integrity_checker.extraction.grobid_adapter import (
+    MergeResult,
+    ProvenanceInfo,
+    build_grobid_id_map,
+    grobid_to_in_text_citations,
+    grobid_to_references,
+    merge_extraction_results,
+    normalize_grobid_id,
+    resolve_tei_links,
+)
 from integrity_checker.extraction.grobid_parser import (
     GrobidAuthor,
     GrobidBibEntry,
@@ -35,16 +42,9 @@ from integrity_checker.extraction.grobid_service import (
     get_grobid_manager,
     reset_grobid_manager,
 )
-from integrity_checker.extraction.grobid_adapter import (
-    ProvenanceInfo,
-    MergeResult,
-    grobid_to_references,
-    grobid_to_in_text_citations,
-    build_grobid_id_map,
-    merge_extraction_results,
-    resolve_tei_links,
-    normalize_grobid_id,
-)
+from integrity_checker.extraction.mupdf_parser import MuPdfParser
+from integrity_checker.extraction.pdfplumber_parser import PdfPlumberParser
+from integrity_checker.extraction.reference_parser import ReferenceListParser
 from integrity_checker.extraction.regex_patterns import CitationPattern, get_all_patterns
 from integrity_checker.extraction.section_segmenter import (
     DocumentSection,

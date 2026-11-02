@@ -24,9 +24,10 @@ import os
 import re
 import secrets
 import urllib.parse
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping
+from typing import Any
 
 VNPAY_VERSION = "2.1.0"
 VNPAY_COMMAND_PAY = "pay"

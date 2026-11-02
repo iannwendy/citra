@@ -60,8 +60,8 @@ class ProvenanceInfo:
     """
 
     source: str = "regex"
-    source_confidence: Optional[float] = None
-    grobid_ref_id: Optional[str] = None
+    source_confidence: float | None = None
+    grobid_ref_id: str | None = None
     is_grobid_linked: bool = False
     conflict_fields: list[str] = field(default_factory=list)
 
@@ -263,9 +263,9 @@ def _grobid_bib_to_citation(bib: GrobidBibEntry, order_index: int) -> Citation:
 def _estimate_bib_confidence(
     bib: GrobidBibEntry,
     authors: list[str],
-    title: Optional[str],
-    year: Optional[str],
-    doi: Optional[str],
+    title: str | None,
+    year: str | None,
+    doi: str | None,
 ) -> float:
     """Estimate extraction confidence dựa trên field completeness.
 
@@ -392,7 +392,7 @@ def build_grobid_id_map(citations: list) -> dict[str, list]:
 
 
 def merge_extraction_results(
-    grobid_output: Optional[GrobidOutput],
+    grobid_output: GrobidOutput | None,
     regex_references: list,
     regex_intext: list,
     *,
@@ -591,7 +591,7 @@ def _merge_intext_citations(
     return merged, conflicts, provenance
 
 
-def _normalize_url_for_dedup(url: Optional[str]) -> str:
+def _normalize_url_for_dedup(url: str | None) -> str:
     if not url:
         return ""
     u = url.strip().lower().rstrip("/.,;)")

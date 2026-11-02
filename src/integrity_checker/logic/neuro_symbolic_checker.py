@@ -16,14 +16,14 @@ from typing import TYPE_CHECKING, Optional
 from integrity_checker.config import get_settings
 from integrity_checker.extraction.patterns.apa import is_vn_legal_reference
 from integrity_checker.logging import get_logger
-from integrity_checker.models.citation import Citation
-from integrity_checker.models.source import SourceCandidate, SourceResult
-from integrity_checker.models.validation import CitationVerdict, MatchFeatures, ValidationLabel
-from integrity_checker.matching.author_matcher import author_match_score
-from integrity_checker.matching.features import FeatureCalculator
 from integrity_checker.logic.calibration import HybridMLScorer
 from integrity_checker.logic.rules import SymbolicRules, _is_fake_url
 from integrity_checker.logic.vn_legal_verifier import verify_vn_legal_citation
+from integrity_checker.matching.author_matcher import author_match_score
+from integrity_checker.matching.features import FeatureCalculator
+from integrity_checker.models.citation import Citation
+from integrity_checker.models.source import SourceCandidate, SourceResult
+from integrity_checker.models.validation import CitationVerdict, MatchFeatures, ValidationLabel
 from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
 
 if TYPE_CHECKING:
@@ -166,9 +166,9 @@ class NeuroSymbolicChecker:
         self,
         citation: Citation,
         source: SourceResult,
-        mapping_status: "CitationMappingStatus | None" = None,
-        style_profile: "StyleProfile | None" = None,
-        citation_context: Optional[str] = None,
+        mapping_status: CitationMappingStatus | None = None,
+        style_profile: StyleProfile | None = None,
+        citation_context: str | None = None,
         # NEW v1.3: Provenance tracking
         api_exhausted: bool = False,
         used_local_db: bool = False,

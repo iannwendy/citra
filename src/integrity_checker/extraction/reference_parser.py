@@ -34,12 +34,15 @@ from __future__ import annotations
 import logging
 import re
 from collections import Counter
-from typing import Iterable
+from collections.abc import Iterable
 
 from integrity_checker.extraction.base import Document
 from integrity_checker.extraction.citation_extractor import CitationExtractor
-from integrity_checker.extraction.patterns import get_format, get_all_formats
-from integrity_checker.extraction.patterns.apa import is_vn_legal_reference, parse_vn_legal_reference
+from integrity_checker.extraction.patterns import get_all_formats, get_format
+from integrity_checker.extraction.patterns.apa import (
+    is_vn_legal_reference,
+    parse_vn_legal_reference,
+)
 from integrity_checker.extraction.patterns.base import CitationFormat
 from integrity_checker.extraction.patterns.utils import extract_publication_year
 from integrity_checker.matching.author_parser import parse_authors

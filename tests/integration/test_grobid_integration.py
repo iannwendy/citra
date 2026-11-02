@@ -272,7 +272,7 @@ def create_mock_post_fn_with_file(tei_xml: str, pdf_content: bytes):
 
 
 @pytest.fixture
-def sample_essay_path() -> Optional[Path]:
+def sample_essay_path() -> Path | None:
     """Path to sample essay PDF if exists."""
     essay_path = ESSAYS_DIR / "essay_01_real_only.pdf"
     if not essay_path.exists():
@@ -389,8 +389,8 @@ class TestCallGrobidFulltext:
 
     def test_call_with_mock_http(self, fake_pdf_content):
         """call_grobid_fulltext with mock HTTP should return TEI XML."""
-        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
 
         config = GrobidConfig(url=GROBID_URL, timeout_seconds=30)
         mock_post = create_mock_post_fn(SAMPLE_TEI_BASIC)
@@ -404,8 +404,8 @@ class TestCallGrobidFulltext:
 
     def test_call_with_mock_essay_01(self, fake_pdf_content):
         """call_grobid_fulltext with essay_01 mock returns essay TEI."""
-        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
 
         config = GrobidConfig(url=GROBID_URL, timeout_seconds=30)
         mock_post = create_mock_post_fn(SAMPLE_TEI_ESSAY_01)
@@ -419,8 +419,8 @@ class TestCallGrobidFulltext:
 
     def test_call_with_missing_file_returns_empty(self):
         """call_grobid_fulltext with missing file returns empty string."""
-        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
 
         config = GrobidConfig(url=GROBID_URL, timeout_seconds=30)
         result = call_grobid_fulltext("/nonexistent/file.pdf", config)
@@ -437,8 +437,8 @@ class TestDocumentParserWithMockGrobid:
 
     def test_document_parser_with_mock_grobid(self, fake_pdf_content):
         """DocumentParser with mock GROBID should parse TEI and extract citations."""
-        from integrity_checker.extraction.document_parser import DocumentParser
         from integrity_checker.config import GrobidConfig, Settings
+        from integrity_checker.extraction.document_parser import DocumentParser
 
         # Create settings with GROBID enabled
         settings = Settings(
@@ -466,8 +466,8 @@ class TestDocumentParserWithMockGrobid:
 
     def test_document_parser_fallback_when_disabled(self, fake_pdf_content):
         """DocumentParser should fallback when GROBID disabled."""
-        from integrity_checker.extraction.document_parser import DocumentParser
         from integrity_checker.config import Settings
+        from integrity_checker.extraction.document_parser import DocumentParser
 
         settings = Settings(
             extraction={
@@ -497,8 +497,8 @@ class TestPipelineWithMockGrobid:
 
     def test_grobid_to_citations_conversion(self, fake_pdf_content):
         """GrobidOutput should convert correctly to Citation objects."""
-        from integrity_checker.extraction.document_parser import DocumentParser
         from integrity_checker.config import Settings
+        from integrity_checker.extraction.document_parser import DocumentParser
 
         settings = Settings(extraction={"grobid": {"enabled": True, "url": GROBID_URL}})
         mock_post = create_mock_post_fn(SAMPLE_TEI_ESSAY_01)
@@ -554,8 +554,8 @@ class TestRealGrobidDocker:
 
     def test_real_grobid_process_sample(self, check_grobid_running, sample_essay_path):
         """GROBID processFulltextDocument should parse real PDF."""
-        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext, parse_tei
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext, parse_tei
 
         grobid_url = _get_grobid_url()
         config = GrobidConfig(url=grobid_url, timeout_seconds=60)
@@ -569,8 +569,8 @@ class TestRealGrobidDocker:
 
     def test_real_document_parser(self, check_grobid_running, sample_essay_path):
         """DocumentParser with real GROBID should parse PDF."""
-        from integrity_checker.extraction.document_parser import DocumentParser
         from integrity_checker.config import Settings
+        from integrity_checker.extraction.document_parser import DocumentParser
 
         grobid_url = _get_grobid_url()
         settings = Settings(
@@ -585,10 +585,9 @@ class TestRealGrobidDocker:
 
     def test_real_pipeline_end_to_end(self, check_grobid_running, sample_essay_path):
         """Full pipeline with real GROBID should produce valid report."""
-        from unittest.mock import MagicMock
 
-        from integrity_checker.extraction.document_parser import DocumentParser
         from integrity_checker.config import Settings
+        from integrity_checker.extraction.document_parser import DocumentParser
         from integrity_checker.models.source import SourceCandidate, SourceResult
         from integrity_checker.pipeline.integrity_pipeline import IntegrityPipeline
 
@@ -684,8 +683,8 @@ class TestGrobidErrorHandling:
 
             return ErrorResponse()
 
-        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
 
         config = GrobidConfig(url=GROBID_URL, timeout_seconds=10)
 
@@ -701,8 +700,8 @@ class TestGrobidErrorHandling:
         def mock_post_timeout(url, files, data, timeout):
             raise TimeoutError("Connection timeout")
 
-        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
         from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
 
         config = GrobidConfig(url=GROBID_URL, timeout_seconds=1)
 

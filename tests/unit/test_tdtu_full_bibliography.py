@@ -13,7 +13,6 @@ from integrity_checker.extraction.section_segmenter import SectionSegmenter, Sec
 from integrity_checker.linking.citation_linker import CitationLinker
 from integrity_checker.linking.statuses import CitationMappingStatus
 
-
 TDTU_MUC_2_6_3_INLINE = """DANH MỤC TÀI LIỆU THAM KHẢO
 A. Văn bản quy phạm pháp luật
 1. Hiến pháp 2013. 2. Luật Doanh nghiệp (Luật số 68/2014/QH13) ngày 26/12/2014. 3. Nghị định số 23/2015/NĐ-CP của Chính phủ ngày 16/02/2015 về cấp bản sao từ sổ gốc, chứng thực bản sao từ bản chính, chứng thực chữ ký và chứng thực hợp đồng, giao dịch.

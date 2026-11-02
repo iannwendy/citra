@@ -275,7 +275,7 @@ async def upload_essay(
     default_env_bytes = 25 * 1024 * 1024
     effective_max_bytes = (
         min(policy.max_file_size_bytes, MAX_PDF_UPLOAD_BYTES)
-        if MAX_PDF_UPLOAD_BYTES != default_env_bytes
+        if default_env_bytes != MAX_PDF_UPLOAD_BYTES
         else policy.max_file_size_bytes
     )
 
@@ -1254,6 +1254,7 @@ def _synthesize_academic_manuscript_pdf(
     """Build a multi-page academic PDF manuscript containing body sections with in-text citations + References."""
     import io
     from html import escape
+
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import cm
@@ -1525,6 +1526,7 @@ async def verify_sandbox_citations_instant(
 ) -> dict[str, Any]:
     """Instant 3-second live citation & Layer-1/Layer-2 verification without leaving UploadPage."""
     import time
+
     from integrity_checker.export.bibliography_formatter import build_remediated_bibliography
     from integrity_checker.extraction.base import Document, Page
     from integrity_checker.models.citation import Citation, CitationStyle, CitationType
@@ -1689,7 +1691,7 @@ async def verify_sandbox_citations_instant(
                     pass
             try:
                 return await asyncio.wait_for(pipeline.orchestrator.retrieve(c), timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return SourceResult(
                     citation_raw=c.raw_text,
                     candidates=[],

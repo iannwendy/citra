@@ -34,7 +34,6 @@ from integrity_checker.extraction.patterns.utils import extract_publication_year
 from integrity_checker.matching.author_parser import parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
-
 # =============================================================================
 # Vancouver Pattern Definitions
 # =============================================================================
@@ -222,7 +221,7 @@ class VancouverFormat:
             _VANCOUVER_PERIOD_NUMBERED,
         ]
 
-    def parse_reference_entry(self, text: str) -> Optional[Citation]:
+    def parse_reference_entry(self, text: str) -> Citation | None:
         """Parse Vancouver reference entry into Citation object.
 
         Args:
@@ -312,7 +311,7 @@ class VancouverFormat:
             return True
         return False
 
-    def _try_parse_plainnat(self, text: str) -> Optional[Citation]:
+    def _try_parse_plainnat(self, text: str) -> Citation | None:
         """Parse plainnat / NeurIPS / ICLR / COLM / ICML unnumbered reference entries."""
         s = text.strip()
         if re.match(r'^(?:\[\s*\d+\s*\]|\d+\.\s|\(\s*\d+\s*\))', s):
@@ -436,7 +435,7 @@ class VancouverFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
-    def _try_parse_year_first(self, text: str) -> Optional[Citation]:
+    def _try_parse_year_first(self, text: str) -> Citation | None:
         """Try to parse year-first Vancouver variant."""
         # Try numbered year-first first
         match = _VANCOUVER_YEAR_FIRST_NUMBERED.search(text)
@@ -450,7 +449,7 @@ class VancouverFormat:
 
         return None
 
-    def _try_parse_standard(self, text: str) -> Optional[Citation]:
+    def _try_parse_standard(self, text: str) -> Citation | None:
         """Try to parse standard Vancouver format."""
         # Try numbered first
         match = _VANCOUVER_NUMBERED_REFERENCE.search(text)
@@ -464,7 +463,7 @@ class VancouverFormat:
 
         return None
 
-    def _try_parse_period_numbered(self, text: str) -> Optional[Citation]:
+    def _try_parse_period_numbered(self, text: str) -> Citation | None:
         """Try to parse period-numbered Vancouver format."""
         match = _VANCOUVER_PERIOD_NUMBERED.search(text)
         if match:
@@ -473,7 +472,7 @@ class VancouverFormat:
 
     def _parse_year_first_entry(
         self, match: re.Match, text: str, numbered: bool
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse year-first Vancouver entry."""
         citation = Citation(
             raw_text=text,
@@ -525,7 +524,7 @@ class VancouverFormat:
 
     def _parse_standard_entry(
         self, match: re.Match, text: str, numbered: bool
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse standard Vancouver reference entry."""
         citation = Citation(
             raw_text=text,
@@ -582,7 +581,7 @@ class VancouverFormat:
 
     def _parse_period_numbered_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse period-numbered Vancouver entry."""
         citation = Citation(
             raw_text=text,
@@ -635,7 +634,7 @@ class VancouverFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
-    def _parse_vancouver_fallback(self, text: str) -> Optional[Citation]:
+    def _parse_vancouver_fallback(self, text: str) -> Citation | None:
         """Fallback parser: extract whatever metadata possible from unstructured text."""
         citation = Citation(
             raw_text=text,

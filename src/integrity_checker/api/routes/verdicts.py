@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from integrity_checker.api.deps import get_db, get_current_user
+from integrity_checker.api.deps import get_current_user, get_db
 from integrity_checker.db.models import ClassMembership, User
 from integrity_checker.db.repository import Repository
 from integrity_checker.linking.statuses import CitationMappingStatus

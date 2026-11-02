@@ -19,8 +19,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from integrity_checker.extraction.document_parser import ParsedDocument
 from integrity_checker.extraction.base import Document
+from integrity_checker.extraction.document_parser import ParsedDocument
 from integrity_checker.models.citation import (
     Citation,
     CitationStyle,
@@ -34,7 +34,7 @@ from integrity_checker.pipeline.integrity_pipeline import (
 
 def _make_citation(
     raw_text: str, title: str | None = None, year: str | None = None,
-    citation_type: "CitationType | None" = None,
+    citation_type: CitationType | None = None,
 ) -> Citation:
     """Build minimal Citation cho test."""
     return Citation(

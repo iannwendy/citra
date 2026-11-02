@@ -35,7 +35,6 @@ from integrity_checker.extraction.patterns.registry import register_format
 from integrity_checker.matching.author_parser import parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
-
 # =============================================================================
 # AMA Pattern Definitions
 # =============================================================================
@@ -237,7 +236,7 @@ class AMAFormat:
             _AMA_BOOK_CHAPTER,
         ]
 
-    def parse_reference_entry(self, text: str) -> Optional[Citation]:
+    def parse_reference_entry(self, text: str) -> Citation | None:
         """Parse AMA reference entry into Citation object.
 
         Args:
@@ -304,35 +303,35 @@ class AMAFormat:
         # Fallback
         return self._parse_ama_fallback(text)
 
-    def _try_parse_article(self, text: str) -> Optional[Citation]:
+    def _try_parse_article(self, text: str) -> Citation | None:
         """Try to parse AMA article format."""
         match = _AMA_REFERENCE_ARTICLE.search(text)
         if match:
             return self._parse_article_entry(match, text)
         return None
 
-    def _try_parse_article_doi(self, text: str) -> Optional[Citation]:
+    def _try_parse_article_doi(self, text: str) -> Citation | None:
         """Try to parse AMA article with DOI format."""
         match = _AMA_REFERENCE_ARTICLE_DOI.search(text)
         if match:
             return self._parse_article_doi_entry(match, text)
         return None
 
-    def _try_parse_numbered(self, text: str) -> Optional[Citation]:
+    def _try_parse_numbered(self, text: str) -> Citation | None:
         """Try to parse AMA numbered format."""
         match = _AMA_NUMBERED.search(text)
         if match:
             return self._parse_numbered_entry(match, text)
         return None
 
-    def _try_parse_book(self, text: str) -> Optional[Citation]:
+    def _try_parse_book(self, text: str) -> Citation | None:
         """Try to parse AMA book format."""
         match = _AMA_BOOK.search(text)
         if match:
             return self._parse_book_entry(match, text)
         return None
 
-    def _try_parse_book_chapter(self, text: str) -> Optional[Citation]:
+    def _try_parse_book_chapter(self, text: str) -> Citation | None:
         """Try to parse AMA book chapter format."""
         match = _AMA_BOOK_CHAPTER.search(text)
         if match:
@@ -341,7 +340,7 @@ class AMAFormat:
 
     def _parse_article_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse AMA article entry."""
         citation = Citation(
             raw_text=text,
@@ -390,7 +389,7 @@ class AMAFormat:
 
     def _parse_article_doi_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse AMA article with DOI entry."""
         citation = self._parse_article_entry(match, text)
         if citation:
@@ -403,7 +402,7 @@ class AMAFormat:
 
     def _parse_numbered_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse AMA numbered entry."""
         citation = Citation(
             raw_text=text,
@@ -457,7 +456,7 @@ class AMAFormat:
 
     def _parse_book_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse AMA book entry."""
         citation = Citation(
             raw_text=text,
@@ -505,7 +504,7 @@ class AMAFormat:
 
     def _parse_book_chapter_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse AMA book chapter entry."""
         citation = Citation(
             raw_text=text,
@@ -550,7 +549,7 @@ class AMAFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
-    def _parse_ama_fallback(self, text: str) -> Optional[Citation]:
+    def _parse_ama_fallback(self, text: str) -> Citation | None:
         """Fallback parser: extract whatever metadata possible."""
         # AMA fallback only applies if entry has AMA semicolon-year / year-semicolon-vol structure
         if not re.search(r'(?:;\s*(?:19|20)\d{2}|\b(?:19|20)\d{2};\d+)', text):

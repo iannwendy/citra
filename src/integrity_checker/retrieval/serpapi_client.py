@@ -184,6 +184,7 @@ class SerpApiClient(BaseScholarClient):
         Retry on network errors và temporary failures.
         """
         import asyncio
+
         from serpapi import GoogleScholarSearch
 
         # FIX: Be explicit about which exceptions to retry
@@ -240,6 +241,7 @@ class SerpApiClient(BaseScholarClient):
             First matching organic_result dict hoặc None.
         """
         from serpapi import GoogleScholarSearch  # Local import
+
         from integrity_checker.retrieval.normalization import title_similarity
 
         params: dict = {

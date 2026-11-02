@@ -16,8 +16,8 @@ from typing import Optional
 
 import httpx
 
-from integrity_checker.logic.rules import _is_fake_url
 from integrity_checker.logging import get_logger
+from integrity_checker.logic.rules import _is_fake_url
 
 logger = get_logger(__name__)
 
@@ -39,11 +39,11 @@ class LinkCheckResult:
 
     url: str
     status: LinkStatus
-    status_code: Optional[int] = None
-    final_url: Optional[str] = None
-    error: Optional[str] = None
-    archive_url: Optional[str] = None
-    archive_timestamp: Optional[str] = None
+    status_code: int | None = None
+    final_url: str | None = None
+    error: str | None = None
+    archive_url: str | None = None
+    archive_timestamp: str | None = None
 
     @property
     def is_valid(self) -> bool:

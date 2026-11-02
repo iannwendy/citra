@@ -60,8 +60,8 @@ class GrobidStats:
     failed_requests: int = 0
     cache_hits: int = 0
     cache_misses: int = 0
-    last_used: Optional[float] = None  # Unix timestamp
-    container_id: Optional[str] = None
+    last_used: float | None = None  # Unix timestamp
+    container_id: str | None = None
     container_status: str = "unknown"
 
 
@@ -407,7 +407,7 @@ class GrobidServiceManager:
                 except Exception:
                     pass
 
-    def wait_until_ready(self, timeout: Optional[int] = None) -> bool:
+    def wait_until_ready(self, timeout: int | None = None) -> bool:
         """Wait cho GROBID API ready.
 
         Args:
@@ -484,7 +484,7 @@ class GrobidServiceManager:
         sha = compute_sha256(pdf_path)
         return cache_dir / f"{sha}.tei.xml"
 
-    def get_from_cache(self, pdf_path: str) -> Optional[str]:
+    def get_from_cache(self, pdf_path: str) -> str | None:
         """Get cached TEI XML cho PDF.
 
         Args:
@@ -532,7 +532,7 @@ class GrobidServiceManager:
             logger.warning("Failed to save cache: %s", exc)
             return False
 
-    def invalidate_cache(self, pdf_path: Optional[str] = None) -> int:
+    def invalidate_cache(self, pdf_path: str | None = None) -> int:
         """Invalidate cache.
 
         Args:
@@ -589,11 +589,11 @@ class GrobidServiceManager:
 
 # --- Singleton ---
 
-_grobid_manager: Optional[GrobidServiceManager] = None
+_grobid_manager: GrobidServiceManager | None = None
 
 
 def get_grobid_manager(
-    config: Optional[GrobidConfig] = None,
+    config: GrobidConfig | None = None,
     auto_start: bool = False,
 ) -> GrobidServiceManager:
     """Get singleton GROBID service manager.

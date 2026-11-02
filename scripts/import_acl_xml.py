@@ -326,7 +326,7 @@ def main():
 
     # Show stats
     stats = db.get_stats()
-    print(f"\nDatabase stats:")
+    print("\nDatabase stats:")
     print(f"  Total papers: {stats['total_papers']}")
     print(f"  ACL papers: {stats['source_counts'].get('acl', 0)}")
 

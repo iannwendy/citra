@@ -26,9 +26,9 @@ References:
 from integrity_checker.linking.citation_linker import CitationLinker
 from integrity_checker.linking.duplicate_detector import DuplicateDetector, DuplicateGroup
 from integrity_checker.linking.statuses import (
+    MAPPING_PENALTIES,
     CitationMappingStatus,
     LinkingResult,
-    MAPPING_PENALTIES,
 )
 
 __all__ = [

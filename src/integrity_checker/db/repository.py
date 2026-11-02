@@ -6,12 +6,11 @@ import hashlib
 import json
 import re
 import secrets
+from datetime import UTC, datetime, timezone
 from typing import Any
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-
-from datetime import datetime, timezone
 
 from integrity_checker.billing.plans import default_plan_for_role
 from integrity_checker.db.models import (
@@ -860,10 +859,10 @@ class Repository:
         }
 
     def update_last_login(self, user_id: int) -> None:
-        from datetime import datetime, timezone
+        from datetime import datetime
         user = self.session.get(User, user_id)
         if user:
-            user.last_login_at = datetime.now(timezone.utc)
+            user.last_login_at = datetime.now(UTC)
             self.session.flush()
 
     def delete_user(self, user_id: int) -> bool:
@@ -929,7 +928,7 @@ class Repository:
         expires_at: datetime,
     ) -> tuple[str, AuthToken]:
         """Issue a new one-time token and invalidate prior unused tokens of the same type."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         prior_unused = (
             self.session.query(AuthToken)
             .filter(
@@ -983,7 +982,7 @@ class Repository:
 
     def mark_auth_token_used(self, token_row: AuthToken) -> None:
         """Mark a token as consumed."""
-        token_row.used_at = datetime.now(timezone.utc)
+        token_row.used_at = datetime.now(UTC)
         self.session.flush()
 
     # -- Essays with user_id --
@@ -1100,7 +1099,7 @@ class Repository:
             result.append((best, duplicates))
 
         result.sort(
-            key=lambda item: item[0].uploaded_at or datetime.min.replace(tzinfo=timezone.utc),
+            key=lambda item: item[0].uploaded_at or datetime.min.replace(tzinfo=UTC),
             reverse=True,
         )
         return result
@@ -1160,7 +1159,7 @@ class Repository:
     def update_cache_hit(self, cache_key: str) -> None:
         entry = self.session.query(CitationCache).filter(CitationCache.cache_key == cache_key).first()
         if entry:
-            entry.last_hit_at = datetime.now(timezone.utc)
+            entry.last_hit_at = datetime.now(UTC)
             entry.hit_count = (entry.hit_count or 0) + 1
             self.session.flush()
 

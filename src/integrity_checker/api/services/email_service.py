@@ -14,7 +14,7 @@ import logging
 import os
 import smtplib
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr, formatdate, make_msgid
@@ -48,7 +48,7 @@ class SentEmailMessage:
     action_url: str | None = None
     token: str | None = None
     delivered_via_smtp: bool = False
-    sent_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    sent_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 def _is_reserved_test_email(email: str) -> bool:
@@ -494,7 +494,7 @@ class EmailService:
 
         display_name = full_name.strip() if full_name and full_name.strip() else username
         is_vi = lang.lower().startswith("vi")
-        timestamp_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        timestamp_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
         if is_vi:
             subject = "[CITRA] Yêu cầu Đặt lại Mật khẩu Tài khoản của bạn"
@@ -601,7 +601,7 @@ class EmailService:
         action_url = f"{frontend_url}/login"
         display_name = full_name.strip() if full_name and full_name.strip() else username
         is_vi = lang.lower().startswith("vi")
-        timestamp_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        timestamp_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
         if is_vi:
             subject = "[CITRA] Mật khẩu tài khoản của bạn đã được cập nhật thành công"
@@ -698,7 +698,7 @@ class EmailService:
         action_url = f"{frontend_url}/reset-password?token={raw_token}"
         display_name = full_name.strip() if full_name and full_name.strip() else username
         is_vi = lang.lower().startswith("vi")
-        timestamp_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        timestamp_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
         if is_vi:
             subject = "[CITRA] Chào mừng bạn đến với CITRA — Thiết lập mật khẩu & tên đăng nhập"

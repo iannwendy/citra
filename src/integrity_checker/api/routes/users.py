@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import bcrypt
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -527,7 +527,7 @@ def send_my_password_setup_email(
 
     lang = request.lang if request else "vi"
     repo = Repository(db)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if not is_test_runtime():
         latest = repo.get_latest_auth_token_for_user(current_user.id, "password_reset")
         if latest and (now - _ensure_utc(latest.created_at)).total_seconds() < 30:

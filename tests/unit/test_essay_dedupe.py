@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -20,7 +20,7 @@ def _session(tmp_path):
 def test_duplicate_filenames_are_collapsed(tmp_path) -> None:
     session = _session(tmp_path)
     repo = Repository(session)
-    base_time = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    base_time = datetime(2026, 9, 1, tzinfo=UTC)
 
     # Three uploads of the same file; only the newest produced citations.
     first = EssayRecord(filename="4.pdf", num_pages=37, uploaded_at=base_time)
@@ -76,7 +76,7 @@ def test_different_users_with_same_filename_are_not_collapsed(tmp_path) -> None:
 def test_newer_completed_upload_wins_over_older_inflated_upload(tmp_path) -> None:
     session = _session(tmp_path)
     repo = Repository(session)
-    base_time = datetime(2026, 9, 1, tzinfo=timezone.utc)
+    base_time = datetime(2026, 9, 1, tzinfo=UTC)
 
     older = EssayRecord(filename="paper.pdf", num_pages=12, user_id=1, uploaded_at=base_time)
     newer = EssayRecord(

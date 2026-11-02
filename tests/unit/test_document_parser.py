@@ -31,7 +31,6 @@ from integrity_checker.extraction.grobid_parser import (
     GrobidOutput,
 )
 
-
 # ---------- Helpers ----------
 
 @dataclass

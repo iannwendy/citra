@@ -19,7 +19,6 @@ from integrity_checker.retrieval.crossref_client import CrossrefClient
 from integrity_checker.retrieval.openalex_client import OpenAlexClient
 from integrity_checker.retrieval.semantic_scholar_client import SemanticScholarClient
 
-
 # ---------- Mock helpers ----------
 
 def _patch_httpx(handler):

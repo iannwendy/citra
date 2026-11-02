@@ -142,7 +142,7 @@ class CitationVerdict:
     citation_links: list = field(default_factory=list)   # list[CitationLink]
 
     # Bằng chứng
-    matched_source: Optional[SourceResult] = None
+    matched_source: SourceResult | None = None
     features: MatchFeatures = field(default_factory=MatchFeatures)
 
     # Giải thích cho giảng viên
@@ -152,9 +152,9 @@ class CitationVerdict:
 
     # Audit (override của giảng viên)
     is_overridden: bool = False
-    overridden_label: Optional[ValidationLabel] = None
-    overridden_by: Optional[str] = None  # user id / lecturer email
-    override_note: Optional[str] = None
+    overridden_label: ValidationLabel | None = None
+    overridden_by: str | None = None  # user id / lecturer email
+    override_note: str | None = None
 
     # NEW v1.3: Provenance tracking
     sources_succeeded: list[str] = field(default_factory=list)  # e.g. ["crossref", "openalex"]
@@ -163,7 +163,7 @@ class CitationVerdict:
     used_local_db: bool = False  # True if result came from local database
     style_penalty: float = 0.0
     domain_exception: bool = False
-    archive_url: Optional[str] = None
+    archive_url: str | None = None
     is_retracted: bool = False
 
 
@@ -263,7 +263,7 @@ class CitationLink:
     """
 
     occurrence_id: str
-    reference_id: Optional[str]
+    reference_id: str | None
     status: object  # CitationMappingStatus -- tránh circular import
     confidence: float
     method: str | MappingMethod = MappingMethod.NO_KEYS  # str for backward compat

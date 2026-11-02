@@ -71,8 +71,8 @@ class CISCalculator:
     def compute(
         self,
         verdicts: list[CitationVerdict],
-        linking_result: "LinkingResult | None" = None,
-        style_profile: "StyleProfile | None" = None,
+        linking_result: LinkingResult | None = None,
+        style_profile: StyleProfile | None = None,
     ) -> CitationIntegrityScore:
         if not verdicts:
             return CitationIntegrityScore(
@@ -156,8 +156,8 @@ class CISCalculator:
     def _compute_components(
         self,
         verdicts: list[CitationVerdict],
-        linking_result: "LinkingResult | None" = None,
-        style_profile: "StyleProfile | None" = None,
+        linking_result: LinkingResult | None = None,
+        style_profile: StyleProfile | None = None,
     ) -> CISComponents:
         academic_verdicts = [
             verdict for verdict in verdicts if verdict.label != ValidationLabel.RESOURCE
@@ -228,7 +228,7 @@ class CISCalculator:
     @staticmethod
     def _compute_link_consistency(
         verdicts: list[CitationVerdict],
-        linking_result: "LinkingResult | None" = None,
+        linking_result: LinkingResult | None = None,
     ) -> float:
         """Tính in_text_bib_consistency từ CitationLinker output.
 
@@ -341,7 +341,7 @@ class CISCalculator:
 
     @staticmethod
     def _compute_format_consistency(
-        style_profile: "StyleProfile | None" = None,
+        style_profile: StyleProfile | None = None,
         verdicts: list[CitationVerdict] | None = None,
     ) -> float:
         """Tính format_consistency từ StyleDetector output.

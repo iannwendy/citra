@@ -29,7 +29,6 @@ from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.models.validation import MatchFeatures, ValidationLabel
 from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
 
-
 # ==============================================================================
 # PHASE 1 (P0): Reference Parsing & Segmentation Regressions (BUG-01 .. BUG-15)
 # ==============================================================================

@@ -142,14 +142,14 @@ def download_acl_anthology(output_path: Path) -> Path:
                     total += len(chunk)
 
         if total == 0:
-            raise IOError("downloaded 0 bytes")
+            raise OSError("downloaded 0 bytes")
 
         # Sanity check: a complete BibTeX file must end with a closing brace.
         with open(output_path, 'rb') as f:
             f.seek(max(0, total - 64))
             tail = f.read().decode('utf-8', errors='replace')
         if not tail.rstrip().endswith('}'):
-            raise IOError(
+            raise OSError(
                 "downloaded file looks truncated (does not end with '}'); "
                 "refusing to keep a partial anthology"
             )
@@ -213,7 +213,7 @@ def main():
 
     # Read and parse BibTeX
     print("Parsing BibTeX...")
-    with open(bibtex_path, 'r', encoding='utf-8') as f:
+    with open(bibtex_path, encoding='utf-8') as f:
         bibtex_content = f.read()
 
     papers = parse_bibtex(bibtex_content)
@@ -230,7 +230,7 @@ def main():
 
     # Show stats
     stats = db.get_stats()
-    print(f"\nDatabase stats:")
+    print("\nDatabase stats:")
     print(f"  Total papers: {stats['total_papers']}")
     print(f"  ACL papers: {stats['source_counts'].get('acl', 0)}")
 

@@ -7,17 +7,18 @@ Tests covering:
 - Bug 6: in_text_bib_consistency calculation fix
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
 from dataclasses import dataclass
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from integrity_checker.config import get_settings
+from integrity_checker.logic.cis import MAPPING_PENALTIES, CISCalculator
+from integrity_checker.logic.neuro_symbolic_checker import NeuroSymbolicChecker
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.models.validation import CitationVerdict, ValidationLabel
-from integrity_checker.logic.cis import CISCalculator, MAPPING_PENALTIES
-from integrity_checker.logic.neuro_symbolic_checker import NeuroSymbolicChecker
-from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator, _KNOWN_PAPERS
-from integrity_checker.config import get_settings
+from integrity_checker.retrieval.retrieval_orchestrator import _KNOWN_PAPERS, RetrievalOrchestrator
 
 
 class TestBug1NumPagesFix:
@@ -25,9 +26,9 @@ class TestBug1NumPagesFix:
 
     def test_num_pages_comes_from_document_not_sections(self):
         """Verify that ParsedDocument uses document.num_pages."""
+        from integrity_checker.extraction.base import Document, Page
         from integrity_checker.extraction.document_parser import ParsedDocument
         from integrity_checker.extraction.section_segmenter import DocumentSection, SectionType
-        from integrity_checker.extraction.base import Document, Page
 
         # Create mock document with 91 pages
         mock_doc = MagicMock(spec=Document)

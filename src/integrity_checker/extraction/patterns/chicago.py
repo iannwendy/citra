@@ -41,7 +41,6 @@ from integrity_checker.extraction.patterns.utils import extract_publication_year
 from integrity_checker.matching.author_parser import parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
-
 # =============================================================================
 # Chicago Pattern Definitions
 # =============================================================================
@@ -247,7 +246,7 @@ class ChicagoFormat:
             _CHICAGO_NB_BOOK,
         ]
 
-    def parse_reference_entry(self, text: str) -> Optional[Citation]:
+    def parse_reference_entry(self, text: str) -> Citation | None:
         """Parse Chicago reference entry into Citation object.
 
         Args:
@@ -308,35 +307,35 @@ class ChicagoFormat:
         # Fallback
         return self._parse_chicago_fallback(text)
 
-    def _try_parse_ad_article(self, text: str) -> Optional[Citation]:
+    def _try_parse_ad_article(self, text: str) -> Citation | None:
         """Try to parse Chicago Author-Date article format."""
         match = _CHICAGO_AD_ARTICLE.search(text)
         if match:
             return self._parse_ad_article_entry(match, text)
         return None
 
-    def _try_parse_ad_book(self, text: str) -> Optional[Citation]:
+    def _try_parse_ad_book(self, text: str) -> Citation | None:
         """Try to parse Chicago Author-Date book format."""
         match = _CHICAGO_AD_BOOK.search(text)
         if match:
             return self._parse_ad_book_entry(match, text)
         return None
 
-    def _try_parse_ad_numbered(self, text: str) -> Optional[Citation]:
+    def _try_parse_ad_numbered(self, text: str) -> Citation | None:
         """Try to parse Chicago Author-Date numbered format."""
         match = _CHICAGO_AD_NUMBERED.search(text)
         if match:
             return self._parse_ad_numbered_entry(match, text)
         return None
 
-    def _try_parse_nb_article(self, text: str) -> Optional[Citation]:
+    def _try_parse_nb_article(self, text: str) -> Citation | None:
         """Try to parse Chicago Notes-Bibliography article format."""
         match = _CHICAGO_NB_ARTICLE.search(text)
         if match:
             return self._parse_nb_article_entry(match, text)
         return None
 
-    def _try_parse_nb_book(self, text: str) -> Optional[Citation]:
+    def _try_parse_nb_book(self, text: str) -> Citation | None:
         """Try to parse Chicago Notes-Bibliography book format."""
         match = _CHICAGO_NB_BOOK.search(text)
         if match:
@@ -345,7 +344,7 @@ class ChicagoFormat:
 
     def _parse_ad_article_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Chicago Author-Date article entry."""
         citation = Citation(
             raw_text=text,
@@ -390,7 +389,7 @@ class ChicagoFormat:
 
     def _parse_ad_book_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Chicago Author-Date book entry."""
         citation = Citation(
             raw_text=text,
@@ -434,7 +433,7 @@ class ChicagoFormat:
 
     def _parse_ad_numbered_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Chicago Author-Date numbered entry."""
         citation = Citation(
             raw_text=text,
@@ -473,7 +472,7 @@ class ChicagoFormat:
 
     def _parse_nb_article_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Chicago Notes-Bibliography article entry."""
         citation = Citation(
             raw_text=text,
@@ -518,7 +517,7 @@ class ChicagoFormat:
 
     def _parse_nb_book_entry(
         self, match: re.Match, text: str
-    ) -> Optional[Citation]:
+    ) -> Citation | None:
         """Parse Chicago Notes-Bibliography book entry."""
         citation = Citation(
             raw_text=text,
@@ -569,7 +568,7 @@ class ChicagoFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
-    def _parse_chicago_fallback(self, text: str) -> Optional[Citation]:
+    def _parse_chicago_fallback(self, text: str) -> Citation | None:
         """Fallback parser: only match when Chicago-specific cues exist."""
         if not (
             re.search(r",\s*no\.\s*\d+\s*\((?:18|19|20)\d{2}\)", text)

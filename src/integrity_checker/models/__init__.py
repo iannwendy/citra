@@ -3,6 +3,14 @@
 Re-export từ đây để tránh import sâu: `from integrity_checker.models import Citation`.
 """
 
+from integrity_checker.models.api_schemas import (
+    AnalysisReportSchema,
+    CISSchema,
+    CitationSchema,
+    EssayUploadResponse,
+    HealthResponse,
+    VerdictSchema,
+)
 from integrity_checker.models.citation import (
     Citation,
     CitationStyle,
@@ -14,14 +22,6 @@ from integrity_checker.models.validation import (
     CitationVerdict,
     MatchFeatures,
     ValidationLabel,
-)
-from integrity_checker.models.api_schemas import (
-    AnalysisReportSchema,
-    CitationSchema,
-    CISSchema,
-    EssayUploadResponse,
-    HealthResponse,
-    VerdictSchema,
 )
 
 __all__ = [
