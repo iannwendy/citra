@@ -396,6 +396,65 @@ class TestProductionSecurityGuards:
         finally:
             _login_rate_limiter.clear_all()
 
+    def test_rate_limiter_bounded_lru_eviction_and_per_ip_google_isolation(self, monkeypatch):
+        from integrity_checker.api.routes.auth import (
+            _login_rate_limiter,
+            _SlidingWindowRateLimiter,
+        )
+
+        # 1. Verify bounded LRU eviction when max_keys is exceeded
+        limiter = _SlidingWindowRateLimiter(max_attempts=3, window_seconds=60.0, max_keys=4)
+        limiter.enforce_in_tests = True
+        for i in range(6):
+            limiter.record_failure(f"ip-{i}:user")
+        assert len(limiter._attempts) == 4
+        assert "ip-0:user" not in limiter._attempts
+        assert "ip-1:user" not in limiter._attempts
+        assert "ip-5:user" in limiter._attempts
+
+        # 2. Verify per-IP isolation on Google OAuth endpoint
+        _login_rate_limiter.clear_all()
+        monkeypatch.setattr(_login_rate_limiter, "enforce_in_tests", True)
+        monkeypatch.setattr(_login_rate_limiter, "max_attempts", 2)
+        monkeypatch.setenv("GOOGLE_CLIENT_ID", "12345-citra.apps.googleusercontent.com")
+
+        client = TestClient(app)
+        try:
+            # Attacker IP triggers 2 failures (missing token -> 400) and gets rate-limited (429) on 3rd
+            for _ in range(2):
+                bad_r = client.post(
+                    "/api/auth/google",
+                    json={},
+                    headers={"X-Forwarded-For": "203.0.113.99"},
+                )
+                assert bad_r.status_code == 400
+
+            blocked_google = client.post(
+                "/api/auth/google",
+                json={},
+                headers={"X-Forwarded-For": "203.0.113.99"},
+            )
+            assert blocked_google.status_code == 429
+
+            # Legitimate user from a different IP is NOT locked out of Google OAuth
+            monkeypatch.setattr(
+                "integrity_checker.api.routes.auth._verify_google_payload",
+                lambda req, cid, csec: {
+                    "sub": "google-legit-ip-sub",
+                    "email": "legit_ip@tdtu.edu.vn",
+                    "email_verified": True,
+                    "name": "Legit User",
+                },
+            )
+            ok_google = client.post(
+                "/api/auth/google",
+                json={"access_token": "valid_tok"},
+                headers={"X-Forwarded-For": "198.51.100.12"},
+            )
+            assert ok_google.status_code == 200
+        finally:
+            _login_rate_limiter.clear_all()
+
 
 class TestGoogleOAuthFlow:
     def test_google_config_endpoint_reflects_client_id(self, monkeypatch):

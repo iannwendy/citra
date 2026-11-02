@@ -8,14 +8,14 @@ import re
 import secrets
 import threading
 import time
-from collections import defaultdict
+from collections import OrderedDict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import bcrypt
 import httpx
 import jwt
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr, Field
 
 from integrity_checker.api.deps import get_current_user, get_db
@@ -91,12 +91,31 @@ def _validate_password(password: str) -> None:
 class _SlidingWindowRateLimiter:
     """Thread-safe in-memory sliding window rate limiter for auth endpoints."""
 
-    def __init__(self, max_attempts: int = 10, window_seconds: float = 60.0) -> None:
+    MAX_KEYS: int = 4096
+
+    def __init__(
+        self,
+        max_attempts: int = 10,
+        window_seconds: float = 60.0,
+        max_keys: int = MAX_KEYS,
+    ) -> None:
         self.max_attempts = max_attempts
         self.window_seconds = window_seconds
-        self._attempts: dict[str, list[float]] = defaultdict(list)
+        self.max_keys = max_keys
+        self._attempts: OrderedDict[str, list[float]] = OrderedDict()
         self._lock = threading.Lock()
         self.enforce_in_tests: bool = False
+
+    def _evict_expired_and_cap_unlocked(self, cutoff: float) -> None:
+        expired_keys = [
+            k
+            for k, ts_list in self._attempts.items()
+            if not ts_list or ts_list[-1] <= cutoff
+        ]
+        for k in expired_keys:
+            self._attempts.pop(k, None)
+        while len(self._attempts) > self.max_keys:
+            self._attempts.popitem(last=False)
 
     def check(self, key: str) -> None:
         """Raise HTTP 429 if key has exceeded max_attempts within window_seconds."""
@@ -106,13 +125,16 @@ class _SlidingWindowRateLimiter:
         cutoff = now - self.window_seconds
         with self._lock:
             history = [t for t in self._attempts.get(key, []) if t > cutoff]
+            if not history:
+                self._attempts.pop(key, None)
+                return
+            self._attempts[key] = history
+            self._attempts.move_to_end(key)
             if len(history) >= self.max_attempts:
-                self._attempts[key] = history
                 raise HTTPException(
                     status_code=429,
                     detail="Too many authentication attempts. Please try again in a minute.",
                 )
-            self._attempts[key] = history
 
     def record_failure(self, key: str) -> None:
         """Record a failed attempt for key."""
@@ -124,6 +146,9 @@ class _SlidingWindowRateLimiter:
             history = [t for t in self._attempts.get(key, []) if t > cutoff]
             history.append(now)
             self._attempts[key] = history
+            self._attempts.move_to_end(key)
+            if len(self._attempts) > self.max_keys:
+                self._evict_expired_and_cap_unlocked(cutoff)
 
     def reset(self, key: str) -> None:
         """Clear attempts for key after a successful login."""
@@ -136,6 +161,21 @@ class _SlidingWindowRateLimiter:
 
 
 _login_rate_limiter = _SlidingWindowRateLimiter(max_attempts=10, window_seconds=60.0)
+
+
+def _extract_client_ip(http_request: Request | None) -> str:
+    """Extract client IP from X-Forwarded-For or request.client.host."""
+    if http_request is None or not hasattr(http_request, "headers"):
+        return "unknown"
+    forwarded = (http_request.headers.get("x-forwarded-for") or "").strip()
+    if forwarded:
+        first_ip = forwarded.split(",", 1)[0].strip()
+        if first_ip:
+            return first_ip
+    client_obj = getattr(http_request, "client", None)
+    if client_obj and getattr(client_obj, "host", None):
+        return str(client_obj.host)
+    return "unknown"
 
 
 def _is_demo_enabled() -> bool:
@@ -370,7 +410,11 @@ def _create_token(user: User) -> tuple[str, datetime]:
 
 
 @router.post("/login", response_model=LoginResponse)
-def login(request: LoginRequest, db=Depends(get_db)):
+def login(
+    request: LoginRequest,
+    http_request: Request = None,  # type: ignore[assignment]
+    db=Depends(get_db),
+):
     """Login with username/email and password.
 
     Supports both hardcoded demo credentials (admin/user) and any user stored in
@@ -381,7 +425,8 @@ def login(request: LoginRequest, db=Depends(get_db)):
     repo = Repository(db)
     user: User | None = None
     identifier = request.username.strip()
-    rate_key = identifier.lower()
+    client_ip = _extract_client_ip(http_request)
+    rate_key = f"{client_ip}:{identifier.lower()}"
     _login_rate_limiter.check(rate_key)
 
     # Check DB first by username, then by email if identifier contains '@'
@@ -644,7 +689,11 @@ def get_google_auth_config():
 
 
 @router.post("/google", response_model=LoginResponse)
-def google_login(request: GoogleLoginRequest, db=Depends(get_db)):
+def google_login(
+    request: GoogleLoginRequest,
+    http_request: Request = None,  # type: ignore[assignment]
+    db=Depends(get_db),
+):
     """Sign in or register with a Google account (ID token, access token, or auth code)."""
     client_id, client_secret = _get_google_client_config()
     if not client_id:
@@ -653,12 +702,14 @@ def google_login(request: GoogleLoginRequest, db=Depends(get_db)):
             detail="GOOGLE_NOT_CONFIGURED: Google Sign-In is not configured on the server (missing GOOGLE_CLIENT_ID).",
         )
 
-    _login_rate_limiter.check("google_auth_endpoint")
+    client_ip = _extract_client_ip(http_request)
+    google_ip_key = f"google:{client_ip}"
+    _login_rate_limiter.check(google_ip_key)
     try:
         profile = _verify_google_payload(request, client_id, client_secret)
     except HTTPException as exc:
         if exc.status_code in (400, 401, 403):
-            _login_rate_limiter.record_failure("google_auth_endpoint")
+            _login_rate_limiter.record_failure(google_ip_key)
         raise
 
     google_id = str(profile.get("sub") or "").strip()
@@ -776,7 +827,7 @@ def google_login(request: GoogleLoginRequest, db=Depends(get_db)):
         except Exception as exc:
             logger.warning("Failed to dispatch Google welcome/password setup email to %s: %s", email, exc)
 
-    _login_rate_limiter.reset("google_auth_endpoint")
+    _login_rate_limiter.reset(google_ip_key)
     _login_rate_limiter.reset(rate_key)
     repo.update_last_login(user.id)
 
