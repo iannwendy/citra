@@ -22,6 +22,33 @@ def _set_cell_background(cell, hex_color: str) -> None:
         pass
 
 
+_CIS_WEIGHT_KEYS = (
+    "verified_ratio",
+    "metadata_accuracy",
+    "in_text_bib_consistency",
+    "format_consistency",
+    "identifier_validity",
+)
+
+
+def _resolve_cis_weights(cis_weights: dict[str, float] | None) -> dict[str, float]:
+    """Effective CIS weights: explicit (e.g. report ``weights_used``) else settings."""
+    from integrity_checker.config import get_settings
+
+    resolved = dict(get_settings().cis.weights.model_dump())
+    if cis_weights and isinstance(cis_weights, dict):
+        for key in _CIS_WEIGHT_KEYS:
+            val = cis_weights.get(key)
+            if isinstance(val, int | float):
+                resolved[key] = float(val)
+    return resolved
+
+
+def _format_weight(value: float) -> str:
+    pct = float(value) * 100.0
+    return f"{pct:.0f}%" if abs(pct - round(pct)) < 1e-6 else f"{pct:.1f}%"
+
+
 def export_report_to_docx(
     filename: str,
     cis_score: float,
@@ -37,6 +64,7 @@ def export_report_to_docx(
     cis_components: dict[str, float] | None = None,
     linking_summary: dict[str, int] | None = None,
     style_profile: dict | None = None,
+    cis_weights: dict[str, float] | None = None,
 ) -> bytes:
     """Generate a DOCX report from analysis results.
 
@@ -51,6 +79,8 @@ def export_report_to_docx(
         num_resource: Number of URL/Resource citations
         verdicts: List of verdict dictionaries
         generated_at: Timestamp string
+        cis_weights: CIS weights actually used (report ``weights_used``);
+            defaults to ``settings.cis.weights`` so labels never drift.
 
     Returns:
         bytes: DOCX file content
@@ -110,12 +140,21 @@ def export_report_to_docx(
                 for run in paragraph.runs:
                     run.font.bold = True
 
+        weights = _resolve_cis_weights(cis_weights)
+        comp_labels = {
+            "verified_ratio": "Verified Ratio (Layer 2)",
+            "metadata_accuracy": "Metadata Accuracy (Author/Year/Title)",
+            "in_text_bib_consistency": "In-Text ↔ Bibliography Consistency (Layer 1)",
+            "format_consistency": "Citation Style Consistency",
+            "identifier_validity": "Identifier Validity (DOI / CrossRef)",
+        }
         comp_rows = [
-            ("Verified Ratio (Layer 2)", "35%", float(cis_components.get("verified_ratio", 0.0) or 0.0)),
-            ("Metadata Accuracy (Author/Year/Title)", "25%", float(cis_components.get("metadata_accuracy", 0.0) or 0.0)),
-            ("In-Text ↔ Bibliography Consistency (Layer 1)", "20%", float(cis_components.get("in_text_bib_consistency", 0.0) or 0.0)),
-            ("Citation Style Consistency", "10%", float(cis_components.get("format_consistency", 0.0) or 0.0)),
-            ("Identifier Validity (DOI / CrossRef)", "10%", float(cis_components.get("identifier_validity", 0.0) or 0.0)),
+            (
+                comp_labels[key],
+                _format_weight(weights.get(key, 0.0)),
+                float(cis_components.get(key, 0.0) or 0.0),
+            )
+            for key in _CIS_WEIGHT_KEYS
         ]
         for label_txt, weight_txt, val in comp_rows:
             r_cells = comp_table.add_row().cells

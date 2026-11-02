@@ -1093,12 +1093,14 @@ def _docx_response(filename: str, essay, verdicts: list) -> StreamingResponse:
     # Get CIS score from essay
     cis_score = 0.0
     cis_components = None
+    cis_weights_used = None
     style_profile = None
     if essay.cis_json:
         try:
             cis_dict = json.loads(essay.cis_json)
             cis_score = cis_dict.get("score", 0.0)
             cis_components = cis_dict.get("components")
+            cis_weights_used = cis_dict.get("weights_used")
         except (json.JSONDecodeError, TypeError):
             pass
     if essay.style_profile_json:
@@ -1141,6 +1143,7 @@ def _docx_response(filename: str, essay, verdicts: list) -> StreamingResponse:
         cis_components=cis_components,
         linking_summary=linking_summary,
         style_profile=style_profile,
+        cis_weights=cis_weights_used,
     )
 
     return StreamingResponse(
