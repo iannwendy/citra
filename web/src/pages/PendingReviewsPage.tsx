@@ -91,7 +91,7 @@ export function PendingReviewsPage() {
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-mono text-slate-600 dark:text-slate-300">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                {reviews.length} FLAGGED VERDICTS
+                {lang === 'vi' ? `${reviews.length} TRÍCH DẪN CẦN RÀ SOÁT` : `${reviews.length} FLAGGED VERDICTS`}
               </span>
             </div>
 
@@ -140,7 +140,7 @@ export function PendingReviewsPage() {
             <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Queue Depth
+                  {lang === 'vi' ? 'Hàng đợi rà soát' : 'Queue Depth'}
                 </span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                   01
@@ -154,7 +154,7 @@ export function PendingReviewsPage() {
             <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-medium text-rose-600 dark:text-rose-400">
-                  Suspected Hallucination
+                  {lang === 'vi' ? 'Nghi vấn ngụy tạo' : 'Suspected Hallucination'}
                 </span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400">
                   02
@@ -168,7 +168,7 @@ export function PendingReviewsPage() {
             <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                  Metadata Error
+                  {lang === 'vi' ? 'Sai lệch Metadata' : 'Metadata Error'}
                 </span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400">
                   03

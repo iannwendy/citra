@@ -93,7 +93,7 @@ export function AuditLogPage() {
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/70 dark:border-emerald-800/70 text-[11px] font-mono text-emerald-700 dark:text-emerald-300">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                VERDICT OVERRIDE STREAM
+                {lang === 'vi' ? 'LUỒNG GHI ĐÈ PHÁN QUYẾT' : 'VERDICT OVERRIDE STREAM'}
               </span>
             </div>
 
@@ -119,7 +119,7 @@ export function AuditLogPage() {
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              Recorded Events
+              {lang === 'vi' ? 'Sự kiện đã ghi' : 'Recorded Events'}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
               01
@@ -133,7 +133,7 @@ export function AuditLogPage() {
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
-              Unique Actors
+              {lang === 'vi' ? 'Người thực hiện' : 'Unique Actors'}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400">
               02
@@ -147,14 +147,14 @@ export function AuditLogPage() {
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              Query Window
+              {lang === 'vi' ? 'Giới hạn truy vấn' : 'Query Window'}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400">
               03
             </span>
           </div>
           <p className="text-2xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
-            LIMIT 100
+            {lang === 'vi' ? 'TỐI ĐA 100' : 'LIMIT 100'}
           </p>
         </Card>
       </div>
@@ -182,7 +182,7 @@ export function AuditLogPage() {
             </span>
           </div>
           <span className="text-[11px] font-mono text-slate-400 shrink-0">
-            {entries.length} entries
+            {lang === 'vi' ? `${entries.length} bản ghi` : `${entries.length} entries`}
           </span>
         </div>
 
@@ -194,7 +194,7 @@ export function AuditLogPage() {
               value={userFilter}
               onChange={(e) => setUserFilter(e.target.value)}
               placeholder={t('admin.filterByUsername')}
-              aria-label="Filter audit log by username"
+              aria-label={lang === 'vi' ? 'Lọc nhật ký kiểm toán theo tên đăng nhập' : 'Filter audit log by username'}
               className="pl-10 rounded-xl"
             />
             {userFilter && (

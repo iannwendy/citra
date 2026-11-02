@@ -9,6 +9,7 @@ import {
   ExternalLink,
   AlertTriangle,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { GraphNode } from './types';
 import { SourceIcon } from './SourceIcon';
 import { VERDICT_CONFIG } from './verdictConfig';
@@ -54,38 +55,38 @@ function getDotColor(status: GraphNode['status']): string {
   }
 }
 
-function getStatusPillStyles(status: GraphNode['status']): {
+function getStatusPillStyles(status: GraphNode['status'], isVi = false): {
   text: string;
   className: string;
 } {
   switch (status) {
     case 'success':
       return {
-        text: 'PASS',
+        text: isVi ? 'ĐẠT' : 'PASS',
         className:
           'bg-emerald-100/90 text-emerald-800 border-emerald-300/80 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800',
       };
     case 'warning':
       return {
-        text: 'WARN',
+        text: isVi ? 'CẢNH BÁO' : 'WARN',
         className:
           'bg-amber-100/90 text-amber-800 border-amber-300/80 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800',
       };
     case 'error':
       return {
-        text: 'FAIL',
+        text: isVi ? 'LỖI' : 'FAIL',
         className:
           'bg-red-100/90 text-red-800 border-red-300/80 dark:bg-red-950 dark:text-red-300 dark:border-red-800',
       };
     case 'no_match':
       return {
-        text: 'NO HIT',
+        text: isVi ? 'KHÔNG KHỚP' : 'NO HIT',
         className:
           'bg-slate-200/70 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700',
       };
     default:
       return {
-        text: 'ROOT',
+        text: isVi ? 'GỐC' : 'ROOT',
         className:
           'bg-indigo-100/90 text-indigo-800 border-indigo-300/80 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800',
       };
@@ -137,6 +138,8 @@ export function EvidenceGraphNode({
   onExpand,
   expandedNodes,
 }: EvidenceGraphNodeProps) {
+  const { i18n } = useTranslation();
+  const isVi = Boolean(i18n.language?.startsWith('vi'));
   const hasChildren = Boolean(node.children && node.children.length > 0);
   const isExpanded = expandedNodes?.has(node.id) ?? false;
   const matchedUrl =
@@ -145,7 +148,7 @@ export function EvidenceGraphNode({
     'url' in node.matchedSource
       ? (node.matchedSource as { url?: string }).url
       : undefined;
-  const statusPill = getStatusPillStyles(node.status);
+  const statusPill = getStatusPillStyles(node.status, isVi);
   const isRoot = level === 0;
 
   return (
@@ -213,9 +216,9 @@ export function EvidenceGraphNode({
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700 text-[10px] font-mono text-indigo-600 dark:text-indigo-400 hover:underline shrink-0"
                   onClick={(e) => e.stopPropagation()}
-                  title="Open canonical source record"
+                  title={isVi ? 'Mở bản ghi nguồn gốc' : 'Open canonical source record'}
                 >
-                  <span>Source</span>
+                  <span>{isVi ? 'Nguồn' : 'Source'}</span>
                   <ExternalLink className="h-2.5 w-2.5" />
                 </a>
               )}

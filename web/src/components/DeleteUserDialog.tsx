@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { User } from '@/api/client';
 import { api } from '@/api/client';
 import {
@@ -26,6 +27,7 @@ export function DeleteUserDialog({
   currentUserId,
   onSuccess,
 }: DeleteUserDialogProps) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -40,7 +42,7 @@ export function DeleteUserDialog({
       onSuccess();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Delete failed');
+      setError(err instanceof Error ? err.message : t('admin.deleteFailed'));
     } finally {
       setLoading(false);
     }
@@ -57,14 +59,14 @@ export function DeleteUserDialog({
           </div>
           <div>
             <DialogTitle className="text-lg font-bold mb-1">
-              Delete User
+              {t('admin.deleteUserTitle')}
             </DialogTitle>
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              You are about to delete the user{' '}
+              {t('admin.deleteUserConfirmPrefix')}{' '}
               <span className="font-semibold text-slate-900 dark:text-white">
                 {user.username}
               </span>
-              . This action cannot be undone.
+              {t('admin.deleteUserConfirmSuffix')}
             </p>
           </div>
         </div>
@@ -78,7 +80,7 @@ export function DeleteUserDialog({
         {isSelf && (
           <Alert variant="warning" className="mb-3">
             <AlertDescription>
-              You cannot delete your own account.
+              {t('admin.cannotDeleteOwnAccount')}
             </AlertDescription>
           </Alert>
         )}
@@ -86,7 +88,7 @@ export function DeleteUserDialog({
         <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-2.5">
           <DialogClose asChild>
             <Button type="button" variant="secondary">
-              Cancel
+              {t('common.cancel')}
             </Button>
           </DialogClose>
           <Button
@@ -97,10 +99,10 @@ export function DeleteUserDialog({
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Deleting...
+                {t('admin.deletingBtn')}
               </>
             ) : (
-              'Delete User'
+              t('admin.deleteUserTitle')
             )}
           </Button>
         </div>

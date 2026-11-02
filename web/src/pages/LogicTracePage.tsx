@@ -780,7 +780,7 @@ export function LogicTracePage() {
         <EssayActionBar essayId={id ?? ''} />
         <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
           <Scale className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-          <span>{totalCount} citations traced</span>
+          <span>{lang === 'vi' ? `${totalCount} trích dẫn được truy vết` : `${totalCount} citations traced`}</span>
         </div>
       </div>
 
@@ -789,7 +789,7 @@ export function LogicTracePage() {
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              Total
+              {lang === 'vi' ? 'Tổng số' : 'Total'}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
               01
@@ -803,7 +803,7 @@ export function LogicTracePage() {
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-200/80 dark:border-emerald-900/70 shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              Verified
+              {lang === 'vi' ? 'Hợp lệ' : 'Verified'}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
               02
@@ -817,7 +817,7 @@ export function LogicTracePage() {
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-amber-200/80 dark:border-amber-900/70 shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-              Meta Errors
+              {lang === 'vi' ? 'Sai lệch Metadata' : 'Meta Errors'}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
               03
@@ -831,7 +831,7 @@ export function LogicTracePage() {
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-red-200/80 dark:border-red-900/70 shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-red-600 dark:text-red-400">
-              Suspected
+              {lang === 'vi' ? 'Nghi vấn ngụy tạo' : 'Suspected'}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300">
               04
@@ -856,16 +856,18 @@ export function LogicTracePage() {
             <Separator orientation="vertical" className="h-4" />
             <div className="flex items-center gap-2 font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
               <GitBranch className="h-3.5 w-3.5 text-violet-500" />
-              <span>symbolic_verifier.py · Citation Traces ({sortedVerdicts.length})</span>
+              <span>
+                symbolic_verifier.py · {lang === 'vi' ? 'Truy vết trích dẫn' : 'Citation Traces'} ({sortedVerdicts.length})
+              </span>
             </div>
           </div>
 
           <div className="flex gap-1.5 flex-wrap">
             {(
               [
-                ['all', `All (${totalCount})`],
-                ['flagged', `Flagged (${flaggedCount})`],
-                ['verified', `Verified (${verifiedCount})`],
+                ['all', lang === 'vi' ? `Tất cả (${totalCount})` : `All (${totalCount})`],
+                ['flagged', lang === 'vi' ? `Cần kiểm tra (${flaggedCount})` : `Flagged (${flaggedCount})`],
+                ['verified', lang === 'vi' ? `Hợp lệ (${verifiedCount})` : `Verified (${verifiedCount})`],
               ] as const
             ).map(([key, label]) => (
               <button

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ChevronUp,
   ChevronDown,
@@ -69,6 +70,8 @@ export function CitationGraphView({
   onSelect,
   onOverride,
 }: CitationGraphViewProps) {
+  const { i18n } = useTranslation();
+  const isVi = i18n.language?.startsWith('vi');
   const [viewMode, setViewMode] = useState<ViewMode>('combined');
   const [statusFilters, setStatusFilters] = useState<
     Set<CitationMappingStatus>
@@ -162,10 +165,14 @@ export function CitationGraphView({
             </div>
             <div className="min-w-0">
               <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
-                Two-Layer Citation &amp; Source Network Explorer
+                {isVi
+                  ? 'Trình Khám Phá Mạng Lưới Trích Dẫn & Nguồn 2 Tầng'
+                  : 'Two-Layer Citation & Source Network Explorer'}
               </h3>
               <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">
-                Select any citation to inspect its Neuro-Symbolic Evidence DAG
+                {isVi
+                  ? 'Chọn trích dẫn bất kỳ để kiểm tra đồ thị bằng chứng Neuro-Symbolic (DAG)'
+                  : 'Select any citation to inspect its Neuro-Symbolic Evidence DAG'}
               </p>
             </div>
           </div>
@@ -174,13 +181,13 @@ export function CitationGraphView({
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800">
               <Link2 className="h-3 w-3 shrink-0" />
               <span>
-                L1 Linked: {stats.integrityCounts.matched ?? 0}/{stats.total}
+                {isVi ? 'Tầng 1 Liên kết:' : 'L1 Linked:'} {stats.integrityCounts.matched ?? 0}/{stats.total}
               </span>
             </span>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800">
               <Database className="h-3 w-3 shrink-0" />
               <span>
-                L2 Verified: {stats.sourceCounts.verified ?? 0}/{stats.total}
+                {isVi ? 'Tầng 2 Xác minh:' : 'L2 Verified:'} {stats.sourceCounts.verified ?? 0}/{stats.total}
               </span>
             </span>
           </div>
@@ -204,7 +211,9 @@ export function CitationGraphView({
 
       {filtered.length === 0 ? (
         <div className="text-center py-12 text-slate-500 dark:text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-          <p className="text-sm italic">No citations match your filters.</p>
+          <p className="text-sm italic">
+            {isVi ? 'Không có trích dẫn nào khớp với bộ lọc.' : 'No citations match your filters.'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start w-full min-w-0">
@@ -241,17 +250,17 @@ export function CitationGraphView({
                         )}
                         {v.is_overridden && (
                           <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
-                            OVERRIDDEN
+                            {isVi ? 'ĐÃ GHI ĐÈ' : 'OVERRIDDEN'}
                           </span>
                         )}
                       </div>
 
                       <div className="flex flex-wrap items-center gap-1 text-[10px] font-mono shrink-0">
                         <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                          src {(v.confidence * 100).toFixed(0)}%
+                          {isVi ? 'nguồn' : 'src'} {(v.confidence * 100).toFixed(0)}%
                         </span>
                         <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                          link {(v.mapping_confidence * 100).toFixed(0)}%
+                          {isVi ? 'liên kết' : 'link'} {(v.mapping_confidence * 100).toFixed(0)}%
                         </span>
                         {v.features?.content_alignment_score !== undefined &&
                           v.features.content_alignment_score > 0 && (

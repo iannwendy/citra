@@ -15,23 +15,23 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 
-const LABEL_OPTIONS: { value: ValidationLabel; label: string; color: string }[] = [
-  { value: 'verified', label: '✓ Verified', color: 'text-green-700 dark:text-green-400' },
-  { value: 'metadata_error', label: '△ Metadata Error', color: 'text-amber-700 dark:text-amber-400' },
-  { value: 'suspected_hallucination', label: '✗ Suspected', color: 'text-red-700 dark:text-red-400' },
-  { value: 'unresolved', label: '— Unresolved', color: 'text-gray-600 dark:text-slate-400' },
-  { value: 'resource', label: '↗ URL Resource', color: 'text-violet-700 dark:text-violet-400' },
+const LABEL_OPTIONS: { value: ValidationLabel; key: string; label: string; color: string }[] = [
+  { value: 'verified', key: 'override.labelVerified', label: '✓ Verified', color: 'text-green-700 dark:text-green-400' },
+  { value: 'metadata_error', key: 'override.labelMetadataError', label: '△ Metadata Error', color: 'text-amber-700 dark:text-amber-400' },
+  { value: 'suspected_hallucination', key: 'override.labelSuspected', label: '✗ Suspected', color: 'text-red-700 dark:text-red-400' },
+  { value: 'unresolved', key: 'override.labelUnresolved', label: '— Unresolved', color: 'text-gray-600 dark:text-slate-400' },
+  { value: 'resource', key: 'override.labelResource', label: '↗ URL Resource', color: 'text-violet-700 dark:text-violet-400' },
 ];
 
-const STATUS_OPTIONS: { value: CitationMappingStatus; label: string }[] = [
-  { value: 'matched', label: 'Matched' },
-  { value: 'missing_reference', label: 'Missing Ref' },
-  { value: 'uncited_reference', label: 'Uncited Ref' },
-  { value: 'in_text_mismatch', label: 'Mismatch' },
-  { value: 'duplicate_reference', label: 'Duplicate' },
-  { value: 'ambiguous_mapping', label: 'Ambiguous' },
-  { value: 'style_inconsistent', label: 'Style Issue' },
-  { value: 'unresolved', label: 'Unresolved' },
+const STATUS_OPTIONS: { value: CitationMappingStatus; key: string; label: string }[] = [
+  { value: 'matched', key: 'override.statusMatched', label: 'Matched' },
+  { value: 'missing_reference', key: 'override.statusMissingRef', label: 'Missing Ref' },
+  { value: 'uncited_reference', key: 'override.statusUncitedRef', label: 'Uncited Ref' },
+  { value: 'in_text_mismatch', key: 'override.statusMismatch', label: 'Mismatch' },
+  { value: 'duplicate_reference', key: 'override.statusDuplicate', label: 'Duplicate' },
+  { value: 'ambiguous_mapping', key: 'override.statusAmbiguous', label: 'Ambiguous' },
+  { value: 'style_inconsistent', key: 'override.statusStyleIssue', label: 'Style Issue' },
+  { value: 'unresolved', key: 'override.statusUnresolved', label: 'Unresolved' },
 ];
 
 function OverrideForm({
@@ -100,7 +100,7 @@ function OverrideForm({
                     : 'hover:bg-muted'
                 )}
               >
-                <span className={opt.color}>{opt.label}</span>
+                <span className={opt.color}>{t(opt.key, opt.label)}</span>
               </button>
             ))}
           </div>
@@ -122,7 +122,7 @@ function OverrideForm({
                     : 'hover:bg-muted'
                 )}
               >
-                {opt.label}
+                {t(opt.key, opt.label)}
               </button>
             ))}
           </div>

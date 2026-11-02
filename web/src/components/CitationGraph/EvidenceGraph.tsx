@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import {
   Layers,
   ListChecks,
@@ -81,7 +83,11 @@ const SOURCE_FLOW_ORDER = [
  */
 export function buildEvidenceGraph(
   verdict: Verdict,
+  lang?: 'en' | 'vi',
 ): { graph: GraphNode; isLocalOnly: boolean } {
+  const resolvedLang: 'en' | 'vi' =
+    lang ?? (i18n.language?.startsWith('vi') ? 'vi' : 'en');
+  const isVi = resolvedLang === 'vi';
   const sourcesByDatabase: Record<string, CandidateInfo[]> = {};
   for (const source of verdict.matched_sources ?? []) {
     const dbKey = (source.source || 'local_db').toLowerCase();
@@ -134,7 +140,7 @@ export function buildEvidenceGraph(
       const bestTitle = Math.max(f.title_sim_fuzzy ?? 0, f.title_sim_semantic ?? 0);
       similarityChildren.push({
         id: 'sim-title',
-        label: 'Title Lexical & Neural Match',
+        label: isVi ? 'Đối sánh từ vựng & ngữ nghĩa tiêu đề' : 'Title Lexical & Neural Match',
         type: 'similarity',
         status: bestTitle >= 0.85 ? 'success' : bestTitle >= 0.55 ? 'warning' : 'error',
         detail: `RapidFuzz=${fuzzyPct}% · Sentence-BERT=${semPct}%`,
@@ -145,7 +151,7 @@ export function buildEvidenceGraph(
       const yrDist = f.year_distance ?? 0;
       similarityChildren.push({
         id: 'sim-meta',
-        label: 'Author & Publication Year Alignment',
+        label: isVi ? 'Đối chiếu tác giả & năm xuất bản' : 'Author & Publication Year Alignment',
         type: 'similarity',
         status:
           (f.author_jaccard ?? 0) >= 0.65 && yrDist <= 1
@@ -153,7 +159,9 @@ export function buildEvidenceGraph(
             : (f.author_jaccard ?? 0) >= 0.4
               ? 'warning'
               : 'error',
-        detail: `Author Jaccard=${authPct}% · Year Δ=${yrDist} yr(s)`,
+        detail: isVi
+          ? `Tác giả Jaccard=${authPct}% · Lệch năm Δ=${yrDist} năm`
+          : `Author Jaccard=${authPct}% · Year Δ=${yrDist} yr(s)`,
       });
     }
     if (
@@ -163,7 +171,9 @@ export function buildEvidenceGraph(
       const alignPct = Math.round((f.content_alignment_score ?? 0) * 100);
       similarityChildren.push({
         id: 'sim-evidence',
-        label: `Sentence-BERT Abstract Evidence (${alignPct}%)`,
+        label: isVi
+          ? `Bằng chứng tóm tắt Sentence-BERT (${alignPct}%)`
+          : `Sentence-BERT Abstract Evidence (${alignPct}%)`,
         type: 'similarity',
         status:
           (f.content_alignment_score ?? 0) >= 0.5
@@ -172,34 +182,48 @@ export function buildEvidenceGraph(
               ? 'warning'
               : 'error',
         detail: f.best_evidence_sentence
-          ? `Matched Abstract Sentence: "${f.best_evidence_sentence.slice(0, 140)}${f.best_evidence_sentence.length > 140 ? '...' : ''}"`
-          : `Context-to-Source semantic alignment score: ${alignPct}%`,
+          ? isVi
+            ? `Câu tóm tắt khớp: "${f.best_evidence_sentence.slice(0, 140)}${f.best_evidence_sentence.length > 140 ? '...' : ''}"`
+            : `Matched Abstract Sentence: "${f.best_evidence_sentence.slice(0, 140)}${f.best_evidence_sentence.length > 140 ? '...' : ''}"`
+          : isVi
+            ? `Điểm tương đồng ngữ nghĩa ngữ cảnh–nguồn: ${alignPct}%`
+            : `Context-to-Source semantic alignment score: ${alignPct}%`,
       });
     }
     if (f.cross_lingual_title_detected) {
       const crossTitlePct = Math.round((f.cross_lingual_title_sim ?? 0) * 100);
       similarityChildren.push({
         id: 'sim-cross-lingual-title',
-        label: `VI ↔ EN Translated Title Match (${crossTitlePct}%)`,
+        label: isVi
+          ? `Khớp tiêu đề dịch Việt ↔ Anh (${crossTitlePct}%)`
+          : `VI ↔ EN Translated Title Match (${crossTitlePct}%)`,
         type: 'similarity',
         status: 'warning',
-        detail: `Translated Vietnamese title matches English publication (${crossTitlePct}%), but original foreign-language title should be preserved per TDTU citation rules.`,
+        detail: isVi
+          ? `Tiêu đề dịch sang tiếng Việt khớp công trình tiếng Anh (${crossTitlePct}%), nhưng cần giữ nguyên tiêu đề tiếng nước ngoài theo chuẩn TDTU.`
+          : `Translated Vietnamese title matches English publication (${crossTitlePct}%), but original foreign-language title should be preserved per TDTU citation rules.`,
       });
     }
     if (f.cross_lingual_detected && f.bridged_concepts && f.bridged_concepts.length > 0) {
       similarityChildren.push({
         id: 'sim-cross-lingual-bridge',
-        label: `VI ↔ EN Academic Concept Bridge (${f.bridged_concepts.length} concepts)`,
+        label: isVi
+          ? `Cầu nối khái niệm học thuật Việt ↔ Anh (${f.bridged_concepts.length} khái niệm)`
+          : `VI ↔ EN Academic Concept Bridge (${f.bridged_concepts.length} concepts)`,
         type: 'similarity',
         status: 'success',
-        detail: `Bridged pairs: ${f.bridged_concepts.slice(0, 5).join('; ')}`,
+        detail: isVi
+          ? `Cặp khái niệm: ${f.bridged_concepts.slice(0, 5).join('; ')}`
+          : `Bridged pairs: ${f.bridged_concepts.slice(0, 5).join('; ')}`,
       });
     }
     if (f.citation_intent || f.stance_label || f.cross_lingual_detected) {
       const stance = f.stance_label || 'supported';
       similarityChildren.push({
         id: 'sim-intent-stance',
-        label: 'Citation Intent & Claim Stance Polarity',
+        label: isVi
+          ? 'Mục đích trích dẫn & Cực tính quan điểm'
+          : 'Citation Intent & Claim Stance Polarity',
         type: 'similarity',
         status:
           stance === 'contradiction_risk'
@@ -224,27 +248,33 @@ export function buildEvidenceGraph(
 
   const graph: GraphNode = {
     id: 'reference',
-    label: verdict.citation_raw || 'Unknown Citation',
+    label: verdict.citation_raw || (isVi ? 'Trích dẫn không rõ' : 'Unknown Citation'),
     type: 'reference',
     status: 'neutral',
-    detail: `Confidence: ${(verdict.confidence * 100).toFixed(0)}%`,
+    detail: isVi
+      ? `Độ tin cậy: ${(verdict.confidence * 100).toFixed(0)}%`
+      : `Confidence: ${(verdict.confidence * 100).toFixed(0)}%`,
     children: [
       {
         id: 'sources',
-        label: 'Academic Databases',
+        label: isVi ? 'Cơ sở dữ liệu học thuật' : 'Academic Databases',
         type: 'source',
         status: (
           databasesWithResults.length > 0 ? 'success' : 'no_match'
         ) as GraphNode['status'],
         detail: isLocalOnly
-          ? 'Local database cache hit — no external APIs queried'
-          : `${databasesWithResults.length} sources queried`,
+          ? isVi
+            ? 'Khớp bộ nhớ đệm cục bộ — không cần truy vấn API ngoài'
+            : 'Local database cache hit — no external APIs queried'
+          : isVi
+            ? `${databasesWithResults.length} nguồn được truy vấn`
+            : `${databasesWithResults.length} sources queried`,
         children: [
           ...databasesWithResults.flatMap(([db, candidates]) => {
             const config = SOURCE_CONFIG[db] ?? SOURCE_CONFIG.crossref;
             return candidates.map((c, idx) => {
               const cleanedFields = (c.fields || [])
-                .map((fld) => getFieldDisplayName(fld).replace(/^the\s+/i, ''))
+                .map((fld) => getFieldDisplayName(fld, resolvedLang).replace(/^the\s+/i, ''))
                 .join(', ');
               return {
                 id: `${db}-${idx}`,
@@ -252,8 +282,12 @@ export function buildEvidenceGraph(
                 type: 'candidate' as const,
                 status: (c.matched ? 'success' : 'no_match') as GraphNode['status'],
                 detail: c.matched
-                  ? `Matched fields: ${cleanedFields || 'available details'}.`
-                  : 'No match found',
+                  ? isVi
+                    ? `Trường khớp: ${cleanedFields || 'thông tin sẵn có'}.`
+                    : `Matched fields: ${cleanedFields || 'available details'}.`
+                  : isVi
+                    ? 'Không tìm thấy bản ghi khớp'
+                    : 'No match found',
                 matchedSource: {
                   source: db,
                   matched_fields: c.fields || [],
@@ -264,7 +298,7 @@ export function buildEvidenceGraph(
                     ? [
                         {
                           id: `${db}-${idx}-link`,
-                          label: 'View Publication',
+                          label: isVi ? 'Xem công bố gốc' : 'View Publication',
                           type: 'candidate' as const,
                           status: 'success' as GraphNode['status'],
                           detail: c.url,
@@ -287,51 +321,60 @@ export function buildEvidenceGraph(
               label: config.label,
               type: 'candidate' as const,
               status: 'no_match' as GraphNode['status'],
-              detail: 'No results',
+              detail: isVi ? 'Không có kết quả' : 'No results',
             };
           }),
         ],
       },
       {
         id: 'similarity',
-        label: 'Semantic Matching',
+        label: isVi ? 'Đối sánh ngữ nghĩa' : 'Semantic Matching',
         type: 'similarity',
         status: (verdict.confidence >= 0.7
           ? 'success'
           : verdict.confidence >= 0.4
             ? 'warning'
             : 'error') as GraphNode['status'],
-        detail: `Best match: ${(verdict.confidence * 100).toFixed(0)}%`,
+        detail: isVi
+          ? `Khớp cao nhất: ${(verdict.confidence * 100).toFixed(0)}%`
+          : `Best match: ${(verdict.confidence * 100).toFixed(0)}%`,
         children: similarityChildren.length > 0 ? similarityChildren : undefined,
       },
       {
         id: 'rules',
-        label: 'Verification Rules',
+        label: isVi ? 'Luật xác minh' : 'Verification Rules',
         type: 'rules',
         status: (
           (verdict.triggered_rules ?? []).length > 0 ? 'warning' : 'success'
         ) as GraphNode['status'],
         detail:
           (verdict.triggered_rules ?? []).length > 0
-            ? (verdict.triggered_rules ?? []).map(getRuleDisplayName).join('. ')
-            : 'No additional warnings were raised.',
+            ? (verdict.triggered_rules ?? []).map((r) => getRuleDisplayName(r, resolvedLang)).join('. ')
+            : isVi
+              ? 'Không có cảnh báo bổ sung nào được phát hiện.'
+              : 'No additional warnings were raised.',
         children:
           (verdict.triggered_rules ?? []).length > 0
             ? [
                 {
                   id: 'rules-list',
-                  label: `${(verdict.triggered_rules ?? []).length} rules triggered`,
+                  label: isVi
+                    ? `${(verdict.triggered_rules ?? []).length} luật được kích hoạt`
+                    : `${(verdict.triggered_rules ?? []).length} rules triggered`,
                   type: 'rules' as const,
                   status: 'warning' as GraphNode['status'],
-                  detail: getVerdictExplanation(verdict),
+                  detail: getVerdictExplanation(verdict, resolvedLang),
                 },
                 ...(verdict.mismatched_fields ?? []).map((field, idx) => ({
                   id: `mismatch-${idx}`,
-                  label: `${getFieldDisplayName(field).replace(/^the /, '')} needs review`,
+                  label: isVi
+                    ? `${getFieldDisplayName(field, resolvedLang)} cần kiểm tra`
+                    : `${getFieldDisplayName(field, resolvedLang).replace(/^the /, '')} needs review`,
                   type: 'rules' as const,
                   status: 'error' as GraphNode['status'],
-                  detail:
-                    'This detail differs from the publication record we found.',
+                  detail: isVi
+                    ? 'Thông tin này khác với hồ sơ công bố mà chúng tôi tìm thấy.'
+                    : 'This detail differs from the publication record we found.',
                 })),
               ]
             : undefined,
@@ -347,7 +390,7 @@ export function buildEvidenceGraph(
             : verdict.label === 'suspected_hallucination'
               ? 'error'
               : 'neutral') as GraphNode['status'],
-        detail: getVerdictExplanation(verdict),
+        detail: getVerdictExplanation(verdict, resolvedLang),
       },
     ],
   };
@@ -364,13 +407,16 @@ function collectAllNodeIds(node: GraphNode, out: string[] = []): string[] {
 }
 
 export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
+  const { i18n: i18nInstance } = useTranslation();
+  const isVi = Boolean(i18nInstance.language?.startsWith('vi'));
+  const lang: 'en' | 'vi' = isVi ? 'vi' : 'en';
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(
     new Set(['reference', 'sources', 'similarity', 'rules']),
   );
 
   const { graph: graphData, isLocalOnly } = useMemo(
-    () => buildEvidenceGraph(verdict),
-    [verdict],
+    () => buildEvidenceGraph(verdict, lang),
+    [verdict, lang],
   );
 
   const toggleExpand = (id: string) => {
@@ -417,14 +463,16 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-                Neuro-Symbolic Evidence Graph
+                {isVi ? 'Đồ Thị Bằng Chứng Neuro-Symbolic' : 'Neuro-Symbolic Evidence Graph'}
               </h3>
               <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800 text-[9px] font-mono font-semibold text-indigo-700 dark:text-indigo-300 shrink-0">
-                DAG TRACE
+                {isVi ? 'TRUY VẾT DAG' : 'DAG TRACE'}
               </span>
             </div>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              Decision tree from federated retrieval to calibrated verdict
+              {isVi
+                ? 'Cây quyết định từ truy xuất liên hợp đến phán quyết hiệu chỉnh'
+                : 'Decision tree from federated retrieval to calibrated verdict'}
             </p>
           </div>
         </div>
@@ -436,7 +484,7 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
             className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-[10px] sm:text-[11px] font-mono text-slate-600 dark:text-slate-300 hover:border-indigo-400 transition-colors cursor-pointer"
           >
             <ChevronsUpDown className="h-3 w-3 shrink-0" />
-            <span>Expand</span>
+            <span>{isVi ? 'Mở rộng' : 'Expand'}</span>
           </button>
           <button
             type="button"
@@ -444,7 +492,7 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
             className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-[10px] sm:text-[11px] font-mono text-slate-600 dark:text-slate-300 hover:border-indigo-400 transition-colors cursor-pointer"
           >
             <ChevronsDownUp className="h-3 w-3 shrink-0" />
-            <span>Collapse</span>
+            <span>{isVi ? 'Thu gọn' : 'Collapse'}</span>
           </button>
           {onClose && (
             <button
@@ -452,7 +500,7 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
               onClick={onClose}
               className="px-2 py-1 rounded-lg text-xs font-mono text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
             >
-              Close
+              {isVi ? 'Đóng' : 'Close'}
             </button>
           )}
         </div>
@@ -464,12 +512,16 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
           <div className="min-w-0">
             <div className="flex items-center gap-1 text-[10px] font-mono uppercase text-slate-400">
               <Database className="h-3 w-3 text-blue-500 shrink-0" />
-              <span className="truncate">1. Retrieval</span>
+              <span className="truncate">{isVi ? '1. Truy xuất' : '1. Retrieval'}</span>
             </div>
             <p className="text-[11px] sm:text-xs font-bold font-mono text-slate-900 dark:text-white mt-0.5 truncate">
               {isLocalOnly
-                ? 'Local FTS5 Hit'
-                : `${matchedSourcesCount} DB Match(es)`}
+                ? isVi
+                  ? 'Khớp FTS5 cục bộ'
+                  : 'Local FTS5 Hit'
+                : isVi
+                  ? `${matchedSourcesCount} CSDL khớp`
+                  : `${matchedSourcesCount} DB Match(es)`}
             </p>
           </div>
           <ArrowRight className="h-3 w-3 text-slate-300 dark:text-slate-700 hidden sm:block shrink-0" />
@@ -479,10 +531,10 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
           <div className="min-w-0">
             <div className="flex items-center gap-1 text-[10px] font-mono uppercase text-slate-400">
               <Brain className="h-3 w-3 text-violet-500 shrink-0" />
-              <span className="truncate">2. Neural</span>
+              <span className="truncate">{isVi ? '2. Ngữ nghĩa' : '2. Neural'}</span>
             </div>
             <p className="text-[11px] sm:text-xs font-bold font-mono text-slate-900 dark:text-white mt-0.5 truncate">
-              Sim: {neuralPct}%
+              {isVi ? 'Tương đồng:' : 'Sim:'} {neuralPct}%
               {verdict.features?.citation_intent
                 ? ` · ${verdict.features.citation_intent}`
                 : ''}
@@ -495,10 +547,12 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
           <div className="min-w-0">
             <div className="flex items-center gap-1 text-[10px] font-mono uppercase text-slate-400">
               <Scale className="h-3 w-3 text-amber-500 shrink-0" />
-              <span className="truncate">3. Symbolic</span>
+              <span className="truncate">{isVi ? '3. Luật logic' : '3. Symbolic'}</span>
             </div>
             <p className="text-[11px] sm:text-xs font-bold font-mono text-slate-900 dark:text-white mt-0.5 truncate">
-              {verdict.triggered_rules.length} Rule(s)
+              {isVi
+                ? `${verdict.triggered_rules.length} Luật`
+                : `${verdict.triggered_rules.length} Rule(s)`}
             </p>
           </div>
           <ArrowRight className="h-3 w-3 text-slate-300 dark:text-slate-700 hidden sm:block shrink-0" />
@@ -508,7 +562,7 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
           <div className="min-w-0">
             <div className="flex items-center gap-1 text-[10px] font-mono uppercase text-slate-500 dark:text-slate-400">
               <ShieldCheck className={`h-3 w-3 shrink-0 ${verdictConfig.color}`} />
-              <span className="truncate">4. Verdict</span>
+              <span className="truncate">{isVi ? '4. Phán quyết' : '4. Verdict'}</span>
             </div>
             <p className={`text-[11px] sm:text-xs font-bold font-mono mt-0.5 truncate ${verdictConfig.color}`}>
               {verdictConfig.label} ({Math.round(verdict.confidence * 100)}%)
@@ -531,12 +585,12 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
           {verdict.features?.cross_lingual_detected && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-100 dark:bg-violet-950/90 text-violet-700 dark:text-violet-300 text-[10px] font-mono font-semibold shrink-0">
               <Sparkles className="h-3 w-3 shrink-0" />
-              VI ↔ EN Cross-Lingual Bridge
+              {isVi ? 'Cầu nối ngữ nghĩa Việt ↔ Anh' : 'VI ↔ EN Cross-Lingual Bridge'}
             </span>
           )}
         </div>
         <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed break-words [overflow-wrap:anywhere]">
-          {getVerdictExplanation(verdict)}
+          {getVerdictExplanation(verdict, lang)}
         </p>
         {verdict.triggered_rules.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2">
@@ -568,26 +622,26 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
         <div className="flex flex-wrap gap-2.5">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-            <span>Match / Pass</span>
+            <span>{isVi ? 'Khớp / Đạt' : 'Match / Pass'}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />
-            <span>Warning / Rule</span>
+            <span>{isVi ? 'Cảnh báo / Luật' : 'Warning / Rule'}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />
-            <span>Mismatch / Fail</span>
+            <span>{isVi ? 'Sai lệch / Lỗi' : 'Mismatch / Fail'}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-slate-400 dark:bg-slate-600 inline-block" />
-            <span>No Hit</span>
+            <span>{isVi ? 'Không tìm thấy' : 'No Hit'}</span>
           </div>
         </div>
 
         {verdict.mismatched_fields.length > 0 && (
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-mono text-[10px] uppercase text-red-600 dark:text-red-400 font-semibold">
-              Mismatched:
+              {isVi ? 'Trường lệch:' : 'Mismatched:'}
             </span>
             {verdict.mismatched_fields.map((field) => (
               <span

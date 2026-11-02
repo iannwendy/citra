@@ -1,4 +1,5 @@
 import { Search, RotateCcw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import type { CitationMappingStatus, ValidationLabel } from '@/api/client';
 
@@ -9,27 +10,29 @@ import type { CitationMappingStatus, ValidationLabel } from '@/api/client';
 export const STATUS_FILTERS: {
   value: CitationMappingStatus;
   label: string;
+  labelVi: string;
   dotColor: string;
 }[] = [
-  { value: 'matched', label: 'Matched', dotColor: 'bg-emerald-500' },
-  { value: 'missing_reference', label: 'Missing Ref', dotColor: 'bg-red-500' },
-  { value: 'uncited_reference', label: 'Uncited Ref', dotColor: 'bg-amber-500' },
-  { value: 'in_text_mismatch', label: 'Mismatch', dotColor: 'bg-amber-500' },
-  { value: 'duplicate_reference', label: 'Duplicate', dotColor: 'bg-orange-500' },
-  { value: 'ambiguous_mapping', label: 'Ambiguous', dotColor: 'bg-amber-500' },
-  { value: 'style_inconsistent', label: 'Style Issue', dotColor: 'bg-violet-500' },
-  { value: 'unresolved', label: 'Unresolved', dotColor: 'bg-slate-400' },
+  { value: 'matched', label: 'Matched', labelVi: 'Đã khớp', dotColor: 'bg-emerald-500' },
+  { value: 'missing_reference', label: 'Missing Ref', labelVi: 'Thiếu nguồn', dotColor: 'bg-red-500' },
+  { value: 'uncited_reference', label: 'Uncited Ref', labelVi: 'Chưa trích dẫn', dotColor: 'bg-amber-500' },
+  { value: 'in_text_mismatch', label: 'Mismatch', labelVi: 'Sai lệch', dotColor: 'bg-amber-500' },
+  { value: 'duplicate_reference', label: 'Duplicate', labelVi: 'Trùng lặp', dotColor: 'bg-orange-500' },
+  { value: 'ambiguous_mapping', label: 'Ambiguous', labelVi: 'Mơ hồ', dotColor: 'bg-amber-500' },
+  { value: 'style_inconsistent', label: 'Style Issue', labelVi: 'Sai chuẩn', dotColor: 'bg-violet-500' },
+  { value: 'unresolved', label: 'Unresolved', labelVi: 'Chưa xác định', dotColor: 'bg-slate-400' },
 ];
 
 export const LABEL_FILTERS: {
   value: ValidationLabel;
   label: string;
+  labelVi: string;
   dotColor: string;
 }[] = [
-  { value: 'verified', label: 'Verified', dotColor: 'bg-emerald-500' },
-  { value: 'metadata_error', label: 'Meta Error', dotColor: 'bg-amber-500' },
-  { value: 'suspected_hallucination', label: 'Suspected', dotColor: 'bg-red-500' },
-  { value: 'unresolved', label: 'Unresolved', dotColor: 'bg-slate-400' },
+  { value: 'verified', label: 'Verified', labelVi: 'Đã xác minh', dotColor: 'bg-emerald-500' },
+  { value: 'metadata_error', label: 'Meta Error', labelVi: 'Sai Metadata', dotColor: 'bg-amber-500' },
+  { value: 'suspected_hallucination', label: 'Suspected', labelVi: 'Nghi vấn', dotColor: 'bg-red-500' },
+  { value: 'unresolved', label: 'Unresolved', labelVi: 'Chưa xác minh', dotColor: 'bg-slate-400' },
 ];
 
 export type ViewMode = 'integrity' | 'source' | 'combined';
@@ -71,6 +74,8 @@ export function CitationGraphControls({
   hasFilters,
   onClearFilters,
 }: CitationGraphControlsProps) {
+  const { i18n } = useTranslation();
+  const isVi = i18n.language?.startsWith('vi');
   const visibleStatusFilters = STATUS_FILTERS.filter(
     (f) => (stats.integrityCounts[f.value] ?? 0) > 0 || statusFilters.has(f.value),
   );
@@ -91,8 +96,12 @@ export function CitationGraphControls({
             type="text"
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search by author, title, year, [#]..."
-            aria-label="Search citations"
+            placeholder={
+              isVi
+                ? 'Tìm theo tác giả, tiêu đề, năm, [#]...'
+                : 'Search by author, title, year, [#]...'
+            }
+            aria-label={isVi ? 'Tìm kiếm trích dẫn' : 'Search citations'}
             className="w-full h-9 pl-9 pr-3 rounded-xl text-xs sm:text-sm bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
           />
         </div>
@@ -100,7 +109,7 @@ export function CitationGraphControls({
         <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
           <div
             role="group"
-            aria-label="Citation view mode"
+            aria-label={isVi ? 'Chế độ xem trích dẫn' : 'Citation view mode'}
             className="inline-flex bg-slate-200/70 dark:bg-slate-800 rounded-xl p-0.5 border border-slate-200 dark:border-slate-700"
           >
             {(['combined', 'integrity', 'source'] as ViewMode[]).map((mode) => (
@@ -117,10 +126,16 @@ export function CitationGraphControls({
                 )}
               >
                 {mode === 'combined'
-                  ? 'All Layers'
+                  ? isVi
+                    ? 'Tất cả tầng'
+                    : 'All Layers'
                   : mode === 'integrity'
-                    ? 'L1 Mapping'
-                    : 'L2 Source'}
+                    ? isVi
+                      ? 'Tầng 1 Liên kết'
+                      : 'L1 Mapping'
+                    : isVi
+                      ? 'Tầng 2 Nguồn'
+                      : 'L2 Source'}
               </button>
             ))}
           </div>
@@ -132,7 +147,7 @@ export function CitationGraphControls({
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-mono font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 transition-colors cursor-pointer shrink-0"
             >
               <RotateCcw className="h-3 w-3" />
-              <span>Reset</span>
+              <span>{isVi ? 'Đặt lại' : 'Reset'}</span>
             </button>
           )}
         </div>
@@ -141,7 +156,7 @@ export function CitationGraphControls({
       {/* Row 2: Active Category Filter Pills (only non-zero counts shown to prevent mobile clutter) */}
       <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
         <span className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 mr-1">
-          Showing {filteredCount}/{stats.total}:
+          {isVi ? `Hiển thị ${filteredCount}/${stats.total}:` : `Showing ${filteredCount}/${stats.total}:`}
         </span>
 
         {(viewMode === 'integrity' || viewMode === 'combined') &&
@@ -167,7 +182,7 @@ export function CitationGraphControls({
                     active ? 'bg-white' : f.dotColor,
                   )}
                 />
-                <span>{f.label}</span>
+                <span>{isVi ? f.labelVi : f.label}</span>
                 <span
                   className={cn(
                     'text-[10px]',
@@ -203,7 +218,7 @@ export function CitationGraphControls({
                     active ? 'bg-white' : f.dotColor,
                   )}
                 />
-                <span>{f.label}</span>
+                <span>{isVi ? f.labelVi : f.label}</span>
                 <span
                   className={cn(
                     'text-[10px]',

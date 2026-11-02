@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { User, UserCreate, UserUpdate } from '@/api/client';
 import { api } from '@/api/client';
 import {
@@ -28,6 +29,7 @@ export function UserFormDialog({
   user,
   onSuccess,
 }: UserFormDialogProps) {
+  const { t } = useTranslation();
   const isEdit = Boolean(user);
 
   const [username, setUsername] = useState('');
@@ -103,7 +105,7 @@ export function UserFormDialog({
       onSuccess();
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : t('admin.genericError'));
     } finally {
       setLoading(false);
     }
@@ -114,7 +116,7 @@ export function UserFormDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader className="mb-2">
           <DialogTitle className="text-xl font-bold">
-            {isEdit ? 'Edit User' : 'Create New User'}
+            {isEdit ? t('admin.editUserTitle') : t('admin.createNewUserTitle')}
           </DialogTitle>
         </DialogHeader>
 
@@ -126,7 +128,7 @@ export function UserFormDialog({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Username *</Label>
+            <Label>{t('admin.usernameRequiredLabel')}</Label>
             <Input
               type="text"
               value={username}
@@ -135,13 +137,13 @@ export function UserFormDialog({
               minLength={3}
               maxLength={50}
               disabled={loading}
-              placeholder="e.g. john_doe"
+              placeholder={t('admin.usernameExamplePlaceholder')}
             />
           </div>
 
           {!isEdit && (
             <div className="space-y-1.5">
-              <Label>Password *</Label>
+              <Label>{t('admin.passwordRequiredLabel')}</Label>
               <Input
                 type="password"
                 value={password}
@@ -150,51 +152,51 @@ export function UserFormDialog({
                 minLength={6}
                 maxLength={128}
                 disabled={loading}
-                placeholder="Minimum 6 characters"
+                placeholder={t('admin.passwordMinPlaceholder')}
               />
             </div>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>Full Name</Label>
+              <Label>{t('admin.fullNameLabel')}</Label>
               <Input
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 maxLength={120}
                 disabled={loading}
-                placeholder="e.g. John Doe"
+                placeholder={t('admin.fullNameExamplePlaceholder')}
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label>Email</Label>
+              <Label>{t('admin.emailLabel')}</Label>
               <Input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
-                placeholder="e.g. john@example.com"
+                placeholder={t('admin.emailExamplePlaceholder')}
               />
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label>Institution / Class</Label>
+            <Label>{t('admin.institutionClassLabel')}</Label>
             <Input
               type="text"
               value={institution}
               onChange={(e) => setInstitution(e.target.value)}
               maxLength={255}
               disabled={loading}
-              placeholder="e.g. Ton Duc Thang University"
+              placeholder={t('admin.institutionExamplePlaceholder')}
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>Role</Label>
+              <Label>{t('admin.tableRole')}</Label>
               <Select
                 value={role}
                 onChange={(e) => {
@@ -207,9 +209,9 @@ export function UserFormDialog({
                 disabled={loading}
                 wrapperClassName="w-full"
               >
-                <option value="user">User</option>
-                <option value="teacher">Teacher</option>
-                <option value="admin">Admin</option>
+                <option value="user">{t('admin.roleUser')}</option>
+                <option value="teacher">{t('admin.roleTeacher')}</option>
+                <option value="admin">{t('admin.roleAdmin')}</option>
               </Select>
             </div>
 
@@ -221,7 +223,7 @@ export function UserFormDialog({
                   disabled={loading}
                 />
                 <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {isActive ? 'Active' : 'Inactive'}
+                  {isActive ? t('admin.active') : t('admin.inactive')}
                 </span>
               </div>
               {role !== 'user' && (
@@ -232,7 +234,7 @@ export function UserFormDialog({
                     disabled={loading}
                   />
                   <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                    Can override verdicts
+                    {t('admin.canOverrideVerdictsLabel')}
                   </span>
                 </div>
               )}
@@ -246,18 +248,18 @@ export function UserFormDialog({
               onClick={() => onOpenChange(false)}
               disabled={loading}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={loading}>
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving...
+                  {t('admin.savingBtn')}
                 </>
               ) : isEdit ? (
-                'Save Changes'
+                t('admin.saveChangesBtn')
               ) : (
-                'Create User'
+                t('admin.createUser')
               )}
             </Button>
           </div>
