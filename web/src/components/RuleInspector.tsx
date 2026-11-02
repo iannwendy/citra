@@ -140,6 +140,19 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
     ],
     conclusion: "METADATA_ERROR",
   },
+  "R-CHIMERIC-DOI-MISMATCH": {
+    id: "R-CHIMERIC-DOI-MISMATCH",
+    name: "Spliced / Chimeric DOI Hallucination",
+    nameVi: "Ngụy tạo ghép nối DOI (Chimeric DOI)",
+    description: "Cited DOI resolves to a completely unrelated publication (low title and author similarity)",
+    descriptionVi: "Mã DOI trích dẫn trỏ tới một ấn phẩm hoàn toàn khác (độ tương đồng tiêu đề và tác giả cực thấp)",
+    conditions: [
+      { field: "doi_exact_match", operator: "=", value: "true" },
+      { field: "title_sim", operator: "<", value: "0.35" },
+      { field: "author_jaccard", operator: "<", value: "0.20" },
+    ],
+    conclusion: "SUSPECTED_HALLUCINATION",
+  },
   "R-CONSENSUS-FULL": {
     id: "R-CONSENSUS-FULL",
     name: "Full Source Consensus",
