@@ -1533,7 +1533,7 @@ function enrichVerdictItem(
 
 export function EssayPage() {
   const { t, i18n } = useTranslation();
-  const { isUser, has } = useRole();
+  const { has } = useRole();
   const canViewDeepTrace = has('view_logic_trace');
   const canOverride = has('override_verdict');
   const lang: 'vi' | 'en' = i18n.language?.startsWith('en') ? 'en' : 'vi';
@@ -2300,7 +2300,7 @@ export function EssayPage() {
                               >
                                 {cit.verdictText}
                               </span>
-                              {!isUser && (
+                              {canViewDeepTrace && (
                                 <span
                                   className={`mapping-badge ${cit.mappingBadgeClass} text-[10px] px-2 py-0.5 font-mono`}
                                 >
@@ -2316,7 +2316,7 @@ export function EssayPage() {
                                 </span>
                               )}
                             </div>
-                            {!isUser && (
+                            {canViewDeepTrace && (
                               <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
                                 Conf:{' '}
                                 <strong className="text-slate-800 dark:text-slate-200">
@@ -2342,13 +2342,13 @@ export function EssayPage() {
                               : undefined
                           }
                         >
-                          {isUser
+                          {!canViewDeepTrace
                             ? lang === 'vi'
                               ? `NGỮ CẢNH TRONG BÀI (${activeItem.pageLabel})`
                               : `IN-TEXT CONTEXT (${activeItem.pageLabel})`
                             : `MANUSCRIPT CONTEXT (${activeItem.pageLabel})`}
                         </span>
-                        {!isUser && <span>GROBID TEI-XML</span>}
+                        {canViewDeepTrace && <span>GROBID TEI-XML</span>}
                       </div>
                       <p className="document-content text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed line-clamp-4 break-words [overflow-wrap:anywhere]">
                         {activeItem.contextBefore}
@@ -2383,7 +2383,7 @@ export function EssayPage() {
                             </h4>
                           ) : (
                             <span className="font-mono text-xs text-slate-400">
-                              {isUser
+                              {!canViewDeepTrace
                                 ? lang === 'vi'
                                   ? 'CHI TIẾT TRÍCH DẪN'
                                   : 'CITATION DETAILS'
@@ -2400,7 +2400,7 @@ export function EssayPage() {
                           >
                             {activeItem.marker}
                           </span>
-                          {!isUser && linksOf(activeItem.verdict)[0]?.reference_id && (
+                          {canViewDeepTrace && linksOf(activeItem.verdict)[0]?.reference_id && (
                             <span className="font-mono text-[11px] text-slate-400">
                               · {linksOf(activeItem.verdict)[0]?.reference_id}
                             </span>
@@ -2424,7 +2424,7 @@ export function EssayPage() {
                         >
                           {activeItem.verdictText}
                         </span>
-                        {!isUser && (
+                        {canViewDeepTrace && (
                           <span
                             className={`mapping-badge ${activeItem.mappingBadgeClass} text-xs px-2.5 py-1 font-mono`}
                           >
@@ -2693,7 +2693,7 @@ export function EssayPage() {
                         </div>
 
                         {/* Raw Bibliography Entry Box — Teacher & Admin only */}
-                        {!isUser && (
+                        {canViewDeepTrace && (
                           <div className="mt-3 p-3 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 text-xs">
                             <span className="font-mono text-[10px] uppercase tracking-wider text-slate-400 block mb-1">
                               {lang === 'vi'

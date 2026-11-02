@@ -23,6 +23,7 @@ import {
   XCircle,
   CheckCircle,
   Scale,
+  Lock,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -113,11 +114,12 @@ function SourceIcon({ source }: { source: string }) {
 function IssueCard({
   verdict,
   lang,
-  isUser,
+  canViewDeep,
 }: {
   verdict: Verdict;
   lang: 'vi' | 'en';
-  isUser: boolean;
+  /** Pro/Ultra plans, teachers and admins (`view_logic_trace` capability). */
+  canViewDeep: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const severity = getSeverity(verdict.label);
@@ -191,7 +193,7 @@ function IssueCard({
               verdict={isUrlResource(verdict) ? 'resource' : verdict.label}
               size="sm"
             />
-            {!isUser && (
+            {canViewDeep && (
               <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
                 Conf: <strong>{Math.round(verdict.confidence * 100)}%</strong>
               </span>
@@ -219,7 +221,26 @@ function IssueCard({
 
       {expanded && (
         <div className="mt-4 pt-4 border-t border-slate-200/80 dark:border-slate-800 space-y-4">
-          {!isUser && (
+          {!canViewDeep && (
+            <div
+              data-testid="issues-upgrade-hint"
+              className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/70 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-800 dark:text-amber-200"
+            >
+              <span className="flex items-center gap-2">
+                <Lock className="h-3.5 w-3.5 shrink-0" />
+                {lang === 'vi'
+                  ? 'Giải thích suy diễn, luật kích hoạt, độ tin cậy và nguồn đối chiếu có trong gói Pro / Ultra.'
+                  : 'Reasoning explanations, triggered rules, confidence and source lookups are available on Pro / Ultra.'}
+              </span>
+              <Link
+                to="/pricing"
+                className="font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+              >
+                {lang === 'vi' ? 'Nâng cấp' : 'Upgrade'}
+              </Link>
+            </div>
+          )}
+          {canViewDeep && (
             <div className="p-3 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 flex items-start gap-2.5">
               <Scale className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
               <div>
@@ -253,7 +274,7 @@ function IssueCard({
               </div>
             )}
 
-            {!isUser && verdict.triggered_rules.length > 0 && (
+            {canViewDeep && verdict.triggered_rules.length > 0 && (
               <div>
                 <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                   {lang === 'vi' ? 'Luật Kích Hoạt' : 'Triggered Rules'}
@@ -273,7 +294,7 @@ function IssueCard({
             )}
           </div>
 
-          {!isUser && sourceResults.length > 0 && (
+          {canViewDeep && sourceResults.length > 0 && (
             <div>
               <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                 {lang === 'vi' ? 'Nguồn Đối Chiếu' : 'Source Lookup'}
@@ -297,7 +318,7 @@ function IssueCard({
             </div>
           )}
 
-          {!isUser && verdict.confidence > 0 && (
+          {canViewDeep && verdict.confidence > 0 && (
             <div>
               <h4 className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                 {lang === 'vi' ? 'Độ tin cậy' : 'Confidence'}
@@ -330,12 +351,12 @@ function SeveritySection({
   severity,
   verdicts,
   lang,
-  isUser,
+  canViewDeep,
 }: {
   severity: Severity;
   verdicts: Verdict[];
   lang: 'vi' | 'en';
-  isUser: boolean;
+  canViewDeep: boolean;
 }) {
   const config = severityConfig[severity];
   const [isOpen, setIsOpen] = useState(true);
@@ -378,7 +399,7 @@ function SeveritySection({
       {isOpen && (
         <div className="space-y-2.5 pl-1">
           {verdicts.map((verdict) => (
-            <IssueCard key={verdict.citation_id} verdict={verdict} lang={lang} isUser={isUser} />
+            <IssueCard key={verdict.citation_id} verdict={verdict} lang={lang} canViewDeep={canViewDeep} />
           ))}
         </div>
       )}
@@ -389,7 +410,8 @@ function SeveritySection({
 export function IssuesPage() {
   const { id } = useParams<{ id: string }>();
   const { i18n } = useTranslation();
-  const { isUser } = useRole();
+  const { has } = useRole();
+  const canViewDeep = has('view_logic_trace');
   const lang: 'vi' | 'en' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const [filter, setFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
 
@@ -550,7 +572,7 @@ export function IssuesPage() {
             </div>
             <Separator orientation="vertical" className="h-4" />
             <span className="font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
-              {isUser
+              {!canViewDeep
                 ? lang === 'vi'
                   ? 'Danh mục Vấn đề'
                   : 'Issues List'
@@ -614,7 +636,7 @@ export function IssuesPage() {
                   severity={severity}
                   verdicts={data}
                   lang={lang}
-                  isUser={isUser}
+                  canViewDeep={canViewDeep}
                 />
               ))}
             </div>

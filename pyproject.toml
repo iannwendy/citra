@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "essay-integrity-checker"
-version = "3.13.4"
+version = "3.13.5"
 description = "Neuro-Symbolic system for citation integrity scoring and hallucinated reference detection in student essays"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -74,10 +74,15 @@ ignore = [
     "B008",    # FastAPI dependency injection idiom: `x = Depends(...)` / `File(...)` defaults
     "UP042",   # `str, Enum` kept for Pydantic/JSON serialization compatibility
     "SIM108",  # ternary rewrites hurt readability of multi-branch rule logic
+    "SIM102",  # nested ifs in dense extraction/rule heuristics keep each guard reviewable on its own line
+    "SIM103",  # explicit `if cond: return True / return False` mirrors the documented rule tables
+    "SIM105",  # explicit try/except/pass is clearer (and cheaper in hot loops) than contextlib.suppress
+    "N806",    # UPPER_CASE function-local constants (compiled regexes, stop-word sets) are intentional
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["N802", "N806", "E741"]
+# Tests: nested `with patch(...)` blocks and `X as alias` imports of constants are idiomatic.
+"tests/**" = ["N802", "N806", "E741", "SIM117", "N811"]
 
 [tool.black]
 line-length = 100

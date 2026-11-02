@@ -19,6 +19,7 @@ import {
   Terminal,
   GitBranch,
   AlertCircle,
+  Lock,
 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
@@ -63,7 +64,8 @@ const DEFAULT_STATS: DashboardStats = {
 export function DashboardPage() {
   const { t, i18n } = useTranslation();
   const toast = useToast();
-  const { isUser, isTeacher, isAdmin } = useRole();
+  const { isUser, isTeacher, isAdmin, has } = useRole();
+  const canViewTrace = has('view_logic_trace');
   const { data: essays = [], isLoading, error, refetch, isFetching } = useEssays();
   const { data: stats = DEFAULT_STATS } = useDashboardStats();
   const deleteMutation = useDeleteEssay();
@@ -439,13 +441,28 @@ export function DashboardPage() {
                         <AlertCircle className="h-3.5 w-3.5" />
                         <span>{t('essay.issues')}</span>
                       </Link>
-                      {!isUser && (
+                      {canViewTrace ? (
                         <Link
                           to={`/verification/report/${essay.id}/trace`}
                           title={t('essay.logicTrace')}
+                          data-testid={`dashboard-trace-link-${essay.id}`}
                           className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-violet-300 dark:hover:border-violet-700 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
                         >
                           <GitBranch className="h-3.5 w-3.5" />
+                          <span>Trace</span>
+                        </Link>
+                      ) : (
+                        <Link
+                          to="/pricing"
+                          title={
+                            lang === 'vi'
+                              ? 'Logic Trace có trong gói Pro / Ultra — bấm để nâng cấp'
+                              : 'Logic Trace is available on Pro / Ultra — click to upgrade'
+                          }
+                          data-testid={`dashboard-trace-locked-${essay.id}`}
+                          className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium rounded-lg border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+                        >
+                          <Lock className="h-3.5 w-3.5" />
                           <span>Trace</span>
                         </Link>
                       )}
