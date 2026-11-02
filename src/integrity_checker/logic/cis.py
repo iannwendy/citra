@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from integrity_checker.config import get_settings
+from integrity_checker.config import RubricPenaltyConfig, Settings, get_settings
 from integrity_checker.models.validation import (
     CISComponents,
     CitationIntegrityScore,
@@ -39,17 +39,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# Penalty per mapping status — cộng dồn vào "negative" bucket.
-# in_text_bib_consistency = 1 - (sum_penalties / total_citations)
-# FIX Bug 6: Updated penalties to match CISConfig rubric_penalty weights
+def rubric_penalties(settings: Settings | None = None) -> dict[str, float]:
+    """CIS rubric penalty per mapping status (keys = ``CitationMappingStatus.value``).
+
+    Single source of truth: ``settings.cis.rubric_penalty`` (v1.2 §3.9,
+    configs/config.yaml ``cis.rubric_penalty``). ``matched`` / ``unresolved``
+    are never penalised. in_text_bib_consistency = 1 - sum(penalties) / total.
+    """
+    cfg = (settings or get_settings()).cis.rubric_penalty
+    table = {name.lower(): float(value) for name, value in cfg.model_dump().items()}
+    table.setdefault("matched", 0.0)
+    table.setdefault("unresolved", 0.0)
+    return table
+
+
+# Default rubric penalties (= RubricPenaltyConfig defaults = config.yaml values).
+# Kept for backward compatibility; runtime code should call rubric_penalties()
+# so YAML/env overrides of ``cis.rubric_penalty`` take effect.
 MAPPING_PENALTIES: dict[str, float] = {
     "matched": 0.0,
-    "missing_reference": 0.20,    # FIX: Match CISConfig rubric_penalty
-    "uncited_reference": 0.10,   # FIX: Match CISConfig rubric_penalty
-    "in_text_mismatch": 0.15,   # FIX: Match CISConfig rubric_penalty
-    "duplicate_reference": 0.10, # FIX: Match CISConfig rubric_penalty
-    "ambiguous_mapping": 0.05,   # FIX: Match CISConfig rubric_penalty
-    "style_inconsistent": 0.02, # FIX: Match CISConfig rubric_penalty
+    **{name.lower(): float(v) for name, v in RubricPenaltyConfig().model_dump().items()},
 }
 
 
@@ -64,9 +73,11 @@ class CISCalculator:
           format_consistency calculation).
     """
 
-    def __init__(self) -> None:
-        s = get_settings()
+    def __init__(self, settings: Settings | None = None) -> None:
+        s = settings or get_settings()
         self.w = s.cis.weights
+        # Rubric penalties come from settings.cis.rubric_penalty (single source).
+        self.penalties: dict[str, float] = rubric_penalties(s)
 
     def compute(
         self,
@@ -89,7 +100,9 @@ class CISCalculator:
         if not academic_verdicts:
             # Resource-only bibliography (e.g. web resources or Vietnamese legal statutes):
             # evaluate link consistency, format consistency, and identifier validity across all verdicts
-            res_link_consistency = self._compute_link_consistency(verdicts, linking_result)
+            res_link_consistency = self._compute_link_consistency(
+                verdicts, linking_result, penalties=self.penalties
+            )
             res_format_consistency = self._compute_format_consistency(style_profile, verdicts)
             invalid_id_rules = {
                 "R-FAKE-URL",
@@ -180,7 +193,7 @@ class CISCalculator:
         #   a. Từ LinkingResult.links (nếu pipeline có chạy CitationLinker)
         #   b. Từ verdict.mapping_status (fallback nếu linker không chạy)
         in_text_bib_consistency = self._compute_link_consistency(
-            academic_verdicts, linking_result
+            academic_verdicts, linking_result, penalties=self.penalties
         )
 
         # 4. Format consistency — TÍNH TỪ StyleDetector
@@ -229,6 +242,7 @@ class CISCalculator:
     def _compute_link_consistency(
         verdicts: list[CitationVerdict],
         linking_result: LinkingResult | None = None,
+        penalties: dict[str, float] | None = None,
     ) -> float:
         """Tính in_text_bib_consistency từ CitationLinker output.
 
@@ -236,7 +250,10 @@ class CISCalculator:
         FIX v1.7: Use ALL linking_result.links (including in-text), not filtered
         by verdict occurrence_ids. Verdicts now contain only references, so
         the old filter-by-verdict approach missed in-text mapping failures.
+
+        ``penalties`` defaults to :func:`rubric_penalties` (current settings).
         """
+        penalty_table = penalties if penalties is not None else rubric_penalties()
         # DEBUG: Log input state
         logger.debug(
             f"CIS link consistency: verdicts={len(verdicts)}, "
@@ -305,15 +322,15 @@ class CISCalculator:
                         else str(link.status)
                     )
                     status_counts[status] = status_counts.get(status, 0) + 1
-                    penalty += MAPPING_PENALTIES.get(status, 0.0)
+                    penalty += penalty_table.get(status, 0.0)
 
                 if uncited_count > 0:
                     status_counts[uncited_key] = status_counts.get(uncited_key, 0) + uncited_count
-                    penalty += uncited_count * MAPPING_PENALTIES.get(uncited_key, 0.0)
+                    penalty += uncited_count * penalty_table.get(uncited_key, 0.0)
 
                 if verdict_dup > 0:
                     status_counts[dup_key] = status_counts.get(dup_key, 0) + verdict_dup
-                    penalty += verdict_dup * MAPPING_PENALTIES.get(dup_key, 0.0)
+                    penalty += verdict_dup * penalty_table.get(dup_key, 0.0)
 
                 logger.debug(f"CIS from ALL links: status_counts={status_counts}, penalty={penalty:.2f}, total={total}")
                 result = max(0.0, 1.0 - penalty / total)
@@ -341,7 +358,7 @@ class CISCalculator:
 
         penalty = 0.0
         for status, count in status_counts.items():
-            p = MAPPING_PENALTIES.get(status, 0.0)
+            p = penalty_table.get(status, 0.0)
             logger.debug(f"  {status}: count={count}, penalty={p:.2f}, total_contrib={p * count:.2f}")
             penalty += p * count
 

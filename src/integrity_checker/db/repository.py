@@ -316,7 +316,7 @@ class Repository:
     def recalculate_essay_cis(self, essay_id: int) -> dict | None:
         """Recalculate and persist essay.cis_json after verdict overrides."""
         from integrity_checker.config import get_settings
-        from integrity_checker.logic.cis import MAPPING_PENALTIES
+        from integrity_checker.logic.cis import rubric_penalties
 
         essay = self.session.get(EssayRecord, essay_id)
         if not essay:
@@ -335,6 +335,7 @@ class Repository:
 
         existing_comps = existing_cis.get("components") or {}
         w = get_settings().cis.weights
+        penalty_table = rubric_penalties(get_settings())
 
         if n_academic == 0:
             cis_dict = {
@@ -371,7 +372,7 @@ class Repository:
             ]
             if in_text_citations:
                 in_text_penalty = sum(
-                    MAPPING_PENALTIES.get(c.mapping_status or "matched", 0.0)
+                    penalty_table.get(c.mapping_status or "matched", 0.0)
                     for c in in_text_citations
                 )
                 ref_non_matched = [
@@ -380,7 +381,7 @@ class Repository:
                     if (v.mapping_status or "matched") != "matched"
                 ]
                 ref_penalty = sum(
-                    MAPPING_PENALTIES.get(v.mapping_status or "matched", 0.0)
+                    penalty_table.get(v.mapping_status or "matched", 0.0)
                     for v in ref_non_matched
                 )
                 total_links = len(in_text_citations) + len(ref_non_matched)
@@ -391,7 +392,7 @@ class Repository:
                 )
             else:
                 total_penalty = sum(
-                    MAPPING_PENALTIES.get(v.mapping_status or "matched", 0.0)
+                    penalty_table.get(v.mapping_status or "matched", 0.0)
                     for v in academic_verdicts
                 )
                 in_text_bib_consistency = max(0.0, 1.0 - total_penalty / n_academic)

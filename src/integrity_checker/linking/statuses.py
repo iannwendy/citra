@@ -181,18 +181,22 @@ class CitationMappingStatus(str, Enum):
         return self == CitationMappingStatus.UNRESOLVED
 
     @property
+    def severity(self) -> float:
+        """Relative severity weight for UI ordering (0.0 = OK, 1.0 = worst).
+
+        NOT the CIS penalty — CIS uses ``settings.cis.rubric_penalty`` via
+        :func:`integrity_checker.logic.cis.rubric_penalties`.
+        """
+        return MAPPING_SEVERITY[self]
+
+    @property
     def penalty(self) -> float:
-        """Penalty score cho CIS calculation (0.0 = OK, 1.0 = worst)."""
-        return {
-            CitationMappingStatus.MATCHED: 0.0,
-            CitationMappingStatus.MISSING_REFERENCE: 1.0,
-            CitationMappingStatus.UNCITED_REFERENCE: 0.5,
-            CitationMappingStatus.IN_TEXT_MISMATCH: 0.8,
-            CitationMappingStatus.DUPLICATE_REFERENCE: 0.6,
-            CitationMappingStatus.AMBIGUOUS_MAPPING: 0.4,
-            CitationMappingStatus.STYLE_INCONSISTENT: 0.2,
-            CitationMappingStatus.UNRESOLVED: 0.0,
-        }[self]
+        """Deprecated alias of :attr:`severity` (kept for backward compatibility).
+
+        Despite the name this is a 0–1 severity weight, not the CIS rubric
+        penalty; see :func:`integrity_checker.logic.cis.rubric_penalties`.
+        """
+        return self.severity
 
     @property
     def label(self) -> str:
@@ -209,10 +213,12 @@ class CitationMappingStatus(str, Enum):
         }[self]
 
 
-# --- Penalty table cho CIS (v1.2 §3.9) ---
-# Dùng trong logic/cis.py để tính in_text_bib_consistency.
+# --- Severity weights (0–1) per mapping status ---
+# Relative "how bad is this" ordering for UI/triage. These are NOT the CIS
+# rubric penalties: CIS reads ``settings.cis.rubric_penalty`` (0.20/0.10/0.15/
+# 0.10/0.05/0.02) through ``logic.cis.rubric_penalties()`` — single source of truth.
 
-MAPPING_PENALTIES = {
+MAPPING_SEVERITY: dict[CitationMappingStatus, float] = {
     CitationMappingStatus.MATCHED: 0.0,
     CitationMappingStatus.MISSING_REFERENCE: 1.0,
     CitationMappingStatus.UNCITED_REFERENCE: 0.5,
@@ -222,6 +228,9 @@ MAPPING_PENALTIES = {
     CitationMappingStatus.STYLE_INCONSISTENT: 0.2,
     CitationMappingStatus.UNRESOLVED: 0.0,
 }
+
+# Deprecated alias (old, misleading name). Prefer MAPPING_SEVERITY.
+MAPPING_PENALTIES = MAPPING_SEVERITY
 
 
 @dataclass

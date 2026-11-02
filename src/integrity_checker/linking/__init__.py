@@ -27,6 +27,7 @@ from integrity_checker.linking.citation_linker import CitationLinker
 from integrity_checker.linking.duplicate_detector import DuplicateDetector, DuplicateGroup
 from integrity_checker.linking.statuses import (
     MAPPING_PENALTIES,
+    MAPPING_SEVERITY,
     CitationMappingStatus,
     LinkingResult,
 )
@@ -37,5 +38,6 @@ __all__ = [
     "CitationLinker",
     "DuplicateDetector",
     "DuplicateGroup",
-    "MAPPING_PENALTIES",
+    "MAPPING_SEVERITY",
+    "MAPPING_PENALTIES",  # deprecated alias of MAPPING_SEVERITY
 ]
