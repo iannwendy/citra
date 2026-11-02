@@ -15,7 +15,7 @@ from pathlib import Path
 import bcrypt
 import httpx
 import jwt
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr, Field
 
 from integrity_checker.api.deps import get_current_user, get_db
@@ -357,6 +357,40 @@ def _ensure_utc(dt: datetime) -> datetime:
     return dt
 
 
+def _safe_send_email(fn, *args, **kwargs) -> None:
+    """Execute an email send callable safely in a background task without crashing the worker."""
+    try:
+        fn(*args, **kwargs)
+    except Exception as exc:
+        logger.warning(
+            "Background email dispatch failed (%s): %s",
+            getattr(fn, "__name__", fn),
+            exc,
+        )
+
+
+def _dispatch_email_task(
+    background_tasks: BackgroundTasks | None,
+    fn,
+    *args,
+    **kwargs,
+) -> bool:
+    """Schedule email sending via FastAPI BackgroundTasks when available, or run safely inline."""
+    if background_tasks is not None:
+        background_tasks.add_task(_safe_send_email, fn, *args, **kwargs)
+        return True
+    try:
+        fn(*args, **kwargs)
+        return True
+    except Exception as exc:
+        logger.warning(
+            "Email dispatch failed (%s): %s",
+            getattr(fn, "__name__", fn),
+            exc,
+        )
+        return False
+
+
 def _to_response_dict(user: User) -> dict:
     sub = get_user_subscription_summary(user)
     provider = getattr(user, "auth_provider", None) or "local"
@@ -691,6 +725,7 @@ def get_google_auth_config():
 @router.post("/google", response_model=LoginResponse)
 def google_login(
     request: GoogleLoginRequest,
+    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
     http_request: Request = None,  # type: ignore[assignment]
     db=Depends(get_db),
 ):
@@ -780,20 +815,15 @@ def google_login(
                 setup_token, _ = repo.create_auth_token(
                     user.id, "password_reset", setup_expires
                 )
-                try:
-                    get_email_service().send_google_welcome_email(
-                        to_email=user.email,
-                        username=user.username,
-                        full_name=user.full_name,
-                        raw_token=setup_token,
-                        lang="vi",
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "Failed to dispatch Google welcome/password setup email to %s: %s",
-                        user.email,
-                        exc,
-                    )
+                _dispatch_email_task(
+                    background_tasks,
+                    get_email_service().send_google_welcome_email,
+                    to_email=user.email,
+                    username=user.username,
+                    full_name=user.full_name,
+                    raw_token=setup_token,
+                    lang="vi",
+                )
     else:
         username = _generate_unique_google_username(repo, email, full_name)
         random_password_hash = _hash_password(secrets.token_urlsafe(32))
@@ -816,16 +846,15 @@ def google_login(
         # Issue a 24-hour initial password setup token and email the link to the user's Google email
         setup_expires = datetime.now(UTC) + timedelta(hours=24)
         setup_token, _ = repo.create_auth_token(user.id, "password_reset", setup_expires)
-        try:
-            get_email_service().send_google_welcome_email(
-                to_email=email,
-                username=username,
-                full_name=user.full_name,
-                raw_token=setup_token,
-                lang="vi",
-            )
-        except Exception as exc:
-            logger.warning("Failed to dispatch Google welcome/password setup email to %s: %s", email, exc)
+        _dispatch_email_task(
+            background_tasks,
+            get_email_service().send_google_welcome_email,
+            to_email=email,
+            username=username,
+            full_name=user.full_name,
+            raw_token=setup_token,
+            lang="vi",
+        )
 
     _login_rate_limiter.reset(google_ip_key)
     _login_rate_limiter.reset(rate_key)
@@ -839,7 +868,11 @@ def google_login(
 
 
 @router.post("/register", response_model=RegisterResponse)
-def register(request: RegisterRequest, db=Depends(get_db)):
+def register(
+    request: RegisterRequest,
+    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
+    db=Depends(get_db),
+):
     """Self-register a new account (creates inactive user and sends HTML activation email)."""
     username = request.username.strip()
     if not _is_valid_username_format(username):
@@ -877,19 +910,16 @@ def register(request: RegisterRequest, db=Depends(get_db)):
     raw_token, _ = repo.create_auth_token(user.id, "activation", expires_at)
     repo.commit()
 
-    email_sent = True
-    try:
-        get_email_service().send_activation_email(
-            to_email=email,
-            username=username,
-            full_name=full_name,
-            raw_token=raw_token,
-            institution=institution,
-            lang=request.lang,
-        )
-    except Exception as exc:
-        logger.error("Failed to dispatch activation email to %s: %s", email, exc)
-        email_sent = False
+    email_sent = _dispatch_email_task(
+        background_tasks,
+        get_email_service().send_activation_email,
+        to_email=email,
+        username=username,
+        full_name=full_name,
+        raw_token=raw_token,
+        institution=institution,
+        lang=request.lang,
+    )
 
     return RegisterResponse(
         message="Account created successfully. Please check your email to activate your account.",
@@ -957,7 +987,11 @@ def activate_account_get(token: str = Query(..., min_length=1), db=Depends(get_d
 
 
 @router.post("/resend-activation", response_model=MessageResponse)
-def resend_activation(request: ResendActivationRequest, db=Depends(get_db)):
+def resend_activation(
+    request: ResendActivationRequest,
+    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
+    db=Depends(get_db),
+):
     """Resend the account activation email by email or username."""
     identifier = request.identifier.strip()
     repo = Repository(db)
@@ -992,17 +1026,16 @@ def resend_activation(request: ResendActivationRequest, db=Depends(get_db)):
     raw_token, _ = repo.create_auth_token(user.id, "activation", expires_at)
     repo.commit()
 
-    try:
-        get_email_service().send_activation_email(
-            to_email=user.email,
-            username=user.username,
-            full_name=user.full_name,
-            raw_token=raw_token,
-            institution=user.institution,
-            lang=request.lang,
-        )
-    except Exception as exc:
-        logger.error("Failed to dispatch resent activation email to %s: %s", user.email, exc)
+    _dispatch_email_task(
+        background_tasks,
+        get_email_service().send_activation_email,
+        to_email=user.email,
+        username=user.username,
+        full_name=user.full_name,
+        raw_token=raw_token,
+        institution=user.institution,
+        lang=request.lang,
+    )
 
     return MessageResponse(
         message="A new activation email has been sent. Please check your inbox."
@@ -1010,7 +1043,11 @@ def resend_activation(request: ResendActivationRequest, db=Depends(get_db)):
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
-def forgot_password(request: ForgotPasswordRequest, db=Depends(get_db)):
+def forgot_password(
+    request: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
+    db=Depends(get_db),
+):
     """Issue a one-time password reset token and send the HTML reset email."""
     email = request.email.strip().lower()
     repo = Repository(db)
@@ -1032,16 +1069,15 @@ def forgot_password(request: ForgotPasswordRequest, db=Depends(get_db)):
     raw_token, _ = repo.create_auth_token(user.id, "password_reset", expires_at)
     repo.commit()
 
-    try:
-        get_email_service().send_password_reset_email(
-            to_email=user.email,
-            username=user.username,
-            full_name=user.full_name,
-            raw_token=raw_token,
-            lang=request.lang,
-        )
-    except Exception as exc:
-        logger.error("Failed to dispatch password reset email to %s: %s", user.email, exc)
+    _dispatch_email_task(
+        background_tasks,
+        get_email_service().send_password_reset_email,
+        to_email=user.email,
+        username=user.username,
+        full_name=user.full_name,
+        raw_token=raw_token,
+        lang=request.lang,
+    )
 
     return MessageResponse(message=generic_msg)
 
@@ -1090,7 +1126,11 @@ def verify_reset_token(token: str = Query(..., min_length=1), db=Depends(get_db)
 
 
 @router.post("/reset-password", response_model=MessageResponse)
-def reset_password(request: ResetPasswordRequest, db=Depends(get_db)):
+def reset_password(
+    request: ResetPasswordRequest,
+    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
+    db=Depends(get_db),
+):
     """Reset a user's password using a valid password_reset token and revoke old sessions."""
     repo = Repository(db)
     token_row = repo.get_auth_token(request.token, "password_reset")
@@ -1129,15 +1169,14 @@ def reset_password(request: ResetPasswordRequest, db=Depends(get_db)):
     repo.commit()
 
     if user.email:
-        try:
-            get_email_service().send_password_changed_email(
-                to_email=user.email,
-                username=user.username,
-                full_name=user.full_name,
-                lang=request.lang,
-            )
-        except Exception as exc:
-            logger.warning("Could not send password changed notification to %s: %s", user.email, exc)
+        _dispatch_email_task(
+            background_tasks,
+            get_email_service().send_password_changed_email,
+            to_email=user.email,
+            username=user.username,
+            full_name=user.full_name,
+            lang=request.lang,
+        )
 
     return MessageResponse(
         message="Password has been reset successfully. You can now sign in with your new password."

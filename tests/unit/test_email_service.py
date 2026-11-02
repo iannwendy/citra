@@ -119,3 +119,33 @@ def test_smtp_ssl_delivery_when_forced():
             mock_ssl.assert_called_once_with("smtp.gmail.com", 465, timeout=20)
             mock_server.login.assert_called_once_with("wendyxsausage@gmail.com", "zyemoditzzdmlshd")
             assert mock_server.sendmail.call_count == 1
+
+    def test_background_tasks_email_dispatch_and_safe_error_handling(self):
+        from fastapi import BackgroundTasks
+
+        from integrity_checker.api.routes.auth import (
+            _dispatch_email_task,
+            _safe_send_email,
+        )
+
+        bg = BackgroundTasks()
+        called_with = []
+
+        def fake_sender(*, to_email: str, raw_token: str):
+            called_with.append((to_email, raw_token))
+
+        ok = _dispatch_email_task(bg, fake_sender, to_email="bg@example.com", raw_token="tok_bg_1")
+        assert ok is True
+        assert len(bg.tasks) == 1
+        assert bg.tasks[0].func is _safe_send_email
+
+        # Execute the scheduled background task and verify it invokes fake_sender
+        bg.tasks[0].func(*bg.tasks[0].args, **bg.tasks[0].kwargs)
+        assert called_with == [("bg@example.com", "tok_bg_1")]
+
+        # Safe wrapper catches and logs exceptions without crashing the background worker
+        def failing_sender():
+            raise RuntimeError("SMTP connection refused")
+
+        _safe_send_email(failing_sender)
+        assert _dispatch_email_task(None, failing_sender) is False

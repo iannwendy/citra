@@ -10,12 +10,13 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, EmailStr, Field
 
 from integrity_checker.api.deps import get_current_user, get_db, require_admin
 from integrity_checker.api.routes.auth import (
     _create_token,
+    _dispatch_email_task,
     _ensure_utc,
     _hash_password,
     _is_reserved_username,
@@ -170,6 +171,7 @@ def list_users(
 @router.post("", response_model=UserResponse)
 def create_user(
     request: UserCreate,
+    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
     admin: User = Depends(require_admin),
     db=Depends(get_db),
 ):
@@ -205,7 +207,27 @@ def create_user(
         can_override_verdicts=request.can_override_verdicts,
         plan_tier=request.plan_tier,
     )
+    raw_activation_token: str | None = None
+    if request.email and not request.is_active:
+        settings = get_settings()
+        expires_at = datetime.now(UTC) + timedelta(
+            hours=settings.auth.activation_expire_hours
+        )
+        raw_activation_token, _ = repo.create_auth_token(
+            user.id, "activation", expires_at
+        )
     repo.commit()
+    if request.email and raw_activation_token is not None:
+        _dispatch_email_task(
+            background_tasks,
+            get_email_service().send_activation_email,
+            to_email=str(request.email),
+            username=user.username,
+            full_name=user.full_name,
+            raw_token=raw_activation_token,
+            institution=user.institution,
+            lang="vi",
+        )
     return _to_response(user)
 
 
@@ -341,6 +363,7 @@ def get_me(current_user: User = Depends(get_current_user)):
 @router.patch("/me", response_model=UserResponse)
 def update_me(
     request: UserSelfUpdate,
+    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
     current_user: User = Depends(get_current_user),
     db=Depends(get_db),
 ):
@@ -413,21 +436,16 @@ def update_me(
         repo.commit()
         if email_changed_to is not None and raw_activation_token is not None:
             target_user = user or current_user
-            try:
-                get_email_service().send_activation_email(
-                    to_email=email_changed_to,
-                    username=target_user.username,
-                    full_name=target_user.full_name,
-                    raw_token=raw_activation_token,
-                    institution=target_user.institution,
-                    lang="vi",
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Failed to dispatch activation email after email change to %s: %s",
-                    email_changed_to,
-                    exc,
-                )
+            _dispatch_email_task(
+                background_tasks,
+                get_email_service().send_activation_email,
+                to_email=email_changed_to,
+                username=target_user.username,
+                full_name=target_user.full_name,
+                raw_token=raw_activation_token,
+                institution=target_user.institution,
+                lang="vi",
+            )
         if user:
             return _to_response(user)
 
@@ -542,6 +560,7 @@ def change_my_password(
 @router.post("/me/password-setup-email", response_model=MessageResponse)
 def send_my_password_setup_email(
     request: PasswordSetupEmailRequest | None = None,
+    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
     current_user: User = Depends(get_current_user),
     db=Depends(get_db),
 ):
@@ -574,33 +593,27 @@ def send_my_password_setup_email(
     raw_token, _ = repo.create_auth_token(current_user.id, "password_reset", expires_at)
     repo.commit()
 
-    try:
-        if is_initial_google:
-            get_email_service().send_google_welcome_email(
-                to_email=current_user.email,
-                username=current_user.username,
-                full_name=current_user.full_name,
-                raw_token=raw_token,
-                lang=lang,
-            )
-        else:
-            get_email_service().send_password_reset_email(
-                to_email=current_user.email,
-                username=current_user.username,
-                full_name=current_user.full_name,
-                raw_token=raw_token,
-                lang=lang,
-            )
-    except Exception as exc:
-        logger.error(
-            "Failed to dispatch password setup email to %s: %s",
-            current_user.email,
-            exc,
+    email_svc = get_email_service()
+    if is_initial_google:
+        _dispatch_email_task(
+            background_tasks,
+            email_svc.send_google_welcome_email,
+            to_email=current_user.email,
+            username=current_user.username,
+            full_name=current_user.full_name,
+            raw_token=raw_token,
+            lang=lang,
         )
-        raise HTTPException(
-            status_code=502,
-            detail="Failed to send password setup email. Please try again.",
-        ) from exc
+    else:
+        _dispatch_email_task(
+            background_tasks,
+            email_svc.send_password_reset_email,
+            to_email=current_user.email,
+            username=current_user.username,
+            full_name=current_user.full_name,
+            raw_token=raw_token,
+            lang=lang,
+        )
 
     return MessageResponse(
         message=f"A password setup link has been sent to {current_user.email}."
