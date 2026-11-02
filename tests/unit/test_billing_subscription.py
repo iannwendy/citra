@@ -916,3 +916,90 @@ def test_vnpay_ipn_webhook_security_tamper_and_idempotency_guards() -> None:
     assert ipn_02.json() == {"RspCode": "02", "Message": "Order already confirmed"}
 
 
+def test_production_rejects_demo_sessions_and_verifies_stripe_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    """In production runtime, demo checkout sessions are rejected with 403 and non-demo sessions verify with Stripe."""
+    from unittest.mock import MagicMock
+
+    client = TestClient(app)
+    token, user_data = _login_user(client, "user", "user123")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 1. Create a demo session
+    checkout = client.post(
+        "/api/billing/create-checkout-session",
+        json={"plan_tier": "pro", "billing_cycle": "monthly", "force_demo": True},
+        headers=headers,
+    ).json()
+    demo_session_id = checkout["session_id"]
+
+    # Simulate production runtime
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("ALLOW_DEMO_CHECKOUT_IN_PROD", raising=False)
+    with patch("integrity_checker.api.routes.billing.is_test_runtime", return_value=False):
+        resp_demo = client.post(
+            "/api/billing/verify-session",
+            json={"session_id": demo_session_id},
+            headers=headers,
+        )
+        assert resp_demo.status_code == 403
+        assert "Demo checkout sessions are not allowed in production" in resp_demo.json()["detail"]
+
+        # When ALLOW_DEMO_CHECKOUT_IN_PROD=true is explicitly set, demo session succeeds
+        monkeypatch.setenv("ALLOW_DEMO_CHECKOUT_IN_PROD", "true")
+        resp_demo_allowed = client.post(
+            "/api/billing/verify-session",
+            json={"session_id": demo_session_id},
+            headers=headers,
+        )
+        assert resp_demo_allowed.status_code == 200
+
+    # 2. Test Stripe API verification for non-demo session (sk_live_ / sk_test_)
+    session = get_session()
+    repo = Repository(session)
+    live_tx = repo.create_billing_transaction(
+        user_id=user_data["id"],
+        stripe_session_id="cs_live_real_session_12345",
+        plan_tier="ultra",
+        billing_cycle="monthly",
+        subtotal_usd=200.0,
+        discount_usd=0.0,
+        promo_code=None,
+        amount_usd=200.0,
+        status="pending",
+        payment_mode="stripe_live",
+    )
+    session.commit()
+    session.close()
+    _ = live_tx
+
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_live_testkey12345")
+
+    mock_unpaid = MagicMock()
+    mock_unpaid.status_code = 200
+    mock_unpaid.json.return_value = {"id": "cs_live_real_session_12345", "payment_status": "unpaid"}
+
+    with patch("httpx.get", return_value=mock_unpaid) as mock_get:
+        resp_unpaid = client.post(
+            "/api/billing/verify-session",
+            json={"session_id": "cs_live_real_session_12345"},
+            headers=headers,
+        )
+        assert resp_unpaid.status_code == 402
+        mock_get.assert_called_once()
+
+    mock_paid = MagicMock()
+    mock_paid.status_code = 200
+    mock_paid.json.return_value = {"id": "cs_live_real_session_12345", "payment_status": "paid"}
+
+    with patch("httpx.get", return_value=mock_paid) as mock_get_paid:
+        resp_paid = client.post(
+            "/api/billing/verify-session",
+            json={"session_id": "cs_live_real_session_12345"},
+            headers=headers,
+        )
+        assert resp_paid.status_code == 200
+        assert resp_paid.json()["subscription"]["plan_tier"] == "ultra"
+        mock_get_paid.assert_called_once()
+
+
+

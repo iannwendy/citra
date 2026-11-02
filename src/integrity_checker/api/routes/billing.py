@@ -44,6 +44,7 @@ from integrity_checker.billing.vnpay import (
     VNPayService,
     get_vnpay_response_message,
 )
+from integrity_checker.config import get_settings, is_test_runtime
 from integrity_checker.db.models import BillingTransaction, PromoCode, User
 from integrity_checker.db.repository import Repository
 
@@ -602,8 +603,9 @@ def create_checkout_session(
     stripe_secret = os.getenv("STRIPE_SECRET_KEY", "").strip()
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
 
-    # Attempt Real Stripe Test Mode if sk_test_ key is provided and not force_demo
-    if stripe_secret.startswith("sk_test_") and not request.force_demo and amount_usd > 0:
+    # Attempt Real Stripe Live / Test Mode if sk_live_ or sk_test_ key is provided and not force_demo
+    if stripe_secret.startswith(("sk_live_", "sk_test_")) and not request.force_demo and amount_usd > 0:
+        stripe_mode = "stripe_live" if stripe_secret.startswith("sk_live_") else "stripe_test"
         try:
             import stripe  # type: ignore
 
@@ -648,13 +650,13 @@ def create_checkout_session(
                 promo_code=applied_promo_code,
                 amount_usd=amount_usd,
                 status="pending",
-                payment_mode="stripe_test",
+                payment_mode=stripe_mode,
             )
             repo.commit()
             return {
                 "session_id": stripe_session.id,
                 "checkout_url": stripe_session.url,
-                "mode": "stripe_test",
+                "mode": stripe_mode,
                 "plan_tier": tier,
                 "plan_name": policy.name,
                 "billing_cycle": cycle,
@@ -903,6 +905,43 @@ def _activate_paid_transaction(
     db.refresh(tx)
 
 
+def _is_production_runtime() -> bool:
+    """Return True when APP_ENV / settings.app.env is production and not in test runtime."""
+    settings = get_settings()
+    env_val = (os.getenv("APP_ENV") or settings.app.env or "").strip().lower()
+    return env_val in ("production", "prod", "live") and not is_test_runtime()
+
+
+def _verify_stripe_session_paid(session_id: str, stripe_secret: str) -> dict[str, Any]:
+    """Verify a Stripe Checkout Session via Stripe HTTP API and require payment_status == 'paid'."""
+    import httpx
+
+    try:
+        resp = httpx.get(
+            f"https://api.stripe.com/v1/checkout/sessions/{session_id}",
+            auth=(stripe_secret, ""),
+            timeout=10.0,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to verify checkout session with Stripe: {exc}",
+        ) from exc
+
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=400,
+            detail="Unable to verify checkout session with Stripe.",
+        )
+    data = resp.json()
+    if data.get("payment_status") != "paid":
+        raise HTTPException(
+            status_code=402,
+            detail=f"Stripe checkout session is not paid (payment_status={data.get('payment_status')}).",
+        )
+    return data
+
+
 @router.post("/verify-session")
 def verify_checkout_session(
     request: VerifyCheckoutSessionRequest,
@@ -916,6 +955,31 @@ def verify_checkout_session(
         raise HTTPException(status_code=404, detail="Checkout session not found")
     if tx.user_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Access denied")
+
+    is_prod = _is_production_runtime()
+    allow_demo_in_prod = os.getenv("ALLOW_DEMO_CHECKOUT_IN_PROD", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    is_demo_session = (
+        request.session_id.startswith(("cs_test_demo_", "cs_demo_"))
+        or (tx.payment_mode or "").lower() in ("demo", "stripe_demo")
+    )
+    if is_prod and is_demo_session and not allow_demo_in_prod:
+        raise HTTPException(
+            status_code=403,
+            detail="Demo checkout sessions are not allowed in production",
+        )
+
+    stripe_secret = os.getenv("STRIPE_SECRET_KEY", "").strip()
+    if stripe_secret.startswith(("sk_live_", "sk_test_")) and not is_demo_session:
+        _verify_stripe_session_paid(request.session_id, stripe_secret)
+    elif is_prod and not is_demo_session:
+        raise HTTPException(
+            status_code=503,
+            detail="STRIPE_SECRET_KEY is not configured in production.",
+        )
 
     target_user = repo.get_user_by_id(tx.user_id)
     if not target_user:
