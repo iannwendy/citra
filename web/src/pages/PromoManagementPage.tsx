@@ -890,7 +890,7 @@ export function PromoManagementPage() {
             data-testid="promo-form-modal"
             className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 backdrop-blur-xs p-4 overflow-y-auto"
           >
-            <div className="w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl my-auto">
+            <div className="w-full max-w-lg max-h-[90dvh] overflow-y-auto overflow-x-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl my-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
@@ -1004,7 +1004,7 @@ export function PromoManagementPage() {
 
               {/* Discount Type & Discount Value */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
+                <div className="min-w-0">
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     {lang === 'vi' ? 'Loại giảm giá *' : 'Discount Type *'}
                   </label>
@@ -1025,7 +1025,7 @@ export function PromoManagementPage() {
                   </Select>
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     {discountType === 'percent'
                       ? lang === 'vi'
@@ -1050,7 +1050,7 @@ export function PromoManagementPage() {
 
               {/* Max Discount Cap & Min Order Subtotal */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
+                <div className="min-w-0">
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     {lang === 'vi'
                       ? 'Giảm tối đa ($ USD, tùy chọn)'
@@ -1075,7 +1075,7 @@ export function PromoManagementPage() {
                   />
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     {lang === 'vi'
                       ? 'Đơn tối thiểu ($ USD)'
@@ -1095,7 +1095,7 @@ export function PromoManagementPage() {
 
               {/* Applicable Tiers & Billing Cycles */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
+                <div className="min-w-0">
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     {lang === 'vi' ? 'Gói cước áp dụng' : 'Applicable Plan Tiers'}
                   </label>
@@ -1115,7 +1115,7 @@ export function PromoManagementPage() {
                   </Select>
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     {lang === 'vi' ? 'Chu kỳ thanh toán' : 'Applicable Billing Cycles'}
                   </label>
@@ -1142,8 +1142,8 @@ export function PromoManagementPage() {
 
               {/* Max Uses, Max Uses Per User, Expiration Date */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                <div className="min-w-0">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 truncate">
                     {lang === 'vi' ? 'Tổng lượt dùng tối đa' : 'Global Max Uses'}
                   </label>
                   <Input
@@ -1157,8 +1157,8 @@ export function PromoManagementPage() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                <div className="min-w-0">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 truncate">
                     {lang === 'vi' ? 'Lượt / Tài khoản' : 'Max Uses / User'}
                   </label>
                   <Input
@@ -1171,8 +1171,8 @@ export function PromoManagementPage() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                <div className="min-w-0">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 truncate">
                     {lang === 'vi' ? 'Ngày hết hạn' : 'Expiration Date'}
                   </label>
                   <Input
@@ -1180,7 +1180,7 @@ export function PromoManagementPage() {
                     data-testid="promo-expires-input"
                     value={expiresAt}
                     onChange={(e) => setExpiresAt(e.target.value)}
-                    className="rounded-xl font-mono text-sm"
+                    className="rounded-xl text-sm sm:px-2.5"
                   />
                 </div>
               </div>
