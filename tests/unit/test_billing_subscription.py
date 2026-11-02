@@ -1374,6 +1374,58 @@ def test_essay_stats_contract_c2_audit_essay_id_and_atomic_promo_redemption() ->
     assert matching[0]["essay_id"] == essay_id
 
 
+def test_get_all_essays_deduped_scopes_citation_counts_to_matched_essay_ids() -> None:
+    """get_all_essays_deduped(user_id=...) scopes CitationRecord count query to matched essay_ids and picks best copy."""
+    from integrity_checker.models.citation import Citation, CitationStyle, CitationType
+
+    client = TestClient(app)
+    _, user_data = _login_user(client, "user", "user123")
+    _, admin_data = _login_user(client, "admin", "admin123")
+
+    session = get_session()
+    repo = Repository(session)
+
+    # User uploads "thesis.pdf" twice: first copy has 0 citations, second copy has 2 citations
+    e_empty = repo.create_essay_with_user("thesis.pdf", 2, user_data["id"])
+    e_populated = repo.create_essay_with_user("thesis.pdf", 2, user_data["id"])
+    repo.add_citations(
+        e_populated.id,
+        [
+            Citation(
+                raw_text="[1]",
+                citation_type=CitationType.IN_TEXT,
+                style=CitationStyle.IEEE,
+            ),
+            Citation(
+                raw_text="[1] Vaswani et al. (2017)",
+                citation_type=CitationType.REFERENCE_LIST,
+                style=CitationStyle.IEEE,
+            ),
+        ],
+    )
+
+    # Admin also uploads a separate essay
+    e_admin = repo.create_essay_with_user("admin_doc.pdf", 1, admin_data["id"])
+    repo.add_citations(
+        e_admin.id,
+        [
+            Citation(
+                raw_text="[1]",
+                citation_type=CitationType.IN_TEXT,
+                style=CitationStyle.IEEE,
+            )
+        ],
+    )
+    session.commit()
+
+    deduped_user = repo.get_all_essays_deduped(user_id=user_data["id"])
+    assert len(deduped_user) == 1
+    canonical, dupes = deduped_user[0]
+    assert canonical.id == e_populated.id
+    assert dupes == [e_empty.id]
+    session.close()
+
+
 
 
 

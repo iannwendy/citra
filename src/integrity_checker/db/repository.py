@@ -1102,12 +1102,18 @@ class Repository:
 
         from sqlalchemy import func
 
-        counts = {
-            row[0]: row[1]
-            for row in self.session.query(
-                CitationRecord.essay_id, func.count(CitationRecord.id)
-            ).group_by(CitationRecord.essay_id).all()
-        }
+        essay_ids = [e.id for e in essays if e.id is not None]
+        counts: dict[int, int] = {}
+        if essay_ids:
+            counts = {
+                row[0]: row[1]
+                for row in self.session.query(
+                    CitationRecord.essay_id, func.count(CitationRecord.id)
+                )
+                .filter(CitationRecord.essay_id.in_(essay_ids))
+                .group_by(CitationRecord.essay_id)
+                .all()
+            }
 
         groups: dict[tuple[int | None, str], list[EssayRecord]] = {}
         for essay in essays:
