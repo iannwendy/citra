@@ -73,11 +73,15 @@ def get_report(
     tracker = get_tracker()
     state = tracker.get(essay_id)
     if state is not None and state.status == "processing":
-        return JSONResponse(
-            status_code=425,
-            content={"detail": "Analysis in progress", "retry_after": 3},
-            headers={"Retry-After": "3"},
-        )
+        persisted = tracker.load_persisted_snapshot(essay_id, essay_record=essay)
+        if essay.cis_json and persisted is None:
+            tracker.clear(essay_id)
+        else:
+            return JSONResponse(
+                status_code=425,
+                content={"detail": "Analysis in progress", "retry_after": 3},
+                headers={"Retry-After": "3"},
+            )
 
     verdicts = repo.get_verdicts(essay_id)
 

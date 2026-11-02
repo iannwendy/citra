@@ -28,6 +28,10 @@ from integrity_checker.db.session import get_session
 @pytest.fixture()
 def clean_db():
     """Provide a clean DB session for each test."""
+    from integrity_checker.api.progress import get_tracker
+
+    get_tracker()._states.clear()
+    get_tracker()._retry_counts.clear()
     session = get_session()
     session.query(VerdictRecord).delete()
     session.query(CitationRecord).delete()
@@ -40,6 +44,8 @@ def clean_db():
     try:
         yield session
     finally:
+        get_tracker()._states.clear()
+        get_tracker()._retry_counts.clear()
         session.close()
         cleanup = get_session()
         cleanup.query(VerdictRecord).delete()

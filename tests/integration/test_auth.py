@@ -95,9 +95,9 @@ def test_get_me_authenticated(client):
 
 
 def test_get_me_unauthenticated(client):
-    """Test GET /auth/me without token returns 422."""
+    """Test GET /auth/me without token or X-API-Key returns 401."""
     resp = client.get("/api/auth/me")
-    assert resp.status_code == 422  # Missing required header
+    assert resp.status_code == 401  # Missing authentication token or X-API-Key
 
 
 def test_admin_list_users(client):
