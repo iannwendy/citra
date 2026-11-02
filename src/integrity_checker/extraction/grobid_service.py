@@ -32,7 +32,6 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 import requests
 
@@ -41,7 +40,7 @@ from integrity_checker.config import GrobidConfig, get_settings
 logger = logging.getLogger(__name__)
 
 
-class GROBID_STATUS(Enum):
+class GROBID_STATUS(Enum):  # noqa: N801 - public enum name used across codebase/tests
     """GROBID container status."""
 
     AVAILABLE = "available"          # Container running, API responding

@@ -185,7 +185,7 @@ def test_export_class_csv_returns_one_row_per_essay(clean_db):
     essay_b_id, verdict_b_id = _create_essay_with_verdict(
         student_id, filename="beta.pdf", label="metadata_error", confidence=0.4,
     )
-    essay_c_id = _create_essay_no_verdict(student_id, filename="gamma.pdf")
+    _create_essay_no_verdict(student_id, filename="gamma.pdf")
 
     # act
     token = get_teacher_token()
@@ -215,7 +215,7 @@ def test_export_class_csv_returns_one_row_per_essay(clean_db):
     assert "is_overridden" in header
 
     # Build dicts for row assertions
-    data_rows = [dict(zip(header, r)) for r in rows[1:]]
+    data_rows = [dict(zip(header, r, strict=False)) for r in rows[1:]]
     filenames = [r["filename"] for r in data_rows]
     assert sorted(filenames) == ["alpha.pdf", "beta.pdf", "gamma.pdf"]
 

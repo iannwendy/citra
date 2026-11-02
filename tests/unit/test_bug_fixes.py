@@ -7,8 +7,7 @@ Tests covering:
 - Bug 6: in_text_bib_consistency calculation fix
 """
 
-from dataclasses import dataclass
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -26,7 +25,7 @@ class TestBug1NumPagesFix:
 
     def test_num_pages_comes_from_document_not_sections(self):
         """Verify that ParsedDocument uses document.num_pages."""
-        from integrity_checker.extraction.base import Document, Page
+        from integrity_checker.extraction.base import Document
         from integrity_checker.extraction.document_parser import ParsedDocument
         from integrity_checker.extraction.section_segmenter import DocumentSection, SectionType
 

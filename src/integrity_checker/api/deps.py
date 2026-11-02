@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Generator
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 
 import jwt
 from fastapi import Depends, Header, HTTPException
@@ -69,10 +69,10 @@ def get_current_user(
 
     try:
         payload = jwt.decode(token, settings.auth.jwt_secret, algorithms=["HS256"])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(status_code=401, detail="Token expired") from exc
+    except jwt.InvalidTokenError as exc:
+        raise HTTPException(status_code=401, detail="Invalid token") from exc
 
     user_id = payload.get("sub")
     if not user_id:
@@ -80,8 +80,8 @@ def get_current_user(
 
     try:
         user_id = int(user_id)  # Convert back from string
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=401, detail="Invalid token payload")
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=401, detail="Invalid token payload") from exc
 
     # Verify session exists and is not expired
     repo = Repository(db)

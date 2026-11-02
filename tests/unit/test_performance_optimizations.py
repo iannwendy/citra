@@ -16,7 +16,7 @@ from sqlalchemy import event, inspect
 from integrity_checker.api.main import create_app
 from integrity_checker.database.local_db import LocalDatabase
 from integrity_checker.database.models import Paper
-from integrity_checker.db.models import Base, CitationRecord, EssayRecord, VerdictRecord
+from integrity_checker.db.models import Base, EssayRecord, VerdictRecord
 from integrity_checker.db.repository import Repository
 from integrity_checker.db.session import _run_inline_migrations, get_engine, get_session
 

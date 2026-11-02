@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class CitationType(str, Enum):
@@ -174,7 +173,6 @@ class Citation:
             extract_title: Nếu True, thử trích title từ formatted citation.
                           Title thường nằm sau year và trước venue (.,;:).
         """
-        import re
         c = cls(raw_text=raw.strip())
         c.doi = _DOI_RE.search(raw).group(0) if _DOI_RE.search(raw) else None
         c.url = _URL_RE.search(raw).group(0) if _URL_RE.search(raw) else None

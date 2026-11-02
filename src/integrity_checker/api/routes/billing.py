@@ -6,7 +6,7 @@ import logging
 import os
 import re
 import secrets
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request

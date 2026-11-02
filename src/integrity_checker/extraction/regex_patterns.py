@@ -24,7 +24,7 @@ warnings.warn(
 )
 
 # Re-export from patterns module for backward compatibility
-from integrity_checker.extraction.patterns import (
+from integrity_checker.extraction.patterns import (  # noqa: E402 - must follow the deprecation warning
     DOI_PATTERN,
     URL_PATTERN,
     YEAR_PATTERN,
@@ -42,7 +42,7 @@ from integrity_checker.extraction.patterns import (
 )
 
 # Import CitationStyle and CitationType for backward compatibility
-from integrity_checker.models.citation import CitationStyle, CitationType
+from integrity_checker.models.citation import CitationStyle, CitationType  # noqa: E402
 
 # Backward compatibility alias - CitationPattern was the old name
 CitationPattern = CompiledPattern
@@ -65,3 +65,27 @@ def get_all_patterns():
         stacklevel=2,
     )
     return list(get_in_text_patterns()) + list(get_utility_patterns())
+
+
+# Public backward-compatible surface of this deprecated module.
+__all__ = [
+    "DOI_PATTERN",
+    "URL_PATTERN",
+    "YEAR_PATTERN",
+    "CitationFormat",
+    "CompiledPattern",
+    "PatternType",
+    "extract_doi",
+    "extract_url",
+    "extract_year",
+    "get_all_formats",
+    "get_format",
+    "get_in_text_patterns",
+    "get_reference_patterns",
+    "get_utility_patterns",
+    "CitationStyle",
+    "CitationType",
+    "CitationPattern",
+    "CITATION_PATTERNS",
+    "get_all_patterns",
+]

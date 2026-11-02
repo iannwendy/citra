@@ -6,7 +6,6 @@ v1.3: Bổ sung content alignment features cho Neural layer.
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from integrity_checker.matching.author_matcher import author_match_score
 from integrity_checker.matching.fuzzy import FuzzyMatcher
@@ -342,10 +341,7 @@ class FeatureCalculator:
         equiv_sets = (
             {"10.18653/v1/n19-1423", "10.48550/arxiv.1810.04805"},
         )
-        for eq in equiv_sets:
-            if d1 in eq and d2 in eq:
-                return True
-        return False
+        return any(d1 in eq and d2 in eq for eq in equiv_sets)
 
     @staticmethod
     def _is_book_review_candidate(cand: SourceCandidate) -> bool:

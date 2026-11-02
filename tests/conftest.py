@@ -19,7 +19,7 @@ os.environ["APP_DEBUG"] = "false"
 os.environ["APP_LOG_LEVEL"] = "WARNING"
 os.environ["DATABASE_URL"] = TEST_DB_URL
 
-from integrity_checker.config import get_settings
+from integrity_checker.config import get_settings  # noqa: E402 - env vars must be set first
 
 get_settings.cache_clear()
 

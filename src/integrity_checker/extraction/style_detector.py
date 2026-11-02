@@ -31,9 +31,8 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
-from integrity_checker.config import Settings, StyleDetectionConfig
+from integrity_checker.config import StyleDetectionConfig
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
 # Optional import for patterns registry

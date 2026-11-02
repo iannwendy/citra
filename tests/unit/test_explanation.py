@@ -1,6 +1,5 @@
 """Unit tests for ExplanationGenerator — Task 1.2."""
 
-from dataclasses import dataclass, field
 
 import pytest
 

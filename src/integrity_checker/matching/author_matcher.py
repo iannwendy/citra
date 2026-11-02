@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Union
 
 from integrity_checker.matching.author_parser import Author
 

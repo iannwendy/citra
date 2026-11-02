@@ -185,7 +185,6 @@ class SerpApiClient(BaseScholarClient):
         """
         import asyncio
 
-        from serpapi import GoogleScholarSearch
 
         # FIX: Be explicit about which exceptions to retry
         # Don't catch KeyboardInterrupt, SystemExit, MemoryError, etc.

@@ -18,7 +18,7 @@ Cần: `python scripts/gen_sample_essays.py` đã chạy trước.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -28,7 +28,6 @@ from integrity_checker.pipeline.integrity_pipeline import (
     AnalysisReport,
     IntegrityPipeline,
 )
-from integrity_checker.retrieval.cache import DiskCache
 from integrity_checker.retrieval.normalization import citation_key
 
 ESSAYS_DIR = Path("data/essays")
@@ -105,12 +104,6 @@ def _build_test_pipeline(
     else:
         orchestrator = _build_mock_orchestrator(found=True)
     checker = _build_mock_checker()
-
-    cache = DiskCache(
-        cache_dir=cache_dir or Path("/tmp/test_essay_cache"),
-        ttl_seconds=60,
-        enabled=False,  # Don't write cache during tests
-    )
 
     return IntegrityPipeline(
         orchestrator=orchestrator,
@@ -232,7 +225,7 @@ class TestPipelineV12ErrorHandling:
         pipeline = _build_test_pipeline(
             use_document_parser=False, disable_retrieval=True
         )
-        with pytest.raises(Exception):
+        with pytest.raises(FileNotFoundError):
             pipeline.run("/nonexistent/file.pdf")
 
     def test_modern_path_missing_file_warns(self):

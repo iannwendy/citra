@@ -12,7 +12,7 @@ Defines the 3 tiers for CITRA (SourceLogic):
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 PlanTierLiteral = Literal["basic", "pro", "ultra"]

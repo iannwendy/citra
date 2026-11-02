@@ -6,11 +6,11 @@ import hashlib
 import json
 import re
 import secrets
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session as OrmSession
 
 from integrity_checker.billing.plans import default_plan_for_role
 from integrity_checker.db.models import (
@@ -36,7 +36,7 @@ from integrity_checker.pipeline.integrity_pipeline import _serialize_matched_sou
 class Repository:
     """Thin wrapper quanh Session — methods domain-specific."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: OrmSession) -> None:
         self.session = session
 
     # -- Essays --

@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
-
 from integrity_checker.extraction.grobid_parser import (
     SAMPLE_TEI,
-    GrobidBibEntry,
-    GrobidOutput,
     compute_sha256,
     compute_sha256_hash,
     deserialize_output,

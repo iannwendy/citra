@@ -9,7 +9,7 @@ import secrets
 import threading
 import time
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import bcrypt
@@ -605,7 +605,7 @@ def _verify_google_payload(
         raise HTTPException(
             status_code=502,
             detail="Could not reach Google authentication servers. Please try again.",
-        )
+        ) from exc
 
 
 def _generate_unique_google_username(

@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from integrity_checker.extraction.grobid_parser import (
     GrobidBibEntry,
@@ -109,7 +109,6 @@ def grobid_to_references(output: GrobidOutput) -> list:
     Returns:
         list[Citation] — mỗi entry là một reference trong bibliography
     """
-    from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
     citations: list[Citation] = []
 
@@ -313,7 +312,6 @@ def grobid_to_in_text_citations(output: GrobidOutput) -> list:
     Returns:
         list[Citation] — mỗi entry là một in-text occurrence
     """
-    from integrity_checker.models.citation import Citation, CitationType
 
     citations: list[Citation] = []
 
@@ -415,7 +413,6 @@ def merge_extraction_results(
     Returns:
         MergeResult với merged references, body_citations, provenance, conflicts
     """
-    from integrity_checker.models.citation import Citation, CitationType
 
     result = MergeResult()
 
@@ -479,7 +476,6 @@ def _merge_references(
     Returns:
         (merged_refs, conflicts, provenance_map)
     """
-    from integrity_checker.models.citation import Citation
 
     merged: list[Citation] = []
     conflicts: list = []
@@ -542,7 +538,6 @@ def _merge_intext_citations(
     Returns:
         (merged_intext, conflicts, provenance_map)
     """
-    from integrity_checker.models.citation import Citation
 
     merged: list[Citation] = []
     conflicts: list = []

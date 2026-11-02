@@ -241,7 +241,6 @@ class TestClassCrud:
         from integrity_checker.db.repository import Repository
         from integrity_checker.db.session import get_session
         s = get_session()
-        t2_user = Repository(s).get_user_by_id(t2_id)
         # Manually create class for teacher2 via DB (no API login as teacher2)
         Repository(s).create_class(name="Teacher2Class", teacher_id=t2_id)
         s.commit()
@@ -315,7 +314,7 @@ class TestClassOwnership:
         from integrity_checker.db.session import get_session
 
         t1_id = _make_user("teacher_a", role="teacher")
-        t2_id = _make_user("teacher_b", role="teacher")
+        _make_user("teacher_b", role="teacher")
         s = get_session()
         c1 = Repository(s).create_class(name="ClassA", teacher_id=t1_id)
         s.commit()
@@ -526,8 +525,8 @@ class TestClassEssays:
         )
         s = get_session()
         repo = Repository(s)
-        e1 = repo.create_essay_with_user("test1.pdf", 5, sid)
-        e2 = repo.create_essay_with_user("test2.pdf", 3, sid)
+        repo.create_essay_with_user("test1.pdf", 5, sid)
+        repo.create_essay_with_user("test2.pdf", 3, sid)
         s.commit()
         s.close()
 
@@ -835,7 +834,6 @@ class TestFreshDbMigration:
 
     def test_old_migration_order_would_fail(self, tmp_path):
         """Demonstrates the bug: if ALTER ran before create_all, fresh DB fails."""
-        import sqlite3
 
         from sqlalchemy import create_engine as sa_create_engine
 

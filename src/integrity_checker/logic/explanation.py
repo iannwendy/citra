@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from integrity_checker.models.validation import CitationVerdict, ValidationLabel
 
 if TYPE_CHECKING:
-    from integrity_checker.linking.statuses import CitationMappingStatus
+    pass
 
 
 class ExplanationGenerator:
@@ -350,7 +350,6 @@ class ExplanationGenerator:
                 }
             }
         """
-        from integrity_checker.models.validation import ValidationLabel
 
         # Get label color
         label_color = verdict.label.color if hasattr(verdict.label, "color") else "#6b7280"

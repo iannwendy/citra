@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from integrity_checker.linking import DuplicateDetector, DuplicateGroup
+from integrity_checker.linking import DuplicateDetector
 from integrity_checker.models.citation import Citation, CitationType
 
 

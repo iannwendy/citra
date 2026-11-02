@@ -10,8 +10,6 @@ Tests covering:
 
 from __future__ import annotations
 
-import pytest
-
 from integrity_checker.extraction.patterns import (
     IEEEFormat,
     get_format,
@@ -19,15 +17,10 @@ from integrity_checker.extraction.patterns import (
     get_reference_patterns,
 )
 from integrity_checker.extraction.patterns.ieee import (
-    _IEEE_BOOK_CHAPTER,
     _IEEE_BRACKET_RE,
-    _IEEE_CONFERENCE,
     _IEEE_NUMERIC,
     _IEEE_REFERENCE_ENTRY,
     _IEEE_REFERENCE_YEAR_END,
-    _IEEE_TECH_REPORT,
-    IEEE_IN_TEXT_PATTERNS,
-    IEEE_REFERENCE_PATTERNS,
 )
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 

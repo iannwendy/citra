@@ -7,13 +7,12 @@ import warnings
 from collections.abc import Iterable
 
 from integrity_checker.extraction.base import Document
-from integrity_checker.extraction.patterns import get_in_text_patterns
 from integrity_checker.extraction.patterns.base import CompiledPattern
 
 # Suppress deprecation warning for legacy import (regex_patterns.py is deprecated)
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
-    from integrity_checker.extraction.regex_patterns import CITATION_PATTERNS, CitationPattern
+    from integrity_checker.extraction.regex_patterns import CitationPattern
 
 from integrity_checker.extraction.text_preprocessor import TextPreprocessor
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
@@ -544,7 +543,7 @@ class CitationExtractor:
                             or any(n >= 300 for n in bracket_nums)
                             or (
                                 len(bracket_nums) >= 2
-                                and any(b < a for a, b in zip(bracket_nums, bracket_nums[1:]))
+                                and any(b < a for a, b in zip(bracket_nums, bracket_nums[1:], strict=False))
                                 and any(n >= 50 for n in bracket_nums)
                             )
                         ):

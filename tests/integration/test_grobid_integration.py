@@ -16,11 +16,9 @@ Reference: v1.2 §3.4, §5.2 (GROBID Docker setup)
 
 from __future__ import annotations
 
-import json
 import os
 from io import BytesIO
 from pathlib import Path
-from typing import Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -437,7 +435,7 @@ class TestDocumentParserWithMockGrobid:
 
     def test_document_parser_with_mock_grobid(self, fake_pdf_content):
         """DocumentParser with mock GROBID should parse TEI and extract citations."""
-        from integrity_checker.config import GrobidConfig, Settings
+        from integrity_checker.config import Settings
         from integrity_checker.extraction.document_parser import DocumentParser
 
         # Create settings with GROBID enabled

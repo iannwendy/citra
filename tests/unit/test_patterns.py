@@ -7,12 +7,9 @@ import pytest
 from integrity_checker.extraction.patterns import (
     DOI_PATTERN,
     URL_PATTERN,
-    UTILITY_PATTERNS,
     YEAR_PATTERN,
-    CitationFormat,
     CompiledPattern,
     PatternType,
-    clear_registry,
     extract_doi,
     extract_url,
     extract_year,
@@ -24,8 +21,7 @@ from integrity_checker.extraction.patterns import (
     get_utility_patterns,
     register_format,
 )
-from integrity_checker.extraction.patterns.base import CompiledPattern as BaseCompiledPattern
-from integrity_checker.models.citation import Citation, CitationStyle
+from integrity_checker.models.citation import CitationStyle
 
 
 class TestUtilityPatterns:
@@ -211,7 +207,6 @@ class TestRegistry:
         """Test registering duplicate format raises error."""
         import uuid
         name1 = f"TestDup1_{uuid.uuid4().hex[:8]}"
-        name2 = f"TestDup2_{uuid.uuid4().hex[:8]}"
 
         class DummyFormat1:
             name = name1

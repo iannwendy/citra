@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestGrobidServiceManager:
     """Test GrobidServiceManager class."""
@@ -117,7 +115,7 @@ class TestCacheOperations:
 
     def test_get_cache_path(self, tmp_path):
         """Test cache path generation."""
-        from integrity_checker.config import GrobidConfig, Settings
+        from integrity_checker.config import GrobidConfig
         from integrity_checker.extraction.grobid_service import GrobidServiceManager
 
         config = GrobidConfig()
@@ -372,7 +370,7 @@ class TestAutoStart:
         manager = get_grobid_manager(config=config, auto_start=False)
 
         # Mock start and wait_until_ready
-        with patch.object(manager, "start", return_value=True) as mock_start:
+        with patch.object(manager, "start", return_value=True):
             with patch.object(manager, "wait_until_ready", return_value=True):
                 with patch.object(manager, "check_health") as mock_health:
                     mock_health.return_value = GROBID_STATUS.AVAILABLE
@@ -520,5 +518,6 @@ class TestProductionConfig:
                     mock_get.return_value = mock_response
 
                     status = manager._check_http_health()
-                    # Since GROBID is not running locally, should return UNHEALTHY
-                    # (this test verifies the HTTP check logic works)
+                    # requests.get is mocked to return HTTP 200, so the HTTP
+                    # check logic must report AVAILABLE.
+                    assert status == GROBID_STATUS.AVAILABLE

@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 from integrity_checker.logic.rules import SymbolicRules
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.models.validation import MatchFeatures, ValidationLabel

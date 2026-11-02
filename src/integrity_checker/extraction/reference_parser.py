@@ -34,11 +34,10 @@ from __future__ import annotations
 import logging
 import re
 from collections import Counter
-from collections.abc import Iterable
 
 from integrity_checker.extraction.base import Document
 from integrity_checker.extraction.citation_extractor import CitationExtractor
-from integrity_checker.extraction.patterns import get_all_formats, get_format
+from integrity_checker.extraction.patterns import get_all_formats
 from integrity_checker.extraction.patterns.apa import (
     is_vn_legal_reference,
     parse_vn_legal_reference,
@@ -2066,7 +2065,7 @@ class ReferenceListParser:
         # pieces[0] is the surname; pairs are (surname, initials).
         for n_pairs in range(len(pieces) // 2, 0, -1):
             pair_pieces = pieces[: n_pairs * 2]
-            surname, initials = pair_pieces[0], pair_pieces[1]
+            surname = pair_pieces[0]
             if len(surname) < 2 or _INITIALS_FULLMATCH.fullmatch(surname):
                 continue
             if any(
@@ -2666,7 +2665,7 @@ def check_tdtu_bibliography_compliance(
         prev_group = grp
 
     # 2. Check legal hierarchy within legal documents (Hiến pháp -> Luật/Bộ luật -> Văn bản dưới luật)
-    legal_cits = [c for c, g in zip(citations, groups) if g == "legal"]
+    legal_cits = [c for c, g in zip(citations, groups, strict=False) if g == "legal"]
     for i in range(len(legal_cits) - 1):
         r1 = _legal_hierarchy_rank(legal_cits[i])
         r2 = _legal_hierarchy_rank(legal_cits[i + 1])
@@ -2677,7 +2676,7 @@ def check_tdtu_bibliography_compliance(
 
     # 3. Check ABC alphabetical sorting within each academic language group ('vi' and 'foreign')
     for target_grp in ("vi", "foreign"):
-        grp_cits = [c for c, g in zip(citations, groups) if g == target_grp]
+        grp_cits = [c for c, g in zip(citations, groups, strict=False) if g == target_grp]
         for i in range(len(grp_cits) - 1):
             label_a = _reference_primary_sort_label(grp_cits[i])
             label_b = _reference_primary_sort_label(grp_cits[i + 1])

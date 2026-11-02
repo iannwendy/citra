@@ -34,7 +34,6 @@ Reference:
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from integrity_checker.extraction.patterns.base import CompiledPattern, PatternType
 from integrity_checker.extraction.patterns.registry import register_format
@@ -733,7 +732,7 @@ class CSEFormat:
         # Try to extract title
         parts = text_no_url.split('.')
         if len(parts) >= 2:
-            for i, part in enumerate(parts[1:], start=1):
+            for part in parts[1:]:
                 part = part.strip()
                 if len(part) > 10 and len(part) < 200:
                     citation.title = part

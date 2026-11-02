@@ -81,6 +81,12 @@ __all__ = [
     "GrobidSection",
     "call_grobid_fulltext",
     "parse_tei",
+    # GROBID service lifecycle (re-exported for pipeline/health routes)
+    "GROBID_STATUS",
+    "GrobidServiceManager",
+    "GrobidStats",
+    "get_grobid_manager",
+    "reset_grobid_manager",
     "StyleDetector",
     "StyleFeatures",
     "StyleProfile",

@@ -14,8 +14,6 @@ import pytest
 
 from integrity_checker.extraction.grobid_adapter import (
     SAMPLE_GROBID_OUTPUT,
-    MergeResult,
-    ProvenanceInfo,
     build_grobid_id_map,
     grobid_to_in_text_citations,
     grobid_to_references,
@@ -349,7 +347,7 @@ class TestMergeExtractionResults:
 
     def test_grobid_used_when_available(self, sample_grobid_output):
         """GROBID references được sử dụng khi available."""
-        from integrity_checker.models.citation import Citation, CitationType
+        from integrity_checker.models.citation import Citation
 
         regex_refs: list[Citation] = []
         regex_intext: list[Citation] = []

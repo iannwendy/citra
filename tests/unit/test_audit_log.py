@@ -187,7 +187,7 @@ def test_list_audit_log_requires_admin(clean_db):
 
 def test_list_audit_log_returns_recent_first(clean_db):
     """GET /api/audit/log must return rows ordered by logged_at DESC."""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from integrity_checker.db.repository import Repository
     from integrity_checker.db.session import get_session

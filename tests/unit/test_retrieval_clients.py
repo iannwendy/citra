@@ -6,7 +6,6 @@ Reference: v1.2 §3.6 — tuần 8.
 
 from __future__ import annotations
 
-from typing import Any
 from unittest.mock import patch
 
 import httpx

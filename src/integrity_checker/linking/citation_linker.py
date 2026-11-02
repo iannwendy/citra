@@ -28,13 +28,12 @@ import difflib
 import logging
 import re
 import unicodedata
-from typing import Optional
 
 from integrity_checker.linking.statuses import (
     CitationMappingStatus,
     LinkingResult,
 )
-from integrity_checker.models.citation import Citation, CitationStyle, CitationType
+from integrity_checker.models.citation import Citation, CitationType
 from integrity_checker.models.validation import CitationLink, MappingMethod
 
 logger = logging.getLogger(__name__)
@@ -196,8 +195,8 @@ class CitationLinker:
                 )
 
             if links:
-                if any(l.status == CitationMappingStatus.MATCHED for l in links):
-                    prev_matched_links = [l for l in links if l.status == CitationMappingStatus.MATCHED]
+                if any(lnk.status == CitationMappingStatus.MATCHED for lnk in links):
+                    prev_matched_links = [lnk for lnk in links if lnk.status == CitationMappingStatus.MATCHED]
                 for link in links:
                     # Populate evidence['raw'] so downstream lookups can find
                     # this link by the in-text citation's raw_text (the pipeline
@@ -211,7 +210,7 @@ class CitationLinker:
                                 bib_matched.add(idx)
                                 break
                 best_link = next(
-                    (l for l in links if l.status == CitationMappingStatus.MATCHED),
+                    (lnk for lnk in links if lnk.status == CitationMappingStatus.MATCHED),
                     links[0],
                 )
                 cit.mapping_status = (
@@ -243,14 +242,14 @@ class CitationLinker:
         for i, bib in enumerate(bib_citations):
             ref_id = bib.reference_id or f"ref-{i:04d}"
             matched_links = [
-                l
-                for l in result.links
-                if l.reference_id == ref_id
-                and getattr(l.status, "value", l.status) == "matched"
+                lnk
+                for lnk in result.links
+                if lnk.reference_id == ref_id
+                and getattr(lnk.status, "value", lnk.status) == "matched"
             ]
             if i in bib_matched and matched_links:
                 bib.mapping_status = CitationMappingStatus.MATCHED.value
-                bib.mapping_confidence = max(l.confidence for l in matched_links)
+                bib.mapping_confidence = max(lnk.confidence for lnk in matched_links)
                 bib.citation_link = matched_links[0]
                 bib.citation_links = list(matched_links)
             else:
@@ -417,7 +416,7 @@ class CitationLinker:
                             confidence=0.0,
                             method=MappingMethod.NO_KEYS,
                         ))
-            if any(l.status == CitationMappingStatus.MATCHED for l in multi_links):
+            if any(lnk.status == CitationMappingStatus.MATCHED for lnk in multi_links):
                 return multi_links
 
         # 3a. Secondary citation (trích dẫn gián tiếp): "(Smith, 2005, dẫn theo Tran, 2016)"
@@ -625,14 +624,14 @@ class CitationLinker:
                         ratio = difflib.SequenceMatcher(None, author_folded, bf).ratio()
                         one_char_diff = (
                             len(author_folded) == len(bf)
-                            and sum(a != b for a, b in zip(author_folded, bf)) == 1
+                            and sum(a != b for a, b in zip(author_folded, bf, strict=False)) == 1
                         ) or (
                             abs(len(author_folded) - len(bf)) == 1
                             and (bf.startswith(author_folded) or author_folded.startswith(bf))
                         ) or (
                             len(author_folded) >= 5
                             and sorted(author_folded) == sorted(bf)
-                            and sum(a != b for a, b in zip(author_folded, bf)) <= 3
+                            and sum(a != b for a, b in zip(author_folded, bf, strict=False)) <= 3
                         )
                         if ratio >= 0.84 or one_char_diff:
                             return CitationLink(

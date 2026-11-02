@@ -33,7 +33,6 @@ Chicago offers two systems:
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from integrity_checker.extraction.patterns.base import CompiledPattern, PatternType
 from integrity_checker.extraction.patterns.registry import register_format

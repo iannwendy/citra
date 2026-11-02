@@ -5,11 +5,11 @@ from __future__ import annotations
 import csv
 import io
 import json
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 from html import escape
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4

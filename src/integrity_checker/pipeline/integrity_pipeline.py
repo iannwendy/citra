@@ -21,8 +21,8 @@ import hashlib
 import inspect
 import json
 import re
-from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime, timezone
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,16 +34,12 @@ from integrity_checker.extraction import (
     PdfPlumberParser,
     ReferenceListParser,
 )
-from integrity_checker.extraction.base import BasePDFParser, Document, Page, chain_parsers
-from integrity_checker.extraction.document_parser import ParsedDocument
+from integrity_checker.extraction.base import BasePDFParser, Page, chain_parsers
 from integrity_checker.linking.citation_linker import CitationLinker
-from integrity_checker.linking.duplicate_detector import DuplicateDetector
 from integrity_checker.linking.statuses import (
     CitationLink,
     CitationMappingStatus,
-    CitationOccurrence,
     LinkingResult,
-    ReferenceEntry,
     StyleProfile,
 )
 from integrity_checker.logging import configure_logging, get_logger
@@ -507,7 +503,7 @@ class IntegrityPipeline:
                 logger.debug(f"progress_callback ignored: {cb_err}")
 
         if (
-            not Path(pdf_path).is_file()
+            not Path(pdf_path).is_file()  # noqa: ASYNC240 - cheap stat before heavy parse
             and self._use_document_parser
             and not self._document_parser_explicit
         ):
@@ -534,7 +530,6 @@ class IntegrityPipeline:
         num_pages = 0
         in_text_citations: list[Citation] = []
         ref_citations: list[Citation] = []
-        appendix_citations: list[Citation] = []
         parser_warnings: list[str] = []
         style_profile_dict: dict[str, Any] | None = None
         document_pages: list[Page] = []  # Store pages for context extraction
@@ -551,7 +546,6 @@ class IntegrityPipeline:
                 if c not in parsed.body_citations
             ]
             ref_citations = parsed.references
-            appendix_citations = parsed.appendix_citations
             parser_warnings = parsed.parser_warnings
             document_pages = parsed.document.pages  # Store for context extraction
             logger.info(
@@ -713,13 +707,11 @@ class IntegrityPipeline:
         # only once when a bibliography entry and in-text occurrence refer to
         # the same paper.
         unique_citations: dict[str, Citation] = {}
-        citation_keys: list[str] = []
         for citation in all_citations:
             # A reference list entry and its in-text occurrence describe the
             # same source; resolve to the linked entry's key so retrieval only
             # queries that paper once.
             key = citation_key(citation)
-            citation_keys.append(key)
             unique_citations.setdefault(key, citation)
 
         # FIX v1.7: Only keep verifiable citations for retrieval + verdicts.
@@ -752,10 +744,6 @@ class IntegrityPipeline:
             *(_bounded_retrieve(c) for c in unique_list),
             return_exceptions=False,
         )
-        # FIX v1.7: source_by_key maps verifiable keys → sources
-        source_by_key = dict(zip(verifiable_keys, unique_sources))
-        # sources[] giờ chỉ dùng cho verifiable citations (references)
-        sources = [source_by_key.get(key) for key in citation_keys]
         if len(unique_list) < len(unique_citations):
             logger.info(
                 f"Retrieval: {len(all_citations)} citations -> "
@@ -842,7 +830,7 @@ class IntegrityPipeline:
         verdicts: list[CitationVerdict] = []
         # FIX v1.7: Only iterate over verifiable (reference) citations for verdicts.
         # In-text citations are verified via linking only (mapping_status attached below).
-        for citation, source in zip(unique_list, unique_sources):
+        for citation, source in zip(unique_list, unique_sources, strict=False):
             # NEW v1.2 §3.2.2 (task #33) — compute mapping_status TRƯỚC rules
             # để SymbolicRules có input cho AMBIGUOUS_MAPPING rule.
             if citation.citation_type.value == "reference_list":
@@ -851,15 +839,15 @@ class IntegrityPipeline:
                 # occurrences. Fall back to DOI check only when no in-text
                 # citations were present in the document.
                 ref_links = [
-                    l
-                    for l in linking_result.links
+                    lnk
+                    for lnk in linking_result.links
                     if citation.reference_id
-                    and l.reference_id == citation.reference_id
-                    and getattr(l.status, "value", l.status) == "matched"
+                    and lnk.reference_id == citation.reference_id
+                    and getattr(lnk.status, "value", lnk.status) == "matched"
                 ]
                 if ref_links:
                     mapping_status = CitationMappingStatus.MATCHED
-                    mapping_confidence = max(l.confidence for l in ref_links)
+                    mapping_confidence = max(lnk.confidence for lnk in ref_links)
                     citation_link = ref_links[0]
                     citation_links_verdict: list = list(ref_links)
                 elif (
@@ -2233,7 +2221,7 @@ def main() -> None:
     # Show GROBID status if requested
     if args.grobid_status:
         try:
-            from integrity_checker.extraction import GROBID_STATUS, get_grobid_manager
+            from integrity_checker.extraction import get_grobid_manager
 
             manager = get_grobid_manager()
             status = manager.check_health()
@@ -2271,7 +2259,7 @@ def main() -> None:
         )
     print("=" * 70)
     print("\n Verdicts:")
-    for i, v in enumerate(report.verdicts, 1):
+    for v in report.verdicts:
         marker = {
             "verified": "✓",
             "metadata_error": "△",

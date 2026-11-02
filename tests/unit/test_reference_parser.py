@@ -230,7 +230,6 @@ class TestCitationTypeAndMetadata:
 
     def test_no_section_no_citations(self):
         # Document không có "References" header → trả []
-        pp = TextPreprocessor()
         doc = Document(
             file_path="x.pdf",
             num_pages=1,

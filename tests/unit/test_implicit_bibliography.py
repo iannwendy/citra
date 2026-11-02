@@ -3,11 +3,9 @@
 Covers Fix 1 from PLAN_fix_ref_extraction.md.
 """
 
-import pytest
 
 from integrity_checker.extraction.base import Document, Page
 from integrity_checker.extraction.section_segmenter import (
-    DocumentSection,
     SectionSegmenter,
     SectionType,
 )

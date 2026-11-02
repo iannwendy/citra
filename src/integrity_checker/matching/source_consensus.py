@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from integrity_checker.models.source import SourceCandidate, SourceResult
+from integrity_checker.models.source import SourceResult
 
 
 @dataclass

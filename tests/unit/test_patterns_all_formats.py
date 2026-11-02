@@ -26,7 +26,6 @@ from integrity_checker.extraction.patterns import (
     MLAFormat,
     NatureFormat,
     VancouverFormat,
-    get_all_formats,
     get_format,
 )
 from integrity_checker.extraction.reference_parser import ReferenceListParser

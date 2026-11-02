@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from integrity_checker.extraction.style_detector import StyleDetector, StyleProfile
+from integrity_checker.extraction.style_detector import StyleDetector
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
 

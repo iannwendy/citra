@@ -8,8 +8,6 @@ Test các rule mới:
 
 from __future__ import annotations
 
-import pytest
-
 from integrity_checker.extraction.style_detector import StyleProfile
 from integrity_checker.linking.statuses import CitationMappingStatus
 from integrity_checker.logic.rules import SymbolicRules

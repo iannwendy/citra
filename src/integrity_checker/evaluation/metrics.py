@@ -32,10 +32,10 @@ class MetricsCalculator:
 
         # Per-class
         per_class: dict[str, dict[str, float]] = {}
-        cm: dict[str, dict[str, int]] = {l: {p: 0 for p in cls.LABELS} for l in cls.LABELS}
+        cm: dict[str, dict[str, int]] = {lbl: {p: 0 for p in cls.LABELS} for lbl in cls.LABELS}
         support: dict[str, int] = Counter()
 
-        for t, p in zip(y_true, y_pred):
+        for t, p in zip(y_true, y_pred, strict=False):
             if t in cm:
                 cm[t][p] = cm.get(t, {}).get(p, 0) + 1
             support[t] += 1
@@ -50,16 +50,16 @@ class MetricsCalculator:
             per_class[label] = {"precision": prec, "recall": rec, "f1": f1}
 
         # Macro
-        macro_f1 = sum(per_class[l]["f1"] for l in cls.LABELS) / len(cls.LABELS)
+        macro_f1 = sum(per_class[lbl]["f1"] for lbl in cls.LABELS) / len(cls.LABELS)
         # Accuracy
-        correct = sum(1 for t, p in zip(y_true, y_pred) if t == p)
+        correct = sum(1 for t, p in zip(y_true, y_pred, strict=False) if t == p)
         accuracy = correct / n
 
         # Micro (precision = recall = accuracy khi đếm per-sample)
         # dùng macro F1 làm headline metric
         return MetricsResult(
-            precision=sum(per_class[l]["precision"] for l in cls.LABELS) / len(cls.LABELS),
-            recall=sum(per_class[l]["recall"] for l in cls.LABELS) / len(cls.LABELS),
+            precision=sum(per_class[lbl]["precision"] for lbl in cls.LABELS) / len(cls.LABELS),
+            recall=sum(per_class[lbl]["recall"] for lbl in cls.LABELS) / len(cls.LABELS),
             f1=macro_f1,
             accuracy=accuracy,
             macro_f1=macro_f1,

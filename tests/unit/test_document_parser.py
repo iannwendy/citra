@@ -16,10 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock
-
-import pytest
 
 from integrity_checker.config import Settings
 from integrity_checker.extraction.base import Document, Page

@@ -22,7 +22,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from integrity_checker.config import get_settings
@@ -44,7 +43,6 @@ from integrity_checker.retrieval.normalization import (
     author_key,
     author_keys,
     author_match_score,
-    normalize_arxiv_id,
     normalize_doi,
     title_similarity,
 )
@@ -1674,7 +1672,7 @@ class RetrievalOrchestrator:
             batch_clients: list[BaseScholarClient],
             batch_results: list[SourceCandidate | BaseException],
         ) -> None:
-            for client, cand in zip(batch_clients, batch_results):
+            for client, cand in zip(batch_clients, batch_results, strict=False):
                 sources_queried.append(client.name)
                 if isinstance(cand, BaseException):
                     failed[client.name] = str(cand)

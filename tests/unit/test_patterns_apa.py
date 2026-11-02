@@ -17,7 +17,6 @@ class TestAPAFormatRegistration:
         # Import APA to trigger registration
         from integrity_checker.extraction.patterns import apa  # noqa: F401
         from integrity_checker.extraction.patterns.registry import (
-            clear_registry,
             get_format,
             get_registry_info,
         )

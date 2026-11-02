@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import json
 import math
-from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -59,7 +58,7 @@ def compute_brier(
         return 0.0
     n = len(predictions)
     s = 0.0
-    for p, y in zip(predictions, ground_truth):
+    for p, y in zip(predictions, ground_truth, strict=False):
         p_clamped = max(0.0, min(1.0, p))
         s += (p_clamped - y) ** 2
     return s / n
@@ -99,7 +98,7 @@ def compute_ece(
     bin_correct: list[int] = [0] * n_bins
     bin_counts: list[int] = [0] * n_bins
 
-    for p, y in zip(predictions, ground_truth):
+    for p, y in zip(predictions, ground_truth, strict=False):
         p_clamped = max(0.0, min(1.0, p))
         # Find bin (last bin includes 1.0)
         bin_idx = min(int(p_clamped * n_bins), n_bins - 1)
@@ -145,7 +144,7 @@ def compute_coverage_accuracy(
         return {c: 0.0 for c in coverages}
 
     paired = sorted(
-        zip(predictions, ground_truth),
+        zip(predictions, ground_truth, strict=False),
         key=lambda x: x[0],
         reverse=descending,
     )
@@ -295,7 +294,7 @@ def compute_calibration_metrics(
     Returns:
         CalibrationMetrics.
     """
-    pairs = list(zip(predictions, ground_truth))
+    pairs = list(zip(predictions, ground_truth, strict=False))
     return CalibrationCalculator.compute(
         pairs,  # type: ignore[arg-type]
         num_buckets=n_bins,
@@ -618,8 +617,8 @@ class HybridMLScorer:
         """Compute softmax class probability distribution over the 4 labels."""
         x = self.extract_feature_vector(features, has_candidate=has_candidate)
         logits: list[float] = []
-        for row_w, b_val in zip(self.weights, self.bias):
-            z = sum(w_i * x_i for w_i, x_i in zip(row_w, x)) + b_val
+        for row_w, b_val in zip(self.weights, self.bias, strict=False):
+            z = sum(w_i * x_i for w_i, x_i in zip(row_w, x, strict=False)) + b_val
             logits.append(z)
 
         max_logit = max(logits) if logits else 0.0
@@ -736,7 +735,7 @@ class HybridMLScorer:
         # Fit PlattCalibrator on predicted max probabilities vs correctness
         raw_max_probs: list[float] = []
         is_correct_list: list[int] = []
-        for rec, true_lbl in zip(feature_records, labels):
+        for rec, true_lbl in zip(feature_records, labels, strict=False):
             probs = self.predict_proba(rec)
             pred_lbl = max(probs, key=lambda k: probs[k])
             raw_max_probs.append(probs[pred_lbl])

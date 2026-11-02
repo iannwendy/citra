@@ -11,13 +11,12 @@ Test các scenarios:
 
 from __future__ import annotations
 
-import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from integrity_checker.models.citation import Citation
-from integrity_checker.models.source import SourceCandidate, SourceResult
+from integrity_checker.models.source import SourceCandidate
 from integrity_checker.retrieval.cache import DiskCache
 from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
 
@@ -427,6 +426,7 @@ class TestRetrievalOrchestratorCache:
         )
 
         result = await orchestrator.retrieve(mock_citation)
+        assert result is not None
 
         # API should have been called
         mock_crossref_success.lookup.assert_called_once()

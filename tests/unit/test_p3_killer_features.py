@@ -15,13 +15,10 @@ import fitz
 from docx import Document as WordDocument
 
 from integrity_checker.api.routes.essays import (
-    _format_in_text_marker_apa,
-    _format_sandbox_ref_entry,
     _synthesize_academic_manuscript_pdf,
 )
 from integrity_checker.api.routes.report import (
     _compute_revision_diff,
-    _extract_document_diagnostics,
     _normalize_manuscript_stem,
 )
 from integrity_checker.database import LocalDatabase

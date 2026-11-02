@@ -602,7 +602,7 @@ def get_class_analytics(
     """
     import json
     import re
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     repo = Repository(db)
     cls = repo.get_class(class_id)

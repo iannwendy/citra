@@ -12,8 +12,6 @@ Tests covering:
 
 from __future__ import annotations
 
-import pytest
-
 from integrity_checker.extraction.patterns import (
     VancouverFormat,
     get_format,
@@ -23,15 +21,11 @@ from integrity_checker.extraction.patterns import (
 from integrity_checker.extraction.patterns.vancouver import (
     _VANCOUVER_BRACKET_RE,
     _VANCOUVER_NARRATIVE,
-    _VANCOUVER_NUMBERED_REFERENCE,
     _VANCOUVER_NUMERIC,
     _VANCOUVER_PARENTHETICAL,
     _VANCOUVER_PERIOD_NUMBERED,
     _VANCOUVER_REFERENCE_ENTRY,
     _VANCOUVER_YEAR_FIRST,
-    _VANCOUVER_YEAR_FIRST_NUMBERED,
-    VANCOUVER_IN_TEXT_PATTERNS,
-    VANCOUVER_REFERENCE_PATTERNS,
 )
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 

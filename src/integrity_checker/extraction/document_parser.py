@@ -20,7 +20,6 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from integrity_checker.config import Settings, get_settings
 from integrity_checker.extraction.base import Document, Page
@@ -864,13 +863,6 @@ class DocumentParser:
                 prof["sn_fold"] and len(prof["sn_fold"]) >= 3 and prof["sn_fold"] in _fold(c.raw_text)
                 for prof in ref_profiles
             )
-        )
-        author_year_body_count = sum(
-            1
-            for c in existing_body
-            if c.citation_type == CitationType.IN_TEXT
-            and c.year
-            and re.search(r"[A-Za-z]{2,}", c.raw_text or "")
         )
         min_ad_matches = int(len(references) * 0.90) if len(references) >= 12 else 6
         if existing_matched_count >= max(10, min_ad_matches) or (

@@ -8,10 +8,8 @@ to view/update their own profile, upload avatar, change password.
 from __future__ import annotations
 
 import logging
-import re
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-import bcrypt
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, EmailStr, Field
 
@@ -438,7 +436,7 @@ async def upload_my_avatar(
     try:
         avatar_svc.validate(mime, len(content), content)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     avatar_url = avatar_svc.save(current_user.id, content, mime)
 
@@ -573,7 +571,7 @@ def send_my_password_setup_email(
         raise HTTPException(
             status_code=502,
             detail="Failed to send password setup email. Please try again.",
-        )
+        ) from exc
 
     return MessageResponse(
         message=f"A password setup link has been sent to {current_user.email}."

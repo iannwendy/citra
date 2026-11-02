@@ -13,8 +13,6 @@ Tests các format:
 
 from __future__ import annotations
 
-import pytest
-
 from integrity_checker.linking import CitationLinker
 from integrity_checker.linking.statuses import CitationMappingStatus
 from integrity_checker.models.citation import Citation, CitationType

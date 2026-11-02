@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from integrity_checker.linking.statuses import (
     MAPPING_PENALTIES,
     CitationMappingStatus,

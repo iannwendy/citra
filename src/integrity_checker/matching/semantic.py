@@ -22,15 +22,15 @@ from __future__ import annotations
 import re
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
 from integrity_checker.matching.vn_en_academic_bridge import (
-    VN_DIACRITIC_RE as _VN_DIACRITIC_RE,
+    VN_DIACRITIC_RE as _VN_DIACRITIC_RE,  # noqa: F401  re-export (legacy private alias)
 )
 from integrity_checker.matching.vn_en_academic_bridge import (
-    VN_EN_ACADEMIC_BRIDGE as _VN_EN_ACADEMIC_BRIDGE,
+    VN_EN_ACADEMIC_BRIDGE as _VN_EN_ACADEMIC_BRIDGE,  # noqa: F401  re-export (used by tests)
 )
 from integrity_checker.matching.vn_en_academic_bridge import (
     bridge_vn_to_en,
@@ -817,7 +817,7 @@ class SemanticMatcher:
 
             total_weight = sum(weights)
             normalized_weights = [w / total_weight for w in weights]
-            weighted_similarity = sum(s * w for s, w in zip(scores, normalized_weights))
+            weighted_similarity = sum(s * w for s, w in zip(scores, normalized_weights, strict=False))
 
             # Preserve strong abstract or sentence-level evidence alignment even when title is metaphorical
             if abstract_sim >= self.ALIGNMENT_THRESHOLD_HIGH:

@@ -510,9 +510,9 @@ class TechStandardClient(BaseScholarClient):
         repo_name = str(data.get("name") or full_name.split("/")[-1]).strip()
         owner_obj = data.get("owner") or {}
         owner_login = str(owner_obj.get("login") if isinstance(owner_obj, dict) else full_name.split("/")[0]).strip()
-        repo_Desc = self._clean_text(data.get("description"))
+        repo_desc = self._clean_text(data.get("description"))
         cff_abs = cff_meta.get("abstract") if cff_meta else None
-        description = cff_abs or repo_Desc
+        description = cff_abs or repo_desc
 
         # Build title strictly from CITATION.cff or GitHub repository metadata
         cff_title = cff_meta.get("title") if cff_meta else None
@@ -520,8 +520,8 @@ class TechStandardClient(BaseScholarClient):
             t
             for t in (
                 cff_title,
-                f"{repo_name}: {repo_Desc}" if repo_Desc else None,
-                f"{full_name}: {repo_Desc}" if repo_Desc else None,
+                f"{repo_name}: {repo_desc}" if repo_desc else None,
+                f"{full_name}: {repo_desc}" if repo_desc else None,
                 repo_name,
                 full_name,
             )

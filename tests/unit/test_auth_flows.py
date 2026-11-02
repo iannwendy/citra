@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -511,7 +511,7 @@ class TestGoogleOAuthFlow:
         client = TestClient(app)
         session = get_session()
         repo = Repository(session)
-        u = repo.create_user(
+        repo.create_user(
             username="deactivated_scholar",
             password_hash="hash",
             role="user",

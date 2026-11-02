@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestSemanticContentAlignment:
     """Test content-context alignment using Neural embeddings."""
@@ -38,8 +36,6 @@ class TestSemanticContentAlignment:
         from integrity_checker.matching.semantic import SemanticMatcher
 
         # Mock the entire check_content_alignment method to avoid real model
-        original_check = SemanticMatcher.check_content_alignment
-
         def mock_check(self, cited_context, source_title, source_abstract=None, source_body=None):
             from integrity_checker.matching.semantic import SemanticAlignmentResult
             # Return high similarity alignment
@@ -108,6 +104,7 @@ class TestSemanticContentAlignment:
             )
 
         # Should have called encode at least twice (title + abstract)
+        assert result is not None
         assert call_count[0] >= 2
 
     def test_content_alignment_returns_compared_texts(self):

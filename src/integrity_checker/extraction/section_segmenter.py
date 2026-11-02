@@ -351,7 +351,7 @@ class SectionSegmenter:
                     if (m := dot_num_re.match(ln.strip()))
                 ]
                 yr_hits = len(re.findall(r"\b(?:18|19|20)\d{2}\b", page.text or ""))
-                has_seq = any(b == a + 1 for a, b in zip(dot_nums, dot_nums[1:]))
+                has_seq = any(b == a + 1 for a, b in zip(dot_nums, dot_nums[1:], strict=False))
                 if not (has_seq and yr_hits >= 3 and len(dot_nums) >= 4):
                     ieee_count = bracket_count
 

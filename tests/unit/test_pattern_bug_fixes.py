@@ -14,8 +14,6 @@ Remaining formats: APA, IEEE, Numeric, Vancouver, Harvard, ACM, Nature, CSE, Chi
 
 from __future__ import annotations
 
-import pytest
-
 from integrity_checker.extraction.patterns import (
     get_format,
     get_in_text_patterns,

@@ -7,7 +7,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import fitz  # PyMuPDF
-import pytest
 
 from integrity_checker.extraction.document_parser import DocumentParser
 from integrity_checker.linking.citation_linker import CitationLinker

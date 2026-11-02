@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -184,8 +183,8 @@ def override_verdict(
     # Parse verdict_id from string (supports raw id "19" or report id "v19")
     try:
         v_id = int(str(verdict_id).lstrip("vV"))
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid verdict_id")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid verdict_id") from exc
 
     # SECURITY (IDOR protection): Ensure the verdict actually belongs to essay_id
     existing_verdict = next(

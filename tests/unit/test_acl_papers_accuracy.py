@@ -275,7 +275,6 @@ class TestACLPapersAccuracy:
 
         doi_success, doi_total = 0, 0
         title_success, title_total = 0, 0
-        author_year_success, author_year_total = 0, 0
 
         for paper in papers:
             # Test 1: DOI lookup

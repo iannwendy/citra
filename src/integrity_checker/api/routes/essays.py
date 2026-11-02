@@ -18,7 +18,7 @@ from integrity_checker.billing.plans import ensure_user_quota_current, get_user_
 from integrity_checker.config import PROJECT_ROOT, is_test_runtime
 from integrity_checker.db.models import CitationRecord, User, VerdictRecord
 from integrity_checker.db.repository import Repository
-from integrity_checker.models.api_schemas import CitationSchema, EssayUploadResponse
+from integrity_checker.models.api_schemas import EssayUploadResponse
 from integrity_checker.pipeline.integrity_pipeline import IntegrityPipeline
 
 router = APIRouter()
@@ -199,7 +199,7 @@ async def _run_pipeline_task(
         tracker.fail(essay_id, safe_err)
     finally:
         if cleanup_file:
-            Path(tmp_path).unlink(missing_ok=True)
+            Path(tmp_path).unlink(missing_ok=True)  # noqa: ASYNC240 - tiny local unlink in cleanup
 
 
 # ---------------------------------------------------------------------------
@@ -859,7 +859,7 @@ def get_essay_page_preview(
                 (r.raw_text or "").strip(): f"ref-{i + 1:04d}"
                 for i, r in enumerate(ref_records_sorted)
             }
-            for v_idx, v in enumerate(verdicts, start=1):
+            for v in verdicts:
                 v_lbl = (v.label or "").lower()
                 if v_lbl not in ("suspected_hallucination", "metadata_error"):
                     continue
@@ -968,17 +968,10 @@ def get_essay_page_preview(
             color=(0.38, 0.43, 0.54),
         )
 
-        hl_q = (highlight or "").strip().lower()
-        hl_tok = ""
-        if hl_q:
-            m_tok = _re.search(r"[a-zA-ZÀ-ỹ]{4,}", hl_q)
-            if m_tok:
-                hl_tok = m_tok.group(0).lower()
-
         # Render verdicts and citations cleanly with text-only red coloring for errors & hallucinations
         y = 96.0
         items_to_draw: list[tuple[str, str, str]] = []
-        for v_idx, v in enumerate(verdicts, start=1):
+        for v in verdicts:
             if len(items_to_draw) >= 8:
                 break
             v_lbl = (v.label or "unresolved").lower()
@@ -989,7 +982,7 @@ def get_essay_page_preview(
                 ctx = (getattr(c, "context", None) or c.raw_text or "").strip()
                 items_to_draw.append((f"[{idx}] {ctx[:220]}", "verified", ctx.lower()))
 
-        for block_text, item_lbl, match_low in items_to_draw[:8]:
+        for block_text, item_lbl, _match_low in items_to_draw[:8]:
             is_halluc = item_lbl == "suspected_hallucination"
             is_meta_err = item_lbl == "metadata_error"
 
@@ -1708,7 +1701,7 @@ async def verify_sandbox_citations_instant(
     verdict_items: list[dict[str, Any]] = []
     raw_verdict_dicts_for_remediation: list[dict[str, Any]] = []
 
-    for idx, (citation, source) in enumerate(zip(parsed_citations, source_results), start=1):
+    for idx, (citation, source) in enumerate(zip(parsed_citations, source_results, strict=False), start=1):
         used_local = "local_db" in (source.sources_succeeded or [])
         verdict = pipeline.checker.check(
             citation,

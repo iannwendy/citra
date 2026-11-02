@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceResult

@@ -31,7 +31,7 @@ from integrity_checker.retrieval.normalization import (
     year_key,
 )
 
-from .models import Paper, QueryLog
+from .models import Paper
 from .schemas import INIT_STATEMENTS
 
 # Default database path (project root / data / local_papers.db)

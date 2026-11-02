@@ -11,9 +11,8 @@ alignment giữa đoạn văn được trích dẫn và paper nguồn.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
-from integrity_checker.config import get_settings
 from integrity_checker.extraction.patterns.apa import is_vn_legal_reference
 from integrity_checker.logging import get_logger
 from integrity_checker.logic.calibration import HybridMLScorer
@@ -197,7 +196,6 @@ class NeuroSymbolicChecker:
         # Match if the candidate starts with an URL scheme. The previous regex
         # required the whole string to be one URL (`^...$`), which failed when
         # trailing punctuation was present.
-        url_prefix_pattern = re.compile(r'^(https?://|www\.)[^\s]+', re.IGNORECASE)
         # Require the URL body to be at least 10 chars after the scheme prefix
         # to reduce false positives (e.g. a sentence starting with "www").
         prefix_match = re.match(r'^(https?://|www\.)', url_candidate, re.IGNORECASE)

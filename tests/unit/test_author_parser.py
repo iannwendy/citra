@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from integrity_checker.matching.author_parser import (
     jaccard_similarity,
     normalize_author,

@@ -58,7 +58,7 @@ from integrity_checker.extraction.style_detector import StyleProfile  # noqa: F4
 
 # Re-export CitationLink + MappingMethod từ models/validation
 # (backward compatibility — pipeline + old tests import từ đây)
-from integrity_checker.models.validation import CitationLink, MappingMethod
+from integrity_checker.models.validation import CitationLink, MappingMethod  # noqa: F401  re-export
 
 # --- Stubs cho backward compatibility với old tests + pipeline ---
 # Pipeline gốc dùng CitationOccurrence/ReferenceEntry wrappers.
@@ -275,13 +275,13 @@ class LinkingResult:
         return {
             "links": [
                 {
-                    "occurrence_id": l.occurrence_id,
-                    "reference_id": l.reference_id,
-                    "status": _status_key(l.status),
-                    "confidence": l.confidence,
-                    "method": l.method.value if hasattr(l.method, "value") else str(l.method),
+                    "occurrence_id": lnk.occurrence_id,
+                    "reference_id": lnk.reference_id,
+                    "status": _status_key(lnk.status),
+                    "confidence": lnk.confidence,
+                    "method": lnk.method.value if hasattr(lnk.method, "value") else str(lnk.method),
                 }
-                for l in self.links
+                for lnk in self.links
             ],
             "status_counts": {
                 _status_key(k): v for k, v in self.status_counts.items()

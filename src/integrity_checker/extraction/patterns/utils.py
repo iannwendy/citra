@@ -13,7 +13,6 @@ of duplicating regex patterns.
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from integrity_checker.extraction.patterns.base import CompiledPattern, PatternType
 
