@@ -69,6 +69,11 @@ export interface UseRoleResult {
   isUltra: boolean;
   isPaid: boolean;
   quota: UserQuota;
+  /**
+   * Batch upload entitlement: plan quota `allow_batch_upload` (Pro/Ultra) or
+   * teacher/admin role. Single source of truth for every Batch Check entry point.
+   */
+  canBatchUpload: boolean;
   capabilities: ReadonlyArray<UserCapability>;
   has: (cap: UserCapability) => boolean;
   hasAny: (caps: UserCapability[]) => boolean;
@@ -167,6 +172,7 @@ export function useRole(): UseRoleResult {
     isUltra,
     isPaid,
     quota,
+    canBatchUpload: role === 'teacher' || role === 'admin' || quota.allow_batch_upload === true,
     capabilities,
     has: (cap) => capabilities.includes(cap),
     hasAny: (caps) => caps.some((c) => capabilities.includes(c)),

@@ -37,7 +37,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 export function HistoryPage() {
   const { t, i18n } = useTranslation();
   const toast = useToast();
-  const { isTeacher, isAdmin } = useRole();
+  const { isTeacher, isAdmin, canBatchUpload } = useRole();
   const {
     data: items = [],
     isLoading,
@@ -105,14 +105,14 @@ export function HistoryPage() {
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap shrink-0">
-          {(isTeacher || isAdmin) && (
+          {canBatchUpload && (
             <Button
               asChild
               variant="outline"
               size="sm"
               className="h-10 rounded-xl font-medium"
             >
-              <Link to="/batch-upload">
+              <Link to="/batch-upload" data-testid="batch-check-link">
                 <Layers className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                 <span>{t('nav.batchCheck')}</span>
               </Link>

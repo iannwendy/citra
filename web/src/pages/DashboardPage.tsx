@@ -64,7 +64,7 @@ const DEFAULT_STATS: DashboardStats = {
 export function DashboardPage() {
   const { t, i18n } = useTranslation();
   const toast = useToast();
-  const { isUser, isTeacher, isAdmin, has } = useRole();
+  const { isUser, isTeacher, isAdmin, has, canBatchUpload } = useRole();
   const canViewTrace = has('view_logic_trace');
   const { data: essays = [], isLoading, error, refetch, isFetching } = useEssays();
   const { data: stats = DEFAULT_STATS } = useDashboardStats();
@@ -176,14 +176,14 @@ export function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap shrink-0">
-          {(isTeacher || isAdmin) && (
+          {canBatchUpload && (
             <Button
               asChild
               variant="outline"
               size="sm"
               className="h-10 rounded-xl font-medium border-slate-200 dark:border-slate-700"
             >
-              <Link to="/batch-upload">
+              <Link to="/batch-upload" data-testid="batch-check-link">
                 <Layers className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                 <span>{t('nav.batchCheck')}</span>
               </Link>

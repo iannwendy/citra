@@ -42,6 +42,8 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   /** If set, item is only visible when user has this capability. */
   capability?: UserCapability;
+  /** If set, item is only visible when the plan allows batch upload. */
+  requiresBatch?: boolean;
 }
 
 interface NavGroup {
@@ -58,7 +60,7 @@ const SIDEBAR_GROUPS: NavGroup[] = [
       { path: '/dashboard', labelKey: 'nav.dashboard', icon: FileSearch, capability: 'upload_essay' },
       { path: '/upload', labelKey: 'nav.newCheck', icon: Upload, capability: 'upload_essay' },
       { path: '/sandbox', labelKey: 'nav.liveSandbox', icon: FlaskConical, capability: 'upload_essay' },
-      { path: '/batch-upload', labelKey: 'nav.batchCheck', icon: Layers, capability: 'view_class_history' },
+      { path: '/batch-upload', labelKey: 'nav.batchCheck', icon: Layers, requiresBatch: true },
       { path: '/history', labelKey: 'nav.history', icon: History, capability: 'view_own_history' },
     ],
   },
@@ -94,7 +96,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const { user, logout } = useAuth();
-  const { has, role, planTier, isBasic, quota } = useRole();
+  const { has, role, planTier, isBasic, quota, canBatchUpload } = useRole();
   const { toggleTheme } = useTheme();
   const toast = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -271,7 +273,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             {SIDEBAR_GROUPS.map((group) => {
               if (group.roles && !group.roles.includes(role)) return null;
               const visibleItems = group.items.filter(
-                (item) => !item.capability || has(item.capability),
+                (item) =>
+                  (!item.capability || has(item.capability)) &&
+                  (!item.requiresBatch || canBatchUpload),
               );
               if (visibleItems.length === 0) return null;
               return (

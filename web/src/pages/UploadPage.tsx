@@ -44,7 +44,7 @@ export function UploadPage() {
   const { t, i18n } = useTranslation();
   const { refreshUser } = useAuth();
   const toast = useToast();
-  const { isUser, isTeacher, isAdmin, planTier, isBasic, quota } = useRole();
+  const { isUser, isTeacher, isAdmin, planTier, isBasic, quota, canBatchUpload } = useRole();
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -280,14 +280,14 @@ export function UploadPage() {
               <span>{t('nav.liveSandbox')}</span>
             </Link>
           </Button>
-          {(isTeacher || isAdmin) && (
+          {canBatchUpload && (
             <Button
               asChild
               variant="outline"
               size="sm"
               className="h-10 rounded-xl font-medium"
             >
-              <Link to="/batch-upload">
+              <Link to="/batch-upload" data-testid="batch-check-link">
                 <Layers className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                 <span>{t('nav.batchCheck')}</span>
               </Link>
