@@ -248,10 +248,9 @@
   },
   "history": {
     "title": "Verification Reports",
-    "documentCountOne": "{{count}} document · Auto-refresh active",
-    "documentCountOther": "{{count}} documents · Auto-refresh active",
-    "pages": "pages",
-    "autoRefreshActive": "Auto-refresh active"
+    "documentCountOne": "{{count}} document",
+    "documentCountOther": "{{count}} documents",
+    "pages": "pages"
   },
   "profile": {
     "title": "My Profile",

@@ -490,10 +490,6 @@ export function DashboardPage() {
                 total: essays.length,
               })}
             </p>
-            <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              {t('history.autoRefreshActive')}
-            </span>
           </div>
         )}
       </Card>

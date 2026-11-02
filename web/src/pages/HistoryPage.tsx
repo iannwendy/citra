@@ -12,7 +12,6 @@ import {
   RefreshCw,
   ChevronRight,
   AlertTriangle,
-  CheckCircle2,
   Archive,
   Layers,
 } from 'lucide-react';
@@ -90,10 +89,6 @@ export function HistoryPage() {
               {lang === 'vi'
                 ? 'KHO LƯU TRỮ BÁO CÁO KIỂM CHỨNG'
                 : 'VERIFICATION REPORTS ARCHIVE'}
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200/70 dark:border-emerald-800/70 text-[11px] font-mono font-semibold text-emerald-700 dark:text-emerald-300">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              {t('history.autoRefreshActive')}
             </span>
           </div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
@@ -341,10 +336,6 @@ export function HistoryPage() {
                 shown: filteredItems.length,
                 total: items.length,
               })}
-            </p>
-            <p className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              {t('history.autoRefreshActive')}
             </p>
           </div>
         )}

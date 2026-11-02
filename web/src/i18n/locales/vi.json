@@ -248,10 +248,9 @@
   },
   "history": {
     "title": "Báo cáo xác minh",
-    "documentCountOne": "{{count}} tài liệu · Tự động làm mới",
-    "documentCountOther": "{{count}} tài liệu · Tự động làm mới",
-    "pages": "trang",
-    "autoRefreshActive": "Tự động làm mới đang bật"
+    "documentCountOne": "{{count}} tài liệu",
+    "documentCountOther": "{{count}} tài liệu",
+    "pages": "trang"
   },
   "profile": {
     "title": "Hồ sơ của tôi",
