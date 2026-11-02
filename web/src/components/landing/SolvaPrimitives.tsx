@@ -572,7 +572,7 @@ export function SolvaPainterlyFrame({
         alt={alt}
         loading="eager"
         decoding="async"
-        fetchPriority={priority ? 'high' : 'low'}
+        {...({ fetchpriority: priority ? 'high' : 'low' } as Record<string, string>)}
         style={{
           transform: 'translate3d(0, 0px, 0) scale3d(1.06, 1.06, 1)',
           willChange: 'transform',
@@ -828,17 +828,23 @@ export function SolvaAnimatedMetric({
   const hasAnimated = useRef(false);
   const animRafRef = useRef<number | null>(null);
 
-  const formatMetric = (val: number) => `${prefix}${val.toFixed(decimals)}${suffix}`;
+  const formatMetric = (val: number) => {
+    const safeVal = Math.abs(val) < 1e-9 ? 0 : val;
+    return `${prefix}${safeVal.toFixed(decimals)}${suffix}`;
+  };
 
   const runCountAnimation = (fromVal: number, toVal: number, durationMs: number) => {
     if (animRafRef.current !== null) {
       cancelAnimationFrame(animRafRef.current);
     }
-    const startTime = performance.now();
+    let startTime: number | null = null;
     let lastText = '';
     const tick = (now: number) => {
-      const elapsed = now - startTime;
-      const progress = Math.min(1, elapsed / durationMs);
+      if (startTime === null) {
+        startTime = now;
+      }
+      const elapsed = Math.max(0, now - startTime);
+      const progress = Math.max(0, Math.min(1, elapsed / durationMs));
       const eased = 1 - Math.pow(1 - progress, 4);
       const current = fromVal + (toVal - fromVal) * eased;
       const nextText = formatMetric(progress < 1 && hasAnimated.current ? current : toVal);

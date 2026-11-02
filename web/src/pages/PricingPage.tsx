@@ -717,7 +717,7 @@ export function PricingPage() {
                       alt=""
                       loading="eager"
                       decoding="async"
-                      fetchPriority="low"
+                      {...({ fetchpriority: 'low' } as Record<string, string>)}
                       className="w-full h-full object-cover"
                     />
                   </div>

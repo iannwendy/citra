@@ -507,6 +507,21 @@ function parseRawCitationMeta(rawText: string): MetadataFields {
   };
 }
 
+function normalizeAuthorDisplay(name: string): string {
+  if (!name || name === '—') return name;
+  return name
+    .replace(/\.{2,}/g, '.')
+    .split(/\s+/)
+    .map((word) => {
+      if (!word) return word;
+      if (/^[a-zà-ỹ]{2,}$/.test(word) && !/^(?:et|al|and|va|và|of|for|in|the)$/i.test(word)) {
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      }
+      return word;
+    })
+    .join(' ');
+}
+
 function formatShortInText(
   authors: string,
   year: string,
@@ -514,7 +529,9 @@ function formatShortInText(
   authorList?: string[]
 ): string {
   if (authors && authors !== '—') {
-    const firstAuthor = authors.split(/,|&|\band\b/i)[0].trim();
+    const firstAuthor = normalizeAuthorDisplay(
+      authors.split(/,|&|\band\b/i)[0].trim()
+    );
     const hasMore =
       authorList && authorList.length > 0
         ? authorList.length > 1 || /\bet\s+al/i.test(authors)
@@ -1074,8 +1091,8 @@ function enrichVerdictItem(
     title: matchedRef?.title || parsedFallback.title || verdict.citation_raw,
     authors:
       (matchedRef?.authors && matchedRef.authors.length > 0
-        ? matchedRef.authors.join(', ')
-        : parsedFallback.authors) || '—',
+        ? matchedRef.authors.map(normalizeAuthorDisplay).join(', ')
+        : normalizeAuthorDisplay(parsedFallback.authors)) || '—',
     year:
       (matchedRef?.year ? String(matchedRef.year) : parsedFallback.year) || '—',
     venue: matchedRef?.venue || parsedFallback.venue || '—',

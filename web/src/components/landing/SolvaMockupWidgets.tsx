@@ -90,10 +90,11 @@ function formatSolvaLiveNumber(
   prefix: string,
   suffix: string
 ): string {
-  const fixed = num.toFixed(decimals);
+  const safeNum = Math.abs(num) < 1e-9 ? 0 : num;
+  const fixed = safeNum.toFixed(decimals);
   let body: string;
   if (padDigits > 0 && decimals === 0) {
-    body = Math.round(num).toString().padStart(padDigits, '0');
+    body = Math.round(safeNum).toString().padStart(padDigits, '0');
   } else if (!formatThousands) {
     body = fixed;
   } else {
@@ -169,12 +170,15 @@ export function SolvaLiveNumber({
       cancelAnimationFrame(rafRef.current);
     }
 
-    const startTime = performance.now();
+    let startTime: number | null = null;
     let lastText = '';
 
     const tick = (now: number) => {
-      const elapsed = now - startTime;
-      const progress = Math.min(1, elapsed / Math.max(140, activeDuration));
+      if (startTime === null) {
+        startTime = now;
+      }
+      const elapsed = Math.max(0, now - startTime);
+      const progress = Math.max(0, Math.min(1, elapsed / Math.max(140, activeDuration)));
       // Quartic ease-out for silky deceleration matching SolvaAnimatedMetric
       const eased = 1 - Math.pow(1 - progress, 4);
       const next = progress < 1 ? fromVal + (value - fromVal) * eased : value;

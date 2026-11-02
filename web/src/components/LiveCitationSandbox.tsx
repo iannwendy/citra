@@ -342,43 +342,43 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
       case 'wrong_year':
         return (
           <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300">
-            ⚡ LỖI NĂM (METADATA_ERROR)
+            {lang === 'vi' ? '⚡ LỖI NĂM (METADATA_ERROR)' : '⚡ WRONG YEAR (METADATA_ERROR)'}
           </span>
         );
       case 'wrong_author':
         return (
           <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300">
-            ⚡ LỖI TÁC GIẢ (METADATA_ERROR)
+            {lang === 'vi' ? '⚡ LỖI TÁC GIẢ (METADATA_ERROR)' : '⚡ WRONG AUTHOR (METADATA_ERROR)'}
           </span>
         );
       case 'hallucinated':
         return (
           <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300 border border-red-300">
-            🚨 NGUỒN BỊA ĐẶT (HALLUCINATION)
+            {lang === 'vi' ? '🚨 NGUỒN BỊA ĐẶT (HALLUCINATION)' : '🚨 HALLUCINATED SOURCE'}
           </span>
         );
       case 'year_mismatch_intext':
         return (
           <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300 border border-violet-300">
-            🔗 LỆCH NĂM IN-TEXT ↔ REF
+            {lang === 'vi' ? '🔗 LỆCH NĂM IN-TEXT ↔ REF' : '🔗 IN-TEXT ↔ REF YEAR MISMATCH'}
           </span>
         );
       case 'uncited_ref':
         return (
           <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300 border border-orange-300">
-            👻 UNCITED REFERENCE (KHÔNG TRÍCH TRONG BÀI)
+            {lang === 'vi' ? '👻 UNCITED REFERENCE (KHÔNG TRÍCH TRONG BÀI)' : '👻 UNCITED REFERENCE'}
           </span>
         );
       case 'orphan_intext':
         return (
           <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300">
-            ❓ MISSING REFERENCE (TRÍCH DẪN MỒ CÔI)
+            {lang === 'vi' ? '❓ MISSING REFERENCE (TRÍCH DẪN MỒ CÔI)' : '❓ ORPHAN IN-TEXT CITATION'}
           </span>
         );
       default:
         return (
           <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300">
-            ✓ CHUẨN GỐC CSDL ACL
+            {lang === 'vi' ? '✓ CHUẨN GỐC CSDL ACL' : '✓ CANONICAL ACL RECORD'}
           </span>
         );
     }
@@ -590,10 +590,10 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                             data-testid={`sandbox-preset-clean-${idx}`}
                             onClick={() => applyItemPreset(idx, 'clean')}
                             className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 dark:bg-slate-800 dark:text-slate-300 transition-colors"
-                            title="Khôi phục dữ liệu chuẩn gốc từ CSDL ACL"
+                            title={lang === 'vi' ? 'Khôi phục dữ liệu chuẩn gốc từ CSDL ACL' : 'Restore canonical ACL record'}
                           >
                             <RotateCcw className="h-2.5 w-2.5 inline mr-0.5" />
-                            Gốc ACL
+                            {lang === 'vi' ? 'Gốc ACL' : 'Canonical ACL'}
                           </button>
                           <button
                             type="button"
@@ -601,7 +601,7 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                             onClick={() => applyItemPreset(idx, 'wrong_year')}
                             className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-100/80 hover:bg-amber-200 text-amber-900 dark:bg-amber-950 dark:text-amber-300 transition-colors"
                           >
-                            Sửa sai Năm
+                            {lang === 'vi' ? 'Sửa sai Năm' : 'Wrong Year'}
                           </button>
                           <button
                             type="button"
@@ -609,7 +609,7 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                             onClick={() => applyItemPreset(idx, 'wrong_author')}
                             className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-100/80 hover:bg-amber-200 text-amber-900 dark:bg-amber-950 dark:text-amber-300 transition-colors"
                           >
-                            Sửa sai Tác giả
+                            {lang === 'vi' ? 'Sửa sai Tác giả' : 'Wrong Author'}
                           </button>
                           <button
                             type="button"
@@ -617,7 +617,7 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                             onClick={() => applyItemPreset(idx, 'hallucinated')}
                             className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-red-100/90 hover:bg-red-200 text-red-900 dark:bg-red-950 dark:text-red-300 transition-colors"
                           >
-                            Bịa nguồn giả (Hallucination)
+                            {lang === 'vi' ? 'Bịa nguồn giả (Hallucination)' : 'Hallucinate'}
                           </button>
                           <button
                             type="button"
@@ -625,7 +625,7 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                             onClick={() => applyItemPreset(idx, 'year_mismatch_intext')}
                             className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-violet-100/90 hover:bg-violet-200 text-violet-900 dark:bg-violet-950 dark:text-violet-300 transition-colors"
                           >
-                            Lệch năm In-text ↔ Ref
+                            {lang === 'vi' ? 'Lệch năm In-text ↔ Ref' : 'In-text ↔ Ref Year Drift'}
                           </button>
                           <button
                             type="button"
@@ -650,7 +650,7 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                       <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
                         <div className="md:col-span-5">
                           <label className="block text-[10px] font-mono uppercase text-slate-500 mb-0.5">
-                            Title (Tiêu đề bài báo)
+                            {lang === 'vi' ? 'Title (Tiêu đề bài báo)' : 'Title'}
                           </label>
                           <input
                             type="text"
@@ -662,7 +662,7 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                         </div>
                         <div className="md:col-span-3">
                           <label className="block text-[10px] font-mono uppercase text-slate-500 mb-0.5">
-                            Authors (Tác giả, cách bởi ;)
+                            {lang === 'vi' ? 'Authors (Tác giả, cách bởi ;)' : 'Authors (; separated)'}
                           </label>
                           <input
                             type="text"
@@ -712,7 +712,11 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                               className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                             />
                             <Link2 className="h-3 w-3 text-indigo-500" />
-                            <span>Trích dẫn trong bài (Body In-Text)</span>
+                            <span>
+                              {lang === 'vi'
+                                ? 'Trích dẫn trong bài (Body In-Text)'
+                                : 'Cited in Body Text (In-Text)'}
+                            </span>
                           </label>
 
                           <label className="inline-flex items-center gap-1.5 cursor-pointer font-mono text-[11px] text-slate-700 dark:text-slate-300">
@@ -726,13 +730,19 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                               className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                             />
                             <BookOpen className="h-3 w-3 text-emerald-500" />
-                            <span>Có trong mục References cuối bài</span>
+                            <span>
+                              {lang === 'vi'
+                                ? 'Có trong mục References cuối bài'
+                                : 'Included in Bibliography (References)'}
+                            </span>
                           </label>
                         </div>
 
                         <div className="flex flex-wrap items-center justify-between gap-2 w-full sm:w-auto">
                           <span className="text-[11px] font-mono text-slate-500">
-                            Năm In-text ghi đè (nếu muốn test lệch năm):
+                            {lang === 'vi'
+                              ? 'Năm In-text ghi đè (nếu muốn test lệch năm):'
+                              : 'In-text year override (test year drift):'}
                           </span>
                           <input
                             type="text"
@@ -754,14 +764,19 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                 <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50/90 via-white to-violet-50/80 dark:from-indigo-950/50 dark:via-slate-900 dark:to-violet-950/40 border border-indigo-200/80 dark:border-indigo-800/70 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
                   <div className="text-xs font-mono text-slate-700 dark:text-slate-300 space-y-0.5">
                     <div>
-                      <strong>{items.filter((i) => i.cite_in_text).length}</strong> trích dẫn In-text
-                      trong thân bài ↔{' '}
-                      <strong>{items.filter((i) => i.include_in_references).length}</strong> mục
-                      trong References cuối bài
+                      <strong>{items.filter((i) => i.cite_in_text).length}</strong>{' '}
+                      {lang === 'vi'
+                        ? 'trích dẫn In-text trong thân bài ↔'
+                        : 'in-text citations in body ↔'}{' '}
+                      <strong>{items.filter((i) => i.include_in_references).length}</strong>{' '}
+                      {lang === 'vi'
+                        ? 'mục trong References cuối bài'
+                        : 'entries in References'}
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Hệ thống sẽ tự động sinh file PDF học thuật hoàn chỉnh (3 chương + References)
-                      để kiểm tra cả Layer 1 (In-text ↔ Refs) và Layer 2 (15+ CSDL).
+                      {lang === 'vi'
+                        ? 'Hệ thống sẽ tự động sinh file PDF học thuật hoàn chỉnh (3 chương + References) để kiểm tra cả Layer 1 (In-text ↔ Refs) và Layer 2 (15+ CSDL).'
+                        : 'Synthesizes a complete 3-section academic PDF manuscript + Bibliography to verify both Layer 1 (In-text ↔ Refs) and Layer 2 (15+ Scholarly DBs).'}
                     </div>
                   </div>
 
