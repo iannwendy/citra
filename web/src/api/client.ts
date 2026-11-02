@@ -455,6 +455,18 @@ export interface EssaySummary {
   num_verified?: number;
 }
 
+// --- Aggregate essay stats (GET /essays/stats, contract C2) ---
+
+export interface EssayStats {
+  total_essays: number;
+  total_citations: number;
+  verified: number;
+  metadata_error: number;
+  suspected_hallucination: number;
+  unresolved: number;
+  resource: number;
+}
+
 // --- Cache stats (admin) ---
 
 export interface CacheStats {
@@ -1283,6 +1295,8 @@ export const api = {
   // Essay list & delete (used by Dashboard, History)
   listEssays: () => request<EssaySummary[]>('/essays'),
   listAllEssays: () => request<EssaySummary[]>('/essays/all'),
+  /** Server-side aggregate over every essay visible to the caller (contract C2). */
+  getEssayStats: () => request<EssayStats>('/essays/stats'),
   deleteEssay: (id: number) =>
     request<{ message: string }>(`/essays/${id}`, { method: 'DELETE' }),
 

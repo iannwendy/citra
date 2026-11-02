@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type EssaySummary, type AnalysisReport } from '@/api/client';
+import { api, type EssaySummary, type AnalysisReport, type EssayStats } from '@/api/client';
 
 const ESSAYS_KEY = ['essays'] as const;
 
@@ -32,7 +32,7 @@ export interface DashboardStats {
  * Aggregate stats từ essays + reports.
  * Loop qua essays, fetch report, tính tổng. Skip essay nào lỗi.
  */
-async function loadDashboardStats(essays: EssaySummary[]): Promise<DashboardStats> {
+async function loadClientSideStats(essays: EssaySummary[]): Promise<DashboardStats> {
   let totalCitations = 0;
   let totalCIS = 0;
   let cisCount = 0;
@@ -84,6 +84,43 @@ async function loadDashboardStats(essays: EssaySummary[]): Promise<DashboardStat
     avg_cis_score: cisCount > 0 ? Math.round((totalCIS / cisCount) * 100) / 100 : null,
     verified_rate:
       totalVerdicts > 0 ? Math.round((totalVerified / totalVerdicts) * 100) : 0,
+  };
+}
+
+function isEssayStats(value: unknown): value is EssayStats {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.total_essays === 'number' && typeof v.total_citations === 'number';
+}
+
+/**
+ * Dashboard aggregates. Prefers the server-side `GET /essays/stats` (C2) which
+ * covers every essay visible to the caller; falls back to the client-side
+ * computation when the endpoint is missing (404) or errors. The average CIS is
+ * not part of C2, so it always comes from the essay summaries.
+ */
+export async function loadDashboardStats(essays: EssaySummary[]): Promise<DashboardStats> {
+  let remote: EssayStats | null = null;
+  try {
+    const res = await api.getEssayStats();
+    remote = isEssayStats(res) ? res : null;
+  } catch {
+    remote = null;
+  }
+  const local = await loadClientSideStats(essays);
+  if (!remote) return local;
+
+  const labelTotal =
+    (remote.verified ?? 0) +
+    (remote.metadata_error ?? 0) +
+    (remote.suspected_hallucination ?? 0) +
+    (remote.unresolved ?? 0) +
+    (remote.resource ?? 0);
+  return {
+    total_documents: remote.total_essays,
+    total_citations: remote.total_citations,
+    avg_cis_score: local.avg_cis_score,
+    verified_rate: labelTotal > 0 ? Math.round(((remote.verified ?? 0) / labelTotal) * 100) : 0,
   };
 }
 
