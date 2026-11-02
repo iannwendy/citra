@@ -15,8 +15,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from integrity_checker.api.main import app
+from integrity_checker.db.models import AuthToken, User
 from integrity_checker.db.models import Session as SessionModel
-from integrity_checker.db.models import User
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -463,6 +463,42 @@ class TestUpdateMe:
         assert resp.status_code == 400
         assert "already exists" in resp.json()["detail"]
 
+    def test_changing_email_resets_email_verified_and_sends_activation_email(self, clean_db):
+        from integrity_checker.api.services.email_service import get_email_service
+
+        email_svc = get_email_service()
+        email_svc.clear_outbox()
+
+        token = get_user_token()
+        client = TestClient(app)
+
+        # Initially email_verified is True
+        me_before = client.get("/api/users/me", headers=auth_header(token)).json()
+        assert me_before["email_verified"] is True
+
+        # Changing email resets email_verified=False and dispatches a new activation email
+        resp = client.patch(
+            "/api/users/me",
+            json={"email": "NewAddress@Example.com"},
+            headers=auth_header(token),
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["email"] == "newaddress@example.com"
+        assert data["email_verified"] is False
+
+        assert len(email_svc.outbox) == 1
+        sent = email_svc.outbox[-1]
+        assert sent.to_email == "newaddress@example.com"
+        assert sent.template_type == "activation"
+        assert sent.token is not None
+
+        # Activating with the new token restores email_verified=True
+        act = client.post("/api/auth/activate", json={"token": sent.token})
+        assert act.status_code == 200
+        me_after = client.get("/api/users/me", headers=auth_header(token)).json()
+        assert me_after["email_verified"] is True
+
 
 class TestChangePassword:
     def test_user_changes_password(self, clean_db):
@@ -741,6 +777,7 @@ def clean_db():
     from integrity_checker.db.session import get_session
 
     session = get_session()
+    session.query(AuthToken).delete()
     session.query(SessionModel).delete()
     session.query(User).delete()
     session.commit()
@@ -748,6 +785,7 @@ def clean_db():
     yield
     # Cleanup after test too
     session = get_session()
+    session.query(AuthToken).delete()
     session.query(SessionModel).delete()
     session.query(User).delete()
     session.commit()

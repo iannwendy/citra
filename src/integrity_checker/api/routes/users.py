@@ -379,6 +379,7 @@ def update_me(
         update_data["username_customized"] = True
         update_data["google_onboarded"] = True
 
+    email_changed_to: str | None = None
     if request.email is not None:
         normalized_email = str(request.email).strip().lower()
         current_email = (current_user.email or "").strip().lower()
@@ -392,13 +393,41 @@ def update_me(
             if dup and dup.id != current_user.id:
                 raise HTTPException(status_code=400, detail="Email already exists")
             update_data["email"] = normalized_email
+            update_data["email_verified"] = False
+            email_changed_to = normalized_email
 
     if request.full_name is not None:
         update_data["full_name"] = request.full_name.strip()
 
     if update_data:
         user = repo.update_user(current_user.id, **update_data)
+        raw_activation_token: str | None = None
+        if email_changed_to is not None:
+            settings = get_settings()
+            expires_at = datetime.now(UTC) + timedelta(
+                hours=settings.auth.activation_expire_hours
+            )
+            raw_activation_token, _ = repo.create_auth_token(
+                current_user.id, "activation", expires_at
+            )
         repo.commit()
+        if email_changed_to is not None and raw_activation_token is not None:
+            target_user = user or current_user
+            try:
+                get_email_service().send_activation_email(
+                    to_email=email_changed_to,
+                    username=target_user.username,
+                    full_name=target_user.full_name,
+                    raw_token=raw_activation_token,
+                    institution=target_user.institution,
+                    lang="vi",
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to dispatch activation email after email change to %s: %s",
+                    email_changed_to,
+                    exc,
+                )
         if user:
             return _to_response(user)
 
