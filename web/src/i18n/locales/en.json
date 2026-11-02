@@ -378,7 +378,20 @@
     "domainException": "Domain Exception Detected",
     "domainExceptionDesc": "DOI matched but title similarity is low. This may be a valid source in a specialized domain where metadata differs across databases.",
     "stylePenalty": "Style penalty",
-    "overrideHistory": "Override History"
+    "overrideHistory": "Override History",
+    "export": {
+      "sectionLabel": "Export Audit Artifact",
+      "download": "Download {{filename}} as {{format}}",
+      "lockedHint": "{{format}} export requires the Pro plan — click to upgrade",
+      "downloading": "Preparing {{format}}…",
+      "failedTitle": "Export failed",
+      "failedMessage": "Could not download the {{format}} report. Please try again.",
+      "healedDocx": "Auto-Healed .DOCX",
+      "healedRequiresDocx": "Auto-Healed .DOCX is only available for essays uploaded as .docx files",
+      "upgradeFeature": "Export {{format}} Report",
+      "upgradeTitle": "Unlock Academic Report Export ({{format}})",
+      "upgradeDescription": "Your current plan does not include {{format}} export. Upgrade to Pro ($16/mo billed annually) to export formatted PDF, Word (DOCX), JSON and CSV reports."
+    }
   },
   "teacher": {
     "myClasses": "My Classes",

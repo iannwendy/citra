@@ -378,7 +378,20 @@
     "domainException": "Phát hiện ngoại lệ chuyên ngành",
     "domainExceptionDesc": "DOI khớp nhưng độ tương đồng tiêu đề thấp. Đây có thể là nguồn hợp lệ trong chuyên ngành đặc thù.",
     "stylePenalty": "Điểm trừ định dạng",
-    "overrideHistory": "Lịch sử ghi đè"
+    "overrideHistory": "Lịch sử ghi đè",
+    "export": {
+      "sectionLabel": "Xuất Báo Cáo Chuẩn Hóa",
+      "download": "Tải {{filename}} dạng {{format}}",
+      "lockedHint": "Xuất {{format}} yêu cầu gói Pro — bấm để nâng cấp",
+      "downloading": "Đang chuẩn bị {{format}}…",
+      "failedTitle": "Xuất báo cáo thất bại",
+      "failedMessage": "Không thể tải báo cáo {{format}}. Vui lòng thử lại.",
+      "healedDocx": "Auto-Healed .DOCX",
+      "healedRequiresDocx": "Auto-Healed .DOCX chỉ khả dụng với bài nộp dạng tệp .docx",
+      "upgradeFeature": "Xuất báo cáo {{format}}",
+      "upgradeTitle": "Mở khóa xuất báo cáo học thuật định dạng {{format}}",
+      "upgradeDescription": "Gói hiện tại không hỗ trợ xuất {{format}}. Nâng cấp lên gói Pro ($16/tháng khi trả năm) để tải báo cáo PDF, Word (DOCX), JSON và CSV đầy đủ."
+    }
   },
   "teacher": {
     "myClasses": "Lớp học của tôi",

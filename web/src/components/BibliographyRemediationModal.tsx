@@ -19,6 +19,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { isDocxFilename } from '@/lib/fileKind';
 
 interface BibliographyRemediationModalProps {
   open: boolean;
@@ -51,6 +52,10 @@ export function BibliographyRemediationModal({
   const [error, setError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [filterMode, setFilterMode] = useState<'all' | 'flagged_red' | 'modified'>('all');
+  const [healedBusy, setHealedBusy] = useState(false);
+  const [healedError, setHealedError] = useState<string | null>(null);
+  // The healed-DOCX endpoint only works for original Word uploads (HTTP 400 for PDFs).
+  const isDocxSource = isDocxFilename(filename);
 
   useEffect(() => {
     if (!open || !essayId) return;
@@ -86,6 +91,31 @@ export function BibliographyRemediationModal({
       // ignore clipboard errors
     }
   };
+
+  const handleDownloadHealedDocx = async () => {
+    if (!isDocxSource || healedBusy) return;
+    const targetStyle = selectedStyle === 'ieee' ? 'ieee' : 'apa';
+    setHealedBusy(true);
+    setHealedError(null);
+    try {
+      await api.downloadAutoHealedDocx(essayId, targetStyle, filename);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : '';
+      setHealedError(
+        (lang === 'vi'
+          ? 'Không thể xuất tệp Word tự sửa lỗi. Vui lòng thử lại.'
+          : 'Could not export the auto-healed Word file. Please try again.') +
+          (detail ? ` (${detail})` : ''),
+      );
+    } finally {
+      setHealedBusy(false);
+    }
+  };
+
+  const healedDisabledHint =
+    lang === 'vi'
+      ? 'Auto-Healed .DOCX chỉ khả dụng với bài nộp dạng tệp .docx'
+      : 'Auto-Healed .DOCX is only available for essays uploaded as .docx files';
 
   const handleDownloadFile = (content: string, ext: string, suffix: string) => {
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -272,19 +302,32 @@ export function BibliographyRemediationModal({
                 <button
                   type="button"
                   data-testid="download-auto-healed-docx-btn"
-                  onClick={() => {
-                    const targetStyle = selectedStyle === 'ieee' ? 'ieee' : 'apa';
-                    void api.downloadAutoHealedDocx(essayId, targetStyle, filename);
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors"
+                  onClick={() => void handleDownloadHealedDocx()}
+                  disabled={!isDocxSource || healedBusy}
+                  aria-disabled={!isDocxSource}
+                  aria-busy={healedBusy}
+                  title={isDocxSource ? undefined : healedDisabledHint}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
+                  {healedBusy ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
                   <span>
                     {lang === 'vi'
                       ? 'Xuất Word (.docx) Tự sửa lỗi + Change Log'
                       : 'Export Auto-Healed .DOCX + Change Log'}
                   </span>
                 </button>
+                {!isDocxSource && (
+                  <span
+                    data-testid="auto-healed-docx-hint"
+                    className="text-[11px] text-slate-300"
+                  >
+                    {healedDisabledHint}
+                  </span>
+                )}
               </>
             )}
           </div>
@@ -292,6 +335,15 @@ export function BibliographyRemediationModal({
 
         {/* Body Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50 dark:bg-slate-950/60">
+          {healedError && (
+            <div
+              role="alert"
+              data-testid="auto-healed-docx-error"
+              className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300"
+            >
+              {healedError}
+            </div>
+          )}
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <Loader2 className="h-8 w-8 animate-spin text-indigo-600 dark:text-indigo-400" />

@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Quote, Clock, Download, ShieldCheck, Lock, Sparkles } from 'lucide-react';
+import { ArrowLeft, Quote, Clock, Download, ShieldCheck, Lock, Sparkles, Loader2 } from 'lucide-react';
 import { api } from '@/api/client';
 import { useRole } from '@/hooks/useRole';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip } from '@/components/ui/tooltip';
+import { useToast } from '@/contexts/ToastContext';
+import { isDocxFilename, type ExportFormat } from '@/lib/fileKind';
 
 /* ============================================================
    EssayHeader (Scholarly Precision shadcn/ui v2.0)
@@ -30,33 +33,119 @@ export function EssayHeader({
   styleName,
 }: EssayHeaderProps) {
   const { t, i18n } = useTranslation();
-  const { isUser, isBasic } = useRole();
+  const { isUser, quota } = useRole();
+  const toast = useToast();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [lockedFormat, setLockedFormat] = useState<string>('PDF');
+  const [busy, setBusy] = useState<ExportFormat | 'healed' | null>(null);
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
 
-  const handleDownload = (
-    e: React.MouseEvent<HTMLAnchorElement>,
-    fmt: 'json' | 'csv' | 'pdf' | 'docx',
-  ) => {
-    e.preventDefault();
-    if (isBasic && fmt !== 'json') {
-      setLockedFormat(fmt.toUpperCase());
-      setUpgradeOpen(true);
-      return;
-    }
-    void api.downloadReportFile(essayId, fmt, filename);
+  // Export permissions come from the plan quota (backend `/auth/me`), never
+  // from the role: Pro/Ultra students get every format, Basic only JSON.
+  const allowedFormats = new Set<string>(
+    (quota?.allowed_export_formats ?? []).map((f) => f.toLowerCase()),
+  );
+  const canExport = (fmt: ExportFormat) => allowedFormats.has(fmt);
+  // Auto-healed DOCX is a premium Word export: it follows the DOCX entitlement.
+  const canExportHealed = canExport('docx');
+  const isDocxSource = isDocxFilename(filename);
+
+  const openUpgrade = (label: string) => {
+    setLockedFormat(label);
+    setUpgradeOpen(true);
   };
 
-  const handleDownloadHealedDocx = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    if (isBasic) {
-      setLockedFormat('AUTO-HEALED DOCX');
-      setUpgradeOpen(true);
+  const runDownload = async (
+    key: ExportFormat | 'healed',
+    label: string,
+    fn: () => Promise<void>,
+  ) => {
+    if (busy) return;
+    setBusy(key);
+    try {
+      await fn();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : '';
+      toast.error(
+        t('essay.export.failedTitle'),
+        `${t('essay.export.failedMessage', { format: label })}${detail ? ` (${detail})` : ''}`,
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleDownload = (fmt: ExportFormat) => {
+    const label = fmt.toUpperCase();
+    if (!canExport(fmt)) {
+      openUpgrade(label);
+      return;
+    }
+    void runDownload(fmt, label, () => api.downloadReportFile(essayId, fmt, filename));
+  };
+
+  const handleDownloadHealedDocx = () => {
+    if (!isDocxSource) return;
+    if (!canExportHealed) {
+      openUpgrade('AUTO-HEALED DOCX');
       return;
     }
     const targetStyle = (styleName || '').toLowerCase().includes('ieee') ? 'ieee' : 'apa';
-    void api.downloadAutoHealedDocx(essayId, targetStyle, filename);
+    void runDownload('healed', 'AUTO-HEALED DOCX', () =>
+      api.downloadAutoHealedDocx(essayId, targetStyle, filename),
+    );
+  };
+
+  const renderFormatButton = (fmt: ExportFormat, primary = false) => {
+    const label = fmt.toUpperCase();
+    const locked = !canExport(fmt);
+    const loading = busy === fmt;
+    return (
+      <Button
+        key={fmt}
+        type="button"
+        variant={primary ? 'default' : 'outline'}
+        size="sm"
+        onClick={() => handleDownload(fmt)}
+        disabled={loading}
+        data-testid={`export-${fmt}-btn`}
+        data-locked={locked ? 'true' : 'false'}
+        aria-busy={loading}
+        aria-label={
+          locked
+            ? t('essay.export.lockedHint', { format: label })
+            : t('essay.export.download', { filename, format: label })
+        }
+        title={locked ? t('essay.export.lockedHint', { format: label }) : undefined}
+        className={
+          primary
+            ? 'h-8 font-mono text-xs rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto'
+            : 'h-8 font-mono text-xs rounded-xl w-full sm:w-auto'
+        }
+      >
+        {loading ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : locked ? (
+          <Lock className={primary ? 'h-3.5 w-3.5 text-amber-300' : 'h-3.5 w-3.5 text-amber-500'} />
+        ) : fmt === 'pdf' || fmt === 'docx' ? (
+          <FileFormatIcon format={fmt} size="xs" />
+        ) : (
+          <Download className="h-3.5 w-3.5" />
+        )}
+        {label}
+        {locked && (
+          <span
+            className={
+              primary
+                ? 'ml-1 px-1 py-0.2 rounded bg-amber-400/20 text-amber-200 text-[9px] font-bold'
+                : 'ml-1 px-1 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 text-[9px] font-bold'
+            }
+          >
+            PRO
+          </span>
+        )}
+      </Button>
+    );
   };
 
   return (
@@ -114,96 +203,45 @@ export function EssayHeader({
 
         {/* Export Actions */}
         <div className="flex flex-col items-start xl:items-end gap-1.5 shrink-0 w-full xl:w-auto">
-          {!isUser && (
-            <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              {lang === 'vi' ? 'Xuất Báo Cáo Chuẩn Hóa' : 'Export Audit Artifact'}
-            </span>
-          )}
+          <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            {t('essay.export.sectionLabel')}
+          </span>
           <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full xl:w-auto">
-            {!isUser && (
-              <>
-                <Button asChild variant="outline" size="sm" className="h-8 font-mono text-xs rounded-xl w-full sm:w-auto">
-                  <a
-                    href={api.downloadReport(essayId, 'json')}
-                    onClick={(e) => handleDownload(e, 'json')}
-                    download
-                    aria-label={`Download ${filename} as JSON`}
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    JSON
-                  </a>
-                </Button>
-                <Button asChild variant="outline" size="sm" className="h-8 font-mono text-xs rounded-xl w-full sm:w-auto">
-                  <a
-                    href={api.downloadReport(essayId, 'csv')}
-                    onClick={(e) => handleDownload(e, 'csv')}
-                    download
-                    aria-label={`Download ${filename} as CSV`}
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    CSV
-                  </a>
-                </Button>
-              </>
-            )}
-            <Button asChild size="sm" className="h-8 font-mono text-xs rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto">
-              <a
-                href={api.downloadReport(essayId, 'pdf')}
-                onClick={(e) => handleDownload(e, 'pdf')}
-                download
-                data-testid="export-pdf-btn"
-                aria-label={`Download ${filename} as PDF`}
+            {renderFormatButton('json')}
+            {renderFormatButton('csv')}
+            {renderFormatButton('pdf', true)}
+            {renderFormatButton('docx')}
+            <Tooltip
+              content={isDocxSource ? undefined : t('essay.export.healedRequiresDocx')}
+              className="w-full sm:w-auto"
+            >
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleDownloadHealedDocx}
+                disabled={!isDocxSource || busy === 'healed'}
+                aria-disabled={!isDocxSource}
+                aria-busy={busy === 'healed'}
+                title={isDocxSource ? undefined : t('essay.export.healedRequiresDocx')}
+                data-testid="export-healed-docx-btn"
+                className="h-8 font-mono text-xs rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isBasic ? (
+                {busy === 'healed' ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : !canExportHealed ? (
                   <Lock className="h-3.5 w-3.5 text-amber-300" />
                 ) : (
-                  <FileFormatIcon format="pdf" size="xs" />
+                  <Sparkles className="h-3.5 w-3.5" />
                 )}
-                PDF
-                {isBasic && (
+                <FileFormatIcon format="docx" size="xs" />
+                {t('essay.export.healedDocx')}
+                {!canExportHealed && (
                   <span className="ml-1 px-1 py-0.2 rounded bg-amber-400/20 text-amber-200 text-[9px] font-bold">
                     PRO
                   </span>
                 )}
-              </a>
-            </Button>
-            <Button asChild variant="outline" size="sm" className="h-8 font-mono text-xs rounded-xl w-full sm:w-auto">
-              <a
-                href={api.downloadReport(essayId, 'docx')}
-                onClick={(e) => handleDownload(e, 'docx')}
-                download
-                data-testid="export-docx-btn"
-                aria-label={`Download ${filename} as DOCX`}
-              >
-                {isBasic ? (
-                  <Lock className="h-3.5 w-3.5 text-amber-500" />
-                ) : (
-                  <FileFormatIcon format="docx" size="xs" />
-                )}
-                DOCX
-                {isBasic && (
-                  <span className="ml-1 px-1 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 text-[9px] font-bold">
-                    PRO
-                  </span>
-                )}
-              </a>
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleDownloadHealedDocx}
-              data-testid="export-healed-docx-btn"
-              className="h-8 font-mono text-xs rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto"
-            >
-              {isBasic ? <Lock className="h-3.5 w-3.5 text-amber-300" /> : <Sparkles className="h-3.5 w-3.5" />}
-              <FileFormatIcon format="docx" size="xs" />
-              {lang === 'vi' ? 'Auto-Healed .DOCX' : 'Auto-Healed .DOCX'}
-              {isBasic && (
-                <span className="ml-1 px-1 py-0.2 rounded bg-amber-400/20 text-amber-200 text-[9px] font-bold">
-                  PRO
-                </span>
-              )}
-            </Button>
+              </Button>
+            </Tooltip>
           </div>
         </div>
       </div>
@@ -211,17 +249,9 @@ export function EssayHeader({
       <UpgradeModal
         open={upgradeOpen}
         onOpenChange={setUpgradeOpen}
-        featureName={`Export ${lockedFormat} Report`}
-        reasonTitle={
-          lang === 'vi'
-            ? `Mở khóa xuất báo cáo học thuật định dạng ${lockedFormat}`
-            : `Unlock Academic Report Export (${lockedFormat})`
-        }
-        reasonDescription={
-          lang === 'vi'
-            ? `Gói Basic chỉ hỗ trợ xem báo cáo trực tuyến. Nâng cấp lên gói Pro ($16/tháng khi trả năm) để tải xuống báo cáo ${lockedFormat}, Word (DOCX) và CSV đầy đủ.`
-            : `The free Basic tier supports web viewing only. Upgrade to Pro ($16/mo billed annually) to export formatted ${lockedFormat}, Word (DOCX), and CSV reports.`
-        }
+        featureName={t('essay.export.upgradeFeature', { format: lockedFormat })}
+        reasonTitle={t('essay.export.upgradeTitle', { format: lockedFormat })}
+        reasonDescription={t('essay.export.upgradeDescription', { format: lockedFormat })}
       />
     </div>
   );
