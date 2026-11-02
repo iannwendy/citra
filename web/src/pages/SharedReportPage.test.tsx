@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom';
 import { api } from '@/api/client';
 import i18n from '@/i18n';
 import { renderWithProviders, makeUser, screen, fireEvent, waitFor } from '@/test-utils';
+import { encodeQrMatrix } from '@/lib/qrCode';
 import { SharedReportPage } from './SharedReportPage';
 import { EssayHeader } from './essay/EssayHeader';
 
@@ -155,5 +156,111 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
     expect(screen.getByTestId('shared-receipt-link').getAttribute('href')).toBe(
       '/verify/share/sh_42_1999999999_11223344556677889900aabb',
     );
+  });
+
+  it('toggles language EN <-> VI without re-fetching API, localizes disclaimer/explanations, and copies link reliably', async () => {
+    const getReportSpy = vi.spyOn(api, 'getSharedEssayReport').mockResolvedValue({
+      essay_id: 27,
+      filename: 'ACL2026_CameraReady_Final.pdf',
+      created_at: '2026-11-02T10:00:00Z',
+      num_pages: 9,
+      num_citations: 1,
+      cis: {
+        score: 96.2,
+        components: {
+          verified_ratio: 1.0,
+          metadata_accuracy: 1.0,
+          in_text_bib_consistency: 1.0,
+          format_consistency: 1.0,
+          identifier_validity: 0.5,
+        },
+        weights_used: {},
+        num_citations: 1,
+        num_unresolved: 0,
+        disclaimer: 'Decision support tool only.',
+      },
+      style_profile: {
+        style: 'APA_LIKE',
+        confidence: 1.0,
+        apa_count: 1,
+        ieee_count: 0,
+        mixed_count: 0,
+        features: {},
+        ratios: {},
+        explanation: '',
+      },
+      receipt_id: 'CITRA-00027-9556E7E5',
+      verified_at: '2026-11-02T10:00:00Z',
+      disclaimer: 'Decision support tool only.',
+      verdict_counts: {
+        verified: 1,
+        metadata_error: 0,
+        suspected_hallucination: 0,
+        unresolved: 0,
+        resource: 0,
+      },
+      verdicts: [
+        {
+          reference_id: 'ref-0001',
+          raw_text: 'Vaswani, A. (2017). Attention Is All You Need. NeurIPS.',
+          label: 'verified',
+          confidence: 0.96,
+          explanation: 'Exact match in local DB (title_sim=1.00, author_sim=1.00)',
+          triggered_rules: ['R-LOCAL_DB_VERIFIED', 'R-LOCAL_DB'],
+          matched_source: {
+            source: 'local_db',
+            title: 'Attention Is All You Need',
+            authors: ['Ashish Vaswani'],
+            year: '2017',
+            venue: 'NeurIPS',
+            doi: '10.48550/arXiv.1706.03762',
+            matched_fields: ['title', 'authors', 'year'],
+            checked_at: '2026-11-02T10:00:00Z',
+          },
+        },
+      ],
+    });
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/verify/share/:token" element={<SharedReportPage />} />
+      </Routes>,
+      { initialRoute: '/verify/share/sh_27_1777721599_9556e7e57cf6544577924f50', user: null },
+    );
+
+    await waitFor(() => expect(screen.getByTestId('shared-report-page')).toBeDefined());
+    expect(getReportSpy).toHaveBeenCalledTimes(1);
+
+    // Language toggle displays EN when active language is English
+    const langBtn = screen.getByTestId('shared-lang-toggle');
+    expect(langBtn.textContent).toContain('EN');
+
+    // Toggle to Vietnamese -> button shows VI, does NOT re-fetch API, and localizes explanation
+    fireEvent.click(langBtn);
+    await waitFor(() => expect(langBtn.textContent).toContain('VI'));
+    expect(getReportSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('shared-verdict-row-0').textContent).toContain(
+      'thư viện học thuật cục bộ',
+    );
+    expect(screen.getByTestId('shared-verdict-row-0').textContent).toContain(
+      'DOI / Nguồn gốc',
+    );
+
+    // Copy Link button works and updates label to Vietnamese "Đã sao chép!"
+    const copyBtn = screen.getByTestId('copy-share-url-btn');
+    fireEvent.click(copyBtn);
+    await waitFor(() =>
+      expect(copyBtn.textContent).toContain('Đã sao chép!'),
+    );
+
+    // Genuine ISO/IEC 18004 QR matrix validation
+    const qrSvg = screen.getByTestId('qr-verification-matrix');
+    const matrix = encodeQrMatrix(
+      'https://citra.io.vn/verify/share/sh_27_1777721599_9556e7e57cf6544577924f50',
+    );
+    expect(matrix.length).toBeGreaterThanOrEqual(29);
+    // 7x7 finder pattern top-left row 0 has 7 dark modules followed by 1 light separator
+    expect(matrix[0]!.slice(0, 8)).toEqual([1, 1, 1, 1, 1, 1, 1, 0]);
+    expect(qrSvg.getAttribute('shape-rendering') || qrSvg.getAttribute('shapeRendering')).toBeTruthy();
   });
 });

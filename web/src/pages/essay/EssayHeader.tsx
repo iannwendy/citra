@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useToast } from '@/contexts/ToastContext';
+import { copyTextToClipboard } from '@/lib/clipboard';
 import { isDocxFilename, type ExportFormat } from '@/lib/fileKind';
 
 /* ============================================================
@@ -108,11 +109,7 @@ export function EssayHeader({
           ? window.location.origin
           : 'https://citra.io.vn';
       const fullUrl = `${origin}/verify/share/${res.share_token}`;
-      try {
-        await navigator.clipboard?.writeText(fullUrl);
-      } catch {
-        // Ignore clipboard errors in headless environments
-      }
+      await copyTextToClipboard(fullUrl);
       toast.success(
         t('essay.share.toastTitle'),
         `${res.receipt_id} — ${t('essay.share.toastCopied')}`,

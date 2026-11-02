@@ -889,14 +889,17 @@ def _json_response(
     )
 
 
-def _build_qr_seal_drawing(seed: str, size: float = 64.0) -> Any:
-    """Build a deterministic ReportLab vector QR-style verification matrix seal."""
-    import hashlib
-
+def _build_qr_seal_drawing(seed: str, size: float = 68.0) -> Any:
+    """Build a genuine ISO/IEC 18004 camera-scannable ReportLab vector QR seal with 4-module quiet zone."""
     from reportlab.graphics.shapes import Drawing, Rect
 
-    dim = 15
-    cell = size / dim
+    from integrity_checker.api.routes.essays import generate_qr_matrix
+
+    matrix = generate_qr_matrix(seed)
+    dim = len(matrix)
+    quiet = 4
+    total_dim = dim + 2 * quiet
+    cell = size / total_dim
     drawing = Drawing(size, size)
     drawing.add(
         Rect(
@@ -910,34 +913,19 @@ def _build_qr_seal_drawing(seed: str, size: float = 64.0) -> Any:
         )
     )
 
-    digest = hashlib.sha256((seed or "CITRA").encode()).digest()
+    dark_color = colors.HexColor("#0f172a")
     for r in range(dim):
         for c in range(dim):
-            in_tl = r < 5 and c < 5
-            in_tr = r < 5 and c >= dim - 5
-            in_bl = r >= dim - 5 and c < 5
-            is_dark = False
-            if in_tl:
-                is_dark = r in (0, 4) or c in (0, 4) or (r == 2 and c == 2)
-            elif in_tr:
-                c_rel = c - (dim - 5)
-                is_dark = r in (0, 4) or c_rel in (0, 4) or (r == 2 and c_rel == 2)
-            elif in_bl:
-                r_rel = r - (dim - 5)
-                is_dark = r_rel in (0, 4) or c in (0, 4) or (r_rel == 2 and c == 2)
-            elif not ((r < 6 and c < 6) or (r < 6 and c >= dim - 6) or (r >= dim - 6 and c < 6)):
-                idx = r * dim + c
-                byte_val = digest[idx % len(digest)]
-                is_dark = bool((byte_val >> (idx % 8)) & 1)
-            if is_dark:
+            if matrix[r][c]:
                 drawing.add(
                     Rect(
-                        c * cell,
-                        (dim - 1 - r) * cell,
-                        cell * 0.9,
-                        cell * 0.9,
-                        fillColor=colors.HexColor("#0f172a"),
-                        strokeColor=None,
+                        (c + quiet) * cell,
+                        (total_dim - 1 - (r + quiet)) * cell,
+                        cell,
+                        cell,
+                        fillColor=dark_color,
+                        strokeColor=dark_color,
+                        strokeWidth=0.06,
                     )
                 )
     return drawing
@@ -1022,7 +1010,7 @@ def _generate_pdf_bytes(essay, verdicts: list) -> bytes:
         or f"https://citra.io.vn/verify/share/{share_info['share_token']}"
     )
 
-    qr_drawing = _build_qr_seal_drawing(f"{receipt_id}|{verification_url}", size=62.0)
+    qr_drawing = _build_qr_seal_drawing(verification_url, size=68.0)
     receipt_text_block = [
         Paragraph("<b>CITRA Digital Verification Receipt (HMAC-SHA256)</b>", receipt_style),
         Paragraph(f"<b>Receipt ID:</b> {escape(receipt_id)}", receipt_style),

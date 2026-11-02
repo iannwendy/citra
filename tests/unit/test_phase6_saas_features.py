@@ -171,6 +171,9 @@ class TestTask61ShareableVerificationLinks:
         assert report["essay_id"] == essay_id
         assert report["filename"] == "quantum_nlp_2026.pdf"
         assert report["receipt_id"] == share_data["receipt_id"]
+        assert isinstance(report.get("qr_matrix"), list)
+        assert len(report["qr_matrix"]) >= 29
+        assert report["qr_matrix"][0][:8] == [1, 1, 1, 1, 1, 1, 1, 0]
         assert report["cis"]["score"] == 88.5
         assert "verified_ratio" in report["cis"]["components"]
         assert report["verdict_counts"]["verified"] == 1

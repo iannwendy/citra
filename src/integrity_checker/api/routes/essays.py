@@ -860,6 +860,19 @@ def get_essay_stats(
 # Phase 6.1: Cryptographic Shareable Verification Links & Digital Receipt API
 # ---------------------------------------------------------------------------
 
+def generate_qr_matrix(data: str) -> list[list[int]]:
+    """Generate an ISO/IEC 18004 QR Code matrix (1=dark, 0=light) for camera scanning."""
+    from reportlab.graphics.barcode import qrencoder
+
+    clean_data = (data or "https://citra.io.vn").strip()
+    if "|http" in clean_data:
+        clean_data = clean_data.split("|", 1)[-1].strip()
+    qr = qrencoder.QRCode(None, qrencoder.QRErrorCorrectLevel.M)
+    qr.addData(qrencoder.QR8bitByte(clean_data))
+    qr.make()
+    return [[1 if cell else 0 for cell in row] for row in qr.modules]
+
+
 def create_essay_share_token(essay_id: int, expires_days: int | float = 30) -> dict[str, Any]:
     """Create an HMAC-SHA256 signed shareable verification token and Digital Receipt ID."""
     import hashlib
@@ -877,11 +890,13 @@ def create_essay_share_token(essay_id: int, expires_days: int | float = 30) -> d
     sig24 = hmac_hex[:24]
     token = f"sh_{eid}_{exp_unix}_{sig24}"
     receipt_id = f"CITRA-{eid:05d}-{hmac_hex[:8].upper()}"
+    verification_url = f"https://citra.io.vn/verify/share/{token}"
     return {
         "essay_id": eid,
         "share_token": token,
         "share_url": f"/verify/share/{token}",
-        "verification_url": f"https://citra.io.vn/verify/share/{token}",
+        "verification_url": verification_url,
+        "qr_matrix": generate_qr_matrix(verification_url),
         "receipt_id": receipt_id,
         "signature_prefix": sig24,
         "expires_at": exp_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -1066,6 +1081,7 @@ def get_shared_essay_report(
         if essay.uploaded_at
         else datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     )
+    verification_url = f"https://citra.io.vn/verify/share/{share_token}"
     return {
         "essay_id": essay.id,
         "filename": essay.filename,
@@ -1077,7 +1093,8 @@ def get_shared_essay_report(
         "receipt_id": receipt_id,
         "share_token": share_token,
         "share_url": f"/verify/share/{share_token}",
-        "verification_url": f"https://citra.io.vn/verify/share/{share_token}",
+        "verification_url": verification_url,
+        "qr_matrix": generate_qr_matrix(verification_url),
         "signature_prefix": sig_part,
         "verified_at": created_iso,
         "expires_at": expires_at,

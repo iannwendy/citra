@@ -474,6 +474,7 @@ export interface EssayShareLinkResponse {
   share_token: string;
   share_url: string;
   verification_url?: string;
+  qr_matrix?: number[][];
   receipt_id: string;
   signature_prefix?: string;
   expires_at: string;
@@ -507,6 +508,7 @@ export interface SharedEssayReport {
   share_token?: string;
   share_url?: string;
   verification_url?: string;
+  qr_matrix?: number[][];
   signature_prefix?: string;
   verified_at: string;
   expires_at?: string;

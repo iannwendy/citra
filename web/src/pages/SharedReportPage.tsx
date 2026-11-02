@@ -17,80 +17,73 @@ import {
   Lock,
   Sparkles,
 } from 'lucide-react';
-import { api, type SharedEssayReport, type SharedVerdictItem } from '@/api/client';
+import {
+  api,
+  type SharedEssayReport,
+  type SharedVerdictItem,
+  type Verdict,
+} from '@/api/client';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
+import { useToast } from '@/contexts/ToastContext';
+import { copyTextToClipboard } from '@/lib/clipboard';
+import { encodeQrMatrix } from '@/lib/qrCode';
+import {
+  getRuleDisplayName,
+  getSourceDisplayName,
+  getVerdictExplanation,
+} from '@/lib/verdictExplanation';
 
 /**
- * Deterministic 15x15 QR-style verification matrix SVG from a string seed (share URL + receipt ID).
- * Renders standard QR finder patterns at the 3 corners and deterministic data modules in the grid.
+ * Genuine ISO/IEC 18004 QR Code SVG with a 4-module quiet zone.
+ * Encodes the pure verification URL so iOS/Android phone cameras immediately
+ * recognize and open the verification link.
  */
 function VerificationQrMatrixSvg({
   value,
+  matrix,
   size = 112,
 }: {
   value: string;
+  matrix?: number[][];
   size?: number;
 }) {
   const grid = useMemo(() => {
-    const dim = 15;
-    const matrix: boolean[][] = Array.from({ length: dim }, () =>
-      Array(dim).fill(false),
-    );
-
-    const drawFinder = (r0: number, c0: number) => {
-      for (let r = 0; r < 5; r++) {
-        for (let c = 0; c < 5; c++) {
-          const isBorder = r === 0 || r === 4 || c === 0 || c === 4;
-          const isCenter = r === 2 && c === 2;
-          matrix[r0 + r][c0 + c] = isBorder || isCenter;
-        }
-      }
-    };
-
-    drawFinder(0, 0);
-    drawFinder(0, dim - 5);
-    drawFinder(dim - 5, 0);
-
-    // Deterministic FNV-1a hash stream over value
-    let hash = 2166136261;
-    const seed = value || 'CITRA-VERIFY';
-    for (let r = 0; r < dim; r++) {
-      for (let c = 0; c < dim; c++) {
-        const inTopLeft = r < 6 && c < 6;
-        const inTopRight = r < 6 && c >= dim - 6;
-        const inBottomLeft = r >= dim - 6 && c < 6;
-        if (inTopLeft || inTopRight || inBottomLeft) continue;
-        const ch = seed.charCodeAt((r * dim + c) % seed.length);
-        hash ^= ch + r * 31 + c * 17;
-        hash = Math.imul(hash, 16777619);
-        matrix[r][c] = (Math.abs(hash) & 1) === 1;
-      }
+    if (
+      Array.isArray(matrix) &&
+      matrix.length >= 21 &&
+      Array.isArray(matrix[0]) &&
+      matrix[0].length === matrix.length
+    ) {
+      return matrix;
     }
-    return matrix;
-  }, [value]);
+    return encodeQrMatrix(value || 'https://citra.io.vn');
+  }, [value, matrix]);
 
   const dim = grid.length;
+  const quiet = 4;
+  const totalDim = dim + quiet * 2;
+
   return (
     <svg
       width={size}
       height={size}
-      viewBox={`0 0 ${dim} ${dim}`}
+      viewBox={`0 0 ${totalDim} ${totalDim}`}
+      shapeRendering="crispEdges"
       role="img"
       aria-label="CITRA Verification QR Matrix"
       data-testid="qr-verification-matrix"
-      className="rounded-lg bg-white p-2 border border-slate-200 dark:border-slate-700 shadow-xs shrink-0"
+      className="rounded-lg bg-white border border-slate-200 dark:border-slate-700 shadow-xs shrink-0 select-none"
     >
-      <rect width={dim} height={dim} fill="#ffffff" />
+      <rect width={totalDim} height={totalDim} fill="#ffffff" />
       {grid.map((row, rIdx) =>
         row.map((cell, cIdx) =>
           cell ? (
             <rect
               key={`${rIdx}-${cIdx}`}
-              x={cIdx}
-              y={rIdx}
-              width={0.92}
-              height={0.92}
-              rx={0.14}
+              x={cIdx + quiet}
+              y={rIdx + quiet}
+              width={1}
+              height={1}
               fill="#0f172a"
             />
           ) : null,
@@ -98,6 +91,60 @@ function VerificationQrMatrixSvg({
       )}
     </svg>
   );
+}
+
+function localizeExplanation(v: SharedVerdictItem, lang: 'en' | 'vi'): string {
+  const raw = (v.explanation || v.reasoning || '').trim();
+  if (lang === 'en') {
+    return raw;
+  }
+  const asVerdict: Verdict = {
+    citation_id: v.citation_id || v.reference_id || 'v0',
+    citation_raw: v.raw_text || v.citation_raw || '',
+    label: v.label,
+    confidence: Number(v.confidence || 0),
+    reasoning: raw,
+    triggered_rules: v.triggered_rules || [],
+    mismatched_fields: v.mismatched_fields || [],
+    matched_sources:
+      v.matched_sources && v.matched_sources.length > 0
+        ? v.matched_sources
+        : v.matched_source
+          ? [v.matched_source]
+          : [],
+    is_overridden: false,
+    mapping_status:
+      (v.mapping_status as Verdict['mapping_status']) || 'matched',
+    mapping_confidence: 1.0,
+  };
+  const localizedSummary = getVerdictExplanation(asVerdict, 'vi');
+  if (!raw) return localizedSummary;
+
+  // Also translate common technical English reasoning substrings if present
+  const translatedTechnical = raw
+    .replace(
+      /Exact match in local DB/gi,
+      'Khớp chính xác trong CSDL học thuật cục bộ',
+    )
+    .replace(
+      /Strong match in local DB/gi,
+      'Khớp độ tương đồng cao trong CSDL học thuật cục bộ',
+    )
+    .replace(
+      /Exact title and DOI match in/gi,
+      'Khớp chính xác tiêu đề và DOI trên',
+    )
+    .replace(
+      /Zero matches across 15\+ scholarly indexes/gi,
+      'Không tìm thấy bản ghi khớp trên hơn 15 cơ sở dữ liệu học thuật',
+    )
+    .replace(/title_sim=/g, 'độ khớp tiêu đề=')
+    .replace(/author_sim=/g, 'độ khớp tác giả=');
+
+  if (translatedTechnical !== raw) {
+    return `${localizedSummary} (${translatedTechnical})`;
+  }
+  return localizedSummary;
 }
 
 const CIS_COMPONENT_KEYS: Array<{
@@ -135,6 +182,7 @@ const CIS_COMPONENT_KEYS: Array<{
 export function SharedReportPage() {
   const { token } = useParams<{ token: string }>();
   const { t, i18n } = useTranslation();
+  const toast = useToast();
   const [report, setReport] = useState<SharedEssayReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -167,7 +215,7 @@ export function SharedReportPage() {
           setError(
             err instanceof Error
               ? err.message
-              : t('sharedReport.invalidOrExpiredDesc'),
+              : i18n.t('sharedReport.invalidOrExpiredDesc'),
           );
         }
       } finally {
@@ -180,7 +228,7 @@ export function SharedReportPage() {
     return () => {
       cancelled = true;
     };
-  }, [token, t]);
+  }, [token]);
 
   const shareUrlFull = useMemo(() => {
     const origin =
@@ -191,13 +239,10 @@ export function SharedReportPage() {
   }, [token]);
 
   const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard?.writeText(shareUrlFull);
-    } catch {
-      // Clipboard fallback ignored in headless environments
-    }
+    await copyTextToClipboard(shareUrlFull);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    toast.success(t('sharedReport.copied'), shareUrlFull);
+    setTimeout(() => setCopied(false), 2500);
   };
 
   const toggleExpand = (refId: string) => {
@@ -205,7 +250,19 @@ export function SharedReportPage() {
   };
 
   const toggleLanguage = () => {
-    void i18n.changeLanguage(lang === 'vi' ? 'en' : 'vi');
+    const next = lang === 'vi' ? 'en' : 'vi';
+    void i18n.changeLanguage(next);
+    try {
+      localStorage.setItem('language', next);
+      localStorage.setItem('i18nextLng', next);
+    } catch {
+      // Ignore storage errors in restricted environments
+    }
+    const fixedT = i18n.getFixedT(next);
+    toast.success(
+      fixedT('settings.languageUpdated'),
+      next === 'vi' ? 'Tiếng Việt (VI)' : 'English (EN)',
+    );
   };
 
   const renderVerdictBadge = (label: SharedVerdictItem['label']) => {
@@ -298,6 +355,27 @@ export function SharedReportPage() {
     unresolved: 0,
     resource: 0,
   };
+  const qrMatrixForUrl =
+    report.qr_matrix && report.verification_url === shareUrlFull
+      ? report.qr_matrix
+      : undefined;
+  const rawStyle = (report.style_profile?.style || 'APA').toUpperCase();
+  const displayStyle =
+    rawStyle === 'APA_LIKE'
+      ? 'APA'
+      : rawStyle === 'IEEE_LIKE'
+        ? 'IEEE'
+        : rawStyle === 'MIXED'
+          ? lang === 'vi'
+            ? 'Hỗn hợp'
+            : 'Mixed'
+          : rawStyle === 'UNKNOWN'
+            ? report.filename?.toLowerCase().endsWith('.bib')
+              ? 'BibTeX'
+              : report.filename?.toLowerCase().endsWith('.ris')
+                ? 'RIS'
+                : 'APA'
+            : rawStyle;
 
   return (
     <div
@@ -305,12 +383,12 @@ export function SharedReportPage() {
       data-testid="shared-report-page"
     >
       {/* Top Public Verification Bar */}
-      <header className="border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md sticky top-0 z-20">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+      <header className="border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md sticky top-0 z-40">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <Link
               to="/"
-              className="inline-flex items-center gap-2 font-display font-bold text-lg tracking-tight text-slate-900 dark:text-white"
+              className="inline-flex items-center gap-2 font-display font-bold text-lg tracking-tight text-slate-900 dark:text-white shrink-0"
             >
               <ShieldCheck className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
               <span>CITRA</span>
@@ -321,30 +399,37 @@ export function SharedReportPage() {
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={toggleLanguage}
               data-testid="shared-lang-toggle"
-              className="px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              aria-label={t('nav.language')}
+              title={
+                lang === 'vi'
+                  ? 'Chuyển sang Tiếng Anh (EN)'
+                  : 'Switch to Vietnamese (VI)'
+              }
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer touch-manipulation select-none"
             >
-              {lang === 'vi' ? 'EN' : 'VI'}
+              <Globe className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>{lang === 'vi' ? 'VI' : 'EN'}</span>
             </button>
             <button
               type="button"
               onClick={() => void handleCopyLink()}
               data-testid="copy-share-url-btn"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white transition-colors cursor-pointer touch-manipulation select-none"
             >
               {copied ? (
                 <>
                   <Check className="h-3.5 w-3.5" />
-                  {t('sharedReport.copied')}
+                  <span>{t('sharedReport.copied')}</span>
                 </>
               ) : (
                 <>
                   <Copy className="h-3.5 w-3.5" />
-                  {t('sharedReport.copyVerificationLink')}
+                  <span>{t('sharedReport.copyVerificationLink')}</span>
                 </>
               )}
             </button>
@@ -356,7 +441,7 @@ export function SharedReportPage() {
         {/* Digital Verification Receipt Card */}
         <section className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xs">
           <div className="flex flex-col lg:flex-row items-start justify-between gap-6">
-            <div className="space-y-3 flex-1 min-w-0">
+            <div className="space-y-3 flex-1 min-w-0 w-full">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <span
                   data-testid="receipt-id-badge"
@@ -381,7 +466,7 @@ export function SharedReportPage() {
                 <div className="flex items-center gap-3 min-w-0">
                   <FileFormatIcon filename={report.filename} size="lg" />
                   <h1
-                    className="font-display text-xl sm:text-2xl font-bold text-slate-900 dark:text-white break-words"
+                    className="font-display text-xl sm:text-2xl font-bold text-slate-900 dark:text-white break-words [overflow-wrap:anywhere] min-w-0 flex-1"
                     data-testid="shared-report-filename"
                   >
                     {report.filename}
@@ -411,7 +496,7 @@ export function SharedReportPage() {
                     {t('sharedReport.styleLabel')}
                   </div>
                   <div className="font-bold text-slate-800 dark:text-slate-200 mt-0.5">
-                    {report.style_profile?.style || 'APA'}
+                    {displayStyle}
                   </div>
                 </div>
                 <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
@@ -428,10 +513,11 @@ export function SharedReportPage() {
             {/* QR Matrix + Cryptographic Signature Block */}
             <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 w-full lg:w-auto">
               <VerificationQrMatrixSvg
-                value={`${report.receipt_id}|${shareUrlFull}`}
-                size={96}
+                value={shareUrlFull}
+                matrix={qrMatrixForUrl}
+                size={112}
               />
-              <div className="space-y-1 text-xs font-mono min-w-0">
+              <div className="space-y-1.5 text-xs font-mono min-w-0 flex-1">
                 <div className="font-bold text-slate-800 dark:text-slate-200">
                   {t('sharedReport.qrSealTitle')}
                 </div>
@@ -553,7 +639,9 @@ export function SharedReportPage() {
             </div>
 
             <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
-              {report.disclaimer}
+              {lang === 'vi'
+                ? t('essay.disclaimer')
+                : report.disclaimer || t('essay.disclaimer')}
             </div>
           </section>
         </div>
@@ -578,6 +666,7 @@ export function SharedReportPage() {
               {report.verdicts.map((v, idx) => {
                 const isExpanded = Boolean(expandedIds[v.reference_id]);
                 const matched = v.matched_source;
+                const localizedReason = localizeExplanation(v, lang);
                 return (
                   <div
                     key={v.reference_id || idx}
@@ -587,7 +676,7 @@ export function SharedReportPage() {
                     <button
                       type="button"
                       onClick={() => toggleExpand(v.reference_id)}
-                      className="w-full text-left p-4 flex items-start justify-between gap-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                      className="w-full text-left p-4 flex items-start justify-between gap-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer touch-manipulation"
                     >
                       <div className="space-y-1.5 flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -615,13 +704,13 @@ export function SharedReportPage() {
 
                     {isExpanded && (
                       <div className="px-4 pb-4 pt-2 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50 space-y-2.5 text-xs">
-                        {v.explanation && (
+                        {localizedReason && (
                           <div>
                             <span className="font-mono font-semibold text-slate-600 dark:text-slate-300">
                               {t('sharedReport.explanationLabel')}:{' '}
                             </span>
                             <span className="text-slate-700 dark:text-slate-300">
-                              {v.explanation}
+                              {localizedReason}
                             </span>
                           </div>
                         )}
@@ -633,6 +722,7 @@ export function SharedReportPage() {
                             {v.triggered_rules.map((r) => (
                               <span
                                 key={r}
+                                title={getRuleDisplayName(r, lang)}
                                 className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-mono text-[11px]"
                               >
                                 {r}
@@ -642,19 +732,28 @@ export function SharedReportPage() {
                         )}
                         {matched && (
                           <div className="p-3 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 space-y-1">
-                            <div className="font-mono font-semibold text-emerald-700 dark:text-emerald-300 flex items-center justify-between">
+                            <div className="font-mono font-semibold text-emerald-700 dark:text-emerald-300 flex items-center justify-between gap-2 flex-wrap">
                               <span>
                                 {t('sharedReport.matchedSourceLabel')}:{' '}
-                                {(matched.source || 'scholarly_db').toUpperCase()}
+                                {getSourceDisplayName(
+                                  matched.source || 'scholarly_db',
+                                  lang,
+                                ).toUpperCase()}
                               </span>
-                              {matched.url && (
+                              {(matched.url || matched.doi) && (
                                 <a
-                                  href={matched.url}
+                                  href={
+                                    matched.url ||
+                                    `https://doi.org/${matched.doi}`
+                                  }
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline"
                                 >
-                                  DOI / Source <ExternalLink className="h-3 w-3" />
+                                  {lang === 'vi'
+                                    ? 'DOI / Nguồn gốc'
+                                    : 'DOI / Source'}{' '}
+                                  <ExternalLink className="h-3 w-3" />
                                 </a>
                               )}
                             </div>
