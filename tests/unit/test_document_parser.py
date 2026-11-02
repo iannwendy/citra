@@ -375,3 +375,103 @@ class TestGrobidToCitations:
         assert c.order_index == 1
         assert len(c.authors) == 1
         assert c.authors[0] == "Smith, J."
+
+
+# ---------- Test 8: PdfPlumberParser fallback when MuPdfParser fails or returns empty ----------
+
+
+class TestPdfPlumberFallback:
+    def test_fallback_to_pdfplumber_when_mupdf_raises(self, tmp_path: Path):
+        """When MuPdfParser.parse raises an exception, PdfPlumberParser.parse is used."""
+        pdf = tmp_path / "essay.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n%fake\n")
+
+        class _FailMuPdf:
+            def parse(self, file_path):
+                raise RuntimeError("PyMuPDF crashed on font stream")
+
+        plumber_doc = _make_text_doc()
+        plumber_doc.parser_used = "pdfplumber"
+        mock_plumber = MagicMock()
+        mock_plumber.parse.return_value = plumber_doc
+
+        settings = _make_settings(grobid_enabled=False)
+        parser = DocumentParser(
+            config=settings,
+            mupdf_parser=_FailMuPdf(),  # type: ignore[arg-type]
+            pdfplumber_parser=mock_plumber,
+            grobid_post_fn=None,
+        )
+
+        parsed = parser.parse(str(pdf))
+
+        mock_plumber.parse.assert_called_once_with(str(pdf))
+        assert parsed.document.parser_used == "pdfplumber"
+        assert "Introduction" in parsed.body_text
+        assert len(parsed.references) >= 1
+        assert any("Fallback to PdfPlumberParser succeeded" in w for w in parsed.parser_warnings)
+
+    def test_fallback_to_pdfplumber_when_mupdf_returns_empty_non_scanned(self, tmp_path: Path):
+        """When MuPdfParser returns 0 pages / empty text and is_scanned_pdf is False, PdfPlumberParser is invoked."""
+        pdf = tmp_path / "essay.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n%fake\n")
+
+        empty_mupdf_doc = Document(
+            file_path=str(pdf),
+            num_pages=0,
+            pages=[],
+            metadata={"is_scanned_pdf": False},
+            parser_used="mupdf",
+        )
+        mock_mupdf = _MockMuPdfParser(empty_mupdf_doc)
+
+        plumber_doc = _make_text_doc()
+        plumber_doc.parser_used = "pdfplumber"
+        mock_plumber = MagicMock()
+        mock_plumber.parse.return_value = plumber_doc
+
+        settings = _make_settings(grobid_enabled=False)
+        parser = DocumentParser(
+            config=settings,
+            mupdf_parser=mock_mupdf,  # type: ignore[arg-type]
+            pdfplumber_parser=mock_plumber,
+            grobid_post_fn=None,
+        )
+
+        parsed = parser.parse(str(pdf))
+
+        mock_plumber.parse.assert_called_once_with(str(pdf))
+        assert parsed.document.parser_used == "pdfplumber"
+        assert "Introduction" in parsed.body_text
+        assert any("PdfPlumberParser" in w for w in parsed.parser_warnings)
+
+    def test_no_pdfplumber_fallback_when_scanned_pdf_is_true(self, tmp_path: Path):
+        """When MuPdfParser marks document as is_scanned_pdf=True, PdfPlumberParser is not invoked."""
+        pdf = tmp_path / "scanned.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n%fake\n")
+
+        scanned_doc = Document(
+            file_path=str(pdf),
+            num_pages=2,
+            pages=[
+                Page(page_num=1, text="", has_text_layer=False),
+                Page(page_num=2, text="", has_text_layer=False),
+            ],
+            metadata={"is_scanned_pdf": True},
+            parser_used="mupdf",
+        )
+        mock_mupdf = _MockMuPdfParser(scanned_doc)
+        mock_plumber = MagicMock()
+
+        settings = _make_settings(grobid_enabled=False)
+        parser = DocumentParser(
+            config=settings,
+            mupdf_parser=mock_mupdf,  # type: ignore[arg-type]
+            pdfplumber_parser=mock_plumber,
+            grobid_post_fn=None,
+        )
+
+        parsed = parser.parse(str(pdf))
+
+        mock_plumber.parse.assert_not_called()
+        assert parsed.document.metadata.get("is_scanned_pdf") is True

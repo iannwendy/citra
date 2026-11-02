@@ -33,6 +33,7 @@ from integrity_checker.extraction.grobid_parser import (
 )
 from integrity_checker.extraction.grobid_service import get_grobid_manager
 from integrity_checker.extraction.mupdf_parser import MuPdfParser
+from integrity_checker.extraction.pdfplumber_parser import PdfPlumberParser
 from integrity_checker.extraction.reference_parser import ReferenceListParser
 from integrity_checker.extraction.section_segmenter import (
     DocumentSection,
@@ -134,6 +135,7 @@ class DocumentParser:
         config: Settings | None = None,
         *,
         mupdf_parser: MuPdfParser | None = None,
+        pdfplumber_parser: PdfPlumberParser | None = None,
         docx_parser: DocxParser | None = None,
         grobid_post_fn=None,
     ) -> None:
@@ -142,11 +144,13 @@ class DocumentParser:
         Args:
             config: Settings instance; mặc định lấy từ ``get_settings()``.
             mupdf_parser: optional MuPdfParser instance (cho test injection).
+            pdfplumber_parser: optional PdfPlumberParser instance (fallback khi MuPdfParser fail).
             docx_parser: optional DocxParser instance (cho .docx files).
             grobid_post_fn: optional HTTP POST callable (cho test injection).
         """
         self.config = config or get_settings()
         self._mupdf_parser = mupdf_parser or MuPdfParser()
+        self._pdfplumber_parser = pdfplumber_parser or PdfPlumberParser()
         self._docx_parser = docx_parser or DocxParser()
         self._grobid_post_fn = grobid_post_fn
         self._section_segmenter = SectionSegmenter()
@@ -174,26 +178,55 @@ class DocumentParser:
         grobid_status = "unknown"
         is_docx = self._is_docx_file(pdf_path)
 
-        # 1. Native DOCX or PyMuPDF (always)
+        # 1. Native DOCX or PyMuPDF (with PdfPlumberParser fallback)
+        mupdf_failed = False
         try:
             text_doc = self._load_pdf_text(pdf_path)
             if is_docx:
                 parser_used = "docx"
                 grobid_status = "disabled"
         except Exception as exc:  # noqa: BLE001
+            mupdf_failed = True
             logger.warning("Document parse failed: %s", exc)
             warnings.append(f"PyMuPDF failed: {exc}")
-            text_doc = Document(
-                file_path=pdf_path,
-                num_pages=0,
-                pages=[],
-                parser_used="mupdf_fallback_empty",
-                errors=[str(exc)],
-            )
+            text_doc = None
+            if not is_docx:
+                try:
+                    plumber_doc = self._pdfplumber_parser.parse(pdf_path)
+                    if plumber_doc and (plumber_doc.num_pages > 0 or plumber_doc.pages):
+                        text_doc = plumber_doc
+                        warnings.append("Fallback to PdfPlumberParser succeeded")
+                except Exception as plumber_exc:  # noqa: BLE001
+                    logger.warning("PdfPlumber fallback failed: %s", plumber_exc)
+                    warnings.append(f"PdfPlumber fallback failed: {plumber_exc}")
+            if text_doc is None:
+                text_doc = Document(
+                    file_path=pdf_path,
+                    num_pages=0,
+                    pages=[],
+                    parser_used="mupdf_fallback_empty",
+                    errors=[str(exc)],
+                )
             parser_used = "regex"  # Fallback to regex since PyMuPDF failed
 
         total_chars = sum(len((p.text or "").strip()) for p in (text_doc.pages or []))
         doc_meta = dict(text_doc.metadata or {})
+        if (
+            not is_docx
+            and not mupdf_failed
+            and not doc_meta.get("is_scanned_pdf")
+            and (text_doc.num_pages == 0 or not text_doc.pages or total_chars == 0)
+        ):
+            try:
+                plumber_doc = self._pdfplumber_parser.parse(pdf_path)
+                plumber_chars = sum(len((p.text or "").strip()) for p in (plumber_doc.pages or []))
+                if plumber_chars > total_chars or (text_doc.num_pages == 0 and plumber_doc.num_pages > 0):
+                    text_doc = plumber_doc
+                    total_chars = plumber_chars
+                    doc_meta = dict(text_doc.metadata or {})
+                    warnings.append("PyMuPDF returned empty text — fell back to PdfPlumberParser")
+            except Exception as plumber_exc:  # noqa: BLE001
+                logger.debug("PdfPlumber fallback on empty document failed: %s", plumber_exc)
         is_scanned_pdf = bool(
             not is_docx
             and (
