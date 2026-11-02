@@ -231,14 +231,28 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
     await waitFor(() => expect(screen.getByTestId('shared-report-page')).toBeDefined());
     expect(getReportSpy).toHaveBeenCalledTimes(1);
 
-    // Language toggle displays EN when active language is English
-    const langBtn = screen.getByTestId('shared-lang-toggle');
-    expect(langBtn.textContent).toContain('EN');
+    // Segmented ENG | VIE toggle clearly marks ENG as active when in English
+    const langToggle = screen.getByTestId('shared-lang-toggle');
+    const enBtn = screen.getByTestId('shared-lang-en');
+    const viBtn = screen.getByTestId('shared-lang-vi');
+    expect(langToggle.getAttribute('data-active-lang')).toBe('en');
+    expect(enBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(viBtn.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('shared-report-disclaimer').textContent).toContain(
+      'This system is a decision-support tool',
+    );
 
-    // Toggle to Vietnamese -> button shows VI, does NOT re-fetch API, and localizes explanation
-    fireEvent.click(langBtn);
-    await waitFor(() => expect(langBtn.textContent).toContain('VI'));
+    // Toggle to Vietnamese -> VIE is active, does NOT re-fetch API, and localizes disclaimer + explanation
+    fireEvent.click(viBtn);
+    await waitFor(() =>
+      expect(langToggle.getAttribute('data-active-lang')).toBe('vi'),
+    );
+    expect(viBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(enBtn.getAttribute('aria-pressed')).toBe('false');
     expect(getReportSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('shared-report-disclaimer').textContent).toContain(
+      'Hệ thống này chỉ hỗ trợ giảng viên',
+    );
     expect(screen.getByTestId('shared-verdict-row-0').textContent).toContain(
       'thư viện học thuật cục bộ',
     );

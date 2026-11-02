@@ -95,9 +95,6 @@ function VerificationQrMatrixSvg({
 
 function localizeExplanation(v: SharedVerdictItem, lang: 'en' | 'vi'): string {
   const raw = (v.explanation || v.reasoning || '').trim();
-  if (lang === 'en') {
-    return raw;
-  }
   const asVerdict: Verdict = {
     citation_id: v.citation_id || v.reference_id || 'v0',
     citation_raw: v.raw_text || v.citation_raw || '',
@@ -117,10 +114,19 @@ function localizeExplanation(v: SharedVerdictItem, lang: 'en' | 'vi'): string {
       (v.mapping_status as Verdict['mapping_status']) || 'matched',
     mapping_confidence: 1.0,
   };
+  if (lang === 'en') {
+    const hasVietnameseChars =
+      /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(
+        raw,
+      );
+    if (!raw || hasVietnameseChars) {
+      return getVerdictExplanation(asVerdict, 'en');
+    }
+    return raw;
+  }
   const localizedSummary = getVerdictExplanation(asVerdict, 'vi');
   if (!raw) return localizedSummary;
 
-  // Also translate common technical English reasoning substrings if present
   const translatedTechnical = raw
     .replace(
       /Exact match in local DB/gi,
@@ -249,8 +255,8 @@ export function SharedReportPage() {
     setExpandedIds((prev) => ({ ...prev, [refId]: !prev[refId] }));
   };
 
-  const toggleLanguage = () => {
-    const next = lang === 'vi' ? 'en' : 'vi';
+  const applyLanguage = (next: 'en' | 'vi') => {
+    if (next === lang) return;
     void i18n.changeLanguage(next);
     try {
       localStorage.setItem('language', next);
@@ -261,8 +267,12 @@ export function SharedReportPage() {
     const fixedT = i18n.getFixedT(next);
     toast.success(
       fixedT('settings.languageUpdated'),
-      next === 'vi' ? 'Tiếng Việt (VI)' : 'English (EN)',
+      next === 'vi' ? 'Tiếng Việt (VIE)' : 'English (ENG)',
     );
+  };
+
+  const toggleLanguage = () => {
+    applyLanguage(lang === 'vi' ? 'en' : 'vi');
   };
 
   const renderVerdictBadge = (label: SharedVerdictItem['label']) => {
@@ -361,9 +371,9 @@ export function SharedReportPage() {
       : undefined;
   const rawStyle = (report.style_profile?.style || 'APA').toUpperCase();
   const displayStyle =
-    rawStyle === 'APA_LIKE'
+    rawStyle === 'APA_LIKE' || rawStyle === 'APA-LIKE'
       ? 'APA'
-      : rawStyle === 'IEEE_LIKE'
+      : rawStyle === 'IEEE_LIKE' || rawStyle === 'IEEE-LIKE'
         ? 'IEEE'
         : rawStyle === 'MIXED'
           ? lang === 'vi'
@@ -400,21 +410,53 @@ export function SharedReportPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={toggleLanguage}
-              data-testid="shared-lang-toggle"
+            <div
+              role="group"
               aria-label={t('nav.language')}
+              data-testid="shared-lang-toggle"
+              data-active-lang={lang}
+              onClick={toggleLanguage}
               title={
                 lang === 'vi'
-                  ? 'Chuyển sang Tiếng Anh (EN)'
-                  : 'Switch to Vietnamese (VI)'
+                  ? 'Đang hiển thị Tiếng Việt (VIE) — bấm để chuyển sang Tiếng Anh (ENG)'
+                  : 'Currently English (ENG) — click to switch to Vietnamese (VIE)'
               }
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer touch-manipulation select-none"
+              className="inline-flex items-center gap-0.5 p-0.5 rounded-lg text-xs font-mono font-semibold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 cursor-pointer touch-manipulation select-none"
             >
-              <Globe className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span>{lang === 'vi' ? 'VI' : 'EN'}</span>
-            </button>
+              <Globe className="h-3.5 w-3.5 ml-1.5 mr-0.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  applyLanguage('en');
+                }}
+                data-testid="shared-lang-en"
+                aria-pressed={lang === 'en'}
+                className={`px-2 py-1 rounded-md transition-colors cursor-pointer ${
+                  lang === 'en'
+                    ? 'bg-indigo-600 text-white shadow-2xs font-bold'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                ENG
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  applyLanguage('vi');
+                }}
+                data-testid="shared-lang-vi"
+                aria-pressed={lang === 'vi'}
+                className={`px-2 py-1 rounded-md transition-colors cursor-pointer ${
+                  lang === 'vi'
+                    ? 'bg-indigo-600 text-white shadow-2xs font-bold'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                VIE
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => void handleCopyLink()}
@@ -638,10 +680,11 @@ export function SharedReportPage() {
               </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
-              {lang === 'vi'
-                ? t('essay.disclaimer')
-                : report.disclaimer || t('essay.disclaimer')}
+            <div
+              data-testid="shared-report-disclaimer"
+              className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400"
+            >
+              {t('sharedReport.disclaimer')}
             </div>
           </section>
         </div>
@@ -750,9 +793,7 @@ export function SharedReportPage() {
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline"
                                 >
-                                  {lang === 'vi'
-                                    ? 'DOI / Nguồn gốc'
-                                    : 'DOI / Source'}{' '}
+                                  {t('sharedReport.viewSourceLink')}{' '}
                                   <ExternalLink className="h-3 w-3" />
                                 </a>
                               )}

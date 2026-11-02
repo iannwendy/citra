@@ -710,6 +710,8 @@
     "noVerdicts": "No reference verdicts recorded for this manuscript.",
     "explanationLabel": "Diagnostic Reasoning",
     "matchedSourceLabel": "Matched Source",
+    "viewSourceLink": "DOI / Source",
+    "disclaimer": "This system is a decision-support tool designed to assist instructors and researchers in auditing citation integrity in academic manuscripts. Both verification layers (in-text ↔ bibliography linking and source reliability) provide evidence-based suggestions from public scholarly databases (Crossref, OpenAlex, Semantic Scholar, CORE) and explainable Neuro-Symbolic rules. A `SUSPECTED_HALLUCINATION` verdict is a suspicion flag only — it does not automatically prove a source is fabricated. The instructor or human reviewer makes the final decision. This system does NOT automatically conclude academic misconduct, does NOT verify claim-level factual accuracy, and does NOT treat citing the same valid source multiple times as 'redundant'.",
     "verifyingSignature": "Verifying cryptographic HMAC-SHA256 signature...",
     "invalidOrExpiredTitle": "Verification Link Invalid or Expired",
     "invalidOrExpiredDesc": "This cryptographic share token is invalid, tampered with, or has expired.",

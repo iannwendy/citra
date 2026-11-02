@@ -710,6 +710,8 @@
     "noVerdicts": "Không có phán quyết tài liệu tham khảo nào cho bản thảo này.",
     "explanationLabel": "Lý giải Chẩn đoán",
     "matchedSourceLabel": "Nguồn Khớp",
+    "viewSourceLink": "DOI / Nguồn gốc",
+    "disclaimer": "Hệ thống này chỉ hỗ trợ giảng viên và nhà nghiên cứu rà soát tính toàn vẹn trích dẫn trong tiểu luận. Hai lớp kết quả (đối chiếu in-text ↔ reference entry và độ tin cậy nguồn) đều là gợi ý dựa trên bằng chứng từ các cơ sở dữ liệu học thuật công khai (Crossref, OpenAlex, Semantic Scholar, CORE) và quy luật Neuro-Symbolic có thể giải thích. Kết luận `SUSPECTED_HALLUCINATION` chỉ là nghi vấn — không đồng nghĩa nguồn chắc chắn bị bịa đặt. Giảng viên là người ra quyết định cuối cùng. Hệ thống KHÔNG tự động kết luận gian lận học thuật, KHÔNG kiểm chứng claim-level, và KHÔNG xem việc trích dẫn cùng một nguồn nhiều lần là 'dư thừa'.",
     "verifyingSignature": "Đang kiểm tra chữ ký mật mã HMAC-SHA256...",
     "invalidOrExpiredTitle": "Liên kết Xác thực Không hợp lệ hoặc Đã hết hạn",
     "invalidOrExpiredDesc": "Mã chia sẻ mật mã này không hợp lệ, đã bị thay đổi hoặc đã hết hạn.",
