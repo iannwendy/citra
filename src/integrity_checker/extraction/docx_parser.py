@@ -9,9 +9,10 @@ and ``Page`` data structures used by ``DocumentParser``, ``SectionSegmenter``,
 from __future__ import annotations
 
 import re
-import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
+
+from defusedxml.ElementTree import fromstring as safe_fromstring
 
 from integrity_checker.extraction.base import BasePDFParser, Document, Page
 from integrity_checker.logging import get_logger
@@ -19,6 +20,10 @@ from integrity_checker.logging import get_logger
 logger = get_logger(__name__)
 
 _WORD_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+# Upper bound for word/footnotes.xml / endnotes.xml (uncompressed) — real notes
+# parts are a few hundred KB; anything bigger is treated as a zip bomb.
+_MAX_NOTES_XML_BYTES = 20 * 1024 * 1024
 
 _BIB_HEADING_RE = re.compile(
     r"^\s*(?:[IVXLCDM]+\.\s*|\d+(?:\.\d+)*\.?\s*)?"
@@ -223,8 +228,15 @@ class DocxParser(BasePDFParser):
             with zipfile.ZipFile(docx_path, "r") as zf:
                 if member_name not in zf.namelist():
                     return notes
+                if zf.getinfo(member_name).file_size > _MAX_NOTES_XML_BYTES:
+                    logger.warning(
+                        "Skipping oversized {} in {} (possible zip bomb)", member_name, docx_path
+                    )
+                    return notes
                 xml_bytes = zf.read(member_name)
-            root = ET.fromstring(xml_bytes)
+            # Untrusted user upload: defusedxml forbids DTD entities / external
+            # references (billion-laughs, XXE) and raises instead of expanding.
+            root = safe_fromstring(xml_bytes, forbid_dtd=True)
             for note_el in root.findall(f".//{_WORD_NS}{note_tag}"):
                 raw_id = note_el.attrib.get(f"{_WORD_NS}id")
                 note_type = note_el.attrib.get(f"{_WORD_NS}type", "")

@@ -12,10 +12,12 @@ import asyncio
 import os
 import re
 import time
-import xml.etree.ElementTree as ET
 from typing import Any
 
 import httpx
+from defusedxml import DefusedXmlException
+from defusedxml.ElementTree import ParseError
+from defusedxml.ElementTree import fromstring as safe_fromstring
 from tenacity import (
     AsyncRetrying,
     RetryError,
@@ -313,8 +315,9 @@ class ArxivClient(BaseScholarClient):
     @classmethod
     def _parse_atom_entries(cls, xml_text: str) -> list[SourceCandidate]:
         try:
-            root = ET.fromstring(xml_text)
-        except ET.ParseError as exc:
+            # Remote (untrusted) XML: defusedxml blocks entity expansion / XXE.
+            root = safe_fromstring(xml_text, forbid_dtd=True)
+        except (ParseError, DefusedXmlException) as exc:
             logger.warning(f"arXiv XML parse error: {exc}")
             return []
 

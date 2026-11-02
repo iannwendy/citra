@@ -2,19 +2,48 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any
 
+from defusedxml.ElementTree import fromstring as safe_fromstring
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
 from docx.shared import Pt, RGBColor
 
+_MAX_DOCX_PART_BYTES = 50 * 1024 * 1024
+_HEX_COLOR_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
+
+
+def _docx_xml_is_safe(docx_path: str) -> bool:
+    """Validate every XML part of an untrusted .docx with defusedxml.
+
+    Rejects packages whose parts declare DTDs/entities (billion laughs, XXE),
+    are malformed, or are oversized (zip bomb) before python-docx opens them.
+    """
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(docx_path, "r") as zf:
+            for info in zf.infolist():
+                name = info.filename.lower()
+                if not (name.endswith(".xml") or name.endswith(".rels")):
+                    continue
+                if info.file_size > _MAX_DOCX_PART_BYTES:
+                    return False
+                safe_fromstring(zf.read(info), forbid_dtd=True)
+    except Exception:
+        return False
+    return True
+
 
 def _set_cell_background(cell, hex_color: str) -> None:
     """Apply background shading color (e.g. 'FEE2E2') to a python-docx table cell."""
+    if not _HEX_COLOR_RE.match(str(hex_color or "")):
+        return
     try:
         shading = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{hex_color}"/>')
         cell._tc.get_or_add_tcPr().append(shading)
@@ -446,7 +475,11 @@ def export_auto_healed_docx(
 
     if original_docx_path:
         orig_path = Path(original_docx_path)
-        if orig_path.is_file() and orig_path.suffix.lower() == ".docx":
+        if (
+            orig_path.is_file()
+            and orig_path.suffix.lower() == ".docx"
+            and _docx_xml_is_safe(str(orig_path))
+        ):
             try:
                 doc = Document(str(orig_path))
                 used_original_docx = True
