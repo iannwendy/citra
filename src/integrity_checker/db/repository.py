@@ -1298,6 +1298,9 @@ class Repository:
             .all()
         )
 
+    def list_teacher_classes(self, teacher_id: int) -> list[Class]:
+        return self.list_classes_for_teacher(teacher_id)
+
     def list_classes_for_student(self, student_id: int) -> list[Class]:
         """Classes mà student là thành viên (qua ClassMembership)."""
         return list(

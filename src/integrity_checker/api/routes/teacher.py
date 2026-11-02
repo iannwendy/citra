@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from integrity_checker.api.deps import get_current_user, get_db, require_teacher
+from integrity_checker.billing.plans import get_user_plan_policy
 from integrity_checker.db.models import Class, User
 from integrity_checker.db.repository import Repository
 
@@ -224,6 +225,21 @@ def create_class(
 ):
     """Teacher tạo class mới (admin cũng OK)."""
     repo = Repository(db)
+    policy = get_user_plan_policy(teacher)
+    if teacher.role != "admin" and len(repo.list_teacher_classes(teacher.id)) >= policy.max_classes:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "message": (
+                    f"Your {policy.name} plan allows up to {policy.max_classes} classes. "
+                    "Upgrade to Ultra for unlimited classes."
+                ),
+                "code": "CLASS_LIMIT_EXCEEDED",
+                "limit": policy.max_classes,
+                "current_tier": policy.tier,
+                "required_tier": "ultra",
+            },
+        )
     if repo.get_class_by_name(request.name):
         raise HTTPException(status_code=400, detail="Class name already exists")
     cls = repo.create_class(

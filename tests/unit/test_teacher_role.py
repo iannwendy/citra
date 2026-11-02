@@ -273,6 +273,50 @@ class TestClassCrud:
         resp = client.get("/api/teacher/classes/9999/students", headers=auth_header(token))
         assert resp.status_code == 404
 
+    def test_teacher_pro_plan_max_classes_enforced_and_ultra_unlocks(self, clean_db):
+        """Pro teacher defaults to max_classes=3; 4th class fails with 402 until upgraded to Ultra."""
+        from integrity_checker.db.repository import Repository
+        from integrity_checker.db.session import get_session
+
+        token = get_teacher_token()
+        client = TestClient(app)
+        for idx in range(1, 4):
+            resp = client.post(
+                "/api/teacher/classes",
+                json={"name": f"ProClass-{idx}"},
+                headers=auth_header(token),
+            )
+            assert resp.status_code == 201, resp.text
+
+        # 4th class exceeds Pro max_classes=3
+        fourth = client.post(
+            "/api/teacher/classes",
+            json={"name": "ProClass-4"},
+            headers=auth_header(token),
+        )
+        assert fourth.status_code == 402, fourth.text
+        detail = fourth.json()["detail"]
+        assert detail["code"] == "CLASS_LIMIT_EXCEEDED"
+        assert detail["limit"] == 3
+        assert detail["current_tier"] == "pro"
+        assert detail["required_tier"] == "ultra"
+
+        # Upgrade teacher to Ultra -> 4th class succeeds
+        s = get_session()
+        repo = Repository(s)
+        teacher_user = repo.get_user_by_username("teacher")
+        assert teacher_user is not None
+        repo.update_user(teacher_user.id, plan_tier="ultra")
+        s.commit()
+        s.close()
+
+        fourth_after_upgrade = client.post(
+            "/api/teacher/classes",
+            json={"name": "ProClass-4"},
+            headers=auth_header(token),
+        )
+        assert fourth_after_upgrade.status_code == 201, fourth_after_upgrade.text
+
 
 # ---------------------------------------------------------------------------
 # Class ownership enforcement
