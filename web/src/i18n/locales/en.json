@@ -244,7 +244,14 @@
     "startVerification": "Start Verification",
     "allProcessedOpening": "All files processed — opening report…",
     "allFailedNotice": "All files failed to process. Check the errors above and retry.",
-    "disclaimer": "This is a decision-support tool. All results should be reviewed by experts."
+    "disclaimer": "This is a decision-support tool. All results should be reviewed by experts.",
+    "concurrentWorkers": "{{count}} CONCURRENT WORKERS",
+    "limitTitle": "Batch exceeds your plan limits",
+    "tooManyFiles": "Your {{plan}} plan allows up to {{max}} files per batch — you queued {{count}}.",
+    "fileTooLarge": "{{name}} is {{size}} — the {{plan}} plan limit is {{max}} MB per file.",
+    "notEnoughUploads": "Only {{remaining}} monthly checks remain on your {{plan}} plan — you queued {{count}} files.",
+    "noBatchAccess": "Batch upload is not included in your {{plan}} plan.",
+    "upgradeFeature": "Larger batch uploads"
   },
   "history": {
     "title": "Verification Reports",

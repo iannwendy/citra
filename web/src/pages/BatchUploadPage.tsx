@@ -26,6 +26,9 @@ import { Progress } from '@/components/ui/progress';
 import { Select } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { UpgradeModal } from '@/components/UpgradeModal';
+import { runWithConcurrency } from '@/lib/concurrencyPool';
+import { isUnlimitedValue } from '@/lib/quotaDisplay';
 
 /* ============================================================
    Batch Upload Page (Scholarly Precision shadcn/ui v2.0)
@@ -102,9 +105,17 @@ function getStatusText(status: FileStatus, progress: number, t: TFunction): stri
   }
 }
 
+/** Number of files uploaded + polled at the same time. */
+export const BATCH_CONCURRENCY = 3;
+
+/** Status poll timing (mutable so tests can shorten the interval). */
+export const batchTiming = { pollIntervalMs: 2000 };
+
 export function BatchUploadPage() {
   const { t, i18n } = useTranslation();
-  const { isTeacher, isAdmin } = useRole();
+  const { isTeacher, isAdmin, planTier, quota, canBatchUpload } = useRole();
+  const [quotaProblems, setQuotaProblems] = useState<string[]>([]);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [classes, setClasses] = useState<Class[]>([]);
   const [targetClassId, setTargetClassId] = useState<number | null>(null);
 
@@ -185,6 +196,68 @@ export function BatchUploadPage() {
     navigate,
   ]);
 
+  const setFileState = useCallback((id: string, patch: Partial<BatchFileItem>) => {
+    setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+  }, []);
+
+  /** Upload one file and poll its pipeline status until it settles. */
+  const processOne = useCallback(
+    async (fileItem: BatchFileItem) => {
+      if (!isMountedRef.current) return;
+      setFileState(fileItem.id, { status: 'uploading' });
+      try {
+        const response = await api.uploadEssay(fileItem.file, targetClassId);
+        if (!isMountedRef.current) return;
+        setFileState(fileItem.id, {
+          status: 'processing',
+          essayId: response.essay_id,
+          progress: 0,
+        });
+
+        let attempts = 0;
+        const maxAttempts = 150;
+        while (attempts < maxAttempts && isMountedRef.current) {
+          await new Promise((resolve) => setTimeout(resolve, batchTiming.pollIntervalMs));
+          if (!isMountedRef.current) return;
+          attempts++;
+
+          try {
+            const status = await api.getEssayStatus(response.essay_id);
+            if (!isMountedRef.current) return;
+            if (status.status === 'completed') {
+              setFileState(fileItem.id, { status: 'completed', progress: 100 });
+              return;
+            }
+            if (status.status === 'failed') {
+              setFileState(fileItem.id, {
+                status: 'failed',
+                error: status.error || 'Processing failed',
+              });
+              return;
+            }
+            const progress = Math.round(
+              (status.step_index / Math.max(1, status.total_steps)) * 100
+            );
+            setFileState(fileItem.id, { status: 'processing', progress });
+          } catch {
+            // Continue polling
+          }
+        }
+
+        if (attempts >= maxAttempts && isMountedRef.current) {
+          setFileState(fileItem.id, { status: 'failed', error: 'Processing timeout' });
+        }
+      } catch (error) {
+        if (!isMountedRef.current) return;
+        setFileState(fileItem.id, {
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Upload failed',
+        });
+      }
+    },
+    [setFileState, targetClassId]
+  );
+
   const processQueue = useCallback(async () => {
     const pendingFiles = files.filter((f) => f.status === 'pending');
     if (pendingFiles.length === 0) {
@@ -202,111 +275,8 @@ export function BatchUploadPage() {
       hasAutoNavigated: false,
     });
 
-    for (let i = 0; i < pendingFiles.length; i++) {
-      if (!isMountedRef.current) return;
-      const fileItem = pendingFiles[i];
-
-      setFiles((prev) =>
-        prev.map((f) =>
-          f.id === fileItem.id ? { ...f, status: 'uploading' as FileStatus } : f
-        )
-      );
-
-      try {
-        const response = await api.uploadEssay(fileItem.file, targetClassId);
-        if (!isMountedRef.current) return;
-
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.id === fileItem.id
-              ? {
-                  ...f,
-                  status: 'processing' as FileStatus,
-                  essayId: response.essay_id,
-                  progress: 0,
-                }
-              : f
-          )
-        );
-
-        let attempts = 0;
-        const maxAttempts = 150;
-        while (attempts < maxAttempts && isMountedRef.current) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          if (!isMountedRef.current) return;
-          attempts++;
-
-          try {
-            const status = await api.getEssayStatus(response.essay_id);
-            if (!isMountedRef.current) return;
-            if (status.status === 'completed') {
-              setFiles((prev) =>
-                prev.map((f) =>
-                  f.id === fileItem.id
-                    ? { ...f, status: 'completed' as FileStatus, progress: 100 }
-                    : f
-                )
-              );
-              break;
-            } else if (status.status === 'failed') {
-              setFiles((prev) =>
-                prev.map((f) =>
-                  f.id === fileItem.id
-                    ? {
-                        ...f,
-                        status: 'failed' as FileStatus,
-                        error: status.error || 'Processing failed',
-                      }
-                    : f
-                )
-              );
-              break;
-            } else {
-              const progress = Math.round(
-                (status.step_index / Math.max(1, status.total_steps)) * 100
-              );
-              setFiles((prev) =>
-                prev.map((f) =>
-                  f.id === fileItem.id
-                    ? { ...f, status: 'processing' as FileStatus, progress }
-                    : f
-                )
-              );
-            }
-          } catch {
-            // Continue polling
-          }
-        }
-
-        if (attempts >= maxAttempts && isMountedRef.current) {
-          setFiles((prev) =>
-            prev.map((f) =>
-              f.id === fileItem.id
-                ? {
-                    ...f,
-                    status: 'failed' as FileStatus,
-                    error: 'Processing timeout',
-                  }
-                : f
-            )
-          );
-        }
-      } catch (error) {
-        if (!isMountedRef.current) return;
-        setFiles((prev) =>
-          prev.map((f) =>
-            f.id === fileItem.id
-              ? {
-                  ...f,
-                  status: 'failed' as FileStatus,
-                  error:
-                    error instanceof Error ? error.message : 'Upload failed',
-                }
-              : f
-          )
-        );
-      }
-    }
+    // Real concurrency pool: up to BATCH_CONCURRENCY files upload + poll in parallel.
+    await runWithConcurrency(pendingFiles, BATCH_CONCURRENCY, processOne);
 
     if (!isMountedRef.current) return;
     setQueueState({
@@ -314,7 +284,56 @@ export function BatchUploadPage() {
       currentIndex: -1,
       hasAutoNavigated: false,
     });
-  }, [files, targetClassId]);
+  }, [files, processOne]);
+
+  /**
+   * Client-side plan pre-check (mirrors backend quota) so users get an
+   * UpgradeModal instead of a batch of 403/413 failures.
+   */
+  const checkBatchAgainstQuota = (pending: BatchFileItem[]): string[] => {
+    if (isAdmin) {
+      return [];
+    }
+    const plan = planTier.toUpperCase();
+    const problems: string[] = [];
+    if (!canBatchUpload) {
+      problems.push(t('batchUpload.noBatchAccess', { plan }));
+      return problems;
+    }
+    if (!isUnlimitedValue(quota.max_batch_files) && pending.length > quota.max_batch_files) {
+      problems.push(
+        t('batchUpload.tooManyFiles', { plan, max: quota.max_batch_files, count: pending.length })
+      );
+    }
+    if (
+      !isUnlimitedValue(quota.monthly_uploads_limit) &&
+      pending.length > quota.monthly_uploads_remaining
+    ) {
+      problems.push(
+        t('batchUpload.notEnoughUploads', {
+          plan,
+          remaining: Math.max(0, quota.monthly_uploads_remaining),
+          count: pending.length,
+        })
+      );
+    }
+    if (!isUnlimitedValue(quota.max_file_size_mb)) {
+      const maxBytes = quota.max_file_size_mb * 1024 * 1024;
+      for (const item of pending) {
+        if (item.file.size > maxBytes) {
+          problems.push(
+            t('batchUpload.fileTooLarge', {
+              name: item.file.name,
+              size: formatBytes(item.file.size),
+              plan,
+              max: quota.max_file_size_mb,
+            })
+          );
+        }
+      }
+    }
+    return problems;
+  };
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -392,6 +411,12 @@ export function BatchUploadPage() {
 
   const handleStartVerification = () => {
     if (files.length === 0 || queueState.isProcessing) return;
+    const problems = checkBatchAgainstQuota(files.filter((f) => f.status === 'pending'));
+    setQuotaProblems(problems);
+    if (problems.length > 0) {
+      setUpgradeOpen(true);
+      return;
+    }
     if (navigateTimerRef.current) {
       clearTimeout(navigateTimerRef.current);
       navigateTimerRef.current = null;
@@ -447,7 +472,7 @@ export function BatchUploadPage() {
             </span>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[11px] font-mono text-slate-600 dark:text-slate-300">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              CONCURRENT WORKER READY
+              {t('batchUpload.concurrentWorkers', { count: BATCH_CONCURRENCY })}
             </span>
           </div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
@@ -701,6 +726,19 @@ export function BatchUploadPage() {
             </div>
           )}
 
+          {quotaProblems.length > 0 && (
+            <div
+              role="alert"
+              data-testid="batch-quota-errors"
+              className="space-y-1 text-xs text-amber-800 dark:text-amber-200 px-3 py-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60"
+            >
+              <p className="font-semibold">{t('batchUpload.limitTitle')}</p>
+              {quotaProblems.map((p) => (
+                <p key={p}>{p}</p>
+              ))}
+            </div>
+          )}
+
           {/* Action Footer */}
           <div className="pt-4 border-t border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -748,6 +786,14 @@ export function BatchUploadPage() {
           </div>
         </div>
       </Card>
+
+      <UpgradeModal
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        featureName={t('batchUpload.upgradeFeature')}
+        reasonTitle={t('batchUpload.limitTitle')}
+        reasonDescription={quotaProblems.join(' ')}
+      />
     </div>
   );
 }

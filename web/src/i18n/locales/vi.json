@@ -244,7 +244,14 @@
     "startVerification": "Bắt đầu xác minh",
     "allProcessedOpening": "Đã xử lý xong tất cả tệp — đang mở báo cáo…",
     "allFailedNotice": "Tất cả tệp đều xử lý thất bại. Vui lòng kiểm tra lỗi phía trên và thử lại.",
-    "disclaimer": "Đây là công cụ hỗ trợ quyết định. Mọi kết quả cần được chuyên gia xem xét."
+    "disclaimer": "Đây là công cụ hỗ trợ quyết định. Mọi kết quả cần được chuyên gia xem xét.",
+    "concurrentWorkers": "{{count}} LUỒNG XỬ LÝ SONG SONG",
+    "limitTitle": "Lô tải lên vượt hạn mức gói",
+    "tooManyFiles": "Gói {{plan}} cho phép tối đa {{max}} tệp mỗi lô — bạn đã chọn {{count}} tệp.",
+    "fileTooLarge": "{{name}} có dung lượng {{size}} — giới hạn gói {{plan}} là {{max}} MB mỗi tệp.",
+    "notEnoughUploads": "Gói {{plan}} chỉ còn {{remaining}} lượt kiểm tra trong tháng — bạn đã chọn {{count}} tệp.",
+    "noBatchAccess": "Gói {{plan}} không bao gồm tính năng tải lên hàng loạt.",
+    "upgradeFeature": "Tải lên hàng loạt lớn hơn"
   },
   "history": {
     "title": "Báo cáo xác minh",
