@@ -60,7 +60,7 @@ _CORP_AUTHOR_NARRATIVE = (
 )
 _PAGE_OR_SECONDARY_SUFFIX = (
     r"(?:\s*,\s*(?:"
-    r"(?:dẫn\s+theo|trích\s+dẫn\s+(?:trong|từ)|as\s+cited\s+in|cited\s+in)\s+[^)\]]+"
+    r"(?:dẫn\s+(?:lại\s+)?(?:theo|từ)|trích\s+(?:dẫn\s+)?(?:trong|từ|theo)|(?:as\s+)?(?:cited|quoted)\s+in)\s+[^)\]]+"
     r"|(?:pp?\.?|tr\.?|trang)\s*\d+(?:\s*[-–]\s*\d+)?"
     r"))?"
 )

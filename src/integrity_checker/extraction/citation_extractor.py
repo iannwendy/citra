@@ -519,7 +519,7 @@ class CitationExtractor:
 
                 # Bug fix 1: Filter out IEEE [N] reference list markers and array/year/interval/ORCID brackets ([0], [0, 1], [2020], [0000-0000-0000-0000])
                 # "[4] Xiao, Y., ..." at start of line is a reference list entry, not in-text citation
-                if citation_type == CitationType.NUMERIC or raw.startswith("["):
+                if raw.startswith("["):
                     raw = re.sub(r"\s+", " ", raw)
                     if re.fullmatch(r"\[\s*(?:0|(?:18|19|20)\d{2})\s*\]", raw) or re.match(r"^\[\s*0", raw):
                         continue
@@ -534,7 +534,7 @@ class CitationExtractor:
                         raw,
                         flags=re.IGNORECASE,
                     )
-                    bracket_nums = [int(n) for n in re.findall(r"\d+", raw_without_page)] if raw.startswith("[") else []
+                    bracket_nums = [int(n) for n in re.findall(r"\d+", raw_without_page)]
                     if bracket_nums:
                         # Reject duplicate numbers inside the same bracket ([1, 1], [10, 255, 255]), large buffer/pixel sizes (>= 300),
                         # or non-ascending multi-number vectors containing values >= 50 (e.g. token IDs [101, 205, 89])
@@ -556,18 +556,29 @@ class CitationExtractor:
                     line_suffix_b = search_text[m.end() : line_end_b]
                     full_line_b = search_text[line_start_b:line_end_b]
                     context_prefix_b = re.sub(r"\s+", " ", search_text[max(0, raw_start - 60) : raw_start])
-                    # Reject code array indexing (e.g. X.shape[1], x_train_flat.shape[1], axs[1].plot, parts[1].trim(), doc[1];, byte[4096], int a[100], [[37, 95], [449, 95]])
+                    # Reject code array indexing (e.g. X.shape[1], arr[0], matrix[1, 2], dp[1][2], axs[1].plot, parts[1].trim(), doc[1];, byte[4096], int a[100], [[37, 95], [449, 95]])
                     if (
                         re.search(
-                            r"(?:[A-Za-z0-9_]\.[A-Za-z_][A-Za-z0-9_]*|[A-Za-z0-9_]+_[A-Za-z0-9_]+|\b(?:byte|int|char|float|double|long|short|uint\d*|int\d*|bool|string)(?:\s+[A-Za-z_][A-Za-z0-9_]*)?\s*|\b(?:buffer|arr|array|vec|matrix|tensor|axs|ax|plt|parts|args|argv|df|coefficients|weights|biases|params|dims?)\s*|\[\s*)$",
+                            r"(?:[A-Za-z0-9_](?:\[\s*[^\]]*\s*\])+|[A-Za-z0-9_]\.[A-Za-z_][A-Za-z0-9_]*|[A-Za-z0-9_]+_[A-Za-z0-9_]+|\b(?:byte|int|char|float|double|long|short|uint\d*|int\d*|bool|string)(?:\s+[A-Za-z_][A-Za-z0-9_]*)?\s*|\b(?:buffer|arr|array|vec|vector|matrix|tensor|dp|mat|grid|axs|ax|plt|parts|args|argv|df|coefficients|weights|biases|params|dims?)(?:\[\s*[^\]]*\s*\])*\s*|\[\s*)$",
                             line_prefix_b,
                         )
-                        or re.match(r"^\.[A-Za-z_][A-Za-z0-9_]*|^\[|^\s*\](?:\s*,|\s*\])", line_suffix_b)
+                        or re.match(
+                            r"^\.[A-Za-z_][A-Za-z0-9_]*|^\[|^\s*\](?:\s*,|\s*\])|^\s*(?:=(?!=)|[+\-*/%]=|==|!=|<=|>=)",
+                            line_suffix_b,
+                        )
                         or re.search(r"\]\s*,\s*\[", full_line_b)
                         or re.search(r"[a-zA-Z_][a-zA-Z0-9_]*\s*\[\s*\d+\s*\]\s*;\s*$", full_line_b)
                         or re.search(
                             r"\b[a-zA-Z_]\w*\[\s*(?:0|[ijknm](?:\s*[-+]\s*1)?)\s*\]|\b(?:const|let|var|await|JSON\.parse)\b",
                             full_line_b,
+                        )
+                        or (
+                            len(bracket_nums) == 1
+                            and re.search(
+                                r"\b(?:Figure|Fig\.?|Table|Tab\.?|Equation|Eq\.?|Formula|Section|Sec\.?|Chapter|Chap\.?|Step|Algorithm|Alg\.?|Theorem|Lemma|Appendix|Hình|Bảng|Mục|Chương|Bước|Công\s+thức|Phương\s+trình|Định\s+lý|Bổ\s+đề|Thuật\s+toán|Phụ\s+lục)\s*$",
+                                context_prefix_b,
+                                re.IGNORECASE,
+                            )
                         )
                     ):
                         continue
@@ -588,11 +599,11 @@ class CitationExtractor:
                         )
                     ):
                         continue
-                    if (
-                        citation_type == CitationType.NUMERIC
-                        or re.match(r"^\[\s*\d+\s*\]$", raw)
-                    ) and _is_reference_list_marker(search_text, raw_start, m.end()):
-                        continue
+                if (
+                    citation_type == CitationType.NUMERIC
+                    or re.match(r"^\[\s*\d+\s*\]$", raw)
+                ) and _is_reference_list_marker(search_text, raw_start, m.end()):
+                    continue
 
                 # Filter out template placeholder citations like "(Author et al., 2020)", "Author (2020)"
                 if re.match(r"^\(?\s*authors?\b", raw, re.IGNORECASE):
@@ -668,7 +679,7 @@ class CitationExtractor:
                         continue
                     inner_head = raw[1:].split(",")[0].strip().lstrip("\"\u201c\u201d'\u2018\u2019")
                     inner_head = re.sub(
-                        r"^(?:see\s+also|see|cf\.?|e\.g\.?,?|i\.e\.?,?|for\s+example|adapted\s+from|modified\s+from|data\s+from|source\s*:)\s+",
+                        r"^(?:see\s+also|see|cf\.?|e\.g\.?,?|i\.e\.?,?|for\s+example|adapted\s+from|modified\s+from|data\s+from|source\s*:|(?:as\s+)?(?:cited|quoted)\s+in|dẫn\s+(?:lại\s+)?(?:theo|từ)|trích\s+(?:dẫn\s+)?(?:trong|từ|theo))\s+",
                         "",
                         inner_head,
                         flags=re.IGNORECASE,

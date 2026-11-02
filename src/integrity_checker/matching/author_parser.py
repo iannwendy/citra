@@ -46,7 +46,7 @@ _DUTCH_MULTI_WORD_PREFIXES = frozenset([
     "van", "de", "den", "der", "ten", "ter",
     "von", "zu", "zur", "af",
     "le", "la", "du", "di", "da",
-    "el", "al",
+    "el", "al", "st", "st.",
 ])
 
 # Particles trong nhiều ngôn ngữ — viết THƯỜNG trong họ
@@ -54,7 +54,7 @@ _PARTICLES = frozenset([
     "van", "de", "den", "der", "ten", "ter",
     "von", "zu", "zur", "af",
     "le", "la", "du", "di", "da",
-    "el", "al",
+    "el", "al", "st", "st.",
 ])
 
 
@@ -915,9 +915,31 @@ def _extract_initials_from_first_tokens(tokens: list[str]) -> list[str]:
     ['J.'] → ['J']
     ['J.', 'K.'] → ['J', 'K']
     ['John', 'K.'] → ['J', 'K']   # full first name → lấy J từ John
+    ['Laurens'] → ['l']           # full first name > 4 chars → lấy l từ Laurens
     ['John', 'K.', 'Smith'] → ['J', 'K']   # author bị trộn (edge case)
     """
-    return _extract_initials_from_tokens(tokens)
+    initials: list[str] = []
+    seen_dotted_initial = False
+    for tok in tokens:
+        tok_clean = tok.strip(".,;")
+        if not tok_clean:
+            continue
+        if _INITIAL_RE.match(tok_clean):
+            initials.append(tok_clean[0].lower())
+            seen_dotted_initial = True
+        elif _is_initial_token(tok_clean):
+            initials.extend(c.lower() for c in tok_clean if c.isalpha())
+            if "." in tok:
+                seen_dotted_initial = True
+        elif _is_initial_like(tok_clean) or (
+            not seen_dotted_initial
+            and not initials
+            and tok_clean[0].isupper()
+            and tok_clean.lower() not in _PARTICLES
+            and tok_clean.lower() not in {"jr", "sr", "ii", "iii", "iv"}
+        ):
+            initials.append(tok_clean[0].lower())
+    return initials
 
 
 def _is_initial_like(tok: str) -> bool:

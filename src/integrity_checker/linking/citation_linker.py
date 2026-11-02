@@ -64,9 +64,9 @@ _NARRATIVE_YEAR_RE = re.compile(
     r"([A-Za-zÀ-ỹ][A-Za-zÀ-ỹ0-9/'\u2019.\s,&\-\[\]]*?)\s*[\(\[]\s*((?:18|19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)(?:\s*,\s*[^)\]]*)?\s*[\)\]]",
     re.IGNORECASE,
 )
-# Secondary citation (trích dẫn gián tiếp): "(Smith, 2005, dẫn theo Tran, 2016)" / "Smith (2005, as cited in Tran, 2016)"
+# Secondary citation (trích dẫn gián tiếp): "(Smith, 2005, dẫn theo Tran, 2016)" / "Smith (2005, as cited in Tran, 2016)" / "(quoted in Smith, 2020)"
 _SECONDARY_CITATION_RE = re.compile(
-    r"(?:dẫn\s+theo|trích\s+dẫn\s+(?:trong|từ)|as\s+cited\s+in|cited\s+in)\s+([^)]+)\)?",
+    r"(?:dẫn\s+(?:lại\s+)?(?:theo|từ)|trích\s+(?:dẫn\s+)?(?:trong|từ|theo)|(?:as\s+)?(?:cited|quoted)\s+in)\s+([^)]+)\)?",
     re.IGNORECASE,
 )
 # Institutional / Corporate / Legal author indicator
@@ -83,7 +83,7 @@ _INSTITUTIONAL_AUTHOR_RE = re.compile(
 )
 # Regex cho in-text IEEE numeric: [N] or [N, M] or [N-M] or [N, Tr. 124]
 _IEEE_NUM_RE = re.compile(
-    r"\[(\d+(?:\s*[-–,]\s*\d+)*)(?:\s*[,;:]\s*(?:tr\.?|trang|pp?\.?)\s*\d+(?:\s*[,–\-—]\s*\d+)*)?\]",
+    r"\[(\d+(?:\s*[-–—−,]\s*\d+)*)(?:\s*[,;:]\s*(?:tr\.?|trang|pp?\.?)\s*\d+(?:\s*[,–\-—−]\s*\d+)*)?\]",
     re.IGNORECASE,
 )
 # Regex cho year extraction từ bib entry
@@ -430,7 +430,14 @@ class CitationLinker:
         # "cited in text" count of each reference must include this occurrence.
         # Returning inside the loop (the previous behaviour) dropped every
         # index after the first.
-        if cit.citation_type == CitationType.NUMERIC:
+        if cit.citation_type == CitationType.NUMERIC or (
+            cit.citation_type == CitationType.IN_TEXT
+            and (
+                getattr(cit, "style", None) and getattr(cit.style, "value", "") == "ieee"
+                or _IEEE_NUM_RE.fullmatch((cit.raw_text or "").strip())
+                or re.search(r"\[\s*\d+\s*\]\s*[-–—−]\s*\[\s*\d+\s*\]", cit.raw_text or "")
+            )
+        ):
             links: list[CitationLink] = []
             for idx in self._extract_numeric_indices(cit.raw_text):
                 bib_ref = bib_by_index.get(idx)
@@ -481,12 +488,17 @@ class CitationLinker:
                         or bib_by_author_year_suffix.get((folded_part, year_part, suffix_part), [])
                     )
                     if suffix_part
-                    else (
+                    else []
+                )
+                if not candidates:
+                    candidates = (
                         bib_by_author_year.get((author_part.lower(), year_part), [])
                         or bib_by_author_year.get((folded_part, year_part), [])
                     )
-                )
                 if candidates:
+                    candidates = self._disambiguate_candidates(
+                        candidates, part, year_suffix=suffix_part
+                    )
                     bib_idx = self._find_bib_index(candidates[0], bib_citations)
                     multi_links.append(CitationLink(
                         occurrence_id=occ_id,
@@ -579,28 +591,14 @@ class CitationLinker:
                         if candidates:
                             break
             if candidates:
-                if cit.title and len(candidates) > 1:
-                    cit_t_low = cit.title.strip().lower()
-                    t_matched = [c for c in candidates if (c.title or "").strip().lower() == cit_t_low]
-                    if t_matched:
-                        candidates = t_matched
-                if len(candidates) > 1:
-                    cit_raw_folded = self._fold_author_key(cit.raw_text or "")
-                    co_matched = []
-                    for c in candidates:
-                        if c.authors and len(c.authors) >= 2:
-                            co_raw = self._fold_author_key(
-                                getattr(c.authors[1], "raw", None) or self._normalize_last_name(c.authors[1])
-                            )
-                            co_last = self._fold_author_key(self._normalize_last_name(c.authors[1]))
-                            if (co_raw and len(co_raw) >= 3 and co_raw in cit_raw_folded) or (
-                                co_last and len(co_last) >= 3 and co_last in cit_raw_folded
-                            ):
-                                co_matched.append(c)
-                    if len(co_matched) == 1:
-                        candidates = co_matched
+                candidates = self._disambiguate_candidates(
+                    candidates,
+                    cit.raw_text or "",
+                    cit_title=cit.title,
+                    year_suffix=year_suffix,
+                )
                 if not year_suffix and len(candidates) > 1 and (
-                    year == "n.d." or not any(c.year_suffix for c in candidates)
+                    year == "n.d." or not any(self._resolve_bib_year_and_suffix(c)[1] for c in candidates)
                 ):
                     return [
                         CitationLink(
@@ -703,9 +701,19 @@ class CitationLinker:
 
         # Pass 2: Minor spelling/transposition typo on surname when year agrees (e.g. Beauvias/Beauvais, Adizogel/Adigozel, Kato-Katoaka/Kato-Kataoka, Shet/Shen, Zade/Zadeh)
         if len(author_folded) >= 3:
+            from integrity_checker.matching.author_matcher import author_match_score
             for bib_idx, bib in enumerate(bib_citations):
-                if not bib.authors or (bib.year or "") != year:
+                bib_norm_yr, _ = self._resolve_bib_year_and_suffix(bib)
+                if not bib.authors or (bib_norm_yr != year and (bib.year or "") != year):
                     continue
+                if " " in author_folded and author_match_score([author], [bib.authors[0]]) >= 0.90:
+                    return CitationLink(
+                        occurrence_id=occ_id,
+                        reference_id=bib.reference_id or f"ref-{bib_idx:04d}",
+                        status=CitationMappingStatus.MATCHED,
+                        confidence=self.author_year_confidence,
+                        method=MappingMethod.AUTHOR_YEAR,
+                    )
                 bib_first = self._fold_author_key(self._normalize_last_name(bib.authors[0]))
                 cand_firsts = [bib_first] + [p for p in bib_first.split("-") if len(p) >= 4]
                 if len(author_folded) >= 4:
@@ -982,13 +990,81 @@ class CitationLinker:
                 out[bib.numeric_index] = bib
         return out
 
+    def _resolve_bib_year_and_suffix(self, bib: Citation) -> tuple[str, str]:
+        """Extract canonical 4-digit/n.d. year and lowercase year_suffix ('a'-'z') from a bib Citation."""
+        raw_yr = str(bib.year or "n.d.").strip()
+        norm_yr, parsed_suf = self._parse_year_token(raw_yr)
+        suffix = (bib.year_suffix or parsed_suf or "").strip().lower()
+        if not suffix and bib.raw_text:
+            m_suf = re.search(
+                r"\(\s*(?:(?:18|19|20)\d{2}|n\.?\s*d\.?)-?([a-h])\s*\)",
+                bib.raw_text,
+                re.IGNORECASE,
+            )
+            if not m_suf and norm_yr != "n.d.":
+                m_suf = re.search(
+                    rf"\b{re.escape(norm_yr)}([a-h])\b",
+                    bib.raw_text,
+                    re.IGNORECASE,
+                )
+            if m_suf:
+                suffix = m_suf.group(1).lower()
+        return norm_yr, suffix
+
+    def _disambiguate_candidates(
+        self,
+        candidates: list[Citation],
+        cit_raw: str,
+        cit_title: str | None = None,
+        year_suffix: str | None = None,
+    ) -> list[Citation]:
+        """Disambiguate multiple same-author same-year bibliography candidates using title, co-authors, or year suffix."""
+        if len(candidates) <= 1:
+            return candidates
+        if cit_title:
+            cit_t_low = cit_title.strip().lower()
+            t_matched = [c for c in candidates if (c.title or "").strip().lower() == cit_t_low]
+            if t_matched:
+                candidates = t_matched
+        if len(candidates) > 1 and cit_raw:
+            cit_raw_folded = self._fold_author_key(cit_raw)
+            scored_cands: list[tuple[int, Citation]] = []
+            for c in candidates:
+                score = 0
+                if c.authors and len(c.authors) >= 2:
+                    for co_auth in c.authors[1:]:
+                        co_last = self._fold_author_key(self._normalize_last_name(co_auth))
+                        co_raw = self._fold_author_key(
+                            getattr(co_auth, "raw", None) or self._normalize_last_name(co_auth)
+                        )
+                        if co_last and len(co_last) >= 2 and re.search(rf"\b{re.escape(co_last)}\b", cit_raw_folded):
+                            score += 2
+                        elif co_raw and len(co_raw) >= 3 and co_raw in cit_raw_folded:
+                            score += 1
+                if score > 0:
+                    scored_cands.append((score, c))
+            if scored_cands:
+                max_score = max(s for s, _ in scored_cands)
+                best_co = [c for s, c in scored_cands if s == max_score]
+                if len(best_co) < len(candidates):
+                    candidates = best_co
+        if len(candidates) > 1 and year_suffix and len(year_suffix) == 1 and "a" <= year_suffix.lower() <= "z":
+            ord_idx = ord(year_suffix.lower()) - ord("a")
+            if 0 <= ord_idx < len(candidates) and not any(
+                self._resolve_bib_year_and_suffix(c)[1] for c in candidates
+            ):
+                candidates = [candidates[ord_idx]]
+        return candidates
+
     def _index_by_author_year(
         self, bibs: list[Citation]
     ) -> dict[tuple[str, str], list[Citation]]:
         out: dict[tuple[str, str], list[Citation]] = {}
         for bib in bibs:
-            bib_yr = bib.year or "n.d."
+            bib_yr, _ = self._resolve_bib_year_and_suffix(bib)
             years_to_index = [bib_yr]
+            if bib.year and str(bib.year) not in years_to_index:
+                years_to_index.append(str(bib.year))
             if bib.year is None or bib.matched_pattern == "vn_legal_document":
                 for yr_m in re.findall(r"\b((?:18|19|20)\d{2})\b", bib.raw_text or ""):
                     if yr_m not in years_to_index:
@@ -1061,8 +1137,7 @@ class CitationLinker:
         """Index bibs by (last_name, year, year_suffix) for 2020a/2020b/n.d.-a matching."""
         out: dict[tuple[str, str, str], list[Citation]] = {}
         for bib in bibs:
-            bib_yr = bib.year or "n.d."
-            year_suffix = bib.year_suffix or ""
+            bib_yr, year_suffix = self._resolve_bib_year_and_suffix(bib)
             if bib.authors:
                 for auth_idx, auth_obj in enumerate(bib.authors):
                     if auth_idx > 0 and bib.matched_pattern != "vn_legal_document":
@@ -1146,18 +1221,26 @@ class CitationLinker:
         return None
 
     def _extract_numeric_indices(self, text: str) -> list[int]:
-        """Trích numeric indices từ [N], [N, M], [N-M], hoặc superscript ^N, ^N-M."""
+        """Trích numeric indices từ [N], [N, M], [N-M], [N]-[M], hoặc superscript ^N, ^N-M."""
+        bracket_range_m = re.search(
+            r"\[\s*(\d+)\s*\]\s*[-–—−]\s*\[\s*(\d+)\s*\]", text
+        )
+        if bracket_range_m:
+            start, end = int(bracket_range_m.group(1)), int(bracket_range_m.group(2))
+            if start <= end and (end - start) <= 50:
+                return list(range(start, end + 1))
+            return [start, end]
         m = _IEEE_NUM_RE.search(text)
         raw_spec = m.group(1) if m else None
         if raw_spec is None:
-            sup_m = re.search(r"\^(\d+(?:\s*[-–,]\s*\d+)*)", text)
+            sup_m = re.search(r"\^(\d+(?:\s*[-–—−,]\s*\d+)*)", text)
             if sup_m:
                 raw_spec = sup_m.group(1)
         if not raw_spec:
             return []
         indices: list[int] = []
         for token in re.split(r"\s*,\s*", raw_spec.strip()):
-            range_m = re.match(r"^(\d+)\s*[-–]\s*(\d+)$", token.strip())
+            range_m = re.match(r"^(\d+)\s*[-–—−]\s*(\d+)$", token.strip())
             if range_m:
                 start, end = int(range_m.group(1)), int(range_m.group(2))
                 if start <= end and (end - start) <= 50:
@@ -1177,7 +1260,7 @@ class CitationLinker:
         cleaned = re.sub(r"\s*\[[^\]]+\]", "", raw_author).strip(" \t()[]\"'\u201c\u201d\u2018\u2019,")
         # Strip leading figure/table caption or discourse prefixes ("Adapted from ", "for example in ", "see ", "Only ", "Both ")
         cleaned = re.sub(
-            r"^(?:.*?\b(?:for\s+example\s+in|such\s+as\s+in|adapted\s+from|reprinted\s+from|modified\s+from|data\s+from|derived\s+from|based\s+on|source\s*:|see\s+also|see|e\.g\.,?|i\.e\.,?|cf\.?)\s+|(?:only|both|either|neither)\s+)",
+            r"^(?:.*?\b(?:for\s+example\s+in|such\s+as\s+in|adapted\s+from|reprinted\s+from|modified\s+from|data\s+from|derived\s+from|based\s+on|source\s*:|see\s+also|see|e\.g\.,?|i\.e\.,?|cf\.?|(?:as\s+)?(?:cited|quoted)\s+in|dẫn\s+(?:lại\s+)?(?:theo|từ)|trích\s+(?:dẫn\s+)?(?:trong|từ|theo))\s+|(?:only|both|either|neither)\s+)",
             "",
             cleaned,
             flags=re.IGNORECASE,

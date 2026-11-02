@@ -314,8 +314,15 @@ def verify_vn_legal_citation(
             )
 
     # 3. Match against curated statutory registry
+    any_name_matched = any(e["pattern"].search(text) for e in _STATUTE_REGISTRY)
     for entry in _STATUTE_REGISTRY:
-        if not entry["pattern"].search(text):
+        name_matched = bool(entry["pattern"].search(text))
+        code_matched = bool(
+            not any_name_matched
+            and code_str
+            and any(code_str.lower() == v.lower() for v in entry["codes_by_year"].values())
+        )
+        if not name_matched and not code_matched:
             continue
 
         canonical_name = entry["canonical_name"]
@@ -451,11 +458,17 @@ def verify_vn_legal_citation(
     rules = ["R-LEGAL-DOCUMENT"]
     if code_str:
         rules.append("R-VN-LEGAL-VERIFIED")
+    inferred_authority = extracted_venue
+    if not inferred_authority and code_suffix:
+        if code_suffix == "NĐ-CP":
+            inferred_authority = "Chính phủ"
+        elif code_suffix.startswith("QH"):
+            inferred_authority = "Quốc hội"
     return VNLegalVerificationResult(
         is_valid=True,
         is_verified_statute=bool(code_str),
         canonical_code=code_str,
-        canonical_authority=extracted_venue,
+        canonical_authority=inferred_authority,
         mismatched_fields=[],
         triggered_rules=rules,
         reasoning=(

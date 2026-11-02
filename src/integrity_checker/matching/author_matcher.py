@@ -318,7 +318,10 @@ def _is_swapped_author_match(
             return False
         given_inits_1 = init_1 - {prim_1[0]}
         if given_inits_1:
-            return any(t[0] in given_inits_1 for t in other_tokens_2)
+            other_inits_2 = {t[0] for t in other_tokens_2 if t}
+            if len(given_inits_1) >= 2 and len(other_tokens_2) >= 2:
+                return given_inits_1 <= other_inits_2
+            return bool(given_inits_1 & other_inits_2)
         # If the given name starts with the same letter as the surname (e.g. "Wang, W." vs "Wang Wei"),
         # accept when side 1 had a single full surname token and side 2 has another token with that same initial.
         if len(full_1) == 1 and any(t[0] == prim_1[0] for t in other_tokens_2):
@@ -332,6 +335,73 @@ def _is_swapped_author_match(
     return False
 
 
+_VN_FAMILY_NAMES_FOLDED = frozenset({
+    "nguyen", "tran", "le", "pham", "hoang", "huynh", "phan", "vu", "vo",
+    "dang", "bui", "do", "ho", "ngo", "duong", "ly", "dao", "dinh",
+    "trinh", "mai", "truong", "chau", "doan", "to", "tang", "ha", "ta",
+    "luong", "lam", "phung", "quach", "diep", "ton", "thach", "luu", "dam",
+})
+
+
+def _extract_raw_author_str(author: Author | str) -> str:
+    if isinstance(author, Author) or hasattr(author, "last_name"):
+        raw_attr = getattr(author, "raw", "") or ""
+        if isinstance(raw_attr, str) and raw_attr.strip():
+            return raw_attr.strip()
+        return str(getattr(author, "last_name", "") or "").strip()
+    return str(author or "").strip()
+
+
+def _has_vietnamese_conflict(a: Author | str, b: Author | str) -> bool:
+    """Detect false-positive matches between distinct Vietnamese names.
+
+    Catches:
+    1. Conflicting explicit Vietnamese diacritics on the same folded token
+       (e.g. 'Nguyễn' vs 'Nguyên', 'Đỗ' vs 'Độ'), while still allowing
+       diacritic vs ASCII OCR-stripped matches ('Nguyễn' vs 'Nguyen').
+    2. Full Vietnamese names sharing the same given name (last token)
+       but having different family names (first token), e.g.
+       'Nguyễn Văn An' vs 'Trần Văn An' or 'Đỗ Văn An' vs 'Đào Văn An'.
+    """
+    raw_a = unicodedata.normalize("NFC", _extract_raw_author_str(a)).lower()
+    raw_b = unicodedata.normalize("NFC", _extract_raw_author_str(b)).lower()
+    if not raw_a or not raw_b:
+        return False
+
+    toks_a = [t for t in re.split(r"[^\w]+", raw_a) if len(t) >= 2]
+    toks_b = [t for t in re.split(r"[^\w]+", raw_b) if len(t) >= 2]
+    for ta in toks_a:
+        fa = _fold_diacritics(ta)
+        if ta == fa:
+            continue
+        for tb in toks_b:
+            fb = _fold_diacritics(tb)
+            if tb == fb:
+                continue
+            if fa == fb and ta != tb:
+                return True
+
+    sig_a = _extract_author_signature(a, fold_diacritics=True)
+    sig_b = _extract_author_signature(b, fold_diacritics=True)
+    prim_a, full_a, _ = sig_a
+    prim_b, full_b, _ = sig_b
+    if (
+        prim_a
+        and prim_a == prim_b
+        and len(full_a) >= 2
+        and len(full_b) >= 2
+        and set(full_a) != set(full_b)
+    ):
+        if (
+            (full_a[0] in _VN_FAMILY_NAMES_FOLDED or full_b[0] in _VN_FAMILY_NAMES_FOLDED)
+            and full_a[0] != full_b[0]
+            and prim_a not in {full_a[0], full_b[0]}
+        ):
+            return True
+
+    return False
+
+
 _CORP_KEYWORDS = {
     "organization", "organisation", "association", "institute", "institution",
     "institutes", "institutions", "ministry", "ministries", "department", "departments",
@@ -339,7 +409,7 @@ _CORP_KEYWORDS = {
     "society", "federation", "university", "universities", "college", "academy",
     "academies", "center", "centers", "centre", "centres", "bureau", "bank",
     "nations", "group", "consortium", "collaboration", "union", "board", "office",
-    "administration", "authority", "health", "control", "services",
+    "administration", "authority", "health", "control", "services", "statistics",
     "bo", "so", "uy", "chinh", "quoc", "toa", "vien", "truong", "to", "hiep",
     "ngan", "tong", "cuc",
 }
@@ -361,8 +431,10 @@ def _extract_corporate_keys(author: Author | str, *, fold_diacritics: bool = Tru
 
     keys: set[str] = set()
     # Explicit parenthesized or bracketed acronym: "World Health Organization (WHO)" -> "who"
-    for acr in re.findall(r"[\(\[]([A-Za-zĐđ]{2,12})[\)\]]", raw_str):
-        keys.add((_fold_diacritics(acr) if fold_diacritics else acr).lower())
+    for acr in re.findall(r"[\(\[]([A-Za-zĐđ&]{2,12})[\)\]]", raw_str):
+        clean_acr = re.sub(r"[^A-Za-zĐđ]", "", acr)
+        if len(clean_acr) >= 2:
+            keys.add((_fold_diacritics(clean_acr) if fold_diacritics else clean_acr).lower())
 
     no_parens = re.sub(r"[\(\[][^\)\]]*[\)\]]", " ", raw_str).strip()
     folded = _fold_diacritics(no_parens) if fold_diacritics else no_parens
@@ -371,21 +443,28 @@ def _extract_corporate_keys(author: Author | str, *, fold_diacritics: bool = Tru
     if not words:
         return keys
 
-    # Single all-caps acronym token (e.g. "WHO", "UNESCO", "UNICEF", "IEEE", "OECD", "NIMH")
-    if len(words) == 1 and 2 <= len(words[0]) <= 10 and (words[0].isupper() or raw_str.isupper()):
-        keys.add(words[0].lower())
-        return keys
+    # Single all-caps acronym token (e.g. "WHO", "UNESCO", "UNICEF", "IEEE", "OECD", "NIMH", "BGD&ĐT")
+    if all(w.isupper() for w in words):
+        joined_caps = "".join(w.lower() for w in words)
+        if 2 <= len(joined_caps) <= 12:
+            keys.add(joined_caps)
+        if len(words) == 1:
+            return keys
 
     lower_words = [w.lower() for w in words]
     if any(w in _CORP_KEYWORDS for w in lower_words):
-        sig_words = [w for w in lower_words if w not in _CORP_STOPWORDS]
+        sig_pairs = [(w, w.lower()) for w in words if w.lower() not in _CORP_STOPWORDS]
+        sig_words = [lw for _, lw in sig_pairs]
         if sig_words:
             keys.add(" ".join(sig_words))
             if len(sig_words) >= 2:
+                keys.add("".join( lw if (len(orig) >= 2 and orig.isupper()) else lw[0] for orig, lw in sig_pairs ))
                 keys.add("".join(w[0] for w in sig_words))
-                # Also add initialism without trailing generic word if 4+ words (e.g. "Centers for Disease Control and Prevention" -> "cdc")
+                # Also add initialism without trailing generic/country word if 4+ words (e.g. "Centers for Disease Control and Prevention" -> "cdc", "General Statistics Office of Vietnam" -> "gso")
                 if len(sig_words) >= 4:
                     keys.add("".join(w[0] for w in sig_words[:-1]))
+                if sig_words[0] in {"bo", "so", "uy", "tong"} and len(sig_pairs) >= 3:
+                    keys.add("".join(lw if (len(orig) >= 2 and orig.isupper()) else lw[0] for orig, lw in sig_pairs[1:]))
     return keys
 
 
@@ -431,6 +510,8 @@ def _first_author_matches(
             break
     if not first_c_ln or not first_cand_ln or first_c is None or first_cand is None:
         return False
+    if _has_vietnamese_conflict(first_c, first_cand):
+        return False
     if first_c_ln == first_cand_ln:
         return True
     if _is_swapped_author_match(
@@ -466,16 +547,32 @@ def author_match_score(
     if not cited_set or not cand_set:
         return 0.0
 
+    # Remove false-positive canonical last-name collisions caused by conflicting Vietnamese diacritics
+    # (e.g. "Nguyễn" vs "Nguyên") or distinct Vietnamese family names sharing a given name
+    # (e.g. "Nguyễn Văn An" vs "Trần Văn An", "Đỗ Văn An" vs "Đào Văn An").
+    if fold_diacritics and (cited_set & cand_set):
+        for idx_c, shared_ln in enumerate(list(cited_set & cand_set)):
+            c_Matching = [a for a in cited if _author_to_last_name(a, fold_diacritics=True) == shared_ln]
+            b_Matching = [b for b in candidate if _author_to_last_name(b, fold_diacritics=True) == shared_ln]
+            if c_Matching and b_Matching and all(
+                _has_vietnamese_conflict(ca, cb) for ca in c_Matching for cb in b_Matching
+            ):
+                cand_set.discard(shared_ln)
+                cand_set.add(f"__vn_conflict_{idx_c}__")
+
     effective_has_et_al = _has_et_al_indicator(cited, has_et_al=has_et_al)
 
     # Augment cand_set with any swapped East-Asian / 2-token matches
     if not (cited_set <= cand_set):
-        cited_sigs = [_extract_author_signature(a, fold_diacritics=fold_diacritics) for a in cited]
-        cand_sigs = [_extract_author_signature(b, fold_diacritics=fold_diacritics) for b in candidate]
-        for sig_c in cited_sigs:
+        cited_sigs = [(a, _extract_author_signature(a, fold_diacritics=fold_diacritics)) for a in cited]
+        cand_sigs = [(b, _extract_author_signature(b, fold_diacritics=fold_diacritics)) for b in candidate]
+        for a_obj, sig_c in cited_sigs:
             prim_c = sig_c[0]
             if prim_c and prim_c not in cand_set:
-                if any(_is_swapped_author_match(sig_c, sig_b) for sig_b in cand_sigs):
+                if any(
+                    not _has_vietnamese_conflict(a_obj, b_obj) and _is_swapped_author_match(sig_c, sig_b)
+                    for b_obj, sig_b in cand_sigs
+                ):
                     cand_set.add(prim_c)
         # Check corporate / institutional acronym & full-name equivalence (e.g. "WHO" <-> "World Health Organization")
         for a in cited:

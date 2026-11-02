@@ -145,12 +145,16 @@ class NeuroSymbolicChecker:
         # Reuse shared FeatureCalculator instance to benefit from SemanticMatcher singleton
         if feature_calculator is not None:
             self.feature_calculator = feature_calculator
-        else:
+        elif enable_content_alignment:
             if NeuroSymbolicChecker._feature_calculator is None:
                 NeuroSymbolicChecker._feature_calculator = FeatureCalculator(
-                    enable_content_alignment=enable_content_alignment
+                    enable_content_alignment=True
                 )
             self.feature_calculator = NeuroSymbolicChecker._feature_calculator
+        else:
+            self.feature_calculator = FeatureCalculator(
+                enable_content_alignment=False
+            )
         self.rules = rules or SymbolicRules()
         self.enable_content_alignment = enable_content_alignment
         self.enable_calibration = enable_calibration

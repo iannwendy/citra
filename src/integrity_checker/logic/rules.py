@@ -716,6 +716,56 @@ class SymbolicRules:
         citation_year: str | None = None,
         citation_raw: str | None = None,
     ) -> RuleOutcome:
+        """Apply symbolic rules and enforce retraction post-conditions."""
+        outcome = self._apply_core(
+            features=features,
+            source=source,
+            mapping_status=mapping_status,
+            style_profile=style_profile,
+            citation_doi=citation_doi,
+            citation_url=citation_url,
+            api_exhausted=api_exhausted,
+            used_local_db=used_local_db,
+            citation_authors=citation_authors,
+            citation_year=citation_year,
+            citation_raw=citation_raw,
+        )
+        is_retracted = bool(
+            getattr(source, "is_retracted", False)
+            or (hasattr(source, "has_retracted_candidate") and source.has_retracted_candidate())
+        )
+        if is_retracted:
+            if outcome.label in (ValidationLabel.VERIFIED, ValidationLabel.UNRESOLVED):
+                outcome.label = ValidationLabel.METADATA_ERROR
+            if "R-RETRACTED-PAPER" not in outcome.triggered_rules:
+                outcome.triggered_rules.append("R-RETRACTED-PAPER")
+            if "retracted" not in outcome.mismatched_fields:
+                outcome.mismatched_fields.append("retracted")
+            if "retracted_paper" not in outcome.mismatched_fields:
+                outcome.mismatched_fields.append("retracted_paper")
+            if "[RETRACTION WARNING:" not in outcome.reasoning:
+                outcome.reasoning += (
+                    " [RETRACTION WARNING: This publication has been officially RETRACTED in scholarly registries "
+                    "(Retraction Watch / OpenAlex / Crossref).]"
+                )
+        return outcome
+
+    def _apply_core(
+        self,
+        features: MatchFeatures,
+        source: SourceResult,
+        mapping_status: CitationMappingStatus | None = None,
+        style_profile: StyleProfile | None = None,
+        citation_doi: str | None = None,
+        citation_url: str | None = None,
+        # NEW v1.3: Provenance tracking
+        api_exhausted: bool = False,
+        used_local_db: bool = False,
+        # NEW v1.3: Citation info for METADATA_ERROR detection
+        citation_authors: list[str] | None = None,
+        citation_year: str | None = None,
+        citation_raw: str | None = None,
+    ) -> RuleOutcome:
         """Apply rules theo thứ tự ưu tiên:
             0. FAKE-URL → SUSPECTED_HALLUCINATION (high priority, pre-flight)
             1. FABRICATED_DOI → SUSPECTED_HALLUCINATION (high priority)
@@ -1380,6 +1430,32 @@ class SymbolicRules:
                 confidence=max(0.0, 0.7 - style_penalty),
                 reasoning=(
                     f"DOI resolved but title similarity is moderate ({title_sim:.2f}). "
+                    f"Mismatched fields: {', '.join(mismatched)}."
+                ),
+                triggered_rules=triggered_rules,
+                mismatched_fields=mismatched,
+                style_penalty=style_penalty,
+            )
+
+        # --- Rule 2b: Spliced / Chimeric DOI hallucination (valid DOI belonging to a completely different paper) ---
+        if (
+            doi_match
+            and title_sim < 0.35
+            and author_sim < 0.20
+            and _has_live_source(source, verified_sources)
+            and "local_db" not in source.sources_succeeded
+            and not (not citation_authors and author_sim == 0.0 and title_sim >= 0.85)
+        ):
+            mismatched.extend(["doi", "title", "author"])
+            if year_dist > self.year_tolerance and year_dist < 900:
+                mismatched.append("year")
+            triggered_rules.extend(["R-CHIMERIC-DOI-MISMATCH", "R-HALLUCINATED-SOURCE"])
+            return RuleOutcome(
+                label=ValidationLabel.SUSPECTED_HALLUCINATION,
+                confidence=max(0.0, 0.88 - style_penalty),
+                reasoning=(
+                    f"Spliced/chimeric citation detected: cited DOI resolved to an unrelated work "
+                    f"(title similarity={title_sim:.2f} < 0.35, author overlap={author_sim:.2f} < 0.20). "
                     f"Mismatched fields: {', '.join(mismatched)}."
                 ),
                 triggered_rules=triggered_rules,

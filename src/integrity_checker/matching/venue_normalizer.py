@@ -174,6 +174,23 @@ class VenueNormalizer:
         key = _normalize_key(venue)
         if key in self.reverse_dict:
             return self.reverse_dict[key]
+        # Try stripping 'Proceedings of (the)' or trailing parenthetical abbreviation e.g. '(NeurIPS)'
+        no_parens = re.sub(r"\s*[\(\[][^\)\]]+[\)\]]\s*", " ", venue).strip()
+        for cand_str in (no_parens, venue):
+            cand_key = _normalize_key(cand_str)
+            cand_no_proc = re.sub(
+                r"^(?:in\s+)?(?:proceedings\s+of\s+(?:the\s+)?|proc\s+(?:of\s+(?:the\s+)?)?)",
+                "",
+                cand_key,
+            ).strip()
+            if cand_key in self.reverse_dict:
+                return self.reverse_dict[cand_key]
+            if cand_no_proc in self.reverse_dict:
+                return self.reverse_dict[cand_no_proc]
+        for paren_m in re.findall(r"[\(\[]([^)\]]{2,15})[\)\]]", venue):
+            p_key = _normalize_key(paren_m)
+            if p_key in self.reverse_dict:
+                return self.reverse_dict[p_key]
         # Try ISSN
         issn = _has_issn(venue)
         if issn:
