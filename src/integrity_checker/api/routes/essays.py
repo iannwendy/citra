@@ -711,6 +711,74 @@ def list_all_essays(
     return _serialize_essay_summaries_batch(repo, grouped)
 
 
+@router.get("/stats")
+def get_essay_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, int]:
+    """Return aggregated essay & citation verdict stats for current_user (Contract C2)."""
+    from sqlalchemy import func
+
+    from integrity_checker.db.models import Class, ClassMembership
+
+    repo = Repository(db)
+    if current_user.role == "admin":
+        grouped = repo.get_all_essays_deduped()
+    elif current_user.role == "teacher":
+        visible_ids = {current_user.id}
+        for (student_id,) in (
+            db.query(ClassMembership.student_id)
+            .join(Class, Class.id == ClassMembership.class_id)
+            .filter(Class.teacher_id == current_user.id)
+            .all()
+        ):
+            visible_ids.add(student_id)
+        grouped = repo.get_all_essays_deduped(user_ids=list(visible_ids))
+    else:
+        grouped = repo.get_all_essays_deduped(user_id=current_user.id)
+
+    essay_ids = [e.id for e, _ in grouped]
+    counts: dict[str, int] = {
+        "verified": 0,
+        "metadata_error": 0,
+        "suspected_hallucination": 0,
+        "unresolved": 0,
+        "resource": 0,
+    }
+    if not essay_ids:
+        return {
+            "total_essays": 0,
+            "total_citations": 0,
+            **counts,
+        }
+
+    for label, cnt in (
+        db.query(VerdictRecord.label, func.count(VerdictRecord.id))
+        .filter(VerdictRecord.essay_id.in_(essay_ids))
+        .group_by(VerdictRecord.label)
+        .all()
+    ):
+        if label in counts:
+            counts[str(label)] = int(cnt or 0)
+
+    total_verdicts = sum(counts.values())
+    if total_verdicts > 0:
+        total_citations = total_verdicts
+    else:
+        total_citations = int(
+            db.query(func.count(CitationRecord.id))
+            .filter(CitationRecord.essay_id.in_(essay_ids))
+            .scalar()
+            or 0
+        )
+
+    return {
+        "total_essays": len(essay_ids),
+        "total_citations": total_citations,
+        **counts,
+    }
+
+
 @router.get("/{essay_id}")
 def get_essay(
     essay_id: int,

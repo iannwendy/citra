@@ -824,7 +824,27 @@ class Repository:
         existing = self.get_promo_redemption_by_tx(promo.id, transaction_id)
         if existing:
             return existing
-        promo.used_count = int(promo.used_count or 0) + 1
+        from sqlalchemy import or_
+
+        updated_rows = (
+            self.session.query(PromoCode)
+            .filter(
+                PromoCode.id == promo.id,
+                or_(
+                    PromoCode.max_uses.is_(None),
+                    func.coalesce(PromoCode.used_count, 0) < PromoCode.max_uses,
+                ),
+            )
+            .update(
+                {PromoCode.used_count: func.coalesce(PromoCode.used_count, 0) + 1},
+                synchronize_session=False,
+            )
+        )
+        if updated_rows == 0:
+            raise ValueError(
+                f"Promo code '{promo.code}' has reached its maximum redemption limit."
+            )
+        self.session.refresh(promo)
         redemption = PromoRedemption(
             promo_code_id=promo.id,
             user_id=user_id,

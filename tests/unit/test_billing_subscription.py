@@ -1264,6 +1264,116 @@ async def test_pipeline_enforces_max_citations_and_allow_serpapi_fallback(tmp_pa
     assert call_kwargs["allow_serpapi"] is False
 
 
+def test_essay_stats_contract_c2_audit_essay_id_and_atomic_promo_redemption() -> None:
+    """Verify GET /api/essays/stats (Contract C2), GET /api/audit/log essay_id, and atomic promo redemption."""
+    from integrity_checker.db.models import VerdictRecord
+    from integrity_checker.models.citation import Citation, CitationStyle, CitationType
+    from integrity_checker.models.validation import CitationVerdict, ValidationLabel
+
+    client = TestClient(app)
+    user_token, user_data = _login_user(client, "user", "user123")
+    admin_token, _ = _login_user(client, "admin", "admin123")
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # 1. Initially 0 essays and 0 citations for user
+    empty_stats = client.get("/api/essays/stats", headers=user_headers)
+    assert empty_stats.status_code == 200
+    assert empty_stats.json() == {
+        "total_essays": 0,
+        "total_citations": 0,
+        "verified": 0,
+        "metadata_error": 0,
+        "suspected_hallucination": 0,
+        "unresolved": 0,
+        "resource": 0,
+    }
+
+    # 2. Seed an essay with verdicts for user and override one verdict to generate audit log
+    session = get_session()
+    repo = Repository(session)
+    essay = repo.create_essay_with_user("stats_test.pdf", 3, user_data["id"])
+    verdicts_list = [
+        CitationVerdict(
+            citation=Citation(
+                raw_text="[1] Vaswani et al. (2017)",
+                citation_type=CitationType.REFERENCE_LIST,
+                style=CitationStyle.IEEE,
+            ),
+            label=ValidationLabel.VERIFIED,
+            confidence=0.98,
+        ),
+        CitationVerdict(
+            citation=Citation(
+                raw_text="[2] Hallucinated Author (2099)",
+                citation_type=CitationType.REFERENCE_LIST,
+                style=CitationStyle.IEEE,
+            ),
+            label=ValidationLabel.SUSPECTED_HALLUCINATION,
+            confidence=0.95,
+        ),
+    ]
+    repo.add_verdicts(essay.id, verdicts_list)
+    session.flush()
+    v_row = session.query(VerdictRecord).filter(VerdictRecord.essay_id == essay.id).first()
+    assert v_row is not None
+    repo.log_audit(
+        verdict_id=v_row.id,
+        original_label="suspected_hallucination",
+        new_label="verified",
+        user="admin",
+        note="Verified manually",
+    )
+
+    # 3. Atomic promo redemption guard when max_uses is reached
+    promo = repo.create_promo_code(
+        code="ATOM01",
+        discount_type="percent",
+        discount_value=50.0,
+        max_uses=1,
+        max_uses_per_user=2,
+    )
+    tx1 = repo.create_billing_transaction(
+        user_id=user_data["id"],
+        stripe_session_id="cs_test_atom_1",
+        plan_tier="pro",
+        billing_cycle="monthly",
+        amount_usd=10.0,
+    )
+    tx2 = repo.create_billing_transaction(
+        user_id=user_data["id"],
+        stripe_session_id="cs_test_atom_2",
+        plan_tier="pro",
+        billing_cycle="monthly",
+        amount_usd=10.0,
+    )
+    repo.record_promo_redemption(promo, user_data["id"], tx1.id, 10.0)
+    with pytest.raises(ValueError, match="maximum redemption limit"):
+        repo.record_promo_redemption(promo, user_data["id"], tx2.id, 10.0)
+
+    essay_id = essay.id
+    verdict_id = v_row.id
+    session.commit()
+    session.close()
+
+    # Check GET /api/essays/stats
+    stats_resp = client.get("/api/essays/stats", headers=user_headers)
+    assert stats_resp.status_code == 200
+    stats_data = stats_resp.json()
+    assert stats_data["total_essays"] == 1
+    assert stats_data["total_citations"] == 2
+    assert stats_data["verified"] == 1
+    assert stats_data["suspected_hallucination"] == 1
+
+    # Check GET /api/audit/log includes essay_id
+    audit_resp = client.get("/api/audit/log", headers=admin_headers)
+    assert audit_resp.status_code == 200
+    audit_items = audit_resp.json()
+    matching = [item for item in audit_items if item["verdict_id"] == verdict_id]
+    assert len(matching) == 1
+    assert matching[0]["essay_id"] == essay_id
+
+
 
 
 
