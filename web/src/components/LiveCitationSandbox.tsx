@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   api,
   type SandboxAclPaperItem,
@@ -28,10 +29,12 @@ import {
 } from 'lucide-react';
 
 interface LiveCitationSandboxProps {
-  lang: 'vi' | 'en';
+  lang?: 'vi' | 'en';
 }
 
-export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
+export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps) {
+  const { i18n } = useTranslation();
+  const lang: 'vi' | 'en' = langProp ?? (i18n.language?.startsWith('vi') ? 'vi' : 'en');
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -308,7 +311,11 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
       );
     } catch (e) {
       toast.error(
-        e instanceof Error ? e.message : 'Failed to download PDF manuscript',
+        e instanceof Error
+          ? e.message
+          : lang === 'vi'
+            ? 'Không thể tải xuống file PDF bản thảo'
+            : 'Failed to download PDF manuscript',
       );
     } finally {
       setDownloadingPdf(false);
@@ -403,7 +410,7 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                   : 'Live Citation Sandbox & Synthetic Academic PDF Generator (ACL Database)'}
               </h1>
               <Badge className="bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 font-mono text-[10px]">
-                {dbTotalPapers.toLocaleString()} ACL PAPERS
+                {dbTotalPapers.toLocaleString()} {lang === 'vi' ? 'BÀI BÁO ACL' : 'ACL PAPERS'}
               </Badge>
             </div>
             <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5 leading-relaxed">
@@ -455,7 +462,11 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                   </label>
                   <select
                     data-testid="sandbox-acl-count-select"
-                    aria-label="Number of ACL papers to sample"
+                    aria-label={
+                      lang === 'vi'
+                        ? 'Số lượng bài báo ACL lấy mẫu'
+                        : 'Number of ACL papers to sample'
+                    }
                     value={sampleCount}
                     onChange={(e) => setSampleCount(Number(e.target.value))}
                     className="h-9 px-2.5 rounded-xl text-xs font-mono font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 flex-1 sm:flex-initial min-w-0 max-w-full"
@@ -473,7 +484,11 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                   </label>
                   <select
                     data-testid="sandbox-acl-style-select"
-                    aria-label="Target citation style for generated PDF"
+                    aria-label={
+                      lang === 'vi'
+                        ? 'Chuẩn trích dẫn cho file PDF'
+                        : 'Target citation style for generated PDF'
+                    }
                     value={style}
                     onChange={(e) => setStyle(e.target.value as 'apa' | 'ieee')}
                     className="h-9 px-2.5 rounded-xl text-xs font-mono font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 flex-1 sm:flex-initial min-w-0 max-w-full"
@@ -633,7 +648,7 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                             onClick={() => applyItemPreset(idx, 'uncited_ref')}
                             className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-orange-100/90 hover:bg-orange-200 text-orange-900 dark:bg-orange-950 dark:text-orange-300 transition-colors"
                           >
-                            Uncited Ref
+                            {lang === 'vi' ? 'Ref không trích (Uncited)' : 'Uncited Ref'}
                           </button>
                           <button
                             type="button"
@@ -641,7 +656,7 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                             onClick={() => applyItemPreset(idx, 'orphan_intext')}
                             className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-rose-100/90 hover:bg-rose-200 text-rose-900 dark:bg-rose-950 dark:text-rose-300 transition-colors"
                           >
-                            Orphan In-text
+                            {lang === 'vi' ? 'Trích dẫn mồ côi (Orphan)' : 'Orphan In-text'}
                           </button>
                         </div>
                       </div>
@@ -674,7 +689,7 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                         </div>
                         <div className="md:col-span-1">
                           <label className="block text-[10px] font-mono uppercase text-slate-500 mb-0.5">
-                            Year
+                            {lang === 'vi' ? 'Year (Năm)' : 'Year'}
                           </label>
                           <input
                             type="text"
@@ -686,7 +701,7 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                         </div>
                         <div className="md:col-span-3">
                           <label className="block text-[10px] font-mono uppercase text-slate-500 mb-0.5">
-                            DOI / Identifier
+                            {lang === 'vi' ? 'DOI / Mã định danh' : 'DOI / Identifier'}
                           </label>
                           <input
                             type="text"
@@ -892,16 +907,16 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                   ⚡ {instantResult.elapsed_seconds}s
                 </Badge>
                 <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold">
-                  ✓ Verified: {instantResult.summary.verified}
+                  ✓ {lang === 'vi' ? 'Hợp lệ' : 'Verified'}: {instantResult.summary.verified}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-semibold">
-                  ⚠ Metadata Error: {instantResult.summary.metadata_error}
+                  ⚠ {lang === 'vi' ? 'Sai lệch Metadata' : 'Metadata Error'}: {instantResult.summary.metadata_error}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 font-semibold">
-                  🚨 Hallucination: {instantResult.summary.suspected_hallucination}
+                  🚨 {lang === 'vi' ? 'Nghi bịa đặt' : 'Hallucination'}: {instantResult.summary.suspected_hallucination}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950 text-violet-700 dark:text-violet-300 font-semibold">
-                  🔗 Layer-1 In-text ↔ Ref Issues: {instantResult.summary.layer1_linking_issues}
+                  🔗 {lang === 'vi' ? 'Lỗi liên kết Layer-1 In-text ↔ Ref' : 'Layer-1 In-text ↔ Ref Issues'}: {instantResult.summary.layer1_linking_issues}
                 </span>
               </div>
 
@@ -920,12 +935,12 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                   {copiedBibtex ? (
                     <>
                       <Check className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>Copied BibTeX!</span>
+                      <span>{lang === 'vi' ? 'Đã sao chép BibTeX!' : 'Copied BibTeX!'}</span>
                     </>
                   ) : (
                     <>
                       <Copy className="h-3.5 w-3.5 text-indigo-600" />
-                      <span>Copy Standardized BibTeX</span>
+                      <span>{lang === 'vi' ? 'Sao chép BibTeX chuẩn hóa' : 'Copy Standardized BibTeX'}</span>
                     </>
                   )}
                 </button>
@@ -975,7 +990,7 @@ export function LiveCitationSandbox({ lang }: LiveCitationSandboxProps) {
                         </span>
                       </div>
                       <span className="font-mono text-[11px] text-slate-500">
-                        Rules: {(r.triggered_rules || []).join(', ') || 'R01'}
+                        {lang === 'vi' ? 'Luật' : 'Rules'}: {(r.triggered_rules || []).join(', ') || 'R01'}
                       </span>
                     </div>
                     <p className="font-mono text-[11px] text-slate-800 dark:text-slate-200 break-words [overflow-wrap:anywhere]">
