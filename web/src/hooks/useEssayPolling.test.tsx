@@ -12,7 +12,10 @@ vi.mock('@/api/client', () => ({
 }));
 
 import { useEssayPolling } from './useEssayPolling';
+import { useEssayReport } from './useEssayReport';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/queryClient';
+import React from 'react';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -162,5 +165,22 @@ describe('useEssayPolling', () => {
     });
     expect(mockGetEssay).toHaveBeenCalledTimes(2);
     expect(resultAfterInvalidate.current.report?.verdicts[0].label).toBe('verified');
+  });
+
+  it('useEssayReport stops polling immediately on 403/404 error', async () => {
+    mockGetEssay.mockRejectedValue(new Error('API 403: Access denied'));
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useEssayReport(999, { intervalMs: 1000 }), { wrapper });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(result.current.isError).toBe(true);
+    const callsAfterError = mockGetEssay.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(mockGetEssay.mock.calls.length).toBe(callsAfterError);
   });
 });

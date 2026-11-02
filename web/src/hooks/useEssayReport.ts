@@ -30,8 +30,9 @@ export function useEssayReport(
     },
     enabled: essayId !== null,
     staleTime: Infinity,
+    retry: false,
     refetchInterval: (query) => {
-      if (!pollUntilDone) return false;
+      if (!pollUntilDone || query.state.status === 'error') return false;
       const data = query.state.data;
       // Poll while no report yet
       return data ? false : intervalMs;

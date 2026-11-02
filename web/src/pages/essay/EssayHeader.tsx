@@ -295,7 +295,7 @@ export function EssayHeader({
           {shareInfo && (
             <div
               data-testid="shared-receipt-banner"
-              className="flex items-center gap-2 text-xs font-mono text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 rounded-lg px-2.5 py-1 mt-1"
+              className="flex flex-wrap items-center gap-2 text-xs font-mono text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 rounded-lg px-2.5 py-1 mt-1 max-w-full"
             >
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
               <span className="font-bold">{shareInfo.receipt_id}</span>
