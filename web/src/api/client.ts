@@ -1226,8 +1226,15 @@ export const api = {
     }),
   getClassAnalytics: (classId: number) =>
     request<ClassAnalytics>(`/teacher/classes/${classId}/analytics`),
-  listAvailableStudents: () =>
-    request<ClassStudent[]>('/teacher/students'),
+  listStudents: (q?: string, limit?: number) => {
+    const params = new URLSearchParams();
+    if (q && q.trim()) params.set('q', q.trim());
+    if (limit !== undefined) params.set('limit', String(limit));
+    const qs = params.toString();
+    return request<ClassStudent[]>(`/teacher/students${qs ? `?${qs}` : ''}`);
+  },
+  listAvailableStudents: (q?: string, limit?: number) =>
+    api.listStudents(q, limit),
   listClassStudents: (classId: number) =>
     request<ClassStudent[]>(`/teacher/classes/${classId}/students`),
   addStudentToClass: (classId: number, studentId: number) =>

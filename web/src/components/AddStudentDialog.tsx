@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Search } from 'lucide-react';
 import { api, type ClassStudent } from '@/api/client';
+import { useDebounce } from '@/hooks/useDebounce';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -17,7 +19,7 @@ export interface AddStudentDialogProps {
  * AddStudentDialog — search and add students to a class.
  *
  * Lists users with role='user' (students), filters out those already enrolled,
- * and supports live search by username/full_name.
+ * and supports debounced server-side search by username/email/full_name (Contract C1).
  */
 export function AddStudentDialog({
   open,
@@ -26,26 +28,35 @@ export function AddStudentDialog({
   onClose,
   onAdded,
 }: AddStudentDialogProps) {
+  const { t } = useTranslation();
   const [users, setUsers] = useState<ClassStudent[]>([]);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Load students list when dialog opens
+  useEffect(() => {
+    if (!open) {
+      setSearch('');
+    }
+  }, [open]);
+
+  // Load students list when dialog opens or debounced search changes
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setLoading(true);
     setError('');
+    const trimmed = debouncedSearch.trim();
     api
-      .listAvailableStudents()
+      .listStudents(trimmed.length >= 2 ? trimmed : undefined)
       .then((data) => {
         if (!cancelled) setUsers(data);
       })
       .catch((e) => {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Failed to load users');
+          setError(e instanceof Error ? e.message : t('teacher.loadStudentsFailed'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -53,7 +64,7 @@ export function AddStudentDialog({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, debouncedSearch, t]);
 
   // Escape to close
   useEffect(() => {
@@ -73,7 +84,8 @@ export function AddStudentDialog({
       !existingStudentIds.includes(u.id) &&
       (!q ||
         u.username.toLowerCase().includes(q) ||
-        (u.full_name ?? '').toLowerCase().includes(q))
+        (u.full_name ?? '').toLowerCase().includes(q) ||
+        (u.email ?? '').toLowerCase().includes(q))
   );
 
   const handleAdd = async (studentId: number) => {
@@ -84,7 +96,7 @@ export function AddStudentDialog({
       onAdded();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add student');
+      setError(err instanceof Error ? err.message : t('teacher.addStudentFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -107,28 +119,37 @@ export function AddStudentDialog({
             id="add-student-title"
             className="font-display text-lg font-bold text-slate-900 dark:text-white"
           >
-            Thêm sinh viên
+            {t('teacher.addStudentModalTitle')}
           </h2>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t('teacher.closeModal')}
             className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="h-5 w-5 text-slate-500" />
           </button>
         </div>
 
-        <div className="relative mb-3">
+        <div className="relative mb-2">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
           <Input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm theo username hoặc tên…"
-            aria-label="Search students"
+            placeholder={t('teacher.searchStudentsPlaceholder')}
+            aria-label={t('teacher.searchStudentsAria')}
             className="pl-10"
           />
         </div>
+
+        {search.trim().length < 2 && (
+          <p
+            data-testid="student-search-hint"
+            className="text-xs text-slate-500 dark:text-slate-400 mb-3"
+          >
+            {t('teacher.searchStudentsMinCharsHint')}
+          </p>
+        )}
 
         {error && (
           <Alert variant="destructive" className="mb-3">
@@ -142,11 +163,11 @@ export function AddStudentDialog({
         >
           {loading ? (
             <li className="text-sm text-slate-500 px-2 py-6 text-center">
-              Đang tải…
+              {t('teacher.loadingStudents')}
             </li>
           ) : candidates.length === 0 ? (
             <li className="text-sm text-slate-500 px-2 py-6 text-center">
-              Không có sinh viên phù hợp.
+              {t('teacher.noMatchingStudents')}
             </li>
           ) : (
             candidates.map((u) => (
@@ -169,7 +190,7 @@ export function AddStudentDialog({
                   onClick={() => handleAdd(u.id)}
                   disabled={submitting}
                 >
-                  Thêm
+                  {t('teacher.addStudentBtn')}
                 </Button>
               </li>
             ))

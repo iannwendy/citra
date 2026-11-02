@@ -82,7 +82,7 @@ export function MyClassesPage() {
 
           <Button
             onClick={() => setCreateOpen(true)}
-            aria-label="Tạo lớp"
+            aria-label={t('teacher.createClass')}
             className="gap-2 rounded-xl shadow-xs shrink-0"
           >
             <Plus className="h-4 w-4" />

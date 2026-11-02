@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { api, type Class, type ClassCreate } from '@/api/client';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,7 @@ export function CreateClassDialog({
   onClose,
   onCreated,
 }: CreateClassDialogProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -63,7 +65,7 @@ export function CreateClassDialog({
       onCreated(cls);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create class');
+      setError(err instanceof Error ? err.message : t('teacher.createClassFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -86,11 +88,11 @@ export function CreateClassDialog({
             id="create-class-title"
             className="font-display text-lg font-bold text-slate-900 dark:text-white"
           >
-            Tạo lớp mới
+            {t('teacher.createClassModalTitle')}
           </h2>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t('teacher.closeModal')}
             className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="h-5 w-5 text-slate-500" />
@@ -100,7 +102,7 @@ export function CreateClassDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="class-name">
-              Tên lớp <span className="text-rose-500">*</span>
+              {t('teacher.classNameLabel')} <span className="text-rose-500">*</span>
             </Label>
             <Input
               id="class-name"
@@ -114,7 +116,7 @@ export function CreateClassDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="class-desc">Mô tả (optional)</Label>
+            <Label htmlFor="class-desc">{t('teacher.classDescriptionLabel')}</Label>
             <Textarea
               id="class-desc"
               value={description}
@@ -132,13 +134,13 @@ export function CreateClassDialog({
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={onClose}>
-              Hủy
+              {t('teacher.cancelBtn')}
             </Button>
             <Button
               type="submit"
               disabled={submitting || !name.trim()}
             >
-              {submitting ? 'Đang tạo…' : 'Tạo'}
+              {submitting ? t('teacher.creatingBtn') : t('teacher.createBtn')}
             </Button>
           </div>
         </form>
