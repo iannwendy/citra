@@ -212,6 +212,16 @@ describe('120fps Solva Editorial Notification Engine (ToastContext)', () => {
     expect(screen.getByText('Subscription Reactivated')).toBeTruthy();
     expect(screen.getByText('Orphan Citation Detected')).toBeTruthy();
 
+    // Unread notifications remain unread when opening panel until marked as read
+    expect(screen.getAllByTestId('notification-unread-dot')).toHaveLength(2);
+    const markAllReadBtn = screen.getByTestId('notification-mark-all-read-btn');
+    expect(markAllReadBtn.textContent).toMatch(/Mark all read \(2\)/i);
+
+    // Clicking Mark all read marks all notifications as read and updates button state
+    fireEvent.click(markAllReadBtn);
+    expect(screen.queryAllByTestId('notification-unread-dot')).toHaveLength(0);
+    expect(markAllReadBtn.textContent).toMatch(/All read/i);
+
     // Toggle LIVE -> MUTED
     const muteBtn = screen.getByTestId('notification-mute-toggle-btn');
     expect(muteBtn.textContent).toMatch(/LIVE/i);
@@ -222,6 +232,7 @@ describe('120fps Solva Editorial Notification Engine (ToastContext)', () => {
     fireEvent.click(screen.getByTestId('trigger-info'));
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('Engine Ready')).toBeTruthy();
+    expect(screen.getAllByTestId('notification-unread-dot')).toHaveLength(1);
 
     // Clear history
     fireEvent.click(screen.getByTestId('notification-clear-history-btn'));

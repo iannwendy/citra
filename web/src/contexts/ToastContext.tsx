@@ -81,6 +81,7 @@ export interface ToastContextValue {
   updateToast: (id: string, updates: Partial<Omit<Toast, 'id' | 'createdAt'>>) => void;
   removeToast: (id: string) => void;
   dismissAll: () => void;
+  markRead: (id: string) => void;
   markAllRead: () => void;
   clearHistory: () => void;
   // Convenience methods
@@ -426,8 +427,20 @@ export function ToastProvider({
     exitTimersRef.current.set('__all__', tid);
   }, []);
 
+  const markRead = useCallback((id: string): void => {
+    setHistory((prev) => {
+      const next = prev.map((item) => (item.id === id ? { ...item, read: true } : item));
+      writeStoredHistory(next);
+      return next;
+    });
+  }, []);
+
   const markAllRead = useCallback((): void => {
-    setHistory((prev) => prev.map((item) => ({ ...item, read: true })));
+    setHistory((prev) => {
+      const next = prev.map((item) => ({ ...item, read: true }));
+      writeStoredHistory(next);
+      return next;
+    });
   }, []);
 
   const clearHistory = useCallback((): void => {
@@ -553,6 +566,7 @@ export function ToastProvider({
     updateToast,
     removeToast,
     dismissAll,
+    markRead,
     markAllRead,
     clearHistory,
     success,
@@ -1054,14 +1068,14 @@ function ToastItem({
         <ToastStatusGlyph type={toast.type} />
 
         {/* Center Editorial Text & Action */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 overflow-hidden">
           {/* Top Monospace Telemetry Strip */}
-          <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="flex items-center justify-between gap-2 mb-1 min-w-0">
             <span
-              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-mono font-bold uppercase tracking-wider leading-none ${meta.pillClass}`}
+              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-mono font-bold uppercase tracking-wider leading-none max-w-full truncate ${meta.pillClass}`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${meta.dotClass}`} />
-              <span>{toast.category || meta.tag}</span>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${meta.dotClass}`} />
+              <span className="truncate">{toast.category || meta.tag}</span>
             </span>
 
             <span className="text-[10px] font-mono text-[#8C887E] dark:text-[#7A756B] uppercase tracking-wider shrink-0">
@@ -1070,13 +1084,13 @@ function ToastItem({
           </div>
 
           {toast.title && (
-            <p className="font-solva-sans font-semibold text-[13.5px] sm:text-[14px] text-[#1C1A15] dark:text-[#FBFAF6] tracking-[-0.012em] leading-[1.35] break-words">
+            <p className="font-solva-sans font-semibold text-[13.5px] sm:text-[14px] text-[#1C1A15] dark:text-[#FBFAF6] tracking-[-0.012em] leading-[1.35] break-words [overflow-wrap:anywhere] [word-break:break-word]">
               {toast.title}
             </p>
           )}
 
           {toast.message && (
-            <p className="font-solva-sans text-[12.5px] sm:text-[13px] text-[#56524A] dark:text-[#A8A296] leading-[1.45] mt-0.5 break-words">
+            <p className="font-solva-sans text-[12.5px] sm:text-[13px] text-[#56524A] dark:text-[#A8A296] leading-[1.45] mt-0.5 break-words [overflow-wrap:anywhere] [word-break:break-word]">
               {toast.message}
             </p>
           )}
@@ -1149,19 +1163,31 @@ export function NotificationCenterButton({
     unreadCount,
     notificationsEnabled,
     setNotificationsEnabled,
+    markRead,
     markAllRead,
+    dismissAll,
     clearHistory,
     success,
   } = useToast();
   const [open, setOpen] = useState(false);
+  const [justMarkedRead, setJustMarkedRead] = useState(false);
 
   const handleOpen = () => {
-    const next = !open;
-    setOpen(next);
-    if (next && unreadCount > 0) {
-      markAllRead();
-    }
+    setOpen((prev) => !prev);
   };
+
+  const handleMarkAllRead = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    markAllRead();
+    dismissAll();
+    setJustMarkedRead(true);
+  };
+
+  useEffect(() => {
+    if (!justMarkedRead) return;
+    const tid = setTimeout(() => setJustMarkedRead(false), 1800);
+    return () => clearTimeout(tid);
+  }, [justMarkedRead]);
 
   useEffect(() => {
     if (!open) return;
@@ -1223,7 +1249,7 @@ export function NotificationCenterButton({
         typeof document !== 'undefined' &&
         createPortal(
           <div
-            className="fixed inset-0 z-[95] flex items-start justify-end p-3 sm:p-5 bg-black/25 dark:bg-black/50 backdrop-blur-[2px] animate-fade-in"
+            className="fixed inset-0 z-[110] flex items-start justify-end p-3 sm:p-5 bg-black/25 dark:bg-black/50 backdrop-blur-[2px] animate-fade-in"
             onClick={() => setOpen(false)}
           >
             <div
@@ -1236,20 +1262,20 @@ export function NotificationCenterButton({
             >
               {/* macOS Editorial Header Chrome */}
               <div className="flex items-center justify-between gap-2 px-4 py-3 bg-[#F4F2EC] dark:bg-[#141310] border-b border-[#E7E3D9] dark:border-[#332F26]">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
                   </div>
-                  <span className="h-3.5 w-px bg-[#E7E3D9] dark:bg-[#332F26] mx-0.5" />
-                  <Terminal className="w-3.5 h-3.5 text-[#1C1A15] dark:text-[#FBFAF6]" />
-                  <span className="font-mono text-xs font-semibold text-[#1C1A15] dark:text-[#FBFAF6]">
+                  <span className="h-3.5 w-px bg-[#E7E3D9] dark:bg-[#332F26] mx-0.5 shrink-0" />
+                  <Terminal className="w-3.5 h-3.5 text-[#1C1A15] dark:text-[#FBFAF6] shrink-0" />
+                  <span className="font-mono text-xs font-semibold text-[#1C1A15] dark:text-[#FBFAF6] truncate">
                     {lang === 'vi' ? 'Trung tâm Thông báo' : 'Notification Center'}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
                     data-testid="notification-mute-toggle-btn"
@@ -1294,7 +1320,7 @@ export function NotificationCenterButton({
               {/* Notification List Body */}
               <div
                 role="list"
-                className="max-h-[340px] overflow-y-auto divide-y divide-[#E7E3D9]/70 dark:divide-[#332F26]/70"
+                className="max-h-[340px] overflow-y-auto overflow-x-hidden divide-y divide-[#E7E3D9]/70 dark:divide-[#332F26]/70"
               >
                 {history.length === 0 ? (
                   <div className="p-7 text-center space-y-2.5">
@@ -1317,34 +1343,52 @@ export function NotificationCenterButton({
                 ) : (
                   history.map((item) => {
                     const itemMeta = META_BADGE_CONFIG[item.type];
+                    const isUnread = !item.read;
                     return (
                       <div
                         key={item.id}
                         role="listitem"
-                        className="p-3.5 hover:bg-[#F4F2EC]/70 dark:hover:bg-[#29261F]/50 transition-colors flex items-start gap-3"
+                        data-read={item.read ? 'true' : 'false'}
+                        onClick={() => {
+                          if (isUnread) markRead(item.id);
+                        }}
+                        className={`w-full max-w-full overflow-hidden p-3.5 transition-colors flex items-start gap-3 ${
+                          isUnread
+                            ? 'bg-[#F4F2EC]/65 dark:bg-[#29261F]/55 hover:bg-[#F4F2EC] dark:hover:bg-[#29261F]/80 cursor-pointer'
+                            : 'bg-transparent opacity-75 hover:opacity-100 hover:bg-[#F4F2EC]/40 dark:hover:bg-[#29261F]/30'
+                        }`}
                       >
                         <ToastStatusGlyph type={item.type} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2 mb-0.5">
+                        <div className="flex-1 min-w-0 overflow-hidden">
+                          <div className="flex items-center justify-between gap-2 mb-0.5 min-w-0">
                             <span
-                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-mono font-bold uppercase ${itemMeta.pillClass}`}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-mono font-bold uppercase max-w-full truncate ${itemMeta.pillClass}`}
                             >
                               <span
-                                className={`w-1.5 h-1.5 rounded-full ${itemMeta.dotClass}`}
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${itemMeta.dotClass}`}
                               />
-                              <span>{itemMeta.tag}</span>
+                              <span className="truncate">{item.category || itemMeta.tag}</span>
                             </span>
-                            <span className="text-[10px] font-mono text-[#8C887E]">
-                              {formatTimeAgo(item.createdAt)}
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {isUnread && (
+                                <span
+                                  data-testid="notification-unread-dot"
+                                  aria-label={lang === 'vi' ? 'Chưa đọc' : 'Unread'}
+                                  className="w-2 h-2 rounded-full bg-indigo-600 dark:bg-emerald-400 shrink-0 shadow-[0_0_6px_rgba(79,70,229,0.5)]"
+                                />
+                              )}
+                              <span className="text-[10px] font-mono text-[#8C887E]">
+                                {formatTimeAgo(item.createdAt)}
+                              </span>
+                            </div>
                           </div>
                           {item.title && (
-                            <p className="font-solva-sans font-semibold text-xs text-[#1C1A15] dark:text-[#FBFAF6] leading-snug">
+                            <p className="font-solva-sans font-semibold text-xs text-[#1C1A15] dark:text-[#FBFAF6] leading-snug break-words [overflow-wrap:anywhere] [word-break:break-word]">
                               {item.title}
                             </p>
                           )}
                           {item.message && (
-                            <p className="font-solva-sans text-xs text-[#56524A] dark:text-[#A8A296] leading-relaxed mt-0.5">
+                            <p className="font-solva-sans text-xs text-[#56524A] dark:text-[#A8A296] leading-relaxed mt-0.5 break-words [overflow-wrap:anywhere] [word-break:break-word]">
                               {item.message}
                             </p>
                           )}
@@ -1357,22 +1401,41 @@ export function NotificationCenterButton({
 
               {/* Footer Actions */}
               {history.length > 0 && (
-                <div className="px-4 py-2.5 bg-[#F4F2EC]/90 dark:bg-[#141310]/90 border-t border-[#E7E3D9] dark:border-[#332F26] flex items-center justify-between gap-2 text-xs font-mono">
+                <div className="px-3 py-2 bg-[#F4F2EC]/90 dark:bg-[#141310]/90 border-t border-[#E7E3D9] dark:border-[#332F26] flex items-center justify-between gap-2 text-xs font-mono">
                   <button
                     type="button"
-                    onClick={markAllRead}
-                    className="inline-flex items-center gap-1.5 text-[#56524A] dark:text-[#A8A296] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] transition-colors cursor-pointer"
+                    data-testid="notification-mark-all-read-btn"
+                    onClick={handleMarkAllRead}
+                    className={`inline-flex items-center gap-1.5 min-h-[36px] px-2.5 py-1.5 rounded-lg transition-all duration-150 touch-manipulation active:scale-95 cursor-pointer ${
+                      unreadCount > 0
+                        ? 'text-[#1C1A15] dark:text-[#FBFAF6] bg-[#E7E3D9]/70 dark:bg-[#29261F] hover:bg-[#E7E3D9] dark:hover:bg-[#332F26] font-semibold shadow-2xs'
+                        : justMarkedRead
+                          ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 border border-emerald-500/25 font-semibold'
+                          : 'text-[#56524A] dark:text-[#A8A296] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] hover:bg-[#E7E3D9]/50 dark:hover:bg-[#29261F]/60'
+                    }`}
                   >
-                    <CheckCheck className="w-3.5 h-3.5" />
-                    <span>{lang === 'vi' ? 'Đánh dấu đã đọc' : 'Mark all read'}</span>
+                    <CheckCheck
+                      className={`w-3.5 h-3.5 shrink-0 ${
+                        unreadCount === 0 ? 'text-emerald-600 dark:text-emerald-400' : ''
+                      }`}
+                    />
+                    <span>
+                      {unreadCount === 0
+                        ? lang === 'vi'
+                          ? 'Đã đọc tất cả'
+                          : 'All read'
+                        : lang === 'vi'
+                          ? `Đánh dấu đã đọc (${unreadCount})`
+                          : `Mark all read (${unreadCount})`}
+                    </span>
                   </button>
                   <button
                     type="button"
                     data-testid="notification-clear-history-btn"
                     onClick={clearHistory}
-                    className="inline-flex items-center gap-1.5 text-red-600 dark:text-red-400 hover:underline cursor-pointer"
+                    className="inline-flex items-center gap-1.5 min-h-[36px] px-2.5 py-1.5 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-500/10 active:scale-95 transition-all duration-150 touch-manipulation cursor-pointer"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-3.5 h-3.5 shrink-0" />
                     <span>{lang === 'vi' ? 'Xóa lịch sử' : 'Clear history'}</span>
                   </button>
                 </div>
