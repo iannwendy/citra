@@ -27,8 +27,25 @@ from integrity_checker.models.citation import Citation
 
 logger = logging.getLogger(__name__)
 
-# arXiv ID pattern
-_ARXIV_RE = re.compile(r"arXiv:?((\d{4}\.\d{4,5}|[a-z-]+/\d{7}))", re.IGNORECASE)
+# arXiv ID pattern — accepts "arXiv:2103.12345", "arXiv 2103.12345" and the
+# DataCite DOI form "10.48550/arXiv.2103.12345".
+_ARXIV_RE = re.compile(r"arXiv[:.\s]?((\d{4}\.\d{4,5}|[a-z-]+/\d{7}))", re.IGNORECASE)
+# Version suffix on arXiv IDs ("2103.12345v2") is ignored for grouping.
+_DOI_PREFIX_RE = re.compile(r"^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)", re.IGNORECASE)
+# Year with disambiguation suffix: "2020a", "(2020b)".
+_YEAR_SUFFIX_RE = re.compile(r"\b(?:19|20)\d{2}([a-z])\b")
+# Edition markers: "2nd ed.", "3rd edition", "tái bản lần thứ 2", "xuất bản lần 3".
+_EDITION_RE = re.compile(
+    r"\b(\d{1,2})\s*(?:st|nd|rd|th)?\s*(?:ed\.|edn\.?|edition)"
+    r"|(?:tái\s+bản|xuất\s+bản)\s+(?:lần\s+)?(?:thứ\s+)?(\d{1,2})",
+    re.IGNORECASE,
+)
+# Volume / part markers: "Vol. 2", "Volume II", "Part 1", "Tập 2", "Phần II".
+_VOLUME_RE = re.compile(
+    r"\b(?:vol(?:ume)?\.?|part|pt\.|tập|phần)\s*([0-9]{1,3}|[IVXLC]{1,6})\b",
+    re.IGNORECASE,
+)
+_WORD_RE = re.compile(r"[\wÀ-ỹ]+", re.UNICODE)
 
 
 @dataclass
@@ -90,7 +107,7 @@ class DuplicateDetector:
             # 1. DOI exact groups
             doi_groups: dict[str, list[tuple[int, Citation]]] = {}
             for i, cit in enumerate(bib_citations):
-                doi = (cit.doi or "").strip().lower()
+                doi = self._normalize_doi(cit.doi)
                 if doi:
                     doi_groups.setdefault(doi, []).append((i, cit))
 
@@ -154,6 +171,11 @@ class DuplicateDetector:
                 for idx_b, cit_b in remaining:
                     if idx_b <= idx_a or idx_b in assigned:
                         continue
+                    # Explicitly distinct works (2020a vs 2020b, 2nd vs 3rd
+                    # edition, Vol. 1 vs Vol. 2, different DOIs) are never
+                    # merged by the fuzzy fallback.
+                    if self._explicitly_distinct(cit_a, cit_b):
+                        continue
                     sim = self._similarity(cit_a, cit_b)
                     if sim >= self.threshold:
                         group_members.append((idx_b, cit_b))
@@ -199,8 +221,8 @@ class DuplicateDetector:
         total += 0.4
 
         # Title similarity (weight: 0.4)
-        title_a = a.title_normalized or ""
-        title_b = b.title_normalized or ""
+        title_a = self._title_key(a)
+        title_b = self._title_key(b)
         if title_a and title_b:
             title_sim = self._jaccard_words(title_a, title_b)
             score += 0.4 * title_sim
@@ -234,6 +256,65 @@ class DuplicateDetector:
         if m:
             return m.group(1).strip()
         return None
+
+    # -- distinctness guards (avoid false duplicates) --
+
+    @staticmethod
+    def _normalize_doi(doi: str | None) -> str:
+        """Lowercase DOI without resolver prefix / trailing punctuation."""
+        if not doi:
+            return ""
+        d = _DOI_PREFIX_RE.sub("", str(doi).strip())
+        return d.rstrip(".,;)").strip().lower()
+
+    @staticmethod
+    def _title_key(cit: Citation) -> str:
+        """Normalized title words (falls back to ``title`` when not normalized)."""
+        raw = cit.title_normalized or cit.title or ""
+        return " ".join(w.lower() for w in _WORD_RE.findall(raw))
+
+    @staticmethod
+    def _year_suffix(cit: Citation) -> str | None:
+        suffix = getattr(cit, "year_suffix", None)
+        if suffix:
+            return str(suffix).strip().lower() or None
+        for text in (cit.year or "", cit.raw_text or ""):
+            m = _YEAR_SUFFIX_RE.search(str(text))
+            if m:
+                return m.group(1).lower()
+        return None
+
+    @staticmethod
+    def _edition(cit: Citation) -> str | None:
+        m = _EDITION_RE.search(cit.raw_text or "")
+        if not m:
+            return None
+        return (m.group(1) or m.group(2) or "").strip() or None
+
+    @staticmethod
+    def _volume(cit: Citation) -> str | None:
+        m = _VOLUME_RE.search(cit.raw_text or "")
+        return m.group(1).upper() if m else None
+
+    def _explicitly_distinct(self, a: Citation, b: Citation) -> bool:
+        """True when metadata proves the two entries are different works."""
+        doi_a, doi_b = self._normalize_doi(a.doi), self._normalize_doi(b.doi)
+        if doi_a and doi_b and doi_a != doi_b:
+            return True
+        arx_a = self._extract_arxiv_id(f"{a.raw_text or ''} {a.doi or ''}")
+        arx_b = self._extract_arxiv_id(f"{b.raw_text or ''} {b.doi or ''}")
+        if arx_a and arx_b and arx_a != arx_b:
+            return True
+        suf_a, suf_b = self._year_suffix(a), self._year_suffix(b)
+        if suf_a != suf_b and (suf_a or suf_b):
+            # "2020a" vs "2020b" (or "2020a" vs plain "2020"): the author
+            # explicitly disambiguated two works of the same year.
+            return True
+        ed_a, ed_b = self._edition(a), self._edition(b)
+        if ed_a and ed_b and ed_a != ed_b:
+            return True
+        vol_a, vol_b = self._volume(a), self._volume(b)
+        return bool(vol_a and vol_b and vol_a != vol_b)
 
     def _jaccard_words(self, a: str, b: str) -> float:
         """Jaccard similarity trên word tokens."""

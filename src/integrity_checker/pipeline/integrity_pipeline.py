@@ -750,6 +750,25 @@ class IntegrityPipeline:
                 f"{len(unique_list)} verifiable (references only)"
             )
 
+        # Duplicate bibliography entries (same DOI/arXiv/title key) collapse
+        # into one retrieval above; they still need their own verdict so the
+        # report can surface DUPLICATE_REFERENCE. Reuse the canonical source.
+        verdict_pairs: list[tuple[Citation, SourceResult]] = list(
+            zip(unique_list, unique_sources, strict=True)
+        )
+        duplicate_ref_ids = set(getattr(linking_result, "duplicate_reference_ids", None) or [])
+        if duplicate_ref_ids:
+            source_by_key = dict(zip(verifiable_keys, unique_sources, strict=True))
+            in_verdicts = {id(c) for c in unique_list}
+            for ref in ref_citations:
+                if id(ref) in in_verdicts or ref.reference_id not in duplicate_ref_ids:
+                    continue
+                shared_source = source_by_key.get(citation_key(ref))
+                if shared_source is None:
+                    shared_source = await _bounded_retrieve(ref)
+                verdict_pairs.append((ref, shared_source))
+                in_verdicts.add(id(ref))
+
         # Surface per-data-source outcomes to the UI. Sources_queried is built
         # from the union of all retrieved SourceResults — a source is "ok" if
         # at least one citation got a hit, "failed" if every call failed,
@@ -830,7 +849,7 @@ class IntegrityPipeline:
         verdicts: list[CitationVerdict] = []
         # FIX v1.7: Only iterate over verifiable (reference) citations for verdicts.
         # In-text citations are verified via linking only (mapping_status attached below).
-        for citation, source in zip(unique_list, unique_sources, strict=False):
+        for citation, source in verdict_pairs:
             # NEW v1.2 §3.2.2 (task #33) — compute mapping_status TRƯỚC rules
             # để SymbolicRules có input cho AMBIGUOUS_MAPPING rule.
             if citation.citation_type.value == "reference_list":
@@ -845,11 +864,17 @@ class IntegrityPipeline:
                     and lnk.reference_id == citation.reference_id
                     and getattr(lnk.status, "value", lnk.status) == "matched"
                 ]
-                if ref_links:
+                if citation.reference_id and citation.reference_id in duplicate_ref_ids:
+                    # Non-canonical member of a duplicate group (DuplicateDetector).
+                    mapping_status = CitationMappingStatus.DUPLICATE_REFERENCE
+                    mapping_confidence = float(citation.mapping_confidence or 1.0)
+                    citation_link = ref_links[0] if ref_links else None
+                    citation_links_verdict: list = list(ref_links)
+                elif ref_links:
                     mapping_status = CitationMappingStatus.MATCHED
                     mapping_confidence = max(lnk.confidence for lnk in ref_links)
                     citation_link = ref_links[0]
-                    citation_links_verdict: list = list(ref_links)
+                    citation_links_verdict = list(ref_links)
                 elif (
                     not in_text_citations
                     and source.best_candidate()

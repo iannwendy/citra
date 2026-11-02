@@ -246,7 +246,9 @@ class CISCalculator:
         # Strategy A: Use ALL links from LinkingResult (preferred)
         # This includes BOTH in-text AND reference links (uncited/duplicate), giving true consistency score.
         if linking_result is not None and (
-            linking_result.links or getattr(linking_result, "unmatched_reference_ids", None)
+            linking_result.links
+            or getattr(linking_result, "unmatched_reference_ids", None)
+            or getattr(linking_result, "duplicate_reference_ids", None)
         ):
             links = linking_result.links or []
             unmatched_refs = getattr(linking_result, "unmatched_reference_ids", None) or []
@@ -283,6 +285,14 @@ class CISCalculator:
                 has_any_verdict_mapping = any(v.mapping_status is not None for v in verdicts)
                 if not has_any_verdict_mapping:
                     uncited_count = len(unmatched_refs)
+
+            # Duplicate entries flagged by the linker's DuplicateDetector: fall back
+            # to the linking result when verdicts carry no mapping information.
+            linker_dups = getattr(linking_result, "duplicate_reference_ids", None) or []
+            if verdict_dup == 0 and linker_dups and (
+                not verdicts or not any(v.mapping_status is not None for v in verdicts)
+            ):
+                verdict_dup = len(linker_dups)
 
             total = len(links) + uncited_count + verdict_dup
             if total > 0:

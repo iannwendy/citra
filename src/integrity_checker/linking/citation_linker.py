@@ -29,6 +29,7 @@ import logging
 import re
 import unicodedata
 
+from integrity_checker.linking.duplicate_detector import DuplicateDetector
 from integrity_checker.linking.statuses import (
     CitationMappingStatus,
     LinkingResult,
@@ -99,6 +100,8 @@ class CitationLinker:
         numeric_confidence: float = 0.90,
         doi_confidence: float = 0.95,
         fuzzy_confidence: float = 0.65,
+        duplicate_detector: DuplicateDetector | None = None,
+        detect_duplicates: bool = True,
     ) -> None:
         """
         Args:
@@ -107,12 +110,37 @@ class CitationLinker:
             numeric_confidence: confidence khi match by numeric index.
             doi_confidence: confidence khi match by DOI.
             fuzzy_confidence: confidence khi fuzzy fallback.
+            duplicate_detector: detector dùng để gắn DUPLICATE_REFERENCE cho
+                bibliography entries trùng lặp. ``None`` → build từ
+                ``settings.linking.duplicate_detection``.
+            detect_duplicates: tắt hẳn duplicate detection khi False.
         """
         self.fuzzy_threshold = fuzzy_threshold
         self.author_year_confidence = author_year_confidence
         self.numeric_confidence = numeric_confidence
         self.doi_confidence = doi_confidence
         self.fuzzy_confidence = fuzzy_confidence
+        if not detect_duplicates:
+            self.duplicate_detector: DuplicateDetector | None = None
+        elif duplicate_detector is not None:
+            self.duplicate_detector = duplicate_detector
+        else:
+            self.duplicate_detector = self._build_default_duplicate_detector()
+
+    @staticmethod
+    def _build_default_duplicate_detector() -> DuplicateDetector:
+        """DuplicateDetector configured from ``linking.duplicate_detection``."""
+        try:
+            from integrity_checker.config import get_settings
+
+            cfg = get_settings().linking.duplicate_detection
+            return DuplicateDetector(
+                exact_identifier_match=cfg.exact_identifier_match,
+                title_year_author_similarity=cfg.title_year_author_similarity,
+            )
+        except Exception as exc:  # pragma: no cover — settings always load in practice
+            logger.debug("DuplicateDetector settings unavailable (%s); using defaults", exc)
+            return DuplicateDetector()
 
     def link(
         self,
@@ -259,7 +287,70 @@ class CitationLinker:
                 bib.citation_link = None
                 bib.citation_links = []
 
+        # Duplicate bibliography entries → DUPLICATE_REFERENCE (v1.2 §3.5).
+        self._apply_duplicate_detection(bib_citations, result)
+
         return result
+
+    def _apply_duplicate_detection(
+        self, bib_citations: list[Citation], result: LinkingResult
+    ) -> None:
+        """Flag every non-canonical member of a duplicate group.
+
+        The canonical entry of a group is the first member that is cited in the
+        text (MATCHED); if none is cited, the first member. Every other member
+        gets ``DUPLICATE_REFERENCE`` — this replaces UNCITED_REFERENCE for that
+        entry (the redundancy is the real issue, so it is penalised once).
+        In-text links pointing at a duplicate entry stay MATCHED.
+        """
+        if self.duplicate_detector is None or len(bib_citations) < 2:
+            return
+        try:
+            groups = self.duplicate_detector.detect(bib_citations)
+        except Exception as exc:  # never break linking because of the detector
+            logger.warning("Duplicate detection failed: %s", exc)
+            return
+        if not groups:
+            return
+
+        def _ref_id(bib: Citation) -> str:
+            return bib.reference_id or f"ref-{self._find_bib_index(bib, bib_citations):04d}"
+
+        unmatched = set(result.unmatched_reference_ids)
+        for group in groups:
+            members = list(group.citations)
+            canonical = next(
+                (
+                    m for m in members
+                    if m.mapping_status == CitationMappingStatus.MATCHED.value
+                ),
+                members[0],
+            )
+            canonical_id = _ref_id(canonical)
+            member_ids = [_ref_id(m) for m in members]
+            for member, member_id in zip(members, member_ids, strict=True):
+                if member is canonical:
+                    continue
+                member.mapping_status = CitationMappingStatus.DUPLICATE_REFERENCE.value
+                member.mapping_confidence = float(group.score)
+                member.duplicate_of = canonical_id  # type: ignore[attr-defined]
+                if member_id in unmatched:
+                    unmatched.discard(member_id)
+                if member_id not in result.duplicate_reference_ids:
+                    result.duplicate_reference_ids.append(member_id)
+                status = CitationMappingStatus.DUPLICATE_REFERENCE
+                result.status_counts[status] = result.status_counts.get(status, 0) + 1
+            result.duplicate_groups.append(
+                {
+                    "reference_ids": member_ids,
+                    "canonical_reference_id": canonical_id,
+                    "reason": group.reason,
+                    "score": round(float(group.score), 4),
+                }
+            )
+        result.unmatched_reference_ids = [
+            rid for rid in result.unmatched_reference_ids if rid in unmatched
+        ]
 
     # -- internal helpers --
 

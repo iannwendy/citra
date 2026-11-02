@@ -236,6 +236,10 @@ class LinkingResult:
         total_citations: total in-text occurrences.
         total_references: total reference entries.
         matched_count: number of MATCHED links.
+        duplicate_reference_ids: reference IDs flagged DUPLICATE_REFERENCE
+            (every non-canonical member of a duplicate group).
+        duplicate_groups: list of dicts describing each duplicate group
+            (``reference_ids``, ``canonical_reference_id``, ``reason``, ``score``).
     """
 
     links: list = field(default_factory=list)
@@ -245,6 +249,8 @@ class LinkingResult:
     total_citations: int = 0
     total_references: int = 0
     matched_count: int = 0
+    duplicate_reference_ids: list = field(default_factory=list)
+    duplicate_groups: list = field(default_factory=list)
 
     def add_link(self, link: CitationLink) -> None:
         """Thêm 1 link và update counters."""
@@ -292,4 +298,6 @@ class LinkingResult:
             "total_references": self.total_references,
             "matched_count": self.matched_count,
             "match_rate": self.match_rate,
+            "duplicate_reference_ids": list(self.duplicate_reference_ids),
+            "duplicate_groups": list(self.duplicate_groups),
         }
