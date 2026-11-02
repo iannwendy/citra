@@ -1,12 +1,18 @@
 import React from 'react';
 
-export type DocumentFormat = 'pdf' | 'docx';
+export type DocumentFormat = 'pdf' | 'docx' | 'bib' | 'ris';
 
 export function getDocumentFormat(filename?: string | null): DocumentFormat {
   if (!filename) return 'pdf';
   const lower = filename.trim().toLowerCase();
   if (lower.endsWith('.docx') || lower.endsWith('.doc')) {
     return 'docx';
+  }
+  if (lower.endsWith('.bib') || lower.endsWith('.bibtex')) {
+    return 'bib';
+  }
+  if (lower.endsWith('.ris')) {
+    return 'ris';
   }
   return 'pdf';
 }
@@ -36,8 +42,32 @@ export const FileFormatIcon: React.FC<FileFormatIconProps> = ({
 }) => {
   const resolvedFormat: DocumentFormat = format ?? getDocumentFormat(filename);
   const isDocx = resolvedFormat === 'docx';
+  const isBib = resolvedFormat === 'bib';
+  const isRis = resolvedFormat === 'ris';
 
   if (size === 'xs') {
+    if (isBib) {
+      return (
+        <span
+          data-testid="file-format-icon-bib"
+          title="BibTeX Bibliography (.BIB)"
+          className={`inline-flex items-center justify-center w-5 h-5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700/70 text-emerald-700 dark:text-emerald-400 text-[8px] font-mono font-extrabold shrink-0 select-none ${className}`}
+        >
+          BIB
+        </span>
+      );
+    }
+    if (isRis) {
+      return (
+        <span
+          data-testid="file-format-icon-ris"
+          title="RIS Bibliography (.RIS)"
+          className={`inline-flex items-center justify-center w-5 h-5 rounded-md bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/70 text-amber-700 dark:text-amber-400 text-[8px] font-mono font-extrabold shrink-0 select-none ${className}`}
+        >
+          RIS
+        </span>
+      );
+    }
     return isDocx ? (
       <span
         data-testid="file-format-icon-docx"
@@ -128,6 +158,124 @@ export const FileFormatIcon: React.FC<FileFormatIconProps> = ({
       : size === 'lg'
         ? 'w-7 h-7 sm:w-7 sm:h-7'
         : 'w-5 h-5 sm:w-6 sm:h-6';
+
+  if (isBib) {
+    return (
+      <div
+        data-testid="file-format-icon-bib"
+        title="BibTeX Bibliography (.BIB)"
+        aria-label="BibTeX Bibliography"
+        className={`${containerSizeClass} bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-700/70 text-emerald-700 dark:text-emerald-400 group-hover:bg-emerald-600 group-hover:border-emerald-600 group-hover:text-white flex items-center justify-center shrink-0 transition-all duration-200 shadow-2xs select-none ${className}`}
+      >
+        <svg
+          viewBox="0 0 32 32"
+          className={svgSizeClass}
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <path
+            d="M8 3.5h11.2L25.5 9.8V26a2.5 2.5 0 0 1-2.5 2.5H8A2.5 2.5 0 0 1 5.5 26V6A2.5 2.5 0 0 1 8 3.5Z"
+            fill="currentColor"
+            fillOpacity="0.12"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M19 3.5V10h6.5"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <text
+            x="15.5"
+            y="16.5"
+            textAnchor="middle"
+            fill="currentColor"
+            fontSize="7.2"
+            fontWeight="800"
+            fontFamily="JetBrains Mono, Inter, system-ui, sans-serif"
+          >
+            @{"{}"}
+          </text>
+          <rect x="6.5" y="20.4" width="18" height="5.8" rx="1.6" fill="#059669" />
+          <text
+            x="15.5"
+            y="24.5"
+            textAnchor="middle"
+            fill="#FFFFFF"
+            fontSize="4.7"
+            fontWeight="800"
+            fontFamily="JetBrains Mono, Inter, system-ui, sans-serif"
+            letterSpacing="0.06em"
+          >
+            BIB
+          </text>
+        </svg>
+      </div>
+    );
+  }
+
+  if (isRis) {
+    return (
+      <div
+        data-testid="file-format-icon-ris"
+        title="Research Information Systems (.RIS)"
+        aria-label="RIS Bibliography"
+        className={`${containerSizeClass} bg-amber-50 dark:bg-amber-950/80 border border-amber-300 dark:border-amber-700/70 text-amber-700 dark:text-amber-400 group-hover:bg-amber-600 group-hover:border-amber-600 group-hover:text-white flex items-center justify-center shrink-0 transition-all duration-200 shadow-2xs select-none ${className}`}
+      >
+        <svg
+          viewBox="0 0 32 32"
+          className={svgSizeClass}
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <path
+            d="M8 3.5h11.2L25.5 9.8V26a2.5 2.5 0 0 1-2.5 2.5H8A2.5 2.5 0 0 1 5.5 26V6A2.5 2.5 0 0 1 8 3.5Z"
+            fill="currentColor"
+            fillOpacity="0.12"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M19 3.5V10h6.5"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <text
+            x="15.5"
+            y="16.2"
+            textAnchor="middle"
+            fill="currentColor"
+            fontSize="6.5"
+            fontWeight="800"
+            fontFamily="JetBrains Mono, Inter, system-ui, sans-serif"
+          >
+            TY-
+          </text>
+          <rect x="6.5" y="20.4" width="18" height="5.8" rx="1.6" fill="#D97706" />
+          <text
+            x="15.5"
+            y="24.5"
+            textAnchor="middle"
+            fill="#FFFFFF"
+            fontSize="4.7"
+            fontWeight="800"
+            fontFamily="JetBrains Mono, Inter, system-ui, sans-serif"
+            letterSpacing="0.06em"
+          >
+            RIS
+          </text>
+        </svg>
+      </div>
+    );
+  }
 
   if (isDocx) {
     return (
@@ -290,6 +438,32 @@ export const FileFormatBadge: React.FC<FileFormatBadgeProps> = ({
 }) => {
   const resolvedFormat: DocumentFormat = format ?? getDocumentFormat(filename);
   const isDocx = resolvedFormat === 'docx';
+  const isBib = resolvedFormat === 'bib';
+  const isRis = resolvedFormat === 'ris';
+
+  if (isBib) {
+    return (
+      <span
+        data-testid="file-format-badge-bib"
+        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/90 dark:text-emerald-300 dark:border-emerald-800 shrink-0 select-none ${className}`}
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400" />
+        BIB
+      </span>
+    );
+  }
+
+  if (isRis) {
+    return (
+      <span
+        data-testid="file-format-badge-ris"
+        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/90 dark:text-amber-300 dark:border-amber-800 shrink-0 select-none ${className}`}
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-600 dark:bg-amber-400" />
+        RIS
+      </span>
+    );
+  }
 
   if (isDocx) {
     return (

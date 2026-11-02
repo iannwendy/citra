@@ -40,10 +40,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
    Academic Source Verification Workspace
    ============================================================ */
 
-const ACCEPTED_EXTENSIONS = ['.pdf', '.docx'];
+const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.bib', '.ris'];
 const ACCEPTED_MIME = {
   'application/pdf': ['.pdf'],
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'application/x-bibtex': ['.bib'],
+  'application/x-research-info-systems': ['.ris'],
 };
 
 export function UploadPage() {
@@ -370,7 +372,7 @@ export function UploadPage() {
             </div>
             <Separator orientation="vertical" className="h-4 shrink-0" />
             <span className="font-mono text-xs text-slate-600 dark:text-slate-300 font-medium truncate">
-              manuscript_ingest.pdf / .docx
+              manuscript_ingest.pdf / .docx / .bib / .ris
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -378,7 +380,7 @@ export function UploadPage() {
               variant="outline"
               className="font-mono text-[10px] whitespace-nowrap shrink-0 bg-indigo-50/80 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
             >
-              PDF + DOCX
+              PDF + DOCX + BIB + RIS
             </Badge>
             <Badge
               variant="outline"
@@ -514,7 +516,11 @@ export function UploadPage() {
                       {(file.size / 1024 / 1024).toFixed(2)} MB ·{' '}
                       {file.name.toLowerCase().endsWith('.docx')
                         ? 'application/vnd.openxmlformats (.docx)'
-                        : 'application/pdf'}{' '}
+                        : file.name.toLowerCase().endsWith('.bib')
+                          ? 'application/x-bibtex (.bib)'
+                          : file.name.toLowerCase().endsWith('.ris')
+                            ? 'application/x-research-info-systems (.ris)'
+                            : 'application/pdf'}{' '}
                       {!isUser ? ' · GROBID / XML' : ''}
                     </p>
                   </div>
@@ -534,18 +540,20 @@ export function UploadPage() {
             ) : (
               /* Dropzone default state */
               <div className="max-w-md mx-auto">
-                <div className="flex items-center justify-center gap-3 mb-4">
+                <div className="flex items-center justify-center gap-2.5 mb-4">
                   <FileFormatIcon format="pdf" size="md" />
+                  <FileFormatIcon format="docx" size="md" />
                   <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shadow-xs">
                     <Upload className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
                   </div>
-                  <FileFormatIcon format="docx" size="md" />
+                  <FileFormatIcon format="bib" size="md" />
+                  <FileFormatIcon format="ris" size="md" />
                 </div>
                 <p className="font-display text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-1.5">
                   {t('upload.dropDocument')}
                 </p>
                 <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mb-4">
-                  PDF &amp; DOCX · APA, IEEE, MLA, Chicago, Harvard, Vancouver
+                  PDF, DOCX, BibTeX (.bib) &amp; RIS (.ris) · APA, IEEE, MLA, Chicago, Harvard, Vancouver
                 </p>
                 <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-indigo-600 dark:text-indigo-400 shadow-2xs">
                   {t('upload.orBrowse')}

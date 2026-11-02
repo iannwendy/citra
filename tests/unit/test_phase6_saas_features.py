@@ -306,3 +306,161 @@ class TestTask62ExportReceiptAndQrSeal:
         assert f"CITRA-{essay_id:05d}-" in http_pdf_text
         assert f"https://citra.io.vn/verify/share/sh_{essay_id}_" in http_pdf_text
 
+
+class TestTask63BibtexAndRisUploadAndParsing:
+    """Task 6.3: Direct BibTeX (.bib) and RIS (.ris) bibliography upload and verification."""
+
+    def test_parse_bibtex_entries_and_layer1_linking(self) -> None:
+        from integrity_checker.extraction.reference_parser import parse_bib_or_ris_content
+        from integrity_checker.linking.citation_linker import CitationLinker
+        from integrity_checker.models.citation import CitationType
+
+        bib_text = r"""
+        @article{vaswani2017attention,
+          title={{Attention Is All You Need}},
+          author={Vaswani, Ashish and Shazeer, Noam and Parmar, Niki},
+          journal={Advances in Neural Information Processing Systems},
+          volume={30},
+          pages={5998--6008},
+          year={2017},
+          doi={10.48550/arXiv.1706.03762}
+        }
+
+        @inproceedings{scholkopf2001learning,
+          title={Learning with {K}ernels \& Support Vector Machines},
+          author={Sch{\"o}lkopf, Bernhard and Smola, Alexander J.},
+          booktitle={Proceedings of the International Conference on Machine Learning},
+          year={2001},
+          number={2},
+          url={https://example.org/kernels}
+        }
+        """
+        citations = parse_bib_or_ris_content(bib_text, ".bib")
+        refs = [c for c in citations if c.citation_type == CitationType.REFERENCE_LIST]
+        in_texts = [c for c in citations if c.citation_type == CitationType.IN_TEXT]
+
+        assert len(refs) == 2
+        assert len(in_texts) == 2
+
+        assert refs[0].reference_id == "ref-0001"
+        assert refs[0].title == "Attention Is All You Need"
+        assert refs[0].authors == ["Vaswani, Ashish", "Shazeer, Noam", "Parmar, Niki"]
+        assert refs[0].year == "2017"
+        assert refs[0].doi == "10.48550/arXiv.1706.03762"
+        assert refs[0].volume == "30"
+        assert refs[0].pages == "5998–6008"
+
+        assert refs[1].reference_id == "ref-0002"
+        assert refs[1].title == "Learning with Kernels & Support Vector Machines"
+        assert "Schölkopf, Bernhard" in refs[1].authors
+        assert refs[1].year == "2001"
+        assert refs[1].issue == "2"
+
+        assert in_texts[0].reference_id == "occ-0001"
+        assert in_texts[0].grobid_ref_id == "ref-0001"
+        assert in_texts[0].is_grobid_linked is True
+
+        linker = CitationLinker()
+        link_res = linker.link(in_texts, refs)
+        assert len(link_res.unmatched_in_text) == 0
+        assert len(link_res.unmatched_reference_ids) == 0
+        assert all(r.mapping_status == "matched" for r in refs)
+
+    def test_parse_ris_entries_and_document_parser_integration(self, tmp_path) -> None:
+        from integrity_checker.extraction.document_parser import DocumentParser
+        from integrity_checker.extraction.reference_parser import parse_bib_or_ris_content
+        from integrity_checker.models.citation import CitationType
+
+        ris_text = """TY  - JOUR
+TI  - Deep Residual Learning for Image Recognition
+AU  - He, Kaiming
+AU  - Zhang, Xiangyu
+PY  - 2016/06/01
+JO  - IEEE Conference on Computer Vision and Pattern Recognition
+VL  - 1
+IS  - 1
+SP  - 770
+EP  - 778
+DO  - 10.1109/CVPR.2016.90
+UR  - https://doi.org/10.1109/CVPR.2016.90
+ER  -
+
+TY  - BOOK
+T1  - Pattern Recognition and Machine Learning
+A1  - Bishop, Christopher M.
+Y1  - 2006
+PB  - Springer
+ER  -
+"""
+        citations = parse_bib_or_ris_content(ris_text, ".ris")
+        refs = [c for c in citations if c.citation_type == CitationType.REFERENCE_LIST]
+        in_texts = [c for c in citations if c.citation_type == CitationType.IN_TEXT]
+        assert len(refs) == 2
+        assert len(in_texts) == 2
+        assert refs[0].title == "Deep Residual Learning for Image Recognition"
+        assert refs[0].doi == "10.1109/CVPR.2016.90"
+        assert refs[0].year == "2016"
+        assert refs[0].pages == "770–778"
+        assert refs[1].title == "Pattern Recognition and Machine Learning"
+        assert refs[1].venue == "Springer"
+
+        ris_file = tmp_path / "export.ris"
+        ris_file.write_text(ris_text, encoding="utf-8")
+
+        doc_parser = DocumentParser()
+        parsed_doc = doc_parser.parse(str(ris_file), use_service_manager=False)
+        assert parsed_doc.parser_used == "ris"
+        assert len(parsed_doc.references) == 2
+        assert len(parsed_doc.body_citations) == 2
+        assert parsed_doc.document.num_pages == 1
+
+    def test_upload_bib_and_ris_endpoints(self, clean_db, monkeypatch) -> None:
+        from integrity_checker.api.routes import essays as essays_route
+
+        async def _noop_pipeline_task(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(essays_route, "_run_pipeline_task", _noop_pipeline_task)
+
+        client = TestClient(app)
+        admin_token, _ = _login(client, "admin", "admin123")
+        headers = {"Authorization": f"Bearer {admin_token}"}
+
+        bib_bytes = b"""@article{devlin2019bert,
+          title={BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding},
+          author={Devlin, Jacob and Chang, Ming-Wei},
+          journal={NAACL-HLT},
+          year={2019},
+          doi={10.18653/v1/N19-1423}
+        }"""
+        resp_bib = client.post(
+            "/api/essays",
+            files={"file": ("references.bib", bib_bytes, "application/x-bibtex")},
+            headers=headers,
+        )
+        assert resp_bib.status_code == 200
+        assert resp_bib.json()["filename"] == "references.bib"
+
+        ris_bytes = b"""TY  - JOUR
+TI  - Attention Is All You Need
+AU  - Vaswani, Ashish
+PY  - 2017
+ER  -
+"""
+        resp_ris = client.post(
+            "/api/essays",
+            files={"file": ("zotero.ris", ris_bytes, "application/x-research-info-systems")},
+            headers=headers,
+        )
+        assert resp_ris.status_code == 200
+        assert resp_ris.json()["filename"] == "zotero.ris"
+
+        # Invalid .bib without @ entry is rejected with 400
+        resp_bad_bib = client.post(
+            "/api/essays",
+            files={"file": ("broken.bib", b"just plain text without bibtex entries", "text/plain")},
+            headers=headers,
+        )
+        assert resp_bad_bib.status_code == 400
+
+

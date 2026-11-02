@@ -2690,3 +2690,537 @@ def check_tdtu_bibliography_compliance(
         groups=groups,
         violations=violations,
     )
+
+
+# =============================================================================
+# Direct BibTeX (.bib) and RIS (.ris) Bibliography Parser (Task 6.3)
+# =============================================================================
+
+_LATEX_COMBINING_MARKS: dict[str, str] = {
+    '"': "\u0308",  # diaeresis / umlaut
+    "'": "\u0301",  # acute
+    "`": "\u0300",  # grave
+    "^": "\u0302",  # circumflex
+    "~": "\u0303",  # tilde
+    "=": "\u0304",  # macron
+    ".": "\u0307",  # dot above
+    "u": "\u0306",  # breve
+    "v": "\u030c",  # caron / hacek
+    "H": "\u030b",  # double acute
+    "c": "\u0327",  # cedilla
+    "k": "\u0328",  # ogonek
+    "d": "\u0323",  # dot below
+    "r": "\u030a",  # ring above
+}
+
+_LATEX_SPECIAL_MACROS: dict[str, str] = {
+    r"\ss": "ß",
+    r"\O": "Ø",
+    r"\o": "ø",
+    r"\L": "Ł",
+    r"\l": "ł",
+    r"\AA": "Å",
+    r"\aa": "å",
+    r"\AE": "Æ",
+    r"\ae": "æ",
+    r"\OE": "Œ",
+    r"\oe": "œ",
+    r"\DJ": "Đ",
+    r"\dj": "đ",
+    r"\&": "&",
+    r"\%": "%",
+    r"\_": "_",
+    r"\#": "#",
+    r"\$": "$",
+}
+
+
+def _clean_latex_text(raw: str) -> str:
+    """Strip LaTeX braces, convert accent macros to Unicode NFC, and normalize whitespace."""
+    import unicodedata
+
+    if not raw:
+        return ""
+    text = raw.strip()
+
+    # Replace special LaTeX character macros (e.g. {\ss}, \ss, \&, \o)
+    for macro, repl in _LATEX_SPECIAL_MACROS.items():
+        text = text.replace("{" + macro + "}", repl)
+        if macro[-1].isalpha():
+            text = re.sub(re.escape(macro) + r"(?![A-Za-z])", repl, text)
+        else:
+            text = text.replace(macro, repl)
+
+    # Convert combining accents like {\"o}, \"o, \"{o}, {\'e}, \v{s}, \c{c}
+    def _replace_accent(m: re.Match[str]) -> str:
+        cmd = m.group("cmd")
+        ch = m.group("ch")
+        if ch in (r"\i", "i") and cmd in ('"', "'", "`", "^", "~"):
+            ch = "i"
+        mark = _LATEX_COMBINING_MARKS.get(cmd)
+        if not mark or not ch:
+            return ch or ""
+        return unicodedata.normalize("NFC", ch[-1] + mark)
+
+    accent_re = re.compile(
+        r"\{?\s*\\(?P<cmd>[\"'`^~=.uvHckdr])(?:\s*\{(?P<ch1>\\?[A-Za-z])\}|\s+(?P<ch2>\\?[A-Za-z])|(?P<ch3>[A-Za-z]))\s*\}?"
+    )
+    for _ in range(2):
+        text = accent_re.sub(
+            lambda m: _replace_accent_groups(m),
+            text,
+        )
+
+    text = text.replace("---", "—").replace("--", "–").replace("~", " ")
+    text = text.replace("{", "").replace("}", "")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _replace_accent_groups(m: re.Match[str]) -> str:
+    """Helper to normalize a matched LaTeX accent group into NFC Unicode."""
+    import unicodedata
+
+    cmd = m.group("cmd")
+    ch = m.group("ch1") or m.group("ch2") or m.group("ch3") or ""
+    if ch.startswith("\\"):
+        ch = ch[1:]
+    mark = _LATEX_COMBINING_MARKS.get(cmd)
+    if not mark or not ch:
+        return ch
+    return unicodedata.normalize("NFC", ch + mark)
+
+
+def _clean_doi_value(raw_doi: str | None, fallback_url: str | None = None) -> str | None:
+    """Normalize a DOI string from BibTeX/RIS fields or fallback URL."""
+    candidates = [raw_doi or "", fallback_url or ""]
+    for cand in candidates:
+        cleaned = _clean_latex_text(cand).strip()
+        if not cleaned:
+            continue
+        cleaned = re.sub(r"^https?://(?:dx\.)?doi\.org/", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"^doi\s*:\s*", "", cleaned, flags=re.IGNORECASE)
+        m = _DOI_RE.search(cleaned)
+        if m:
+            return m.group(0).rstrip(".,;)}]")
+    return None
+
+
+def _extract_primary_surname(author_str: str) -> str:
+    """Extract author surname from 'Last, First' or 'First Middle Last'."""
+    cleaned = (author_str or "").strip()
+    if not cleaned:
+        return "Anonymous"
+    if "," in cleaned:
+        return cleaned.split(",", 1)[0].strip() or "Anonymous"
+    parts = cleaned.split()
+    return parts[-1].strip() if parts else "Anonymous"
+
+
+def _build_bib_ris_citation_pair(
+    *,
+    idx: int,
+    title: str | None,
+    authors: list[str],
+    year: str | None,
+    venue: str | None,
+    doi: str | None,
+    url: str | None,
+    volume: str | None,
+    issue: str | None,
+    pages: str | None,
+    cite_key: str | None = None,
+    source_tag: str = "bibtex",
+) -> tuple[Citation, Citation]:
+    """Construct a matched (REFERENCE_LIST, IN_TEXT) Citation pair for a BibTeX/RIS entry."""
+    ref_id = f"ref-{idx:04d}"
+    occ_id = f"occ-{idx:04d}"
+
+    authors_display = ", ".join(authors) if authors else (cite_key or "Anonymous")
+    year_display = year or "n.d."
+
+    segments: list[str] = [f"{authors_display} ({year_display})."]
+    if title:
+        segments.append(f"{title.rstrip('.')}.")
+    if venue:
+        venue_str = venue.rstrip(".")
+        if volume:
+            venue_str += f", {volume}"
+            if issue:
+                venue_str += f"({issue})"
+        elif issue:
+            venue_str += f" ({issue})"
+        if pages:
+            venue_str += f", {pages}"
+        segments.append(f"{venue_str}.")
+    if doi:
+        segments.append(f"https://doi.org/{doi}")
+    elif url:
+        segments.append(url)
+
+    raw_ref_text = " ".join(segments).strip()
+    primary_surname = _extract_primary_surname(authors[0]) if authors else (cite_key or "Anonymous")
+    if len(authors) > 2:
+        in_text_raw = f"({primary_surname} et al., {year_display})"
+    elif len(authors) == 2:
+        second_surname = _extract_primary_surname(authors[1])
+        in_text_raw = f"({primary_surname} & {second_surname}, {year_display})"
+    else:
+        in_text_raw = f"({primary_surname}, {year_display})"
+
+    ref_citation = Citation(
+        raw_text=raw_ref_text,
+        citation_type=CitationType.REFERENCE_LIST,
+        style=CitationStyle.APA,
+        authors=list(authors),
+        year=year,
+        title=title,
+        venue=venue,
+        doi=doi,
+        url=url,
+        volume=volume,
+        issue=issue,
+        pages=pages,
+        title_normalized=_normalize_title(title) if title else None,
+        order_index=idx - 1,
+        page_num=1,
+        matched_pattern=f"{source_tag}_entry",
+        raw_in_text_citation=in_text_raw,
+        confidence=0.98,
+        reference_id=ref_id,
+        source=source_tag,
+        grobid_ref_id=ref_id,
+        is_grobid_linked=True,
+    )
+
+    in_text_citation = Citation(
+        raw_text=in_text_raw,
+        citation_type=CitationType.IN_TEXT,
+        style=CitationStyle.APA,
+        authors=list(authors[:2]) if authors else [],
+        year=year,
+        title=None,
+        venue=None,
+        doi=doi,
+        url=None,
+        order_index=idx - 1,
+        page_num=1,
+        matched_pattern=f"{source_tag}_in_text",
+        confidence=0.98,
+        reference_id=occ_id,
+        source=source_tag,
+        grobid_ref_id=ref_id,
+        is_grobid_linked=True,
+    )
+    return ref_citation, in_text_citation
+
+
+def _parse_bibtex_fields(body: str) -> dict[str, str]:
+    """Parse key = value pairs from the interior of a BibTeX entry."""
+    fields: dict[str, str] = {}
+    n = len(body)
+    i = 0
+
+    while i < n:
+        while i < n and body[i] in " \t\r\n,":
+            i += 1
+        if i >= n:
+            break
+
+        key_start = i
+        while i < n and (body[i].isalnum() or body[i] in "_:-."):
+            i += 1
+        key = body[key_start:i].strip().lower()
+        if not key:
+            i += 1
+            continue
+
+        while i < n and body[i] in " \t\r\n":
+            i += 1
+        if i >= n or body[i] != "=":
+            while i < n and body[i] != ",":
+                i += 1
+            continue
+        i += 1  # skip '='
+
+        value_parts: list[str] = []
+        while i < n:
+            while i < n and body[i] in " \t\r\n":
+                i += 1
+            if i >= n:
+                break
+
+            if body[i] == "{":
+                depth = 1
+                i += 1
+                val_start = i
+                while i < n and depth > 0:
+                    if body[i] == "{" and (i == 0 or body[i - 1] != "\\"):
+                        depth += 1
+                    elif body[i] == "}" and (i == 0 or body[i - 1] != "\\"):
+                        depth -= 1
+                    i += 1
+                value_parts.append(body[val_start : max(val_start, i - 1)])
+            elif body[i] == '"':
+                i += 1
+                val_start = i
+                brace_depth = 0
+                while i < n:
+                    ch = body[i]
+                    if ch == "{" and body[i - 1] != "\\":
+                        brace_depth += 1
+                    elif ch == "}" and body[i - 1] != "\\":
+                        brace_depth = max(0, brace_depth - 1)
+                    elif ch == '"' and brace_depth == 0 and body[i - 1] != "\\":
+                        break
+                    i += 1
+                value_parts.append(body[val_start:i])
+                if i < n and body[i] == '"':
+                    i += 1
+            else:
+                val_start = i
+                while i < n and body[i] not in ",#\r\n}":
+                    i += 1
+                value_parts.append(body[val_start:i].strip())
+
+            while i < n and body[i] in " \t\r\n":
+                i += 1
+            if i < n and body[i] == "#":
+                i += 1
+                continue
+            break
+
+        while i < n and body[i] != ",":
+            i += 1
+        if i < n and body[i] == ",":
+            i += 1
+
+        fields[key] = "".join(value_parts).strip()
+
+    return fields
+
+
+def _parse_bibtex_content(text: str) -> list[Citation]:
+    """Parse BibTeX (.bib) text into a list of REFERENCE_LIST and matched IN_TEXT Citations."""
+    citations: list[Citation] = []
+    entry_header_re = re.compile(r"@\s*([A-Za-z]+)\s*([{(])")
+    pos = 0
+    n = len(text)
+    entry_idx = 0
+
+    while pos < n:
+        m = entry_header_re.search(text, pos)
+        if not m:
+            break
+        entry_type = m.group(1).strip().lower()
+        open_delim = m.group(2)
+        close_delim = "}" if open_delim == "{" else ")"
+        i = m.end()
+        depth = 1
+        while i < n and depth > 0:
+            ch = text[i]
+            if ch == open_delim and text[i - 1] != "\\":
+                depth += 1
+            elif ch == close_delim and text[i - 1] != "\\":
+                depth -= 1
+            i += 1
+
+        block_inner = text[m.end() : max(m.end(), i - 1)].strip()
+        pos = i
+
+        if entry_type in {"comment", "preamble", "string"}:
+            continue
+
+        comma_idx = block_inner.find(",")
+        if comma_idx == -1:
+            continue
+        cite_key = block_inner[:comma_idx].strip()
+        fields_str = block_inner[comma_idx + 1 :]
+        fields = _parse_bibtex_fields(fields_str)
+        if not fields:
+            continue
+
+        raw_title = fields.get("title") or fields.get("booktitle") or ""
+        title = _clean_latex_text(raw_title) or None
+
+        raw_author = fields.get("author") or fields.get("editor") or ""
+        authors: list[str] = []
+        if raw_author:
+            normalized_author_str = re.sub(r"\s+", " ", raw_author).strip()
+            for part in re.split(r"\s+\band\b\s+", normalized_author_str, flags=re.IGNORECASE):
+                cleaned_author = _clean_latex_text(part)
+                if cleaned_author and cleaned_author.lower() != "others":
+                    authors.append(cleaned_author)
+
+        raw_year = fields.get("year") or fields.get("date") or ""
+        yr_m = re.search(r"\b((?:18|19|20)\d{2})\b", _clean_latex_text(raw_year))
+        year = yr_m.group(1) if yr_m else None
+
+        raw_venue = (
+            fields.get("journal")
+            or fields.get("journaltitle")
+            or fields.get("booktitle")
+            or fields.get("series")
+            or fields.get("publisher")
+            or fields.get("school")
+            or fields.get("institution")
+            or fields.get("howpublished")
+            or ""
+        )
+        venue = _clean_latex_text(raw_venue) or None
+        if venue and title and venue == title and fields.get("publisher"):
+            venue = _clean_latex_text(fields.get("publisher", "")) or venue
+
+        raw_url = _clean_latex_text(fields.get("url") or fields.get("ee") or "") or None
+        doi = _clean_doi_value(fields.get("doi"), raw_url)
+        volume = _clean_latex_text(fields.get("volume", "")) or None
+        issue = _clean_latex_text(fields.get("number") or fields.get("issue") or "") or None
+        pages = _clean_latex_text(fields.get("pages", "")) or None
+
+        if not title and not authors and not doi:
+            continue
+
+        entry_idx += 1
+        ref_cit, occ_cit = _build_bib_ris_citation_pair(
+            idx=entry_idx,
+            title=title,
+            authors=authors,
+            year=year,
+            venue=venue,
+            doi=doi,
+            url=raw_url,
+            volume=volume,
+            issue=issue,
+            pages=pages,
+            cite_key=cite_key,
+            source_tag="bibtex",
+        )
+        citations.append(ref_cit)
+        citations.append(occ_cit)
+
+    return citations
+
+
+def _parse_ris_content(text: str) -> list[Citation]:
+    """Parse RIS (.ris) text into a list of REFERENCE_LIST and matched IN_TEXT Citations."""
+    citations: list[Citation] = []
+    tag_re = re.compile(r"^\s*([A-Z0-9]{2})\s+-\s?(.*)$")
+
+    records: list[list[tuple[str, str]]] = []
+    current_record: list[tuple[str, str]] | None = None
+
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip("\r\n")
+        m = tag_re.match(line)
+        if m:
+            tag = m.group(1).upper()
+            val = m.group(2).strip()
+            if tag == "TY":
+                if current_record:
+                    records.append(current_record)
+                current_record = [("TY", val)]
+            elif tag == "ER":
+                if current_record:
+                    records.append(current_record)
+                    current_record = None
+            else:
+                if current_record is None:
+                    current_record = []
+                current_record.append((tag, val))
+        elif current_record and line.strip():
+            last_tag, last_val = current_record[-1]
+            current_record[-1] = (last_tag, f"{last_val} {line.strip()}".strip())
+
+    if current_record:
+        records.append(current_record)
+
+    entry_idx = 0
+    for rec in records:
+        title: str | None = None
+        authors: list[str] = []
+        year: str | None = None
+        venue: str | None = None
+        raw_doi: str | None = None
+        url: str | None = None
+        volume: str | None = None
+        issue: str | None = None
+        sp: str | None = None
+        ep: str | None = None
+        cite_key: str | None = None
+
+        for tag, val in rec:
+            if not val:
+                continue
+            if tag in {"TI", "T1", "CT", "BT"} and not title:
+                title = _clean_latex_text(val)
+            elif tag in {"AU", "A1", "A2", "ED"}:
+                cleaned_a = _clean_latex_text(val)
+                if cleaned_a:
+                    authors.append(cleaned_a)
+            elif tag in {"PY", "Y1", "DA", "YR"} and not year:
+                yr_m = re.search(r"\b((?:18|19|20)\d{2})\b", val)
+                if yr_m:
+                    year = yr_m.group(1)
+            elif tag in {"JO", "JF", "T2", "JA", "J2", "PB"} and not venue:
+                venue = _clean_latex_text(val)
+            elif tag in {"DO", "DI"} and not raw_doi:
+                raw_doi = val
+            elif tag in {"UR", "L2", "LK"} and not url:
+                url = val.strip()
+            elif tag == "VL" and not volume:
+                volume = val.strip()
+            elif tag == "IS" and not issue:
+                issue = val.strip()
+            elif tag == "SP" and not sp:
+                sp = val.strip()
+            elif tag == "EP" and not ep:
+                ep = val.strip()
+            elif tag == "ID" and not cite_key:
+                cite_key = val.strip()
+
+        doi = _clean_doi_value(raw_doi, url)
+        pages = f"{sp}–{ep}" if (sp and ep and sp != ep) else (sp or ep)
+
+        if not title and not authors and not doi:
+            continue
+
+        entry_idx += 1
+        ref_cit, occ_cit = _build_bib_ris_citation_pair(
+            idx=entry_idx,
+            title=title,
+            authors=authors,
+            year=year,
+            venue=venue,
+            doi=doi,
+            url=url,
+            volume=volume,
+            issue=issue,
+            pages=pages,
+            cite_key=cite_key,
+            source_tag="ris",
+        )
+        citations.append(ref_cit)
+        citations.append(occ_cit)
+
+    return citations
+
+
+def parse_bib_or_ris_content(text: str, ext: str = ".bib") -> list[Citation]:
+    """Parse raw BibTeX (.bib) or RIS (.ris) bibliography content into Citations.
+
+    For each bibliography entry, emits both a ``CitationType.REFERENCE_LIST``
+    citation (``reference_id="ref-XXXX"``) and a matched ``CitationType.IN_TEXT``
+    citation (``reference_id="occ-XXXX"``, ``grobid_ref_id="ref-XXXX"``,
+    ``is_grobid_linked=True``) so Layer 1 links 100% cleanly and Layer 2
+    verifies every entry across the scholarly APIs.
+    """
+    if not text or not text.strip():
+        return []
+    norm_ext = (ext or "").strip().lower()
+    if norm_ext.endswith("ris") or (
+        not norm_ext.endswith("bib")
+        and bool(re.search(r"(?:^|\n)\s*TY\s+-\s+", text))
+    ):
+        return _parse_ris_content(text)
+    return _parse_bibtex_content(text)
+

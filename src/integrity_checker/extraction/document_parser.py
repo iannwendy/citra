@@ -34,7 +34,10 @@ from integrity_checker.extraction.grobid_parser import (
 from integrity_checker.extraction.grobid_service import get_grobid_manager
 from integrity_checker.extraction.mupdf_parser import MuPdfParser
 from integrity_checker.extraction.pdfplumber_parser import PdfPlumberParser
-from integrity_checker.extraction.reference_parser import ReferenceListParser
+from integrity_checker.extraction.reference_parser import (
+    ReferenceListParser,
+    parse_bib_or_ris_content,
+)
 from integrity_checker.extraction.section_segmenter import (
     DocumentSection,
     SectionSegmenter,
@@ -176,6 +179,9 @@ class DocumentParser:
         warnings: list[str] = []
         parser_used = "unknown"
         grobid_status = "unknown"
+        bib_ris_ext = self._is_bib_or_ris_file(pdf_path)
+        if bib_ris_ext is not None:
+            return self._parse_bib_or_ris_document(pdf_path, bib_ris_ext)
         is_docx = self._is_docx_file(pdf_path)
 
         # 1. Native DOCX or PyMuPDF (with PdfPlumberParser fallback)
@@ -354,7 +360,67 @@ class DocumentParser:
         parsed.grobid_status = grobid_status
         return parsed
 
-    # ---------- Step 1: PyMuPDF / DOCX ----------
+    # ---------- Step 1: PyMuPDF / DOCX / BibTeX / RIS ----------
+
+    def _is_bib_or_ris_file(self, file_path: str) -> str | None:
+        """Detect .bib or .ris files via extension."""
+        lower_path = str(file_path).lower()
+        if lower_path.endswith(".bib"):
+            return ".bib"
+        if lower_path.endswith(".ris"):
+            return ".ris"
+        return None
+
+    def _parse_bib_or_ris_document(self, file_path: str, ext: str) -> ParsedDocument:
+        """Parse a .bib or .ris file into a structured ParsedDocument."""
+        p = Path(file_path)
+        raw_text = p.read_text(encoding="utf-8", errors="replace") if p.is_file() else ""
+        all_citations = parse_bib_or_ris_content(raw_text, ext)
+        body_citations = [
+            c
+            for c in all_citations
+            if c.citation_type in (CitationType.IN_TEXT, CitationType.NUMERIC)
+        ]
+        references = [
+            c for c in all_citations if c.citation_type == CitationType.REFERENCE_LIST
+        ]
+        body_text = "\n".join(c.raw_text for c in body_citations)
+        bib_text = "References\n" + "\n".join(c.raw_text for c in references)
+        page_text = f"{body_text}\n\n{bib_text}".strip() or raw_text
+        parser_name = "bibtex" if ext == ".bib" else "ris"
+
+        text_doc = Document(
+            file_path=file_path,
+            num_pages=1,
+            pages=[Page(page_num=1, text=page_text, has_text_layer=True)],
+            metadata={"is_scanned_pdf": False, "file_format": ext.lstrip(".")},
+            parser_used=parser_name,
+        )
+        sections = [
+            DocumentSection(
+                section_type=SectionType.BODY,
+                start_page=1,
+                end_page=1,
+                text=body_text,
+            ),
+            DocumentSection(
+                section_type=SectionType.BIBLIOGRAPHY,
+                start_page=1,
+                end_page=1,
+                text=bib_text,
+            ),
+        ]
+        return ParsedDocument(
+            document=text_doc,
+            sections=sections,
+            body_citations=body_citations,
+            references=references,
+            appendix_citations=[],
+            grobid=None,
+            parser_warnings=[],
+            parser_used=parser_name,
+            grobid_status="disabled",
+        )
 
     def _is_docx_file(self, file_path: str) -> bool:
         """Detect .docx files via extension or ZIP magic header."""

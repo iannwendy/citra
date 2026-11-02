@@ -27,13 +27,17 @@ router = APIRouter()
 UPLOADS_DIR = PROJECT_ROOT / "data" / "essays" / "uploads"
 
 
+ALLOWED_UPLOAD_EXTENSIONS = (".pdf", ".docx", ".bib", ".ris")
+
+
 def _get_persisted_upload_path(essay_id: int, ext: str | None = None) -> Path:
-    """Return persistent path on disk for an uploaded essay PDF or DOCX."""
-    if ext in (".pdf", ".docx"):
+    """Return persistent path on disk for an uploaded essay PDF, DOCX, BIB, or RIS."""
+    if ext in ALLOWED_UPLOAD_EXTENSIONS:
         return UPLOADS_DIR / f"{essay_id}{ext}"
-    docx_candidate = UPLOADS_DIR / f"{essay_id}.docx"
-    if docx_candidate.is_file():
-        return docx_candidate
+    for cand_ext in (".docx", ".bib", ".ris", ".pdf"):
+        candidate = UPLOADS_DIR / f"{essay_id}{cand_ext}"
+        if candidate.is_file():
+            return candidate
     return UPLOADS_DIR / f"{essay_id}.pdf"
 
 
@@ -241,9 +245,20 @@ def _sanitize_upload_filename(raw_name: str) -> str:
     base = Path(raw_name.replace("\\", "/")).name
     cleaned = "".join(ch for ch in base if ch >= " " and ch != "\x7f").strip()
     lower = cleaned.lower()
-    ext = ".docx" if lower.endswith(".docx") else ".pdf"
+    if lower.endswith(".docx"):
+        ext = ".docx"
+    elif lower.endswith(".bib"):
+        ext = ".bib"
+    elif lower.endswith(".ris"):
+        ext = ".ris"
+    else:
+        ext = ".pdf"
     if not cleaned or cleaned.startswith("."):
-        cleaned = f"essay{cleaned}" if lower.endswith((".pdf", ".docx")) else f"document{ext}"
+        cleaned = (
+            f"essay{cleaned}"
+            if lower.endswith(ALLOWED_UPLOAD_EXTENSIONS)
+            else f"document{ext}"
+        )
     if len(cleaned) > 200:
         stem = cleaned[: -len(ext)][: 200 - len(ext)]
         cleaned = f"{stem}{ext}"
@@ -289,9 +304,19 @@ async def upload_essay(
     """
     raw_filename = (file.filename or "").strip()
     lower_name = raw_filename.lower()
-    if not raw_filename or not lower_name.endswith((".pdf", ".docx")):
-        raise HTTPException(status_code=400, detail="Only PDF and DOCX files allowed")
-    upload_ext = ".docx" if lower_name.endswith(".docx") else ".pdf"
+    if not raw_filename or not lower_name.endswith(ALLOWED_UPLOAD_EXTENSIONS):
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF, DOCX, BibTeX (.bib), and RIS (.ris) files allowed",
+        )
+    if lower_name.endswith(".docx"):
+        upload_ext = ".docx"
+    elif lower_name.endswith(".bib"):
+        upload_ext = ".bib"
+    elif lower_name.endswith(".ris"):
+        upload_ext = ".ris"
+    else:
+        upload_ext = ".pdf"
 
     ensure_user_quota_current(current_user)
     policy = get_user_plan_policy(current_user)
@@ -313,11 +338,39 @@ async def upload_essay(
     if upload_ext == ".pdf":
         if b"%PDF-" not in content[:1024]:
             raise HTTPException(status_code=400, detail="Invalid PDF file: missing %PDF- header")
-    else:
+    elif upload_ext == ".docx":
         if not content.startswith(b"PK\x03\x04"):
             raise HTTPException(
                 status_code=400,
                 detail="Invalid DOCX file: missing OOXML PK archive header",
+            )
+    elif upload_ext == ".bib":
+        try:
+            bib_text = content.decode("utf-8").strip()
+        except UnicodeDecodeError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid BibTeX file: must be valid UTF-8 text",
+            ) from exc
+        if not bib_text or "@" not in bib_text:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid BibTeX file: missing @entry definitions",
+            )
+    elif upload_ext == ".ris":
+        import re as _re
+
+        try:
+            ris_text = content.decode("utf-8").strip()
+        except UnicodeDecodeError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid RIS file: must be valid UTF-8 text",
+            ) from exc
+        if not ris_text or not _re.search(r"(?:^|\n)\s*TY\s+-", ris_text):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid RIS file: missing TY  - record header",
             )
 
     # Enforce monthly upload quota for the user's subscription tier
@@ -332,7 +385,7 @@ async def upload_essay(
         )
 
     # Enforce per-document page limit if readable by PyMuPDF
-    detected_pages = 0
+    detected_pages = 1 if upload_ext in (".bib", ".ris") else 0
     if upload_ext == ".pdf":
         try:
             import fitz
@@ -549,13 +602,25 @@ async def reanalyze_essay(
     if not repo.can_user_access_essay(current_user, essay):
         raise HTTPException(status_code=403, detail="Access denied")
 
-    ext = ".docx" if str(essay.filename or "").lower().endswith(".docx") else ".pdf"
+    lower_fname = str(essay.filename or "").lower()
+    if lower_fname.endswith(".docx"):
+        ext = ".docx"
+    elif lower_fname.endswith(".bib"):
+        ext = ".bib"
+    elif lower_fname.endswith(".ris"):
+        ext = ".ris"
+    else:
+        ext = ".pdf"
     persisted_path = _get_persisted_upload_path(essay_id, ext=ext)
     if not persisted_path.is_file():
-        alt_ext = ".pdf" if ext == ".docx" else ".docx"
-        alt_path = _get_persisted_upload_path(essay_id, ext=alt_ext)
-        if alt_path.is_file():
-            persisted_path = alt_path
+        found_alt = None
+        for alt_ext in ALLOWED_UPLOAD_EXTENSIONS:
+            alt_path = _get_persisted_upload_path(essay_id, ext=alt_ext)
+            if alt_path.is_file():
+                found_alt = alt_path
+                break
+        if found_alt is not None:
+            persisted_path = found_alt
         else:
             raise HTTPException(status_code=404, detail="Persisted document file not found on disk")
 
@@ -1063,10 +1128,10 @@ def delete_essay(
     if current_user.role != "admin" and essay.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Clean up progress tracker and persisted PDF / DOCX
+    # Clean up progress tracker and persisted PDF / DOCX / BIB / RIS
     get_tracker().clear(essay_id)
-    _get_persisted_upload_path(essay_id, ext=".pdf").unlink(missing_ok=True)
-    _get_persisted_upload_path(essay_id, ext=".docx").unlink(missing_ok=True)
+    for ext_to_clean in ALLOWED_UPLOAD_EXTENSIONS:
+        _get_persisted_upload_path(essay_id, ext=ext_to_clean).unlink(missing_ok=True)
 
     db.delete(essay)
     db.commit()

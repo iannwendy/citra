@@ -35,7 +35,7 @@ import { isUnlimitedValue } from '@/lib/quotaDisplay';
    Upload multiple PDFs for concurrent analysis
    ============================================================ */
 
-const ACCEPTED_EXTENSIONS = ['.pdf', '.docx'];
+const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.bib', '.ris'];
 
 type FileStatus = 'pending' | 'uploading' | 'processing' | 'completed' | 'failed';
 
@@ -599,18 +599,20 @@ export function BatchUploadPage() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.docx"
+              accept=".pdf,.docx,.bib,.ris"
               multiple
               onChange={handleFileInput}
               className="hidden"
             />
 
-            <div className="flex items-center justify-center gap-3 mb-3.5">
+            <div className="flex items-center justify-center gap-2.5 mb-3.5">
               <FileFormatIcon format="pdf" size="md" />
+              <FileFormatIcon format="docx" size="md" />
               <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shadow-2xs">
                 <Upload className="h-7 w-7 text-indigo-600 dark:text-indigo-400" />
               </div>
-              <FileFormatIcon format="docx" size="md" />
+              <FileFormatIcon format="bib" size="md" />
+              <FileFormatIcon format="ris" size="md" />
             </div>
             <p className="font-display text-lg font-bold text-slate-900 dark:text-white mb-1">
               {t('batchUpload.dropPdfs')}
