@@ -1071,5 +1071,62 @@ def test_vnpay_sandbox_disabled_in_prod_and_default_secret_rejected(
     assert ret_resp.json()["transaction"]["payment_mode"] == "vnpay_live"
 
 
+def test_sandbox_generate_pdf_enforces_upload_quota_and_reanalyze_uses_background_tasks() -> None:
+    """POST /api/essays/sandbox/generate-pdf enforces monthly upload quota (402 MONTHLY_QUOTA_EXCEEDED) and increments usage; reanalyze uses BackgroundTasks outside test runtime."""
+    client = TestClient(app)
+    token, _ = _login_user(client, "user", "user123")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    sandbox_payload = {
+        "style": "apa",
+        "title": "Sandbox Quota Test",
+        "items": [
+            {
+                "title": "Attention Is All You Need",
+                "authors": ["Vaswani, A.", "Shazeer, N."],
+                "year": "2017",
+                "venue": "NeurIPS",
+                "cite_in_text": True,
+                "include_in_references": True,
+            }
+        ],
+    }
+
+    with patch("integrity_checker.api.routes.essays._run_pipeline_task") as mock_pipe:
+        # 1st, 2nd, 3rd sandbox PDF generation + verification succeed and increment monthly_uploads_used
+        for _i in range(3):
+            resp = client.post(
+                "/api/essays/sandbox/generate-pdf",
+                json=sandbox_payload,
+                headers=headers,
+            )
+            assert resp.status_code == 200, resp.text
+            last_essay_id = resp.json()["essay_id"]
+
+        me_resp = client.get("/api/users/me", headers=headers)
+        assert me_resp.json()["quota"]["monthly_uploads_used"] == 3
+
+        # 4th sandbox PDF generation with verification must be rejected with HTTP 402 MONTHLY_QUOTA_EXCEEDED
+        resp_4th = client.post(
+            "/api/essays/sandbox/generate-pdf",
+            json=sandbox_payload,
+            headers=headers,
+        )
+        assert resp_4th.status_code == 402
+        detail = resp_4th.json()["detail"]
+        assert isinstance(detail, dict)
+        assert detail["code"] == "MONTHLY_QUOTA_EXCEEDED"
+        assert detail["used"] == 3
+        assert detail["limit"] == 3
+
+        # Reanalyze outside test runtime schedules background task and returns status="processing"
+        with patch("integrity_checker.api.routes.essays.is_test_runtime", return_value=False):
+            re_resp = client.post(f"/api/essays/{last_essay_id}/reanalyze", headers=headers)
+            assert re_resp.status_code == 200
+            assert re_resp.json()["status"] == "processing"
+            assert mock_pipe.call_count == 4
+
+
+
 
 

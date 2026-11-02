@@ -497,6 +497,7 @@ def get_essay_status(
 @router.post("/{essay_id}/reanalyze")
 async def reanalyze_essay(
     essay_id: int,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     pipeline: IntegrityPipeline = Depends(get_pipeline),
@@ -522,14 +523,25 @@ async def reanalyze_essay(
 
     tracker = get_tracker()
     tracker.init(essay_id, is_retry=True)
-    await _run_pipeline_task(
+    if is_test_runtime():
+        await _run_pipeline_task(
+            essay.id,
+            str(persisted_path),
+            essay.user_id or current_user.id,
+            pipeline,
+            False,
+        )
+        return {"status": "completed", "essay_id": essay.id}
+
+    background_tasks.add_task(
+        _run_pipeline_task,
         essay.id,
         str(persisted_path),
         essay.user_id or current_user.id,
         pipeline,
         False,
     )
-    return {"status": "completed", "essay_id": essay.id}
+    return {"status": "processing", "essay_id": essay.id}
 
 
 def _serialize_essay_summary(
@@ -1472,6 +1484,24 @@ async def generate_sandbox_pdf_manuscript(
             },
         )
 
+    ensure_user_quota_current(current_user)
+    policy = get_user_plan_policy(current_user)
+    used_uploads = int(current_user.monthly_uploads_used or 0)
+    if used_uploads >= policy.max_uploads_per_month:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "code": "MONTHLY_QUOTA_EXCEEDED",
+                "message": (
+                    f"Monthly upload quota reached ({used_uploads}/{policy.max_uploads_per_month} documents "
+                    f"on the {policy.name} plan). Please upgrade to Pro or Ultra to continue analyzing manuscripts."
+                ),
+                "used": used_uploads,
+                "limit": policy.max_uploads_per_month,
+                "current_tier": policy.tier,
+            },
+        )
+
     # Create essay row & launch full IntegrityPipeline (In-Text <-> Refs + 15+ DBs)
     repo = Repository(db)
     essay = repo.create_essay_with_user(
@@ -1479,6 +1509,7 @@ async def generate_sandbox_pdf_manuscript(
         num_pages=num_pages,
         user_id=current_user.id,
     )
+    current_user.monthly_uploads_used = used_uploads + 1
     db.commit()
     db.refresh(essay)
 
