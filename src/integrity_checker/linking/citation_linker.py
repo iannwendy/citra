@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 # (Author, Year) / (Author Year) / [Author, Year] / [Author Year] / (Author, Year, tr. 15) / (Author 2020, 25) / (Author, 2020: 25) / (Author, n.d.)
 _APA_YEAR_RE = re.compile(
     r"[\(\[][\"\u201c\u201d'\u2018\u2019]?([A-Za-zÀ-ỹ][A-Za-zÀ-ỹ0-9/'\u2019\u2018.\s,&\-\u2013\u2014\[\]:]*?)(?:,[\"\u201d\u2019']?\s*|\s+)((?:18|19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)"
-    r"(?:\s*[,:]\s*(?:pp?\.?|tr\.?|trang|с\.?|p\.?)?\s*\d+(?:\s*[-–]\s*\d+)?)?[\)\]]",
+    r"(?:\s*[,:]\s*(?:pp?\.?|tr\.?|trang|с\.?|p\.?)?\s*\d+(?:\s*[,–\-]\s*\d+)*)?[\)\]]",
     re.IGNORECASE,
 )
 # Regex cho MLA / Chicago in-text author-page: (Smith 25), [Cole, p. 247], (Smith and Doe 42), (Smith et al. 105),
@@ -55,7 +55,7 @@ _MLA_AUTHOR_PAGE_RE = re.compile(
 )
 # Regex cho Author et al. / và cộng sự (Year) or Author et al. Year format
 _APA_ETAL_YEAR_RE = re.compile(
-    r"([A-Za-zÀ-ỹ'\u2019.\s,&\-]+?)\s+(?:et\s+a?l\.?|và\s+cộng\s+sự|và\s+cs\.?)\s*"
+    r"([A-Za-zÀ-ỹ'\u2019.\s,&\-]+?)\s+(?:et\s+a?l\.?|và\s+cộng\s+sự|và\s+cs\.?|và\s+ctv\.?|và\s+cộng\s+tác\s+viên)\s*"
     r"(?:[\(\[]\s*((?:18|19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)(?:\s*,\s*[^)\]]*)?\s*[\)\]]|((?:18|19|20)\d{2}[a-z]?)\b)",
     re.IGNORECASE,
 )
@@ -81,8 +81,11 @@ _INSTITUTIONAL_AUTHOR_RE = re.compile(
     r"|\b(?:of|for|Association|Organization|Institute|Initiative|Project|Advisors|Clinics|Contributors|Developers)\b",
     re.IGNORECASE,
 )
-# Regex cho in-text IEEE numeric: [N] or [N, M] or [N-M]
-_IEEE_NUM_RE = re.compile(r"\[(\d+(?:\s*[-–,]\s*\d+)*)\]")
+# Regex cho in-text IEEE numeric: [N] or [N, M] or [N-M] or [N, Tr. 124]
+_IEEE_NUM_RE = re.compile(
+    r"\[(\d+(?:\s*[-–,]\s*\d+)*)(?:\s*[,;:]\s*(?:tr\.?|trang|pp?\.?)\s*\d+(?:\s*[,–\-—]\s*\d+)*)?\]",
+    re.IGNORECASE,
+)
 # Regex cho year extraction từ bib entry
 _BIB_YEAR_RE = re.compile(r"\((?:19|20)\d{2}[a-z]?\)|(?:19|20)\d{2}[a-z]?")
 
@@ -491,6 +494,21 @@ class CitationLinker:
                     t_matched = [c for c in candidates if (c.title or "").strip().lower() == cit_t_low]
                     if t_matched:
                         candidates = t_matched
+                if len(candidates) > 1:
+                    cit_raw_folded = self._fold_author_key(cit.raw_text or "")
+                    co_matched = []
+                    for c in candidates:
+                        if c.authors and len(c.authors) >= 2:
+                            co_raw = self._fold_author_key(
+                                getattr(c.authors[1], "raw", None) or self._normalize_last_name(c.authors[1])
+                            )
+                            co_last = self._fold_author_key(self._normalize_last_name(c.authors[1]))
+                            if (co_raw and len(co_raw) >= 3 and co_raw in cit_raw_folded) or (
+                                co_last and len(co_last) >= 3 and co_last in cit_raw_folded
+                            ):
+                                co_matched.append(c)
+                    if len(co_matched) == 1:
+                        candidates = co_matched
                 if not year_suffix and len(candidates) > 1 and (
                     year == "n.d." or not any(c.year_suffix for c in candidates)
                 ):
@@ -594,35 +612,47 @@ class CitationLinker:
                 )
 
         # Pass 2: Minor spelling/transposition typo on surname when year agrees (e.g. Beauvias/Beauvais, Adizogel/Adigozel, Kato-Katoaka/Kato-Kataoka, Shet/Shen, Zade/Zadeh)
-        if len(author_folded) >= 4:
+        if len(author_folded) >= 3:
             for bib_idx, bib in enumerate(bib_citations):
                 if not bib.authors or (bib.year or "") != year:
                     continue
                 bib_first = self._fold_author_key(self._normalize_last_name(bib.authors[0]))
-                if not bib_first or len(bib_first) < 4:
-                    continue
-                if author_folded[0] != bib_first[0]:
-                    continue
-                ratio = difflib.SequenceMatcher(None, author_folded, bib_first).ratio()
-                one_char_diff = (
-                    len(author_folded) == len(bib_first)
-                    and sum(a != b for a, b in zip(author_folded, bib_first)) == 1
-                ) or (
-                    abs(len(author_folded) - len(bib_first)) == 1
-                    and (bib_first.startswith(author_folded) or author_folded.startswith(bib_first))
-                ) or (
-                    len(author_folded) >= 5
-                    and sorted(author_folded) == sorted(bib_first)
-                    and sum(a != b for a, b in zip(author_folded, bib_first)) <= 3
-                )
-                if ratio >= 0.84 or one_char_diff:
-                    return CitationLink(
-                        occurrence_id=occ_id,
-                        reference_id=bib.reference_id or f"ref-{bib_idx:04d}",
-                        status=CitationMappingStatus.MATCHED,
-                        confidence=self.fuzzy_confidence,
-                        method=MappingMethod.FUZZY,
-                    )
+                cand_firsts = [bib_first] + [p for p in bib_first.split("-") if len(p) >= 4]
+                if len(author_folded) >= 4:
+                    for bf in cand_firsts:
+                        if not bf or len(bf) < 4 or author_folded[0] != bf[0]:
+                            continue
+                        ratio = difflib.SequenceMatcher(None, author_folded, bf).ratio()
+                        one_char_diff = (
+                            len(author_folded) == len(bf)
+                            and sum(a != b for a, b in zip(author_folded, bf)) == 1
+                        ) or (
+                            abs(len(author_folded) - len(bf)) == 1
+                            and (bf.startswith(author_folded) or author_folded.startswith(bf))
+                        ) or (
+                            len(author_folded) >= 5
+                            and sorted(author_folded) == sorted(bf)
+                            and sum(a != b for a, b in zip(author_folded, bf)) <= 3
+                        )
+                        if ratio >= 0.84 or one_char_diff:
+                            return CitationLink(
+                                occurrence_id=occ_id,
+                                reference_id=bib.reference_id or f"ref-{bib_idx:04d}",
+                                status=CitationMappingStatus.MATCHED,
+                                confidence=self.fuzzy_confidence,
+                                method=MappingMethod.FUZZY,
+                            )
+                # Co-author surname fallback when year agrees and student cited a co-author with et al.
+                for co_auth in bib.authors[1:]:
+                    co_last = self._fold_author_key(self._normalize_last_name(co_auth))
+                    if co_last and co_last == author_folded:
+                        return CitationLink(
+                            occurrence_id=occ_id,
+                            reference_id=bib.reference_id or f"ref-{bib_idx:04d}",
+                            status=CitationMappingStatus.MATCHED,
+                            confidence=self.fuzzy_confidence,
+                            method=MappingMethod.FUZZY,
+                        )
 
         # Pass 3: Personal author with year difference when author surname uniquely matches in bib.authors
         if year.isdigit() and len(author_folded) >= 4 and not _INSTITUTIONAL_AUTHOR_RE.search(author):
@@ -631,9 +661,10 @@ class CitationLinker:
                 if not bib.authors or not bib.year or not str(bib.year).isdigit():
                     continue
                 bib_first = self._fold_author_key(self._normalize_last_name(bib.authors[0]))
+                bib_raw_folded = self._fold_author_key(getattr(bib.authors[0], "raw", "") or "")
                 short_first = bib_first.split()[-1] if " " in bib_first else bib_first
                 max_yr_diff = 15 if (len(author_folded.split()) >= 3 and len(bib.authors) >= 2) else 9
-                if author_folded in (bib_first, short_first) and abs(int(bib.year) - yr_int) <= max_yr_diff:
+                if author_folded in (bib_first, short_first, bib_raw_folded) and abs(int(bib.year) - yr_int) <= max_yr_diff:
                     return CitationLink(
                         occurrence_id=occ_id,
                         reference_id=bib.reference_id or f"ref-{bib_idx:04d}",
@@ -1058,17 +1089,17 @@ class CitationLinker:
 
     def _clean_intext_author(self, raw_author: str) -> str:
         """Strip et al. / caption prefixes / bracketed acronyms / 2nd+ authors."""
-        # Strip bracketed acronym definitions like "[NIMH]", "[SAMHSA]" and surrounding quotes
-        cleaned = re.sub(r"\s*\[[^\]]+\]", "", raw_author).strip(" \t\"'\u201c\u201d\u2018\u2019,")
-        # Strip leading figure/table caption or discourse prefixes ("Adapted from ", "for example in ", "see ")
+        # Strip bracketed acronym definitions like "[NIMH]", "[SAMHSA]" and surrounding quotes/parens
+        cleaned = re.sub(r"\s*\[[^\]]+\]", "", raw_author).strip(" \t()[]\"'\u201c\u201d\u2018\u2019,")
+        # Strip leading figure/table caption or discourse prefixes ("Adapted from ", "for example in ", "see ", "Only ", "Both ")
         cleaned = re.sub(
-            r"^(?:.*?\b(?:for\s+example\s+in|such\s+as\s+in|adapted\s+from|reprinted\s+from|modified\s+from|data\s+from|derived\s+from|based\s+on|source\s*:|see\s+also|see|e\.g\.,?|i\.e\.,?|cf\.?)\s+)",
+            r"^(?:.*?\b(?:for\s+example\s+in|such\s+as\s+in|adapted\s+from|reprinted\s+from|modified\s+from|data\s+from|derived\s+from|based\s+on|source\s*:|see\s+also|see|e\.g\.,?|i\.e\.,?|cf\.?)\s+|(?:only|both|either|neither)\s+)",
             "",
             cleaned,
             flags=re.IGNORECASE,
-        ).strip(" \t\"'\u201c\u201d\u2018\u2019,")
+        ).strip(" \t()[]\"'\u201c\u201d\u2018\u2019,")
         author_stripped = re.sub(
-            r",?\s*(?:et\s+a?l\.?|and\s+others?|và\s+cộng\s+sự|và\s+cs\.?)\s*$",
+            r",?\s*(?:et\s+a?l\.?|and\s+others?|và\s+cộng\s+sự|và\s+cs\.?|và\s+ctv\.?|và\s+cộng\s+tác\s+viên)\s*$",
             "",
             cleaned,
             flags=re.IGNORECASE,

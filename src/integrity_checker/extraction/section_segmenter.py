@@ -68,13 +68,13 @@ class SectionType(str, Enum):
 # Pattern ở ĐẦU dòng (line-start), case-insensitive, cho phép số + whitespace trước.
 
 _BIBLIOGRAPHY_HEADERS = re.compile(
-    r"^\s*(?:(?:\d+(?:\.\d+)*|I{1,3}|IV|V|VI{0,3}|IX|X|[A-Z])[\.\)]?\s+)?(?:"
+    r"^\s*(?:(?:(?:chương|phần|mục|chapter|section)\s+)?(?:\d+(?:\.\d+)*|I{1,3}|IV|V|VI{0,3}|IX|X)[\.\):]?\s+|[A-Z][\.\)]\s+)?(?:"
     r"references?|reference\s+list|bibliography|works?\s+cited|literature(?:\s+cited)?|"
     r"notes(?:\s+and\s+references)?|endnotes?|"
     r"bibliografia(?:/bibliografía/bibliographie/works?\s+cited)?|bibliografía|bibliographie|"
     r"referências(?:\s+bibliográficas)?|referencias(?:\s+bibliográficas)?|daftar\s+pustaka|"
     r"(?:[^/\n]{2,50}/\s*)?list\s+of\s+references|"
-    r"danh\s+mục\s+tài\s+liệu(?:\s+tham\s+khảo)?|tài\s+liệu\s+tham\s+khảo|tham\s+khảo|"
+    r"danh\s+mục\s+tài\s+liệu(?:\s+[tk]ham\s+khảo)?|(?:các\s+)?(?:tài\s+liệu|bài\s+viết|nguồn|link)\s+[tk]ham\s+khảo|tham\s+khảo|"
     r"tài\s+liệu\s+trích\s+dẫn|"
     r"参考文献|参考文献$"
     r")\s*[:.]?\s*$",
@@ -261,20 +261,23 @@ class SectionSegmenter:
             elif len(bib_candidates) > 1:
                 later = [p for p in bib_candidates if p > doc.num_pages * 0.35]
                 if len(later) > 1:
+                    final_block_start = later[-1]
+                    while final_block_start - 1 in later:
+                        final_block_start -= 1
                     first_pg = next((pg for pg in doc.pages if pg.page_num == later[0]), None)
-                    last_pg = next((pg for pg in doc.pages if pg.page_num == later[-1]), None)
+                    last_pg = next((pg for pg in doc.pages if pg.page_num == final_block_start), None)
                     first_yr_hits = len(re.findall(r"\b(?:18|19|20)\d{2}\b", first_pg.text or "")) if first_pg else 0
                     last_yr_hits = len(re.findall(r"\b(?:18|19|20)\d{2}\b", last_pg.text or "")) if last_pg else 0
                     if (
-                        later[-1] - later[0] >= 3
+                        final_block_start - later[0] >= 3
                         and later[0] < doc.num_pages * 0.78
                         and last_yr_hits >= 4
                     ):
-                        biblio_start = later[-1]
+                        biblio_start = final_block_start
                     elif later[1] == later[0] + 1 or first_yr_hits >= 4:
                         biblio_start = later[0]
                     else:
-                        biblio_start = later[-1]
+                        biblio_start = final_block_start
                 else:
                     biblio_start = later[-1] if later else bib_candidates[-1]
             else:
@@ -445,7 +448,18 @@ class SectionSegmenter:
                     continue
                 prev_window = "\n".join(lines[max(0, idx - 12) : idx])
                 next_nonempty = [ln.strip() for ln in lines[idx + 1 : idx + 14] if ln.strip()]
+                m_sub = re.match(r"^\s*(\d+)\.(\d+)\b", stripped)
+                if m_sub and next_nonempty:
+                    next_sec_prefix = f"{m_sub.group(1)}.{int(m_sub.group(2)) + 1}"
+                    if next_nonempty[0].startswith(next_sec_prefix):
+                        continue
                 if re.fullmatch(r"references?\s*[:.]?", stripped, re.IGNORECASE):
+                    if re.search(r"\b[A-Z]{2,}_[A-Z]{2,}\b", "\n".join(nearby_lines)) and not re.search(
+                        r"\b(?:18|19|20)\d{2}\b|\[\d+\]|https?://|doi:",
+                        "\n".join(next_nonempty[:8]),
+                        re.IGNORECASE,
+                    ):
+                        continue
                     if re.search(r"\b(?:table|bảng)\s+\d+", prev_window, re.IGNORECASE):
                         prev_nonempty = [ln.strip() for ln in lines[max(0, idx - 4) : idx] if ln.strip()]
                         if not prev_nonempty or not prev_nonempty[-1].endswith("."):

@@ -210,9 +210,9 @@ def normalize_author(raw: str) -> Author:
     if not raw:
         return Author(last_name="", raw="")
 
-    # FIX: Handle "et al." / "và cộng sự" / "và cs." pattern - NOT part of the author name
+    # FIX: Handle "et al." / "và cộng sự" / "và cs." / "và ctv." pattern - NOT part of the author name
     et_al_match = re.search(
-        r",?\s*(?:et\s+al\.?|và\s+cộng\s+sự|và\s+cs\.?)\s*$",
+        r",?\s*(?:et\s+al\.?|và\s+cộng\s+sự|và\s+cs\.?|và\s+ctv\.?|và\s+cộng\s+tác\s+viên)\s*$",
         raw,
         re.IGNORECASE,
     )
@@ -365,9 +365,9 @@ def parse_authors(raw: str, format_name: str | None = None) -> list[Author]:
     # Chuẩn hoá separator → split-friendly
     text = raw_nfc
 
-    # Handle "et al." / "và cộng sự" / "và cs." - replace with separator
+    # Handle "et al." / "và cộng sự" / "và cs." / "và ctv." - replace with separator
     text = re.sub(
-        r",?\s*(?:et\s+al\.?|và\s+cộng\s+sự|và\s+cs\.?)\s*$",
+        r",?\s*(?:et\s+al\.?|và\s+cộng\s+sự|và\s+cs\.?|và\s+ctv\.?|và\s+cộng\s+tác\s+viên)\s*$",
         ";",
         text,
         flags=re.IGNORECASE,
@@ -415,7 +415,7 @@ def _parse_apa_format(text: str) -> list[Author]:
 
     # Handle "et al." / "và cộng sự" - replace with separator for individual parsing
     text = re.sub(
-        r",?\s*(?:et\s+al\.?|và\s+cộng\s+sự|và\s+cs\.?)\s*$",
+        r",?\s*(?:et\s+al\.?|và\s+cộng\s+sự|và\s+cs\.?|và\s+ctv\.?|và\s+cộng\s+tác\s+viên)\s*$",
         ";",
         text,
         flags=re.IGNORECASE,

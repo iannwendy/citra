@@ -44,12 +44,16 @@ _STOPWORDS_AHEAD = (
     r"|Likewise|Otherwise|Subsequently|Accordingly|Alternatively|Finally|Overall"
     r"|Recently|Traditionally|Historically|Yet|Still|Even|While|Whereas|Because"
     r"|Since|When|Where|If|Unless|Until|After|Before|Once|Despite|Unlike|Like"
-    r"|Table|Figure|Chapter|Section|Appendix|Part|Page|Papers|Networks)(?:,|\s+))"
+    r"|Table|Figure|Chapter|Section|Appendix|Part|Page|Papers|Networks"
+    r"|Only|Both|Either|Neither|All|Most|Many|Some|Several|Few|Other|Such|These|Those|Each|Every|No|Nor|Not"
+    r"|Binary|Logistic|Probit|Heckman|Tobit|Regression|Random|Forest|Gradient|Boosting)(?:,|\s+))"
 )
 _AUTHOR_TOKEN = rf"(?:(?:van|de|der|von)\s+)*{_UPPER_VN}[a-zA-ZÀ-ỹ'\u2019\-]+"
+_AUTHOR_PHRASE = rf"{_STOPWORDS_AHEAD}{_AUTHOR_TOKEN}(?:[^\S\n]+{_STOPWORDS_AHEAD}{_AUTHOR_TOKEN}){{0,3}}"
+_COAUTHOR_PHRASE = rf"{_STOPWORDS_AHEAD}{_AUTHOR_TOKEN}(?:\s+{_STOPWORDS_AHEAD}{_AUTHOR_TOKEN}){{0,3}}"
 _CORP_AUTHOR_NARRATIVE = (
     r"(?:Bộ|Tổng\s+cục|Ủy\s+ban|Uỷ\s+ban|Ngân\s+hàng\s+Nhà\s+nước|Tổ\s+chức|Hiệp\s+hội)(?:\s+[A-Za-zÀ-ỹ&]+){1,8}"
-    r"|(?:Chính\s+phủ|Quốc\s+hội|Hiến\s+pháp)(?:\s+[A-Za-zÀ-ỹ&]+){0,6}"
+    r"|(?:Chính\s+phủ|Quốc\s+hội|Hiến\s+pháp)(?:\s+[A-Za-zÀ-ỹ&]+){0,9}"
     r"|(?:Bộ\s+luật|Luật|Pháp\s+lệnh)(?:\s+[A-Za-zÀ-ỹ]+){1,6}"
     r"|(?:Nghị\s+định|Thông\s+tư(?:\s+liên\s+tịch)?|Quyết\s+định|Nghị\s+quyết|Chỉ\s+thị)(?:\s+số)?\s+\d+[A-Za-zĐđ0-9/\-]+"
     r"|(?:Department|Ministry|World\s+Health\s+Organization|United\s+Nations|Reserve\s+Bank)"
@@ -66,7 +70,7 @@ _PAGE_OR_SECONDARY_SUFFIX = (
 # Parenthetical: (Author, 2020), [Author, 2020], (Author et al., 2020), ("Title," 2024), (Author, n.d.)
 _APA_INTEXT_PARENTHETICAL = CompiledPattern.create(
     name="apa_intext_parenthetical",
-    pattern=rf"[\(\[]([^)\]\[]+),[\"\u201d\u2019']?\s*((?:18|19|20)\d{{2}}[a-z]?|n\.?\s*d\.?(?:-[a-z])?){_PAGE_OR_SECONDARY_SUFFIX}[\)\]]",
+    pattern=rf"[\(\[]([^()\]\[]+),[\"\u201d\u2019']?\s*((?:18|19|20)\d{{2}}[a-z]?|n\.?\s*d\.?(?:-[a-z])?){_PAGE_OR_SECONDARY_SUFFIX}[\)\]]",
     pattern_type=PatternType.IN_TEXT,
     description="APA in-text parenthetical: (Author, 2020) | (Author et al., 2020) | (Author, n.d.)",
 )
@@ -75,12 +79,12 @@ _APA_INTEXT_PARENTHETICAL = CompiledPattern.create(
 _APA_INTEXT_NARRATIVE = CompiledPattern.create(
     name="apa_intext_narrative",
     pattern=(
-        rf"({_CORP_AUTHOR_NARRATIVE}|{_STOPWORDS_AHEAD}{_AUTHOR_TOKEN}"
-        rf"(?:(?:\s*,\s*(?:và|and|&)\s+|\s+(?:và|and|&)\s+|\s*,\s*){_STOPWORDS_AHEAD}{_AUTHOR_TOKEN})*"
-        rf"(?:\s*,?\s*(?:et\s+a?l\.?|và\s+cộng\s+sự|và\s+cs\.?))?"
+        rf"({_CORP_AUTHOR_NARRATIVE}|{_AUTHOR_PHRASE}"
+        rf"(?:(?:\s*,\s*(?:và|and|&)\s+|\s+(?:và|and|&)\s+|\s*,\s*){_COAUTHOR_PHRASE})*"
+        rf"(?:\s*,?\s*(?:et\s+a?l\.?|và\s+cộng\s+sự|và\s+cs\.?|và\s+ctv\.?|và\s+cộng\s+tác\s+viên))?"
         rf"(?:[\s,]{_UPPER_VN}[a-zA-ZÀ-ỹ'\u2019\-]*)*)"
         rf"\s+[\(\[]((?:18|19|20)\d{{2}}[a-z]?|n\.?\s*d\.?(?:-[a-z])?){_PAGE_OR_SECONDARY_SUFFIX}[\)\]]"
-        rf"|({_STOPWORDS_AHEAD}{_AUTHOR_TOKEN}\s+et\s+al\.)\s+((?:18|19|20)\d{{2}}[a-z]?)\b"
+        rf"|({_AUTHOR_PHRASE}\s+et\s+al\.)\s+((?:18|19|20)\d{{2}}[a-z]?)\b"
     ),
     pattern_type=PatternType.IN_TEXT,
     description="APA narrative: Author (2020) | Author et al. (2020) | Author (n.d.)",
@@ -286,6 +290,7 @@ def parse_vn_legal_reference(text: str) -> Optional[Citation]:
     cleaned = normalized_text[lead_m.end():].strip() if lead_m else normalized_text
     cleaned = re.sub(r"\s*\[trans\s*:[^\]]*\]?\s*$", "", cleaned, flags=re.IGNORECASE).strip()
     cleaned = re.sub(r"([a-zà-ỹ])(năm\s+(?:19|20)\d{2})\b", r"\1 \2", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"(\b\d+)\s*/\s*(\d{4})\s*/\s*([A-ZĐ0-9\-]+)", r"\1/\2/\3", cleaned)
     if not cleaned:
         return None
     if _VN_LEGAL_ACADEMIC_EXCLUSION_RE.search(cleaned):
@@ -394,6 +399,13 @@ def parse_vn_legal_reference(text: str) -> Optional[Citation]:
             )
             if code_full_m:
                 authors.append(_make_corp_author(code_full_m.group(1)))
+            colon_law_m = re.search(
+                r":\s*((?:Bộ\s+luật|Luật|Pháp\s+lệnh)\s+[^().\n]+?)(?=\s*,\s*ban\s+hành|\s+ban\s+hành|\s*,\s*ngày\s+\d|\s+ngày\s+\d|\s+năm\s+(?:19|20)\d{2}|[.\n]|$)",
+                cleaned,
+                re.IGNORECASE,
+            )
+            if colon_law_m:
+                authors.append(_make_corp_author(colon_law_m.group(1).strip()))
 
             url_m = re.search(r"(https?://[^\s,;)\]]+)", cleaned, re.IGNORECASE)
             return Citation(

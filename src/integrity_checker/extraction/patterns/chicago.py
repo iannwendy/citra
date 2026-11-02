@@ -59,7 +59,7 @@ _CHICAGO_AD_PARENTHETICAL = CompiledPattern.create(
 # Parenthetical without comma: (Author 2020), (Author 2020, 25), (Author 2020: 25)
 _CHICAGO_AD_PARENTHETICAL_NOCOMMA = CompiledPattern.create(
     name="chicago_ad_parenthetical_nocomma",
-    pattern=r"\((?!(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december|spring|summer|fall|autumn|winter|in|since|from|until|before|after|circa|ca|table|figure|fig|section|chapter|part|version|ver|vol|no|issue)\b)([A-ZÀ-Ý][a-zA-ZÀ-ÿ'.\-]+(?:\s+(?:and|&|và)\s+[A-ZÀ-Ý][a-zA-ZÀ-ÿ'.\-]+|\s+et\s+al\.?)?)\s+((?:18|19|20)\d{2}[a-z]?)(?:\s*[:,]\s*(?:pp?\.?\s*)?(\d+(?:[-–]\d+)?|[ivxlcdm]+|n\.?\s*p\.?)(?:\s*[;,]\s*[^)]*)?)?\)",
+    pattern=r"\((?!(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december|spring|summer|fall|autumn|winter|in|since|from|until|before|after|circa|ca|table|figure|fig|section|chapter|part|version|ver|vol|no|issue)\b)([A-ZÀ-Ý][a-zà-ÿ'.\u2019\-]+(?:[A-ZÀ-Ý][a-zà-ÿ'.\u2019\-]+)*(?:\s+(?:and|&|và)\s+[A-ZÀ-Ý][a-zà-ÿ'.\u2019\-]+(?:[A-ZÀ-Ý][a-zà-ÿ'.\u2019\-]+)*|\s+et\s+al\.?)?)\s+((?:18|19|20)\d{2}[a-z]?)(?:\s*[:,]\s*(?:pp?\.?\s*)?(\d+(?:[-–]\d+)?|[ivxlcdm]+|n\.?\s*p\.?)(?:\s*[;,]\s*[^)]*)?)?\)",
     pattern_type=PatternType.IN_TEXT,
     description="Chicago Author-Date: (Author 2020) | (Author 2020, 25)",
 )

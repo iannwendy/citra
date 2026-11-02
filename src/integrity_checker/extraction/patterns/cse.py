@@ -90,7 +90,7 @@ _CSE_NAMEYEAR_PARENTHETICAL_NOCOMMA = CompiledPattern.create(
         r"Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|"
         r"Spring|Summer|Fall|Autumn|Winter|In|From|Since|Until|Before|After|During|"
         r"Between|Around|Circa|See|Table|Figure|Fig|Section|Chapter|Part|Page|Vol|No)\b)"
-        r"([A-ZÀ-Ý][A-Za-zÀ-ÿ'-]+(?:\s+(?:and|&|và)\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'-]+|\s+et\s+al\.?)?)\s+"
+        r"([A-ZÀ-Ý][a-zà-ÿ'\u2019-]+(?:[A-ZÀ-Ý][a-zà-ÿ'\u2019-]+)*(?:\s+(?:and|&|và)\s+[A-ZÀ-Ý][a-zà-ÿ'\u2019-]+(?:[A-ZÀ-Ý][a-zà-ÿ'\u2019-]+)*|\s+et\s+al\.?)?)\s+"
         r"((?:19|20)\d{2}[a-z]?)\)"
     ),
     pattern_type=PatternType.IN_TEXT,

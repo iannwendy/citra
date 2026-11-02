@@ -1065,6 +1065,17 @@ class DocumentParser:
                 pre_pnum = (section.metadata or {}).get("pre_header_page_num") or section.start_page
                 if pre_body and pre_pnum:
                     body_page_texts[pre_pnum] = (body_page_texts.get(pre_pnum, "") + "\n" + pre_body).strip()
+                # Also include bottom-of-page footnote lines on the bibliography page itself
+                # (e.g. "13 Maurice Cozian, Alian Viandier (1988), ..., p.165." below the reference list)
+                for n in range(section.start_page, section.end_page + 1):
+                    if n in by_page and by_page[n].text:
+                        fn_lines = [
+                            ln.strip()
+                            for ln in by_page[n].text.splitlines()
+                            if re.match(r"^\d{1,2}\s+[A-ZÀ-Ý].*(?:\bp\.|\btr\.)\s*\d+", ln.strip(), re.I)
+                        ]
+                        if fn_lines:
+                            body_page_texts[n] = (body_page_texts.get(n, "") + "\n" + "\n".join(fn_lines)).strip()
 
         if not body_page_texts:
             return existing_body
@@ -1170,14 +1181,21 @@ class DocumentParser:
 
             elif (
                 not self._is_non_footnote_student_or_tech_report(source_doc, references)
-                and (has_vn_trad or len(existing_body) <= 2 or (has_vn_bib and len(source_doc.pages or []) >= 4))
+                and (
+                    has_vn_trad
+                    or len(existing_body) <= 4
+                    or (has_vn_bib and len(source_doc.pages or []) >= 4 and len(existing_body) <= 28)
+                )
             ):
                 # For Vietnamese footnote-style articles, match bibliography author/title in page text/footnotes
                 first_raw = ""
                 if ref.authors:
                     a0 = ref.authors[0]
                     first_raw = (getattr(a0, "raw", None) or getattr(a0, "last_name", None) or str(a0)).strip()
-                title_snip = (ref.title or "").strip()
+                title_snip = (
+                    ref.title
+                    or re.sub(r"^\s*(?:\[\s*\d+\s*\]|\d+[\.\)])\s*", "", ref.raw_text or "")
+                ).strip()
                 title_prefix = title_snip[:min(len(title_snip), 32)].strip().lower() if len(title_snip) >= 6 else ""
                 url_snip = (ref.url or "").strip().lower()[:35] if ref.url and len(ref.url) >= 18 else ""
 
@@ -1288,6 +1306,17 @@ class DocumentParser:
                 pre_pnum = (section.metadata or {}).get("pre_header_page_num") or section.start_page
                 if pre_body and pre_pnum:
                     body_page_texts[pre_pnum] = (body_page_texts.get(pre_pnum, "") + "\n" + pre_body).strip()
+                # Also include bottom-of-page footnote lines on the bibliography page itself
+                # (e.g. "13 Maurice Cozian, Alian Viandier (1988), ..., p.165." below the reference list)
+                for n in range(section.start_page, section.end_page + 1):
+                    if n in by_page and by_page[n].text:
+                        fn_lines = [
+                            ln.strip()
+                            for ln in by_page[n].text.splitlines()
+                            if re.match(r"^\d{1,2}\s+[A-ZÀ-Ý].*(?:\bp\.|\btr\.)\s*\d+", ln.strip(), re.I)
+                        ]
+                        if fn_lines:
+                            body_page_texts[n] = (body_page_texts.get(n, "") + "\n" + "\n".join(fn_lines)).strip()
 
         if not body_page_texts:
             return existing_body
@@ -1446,6 +1475,17 @@ class DocumentParser:
                 pre_pnum = (section.metadata or {}).get("pre_header_page_num") or section.start_page
                 if pre_body and pre_pnum:
                     body_page_texts[pre_pnum] = (body_page_texts.get(pre_pnum, "") + "\n" + pre_body).strip()
+                # Also include bottom-of-page footnote lines on the bibliography page itself
+                # (e.g. "13 Maurice Cozian, Alian Viandier (1988), ..., p.165." below the reference list)
+                for n in range(section.start_page, section.end_page + 1):
+                    if n in by_page and by_page[n].text:
+                        fn_lines = [
+                            ln.strip()
+                            for ln in by_page[n].text.splitlines()
+                            if re.match(r"^\d{1,2}\s+[A-ZÀ-Ý].*(?:\bp\.|\btr\.)\s*\d+", ln.strip(), re.I)
+                        ]
+                        if fn_lines:
+                            body_page_texts[n] = (body_page_texts.get(n, "") + "\n" + "\n".join(fn_lines)).strip()
 
         if not body_page_texts:
             return existing_body
@@ -1727,6 +1767,13 @@ class DocumentParser:
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Reference parser failed: %s", exc)
         if all_citations:
+            # If the bibliography is predominantly numbered (1..N) and inline splitting
+            # produced an entry with numeric_index=None (e.g. two entries glued without
+            # a newline in PDF extraction), assign sequential 1..N numeric_index values.
+            num_count = sum(1 for c in all_citations if c.numeric_index is not None)
+            if num_count >= max(3, int(len(all_citations) * 0.6)) and num_count < len(all_citations):
+                for idx, c in enumerate(all_citations, start=1):
+                    c.numeric_index = idx
             logger.info(f"Extracted {len(all_citations)} references from regex")
         return all_citations
 

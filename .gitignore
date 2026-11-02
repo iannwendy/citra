@@ -98,6 +98,7 @@ web/playwright-report/
 vn_legal_reports/
 style_corpora/
 tdtu_github_reports/
+TDTU_PDF/
 
 # Kilo Code agent state (worktrees/state, không phải config)
 .kilo/worktrees/
@@ -121,6 +122,7 @@ PHASE1_2_VERIFICATION_REPORT.md
 ROLES_PLAN.md
 docs/UX_UI_COMPREHENSIVE_AUDIT_REPORT.md
 TDTU-MidtermReport/
+6_ICCIES_2027/
 tai_lieu_tham_khao_TDTU.md
 
 # Local runtime data (dev containers write these)
