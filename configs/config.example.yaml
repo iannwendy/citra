@@ -6,7 +6,7 @@
 
 app:
   name: "Essay Integrity Checker"
-  version: "0.2.0"   # v1.2 spec (re-scoped từ v1.1)
+  # version: derived from integrity_checker.__version__ (override via APP_VERSION env)
   env: development
   debug: true
   log_level: INFO

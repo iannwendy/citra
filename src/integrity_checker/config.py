@@ -16,6 +16,8 @@ import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from integrity_checker.__version__ import __version__ as _package_version
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MAIN_APP_DB_PATH = (PROJECT_ROOT / "data" / "app.db").resolve()
 
@@ -49,9 +51,24 @@ def is_main_app_db_url(url: str) -> bool:
 # ---------- Sub-configs ----------
 
 
+def resolve_app_version() -> str:
+    """Effective application version.
+
+    Single source of truth is ``integrity_checker.__version__`` (auto-bumped by
+    the release hook). Deployments may pin a different label explicitly via the
+    ``APP_VERSION`` environment variable. Any ``app.version`` left in YAML
+    configs is ignored so stale hardcoded values cannot leak into /api/health.
+    """
+    import os
+
+    override = (os.getenv("APP_VERSION") or "").strip()
+    return override or _package_version
+
+
 class AppConfig(BaseModel):
     name: str = "Essay Integrity Checker"
-    version: str = "0.2.0"   # v1.2 spec
+    # Derived from integrity_checker.__version__ (see resolve_app_version()).
+    version: str = Field(default_factory=lambda: _package_version)
     env: str = "development"
     debug: bool = False
     log_level: str = "INFO"
@@ -495,6 +512,10 @@ class Settings(BaseSettings):
     def _validate_weights_sum(self) -> Settings:
         """CIS weights PHẢI tổng = 1.0 (±0.01). Raise nếu sai."""
         import os
+
+        # Version always comes from the package (or explicit APP_VERSION env),
+        # never from a possibly stale YAML `app.version`.
+        self.app.version = resolve_app_version()
 
         env_db_url = os.getenv("DATABASE_URL")
         if env_db_url:
