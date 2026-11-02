@@ -20,8 +20,18 @@ import {
   CreditCard,
   Sparkles,
   Loader2,
+  KeyRound,
+  Copy,
+  Trash2,
+  Plus,
 } from 'lucide-react';
-import { api, type BillingTransactionItem, type SubscriptionSummary } from '@/api/client';
+import {
+  api,
+  type ApiKeyItem,
+  type BillingTransactionItem,
+  type CreatedApiKeyResponse,
+  type SubscriptionSummary,
+} from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRole } from '@/hooks/useRole';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
@@ -65,6 +75,16 @@ export function SettingsPage(): JSX.Element {
   const [billingLoading, setBillingLoading] = useState(false);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
 
+  // Personal Developer API Keys (X-API-Key, Task 6.4)
+  const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([]);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [newlyCreatedKey, setNewlyCreatedKey] = useState<CreatedApiKeyResponse | null>(null);
+  const [copiedRawKey, setCopiedRawKey] = useState(false);
+
+  const canManageApiKeys =
+    !isBasic || isAdmin || user?.role === 'teacher' || user?.role === 'admin';
+
   useEffect(() => {
     if (!user) return;
     let active = true;
@@ -78,10 +98,76 @@ export function SettingsPage(): JSX.Element {
       .catch(() => {
         // Fallback silently if unauthenticated in isolated unit tests
       });
+    if (typeof api.listApiKeys === 'function') {
+      api
+        .listApiKeys()
+        .then((keys) => {
+          if (!active) return;
+          setApiKeys(Array.isArray(keys) ? keys : []);
+        })
+        .catch(() => {
+          // Ignore in isolated tests
+        });
+    }
     return () => {
       active = false;
     };
   }, [user]);
+
+  const handleCreateApiKey = async () => {
+    const trimmed = newKeyName.trim();
+    if (!trimmed || creatingKey) return;
+    setCreatingKey(true);
+    try {
+      const created = await api.createApiKey(trimmed);
+      setNewlyCreatedKey(created);
+      setCopiedRawKey(false);
+      setNewKeyName('');
+      setApiKeys((prev) => [created, ...prev]);
+      toast.success(
+        currentLang === 'vi' ? 'Đã tạo khóa API mới' : 'API Key Created',
+        `${created.name} (${created.key_prefix}…)`,
+      );
+    } catch (err) {
+      toast.error(
+        currentLang === 'vi' ? 'Không thể tạo khóa API' : 'Failed to create API key',
+        err instanceof Error ? err.message : 'Error',
+      );
+    } finally {
+      setCreatingKey(false);
+    }
+  };
+
+  const handleRevokeApiKey = async (keyId: number) => {
+    try {
+      await api.revokeApiKey(keyId);
+      setApiKeys((prev) => prev.filter((k) => k.id !== keyId));
+      if (newlyCreatedKey?.id === keyId) {
+        setNewlyCreatedKey(null);
+      }
+      toast.success(
+        currentLang === 'vi' ? 'Đã thu hồi khóa API' : 'API Key Revoked',
+      );
+    } catch (err) {
+      toast.error(
+        currentLang === 'vi' ? 'Không thể thu hồi khóa API' : 'Failed to revoke API key',
+        err instanceof Error ? err.message : 'Error',
+      );
+    }
+  };
+
+  const handleCopyRawKey = async () => {
+    if (!newlyCreatedKey?.raw_key) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(newlyCreatedKey.raw_key);
+      }
+    } catch {
+      // Clipboard fallback
+    }
+    setCopiedRawKey(true);
+    setTimeout(() => setCopiedRawKey(false), 2000);
+  };
 
   const handleCancelSubscription = async (immediate: boolean = false) => {
     setBillingLoading(true);
@@ -599,6 +685,173 @@ export function SettingsPage(): JSX.Element {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Personal Developer API Keys Section (X-API-Key, Task 6.4) */}
+      <div
+        className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
+        data-testid="settings-api-keys-section"
+      >
+        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
+            </div>
+            <Separator orientation="vertical" className="h-4" />
+            <KeyRound className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
+              {t('settings.apiKeysTitle')}
+            </h2>
+          </div>
+          <span className="text-[11px] font-mono text-slate-400">X-API-Key</span>
+        </div>
+
+        <div className="p-5 sm:p-6 space-y-4">
+          <p className="text-xs text-slate-600 dark:text-slate-400">
+            {t('settings.apiKeysSubtitle')}
+          </p>
+
+          {!canManageApiKeys ? (
+            <div
+              data-testid="api-key-upgrade-prompt"
+              className="p-4 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            >
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">
+                  {currentLang === 'vi'
+                    ? 'Khóa API cá nhân (X-API-Key) yêu cầu gói CITRA Pro hoặc Ultra'
+                    : 'Personal Developer API Keys (X-API-Key) require CITRA Pro or Ultra'}
+                </p>
+                <p className="text-[11px] text-amber-700 dark:text-amber-300/90">
+                  {currentLang === 'vi'
+                    ? 'Nâng cấp gói để tự động hóa kiểm tra trích dẫn qua tập lệnh CLI, Zotero và CI/CD.'
+                    : 'Upgrade your plan to automate citation verification via CLI scripts, Zotero, and CI/CD.'}
+                </p>
+              </div>
+              <Button
+                asChild
+                size="sm"
+                className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shrink-0"
+              >
+                <Link to="/pricing">
+                  <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                  {currentLang === 'vi' ? 'Nâng cấp Pro' : 'Upgrade to Pro'}
+                </Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                <input
+                  type="text"
+                  data-testid="api-key-name-input"
+                  value={newKeyName}
+                  onChange={(e) => setNewKeyName(e.target.value)}
+                  placeholder={
+                    currentLang === 'vi'
+                      ? 'Tên khóa API (VD: Zotero Script, GitHub Actions...)'
+                      : 'API key name (e.g. Zotero Script, GitHub Actions...)'
+                  }
+                  maxLength={120}
+                  className="flex-1 h-10 px-3.5 rounded-xl text-xs font-mono bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  data-testid="create-api-key-btn"
+                  disabled={!newKeyName.trim() || creatingKey}
+                  onClick={handleCreateApiKey}
+                  className="h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shrink-0"
+                >
+                  {creatingKey ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  ) : (
+                    <Plus className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  {t('settings.apiKeyCreateBtn')}
+                </Button>
+              </div>
+
+              {newlyCreatedKey && (
+                <div
+                  data-testid="created-api-key-banner"
+                  className="p-3.5 rounded-xl bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-emerald-900 dark:text-emerald-200">
+                      {t('settings.apiKeyCopyWarning')}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      data-testid="copy-raw-api-key-btn"
+                      onClick={handleCopyRawKey}
+                      className="h-7 px-2.5 text-xs font-mono border-emerald-300 dark:border-emerald-700"
+                    >
+                      {copiedRawKey ? (
+                        <Check className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5 mr-1" />
+                      )}
+                      {copiedRawKey ? 'Copied!' : 'Copy'}
+                    </Button>
+                  </div>
+                  <code
+                    data-testid="created-api-key-secret"
+                    className="block w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-950 border border-emerald-200 dark:border-emerald-900 font-mono text-xs text-emerald-800 dark:text-emerald-300 select-all break-all"
+                  >
+                    {newlyCreatedKey.raw_key}
+                  </code>
+                </div>
+              )}
+
+              {apiKeys.length > 0 && (
+                <div
+                  data-testid="api-keys-list"
+                  className="divide-y divide-slate-200/70 dark:divide-slate-800 border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden text-xs"
+                >
+                  {apiKeys.map((k) => (
+                    <div
+                      key={k.id}
+                      data-testid={`api-key-row-${k.id}`}
+                      className="px-4 py-3 flex items-center justify-between gap-3 bg-white dark:bg-slate-900 flex-wrap"
+                    >
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-slate-900 dark:text-white">
+                            {k.name}
+                          </span>
+                          <code className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[11px] text-indigo-600 dark:text-indigo-400">
+                            {k.key_prefix}••••
+                          </code>
+                        </div>
+                        <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                          {k.last_used_at
+                            ? `Last used: ${new Date(k.last_used_at).toLocaleDateString()}`
+                            : 'Never used'}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        data-testid={`revoke-api-key-btn-${k.id}`}
+                        onClick={() => handleRevokeApiKey(k.id)}
+                        className="h-8 px-2.5 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                        {t('settings.apiKeyRevokeBtn')}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

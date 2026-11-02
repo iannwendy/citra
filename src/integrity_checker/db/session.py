@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool, StaticPool
 
 from integrity_checker.config import get_settings, is_main_app_db_url, is_test_runtime
-from integrity_checker.db.models import Base, PromoCode, User
+from integrity_checker.db.models import ApiKey, Base, PromoCode, User  # noqa: F401
 
 _engine: Engine | None = None
 _engine_url: str | None = None

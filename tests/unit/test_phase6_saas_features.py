@@ -13,6 +13,7 @@ from integrity_checker.api.routes.essays import (
     verify_essay_share_token,
 )
 from integrity_checker.db.models import (
+    ApiKey,
     AuthToken,
     CitationRecord,
     EssayRecord,
@@ -31,6 +32,7 @@ def clean_db():
     session.query(VerdictRecord).delete()
     session.query(CitationRecord).delete()
     session.query(EssayRecord).delete()
+    session.query(ApiKey).delete()
     session.query(AuthToken).delete()
     session.query(SessionModel).delete()
     session.query(User).delete()
@@ -43,6 +45,7 @@ def clean_db():
         cleanup.query(VerdictRecord).delete()
         cleanup.query(CitationRecord).delete()
         cleanup.query(EssayRecord).delete()
+        cleanup.query(ApiKey).delete()
         cleanup.query(AuthToken).delete()
         cleanup.query(SessionModel).delete()
         cleanup.query(User).delete()
@@ -462,5 +465,78 @@ ER  -
             headers=headers,
         )
         assert resp_bad_bib.status_code == 400
+
+
+class TestTask64PersonalApiKeys:
+    """Task 6.4: Personal API key (X-API-Key) management and authentication."""
+
+    def test_create_list_use_and_revoke_api_key(self, clean_db) -> None:
+        client = TestClient(app)
+        admin_token, admin_info = _login(client, "admin", "admin123")
+        jwt_headers = {"Authorization": f"Bearer {admin_token}"}
+
+        # 1. Create a personal API key
+        create_resp = client.post(
+            "/api/users/me/api-keys",
+            json={"name": "CI/CD Pipeline Key"},
+            headers=jwt_headers,
+        )
+        assert create_resp.status_code == 200
+        created = create_resp.json()
+        assert created["name"] == "CI/CD Pipeline Key"
+        assert created["raw_key"].startswith("citra_live_")
+        assert created["key_prefix"] == created["raw_key"][:16]
+        raw_key = created["raw_key"]
+        key_id = created["id"]
+
+        # 2. List keys — raw_key and key_hash are never returned
+        list_resp = client.get("/api/users/me/api-keys", headers=jwt_headers)
+        assert list_resp.status_code == 200
+        keys = list_resp.json()
+        assert len(keys) == 1
+        assert keys[0]["id"] == key_id
+        assert keys[0]["name"] == "CI/CD Pipeline Key"
+        assert "raw_key" not in keys[0]
+        assert "key_hash" not in keys[0]
+        assert keys[0]["last_used_at"] is None
+
+        # 3. Authenticate to /api/auth/me and /api/essays/stats using X-API-Key header
+        me_resp = client.get("/api/auth/me", headers={"X-API-Key": raw_key})
+        assert me_resp.status_code == 200
+        assert me_resp.json()["id"] == admin_info["id"]
+
+        stats_resp = client.get("/api/essays/stats", headers={"X-API-Key": raw_key})
+        assert stats_resp.status_code == 200
+        assert "total_essays" in stats_resp.json()
+
+        # Also support Authorization: Bearer citra_live_...
+        bearer_key_resp = client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {raw_key}"},
+        )
+        assert bearer_key_resp.status_code == 200
+
+        # Verify last_used_at was updated
+        list_after = client.get("/api/users/me/api-keys", headers=jwt_headers).json()
+        assert list_after[0]["last_used_at"] is not None
+
+        # 4. Revoke key -> subsequent X-API-Key calls return 401
+        del_resp = client.delete(f"/api/users/me/api-keys/{key_id}", headers=jwt_headers)
+        assert del_resp.status_code == 200
+
+        revoked_me = client.get("/api/auth/me", headers={"X-API-Key": raw_key})
+        assert revoked_me.status_code == 401
+
+    def test_basic_tier_user_cannot_create_api_key(self, clean_db) -> None:
+        client = TestClient(app)
+        user_token, _ = _login(client, "user", "user123")
+        resp = client.post(
+            "/api/users/me/api-keys",
+            json={"name": "Student Key"},
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+        assert resp.status_code == 402
+        assert "API_KEY_REQUIRES_PRO" in resp.json()["detail"]
+
 
 

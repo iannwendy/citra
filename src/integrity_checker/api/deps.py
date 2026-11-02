@@ -60,11 +60,35 @@ def get_token_from_header(authorization: str) -> str:
 
 
 def get_current_user(
-    authorization: str = Header(..., description="Bearer token"),
+    authorization: str | None = Header(None, description="Bearer token"),
     db: Session = Depends(get_db),
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
 ) -> User:
-    """Decode JWT token and return current user."""
-    token = get_token_from_header(authorization)
+    """Authenticate via JWT Bearer token or X-API-Key (`citra_live_...`) and return current user."""
+    repo = Repository(db)
+
+    raw_api_key = x_api_key.strip() if isinstance(x_api_key, str) else ""
+    raw_auth = authorization.strip() if isinstance(authorization, str) else ""
+    if not raw_api_key and raw_auth.startswith("Bearer citra_live_"):
+        raw_api_key = raw_auth[7:].strip()
+
+    if raw_api_key:
+        api_key_row = repo.get_active_api_key_by_raw(raw_api_key)
+        if not api_key_row:
+            raise HTTPException(status_code=401, detail="Invalid or revoked API key")
+        user = db.get(User, api_key_row.user_id)
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail="Account is deactivated")
+        api_key_row.last_used_at = datetime.now(UTC)
+        db.commit()
+        return user
+
+    if not raw_auth:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    token = get_token_from_header(raw_auth)
     settings = get_settings()
 
     try:
@@ -84,7 +108,6 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Invalid token payload") from exc
 
     # Verify session exists and is not expired
-    repo = Repository(db)
     session_record = repo.get_session_by_token(token)
     if not session_record:
         raise HTTPException(status_code=401, detail="Session not found")
@@ -115,13 +138,16 @@ def get_current_user(
 def get_current_user_optional(
     authorization: str | None = Header(None),
     db: Session = Depends(get_db),
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
 ) -> User | None:
     """Return current user or None if not authenticated."""
-    if not authorization:
+    raw_auth = authorization.strip() if isinstance(authorization, str) else ""
+    raw_key = x_api_key.strip() if isinstance(x_api_key, str) else ""
+    if not raw_auth and not raw_key:
         return None
 
     try:
-        return get_current_user(authorization, db)
+        return get_current_user(authorization, db, x_api_key=x_api_key)
     except HTTPException:
         return None
 

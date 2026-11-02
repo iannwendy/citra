@@ -67,4 +67,34 @@ describe('SettingsPage cancel auto-renew confirmation', () => {
     fireEvent.click(await screen.findByTestId('settings-cancel-sub-btn'));
     expect((await screen.findByRole('dialog')).textContent).toMatch(/Tắt tự động gia hạn\?/);
   });
+
+  it('allows Pro user to create, view, and revoke personal API keys (X-API-Key)', async () => {
+    vi.spyOn(api, 'listApiKeys').mockResolvedValue([]);
+    const createSpy = vi.spyOn(api, 'createApiKey').mockResolvedValue({
+      id: 7,
+      name: 'Zotero Automation',
+      key_prefix: 'citra_live_abc12',
+      raw_key: 'citra_live_abc1234567890secret',
+      created_at: '2026-11-02T10:00:00Z',
+      last_used_at: null,
+      is_active: true,
+    });
+    const revokeSpy = vi.spyOn(api, 'revokeApiKey').mockResolvedValue({
+      message: 'API key revoked',
+      id: 7,
+    });
+
+    renderWithProviders(<SettingsPage />, { user: proUser() });
+    const input = await screen.findByTestId('api-key-name-input');
+    fireEvent.change(input, { target: { value: 'Zotero Automation' } });
+    fireEvent.click(screen.getByTestId('create-api-key-btn'));
+
+    await waitFor(() => expect(createSpy).toHaveBeenCalledWith('Zotero Automation'));
+    const secretEl = await screen.findByTestId('created-api-key-secret');
+    expect(secretEl.textContent).toBe('citra_live_abc1234567890secret');
+
+    const revokeBtn = await screen.findByTestId('revoke-api-key-btn-7');
+    fireEvent.click(revokeBtn);
+    await waitFor(() => expect(revokeSpy).toHaveBeenCalledWith(7));
+  });
 });

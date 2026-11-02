@@ -600,7 +600,12 @@
     "autoVerifyEnabled": "Đã bật tự động xác minh",
     "autoVerifyDisabled": "Đã tắt tự động xác minh",
     "compactViewEnabled": "Đã bật chế độ xem thu gọn",
-    "compactViewDisabled": "Đã tắt chế độ xem thu gọn"
+    "compactViewDisabled": "Đã tắt chế độ xem thu gọn",
+    "apiKeysTitle": "Khóa API Nhà phát triển (X-API-Key)",
+    "apiKeysSubtitle": "Xác thực tập lệnh CLI, quy trình CI/CD và tích hợp Zotero/Overleaf qua header X-API-Key",
+    "apiKeyCreateBtn": "Tạo Khóa API",
+    "apiKeyRevokeBtn": "Thu hồi",
+    "apiKeyCopyWarning": "Hãy sao chép khóa bí mật này ngay bây giờ — khóa sẽ không bao giờ hiển thị lại."
   },
   "error": {
     "network": "Lỗi kết nối",

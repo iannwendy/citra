@@ -1732,4 +1732,30 @@ export const api = {
       `/billing/admin/promos/${id}`,
       { method: 'DELETE' },
     ),
+
+  // Personal Developer API Keys (X-API-Key, Task 6.4)
+  listApiKeys: () => request<ApiKeyItem[]>('/users/me/api-keys'),
+  createApiKey: (name: string) =>
+    request<CreatedApiKeyResponse>('/users/me/api-keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }),
+  revokeApiKey: (keyId: number) =>
+    request<{ message: string; id: number }>(`/users/me/api-keys/${keyId}`, {
+      method: 'DELETE',
+    }),
 };
+
+export interface ApiKeyItem {
+  id: number;
+  name: string;
+  key_prefix: string;
+  created_at: string | null;
+  last_used_at: string | null;
+  is_active: boolean;
+}
+
+export interface CreatedApiKeyResponse extends ApiKeyItem {
+  raw_key: string;
+}

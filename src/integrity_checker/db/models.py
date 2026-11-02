@@ -74,6 +74,9 @@ class User(Base):
     auth_tokens: Mapped[list[AuthToken]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    api_keys: Mapped[list[ApiKey]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     billing_transactions: Mapped[list[BillingTransaction]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -119,6 +122,27 @@ class AuthToken(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="auth_tokens")
+
+
+class ApiKey(Base):
+    """Personal Developer API key (X-API-Key / citra_live_...) for programmatic access."""
+
+    __tablename__ = "api_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC)
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Integer, default=1)
+
+    user: Mapped[User] = relationship(back_populates="api_keys")
 
 
 class CitationCache(Base):

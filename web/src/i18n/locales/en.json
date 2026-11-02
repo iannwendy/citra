@@ -600,7 +600,12 @@
     "autoVerifyEnabled": "Auto-verify enabled",
     "autoVerifyDisabled": "Auto-verify disabled",
     "compactViewEnabled": "Compact view enabled",
-    "compactViewDisabled": "Compact view disabled"
+    "compactViewDisabled": "Compact view disabled",
+    "apiKeysTitle": "Developer API Keys (X-API-Key)",
+    "apiKeysSubtitle": "Authenticate CLI scripts, CI/CD pipelines, and Zotero/Overleaf workflows via X-API-Key header",
+    "apiKeyCreateBtn": "Create API Key",
+    "apiKeyRevokeBtn": "Revoke",
+    "apiKeyCopyWarning": "Copy this secret key now — it will never be shown again."
   },
   "error": {
     "network": "Connection error",

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session as OrmSession
 
 from integrity_checker.billing.plans import default_plan_for_role
 from integrity_checker.db.models import (
+    ApiKey,
     AuditLog,
     AuthToken,
     BillingTransaction,
@@ -1005,6 +1006,57 @@ class Repository:
         """Mark a token as consumed."""
         token_row.used_at = datetime.now(UTC)
         self.session.flush()
+
+    # -- Personal Developer API Keys (X-API-Key) --
+
+    def create_api_key(self, user_id: int, name: str) -> tuple[str, ApiKey]:
+        """Issue a new personal API key (`citra_live_...`), storing only its SHA-256 hash."""
+        raw_key = f"citra_live_{secrets.token_urlsafe(24)}"
+        key_prefix = raw_key[:16]
+        key_hash = self.hash_token(raw_key)
+        key_row = ApiKey(
+            user_id=user_id,
+            name=name.strip(),
+            key_prefix=key_prefix,
+            key_hash=key_hash,
+            is_active=1,
+        )
+        self.session.add(key_row)
+        self.session.flush()
+        return raw_key, key_row
+
+    def list_api_keys(self, user_id: int) -> list[ApiKey]:
+        """List active personal API keys for a user, newest first."""
+        return list(
+            self.session.query(ApiKey)
+            .filter(ApiKey.user_id == user_id, ApiKey.is_active == 1)
+            .order_by(ApiKey.created_at.desc(), ApiKey.id.desc())
+            .all()
+        )
+
+    def get_active_api_key_by_raw(self, raw_key: str) -> ApiKey | None:
+        """Look up an active ApiKey row by its raw secret string."""
+        if not raw_key or not raw_key.strip():
+            return None
+        key_hash = self.hash_token(raw_key)
+        return (
+            self.session.query(ApiKey)
+            .filter(ApiKey.key_hash == key_hash, ApiKey.is_active == 1)
+            .first()
+        )
+
+    def revoke_api_key(self, user_id: int, key_id: int) -> bool:
+        """Revoke and delete a personal API key owned by `user_id`."""
+        row = (
+            self.session.query(ApiKey)
+            .filter(ApiKey.id == key_id, ApiKey.user_id == user_id)
+            .first()
+        )
+        if not row:
+            return False
+        self.session.delete(row)
+        self.session.flush()
+        return True
 
     # -- Essays with user_id --
 

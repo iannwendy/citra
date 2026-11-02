@@ -116,6 +116,10 @@ class MessageResponse(BaseModel):
     message: str
 
 
+class ApiKeyCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
 # ---------- Helpers ----------
 
 
@@ -618,3 +622,76 @@ def send_my_password_setup_email(
     return MessageResponse(
         message=f"A password setup link has been sent to {current_user.email}."
     )
+
+
+# ---------- Personal Developer API Keys (X-API-Key, Task 6.4) ----------
+
+
+@router.get("/me/api-keys")
+def list_my_api_keys(
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+) -> list[dict]:
+    """List current user's personal API keys (never returning raw secret or hash)."""
+    repo = Repository(db)
+    keys = repo.list_api_keys(current_user.id)
+    return [
+        {
+            "id": k.id,
+            "name": k.name,
+            "key_prefix": k.key_prefix,
+            "created_at": k.created_at.isoformat() if k.created_at else None,
+            "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
+            "is_active": bool(k.is_active),
+        }
+        for k in keys
+    ]
+
+
+@router.post("/me/api-keys")
+def create_my_api_key(
+    request: ApiKeyCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+) -> dict:
+    """Create a personal API key (`citra_live_...`). Requires Pro, Ultra, Teacher, or Admin."""
+    sub = get_user_subscription_summary(current_user)
+    effective_tier = str(sub.get("plan_tier") or "basic").lower()
+    if current_user.role not in ("admin", "teacher") and effective_tier not in ("pro", "ultra"):
+        raise HTTPException(
+            status_code=402,
+            detail="API_KEY_REQUIRES_PRO: Personal API keys require a CITRA Pro, Ultra, or Instructor account.",
+        )
+
+    cleaned_name = request.name.strip()
+    if not cleaned_name:
+        raise HTTPException(status_code=400, detail="API key name cannot be empty")
+
+    repo = Repository(db)
+    raw_key, key_row = repo.create_api_key(current_user.id, cleaned_name)
+    repo.commit()
+
+    return {
+        "id": key_row.id,
+        "name": key_row.name,
+        "key_prefix": key_row.key_prefix,
+        "raw_key": raw_key,
+        "created_at": key_row.created_at.isoformat() if key_row.created_at else None,
+        "last_used_at": None,
+        "is_active": bool(key_row.is_active),
+    }
+
+
+@router.delete("/me/api-keys/{key_id}")
+def revoke_my_api_key(
+    key_id: int,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+) -> dict:
+    """Revoke and delete a personal API key owned by the current user."""
+    repo = Repository(db)
+    revoked = repo.revoke_api_key(current_user.id, key_id)
+    if not revoked:
+        raise HTTPException(status_code=404, detail="API key not found")
+    repo.commit()
+    return {"message": "API key revoked", "id": key_id}
