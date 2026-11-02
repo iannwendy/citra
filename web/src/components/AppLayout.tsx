@@ -23,6 +23,7 @@ import {
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
+import { getQuotaView } from '@/lib/quotaDisplay';
 import { useRole, type UserCapability, type UserRole } from '@/hooks/useRole';
 import { ThemeToggle, useTheme } from '@/contexts/ThemeContext';
 import { NotificationCenterButton, useToast } from '@/contexts/ToastContext';
@@ -96,7 +97,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const { user, logout } = useAuth();
-  const { has, role, planTier, isBasic, quota, canBatchUpload } = useRole();
+  const { has, role, planTier, isBasic, quota, canBatchUpload, isAdmin } = useRole();
   const { toggleTheme } = useTheme();
   const toast = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -106,6 +107,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const currentLang = (i18n.resolvedLanguage || i18n.language || 'en').startsWith('vi')
     ? 'vi'
     : 'en';
+
+  const sidebarQuota = getQuotaView(quota, currentLang, { isAdmin });
 
   const handleToggleLanguage = () => {
     const next = currentLang === 'en' ? 'vi' : 'en';
@@ -342,25 +345,20 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     {currentLang === 'vi' ? 'Lượt tải tháng' : 'Monthly Checks'}
                   </span>
                   <span data-testid="sidebar-quota-text" className="font-semibold text-slate-900 dark:text-white">
-                    {quota.monthly_uploads_used} / {quota.monthly_uploads_limit}
+                    {sidebarQuota.uploadsUnlimited
+                      ? sidebarQuota.usage
+                      : `${quota.monthly_uploads_used} / ${quota.monthly_uploads_limit}`}
                   </span>
                 </div>
                 <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
-                      quota.monthly_uploads_used >= quota.monthly_uploads_limit
+                      sidebarQuota.exhausted
                         ? 'bg-red-500'
                         : 'bg-indigo-600 dark:bg-indigo-400'
                     }`}
                     style={{
-                      width: `${Math.min(
-                        100,
-                        Math.round(
-                          (quota.monthly_uploads_used /
-                            Math.max(1, quota.monthly_uploads_limit)) *
-                            100,
-                        ),
-                      )}%`,
+                      width: `${sidebarQuota.uploadsUnlimited ? 100 : sidebarQuota.percent}%`,
                     }}
                   />
                 </div>

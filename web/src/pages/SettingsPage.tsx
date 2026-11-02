@@ -24,6 +24,7 @@ import {
 import { api, type BillingTransactionItem, type SubscriptionSummary } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRole } from '@/hooks/useRole';
+import { getQuotaView } from '@/lib/quotaDisplay';
 import { useTheme, type Theme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/button';
@@ -56,7 +57,7 @@ export function SettingsPage(): JSX.Element {
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
   const { user, refreshUser } = useAuth();
-  const { planTier, isBasic, quota } = useRole();
+  const { planTier, isBasic, quota, isAdmin } = useRole();
 
   const [subscription, setSubscription] = useState<SubscriptionSummary | null>(null);
   const [transactions, setTransactions] = useState<BillingTransactionItem[]>([]);
@@ -458,10 +459,21 @@ export function SettingsPage(): JSX.Element {
                   </Badge>
                 )}
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 font-mono">
-                {currentLang === 'vi'
-                  ? `Hạn mức tháng: Đã dùng ${quota.monthly_uploads_used}/${quota.monthly_uploads_limit} tài liệu · Tối đa ${quota.max_file_size_mb} MB & ${quota.max_pages_per_pdf} trang/PDF`
-                  : `Monthly Quota: ${quota.monthly_uploads_used}/${quota.monthly_uploads_limit} checks used · Max ${quota.max_file_size_mb} MB & ${quota.max_pages_per_pdf} pages/PDF`}
+              <p
+                data-testid="settings-quota-line"
+                className="text-xs text-slate-600 dark:text-slate-300 font-mono"
+              >
+                {(() => {
+                  const qv = getQuotaView(quota, currentLang === 'vi' ? 'vi' : 'en', { isAdmin });
+                  if (qv.uploadsUnlimited) {
+                    return currentLang === 'vi'
+                      ? `Hạn mức tháng: ${qv.usage} · Tối đa ${qv.fileSize} · Số trang/PDF: ${qv.pages}`
+                      : `Monthly Quota: ${qv.usage} · Max ${qv.fileSize} · Pages/PDF: ${qv.pages}`;
+                  }
+                  return currentLang === 'vi'
+                    ? `Hạn mức tháng: Đã dùng ${qv.usage} tài liệu · Tối đa ${qv.fileSize} & ${qv.pages} trang/PDF`
+                    : `Monthly Quota: ${qv.usage} checks used · Max ${qv.fileSize} & ${qv.pages} pages/PDF`;
+                })()}
               </p>
               {subscription?.cancel_at_period_end && (
                 <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
@@ -473,6 +485,16 @@ export function SettingsPage(): JSX.Element {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {isAdmin ? (
+                <span
+                  data-testid="settings-admin-plan-note"
+                  className="text-xs text-slate-500 dark:text-slate-400 max-w-xs"
+                >
+                  {currentLang === 'vi'
+                    ? 'Quản trị viên luôn có toàn quyền Ultra, không giới hạn — không cần nâng cấp.'
+                    : 'Administrators always have unlimited Ultra access — no upgrade needed.'}
+                </span>
+              ) : (
               <Button
                 asChild
                 size="sm"
@@ -490,6 +512,7 @@ export function SettingsPage(): JSX.Element {
                       : 'Change Plan / Cycle'}
                 </Link>
               </Button>
+              )}
 
               {!isBasic && user?.role !== 'admin' && (
                 <>

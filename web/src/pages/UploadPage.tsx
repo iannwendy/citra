@@ -20,6 +20,7 @@ import {
 import { api, type Class } from '../api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRole } from '@/hooks/useRole';
+import { getQuotaView } from '@/lib/quotaDisplay';
 import { useToast } from '@/contexts/ToastContext';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
@@ -62,6 +63,7 @@ export function UploadPage() {
   const navigate = useNavigate();
 
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const quotaView = getQuotaView(quota, lang, { isAdmin });
 
   useEffect(() => {
     api
@@ -146,7 +148,7 @@ export function UploadPage() {
     if (!file) return;
 
     // Client-side monthly upload quota pre-check
-    if (quota.monthly_uploads_remaining <= 0) {
+    if (!quotaView.uploadsUnlimited && quota.monthly_uploads_remaining <= 0) {
       const msg =
         lang === 'vi'
           ? `Bạn đã sử dụng hết hạn mức ${quota.monthly_uploads_limit} lượt kiểm tra PDF/tháng của gói ${planTier.toUpperCase()}. Vui lòng nâng cấp lên gói Pro (50 bài/tháng) hoặc Ultra (1.000 bài/tháng).`
@@ -315,14 +317,14 @@ export function UploadPage() {
           </Badge>
           <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
             {lang === 'vi'
-              ? `Lượt kiểm tra tháng: ${quota.monthly_uploads_used}/${quota.monthly_uploads_limit}`
-              : `Monthly Checks: ${quota.monthly_uploads_used}/${quota.monthly_uploads_limit}`}
+              ? `Lượt kiểm tra tháng: ${quotaView.usage}`
+              : `Monthly Checks: ${quotaView.usage}`}
           </span>
           <span className="text-slate-400">·</span>
           <span className="text-slate-600 dark:text-slate-400 font-mono">
             {lang === 'vi'
-              ? `Tối đa ${quota.max_file_size_mb} MB · ${quota.max_pages_per_pdf} trang / PDF`
-              : `Max ${quota.max_file_size_mb} MB · ${quota.max_pages_per_pdf} pages / PDF`}
+              ? `Tối đa ${quotaView.fileSize} · ${quotaView.pages} trang / PDF`
+              : `Max ${quotaView.fileSize} · ${quotaView.pages} pages / PDF`}
           </span>
         </div>
 

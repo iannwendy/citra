@@ -13,6 +13,7 @@ import { api, type BillingTransactionItem, type SubscriptionSummary } from '@/ap
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { formatLimit } from '@/lib/quotaDisplay';
 import { Badge } from '@/components/ui/badge';
 
 /* ============================================================
@@ -264,7 +265,7 @@ export function BillingSuccessPage() {
           <div className="grid grid-cols-3 gap-3 text-center">
             <div className="p-3 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-800/60">
               <p className="font-display text-xl font-bold text-indigo-700 dark:text-indigo-300">
-                {quota.monthly_uploads_limit}
+                {formatLimit(quota.monthly_uploads_limit, lang === 'vi' ? 'vi' : 'en')}
               </p>
               <p className="text-[11px] text-slate-500">
                 {lang === 'vi' ? 'Tài liệu / tháng' : 'Uploads / month'}
@@ -272,7 +273,7 @@ export function BillingSuccessPage() {
             </div>
             <div className="p-3 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-800/60">
               <p className="font-display text-xl font-bold text-indigo-700 dark:text-indigo-300">
-                {quota.max_pages_per_pdf}
+                {formatLimit(quota.max_pages_per_pdf, lang === 'vi' ? 'vi' : 'en')}
               </p>
               <p className="text-[11px] text-slate-500">
                 {lang === 'vi' ? 'Trang tối đa / PDF' : 'Max pages / PDF'}

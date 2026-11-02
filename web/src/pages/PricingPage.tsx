@@ -31,6 +31,7 @@ import {
 import { api, type BillingCycle, type PlanTier } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRole } from '@/hooks/useRole';
+import { getQuotaView } from '@/lib/quotaDisplay';
 import { ThemeToggle } from '@/contexts/ThemeContext';
 import {
   type Lang,
@@ -258,9 +259,13 @@ export function PricingPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
-  const { planTier, quota } = useRole();
+  const { planTier, quota, isAdmin } = useRole();
 
   const lang: Lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const quotaView = getQuotaView(quota, lang, { isAdmin });
+  // Admins always have Ultra-level access (contract C3): every checkout CTA is
+  // disabled and Ultra is shown as the current plan.
+  const adminLocked = Boolean(user && isAdmin);
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('annual');
   const [loadingTier, setLoadingTier] = useState<'pro' | 'ultra' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -280,6 +285,7 @@ export function PricingPage() {
   };
 
   const handleSelectPlan = async (targetTier: PlanTier) => {
+    if (adminLocked) return;
     if (targetTier === 'basic') {
       if (!user) {
         navigate('/register');
@@ -411,9 +417,13 @@ export function PricingPage() {
                       style={{ color: 'var(--solva-ink)' }}
                       className="font-mono text-[12px]"
                     >
-                      {lang === 'vi'
-                        ? `Đã dùng ${quota.monthly_uploads_used}/${quota.monthly_uploads_limit} tài liệu tháng này`
-                        : `${quota.monthly_uploads_used}/${quota.monthly_uploads_limit} uploads used this month`}
+                      {quotaView.uploadsUnlimited
+                        ? lang === 'vi'
+                          ? `Lượt tải tháng: ${quotaView.usage}`
+                          : `Monthly uploads: ${quotaView.usage}`
+                        : lang === 'vi'
+                          ? `Đã dùng ${quotaView.usage} tài liệu tháng này`
+                          : `${quotaView.usage} uploads used this month`}
                     </span>
                     <Link
                       to="/settings"
@@ -424,6 +434,17 @@ export function PricingPage() {
                       <ChevronRight className="w-3.5 h-3.5" />
                     </Link>
                   </div>
+                  {adminLocked && (
+                    <p
+                      data-testid="admin-plan-note"
+                      style={{ color: 'var(--solva-muted)' }}
+                      className="mt-2 text-[12px] font-solva-sans max-w-[560px] mx-auto"
+                    >
+                      {lang === 'vi'
+                        ? 'Tài khoản quản trị viên luôn có toàn quyền gói Ultra với hạn mức không giới hạn — không cần (và không thể) nâng cấp hay hạ cấp.'
+                        : 'Administrator accounts always have full Ultra access with unlimited quota — upgrades and downgrades are not needed (or available).'}
+                    </p>
+                  )}
                 </SolvaScrollReveal>
               )}
 
@@ -681,11 +702,15 @@ export function PricingPage() {
                   >
                     <SolvaPlanActionButton
                       variant="outline"
-                      disabled={Boolean(user && planTier === 'basic')}
+                      disabled={adminLocked || Boolean(user && planTier === 'basic')}
                       onClick={() => handleSelectPlan('basic')}
                       testId="select-basic-btn"
                     >
-                      {user && planTier === 'basic'
+                      {adminLocked
+                        ? lang === 'vi'
+                          ? 'Đã bao gồm trong quyền Quản trị'
+                          : 'Included with Admin access'
+                        : user && planTier === 'basic'
                         ? lang === 'vi'
                           ? 'Đang sử dụng gói Basic'
                           : 'Current Active Plan'
@@ -898,6 +923,7 @@ export function PricingPage() {
                     <SolvaPlanActionButton
                       variant="primary"
                       disabled={
+                        adminLocked ||
                         loadingTier !== null ||
                         Boolean(
                           user &&
@@ -914,7 +940,11 @@ export function PricingPage() {
                         <CreditCard className="h-4 w-4" />
                       )}
                       <span>
-                        {user &&
+                        {adminLocked
+                          ? lang === 'vi'
+                            ? 'Đã bao gồm trong quyền Quản trị'
+                            : 'Included with Admin access'
+                          : user &&
                         planTier === 'pro' &&
                         user.billing_cycle === billingCycle
                           ? lang === 'vi'
@@ -1102,6 +1132,7 @@ export function PricingPage() {
                     <SolvaPlanActionButton
                       variant="outline"
                       disabled={
+                        adminLocked ||
                         loadingTier !== null ||
                         Boolean(
                           user &&
@@ -1118,7 +1149,11 @@ export function PricingPage() {
                         <CreditCard className="h-4 w-4" />
                       )}
                       <span>
-                        {user &&
+                        {adminLocked
+                          ? lang === 'vi'
+                            ? 'Gói hiện tại · Ultra (Quản trị viên)'
+                            : 'Current Plan · Ultra (Admin)'
+                          : user &&
                         planTier === 'ultra' &&
                         user.billing_cycle === billingCycle
                           ? lang === 'vi'
