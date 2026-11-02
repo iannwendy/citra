@@ -255,8 +255,8 @@ export function SharedReportPage() {
     setExpandedIds((prev) => ({ ...prev, [refId]: !prev[refId] }));
   };
 
-  const applyLanguage = (next: 'en' | 'vi') => {
-    if (next === lang) return;
+  const toggleLanguage = () => {
+    const next = lang === 'vi' ? 'en' : 'vi';
     void i18n.changeLanguage(next);
     try {
       localStorage.setItem('language', next);
@@ -267,12 +267,8 @@ export function SharedReportPage() {
     const fixedT = i18n.getFixedT(next);
     toast.success(
       fixedT('settings.languageUpdated'),
-      next === 'vi' ? 'Tiếng Việt (VIE)' : 'English (ENG)',
+      next === 'vi' ? 'Tiếng Việt (VI)' : 'English (EN)',
     );
-  };
-
-  const toggleLanguage = () => {
-    applyLanguage(lang === 'vi' ? 'en' : 'vi');
   };
 
   const renderVerdictBadge = (label: SharedVerdictItem['label']) => {
@@ -410,53 +406,21 @@ export function SharedReportPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <div
-              role="group"
-              aria-label={t('nav.language')}
-              data-testid="shared-lang-toggle"
-              data-active-lang={lang}
+            <button
+              type="button"
               onClick={toggleLanguage}
+              data-testid="shared-lang-toggle"
+              aria-label={t('nav.language')}
               title={
                 lang === 'vi'
-                  ? 'Đang hiển thị Tiếng Việt (VIE) — bấm để chuyển sang Tiếng Anh (ENG)'
-                  : 'Currently English (ENG) — click to switch to Vietnamese (VIE)'
+                  ? 'Chuyển sang Tiếng Anh (EN)'
+                  : 'Switch to Vietnamese (VI)'
               }
-              className="inline-flex items-center gap-0.5 p-0.5 rounded-lg text-xs font-mono font-semibold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 cursor-pointer touch-manipulation select-none"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer touch-manipulation select-none"
             >
-              <Globe className="h-3.5 w-3.5 ml-1.5 mr-0.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  applyLanguage('en');
-                }}
-                data-testid="shared-lang-en"
-                aria-pressed={lang === 'en'}
-                className={`px-2 py-1 rounded-md transition-colors cursor-pointer ${
-                  lang === 'en'
-                    ? 'bg-indigo-600 text-white shadow-2xs font-bold'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                ENG
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  applyLanguage('vi');
-                }}
-                data-testid="shared-lang-vi"
-                aria-pressed={lang === 'vi'}
-                className={`px-2 py-1 rounded-md transition-colors cursor-pointer ${
-                  lang === 'vi'
-                    ? 'bg-indigo-600 text-white shadow-2xs font-bold'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                VIE
-              </button>
-            </div>
+              <Globe className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>{lang === 'vi' ? 'VI' : 'EN'}</span>
+            </button>
             <button
               type="button"
               onClick={() => void handleCopyLink()}
