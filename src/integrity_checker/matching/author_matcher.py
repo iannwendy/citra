@@ -41,6 +41,19 @@ _AMBIGUOUS_PARTICLES = {"le", "la"}
 _PARTICLES = _PURE_PARTICLES | _AMBIGUOUS_PARTICLES
 _GENERATIONAL_SUFFIXES = {"jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"}
 
+_ET_AL_MARKER_RE = re.compile(
+    r"(?:\bet\s+al\.?(?:\b|$)|\bvà\s+cộng\s+sự\b|\bvà\s+cs\.?(?:\b|$)"
+    r"|(?:^|[\s,;(\[])cs\.(?=\s|$|[),;\]])|\bvà\s+ctv\.?(?:\b|$)"
+    r"|\band\s+others\b|\bothers\b)",
+    re.IGNORECASE,
+)
+_ET_AL_STRIP_RE = re.compile(
+    r",?\s*(?:\bet\s+al\.?(?:\b|$)|\bvà\s+cộng\s+sự\b|\bvà\s+cs\.?(?:\b|$)"
+    r"|(?:^|[\s,;])cs\.(?=\s|$|[,;])|\bvà\s+ctv\.?(?:\b|$)"
+    r"|\band\s+others\b|,\s*others\b|^\s*others\s*$).*$",
+    re.IGNORECASE,
+)
+
 # Strip punctuation EXCEPT apostrophe (which joins words like O'Brien, D'Angelo, L’Engle)
 _PUNCT_RE = re.compile(r"[^\w\s']", re.UNICODE)
 # Remove apostrophes only when surrounded by whitespace (lone apostrophes)
@@ -127,6 +140,9 @@ def _canonicalize_last_name(name: str, *, fold_diacritics: bool = True) -> str:
     Returns:
         Canonical last_name (lowercase, no diacritics, no particles).
     """
+    if not name:
+        return ""
+    name = _ET_AL_STRIP_RE.sub("", name).strip().rstrip(",;:")
     if not name:
         return ""
     name = name.replace("\u2019", "'").replace("\u2018", "'").replace("`", "'")
@@ -373,11 +389,68 @@ def _extract_corporate_keys(author: Author | str, *, fold_diacritics: bool = Tru
     return keys
 
 
+def _has_et_al_indicator(authors_or_text: list | str | None, *, has_et_al: bool = False) -> bool:
+    """Return True if has_et_al is True or any author string/object contains an et al. marker."""
+    if has_et_al:
+        return True
+    if not authors_or_text:
+        return False
+    items = [authors_or_text] if isinstance(authors_or_text, str) else list(authors_or_text)
+    for item in items:
+        if isinstance(item, Author) or hasattr(item, "last_name"):
+            raw_val = f"{getattr(item, 'raw', '') or ''} {getattr(item, 'last_name', '') or ''}"
+        else:
+            raw_val = str(item or "")
+        if raw_val and _ET_AL_MARKER_RE.search(raw_val):
+            return True
+    return False
+
+
+def _first_author_matches(
+    cited: list,
+    candidate: list,
+    *,
+    fold_diacritics: bool = True,
+) -> bool:
+    """Return True if the cited first author matches the candidate's first author."""
+    first_c = None
+    first_c_ln = ""
+    for a in cited:
+        ln = _author_to_last_name(a, fold_diacritics=fold_diacritics)
+        if ln:
+            first_c = a
+            first_c_ln = ln
+            break
+    first_cand = None
+    first_cand_ln = ""
+    for b in candidate:
+        ln = _author_to_last_name(b, fold_diacritics=fold_diacritics)
+        if ln:
+            first_cand = b
+            first_cand_ln = ln
+            break
+    if not first_c_ln or not first_cand_ln or first_c is None or first_cand is None:
+        return False
+    if first_c_ln == first_cand_ln:
+        return True
+    if _is_swapped_author_match(
+        _extract_author_signature(first_c, fold_diacritics=fold_diacritics),
+        _extract_author_signature(first_cand, fold_diacritics=fold_diacritics),
+    ):
+        return True
+    c_corp = _extract_corporate_keys(first_c, fold_diacritics=fold_diacritics)
+    cand_corp = _extract_corporate_keys(first_cand, fold_diacritics=fold_diacritics)
+    if c_corp and cand_corp and (c_corp & cand_corp):
+        return True
+    return False
+
+
 def author_match_score(
     cited: list,
     candidate: list,
     *,
     fold_diacritics: bool = True,
+    has_et_al: bool = False,
 ) -> float:
     """Tính similarity score giữa 2 author lists.
 
@@ -392,6 +465,8 @@ def author_match_score(
     cand_set = _to_last_name_set(candidate, fold_diacritics=fold_diacritics)
     if not cited_set or not cand_set:
         return 0.0
+
+    effective_has_et_al = _has_et_al_indicator(cited, has_et_al=has_et_al)
 
     # Augment cand_set with any swapped East-Asian / 2-token matches
     if not (cited_set <= cand_set):
@@ -415,11 +490,17 @@ def author_match_score(
                         cand_set.add(prim_c)
                         break
 
-    # FIX v1.11: If all cited authors are present in the candidate's author list
-    # (e.g., "Settles, B" or "Pedregosa, Varoquaux, Gramfort, et al." on a 16-author paper),
-    # treat as full author match.
+    # Restrict 1.0 subset shortcut to et al., multi-author subset (>=2),
+    # single-author candidate, or first-author surname match.
     if cited_set <= cand_set:
-        return 1.0  # Exact subset match (et al. truncation)
+        if (
+            effective_has_et_al
+            or len(cited_set) >= 2
+            or len(cand_set) == 1
+            or _first_author_matches(cited, candidate, fold_diacritics=fold_diacritics)
+        ):
+            return 1.0  # Exact subset match (et al. truncation, multi-author, or first-author match)
+        return max(len(cited_set & cand_set) / len(cand_set), 0.55)
     if len(cand_set) == 1 and cand_set <= cited_set and cited:
         first_cited = _author_to_last_name(cited[0], fold_diacritics=fold_diacritics)
         if first_cited and first_cited in cand_set:
@@ -453,6 +534,7 @@ def author_match_details(
     candidate: list,
     *,
     fold_diacritics: bool = True,
+    has_et_al: bool = False,
 ) -> AuthorMatchResult:
     """Trả về chi tiết match (để debug/log).
 
@@ -473,7 +555,7 @@ def author_match_details(
     only_cited = sorted(cited_set - cand_set)
     only_cand = sorted(cand_set - cited_set)
     score = (
-        author_match_score(cited, candidate, fold_diacritics=fold_diacritics)
+        author_match_score(cited, candidate, fold_diacritics=fold_diacritics, has_et_al=has_et_al)
         if (cited_set and cand_set)
         else 0.0
     )

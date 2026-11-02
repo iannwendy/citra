@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 
-from integrity_checker.matching.author_matcher import author_match_score
+from integrity_checker.matching.author_matcher import _has_et_al_indicator, author_match_score
 from integrity_checker.matching.fuzzy import FuzzyMatcher
 from integrity_checker.matching.semantic import SemanticMatcher
 from integrity_checker.models.citation import Citation
@@ -109,9 +109,11 @@ class FeatureCalculator:
                 # Cap at 0.85 so translated-only titles fall into METADATA_ERROR band [0.60, 0.90)
                 semantic_sim = max(semantic_sim, min(0.85, xl_t_sim))
 
+        has_et_al = self._citation_has_et_al(citation, cited_authors)
         author_sim = author_match_score(
             cited_authors,
             list(best.authors or []),
+            has_et_al=has_et_al,
         )
 
         # DOI exact match (normalized + known arXiv/ACL equivalent DOIs + explicit arXiv ID)
@@ -353,6 +355,23 @@ class FeatureCalculator:
             or "book review" in venue_l
         )
 
+    @staticmethod
+    def _citation_has_et_al(citation: Citation, cited_authors: list) -> bool:
+        if _has_et_al_indicator(cited_authors):
+            return True
+        if citation.raw_in_text_citation and _has_et_al_indicator(citation.raw_in_text_citation):
+            return True
+        raw_text = citation.raw_text or ""
+        if raw_text:
+            author_segment = raw_text
+            if citation.title and citation.title in raw_text:
+                author_segment = raw_text.split(citation.title, 1)[0]
+            else:
+                author_segment = raw_text[:160]
+            if _has_et_al_indicator(author_segment):
+                return True
+        return False
+
     def _select_best_candidate(
         self,
         citation: Citation,
@@ -369,12 +388,13 @@ class FeatureCalculator:
         c_title = (citation.title or citation.raw_text or "").lower().strip()
         is_raw = not bool(citation.title)
         cit_is_choice = "10.5860/choice" in (citation.doi or "").lower() or "choice reviews" in (citation.venue or "").lower()
+        has_et_al = self._citation_has_et_al(citation, cited_authors)
 
         def _score_cand(cand: SourceCandidate) -> float:
             doi_bonus = 2.0 if self._doi_matches(citation.doi, cand.doi) else 0.0
             cand_title = (cand.title or "").lower().strip()
             t_sim = self._compute_title_similarity(c_title, cand_title, is_raw_fallback=is_raw)
-            a_sim = author_match_score(cited_authors, list(cand.authors or []))
+            a_sim = author_match_score(cited_authors, list(cand.authors or []), has_et_al=has_et_al)
             y_dist = self._year_distance(citation.year, cand.year)
             if t_sim < 0.55 and a_sim >= 0.60 and y_dist <= 1 and c_title and cand_title:
                 from integrity_checker.matching.vn_en_academic_bridge import (

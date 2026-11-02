@@ -138,6 +138,72 @@ class TestAuthorMatchScore:
         ]
         assert author_match_score(cited, candidate) == 1.0
 
+    def test_single_author_non_first_without_et_al_returns_partial_score(self) -> None:
+        """Single cited surname matching only a non-first author without et al. must not return 1.0."""
+        candidate_12 = [
+            "Alice Adams", "Bob Baker", "Carol Clark", "David Davis",
+            "Eve Evans", "Frank Foster", "Grace Green", "Henry Hill",
+            "Y. Wang", "Jack Jones", "Karen King", "Leo Lewis",
+        ]
+        score = author_match_score(["Wang, Y."], candidate_12)
+        assert score == pytest.approx(0.55)
+        assert score < 1.0
+
+    def test_single_author_first_author_match_returns_one(self) -> None:
+        """Single cited author matching the candidate's first author returns 1.0."""
+        candidate = ["Burr Settles", "Tom Mitchell", "Alice Smith"]
+        assert author_match_score(["Settles, B."], candidate) == 1.0
+
+    def test_single_author_with_et_al_returns_one(self) -> None:
+        """Single cited author with et al. / và cộng sự / và cs / cs. / others returns 1.0."""
+        candidate = ["Alice Smith", "Bob Wang", "Carol Lee"]
+        assert author_match_score(["Wang"], candidate, has_et_al=True) == 1.0
+        assert author_match_score(["Wang et al."], candidate) == 1.0
+        assert author_match_score(["Wang, Y. et al."], candidate) == 1.0
+        assert author_match_score(["Wang và cộng sự"], candidate) == 1.0
+        assert author_match_score(["Wang và cs."], candidate) == 1.0
+        assert author_match_score(["Wang, cs."], candidate) == 1.0
+        assert author_match_score(["Wang and others"], candidate) == 1.0
+
+    def test_multi_author_subset_returns_one(self) -> None:
+        """Multiple cited authors (>=2) all present in candidate returns 1.0 even without et al."""
+        candidate = ["Alice Smith", "Bob Jones", "Charlie Wang", "David Lee"]
+        assert author_match_score(["Jones, B.", "Wang, C."], candidate) == 1.0
+
+    def test_feature_calculator_respects_single_non_first_vs_et_al(self) -> None:
+        """FeatureCalculator passes et al. presence from citation raw text to author_match_score."""
+        from integrity_checker.matching.features import FeatureCalculator
+        from integrity_checker.models.citation import Citation
+        from integrity_checker.models.source import SourceCandidate, SourceResult
+
+        calc = FeatureCalculator(enable_content_alignment=False)
+        cand = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title="Deep Learning Systems",
+            authors=["Alice Smith", "Bob Jones", "Y. Wang"],
+            year="2020",
+        )
+        source = SourceResult(citation_raw="", candidates=[cand])
+
+        cit_no_et_al = Citation(
+            raw_text="Wang, Y. (2020). Deep Learning Systems.",
+            title="Deep Learning Systems",
+            authors=["Wang, Y."],
+            year="2020",
+        )
+        feat_no_et_al = calc.compute(cit_no_et_al, source)
+        assert feat_no_et_al.author_jaccard == pytest.approx(0.55)
+
+        cit_with_et_al = Citation(
+            raw_text="Wang, Y. et al. (2020). Deep Learning Systems.",
+            title="Deep Learning Systems",
+            authors=["Wang, Y."],
+            year="2020",
+        )
+        feat_with_et_al = calc.compute(cit_with_et_al, source)
+        assert feat_with_et_al.author_jaccard == 1.0
+
 
 
 class TestAuthorMatchDetails:
