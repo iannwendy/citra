@@ -186,11 +186,9 @@ def _map_venue(collection_id: str) -> str:
         'F': 'NUSE',
         'G': 'NLR',  # Lexical Resources
         'B': 'BIONLP',  # BioNLP
-        'H': 'SocialNLP',
+        'H': 'HLT',
         'D': 'DUSC',
         'p': 'PeerDSL',
-        'H': 'HLAI',
-        'S': 'WS',  # Workshop on...
     }
     return venue_map.get(collection_id, collection_id)
 

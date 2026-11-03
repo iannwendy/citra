@@ -39,12 +39,15 @@ from .schemas import INIT_STATEMENTS
 DEFAULT_DB_PATH = Path(__file__).resolve().parents[3] / "data" / "local_papers.db"
 
 _DB_CACHE_LOCK = threading.Lock()
+_STATS_COMPUTE_LOCK = threading.Lock()
 _INITIALIZED_DB_INODES: dict[str, int] = {}
 _STATS_CACHE: dict[str, tuple[float, int, int, int, dict[str, Any]]] = {}
+_PAPERS_COUNTS_CACHE: dict[str, tuple[float, int, int, dict[str, int]]] = {}
 _STATS_CACHE_TTL_SECONDS = 3600.0
 _QUERY_CACHE: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
 _QUERY_CACHE_MAX_SIZE = 2048
 _MUTATION_VERSION = 0
+_QUERY_LOG_VERSION = 0
 
 
 def _bump_mutation_version() -> None:
@@ -52,6 +55,12 @@ def _bump_mutation_version() -> None:
     with _DB_CACHE_LOCK:
         _MUTATION_VERSION += 1
         _QUERY_CACHE.clear()
+
+
+def _bump_query_log_version() -> None:
+    global _QUERY_LOG_VERSION
+    with _DB_CACHE_LOCK:
+        _QUERY_LOG_VERSION += 1
 
 
 def _title_key(title: str | None) -> str:
@@ -594,7 +603,7 @@ class LocalDatabase:
                 ),
             )
             conn.commit()
-            _bump_mutation_version()
+            _bump_query_log_version()
             return cursor.lastrowid or 0
 
     def get_stats(self) -> dict[str, Any]:
@@ -605,80 +614,114 @@ class LocalDatabase:
         """
         resolved_key = str(self.db_path.resolve())
         now_mono = time.monotonic()
-        mtime_ns = 0
-        file_size = 0
+        st_ino = 0
         try:
             if self.db_path.is_file():
-                stat = self.db_path.stat()
-                mtime_ns = stat.st_mtime_ns
-                file_size = stat.st_size
+                st_ino = self.db_path.stat().st_ino
         except OSError:
             pass
 
         with _DB_CACHE_LOCK:
             cached = _STATS_CACHE.get(resolved_key)
             if cached is not None:
-                cached_at, c_mtime, c_size, c_ver, payload = cached
+                cached_at, c_ino, c_ver, c_qver, payload = cached
                 if (
                     now_mono - cached_at < _STATS_CACHE_TTL_SECONDS
-                    and c_mtime == mtime_ns
-                    and c_size == file_size
+                    and c_ino == st_ino
                     and c_ver == _MUTATION_VERSION
+                    and c_qver == _QUERY_LOG_VERSION
                 ):
                     return copy.deepcopy(payload)
 
-        with self._get_conn() as conn:
-            # Count by source (uses covering index idx_papers_source, avoiding 245MB table scan)
-            source_counts = conn.execute(
-                """
-                SELECT source, COUNT(*) as count
-                FROM papers
-                GROUP BY source
-                ORDER BY count DESC
-                """
-            ).fetchall()
-            total_papers = sum(int(row[1]) for row in source_counts)
+        with _STATS_COMPUTE_LOCK:
+            now_mono = time.monotonic()
+            with _DB_CACHE_LOCK:
+                cached = _STATS_CACHE.get(resolved_key)
+                if cached is not None:
+                    cached_at, c_ino, c_ver, c_qver, payload = cached
+                    if (
+                        now_mono - cached_at < _STATS_CACHE_TTL_SECONDS
+                        and c_ino == st_ino
+                        and c_ver == _MUTATION_VERSION
+                        and c_qver == _QUERY_LOG_VERSION
+                    ):
+                        return copy.deepcopy(payload)
+                mut_ver_snapshot = _MUTATION_VERSION
+                qlog_ver_snapshot = _QUERY_LOG_VERSION
+                p_cached = _PAPERS_COUNTS_CACHE.get(resolved_key)
 
-            # Count queries + hit rate in a single pass
-            q_row = conn.execute(
-                """
-                SELECT
-                    COUNT(*),
-                    CAST(SUM(found) AS FLOAT) / COUNT(*) * 100
-                FROM query_log
-                """
-            ).fetchone()
-            total_queries = q_row[0] if q_row else 0
-            hit_rate = (q_row[1] if q_row and q_row[1] is not None else 0) or 0
+            source_counts_dict: dict[str, int] | None = None
+            if p_cached is not None:
+                p_at, p_ino, p_ver, p_counts = p_cached
+                if (
+                    now_mono - p_at < _STATS_CACHE_TTL_SECONDS
+                    and p_ino == st_ino
+                    and p_ver == mut_ver_snapshot
+                ):
+                    source_counts_dict = dict(p_counts)
 
-            # Recent queries
-            recent_queries = conn.execute(
-                """
-                SELECT l.*, p.title
-                FROM query_log l
-                LEFT JOIN papers p ON l.paper_id = p.id
-                ORDER BY l.queried_at DESC
-                LIMIT 10
-                """
-            ).fetchall()
+            with self._get_conn() as conn:
+                if source_counts_dict is None:
+                    # Count by source (uses covering index idx_papers_source, avoiding 245MB table scan)
+                    source_rows = conn.execute(
+                        """
+                        SELECT source, COUNT(*) as count
+                        FROM papers
+                        GROUP BY source
+                        ORDER BY count DESC
+                        """
+                    ).fetchall()
+                    source_counts_dict = {row[0]: int(row[1]) for row in source_rows}
+                    with _DB_CACHE_LOCK:
+                        _PAPERS_COUNTS_CACHE[resolved_key] = (
+                            now_mono,
+                            st_ino,
+                            mut_ver_snapshot,
+                            dict(source_counts_dict),
+                        )
 
-            result = {
-                "total_papers": total_papers,
-                "source_counts": {row[0]: row[1] for row in source_counts},
-                "total_queries": total_queries,
-                "hit_rate_percent": round(hit_rate, 2),
-                "recent_queries": [dict(row) for row in recent_queries],
-            }
+                total_papers = sum(source_counts_dict.values())
 
-        with _DB_CACHE_LOCK:
-            _STATS_CACHE[resolved_key] = (
-                now_mono,
-                mtime_ns,
-                file_size,
-                _MUTATION_VERSION,
-                copy.deepcopy(result),
-            )
-        return result
+                # Count queries + hit rate in a single pass
+                q_row = conn.execute(
+                    """
+                    SELECT
+                        COUNT(*),
+                        CAST(SUM(found) AS FLOAT) / COUNT(*) * 100
+                    FROM query_log
+                    """
+                ).fetchone()
+                total_queries = q_row[0] if q_row else 0
+                hit_rate = (q_row[1] if q_row and q_row[1] is not None else 0) or 0
+
+                # Recent queries
+                recent_queries = conn.execute(
+                    """
+                    SELECT l.*, p.title
+                    FROM query_log l
+                    LEFT JOIN papers p ON l.paper_id = p.id
+                    ORDER BY l.queried_at DESC
+                    LIMIT 10
+                    """
+                ).fetchall()
+
+                result = {
+                    "total_papers": total_papers,
+                    "source_counts": dict(source_counts_dict),
+                    "total_queries": total_queries,
+                    "hit_rate_percent": round(hit_rate, 2),
+                    "recent_queries": [dict(row) for row in recent_queries],
+                }
+
+            with _DB_CACHE_LOCK:
+                _STATS_CACHE[resolved_key] = (
+                    now_mono,
+                    st_ino,
+                    mut_ver_snapshot,
+                    qlog_ver_snapshot,
+                    copy.deepcopy(result),
+                )
+            return result
 
     # ==================== Bulk Operations ====================
 

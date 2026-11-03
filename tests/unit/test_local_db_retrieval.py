@@ -184,3 +184,32 @@ def test_local_db_lru_query_cache_and_single_transaction_bulk_insert(monkeypatch
     assert "10.1000/bulk-2" in cached_dois
     assert "10.1000/bulk-3" in cached_dois
     assert "10.1000/bulk-1" not in cached_dois
+
+
+def test_log_query_preserves_lru_query_cache_and_updates_stats(tmp_path) -> None:
+    """Logging a query must not wipe the in-memory paper LRU cache, while get_stats() stays fresh."""
+    db = LocalDatabase(tmp_path / "log_cache.db")
+    pid = db.add_paper(
+        Paper(
+            doi="10.18653/v1/N19-1423",
+            title="BERT: Pre-training of Deep Bidirectional Transformers",
+            authors=["Jacob Devlin"],
+            year=2019,
+            venue="NAACL",
+        )
+    )
+    db._query_cache.clear()
+    assert db.find_by_doi("10.18653/v1/N19-1423") is not None
+    assert len(db._query_cache) == 1
+
+    s0 = db.get_stats()
+    assert s0["total_papers"] == 1
+    assert s0["total_queries"] == 0
+
+    db.log_query({"doi": "10.18653/v1/N19-1423"}, found=True, source="local_db", paper_id=pid)
+    # Paper LRU cache must remain intact after log_query!
+    assert len(db._query_cache) == 1
+    s1 = db.get_stats()
+    assert s1["total_papers"] == 1
+    assert s1["total_queries"] == 1
+    assert s1["hit_rate_percent"] == 100.0

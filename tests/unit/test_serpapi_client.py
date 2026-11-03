@@ -22,6 +22,17 @@ requires_serpapi_key = pytest.mark.skipif(
 class TestSerpApiClient:
     """Test SerpApi client - fallback khi các API free thất bại."""
 
+    @pytest.fixture(autouse=True)
+    def reset_circuit_breaker_state(self):
+        """Isolate class-level circuit breaker and negative cache across unit tests."""
+        prev_exhausted = SerpApiClient._quota_exhausted
+        prev_cache = set(SerpApiClient._negative_query_cache)
+        SerpApiClient._quota_exhausted = False
+        SerpApiClient._negative_query_cache.clear()
+        yield
+        SerpApiClient._quota_exhausted = prev_exhausted
+        SerpApiClient._negative_query_cache = prev_cache
+
     @pytest.fixture
     def client(self) -> SerpApiClient:
         """Create client với test API key."""
@@ -94,10 +105,52 @@ class TestSerpApiClient:
         assert "no title or author" in result.error.lower()
 
     @pytest.mark.asyncio
+    async def test_lookup_known_paper_mocked(self, client: SerpApiClient, known_citation: Citation, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Deterministic unit test for lookup() parsing when SerpApi returns an organic result."""
+        monkeypatch.setattr(
+            client,
+            "_sync_search",
+            lambda query, year=None, title_query=True: {
+                "title": "Attention Is All You Need",
+                "result_id": "vaswani2017",
+                "snippet": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks (2017).",
+                "publication_info": {
+                    "summary": "A Vaswani, N Shazeer - Advances in neural information processing systems, 2017",
+                    "authors": [{"name": "A Vaswani"}, {"name": "N Shazeer"}],
+                },
+                "cited_by": {"total": 120000},
+                "links": [{"link": "https://arxiv.org/abs/1706.03762"}],
+            },
+        )
+        result = await client.lookup(known_citation)
+        assert result.found is True
+        assert result.title == "Attention Is All You Need"
+        assert result.confidence == 0.5
+        assert len(result.authors) == 2
+
+    @pytest.mark.asyncio
+    async def test_quota_circuit_breaker_does_not_poison_negative_cache(
+        self,
+        client: SerpApiClient,
+        known_citation: Citation,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Quota exhaustion must trip circuit breaker cleanly without caching paper as non-existent."""
+        def _trip_quota(query: str, year: str | None = None, title_query: bool = True):
+            SerpApiClient._quota_exhausted = True
+            return None
+
+        monkeypatch.setattr(client, "_sync_search", _trip_quota)
+        result = await client.lookup(known_citation)
+        assert result.found is False
+        assert "quota exhausted" in (result.error or "").lower()
+        assert len(SerpApiClient._negative_query_cache) == 0
+
+    @pytest.mark.asyncio
     @pytest.mark.integration
     @requires_serpapi_key
     async def test_lookup_known_paper(self) -> None:
-        """Integration test với paper nổi tiếng."""
+        """Integration test với paper nổi tiếng (bỏ qua nếu tài khoản hết quota tháng)."""
         client = SerpApiClient(api_key=SERPAPI_KEY)
         citation = Citation(
             raw_text="Vaswani et al. (2017)",
@@ -107,6 +160,8 @@ class TestSerpApiClient:
         )
 
         result = await client.lookup(citation)
+        if SerpApiClient._quota_exhausted or "quota exhausted" in (result.error or "").lower():
+            pytest.skip("Configured SERPAPI_API_KEY has exhausted its monthly search quota")
 
         assert result.found is True
         assert result.title is not None

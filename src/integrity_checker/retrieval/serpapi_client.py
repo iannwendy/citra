@@ -57,6 +57,7 @@ class SerpApiClient(BaseScholarClient):
 
     BASE_URL = "https://serpapi.com"
     name = "serpapi"
+    MAX_NEGATIVE_CACHE_SIZE = 2048
     _quota_exhausted: bool = False
     _negative_query_cache: set[tuple[str, str]] = set()
 
@@ -73,9 +74,21 @@ class SerpApiClient(BaseScholarClient):
         self.api_key = api_key or env_key or settings.serpapi_api_key
         self.max_retries = max_retries or settings.retrieval.retry.max_attempts
         self._backoff = settings.retrieval.retry.backoff
+        self._last_api_error: str | None = None
 
         if not self.api_key:
             logger.warning("SerpApi: No API key found. Set SERPAPI_API_KEY in .env")
+
+    @classmethod
+    def _record_negative_cache(cls, cache_key: tuple[str, str]) -> None:
+        if len(cls._negative_query_cache) >= cls.MAX_NEGATIVE_CACHE_SIZE:
+            # Evict an arbitrary half when full to bound memory in long-lived workers
+            for _ in range(cls.MAX_NEGATIVE_CACHE_SIZE // 2):
+                try:
+                    cls._negative_query_cache.pop()
+                except KeyError:
+                    break
+        cls._negative_query_cache.add(cache_key)
 
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Lookup paper trên Google Scholar qua SerpApi.
@@ -126,10 +139,24 @@ class SerpApiClient(BaseScholarClient):
             )
 
         # Execute search với retry
+        self._last_api_error = None
         result = await self._search_with_retry(query, citation)
 
+        if self.__class__._quota_exhausted:
+            return SourceCandidate(
+                source_name=self.name,
+                found=False,
+                error="SerpApi: Quota exhausted (circuit breaker active)",
+            )
+
         if not result:
-            self.__class__._negative_query_cache.add(cache_key)
+            if self._last_api_error:
+                return SourceCandidate(
+                    source_name=self.name,
+                    found=False,
+                    error=f"SerpApi: {self._last_api_error}",
+                )
+            self._record_negative_cache(cache_key)
             return SourceCandidate(
                 source_name=self.name,
                 found=False,
@@ -140,7 +167,7 @@ class SerpApiClient(BaseScholarClient):
         if citation.title:
             similarity = title_similarity(citation.title, result.get("title"))
             if similarity < MIN_TITLE_SIMILARITY:
-                self.__class__._negative_query_cache.add(cache_key)
+                self._record_negative_cache(cache_key)
                 logger.info(
                     f"SerpApi: title mismatch ({similarity:.2f}) for '{query[:60]}' "
                     f"→ '{str(result.get('title'))[:60]}'"
@@ -267,12 +294,15 @@ class SerpApiClient(BaseScholarClient):
             # Check for API errors or quota exhaustion
             if "error" in data and not data.get("organic_results"):
                 err_str = str(data.get("error") or "")
+                err_lower = err_str.lower()
                 if any(
-                    kw in err_str.lower()
+                    kw in err_lower
                     for kw in ("run out of searches", "quota", "searches per month", "exceeded", "forbidden")
                 ):
                     self.__class__._quota_exhausted = True
                     logger.warning(f"SerpApi quota circuit breaker tripped: {err_str}")
+                elif "hasn't returned any results" not in err_lower and "no results" not in err_lower:
+                    self._last_api_error = err_str
                 return None
 
             if "search_metadata" in data:
@@ -284,6 +314,8 @@ class SerpApiClient(BaseScholarClient):
                         for kw in ("run out of searches", "quota", "searches per month", "exceeded", "forbidden")
                     ):
                         self.__class__._quota_exhausted = True
+                    else:
+                        self._last_api_error = error_msg
                     logger.warning(f"SerpApi status={status}: {error_msg}")
                     return None
 
@@ -308,6 +340,7 @@ class SerpApiClient(BaseScholarClient):
             return best
 
         except Exception as e:
+            self._last_api_error = str(e)
             logger.error(f"SerpApi sync search failed: {e}")
             return None
 

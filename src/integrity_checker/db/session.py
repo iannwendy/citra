@@ -49,13 +49,22 @@ def get_engine() -> Engine:
             kwargs["poolclass"] = NullPool
         _engine = create_engine(url, **kwargs)
         if is_sqlite and not is_memory:
+            journal_mode = os.getenv("SQLITE_JOURNAL_MODE", "DELETE").strip().upper()
+            if journal_mode not in ("DELETE", "WAL", "TRUNCATE", "PERSIST", "MEMORY", "OFF"):
+                journal_mode = "DELETE"
+
             @event.listens_for(_engine, "connect")
             def _set_sqlite_pragma(dbapi_connection, _connection_record) -> None:
                 cursor = dbapi_connection.cursor()
-                cursor.execute("PRAGMA journal_mode=DELETE")
-                cursor.execute("PRAGMA synchronous=NORMAL")
                 cursor.execute("PRAGMA busy_timeout=30000")
+                cursor.execute("PRAGMA synchronous=NORMAL")
                 cursor.close()
+
+            try:
+                with _engine.connect() as _init_conn:
+                    _init_conn.exec_driver_sql(f"PRAGMA journal_mode={journal_mode}")
+            except Exception:
+                pass
 
         _engine_url = url
         _SessionLocal = None

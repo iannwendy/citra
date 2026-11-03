@@ -81,8 +81,13 @@ def get_current_user(
             raise HTTPException(status_code=401, detail="User not found")
         if not user.is_active:
             raise HTTPException(status_code=403, detail="Account is deactivated")
-        api_key_row.last_used_at = datetime.now(UTC)
-        db.commit()
+        now_utc = datetime.now(UTC)
+        prev_used = api_key_row.last_used_at
+        if prev_used is not None and prev_used.tzinfo is None:
+            prev_used = prev_used.replace(tzinfo=UTC)
+        if prev_used is None or (now_utc - prev_used).total_seconds() >= 60.0:
+            api_key_row.last_used_at = now_utc
+            db.commit()
         return user
 
     if not raw_auth:

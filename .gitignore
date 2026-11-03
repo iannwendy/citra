@@ -107,8 +107,9 @@ TDTU_PDF/
 # Bản nháp/duplicate của agent, không commit
 .claude-plan-fix.md
 
-# Playwright MCP state (generated)
+# Playwright MCP & IDE skills state (generated)
 .playwright-mcp/
+skills/
 
 # User avatars (uploaded images)
 data/avatars/

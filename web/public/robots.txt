@@ -12,6 +12,9 @@ Disallow: /admin/
 Disallow: /teacher/
 Disallow: /activate-account
 Disallow: /reset-password
+Disallow: /verify/share/
+Disallow: /billing/
+Disallow: /sandbox
 Disallow: /api/
 
 Sitemap: https://citra.io.vn/sitemap.xml
