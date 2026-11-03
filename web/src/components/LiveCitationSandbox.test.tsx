@@ -128,4 +128,19 @@ describe('LiveCitationSandbox i18n', () => {
     expect(text).toContain('Trích dẫn trong bài (Body In-Text)');
     expect(text).toContain('Có trong mục References cuối bài');
   });
+
+  it('uses explicit light and dark theme classes on the studio header and mode switcher instead of dark-only styling', () => {
+    renderWithProviders(<LiveCitationSandbox lang="en" />);
+
+    const header = screen.getByTestId('sandbox-studio-header');
+    expect(header.className).toContain('from-slate-50');
+    expect(header.className).toContain('text-slate-900');
+    expect(header.className).toContain('dark:from-slate-950');
+    expect(header.className).toContain('dark:text-slate-50');
+    expect(header.className).not.toContain('to-violet-950');
+
+    const rawBtn = screen.getByTestId('sandbox-mode-raw-btn');
+    expect(rawBtn.className).toContain('text-slate-600');
+    expect(rawBtn.className).toContain('dark:text-slate-300');
+  });
 });

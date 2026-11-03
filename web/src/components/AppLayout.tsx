@@ -60,8 +60,8 @@ const SIDEBAR_GROUPS: NavGroup[] = [
     items: [
       { path: '/dashboard', labelKey: 'nav.dashboard', icon: FileSearch, capability: 'upload_essay' },
       { path: '/upload', labelKey: 'nav.newCheck', icon: Upload, capability: 'upload_essay' },
-      { path: '/sandbox', labelKey: 'nav.liveSandbox', icon: FlaskConical, capability: 'upload_essay' },
       { path: '/batch-upload', labelKey: 'nav.batchCheck', icon: Layers, requiresBatch: true },
+      { path: '/sandbox', labelKey: 'nav.liveSandbox', icon: FlaskConical, capability: 'upload_essay' },
       { path: '/history', labelKey: 'nav.history', icon: History, capability: 'view_own_history' },
     ],
   },

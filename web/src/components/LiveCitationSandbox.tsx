@@ -394,26 +394,29 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
   return (
     <Card
       data-testid="live-citation-sandbox"
-      className="p-0 overflow-hidden rounded-2xl border-2 border-indigo-200/90 dark:border-indigo-800/80 bg-white dark:bg-slate-900 shadow-md"
+      className="p-0 overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs"
     >
       {/* Top Studio Header */}
-      <div className="px-4 sm:px-5 py-3.5 sm:py-4 bg-gradient-to-r from-indigo-950 via-slate-900 to-violet-950 text-white flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800">
+      <div
+        data-testid="sandbox-studio-header"
+        className="px-4 sm:px-5 py-4 sm:py-5 bg-gradient-to-r from-slate-50 via-white to-slate-100/80 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200/90 dark:border-slate-800 transition-colors"
+      >
         <div className="flex items-start sm:items-center gap-3 min-w-0">
-          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-indigo-500/25 border border-indigo-400/40 flex items-center justify-center shrink-0">
-            <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-300" />
+          <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 flex items-center justify-center shrink-0">
+            <Sparkles className="h-4 w-4 sm:h-5 sm:w-5 text-slate-800 dark:text-slate-200" />
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-base sm:text-lg font-display font-bold tracking-tight leading-snug">
+              <h1 className="text-base sm:text-lg font-display font-bold tracking-tight leading-snug text-slate-900 dark:text-slate-50">
                 {lang === 'vi'
                   ? 'Live Citation Sandbox & Trình Tạo Bản Thảo PDF Học Thuật Tự Động (CSDL ACL)'
                   : 'Live Citation Sandbox & Synthetic Academic PDF Generator (ACL Database)'}
               </h1>
-              <Badge className="bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 font-mono text-[10px]">
+              <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800 font-mono text-[10px]">
                 {dbTotalPapers.toLocaleString()} {lang === 'vi' ? 'BÀI BÁO ACL' : 'ACL PAPERS'}
               </Badge>
             </div>
-            <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5 leading-relaxed">
+            <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">
               {lang === 'vi'
                 ? 'Lấy ngẫu nhiên 10–20 bài báo thật từ CSDL ACL, tùy chỉnh Metadata / In-text ↔ Refs và xuất File PDF hoàn chỉnh để kiểm chứng!'
                 : 'Sample 10–20 real ACL papers, tweak metadata or in-text linking live, and synthesize a complete academic PDF manuscript to verify In-Text ↔ Refs!'}
@@ -422,7 +425,10 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
         </div>
 
         {/* Mode Switcher */}
-        <div className="grid grid-cols-2 sm:inline-flex w-full md:w-auto items-center p-1 rounded-xl bg-slate-800/90 border border-slate-700 gap-1 shrink-0 self-start md:self-auto">
+        <div
+          data-testid="sandbox-mode-switcher"
+          className="grid grid-cols-2 sm:inline-flex w-full md:w-auto items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700 gap-1 shrink-0 self-start md:self-auto"
+        >
           <button
             type="button"
             data-testid="sandbox-mode-acl-btn"
@@ -430,7 +436,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
             className={`w-full sm:w-auto justify-center text-center whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-semibold transition-all ${
               mode === 'acl_studio'
                 ? 'bg-indigo-600 text-white shadow-2xs'
-                : 'text-slate-300 hover:text-white'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
             }`}
           >
             {lang === 'vi' ? '🎲 CSDL ACL → PDF' : '🎲 ACL DB → Full PDF'}
@@ -442,7 +448,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
             className={`w-full sm:w-auto justify-center text-center whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-semibold transition-all ${
               mode === 'raw_paste'
                 ? 'bg-indigo-600 text-white shadow-2xs'
-                : 'text-slate-300 hover:text-white'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
             }`}
           >
             {lang === 'vi' ? '⚡ Dán Nhanh (3s)' : '⚡ Quick Paste (3s)'}
@@ -776,7 +782,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                 </div>
 
                 {/* Action Footer for Mode A */}
-                <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50/90 via-white to-violet-50/80 dark:from-indigo-950/50 dark:via-slate-900 dark:to-violet-950/40 border border-indigo-200/80 dark:border-indigo-800/70 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-50 via-white to-slate-100/80 dark:from-slate-950/60 dark:via-slate-900 dark:to-slate-950/60 border border-slate-200/90 dark:border-slate-800 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
                   <div className="text-xs font-mono text-slate-700 dark:text-slate-300 space-y-0.5">
                     <div>
                       <strong>{items.filter((i) => i.cite_in_text).length}</strong>{' '}
@@ -807,7 +813,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                       {downloadingPdf ? (
                         <Loader2 className="h-4 w-4 animate-spin shrink-0" />
                       ) : (
-                        <Download className="h-4 w-4 text-indigo-600 shrink-0" />
+                        <Download className="h-4 w-4 text-slate-700 dark:text-slate-200 shrink-0" />
                       )}
                       <span>
                         {lang === 'vi'
@@ -883,7 +889,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                 {verifyingInstant ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Zap className="h-4 w-4 text-amber-300" />
+                  <Zap className="h-4 w-4 text-amber-400 dark:text-amber-600" />
                 )}
                 <span>
                   {lang === 'vi'

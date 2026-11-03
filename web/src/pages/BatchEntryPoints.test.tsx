@@ -66,6 +66,32 @@ describe('Batch Check entry points', () => {
     );
     expect(screen.queryByRole('link', { name: /batch check/i })).toBeNull();
   });
+
+  it('places Live Sandbox below Batch Check in the workspace sidebar', () => {
+    renderWithProviders(
+      <AppLayout>
+        <div />
+      </AppLayout>,
+      { user: makeUser('user', 'pro') },
+    );
+
+    const navLinks = screen
+      .getAllByRole('link')
+      .map((el) => el.getAttribute('href'))
+      .filter((href): href is string =>
+        ['/dashboard', '/upload', '/batch-upload', '/sandbox', '/history'].includes(href ?? ''),
+      );
+
+    // Deduplicate while preserving first-seen order (logo also links to /dashboard)
+    const orderedUnique = Array.from(new Set(navLinks));
+    expect(orderedUnique).toEqual([
+      '/dashboard',
+      '/upload',
+      '/batch-upload',
+      '/sandbox',
+      '/history',
+    ]);
+  });
 });
 
 describe('useRole().canBatchUpload', () => {
