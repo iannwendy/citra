@@ -8,6 +8,7 @@ import { AuthContext } from '@/contexts/AuthContext';
 import { api, type User } from '@/api/client';
 import '@/i18n';
 import { PricingPage } from './PricingPage';
+import { LandingPage } from './LandingPage';
 import { StripeDemoCheckoutPage } from './StripeDemoCheckoutPage';
 import { BillingSuccessPage } from './BillingSuccessPage';
 import { PromoManagementPage } from './PromoManagementPage';
@@ -1383,5 +1384,40 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     expect(screen.getByTestId('receipt-amount-paid').textContent).toContain('4.800.000 ₫ VND');
     expect(screen.getByTestId('receipt-payment-method').textContent).toContain('VNPAY · NCB •••• 2198');
     expect(screen.getByTestId('receipt-vnp-txn-ref').textContent).toContain('CITRA100VNP');
+  });
+
+  it('LandingPage featured Pro card uses high-contrast ink color and medium/semibold weights over floral backdrop like PricingPage', () => {
+    const { container } = renderWithAuth(<LandingPage />, {
+      user: null,
+      initialEntries: ['/'],
+    });
+
+    const taxonomySection = container.querySelector('#taxonomy');
+    expect(taxonomySection).not.toBeNull();
+
+    const proDesc = screen.getByText(
+      /Full 15\+ scholarly API federation, Sentence-BERT semantic matching/i,
+    );
+    expect(proDesc.getAttribute('style')).toContain('var(--solva-ink)');
+    expect(proDesc.className).toContain('font-medium');
+
+    const proIncludes = screen.getByText('Everything in Basic, plus:');
+    expect(proIncludes.getAttribute('style')).toContain('var(--solva-ink)');
+    expect(proIncludes.className).toContain('font-semibold');
+
+    const proFeatureItem = screen.getByText(
+      '50 manuscripts / month (up to 100 pages, 25 MB)',
+    );
+    expect(proFeatureItem.getAttribute('style')).toContain('var(--solva-ink)');
+    expect(proFeatureItem.className).toContain('font-medium');
+
+    const proFeatureCheckIcon = proFeatureItem.parentElement?.querySelector('svg');
+    expect(proFeatureCheckIcon?.getAttribute('style')).toContain('var(--solva-ink)');
+
+    // Non-featured Basic card retains muted editorial body styling
+    const basicFeatureItem = screen.getByText(
+      '3 manuscripts / month (up to 15 pages, 5 MB)',
+    );
+    expect(basicFeatureItem.getAttribute('style')).toContain('var(--solva-muted)');
   });
 });

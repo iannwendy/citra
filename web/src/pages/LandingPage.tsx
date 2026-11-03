@@ -3645,19 +3645,22 @@ function SolvaTaxonomyPricingSection({
                 >
                   {/* Radial-Masked Watercolor Floral Background on Middle Popular Card */}
                   {tier.featured && (
-                    <div
-                      className="solva-pricing-floral-mask absolute inset-0 pointer-events-none select-none z-0"
-                      aria-hidden="true"
-                    >
-                      <img
-                        src="/solva/pricing-floral.webp"
-                        alt=""
-                        loading="eager"
-                        decoding="async"
-                        {...({ fetchpriority: 'low' } as Record<string, string>)}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
+                    <>
+                      <div
+                        className="solva-pricing-floral-mask absolute inset-0 pointer-events-none select-none z-0"
+                        aria-hidden="true"
+                      >
+                        <img
+                          src="/solva/pricing-floral.webp"
+                          alt=""
+                          loading="eager"
+                          decoding="async"
+                          {...({ fetchpriority: 'low' } as Record<string, string>)}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="solva-noise-overlay z-0" aria-hidden="true" />
+                    </>
                   )}
 
                   <div className="relative z-10 space-y-[20px]">
@@ -3665,7 +3668,9 @@ function SolvaTaxonomyPricingSection({
                     <div className="flex items-center justify-between gap-2">
                       <h3
                         style={{ color: 'var(--solva-ink)' }}
-                        className="font-solva-sans text-[20px] font-normal leading-[27px] tracking-[-0.02em]"
+                        className={`font-solva-sans text-[20px] ${
+                          tier.featured ? 'font-medium' : 'font-normal'
+                        } leading-[27px] tracking-[-0.02em]`}
                       >
                         {tier.name}
                       </h3>
@@ -3696,8 +3701,12 @@ function SolvaTaxonomyPricingSection({
                         />
                       </span>
                       <span
-                        style={{ color: 'var(--solva-muted)' }}
-                        className="font-solva-sans text-[14px]"
+                        style={{
+                          color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
+                        }}
+                        className={`font-solva-sans text-[14px] ${
+                          tier.featured ? 'font-medium' : ''
+                        }`}
                       >
                         / {tier.unit}
                       </span>
@@ -3705,8 +3714,12 @@ function SolvaTaxonomyPricingSection({
 
                     {/* Description */}
                     <p
-                      style={{ color: 'var(--solva-muted)' }}
-                      className="font-solva-sans text-[15px] sm:text-[16px] leading-[23.2px]"
+                      style={{
+                        color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
+                      }}
+                      className={`font-solva-sans text-[15px] sm:text-[16px] leading-[23.2px] ${
+                        tier.featured ? 'font-medium' : ''
+                      }`}
                     >
                       {tier.desc}
                     </p>
@@ -3714,8 +3727,12 @@ function SolvaTaxonomyPricingSection({
                     {/* Benefits Checklist */}
                     <div className="space-y-[10px] pt-1">
                       <div
-                        style={{ color: 'var(--solva-muted)' }}
-                        className="font-solva-sans text-[14px]"
+                        style={{
+                          color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
+                        }}
+                        className={`font-solva-sans text-[14px] ${
+                          tier.featured ? 'font-semibold' : ''
+                        }`}
                       >
                         {tier.includesLabel}
                       </div>
@@ -3726,10 +3743,23 @@ function SolvaTaxonomyPricingSection({
                             className="flex items-start gap-[8px] font-solva-sans text-[14px] leading-[21px]"
                           >
                             <CheckCircle2
-                              style={{ color: 'var(--solva-muted)' }}
+                              style={{
+                                color: tier.featured
+                                  ? 'var(--solva-ink)'
+                                  : 'var(--solva-muted)',
+                              }}
                               className="w-[17px] h-[17px] mt-[2px] shrink-0"
                             />
-                            <span style={{ color: 'var(--solva-muted)' }}>{item}</span>
+                            <span
+                              style={{
+                                color: tier.featured
+                                  ? 'var(--solva-ink)'
+                                  : 'var(--solva-muted)',
+                              }}
+                              className={tier.featured ? 'font-medium' : undefined}
+                            >
+                              {item}
+                            </span>
                           </li>
                         ))}
                       </ul>
