@@ -1,7 +1,7 @@
 {
   "name": "essay-integrity-checker-web",
   "private": true,
-  "version": "3.36.13",
+  "version": "3.36.14",
   "type": "module",
   "scripts": {
     "dev": "vite",

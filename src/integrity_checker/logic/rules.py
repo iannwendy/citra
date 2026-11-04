@@ -1571,7 +1571,11 @@ class SymbolicRules:
 
         # --- Rule 3: ≥2 sources in consensus ---
         if consensus >= self.consensus_verified and title_sim >= self.title_sim_verified:
-            if author_sim >= self.author_jaccard_verified and year_dist <= self.year_tolerance:
+            if (
+                author_sim >= self.author_jaccard_verified
+                and year_dist <= self.year_tolerance
+                and not has_doi_conflict
+            ):
                 triggered_rules.append("R-CONSENSUS-FULL")
                 return RuleOutcome(
                     label=ValidationLabel.VERIFIED,
@@ -1581,6 +1585,8 @@ class SymbolicRules:
                     mismatched_fields=[],
                     style_penalty=style_penalty,
                 )
+            if has_doi_conflict:
+                mismatched.append("doi")
             if year_dist > self.year_tolerance:
                 mismatched.append("year")
             if author_sim < self.author_jaccard_verified:

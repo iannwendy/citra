@@ -1270,7 +1270,10 @@ class RetrievalOrchestrator:
         # 3. Book / Textbook / Edition / ISBN citation
         if signals["is_book"]:
             tier1 = _pick(["openlibrary", "crossref", "openalex"])
-            tier2 = _pick(["dblp"]) if signals["is_cs_ai"] else []
+            t2_book = ["datacite"] if citation.doi else []
+            if signals["is_cs_ai"]:
+                t2_book.append("dblp")
+            tier2 = _pick(t2_book)
             return tier1, tier2
 
         # 3b. Thesis / Dissertation / Institutional Repository (OpenAIRE / HAL)
@@ -1282,7 +1285,7 @@ class RetrievalOrchestrator:
         # 4. Biomedical / Psychology / Clinical / Public Health citation
         if signals["is_biomed"]:
             tier1 = _pick(["crossref", "openalex", "europepmc"])
-            tier2_names = ["ncbi_biorxiv", "doaj"]
+            tier2_names = ["datacite", "ncbi_biorxiv", "doaj"] if citation.doi else ["ncbi_biorxiv", "doaj"]
             if signals["is_cs_ai"]:
                 tier2_names.extend(["dblp", "arxiv"])
             elif not citation.doi:
@@ -1383,6 +1386,11 @@ class RetrievalOrchestrator:
                 single_source_high_conf = True
 
             strong_sources.add(cand.source_name)
+
+        # If citation explicitly specifies a DOI and no Tier 1 candidate matched that DOI yet,
+        # escalate to Tier 2 (e.g., DataCite / arXiv / OpenAIRE) before declaring a DOI conflict.
+        if cit_doi and not exact_id_matched:
+            return False
 
         # Sufficient if >= 2 independent sources strongly agree, or exact DOI/arXiv match with >= 2 found,
         # or 1 primary source already satisfies R-SINGLE-SOURCE-VERIFIED (title>=0.92, author>=0.80, year match).
@@ -2185,6 +2193,15 @@ class RetrievalOrchestrator:
                         )
                         if r_sim < 0.85:
                             continue
+                        # If citation specifies an explicit DOI and local_db stores a DIFFERENT DOI
+                        # (e.g. alternate deposit DOI 10.15781/T29G6Z vs 10.15781/t25p41 or a DOI typo),
+                        # do not short-circuit via FTS5 title search — let external DOI registries resolve citation.doi.
+                        if (
+                            citation.doi
+                            and r_paper.doi
+                            and normalize_doi(citation.doi) != normalize_doi(r_paper.doi)
+                        ):
+                            continue
                         if cit_year_int is not None:
                             if not r_paper.year or abs(int(r_paper.year) - cit_year_int) > 1:
                                 continue
@@ -2877,9 +2894,26 @@ class RetrievalOrchestrator:
                     if (citation and citation.authors and existing.authors)
                     else 0.0
                 )
+                cit_doi_norm = (
+                    normalize_doi(citation.doi)
+                    if (citation and citation.doi)
+                    else None
+                )
+                c_doi_exact = bool(
+                    cit_doi_norm and c.doi and normalize_doi(c.doi) == cit_doi_norm
+                )
+                ex_doi_exact = bool(
+                    cit_doi_norm
+                    and existing.doi
+                    and normalize_doi(existing.doi) == cit_doi_norm
+                )
                 if c_auth >= 0.5 and ex_auth < 0.5:
                     primary, secondary = c, existing
                 elif ex_auth >= 0.5 and c_auth < 0.5:
+                    primary, secondary = existing, c
+                elif c_doi_exact and not ex_doi_exact:
+                    primary, secondary = c, existing
+                elif ex_doi_exact and not c_doi_exact:
                     primary, secondary = existing, c
                 else:
                     primary, secondary = (
@@ -2898,7 +2932,12 @@ class RetrievalOrchestrator:
                     or not secondary.authors
                     or author_match_score(primary.authors, secondary.authors) >= 0.50
                 )
-                if not primary.doi and secondary.doi and same_authors and not sec_is_book_review:
+                if (
+                    (not primary.doi or (cit_doi_norm and normalize_doi(secondary.doi or "") == cit_doi_norm))
+                    and secondary.doi
+                    and same_authors
+                    and not sec_is_book_review
+                ):
                     primary.doi = secondary.doi
                 if not primary.venue and secondary.venue and same_authors and not sec_is_book_review:
                     primary.venue = secondary.venue

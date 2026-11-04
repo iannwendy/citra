@@ -21,6 +21,7 @@
    - [Nhóm C: Trích xuất PDF, Hợp nhất GROBID + Regex, Liên kết `cite`↔`ref` & Điểm CIS (`BUG-13` → `BUG-16`)](#nhóm-c--trích-xuất-pdf-hợp-nhất-grobid--regex-liên-kết-citeref--điểm-cis-bug-13--bug-16)
    - [Nhóm D: Batch Check API, Quota, Cơ sở dữ liệu & Giao diện Web (`BUG-17` → `BUG-20`)](#nhóm-d--batch-check-api-quota-cơ-sở-dữ-liệu--giao-diện-web-bug-17--bug-20)
 4. [Ma trận tổng hợp mức độ ưu tiên & Lộ trình triển khai an toàn](#4-ma-trận-tổng-hợp-mức-độ-ưu-tiên--lộ-trình-triển-khai-an-toàn)
+5. [Kết quả nghiệm thu thực nghiệm sau khi vá toàn bộ 20 Bug (`P0 + P1 + P2`)](#5-kết-quả-nghiệm-thu-thực-nghiệm-sau-khi-vá-toàn-bộ-20-bug-p0--p1--p2)
 
 ---
 
@@ -554,3 +555,89 @@ async def _validate_citation_url_full(
 | **Đợt 1 — P0 (`CRITICAL` & Bảo toàn dữ liệu/Quota)** | **BUG-01**, **BUG-06**, **BUG-07**, **BUG-17**, **BUG-18**, **BUG-19** | [`retrieval_orchestrator.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py), [`neuro_symbolic_checker.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/neuro_symbolic_checker.py), [`rules.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py), [`essays.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/essays.py), [`repository.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/db/repository.py) | **Rủi ro: Rất thấp.** Chạy lại `pytest` toàn bộ `tests/` + chạy lại `hard_02`, `hard_03` và script Batch Check 7 file (`monthly_uploads_used` phải tăng đúng `5/5`, file corrupt PDF trả `400`, `verdicts` xếp đúng `[1]..[16]`). |
 | **Đợt 2 — P1 (`HIGH` — Độ chính xác Trích xuất, Liên kết & Wayback)** | **BUG-02**, **BUG-03**, **BUG-08**, **BUG-09**, **BUG-13**, **BUG-14**, **BUG-15** | [`link_validator.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/link_validator.py), [`citation_extractor.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/citation_extractor.py), [`document_parser.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/document_parser.py), [`acm.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/patterns/acm.py), [`citation_linker.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/linking/citation_linker.py), [`report.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/report.py) | **Rủi ro: Thấp** (nhờ giữ nguyên `reference_id` khi gắn `IN_TEXT_MISMATCH` và chỉ thu hẹp regex mảng 2D `[[...], [...]]`). Kiểm chứng trên `041_huit`, `006_tdtu`, `014_tdtu`, `essay_03`, `11.pdf`, `14.pdf`. |
 | **Đợt 3 — P2 (`MEDIUM` — Rate Limiter, APA Ellipsis, Venue, CIS & Batch UI)** | **BUG-04**, **BUG-05**, **BUG-10**, **BUG-11**, **BUG-12**, **BUG-16**, **BUG-20** | [`dblp_client.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/dblp_client.py), [`arxiv_client.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/arxiv_client.py), [`crossref_client.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/crossref_client.py), [`features.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/matching/features.py), [`venue_normalizer.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/matching/venue_normalizer.py), [`cis.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/cis.py), [`BatchUploadPage.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/BatchUploadPage.tsx) | **Rủi ro: Rất thấp.** Kiểm chứng không còn `DBLP/arXiv retry exhausted` dưới tải song song, `VietDepression #1` và `essay_03 #8` đạt `VERIFIED`, và UX trang Batch Upload xử lý mượt kịch bản lỗi hỗn hợp. |
+
+---
+
+## 5. Kết quả nghiệm thu thực nghiệm sau khi vá toàn bộ 20 Bug (`P0 + P1 + P2`)
+
+Toàn bộ **20 bug (`BUG-01` → `BUG-20`)** cùng **3 edge-case dữ liệu học thuật thực tế** phát hiện thêm khi đối chiếu từng dòng sau E2E đã được triển khai an toàn theo quy trình **TDD (`RED → GREEN → Full Regression Suite → Git Commit`)** qua từng đợt độc lập, không gây bất kỳ lỗi hồi quy nào:
+
+### 5.1. Tổng hợp các đợt Commit & Kiểm thử hồi quy tự động
+
+| Đợt triển khai | Commit | Phiên bản | Bộ test TDD mới | Kết quả kiểm thử hồi quy toàn hệ thống |
+|---|---|---|---|---|
+| **Đợt 1 — P0 (`BUG-01, 06, 07, 17, 18, 19`)** | `67951a3` | `v3.36.11` | [`test_audit_p0_fixes.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/tests/unit/test_audit_p0_fixes.py) (`7/7 passed`) | Backend `pytest`: `1,617 passed, 1 skipped, 0 failed` |
+| **Đợt 2 — P1 (`BUG-02, 03, 08, 09, 13, 14, 15`)** | `afe8fa7` | `v3.36.12` | [`test_audit_p1_fixes.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/tests/unit/test_audit_p1_fixes.py) (`7/7 passed`) | Backend `pytest`: `1,624 passed, 1 skipped, 0 failed` |
+| **Đợt 3 — P2 (`BUG-04, 05, 10, 11, 12, 16, 20`)** | `a0d16bf` | `v3.36.13` | [`test_audit_p2_fixes.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/tests/unit/test_audit_p2_fixes.py) + [`BatchUploadPage.test.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/BatchUploadPage.test.tsx) | Backend `pytest`: `1,630 passed` \| Frontend `vitest`: `210/210 passed` (`33` files) \| `npm run build`: `✓ built` |
+| **Đợt 4 — Tinh chỉnh hậu E2E Live Dissection** | `v3.36.14` | `v3.36.14` | [`test_audit_p2_fixes.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/tests/unit/test_audit_p2_fixes.py) (`7/7 passed`) | Backend `pytest`: **`1,631 passed, 1 skipped, 0 failed`** \| `ruff check`: `All checks passed!` |
+
+> **3 Edge-case thực tế bổ sung được phát hiện và khóa chặt khi bóc tách lại 329 `ref` / 682 `cite`:**
+> 1. **Chuẩn hóa năm số hóa muộn của kỷ yếu AAAI OJS (`10.1609/`):** Crossref & OpenAlex lưu các bài kỷ yếu `ICWSM 2013` (`10.1609/icwsm.v7...`) dưới dạng `journal-article` với ngày migrate hệ thống OJS `2021-08-03` và `event: null`. Bổ sung [`CrossrefClient.normalize_aaai_ojs_year`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/crossref_client.py#L321-L348) dùng chung cho cả Crossref và OpenAlex → cả `VietDepression #1` (Pass 2 Pure Live) và `07_a_study_of_sentiment #6` (Markovikj et al., ICWSM 2013) đều đạt **`VERIFIED`**.
+> 2. **Bảo toàn DOI song song hợp lệ từ kho lưu trữ trường đại học (`DataCite` `10.15781/T29G6Z`):** Trong `TranThanhPhuoc #19` (Pennebaker et al., 2015 — LIWC2015), bài báo có 2 DOI kho lưu trữ hợp lệ tại UT Austin (`10.15781/T29G6Z` trên DataCite và `10.15781/t25p41` trên OpenAlex). Đã cập nhật [`RetrievalOrchestrator._lookup_local_db`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L2188-L2197), [`_plan_retrieval_tiers`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L1270-L1294), [`_is_tier1_sufficient`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L1390-L1395) và [`_dedupe_candidates`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L2897-L2943) để gọi `DataCite` xác thực trực tiếp `10.15781/T29G6Z` và ưu tiên giữ DOI khớp chính xác khi gộp ứng viên → `TranThanhPhuoc #19` đạt **`VERIFIED` (`R-DOI-TITLE-AUTHOR`, `CIS = 99.30`)**.
+> 3. **Khóa kẽ hở xung đột DOI ở `Rule 3` (`R-CONSENSUS-FULL`):** Bổ sung điều kiện `and not has_doi_conflict` và `mismatched.append("doi")` tại [`SymbolicRules.apply`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py#L1573-L1590), giúp phát hiện chính xác lỗi sinh viên gõ thừa chữ số cuối của DOI (`10.1002/joom.10618` thay vì `10.1002/joom.1061` ở trang 34 tài liệu `20-theses/11.pdf` `#14`) thành **`METADATA_ERROR (['doi'])`**.
+
+---
+
+### 5.2. Kết quả chạy lại Pass 1 — Full Pipeline Production (21 PDF, 329 `ref`, 682 `cite`)
+
+| # | Tài liệu PDF | CIS Trước | CIS Sau | Nhãn `verdicts` Sau Fix | Liên kết (`matched / missing / uncited / mismatch / dup`) | Điểm cải thiện thực nghiệm đã xác nhận |
+|---:|---|---:|---:|---|---|---|
+| 01 | `main.pdf` | 99.72 | **99.72** | `verified:24, resource:4` | `28 / 2 / 0 / 0 / 0` | `StyleProfile` báo đúng `numeric_count=45` (`BUG-16`); URL cụt `https:` không còn bẩn (`BUG-05`). |
+| 02 | `thesis.pdf` | 90.42 | **90.42** | `verified:16, resource:10, halluc:2, meta_err:1` | `29 / 1 / 0 / 0 / 0` | Bài bịa/chimera bị bắt đúng `suspected_hallucination:2` (`BUG-06`). |
+| 03 | `VietDepression_Research_Article.pdf` | 100.00 | **100.00** | `verified:17, resource:1` | `18 / 0 / 0 / 0 / 0` | Tuyệt đối `100/100` ở cả Pass 1 và Pass 2 Pure Live (`BUG-12`). |
+| 04 | `523H0054_NguyenBaoMinh_...pdf` | 97.50 | **87.50** | `verified:5` | `0 / 0 / 5 / 0 / 0` | Điều chỉnh hợp lý CIS cho bài có 5 tài liệu tham khảo nhưng 0 trích dẫn trong thân bài. |
+| 05 | `TranThanhPhuoc_523H0002_523H0054.pdf` | 99.30 | **99.30** | `verified:24, resource:3` | `25 / 5 / 2 / 0 / 0` | `#19` (`10.15781/T29G6Z`) xác thực trực tiếp qua `DataCite` (`R-DOI-TITLE-AUTHOR`); `#6, #21, #24` skip API học thuật sạch sẽ. |
+| 06 | `TDTU_PDF/041_huit_..._KhoaLuanTotNghiep.pdf` | 63.20 | **83.50** | `verified:4, resource:10, unres:1, halluc:1` | `9 / 1 / 7 / 0 / 0` | **`BUG-02` & `BUG-03`:** `#6` Akinsola đạt `verified`; `#7, #9` (bare URL), `#12` đạt `resource`; khi Wayback trả `429`, không còn gắn oan `R-DEAD-URL` cho `[7], [12], [14], [15]`. |
+| 07 | `TDTU_PDF/043_vn_uni_doantotnghiep_...pdf` | 64.75 | **67.25** | `verified:9, meta_err:3, unres:5, halluc:3` | `20 / 0 / 0 / 0 / 0` | **`BUG-09`:** 2 bài tạp chí/kỷ yếu nội địa tiếng Việt không DOI (`#17, #18`) chuyển từ phạt oan `hallucination` sang `unresolved`. |
+| 08 | `TDTU_PDF/047_hust_..._VuThiHang.pdf` | 94.59 | **94.59** | `verified:22, meta_err:1, halluc:1` | `18 / 0 / 6 / 0 / 0` | Bảo toàn 100% độ chính xác trên luận văn HUST 69 trang. |
+| 09 | `TDTU_PDF/098_uit_vnuhcm_...pdf` | 99.76 | **99.78** | `verified:24` | `24 / 1 / 0 / 0 / 0` | Tách đầy đủ chuỗi trích dẫn gộp (`cite: 43 → 45`), `24/24 verified`. |
+| 10 | `tdtu_github_reports/006_tdtu_YaminThiriWai_...pdf` | 91.14 | **91.25** | `verified:9, unres:3` | `12 / 0 / 0 / 0 / 0` | **`BUG-13`:** Trích xuất đủ `[3], [4]` (`cite: 44 → 51`), khớp `12/12` (`uncited: 2 → 0`). |
+| 11 | `tdtu_github_reports/014_tdtu_MPhong03_...pdf` | 90.88 | **51.50** | `resource:6` | `0 / 0 / 6 / 0 / 0` | **`BUG-13` & `BUG-16`:** Lọc sạch caption `Rogue (1980)` (`missing: 2 → 0`); chấm đúng CIS `51.50` thay vì `90.88` ảo cho bài bỏ trống trích dẫn trong bài. |
+| 12 | `vn_legal_reports/002_vn_legal_..._ESCO_...pdf` | 80.00 | **80.00** | `verified:2, resource:15, meta_err:1` | `18 / 0 / 0 / 0 / 0` | Bảo toàn 100% xử lý văn bản quy phạm pháp luật Việt Nam (`61` trích dẫn). |
+| 13 | `vn_legal_reports/003_vn_legal_..._HOA_KY_...pdf` | 50.15 | **52.08** | `verified:1, meta_err:3, unres:7, halluc:2` | `13 / 0 / 0 / 0 / 0` | Giảm phạt oan tài liệu nội địa không lập chỉ mục (`halluc: 3 → 2`, `unres: 6 → 7`). |
+| 14 | `20-theses/11.pdf` | 99.96 | **96.88** | `verified:21, resource:1, meta_err:1` | `23 / 1 / 0 / 11 / 0` | **`BUG-15` + Rule 3 DOI:** Phát hiện đúng `11` vị trí lệch năm `Kaveripakam, 2024 vs 2025` (`in_text_mismatch=11`), giữ `missing=1` (`Mandarić 2022`), và bắt đúng lỗi gõ thừa số DOI `#14` (`10.1002/joom.10618`). |
+| 15 | `20-theses/14.pdf` | 95.89 | **95.85** | `verified:22, meta_err:1, unres:1` | `23 / 2 / 1 / 1 / 0` | **`BUG-15`:** Bắt đúng `1` vị trí lệch năm `Bloem et al., 2024 vs 2020` (`in_text_mismatch=1`), `0` lỗi đứt liên kết. |
+| 16 | `style_corpora/IEEE/hard_cases/hard_02_...pdf` | 58.04 | **59.71** | `verified:2, meta_err:4` | `4 / 0 / 0 / 0 / 2` | **`BUG-07`, `BUG-08`, `BUG-11`:** Bắt chuẩn xác **4/4 `metadata_error`** (sai năm `#1, #5`, sai tác giả `#2`, sai hội nghị `#3` ICML vs NeurIPS), `0` phạt oan `hallucination`! |
+| 17 | `style_corpora/APA/hard_cases/hard_03_...pdf` | 47.50 | **45.83** | `verified:1, halluc:5` | `6 / 0 / 0 / 0 / 0` | **`BUG-06`:** Bắt trọn **5/5 `suspected_hallucination`** (kể cả Chimeric DOI trùng tác giả `#2, #6` ở cả Pass 1 và Pass 2)! |
+| 18 | `style_corpora/Vancouver/hard_cases/hard_05_...pdf` | 77.50 | **73.93** | `verified:3, unres:3, halluc:1` | `7 / 0 / 0 / 0 / 0` | Công nhận chuẩn `VANCOUVER` trong CIS (`BUG-16`) và bắt đúng URL/trích dẫn giả mạo. |
+| 19 | `style_corpora/ACM/real/07_a_study_...pdf` | 77.38 | **82.38** | `verified:9, unres:2, halluc:1` | `12 / 3 / 0 / 0 / 0` | **`BUG-14` + AAAI OJS:** Sửa regex `ACMFormat` + năm `ICWSM 2013` → `#6` Markovikj đạt `verified` (`verified: 8 → 9`). |
+| 20 | `data/essays/essay_03_comprehensive.pdf` | 63.99 | **63.99** | `verified:4, meta_err:2, halluc:3` | `8 / 0 / 1 / 0 / 0` | **`BUG-10`, `BUG-12`, `BUG-14`:** Hu et al. (2024) MiniCPM `... & Z` đạt `verified`; mục `[4]` năm 2023 tách đúng, không còn bị ghi đè tác giả từ bài năm 2022. |
+| 21 | `data/essays/essay_05_edge_doi_only.pdf` | 35.00 | **35.00** | `meta_err:2` | `2 / 0 / 0 / 0 / 0` | Bảo toàn 100% kiểm định DOI trần (`0.25s`). |
+
+---
+
+### 5.3. Kết quả chạy lại Pass 2 — Đối chứng 100% Pure Live External APIs (Đồng nhất 100% với Pass 1)
+
+Sau khi vá lỗi, cả **6/6 tài liệu** chạy ở chế độ **Pure Live External APIs** (`use_local_db=False`, vô hiệu hóa `_KNOWN_PAPERS`) đạt **độ đồng nhất nhãn và điểm CIS 100% tuyệt đối** so với Pass 1 Production:
+
+| Tài liệu PDF | CIS Pass 1 | CIS Pass 2 (Pure Live) | Nhãn Pass 1 | Nhãn Pass 2 (Pure Live) | Kết luận đối chứng |
+|---|---:|---:|---|---|---|
+| `main.pdf` | 99.72 | **99.72** | `ver:24, res:4` | `ver:24, res:4` | Khớp 100% nhãn và điểm CIS. |
+| `VietDepression_Research_Article.pdf` | 100.00 | **100.00** | `ver:17, res:1` | `ver:17, res:1` | Khớp 100% (`10.1609/icwsm.v7i1.14432` trả đúng năm `2013`). |
+| `006_tdtu_YaminThiriWai_...pdf` | 91.25 | **91.25** | `ver:9, unres:3` | `ver:9, unres:3` | Khớp 100% nhãn và điểm CIS. |
+| `hard_02_metadata_errors_...pdf` | 59.71 | **59.71** | `ver:2, meta_err:4` | `ver:2, meta_err:4` | Khớp 100% (`4/4 metadata_error` chính xác ở cả 2 chế độ). |
+| `hard_03_hallucinations_...pdf` | 45.83 | **45.83** | `ver:1, halluc:5` | `ver:1, halluc:5` | Khớp 100% (`5/5 suspected_hallucination` ở cả 2 chế độ). |
+| `essay_03_comprehensive.pdf` | 63.99 | **63.99** | `ver:4, meta_err:2, halluc:3` | `ver:4, meta_err:2, halluc:3` | Khớp 100% nhãn và điểm CIS (`DBLP/arXiv` `0` lỗi rate-limit). |
+
+---
+
+### 5.4. Kết quả chạy lại Live Batch Check E2E (`BATCH_CONCURRENCY = 3` trên Docker Stack `http://localhost:8000`)
+
+| Lượt | Tên file upload | HTTP Trước → Sau | Trạng thái cuối | CIS Trước → Sau | Kết quả kiểm chứng thực tế |
+|---:|---|---|---|---|---|
+| 1 | `batch_01_main.pdf` | `200` → **`200 OK`** | `completed` | `99.72` → **`99.72`** | JSON/CSV `200 OK`, `numeric_count=45`, `ver:24, res:4`. |
+| 2 | `batch_02_hard_02_ieee.pdf` | `200` → **`200 OK`** | `completed` | `58.04` → **`59.71`** | Bắt đúng `verified:2, metadata_error:4` (không còn phạt nhầm `hallucination`). |
+| 3 | `batch_03_hard_03_apa.pdf` | `200` → **`200 OK`** | `completed` | `47.50` → **`45.83`** | Bắt trọn `verified:1, suspected_hallucination:5` (0 Chimeric DOI lọt lưới). |
+| 4 | `batch_04_014_loop_game.pdf` | `200` → **`200 OK`** | `completed` | `90.88` → **`51.50`** | Lọc sạch caption `Rogue (1980)`, chấm đúng CIS `51.50` cho 6 URL không trích dẫn trong bài. |
+| 5 | `batch_05_041_huit_kltn.pdf` | `200` → **`200 OK`** | `completed` | `77.85` → **`83.50`** | Đồng nhất 100% với Pass 1 (`83.50`), mảng `verdicts` giữ nguyên thứ tự `[1]..[16]` (`BUG-19`). |
+| 6 | `batch_06_corrupt_xref.pdf` | `200` → **`400 Bad Request`** | **`upload_rejected`** | `0.00` → **—** | **`BUG-18`:** Chặn tức thì sau `5.5ms` (`Invalid or corrupted PDF file: unable to parse PDF structure`), **0 tốn quota**! |
+| 7 | `batch_07_invalid_header.pdf` | `400` → **`400 Bad Request`** | **`upload_rejected`** | — → **—** | Chặn tức thì sau `6.4ms` (`Invalid PDF file: missing %PDF- header`), **0 tốn quota**! |
+
+- **Kiểm chứng Atomic Quota (`BUG-17`):** Tài khoản `teacher` xuất phát từ `monthly_uploads_used = 0`, bắn đồng thời 7 file với `BATCH_CONCURRENCY = 3` (5 file hợp lệ, 2 file lỗi bị chặn `400`). Kết thúc batch, `/api/billing/subscription` ghi nhận **chính xác `monthly_uploads_used = 5` (`monthly_uploads_remaining = 995`)** — triệt tiêu hoàn toàn lỗi Lost Update trước đó (`4/6`). *(Toàn bộ bản ghi test tạm `44..48` đã được xóa qua `DELETE /api/essays/{id}` và trả `monthly_uploads_used` về `0` sạch sẽ).*
+- **Chỉ số bất thường toàn cục trên báo cáo giải phẫu [`full_dissection_audit.json`](file:///Users/iannwendy/.gemini/antigravity-cli/brain/fd4e593a-ce64-4ef9-984a-fe72bbc82e89/scratch/full_dissection_audit.json):**
+  - `style_profile_anomalies`: **`0`** (giảm từ `21/21`).
+  - `intext_year_mismatch_masked_as_matched`: **`0`** (giảm từ `12`).
+  - `MISMATCHED_FIELDS_ON_VERIFIED`: **`0`** \| `DOI_DIFF_ON_VERIFIED`: **`0`** \| `LOW_VENUE_SIM_ON_VERIFIED`: **`0`**.
+  - `DEAD_OR_FAKE_URL_MARKED_RESOURCE`: **`0`** \| `DIRTY_EXTRACTED_URL`: **`0`** \| `ARCHIVED_ALIVE_MISSING_ARCHIVE_URL`: **`0`**.
+  - `log_warnings_and_errors`: **`0`**.
+

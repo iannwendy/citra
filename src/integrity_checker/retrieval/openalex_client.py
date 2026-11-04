@@ -399,9 +399,13 @@ class OpenAlexClient(BaseScholarClient):
             if name:
                 authors.append(name)
 
-        # Year — từ 'publication_year'
+        # Year — từ 'publication_year' (chuẩn hóa năm số hóa muộn của AAAI OJS 10.1609/)
         year = work.get("publication_year")
         year_str = str(year) if year else None
+        if doi and year_str:
+            from integrity_checker.retrieval.crossref_client import CrossrefClient
+
+            year_str = CrossrefClient.normalize_aaai_ojs_year(doi, year_str)
 
         # Venue — từ 'primary_location.source.display_name'
         venue: str | None = None

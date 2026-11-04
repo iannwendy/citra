@@ -319,6 +319,35 @@ class CrossrefClient(BaseScholarClient):
         return " ".join(parts) if parts else ""
 
     @staticmethod
+    def normalize_aaai_ojs_year(doi: str | None, raw_year: str | None) -> str | None:
+        """Correct retroactive 2021+ OJS migration dates on AAAI 10.1609/ proceedings DOIs."""
+        if not doi or not raw_year or not str(raw_year)[:4].isdigit():
+            return raw_year
+        y_int = int(str(raw_year)[:4])
+        if y_int < 2021:
+            return raw_year
+        m = re.match(
+            r"^10\.1609/(icwsm|aaai|hcomp|aiide|socs)\.v(\d+)",
+            doi.strip().lower(),
+        )
+        if not m:
+            return raw_year
+        series, vol = m.group(1), int(m.group(2))
+        base_offsets = {
+            "icwsm": 2006,  # v1 = 2007, v7 = 2013
+            "aaai": 1986,   # v24 = 2010, v34 = 2020
+            "hcomp": 2012,  # v1 = 2013
+            "aiide": 2004,  # v1 = 2005
+            "socs": 2009,   # v1 = 2010
+        }
+        if series == "aaai" and vol < 24:
+            return raw_year
+        vol_year = base_offsets[series] + vol
+        if 2005 <= vol_year < 2021:
+            return str(vol_year)
+        return raw_year
+
+    @staticmethod
     def _message_to_candidate(message: dict) -> SourceCandidate:
         """Convert Crossref /works/{doi} message → SourceCandidate."""
         # DOI
@@ -385,6 +414,8 @@ class CrossrefClient(BaseScholarClient):
                 if date_parts and date_parts[0] and date_parts[0][0]:
                     year = str(date_parts[0][0])
                     break
+
+        year = CrossrefClient.normalize_aaai_ojs_year(doi, year)
 
         # Venue
         venue: str | None = None

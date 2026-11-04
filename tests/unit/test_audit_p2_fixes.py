@@ -337,6 +337,29 @@ def test_bug12_crossref_proceedings_event_year_hu2024_and_tier0_reasoning() -> N
     cand2 = CrossrefClient._message_to_candidate(msg_container)
     assert cand2.year == "2013"
 
+    # 2b. AAAI OJS (10.1609/icwsm.v7...) registered as journal-article with 2021 OJS migration date on Crossref & OpenAlex
+    from integrity_checker.retrieval.openalex_client import OpenAlexClient
+
+    msg_aaai_ojs = {
+        "DOI": "10.1609/icwsm.v7i1.14432",
+        "type": "journal-article",
+        "title": ["Predicting Depression via Social Media"],
+        "published-online": {"date-parts": [[2021, 8, 3]]},
+        "issued": {"date-parts": [[2021, 8, 3]]},
+        "volume": "7",
+        "container-title": ["Proceedings of the International AAAI Conference on Web and Social Media"],
+    }
+    assert CrossrefClient._message_to_candidate(msg_aaai_ojs).year == "2013"
+
+    oa_aaai_ojs = {
+        "doi": "https://doi.org/10.1609/icwsm.v7i2.14466",
+        "title": "Mining Facebook Data for Predictive Personality Modeling",
+        "publication_year": 2021,
+        "authorships": [{"author": {"display_name": "Dejan Markovikj"}}],
+        "primary_location": {"source": {"display_name": "Proceedings of the International AAAI Conference on Web and Social Media"}},
+    }
+    assert OpenAlexClient._work_to_candidate(oa_aaai_ojs).year == "2013"
+
     # 3. Hu et al. (2024) MiniCPM in _KNOWN_PAPERS
     cit_hu = Citation(
         raw_text="Hu, S., Tu, Y., Han, X., et al. (2024). MiniCPM: Unveiling the Potential of Small Language Models with Scalable Training Strategies.",
@@ -461,3 +484,111 @@ def test_bug16_style_profile_counts_cis_resource_fairness_and_verdict_json() -> 
     assert serialized["archive_url"] == "https://web.archive.org/web/20230101000000/https://example.edu/paper"
     assert serialized["is_retracted"] is True
     assert isinstance(serialized["matched_sources"], list) and len(serialized["matched_sources"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_post_e2e_polish_alternate_datacite_doi_and_rule3_doi_conflict() -> None:
+    """Verify:
+    1. When Tier 1 finds a psychology/biomed paper on OpenAlex under a different repository DOI
+       (e.g. 10.15781/t25p41), _is_tier1_sufficient returns False and _plan_retrieval_tiers escalates
+       to Tier 2 DataCite to confirm legitimate alternate deposit DOI 10.15781/T29G6Z.
+    2. SymbolicRules Rule 3 (R-CONSENSUS-FULL) blocks VERIFIED and flags 'doi' when cited DOI
+       genuinely conflicts with consensus scholarly DOI (e.g. student typo 10.1002/joom.10618 vs 10.1002/joom.1061).
+    """
+    from unittest.mock import AsyncMock
+
+    cit_liwc = Citation(
+        raw_text="Pennebaker, J. W., Boyd, R. L., Jordan, K., & Blackburn, K. (2015). The development and psychometric properties of LIWC2015. DOI: 10.15781/T29G6Z",
+        title="The development and psychometric properties of LIWC2015",
+        authors=["Pennebaker, J. W.", "Boyd, R. L.", "Jordan, K.", "Blackburn, K."],
+        year="2015",
+        doi="10.15781/T29G6Z",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    oa_alt_cand = SourceCandidate(
+        source_name="openalex",
+        found=True,
+        doi="10.15781/t25p41",
+        title="The Development and Psychometric Properties of LIWC2015",
+        authors=["James W. Pennebaker", "Ryan L. Boyd", "Kayla Jordan", "Kate Blackburn"],
+        year="2015",
+        confidence=1.0,
+    )
+    assert RetrievalOrchestrator._is_tier1_sufficient([oa_alt_cand], cit_liwc) is False
+
+    m_crossref = AsyncMock()
+    m_crossref.name = "crossref"
+    m_crossref.lookup.return_value = SourceCandidate(source_name="crossref", found=False, error="404")
+    m_openalex = AsyncMock()
+    m_openalex.name = "openalex"
+    m_openalex.lookup.return_value = oa_alt_cand
+    m_epmc = AsyncMock()
+    m_epmc.name = "europepmc"
+    m_epmc.lookup.return_value = SourceCandidate(source_name="europepmc", found=False, error="no hit")
+    m_datacite = AsyncMock()
+    m_datacite.name = "datacite"
+    m_datacite.lookup.return_value = SourceCandidate(
+        source_name="datacite",
+        found=True,
+        doi="10.15781/t29g6z",
+        title="The Development and Psychometric Properties of LIWC2015",
+        authors=["Pennebaker, James W.", "Boyd, Ryan L.", "Jordan, Kayla", "Blackburn, Kate"],
+        year="2015",
+        confidence=1.0,
+    )
+
+    orch = RetrievalOrchestrator(
+        crossref=m_crossref,
+        openalex=m_openalex,
+        europepmc=m_epmc,
+        datacite=m_datacite,
+        use_local_db=False,
+        enable_link_validation=False,
+    )
+    res_liwc = await orch.retrieve(cit_liwc)
+    m_datacite.lookup.assert_called_once()
+    assert any((c.doi or "").lower() == "10.15781/t29g6z" for c in res_liwc.candidates)
+
+    # Rule 3 (R-CONSENSUS-FULL) must reject student DOI typo (10.1002/joom.10618 vs 10.1002/joom.1061)
+    src_typo = SourceResult(
+        citation_raw="Villena et al. (2021). DOI: 10.1002/joom.10618",
+        candidates=[
+            SourceCandidate(
+                source_name="crossref",
+                found=True,
+                doi="10.1002/joom.1061",
+                title="On the riskiness of lower-tier suppliers: Should buyers extend sustainability",
+                authors=["Verónica H. Villena", "Meinolf Wilhelm"],
+                year="2021",
+                confidence=0.95,
+            ),
+            SourceCandidate(
+                source_name="openalex",
+                found=True,
+                doi="10.1002/joom.1061",
+                title="On the riskiness of lower-tier suppliers: Should buyers extend sustainability",
+                authors=["Verónica H. Villena", "Meinolf Wilhelm"],
+                year="2021",
+                confidence=0.95,
+            ),
+        ],
+        sources_queried=["crossref", "openalex", "datacite"],
+        sources_succeeded=["crossref", "openalex"],
+    )
+    feat_typo = MatchFeatures(
+        title_sim_fuzzy=1.0,
+        title_sim_semantic=1.0,
+        author_jaccard=1.0,
+        year_distance=0,
+        doi_exact_match=False,
+        source_consensus=2,
+        venue_sim=1.0,
+    )
+    out_typo = SymbolicRules().apply(
+        feat_typo,
+        src_typo,
+        citation_doi="10.1002/joom.10618",
+    )
+    assert out_typo.label == ValidationLabel.METADATA_ERROR
+    assert "doi" in out_typo.mismatched_fields
+

@@ -7,5 +7,5 @@
  *   - fix: / perf: / refactor: -> PATCH (X.Y.Z+1)
  *   - chore: / docs: / test:   -> unchanged
  */
-export const APP_VERSION = '3.36.13';
+export const APP_VERSION = '3.36.14';
 export const APP_BUILD_DATE = '2026-11-04';
