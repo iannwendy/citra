@@ -52,7 +52,7 @@ check_docker() {
 # Pull latest GROBID image
 pull_grobid() {
     log_info "Pulling latest GROBID image..."
-    docker pull lfoppiano/grobid:0.8.0 || true
+    docker pull grobid/grobid:0.9.1-crf || true
 }
 
 # Start all services

@@ -168,18 +168,30 @@ jobs:
               printf '\nGOOGLE_CLIENT_ID=429053368516-7uia3j5uavajvbkhd7hq6lih9a65n22u.apps.googleusercontent.com\n' | sudo tee -a /opt/citra/.env >/dev/null
             fi
 
-            echo ">>> [3/4] Building and rolling out updated containers (api & web)..."
+            echo ">>> [3/4] Building and rolling out updated containers (grobid, api & web)..."
+            CURRENT_GROBID_IMG=$(sudo docker inspect --format="{{.Config.Image}}" essay-check-grobid 2>/dev/null || true)
+            CURRENT_GROBID_RUNNING=$(sudo docker inspect --format="{{.State.Running}}" essay-check-grobid 2>/dev/null || true)
+            if [ "$CURRENT_GROBID_IMG" != "grobid/grobid:0.9.1-crf" ] || [ "$CURRENT_GROBID_RUNNING" != "true" ]; then
+              echo ">>> Updating GROBID container ($CURRENT_GROBID_IMG -> grobid/grobid:0.9.1-crf) and clearing stale TEI cache..."
+              sudo rm -f /opt/citra/data/cache/grobid/*.tei.xml 2>/dev/null || true
+              sudo docker compose -f docker-compose.prod.yml pull grobid
+              sudo docker rm -f essay-check-grobid 2>/dev/null || true
+              sudo docker compose -f docker-compose.prod.yml up -d grobid
+              sudo docker rmi lfoppiano/grobid:0.8.0 2>/dev/null || true
+            fi
             sudo docker compose -f docker-compose.prod.yml build api web
             sudo docker rm -f $(sudo docker ps -aq --filter "name=integrity-api" --filter "name=integrity-web") 2>/dev/null || true
             sudo docker compose -f docker-compose.prod.yml up -d --no-build --remove-orphans api web
             sudo docker image prune -f >/dev/null 2>&1 || true
 
-            echo ">>> [4/4] Verifying container health on 127.0.0.1:8000 and https://citra.io.vn..."
+            echo ">>> [4/4] Verifying container health (API, GROBID & Web) on 127.0.0.1:8000 and https://citra.io.vn..."
             HEALTHY=0
             for i in $(seq 1 45); do
-              if curl -sf http://127.0.0.1:8000/api/health >/dev/null && curl -sf https://citra.io.vn/api/health >/dev/null; then
+              if curl -sf http://127.0.0.1:8070/api/isalive >/dev/null \
+                 && curl -sf http://127.0.0.1:8000/api/health | grep -q "\"available\":true" \
+                 && curl -sf https://citra.io.vn/api/health >/dev/null; then
                 HEALTHY=1
-                echo "Production deployment verified healthy on https://citra.io.vn (attempt $i)!"
+                echo "Production deployment verified healthy (GROBID 0.9.1-crf + API + Web) on https://citra.io.vn (attempt $i)!"
                 break
               fi
               sleep 2
@@ -188,7 +200,7 @@ jobs:
             sudo docker compose -f docker-compose.prod.yml ps
             if [ "$HEALTHY" -ne 1 ]; then
               echo "ERROR: Production healthcheck failed after rollout!"
-              sudo docker compose -f docker-compose.prod.yml logs --tail=50 api web
+              sudo docker compose -f docker-compose.prod.yml logs --tail=50 grobid api web
               exit 1
             fi
           '

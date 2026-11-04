@@ -21,7 +21,7 @@
 #     - Ports 8070-8071 free on host (GROBID server + admin)
 #
 # Environment variables (optional):
-#     GROBID_IMAGE    Docker image to use (default: lfoppiano/grobid:0.8.0)
+#     GROBID_IMAGE    Docker image to use (default: grobid/grobid:0.9.1-crf)
 #     GROBID_HOST_PORT   Host port for GROBID server (default: 8070)
 #     GROBID_CONTAINER_NAME  Container name (default: essay-check-grobid)
 #     GROBID_MEMORY    JVM heap limit (default: 2g)
@@ -30,7 +30,7 @@
 set -euo pipefail
 
 # --- Defaults ---
-GROBID_IMAGE="${GROBID_IMAGE:-lfoppiano/grobid:0.8.0}"
+GROBID_IMAGE="${GROBID_IMAGE:-grobid/grobid:0.9.1-crf}"
 GROBID_HOST_PORT="${GROBID_HOST_PORT:-8070}"
 GROBID_CONTAINER_NAME="${GROBID_CONTAINER_NAME:-essay-check-grobid}"
 GROBID_MEMORY="${GROBID_MEMORY:-2g}"
@@ -138,25 +138,17 @@ cmd_start() {
         fi
 
         log_info "Tạo container '$GROBID_CONTAINER_NAME' (port $GROBID_HOST_PORT)..."
-        # Run with: -d (detached), --rm (auto-remove on stop), -p, --name,
-        # -e JVM heap, -e NewRatio for better concurrency with CRF.
-        #
-        # NOTE: lfoppiano/grobid images use tini which requires PR_SET_CHILD_SUBREAPER
-        # (Linux kernel >= 3.4). On macOS/Darwin, this causes "tini: PR_SET_CHARD_SUBREAPER
-        # is unavailable". Fix: override entrypoint to run grobid-service.jar directly.
-        # NOTE: lfoppiano/grobid images use tini which requires PR_SET_CHILD_SUBREAPER
-        # (Linux kernel >= 3.4). On macOS/Darwin, this causes fatal error.
-        # Fix: run grobid-service directly via classpath (not jar entrypoint).
+        # GROBID 0.9.1-crf ships multi-arch (linux/amd64 + linux/arm64) with
+        # /tini -s -- ./grobid-service/bin/grobid-service and JDK 21 --add-opens.
         docker_cmd run -d \
             --rm \
+            --ulimit core=0 \
             --name "$GROBID_CONTAINER_NAME" \
             -p "${GROBID_HOST_PORT}:8070" \
             -p 8071:8071 \
             -e JAVA_OPTS="-Xmx${GROBID_MEMORY} -XX:+UseG1GC" \
-            --entrypoint "" \
-            --platform linux/amd64 \
-            "$GROBID_IMAGE" \
-            /bin/sh -c "CLASSPATH=/opt/grobid/grobid-service/lib/* && java -Xmx${GROBID_MEMORY} -XX:+UseG1GC -classpath \"\$CLASSPATH\" org.grobid.service.main.GrobidServiceApplication --server.port=8070"
+            -e JDK_JAVA_OPTIONS="-Xmx${GROBID_MEMORY} -XX:+UseG1GC" \
+            "$GROBID_IMAGE"
     fi
 
     wait_for_healthy || exit 1

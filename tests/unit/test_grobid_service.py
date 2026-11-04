@@ -414,6 +414,47 @@ class TestAutoStart:
         assert manager._status == GROBID_STATUS.STARTING
         assert manager.stats.container_id == "abcdef123456"
 
+    def test_default_image_is_grobid_0_9_1_crf(self):
+        """Manager defaults to official multi-arch grobid/grobid:0.9.1-crf image."""
+        from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
+
+        manager = GrobidServiceManager(config=GrobidConfig())
+        assert manager._image == "grobid/grobid:0.9.1-crf"
+
+    def test_start_creates_container_with_default_entrypoint_and_native_arch(self):
+        """start() launches grobid/grobid:0.9.1-crf using image entrypoint (JDK 21 --add-opens) without forcing amd64."""
+        from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_service import GrobidServiceManager
+
+        class FakeNotFoundError(Exception):
+            pass
+
+        manager = GrobidServiceManager(config=GrobidConfig())
+        mock_created = MagicMock()
+        mock_created.id = "091crf1234567890"
+
+        mock_client = MagicMock()
+        mock_client.containers.get.side_effect = FakeNotFoundError("no container")
+        mock_client.containers.run.return_value = mock_created
+
+        mock_docker = MagicMock()
+        mock_docker.errors.NotFound = FakeNotFoundError
+        manager._docker = mock_docker
+
+        with patch.object(manager, "is_container_running", return_value=False):
+            with patch.object(manager, "_docker_client", return_value=mock_client):
+                ok = manager.start()
+
+        assert ok is True
+        mock_client.containers.run.assert_called_once()
+        run_args, run_kwargs = mock_client.containers.run.call_args
+        assert run_args[0] == "grobid/grobid:0.9.1-crf"
+        assert "platform" not in run_kwargs
+        assert "entrypoint" not in run_kwargs
+        assert "command" not in run_kwargs
+
+
 
 
 class TestProcessPDF:

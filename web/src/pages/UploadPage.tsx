@@ -265,7 +265,7 @@ export function UploadPage() {
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[11px] font-mono text-slate-600 dark:text-slate-300">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                GROBID v0.8.0 ONLINE
+                GROBID v0.9.1 ONLINE
               </span>
             </div>
           )}

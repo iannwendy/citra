@@ -45,7 +45,7 @@ const STEP_LABELS: Array<{
     labelVi: 'Phân tích cấu trúc tài liệu (GROBID TEI-XML & DOCX)',
     detailsEn: 'Extracting scholarly text, sections, and XML structure from PDF / DOCX',
     detailsVi: 'Bóc tách văn bản học thuật và cấu trúc từ tài liệu PDF / DOCX',
-    tag: 'GROBID v0.8.0 · DOCX',
+    tag: 'GROBID v0.9.1 · DOCX',
   },
   {
     labelEn: 'Detecting citation style',

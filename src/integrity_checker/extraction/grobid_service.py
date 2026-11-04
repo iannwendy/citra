@@ -85,7 +85,7 @@ class GrobidServiceManager:
 
     # Docker container settings
     _container_name: str = "essay-check-grobid"
-    _image: str = "lfoppiano/grobid:0.8.0"
+    _image: str = "grobid/grobid:0.9.1-crf"
     _memory: str = "2g"
     _health_timeout: int = 120  # seconds
 
@@ -337,20 +337,10 @@ class GrobidServiceManager:
                 name=self._container_name,
                 ports={"8070/tcp": 8070, "8071/tcp": 8071},
                 environment={
-                    "JAVA_OPTS": f"-Xmx{self._memory}",
+                    "JAVA_OPTS": f"-Xmx{self._memory} -XX:+UseG1GC",
+                    "JDK_JAVA_OPTIONS": f"-Xmx{self._memory} -XX:+UseG1GC",
                 },
-                # Override entrypoint cho macOS compatibility
-                entrypoint="",
-                command=(
-                    f"/bin/sh -c "
-                    f'"CLASSPATH=/opt/grobid/grobid-service/lib/* && '
-                    f"java -Xmx{self._memory} -XX:+UseG1GC "
-                    f'-classpath \\"$CLASSPATH\\" '
-                    f"org.grobid.service.main.GrobidServiceApplication "
-                    f'--server.port=8070"'
-                ),
                 mem_limit=self._memory,
-                platform="linux/amd64",
                 remove=False,  # Giữ container để reuse
             )
 

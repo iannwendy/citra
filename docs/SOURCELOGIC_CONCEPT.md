@@ -445,7 +445,7 @@ Hệ thống vận hành theo kiến trúc phân quyền dựa trên năng lực
 | **Routing & i18n** | **React Router v6 + i18next** | Điều hướng bảo vệ theo capability (`ProtectedRoute`) và đa ngôn ngữ Việt/Anh |
 | **Icons** | **Lucide React** | Bộ icon SVG nét mảnh, đồng nhất |
 | **Backend API** | **FastAPI (Python 3.11+)** | REST API bất đồng bộ, xác thực JWT, phân quyền Role/Capability |
-| **PDF & Citation Parsing** | **PyMuPDF + GROBID 0.8.0** | Bóc tách văn bản PDF, nhận diện cấu trúc bài báo và danh mục tham khảo |
+| **PDF & Citation Parsing** | **PyMuPDF + GROBID 0.9.1** | Bóc tách văn bản PDF, nhận diện cấu trúc bài báo và danh mục tham khảo |
 | **Local Database** | **SQLite + FTS5** | Lưu trữ ứng dụng (`app.db`) + Cơ sở dữ liệu 127.103 bài báo ACL (`local_papers.db`) |
 | **External Retrieval** | **Crossref, OpenAlex, Semantic Scholar, CORE** | 4 nguồn truy hồi học thuật đa luồng kết hợp Whitelist các bài báo kinh điển |
 | **Verification Engine** | **Neuro-Symbolic Checker + CIS** | Kết hợp so khớp mờ (fuzzy/semantic matching) với hệ luật suy diễn và tính điểm CIS |

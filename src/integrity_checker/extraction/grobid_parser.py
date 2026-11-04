@@ -183,8 +183,14 @@ def call_grobid_fulltext(
         with open(pdf_path, "rb") as f:
             filename = Path(pdf_path).name if pdf_path else "document.pdf"
             files = {"input": (filename, f, "application/pdf")}
+            raw_consol = (
+                str(config.consolidate_header[0]).strip()
+                if config.consolidate_header
+                else "0"
+            )
+            consol_header = raw_consol if raw_consol in {"0", "1", "2", "3"} else "0"
             data = {
-                "consolidateHeader": str(config.consolidate_header[0]).lower(),
+                "consolidateHeader": consol_header,
                 "consolidateCitations": "0",
                 "includeRawCitations": "1",
                 "teiCoordinates": "figure,head,biblStruct,snote,formula",

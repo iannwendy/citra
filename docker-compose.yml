@@ -15,14 +15,13 @@ services:
   # GROBID — PDF reference extraction service
   # ---------------------------------------------------------------------------
   grobid:
-    image: lfoppiano/grobid:0.8.0
+    image: grobid/grobid:0.9.1-crf
     container_name: essay-check-grobid
     ports:
       - "8070:8070"  # GROBID API
     environment:
       - JAVA_OPTS=-Xmx2g -XX:-UseContainerSupport
       - JDK_JAVA_OPTIONS=-Xmx2g -XX:-UseContainerSupport
-    platform: linux/amd64
     restart: unless-stopped
     deploy:
       resources:
@@ -40,9 +39,9 @@ services:
       test:
         - CMD-SHELL
         - 'bash -c ''exec 3<>/dev/tcp/127.0.0.1/8070 && printf "GET /api/isalive HTTP/1.0\r\n\r\n" >&3 && head -1 <&3 | grep -q 200'''
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 3
+      retries: 5
       start_period: 120s
 
   # ---------------------------------------------------------------------------

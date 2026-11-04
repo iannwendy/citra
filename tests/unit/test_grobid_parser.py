@@ -142,3 +142,34 @@ class TestCallGrobidFulltext:
         result = call_grobid_fulltext(str(f), cfg, http_post_fn=mock_post)
         assert result == "<TEI><teiHeader></teiHeader></TEI>"
         assert "/api/processFulltextDocument" in captured["url"]
+
+    def test_consolidate_header_sends_valid_integer_code(self, tmp_path):
+        """call_grobid_fulltext sends integer code '0'..'3' for consolidateHeader instead of section name."""
+        from integrity_checker.config import GrobidConfig
+        from integrity_checker.extraction.grobid_parser import call_grobid_fulltext
+
+        f = tmp_path / "test.pdf"
+        f.write_bytes(b"%PDF-1.4\n%fake content\n")
+
+        class MockResponse:
+            status_code = 200
+            text = "<TEI><teiHeader></teiHeader></TEI>"
+
+        captured_payloads = []
+
+        def mock_post(url, files, data, timeout):
+            captured_payloads.append(dict(data))
+            return MockResponse()
+
+        # Default config has section list ["abstract", ...] -> must send "0", not "abstract"
+        call_grobid_fulltext(str(f), GrobidConfig(), http_post_fn=mock_post)
+        assert captured_payloads[-1]["consolidateHeader"] == "0"
+
+        # Explicit numeric code ["1"] -> preserved as "1"
+        call_grobid_fulltext(
+            str(f),
+            GrobidConfig(consolidate_header=["1"]),
+            http_post_fn=mock_post,
+        )
+        assert captured_payloads[-1]["consolidateHeader"] == "1"
+
