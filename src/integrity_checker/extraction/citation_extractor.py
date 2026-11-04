@@ -566,7 +566,7 @@ class CitationExtractor:
                             r"^\.[A-Za-z_][A-Za-z0-9_]*|^\[|^\s*\](?:\s*,|\s*\])|^\s*(?:=(?!=)|[+\-*/%]=|==|!=|<=|>=)",
                             line_suffix_b,
                         )
-                        or re.search(r"\]\s*,\s*\[", full_line_b)
+                        or re.search(r"\[\s*\[[^\]]+\]\s*,\s*\[[^\]]+\]", full_line_b)
                         or re.search(r"[a-zA-Z_][a-zA-Z0-9_]*\s*\[\s*\d+\s*\]\s*;\s*$", full_line_b)
                         or re.search(
                             r"\b[a-zA-Z_]\w*\[\s*(?:0|[ijknm](?:\s*[-+]\s*1)?)\s*\]|\b(?:const|let|var|await|JSON\.parse)\b",
@@ -645,11 +645,43 @@ class CitationExtractor:
                 if citation_type == CitationType.IN_TEXT and not raw.startswith(("(", "[")):
                     # Skip journal header self-citation metadata lines ("Trích dẫn: Author (2026)...", "How to cite: ...")
                     line_start_idx = search_text.rfind("\n", 0, raw_start) + 1
+                    line_end_idx = search_text.find("\n", m.end())
+                    if line_end_idx == -1:
+                        line_end_idx = len(search_text)
                     line_prefix_str = search_text[line_start_idx:raw_start]
+                    line_suffix_str = search_text[m.end() : line_end_idx]
+                    full_line_str = search_text[line_start_idx:line_end_idx]
                     if re.search(
                         r"(?:trích\s+dẫn(?:\s+bài\s+viết)?|cách\s+trích\s+dẫn|how\s+to\s+cite|to\s+cite\s+this|suggested\s+citation|cite\s+this\s+article)\s*:",
                         line_prefix_str,
                         re.IGNORECASE,
+                    ):
+                        continue
+                    # Skip Table-of-Contents / List-of-Figures leader-dot lines ("Hình 2.1 ... (1980) ...... 15")
+                    if re.search(r"(?:\.\s*){4,}\d+\s*$", line_suffix_str):
+                        continue
+                    # Skip figure/table captions naming an artwork/game/product ("Hình 2.1 Gameplay của Rogue (1980)")
+                    if (
+                        re.match(
+                            r"^\s*(?:Hình|Ảnh|Bảng|Sơ\s+đồ|Biểu\s+đồ|Figure|Fig\.?|Table)\s+\d+(?:\.\d+)*\b",
+                            full_line_str,
+                            re.IGNORECASE,
+                        )
+                        and not re.search(
+                            r"\b(?:et\s+al\.?|và\s+cộng\s+sự|và\s+cs\.?|&|and)\b",
+                            raw,
+                            re.IGNORECASE,
+                        )
+                        and not re.search(
+                            r"\b(?:adapted\s+from|modified\s+from|reprinted\s+from|source\s*:|nguồn\s*:|theo|trích|summarizes|shows|compares)\b",
+                            full_line_str,
+                            re.IGNORECASE,
+                        )
+                        and re.search(
+                            r"\b(?:của|game|trò\s+chơi|phần\s+mềm|ứng\s+dụng|phiên\s+bản)\s+$",
+                            line_prefix_str,
+                            re.IGNORECASE,
+                        )
                     ):
                         continue
                     # Strip leading acronym clause before ", Author (Year)" (e.g. "EI and HRV, Vanuk et al. (2019)")

@@ -2030,8 +2030,23 @@ class DocumentParser:
                     target.title = donor.title
                     target.title_normalized = donor.title_normalized
 
-            donor_is_multi_chunk = len(donor.raw_text or "") > max(
-                len(target.raw_text or "") * 2.2, 320
+            years_conflict = bool(
+                target.year
+                and donor.year
+                and str(target.year)[:4].isdigit()
+                and str(donor.year)[:4].isdigit()
+                and str(target.year)[:4] != str(donor.year)[:4]
+            )
+            donor_is_multi_chunk = (
+                len(donor.raw_text or "") > max(len(target.raw_text or "") * 2.2, 320)
+                or years_conflict
+            )
+            donor_idx_taken = bool(
+                donor.numeric_index is not None
+                and any(
+                    g is not target and g.numeric_index == donor.numeric_index
+                    for g in grobid_refs
+                )
             )
             # Restore dropped leading or trailing authors when GROBID missed co-authors on a line/hyphen break
             if (
@@ -2106,13 +2121,27 @@ class DocumentParser:
                     target.raw_text = f"{(target.raw_text or '').rstrip('. ')}. {donor.title}"
                     if target.venue and target.venue not in target.raw_text:
                         target.raw_text = f"{target.raw_text.rstrip('. ')}. {target.venue}"
-            if donor.numeric_index is not None:
+            if (
+                donor.numeric_index is not None
+                and not donor_is_multi_chunk
+                and not donor_idx_taken
+            ):
                 target.numeric_index = donor.numeric_index
-            if donor.style and donor.style.value != "unknown":
+            if (
+                donor.style
+                and donor.style.value != "unknown"
+                and not donor_is_multi_chunk
+                and not donor_idx_taken
+            ):
                 target.style = donor.style
-            if donor.matched_pattern and not target.matched_pattern:
+            if donor.matched_pattern and not target.matched_pattern and not donor_is_multi_chunk:
                 target.matched_pattern = donor.matched_pattern
-            if donor.raw_text and re.match(r"^\s*\[\s*\d+\s*\]", donor.raw_text):
+            if (
+                not donor_is_multi_chunk
+                and not donor_idx_taken
+                and donor.raw_text
+                and re.match(r"^\s*\[\s*\d+\s*\]", donor.raw_text)
+            ):
                 if not re.match(r"^\s*\[\s*\d+\s*\]", target.raw_text or ""):
                     idx_label = donor.numeric_index or target.numeric_index
                     if idx_label is not None:

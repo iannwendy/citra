@@ -276,6 +276,27 @@ def _is_non_journal_or_unindexed_source(
     if _BOOK_PUBLISHER_SIGNAL_RE.search(combined):
         return True, "book_or_monograph"
 
+    # 6. Domestic Vietnamese periodicals / proceedings without international DOI (BUG-09)
+    if (
+        not (citation_doi and str(citation_doi).strip())
+        and re.search(
+            r"[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]",
+            combined,
+            re.IGNORECASE,
+        )
+        and re.search(
+            r"\b(?:tạp\s+chí|kỷ\s+yếu(?:\s+hội\s+(?:thảo|nghị))?|hội\s+(?:thảo|nghị)\s+khoa\s+học|thông\s+báo\s+khoa\s+học|chuyên\s+san|nhà\s+xuất\s+bản|nxb\.?)\b",
+            combined,
+            re.IGNORECASE,
+        )
+        and not re.search(
+            r"\b(?:imaginaire|imaginary|fictional|fabricated|nonexistent|giả\s+lập|hư\s+cấu)\b",
+            combined,
+            re.IGNORECASE,
+        )
+    ):
+        return True, "domestic_unindexed_periodical"
+
     return False, ""
 
 
@@ -426,6 +447,24 @@ class SymbolicRules:
         author_sim = features.author_jaccard
         year_dist = features.year_distance
 
+        is_arxiv_vs_pub_doi = bool(
+            citation_doi
+            and best.doi
+            and (
+                "10.48550/arxiv" in citation_doi.lower()
+                or "10.48550/arxiv" in best.doi.lower()
+            )
+            and features.title_sim_fuzzy >= 0.90
+        )
+        has_real_doi_conflict = bool(
+            citation_doi
+            and best.doi
+            and not features.doi_exact_match
+            and not is_arxiv_vs_pub_doi
+        )
+        if has_real_doi_conflict:
+            return None
+
         # Perfect match: fuzzy title >= 0.90, title >= 0.95 AND author >= 0.8 AND year match
         is_authorless_doi_match = (
             not citation_authors
@@ -448,12 +487,8 @@ class SymbolicRules:
 
             confidence = max(0.0, confidence - style_penalty)
 
-            mismatched = []
             doi_note = ""
-            if citation_doi and not features.doi_exact_match:
-                mismatched.append("doi")
-                doi_note = " Note: DOI in citation differs from canonical record."
-            elif not features.doi_exact_match and not citation_doi:
+            if not features.doi_exact_match and not citation_doi:
                 doi_note = " DOI not present in citation."
 
             return RuleOutcome(
@@ -465,7 +500,7 @@ class SymbolicRules:
                     + doi_note
                 ),
                 triggered_rules=["R-LOCAL_DB_VERIFIED"],
-                mismatched_fields=mismatched,
+                mismatched_fields=[],
                 style_penalty=style_penalty,
             )
 
@@ -513,26 +548,26 @@ class SymbolicRules:
             and features.title_sim_fuzzy >= 0.90
         )
 
+        has_real_doi_conflict = bool(
+            citation_doi
+            and best.doi
+            and not features.doi_exact_match
+            and not is_arxiv_vs_pub_doi
+        )
+
         # Good match: fuzzy title >= 0.90, title >= 0.95 AND (author >= 0.5 or exact DOI/arXiv + author >= 0.35) AND year match
         if (
-            features.title_sim_fuzzy >= 0.90
+            not has_real_doi_conflict
+            and features.title_sim_fuzzy >= 0.90
             and title_sim >= 0.95
             and (
                 author_sim >= 0.5
                 or ((features.doi_exact_match or is_arxiv_vs_pub_doi) and author_sim >= 0.35)
-                or (
-                    features.title_sim_fuzzy >= 0.98
-                    and author_sim >= 0.35
-                    and not (citation_doi and best.doi and not features.doi_exact_match and not is_arxiv_vs_pub_doi)
-                )
+                or (features.title_sim_fuzzy >= 0.98 and author_sim >= 0.35)
             )
             and year_dist <= self.year_tolerance
         ):
             confidence = max(0.0, 0.75 - style_penalty)
-
-            mismatched = ["author"]
-            if citation_doi and not features.doi_exact_match:
-                mismatched.append("doi")
 
             return RuleOutcome(
                 label=ValidationLabel.VERIFIED,
@@ -542,7 +577,7 @@ class SymbolicRules:
                     f"title={title_sim:.2f}, author={author_sim:.2f}."
                 ),
                 triggered_rules=["R-LOCAL_DB_GOOD_MATCH"],
-                mismatched_fields=mismatched,
+                mismatched_fields=[],
                 style_penalty=style_penalty,
             )
 
@@ -1372,7 +1407,7 @@ class SymbolicRules:
                     f"Verified with minor metadata variation.{provenance_note}"
                 ),
                 triggered_rules=triggered_rules,
-                mismatched_fields=["author"] if author_sim < self.author_jaccard_verified else [],
+                mismatched_fields=[],
                 style_penalty=style_penalty,
             )
 
@@ -1998,15 +2033,27 @@ class SymbolicRules:
             triggered_rules.append("R-HALLUCINATED-SOURCE")
             hallucination_conf = max(
                 0.55,
-                min(0.85, round(0.85 - title_sim * 0.5, 2) - style_penalty),
+                min(0.85, round(0.85 - features.title_sim_fuzzy * 0.5, 2) - style_penalty)
+                if is_semantic_only_noise and title_sim >= self.abstention_low
+                else min(0.85, round(0.85 - title_sim * 0.5, 2) - style_penalty),
             )
+            if is_semantic_only_noise and title_sim >= self.abstention_low:
+                sim_detail = (
+                    f"fuzzy_title_sim={features.title_sim_fuzzy:.2f} < 0.65, "
+                    f"semantic_sim={features.title_sim_semantic:.2f}, "
+                    f"author_sim={author_sim:.2f}, DOI match={doi_match}"
+                )
+            else:
+                sim_detail = (
+                    f"title_sim={title_sim:.2f} < {self.abstention_low}, "
+                    f"author_sim={author_sim:.2f}, DOI match={doi_match}"
+                )
             return RuleOutcome(
                 label=ValidationLabel.SUSPECTED_HALLUCINATION,
                 confidence=hallucination_conf,
                 reasoning=(
                     f"Extremely weak scholarly evidence across queried databases "
-                    f"(title_sim={title_sim:.2f} < {self.abstention_low}, author_sim={author_sim:.2f}, "
-                    f"DOI match={doi_match}). Suspected AI-hallucinated or fabricated citation."
+                    f"({sim_detail}). Suspected AI-hallucinated or fabricated citation."
                 ),
                 triggered_rules=triggered_rules,
                 mismatched_fields=["title", "author"],

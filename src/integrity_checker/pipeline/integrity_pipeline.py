@@ -908,7 +908,8 @@ class IntegrityPipeline:
                     for lnk in linking_result.links
                     if citation.reference_id
                     and lnk.reference_id == citation.reference_id
-                    and getattr(lnk.status, "value", lnk.status) == "matched"
+                    and getattr(lnk.status, "value", lnk.status)
+                    in ("matched", "in_text_mismatch", "ambiguous_mapping")
                 ]
                 if citation.reference_id and citation.reference_id in duplicate_ref_ids:
                     # Non-canonical member of a duplicate group (DuplicateDetector).
@@ -1142,17 +1143,31 @@ class IntegrityPipeline:
             if not links:
                 links = links_by_key_multi.get(cit.raw_text.lower().strip())
             if links:
-                link = links[0]
-                cit.mapping_status = (
-                    link.status.value
-                    if hasattr(link.status, "value")
-                    else str(link.status)
+                status_priority = {
+                    "missing_reference": 5,
+                    "in_text_mismatch": 4,
+                    "ambiguous_mapping": 3,
+                    "style_inconsistent": 2,
+                    "unresolved": 1,
+                    "matched": 0,
+                }
+                priority_link = max(
+                    links,
+                    key=lambda lnk: status_priority.get(
+                        lnk.status.value if hasattr(lnk.status, "value") else str(lnk.status),
+                        0,
+                    ),
                 )
-                cit.mapping_confidence = link.confidence
+                cit.mapping_status = (
+                    priority_link.status.value
+                    if hasattr(priority_link.status, "value")
+                    else str(priority_link.status)
+                )
+                cit.mapping_confidence = priority_link.confidence
                 # Keep BOTH: the list is the source of truth ("[9, 10]" → two
-                # refs), the scalar stays for legacy consumers.
+                # refs), the scalar stays as links[0] for legacy consumers.
                 cit.citation_links = list(links)
-                cit.citation_link = link
+                cit.citation_link = links[0]
 
         _emit(
             "checking",

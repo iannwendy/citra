@@ -196,31 +196,92 @@ class NeuroSymbolicChecker:
         import re
         raw_text = citation.raw_text or ""
         stripped_text = raw_text.strip()
-        # Strip trailing punctuation that commonly follows a URL in running text.
-        url_candidate = stripped_text.rstrip(".,;:)\"'")
-        # Match if the candidate starts with an URL scheme. The previous regex
-        # required the whole string to be one URL (`^...$`), which failed when
-        # trailing punctuation was present.
-        # Require the URL body to be at least 10 chars after the scheme prefix
-        # to reduce false positives (e.g. a sentence starting with "www").
-        prefix_match = re.match(r'^(https?://|www\.)', url_candidate, re.IGNORECASE)
-        url_body_match = re.match(
-            r'^(?:https?://|www\.)(\S{10,})$', url_candidate, re.IGNORECASE
+        stripped_no_idx = re.sub(
+            r"^\s*(?:\[\s*\d+\s*\]|\(\s*\d+\s*\)|\d{1,3}[\.\)])\s*",
+            "",
+            stripped_text,
         )
-        if prefix_match and url_body_match and not url_candidate[len(prefix_match.group(0)):].startswith((" ", "\n", "\t")):
+        stripped_no_access = re.sub(
+            r"\s*(?:\[\s*(?:accessed|truy\s+cập|retrieved)[^\]]*\]|\(\s*(?:accessed|truy\s+cập|retrieved)[^)]*\))\.?\s*$",
+            "",
+            stripped_no_idx,
+            flags=re.IGNORECASE,
+        )
+        # Strip trailing punctuation that commonly follows a URL in running text.
+        url_candidate = stripped_no_access.rstrip(".,;:)\"']>")
+        compact_url_candidate = re.sub(r"\s+", "", url_candidate)
+
+        # Evaluate fake / dead / Wayback status BEFORE Check 1 & Check 2 so broken or fake URLs
+        # never get whitelisted as RESOURCE (BUG-03).
+        inline_url_m = re.search(r"https?://\S+", raw_text, re.IGNORECASE)
+        effective_url_check = (
+            (citation.url or "").strip()
+            or (inline_url_m.group(0).rstrip(".,;:)\"']>") if inline_url_m else "")
+        )
+        has_fake_url_early, _ = _is_fake_url(effective_url_check)
+        if not has_fake_url_early and url_candidate.lower().startswith(("http://", "https://", "www.")):
+            has_fake_url_early, _ = _is_fake_url(compact_url_candidate)
+        url_stat_early = getattr(source, "url_status", None)
+        is_dead_url_early = url_stat_early in ("dead_link", "fake_domain")
+        archive_url_early = getattr(source, "archive_url", None)
+
+        scholarly_paper_url_re = (
+            r"(?:doi\.org/10\.|(?:^|[./])arxiv\.org/(?:abs|pdf|html)/|"
+            r"aclanthology\.org/[A-Za-z0-9.\-]+/?$|"
+            r"ieeexplore\.ieee\.org/document/|dl\.acm\.org/doi/|"
+            r"link\.springer\.com/(?:article|chapter)/|"
+            r"sciencedirect\.com/science/article/|"
+            r"nature\.com/articles/|onlinelibrary\.wiley\.com/doi/|"
+            r"ncbi\.nlm\.nih\.gov/pmc/articles/|pubmed\.ncbi\.nlm\.nih\.gov/\d)"
+        )
+        is_scholarly_paper_url = bool(
+            citation.doi
+            or re.search(scholarly_paper_url_re, compact_url_candidate, re.IGNORECASE)
+        )
+
+        # Match if the candidate starts with a URL scheme (including PDF-wrapped fragment URLs).
+        prefix_match = re.match(r"^(https?://|www\.)", url_candidate, re.IGNORECASE)
+        url_body_match = re.match(
+            r"^(?:https?://|www\.)(\S{10,})$", url_candidate, re.IGNORECASE
+        ) or (
+            prefix_match is not None
+            and len(compact_url_candidate) >= 18
+            and (
+                "#:~:text=" in url_candidate
+                or re.search(r"%[0-9A-Fa-f]{0,2}\s+[0-9A-Fa-f]", url_candidate)
+                or (not citation.authors and not citation.title)
+            )
+        )
+        if (
+            prefix_match
+            and url_body_match
+            and not is_scholarly_paper_url
+            and not has_fake_url_early
+            and not is_dead_url_early
+            and not url_candidate[len(prefix_match.group(0)) :].startswith((" ", "\n", "\t"))
+        ):
             logger.debug(
                 f"URL/RESOURCE detected: raw='{raw_text[:80]}' "
                 f"-> url_candidate='{url_candidate[:80]}'"
             )
+            if url_stat_early == "archived_alive":
+                res_rules = ["R-WAYBACK-ARCHIVED", "R-URL-RESOURCE"]
+                conf = 0.90
+                note = f" (Wayback Machine snapshot: {archive_url_early or 'archive.org'})"
+            else:
+                res_rules = ["R-URL-RESOURCE"]
+                conf = 0.95
+                note = ""
             return CitationVerdict(
                 citation=citation,
                 label=ValidationLabel.RESOURCE,
-                confidence=0.95,
+                confidence=conf,
                 matched_source=source,
                 features=MatchFeatures(),
-                reasoning=f"URL/Reference link detected: {raw_text[:60]}... (not an academic citation)",
-                triggered_rules=["R-URL-RESOURCE"],
+                reasoning=f"URL/Reference link detected{note}: {raw_text[:60]}... (not an academic citation)",
+                triggered_rules=res_rules,
                 mismatched_fields=[],
+                archive_url=archive_url_early,
             )
 
         # --- Check 2: Web resource/API citations (không bắt đầu bằng URL) ---
@@ -229,22 +290,32 @@ class NeuroSymbolicChecker:
             for part in (raw_text, citation.title or "", citation.url or "", citation.venue or "")
             if part
         )
-        for pattern in _WEB_RESOURCE_PATTERNS:
-            if not citation.doi and pattern.search(check_resource_str):
-                logger.debug(
-                    f"Web resource/API detected: raw='{raw_text[:80]}' "
-                    f"matched pattern: {pattern.pattern[:50]}"
-                )
-                return CitationVerdict(
-                    citation=citation,
-                    label=ValidationLabel.RESOURCE,
-                    confidence=0.95,
-                    matched_source=source,
-                    features=MatchFeatures(),
-                    reasoning=f"Web resource/API citation detected: {raw_text[:60]}... (not an academic paper)",
-                    triggered_rules=["R-WEB-RESOURCE"],
-                    mismatched_fields=[],
-                )
+        if not has_fake_url_early and not is_dead_url_early:
+            for pattern in _WEB_RESOURCE_PATTERNS:
+                if not citation.doi and pattern.search(check_resource_str):
+                    logger.debug(
+                        f"Web resource/API detected: raw='{raw_text[:80]}' "
+                        f"matched pattern: {pattern.pattern[:50]}"
+                    )
+                    if url_stat_early == "archived_alive":
+                        res_rules = ["R-WAYBACK-ARCHIVED", "R-WEB-RESOURCE"]
+                        conf = 0.90
+                        note = f" (Wayback Machine snapshot: {archive_url_early or 'archive.org'})"
+                    else:
+                        res_rules = ["R-WEB-RESOURCE"]
+                        conf = 0.95
+                        note = ""
+                    return CitationVerdict(
+                        citation=citation,
+                        label=ValidationLabel.RESOURCE,
+                        confidence=conf,
+                        matched_source=source,
+                        features=MatchFeatures(),
+                        reasoning=f"Web resource/API citation detected{note}: {raw_text[:60]}... (not an academic paper)",
+                        triggered_rules=res_rules,
+                        mismatched_fields=[],
+                        archive_url=archive_url_early,
+                    )
 
         # --- Check 3: Vietnamese legal documents (TDTU §2.6.1 & Sprint 3.2 Legal Verifier) ---
         if citation.matched_pattern == "vn_legal_document" or is_vn_legal_reference(raw_text):

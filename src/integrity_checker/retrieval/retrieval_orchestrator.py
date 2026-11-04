@@ -1039,14 +1039,50 @@ class RetrievalOrchestrator:
             re.IGNORECASE,
         ):
             return False
-        stripped = re.sub(r"^(?:\[\d+\]|\(\d+\)|\d+\.)\s*", "", raw_text.strip())
-        url_candidate = stripped.rstrip(".,;:)\"'")
-        if re.match(r"^(?:https?://|www\.)(\S{10,})$", url_candidate, re.IGNORECASE):
-            if not re.search(
-                r"(?:doi\.org|arxiv\.org|aclanthology\.org|ieeexplore\.ieee\.org|dl\.acm\.org|link\.springer\.com|sciencedirect\.com)",
-                url_candidate,
-                re.IGNORECASE,
-            ):
+        stripped = re.sub(
+            r"^\s*(?:\[\s*\d+\s*\]|\(\s*\d+\s*\)|\d{1,3}[\.\)])\s*",
+            "",
+            raw_text.strip(),
+        )
+        # Strip optional trailing access-date note and punctuation, and repair PDF line-wraps inside URLs
+        stripped_no_access = re.sub(
+            r"\s*(?:\[\s*(?:accessed|truy\s+cập|retrieved)[^\]]*\]|\(\s*(?:accessed|truy\s+cập|retrieved)[^)]*\))\.?\s*$",
+            "",
+            stripped,
+            flags=re.IGNORECASE,
+        )
+        compact_url = re.sub(r"\s+", "", stripped_no_access).rstrip(".,;:)\"']>")
+        is_bare_url_entry = bool(
+            re.match(r"^(?:https?://|www\.)\S{8,}", stripped_no_access, re.IGNORECASE)
+            and (
+                re.match(r"^(?:https?://|www\.)\S{10,}$", stripped_no_access.rstrip(".,;:)\"']>"), re.IGNORECASE)
+                or "#:~:text=" in stripped_no_access
+                or re.search(r"%[0-9A-Fa-f]{0,2}\s+[0-9A-Fa-f]", stripped_no_access)
+                or (
+                    not citation.authors
+                    and (
+                        not citation.title
+                        or citation.title.strip().lower().startswith(("http://", "https://", "www."))
+                    )
+                )
+            )
+        )
+        if is_bare_url_entry:
+            from integrity_checker.logic.rules import _is_fake_url
+
+            is_fake, _ = _is_fake_url(citation.url or compact_url)
+            if is_fake:
+                return False
+            scholarly_paper_url_re = (
+                r"(?:doi\.org/10\.|(?:^|[./])arxiv\.org/(?:abs|pdf|html)/|"
+                r"aclanthology\.org/[A-Za-z0-9.\-]+/?$|"
+                r"ieeexplore\.ieee\.org/document/|dl\.acm\.org/doi/|"
+                r"link\.springer\.com/(?:article|chapter)/|"
+                r"sciencedirect\.com/science/article/|"
+                r"nature\.com/articles/|onlinelibrary\.wiley\.com/doi/|"
+                r"ncbi\.nlm\.nih\.gov/pmc/articles/|pubmed\.ncbi\.nlm\.nih\.gov/\d)"
+            )
+            if not re.search(scholarly_paper_url_re, compact_url, re.IGNORECASE):
                 return True
         for pattern in _WEB_RESOURCE_PATTERNS:
             if (

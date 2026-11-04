@@ -156,8 +156,8 @@ _ACM_JOURNAL = CompiledPattern.create(
     name="acm_journal",
     pattern=(
         r'^\[\s*(?P<index>\d+)\s*\]\s*'  # [N]
-        r'(?P<authors>.+?)(?<!\bvol)(?<!\bno)(?<!\bpp)\.\s+(?!(?:[A-ZÀ-Ý]\.|[A-ZÀ-Ý][a-zà-ÿ\'-]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ\'-]+)?(?:[.,]\s|\s+and\s+[A-ZÀ-Ý]|\s*&|\s+et\s+al\b)|and\b|&|et\s+al\.))'  # Authors (don't stop at initial).
-        r'(?P<title>(?:[^.?!]|\.(?!\s))*[A-Za-z]{3,}(?:[^.?!]|\.(?!\s))*?)[.?!]\s+'  # Title.
+        r'(?P<authors>.+?)(?<!\b[Vv]ol)(?<!\b[Nn]o)(?<!\b[Pp]p)\.\s+(?!(?:[A-ZÀ-Ý][.,]\s|[A-ZÀ-Ý][a-zà-ÿ\'-]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ\'-]+)?(?:[.,]\s|\s+and\s+[A-ZÀ-Ý]|\s*&|\s+et\s+al\b)|and\b|&|et\s+al\.))'  # Authors (don't stop at initial).
+        r'(?P<title>(?:[^.?!]|\.(?!\s))*[A-Za-z]{3,}(?:[^.?!]|\.(?!\s))*?)(?<!\b[Vv]ol)(?<!\b[Nn]o)(?<!\b[Pp]p)[.?!]\s+'  # Title.
         r'(?P<venue>.+?)'  # Venue
         r'(?:,\s*(?P<year>(?:18|19|20)\d{2}[a-z]?))?'  # Optional trailing year
         r'\.?$'
@@ -189,8 +189,8 @@ _ACM_FULL_NAME = CompiledPattern.create(
     name="acm_full_name",
     pattern=(
         r'^\[\s*(?P<index>\d+)\s*\]\s*'  # [N]
-        r'(?P<authors>.+?)(?<!\bvol)(?<!\bno)(?<!\bpp)\.\s+(?!(?:[A-ZÀ-Ý]\.|[A-ZÀ-Ý][a-zà-ÿ\'-]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ\'-]+)?(?:[.,]\s|\s+and\s+[A-ZÀ-Ý]|\s*&|\s+et\s+al\b)|and\b|&|et\s+al\.))'  # Authors (ends with surname).
-        r'(?P<title>(?:[^.?!]|\.(?!\s))*[A-Za-z]{3,}(?:[^.?!]|\.(?!\s))*?)(?:[.?!]\s+(?P<venue>.+?)|,\s*(?:[A-Za-z]+\.?\s+)?(?P<year_direct>(?:18|19|20)\d{2}[a-z]?)(?:\.\s*(?P<trailing_url>(?:URL\s+)?https?://\S+|\bdoi:\s*\S+))?)'  # Title. Venue OR Title, Year.
+        r'(?P<authors>.+?)(?<!\b[Vv]ol)(?<!\b[Nn]o)(?<!\b[Pp]p)\.\s+(?!(?:[A-ZÀ-Ý][.,]\s|[A-ZÀ-Ý][a-zà-ÿ\'-]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ\'-]+)?(?:[.,]\s|\s+and\s+[A-ZÀ-Ý]|\s*&|\s+et\s+al\b)|and\b|&|et\s+al\.))'  # Authors (ends with surname).
+        r'(?P<title>(?:[^.?!]|\.(?!\s))*[A-Za-z]{3,}(?:[^.?!]|\.(?!\s))*?)(?<!\b[Vv]ol)(?<!\b[Nn]o)(?<!\b[Pp]p)(?:[.?!]\s+(?P<venue>.+?)|,\s*(?:[A-Za-z]+\.?\s+)?(?P<year_direct>(?:18|19|20)\d{2}[a-z]?)(?:\.\s*(?P<trailing_url>(?:URL\s+)?https?://\S+|\bdoi:\s*\S+))?)'  # Title. Venue OR Title, Year.
         r'(?:\s+(?P<year>(?:18|19|20)\d{2}[a-z]?))?'  # Optional year
         r'\.?$'
     ),
@@ -362,6 +362,13 @@ class ACMFormat:
 
         # Try tech report format
         citation = self._try_parse_tech_report(text)
+        if citation:
+            if numeric_index and citation.numeric_index is None:
+                citation.numeric_index = numeric_index
+            return citation
+
+        # Try unquoted comma-separated journal/conference format (e.g. [6] Surname, Given, ..., Title, Journal ..., Year)
+        citation = self._try_parse_comma_separated_journal(text)
         if citation:
             if numeric_index and citation.numeric_index is None:
                 citation.numeric_index = numeric_index
@@ -902,6 +909,82 @@ class ACMFormat:
         if doi_m:
             citation.doi = doi_m.group(0).rstrip('.')
 
+        citation.confidence = self._estimate_confidence(citation)
+        return citation
+
+    def _try_parse_comma_separated_journal(self, text: str) -> Citation | None:
+        """Parse unquoted comma-separated '[N] Surname, Given, ..., Title, Journal ..., Year' entries."""
+        if any(q in text for q in ('"', "\u201c", "\u201d")):
+            return None
+        m = re.match(r"^\[\s*(?P<index>\d+)\s*\]\s*(?P<body>.+)$", text)
+        if not m:
+            return None
+        parts = [p.strip() for p in m.group("body").split(", ") if p.strip()]
+        if len(parts) < 4:
+            return None
+
+        surname_re = re.compile(
+            r"^(?:(?:and|&)\s+)?[A-ZÀ-Ý][A-Za-zÀ-ỹ'\-]+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ỹ'\-]+)?$"
+        )
+        given_re = re.compile(
+            r"^(?:[A-ZÀ-Ý][a-zà-ỹ'\-]+|[A-ZÀ-Ý]\.?)(?:\s+(?:[A-ZÀ-Ý][a-zà-ỹ'\-]+|[A-ZÀ-Ý]\.?)){0,2}$"
+        )
+        venue_kw_re = re.compile(
+            r"\b(?:Journal|Proceedings|Conference|Transactions|Symposium|Workshop|Review|Letters|Magazine|Volume|Vol\.?)\b",
+            re.IGNORECASE,
+        )
+
+        author_items: list[str] = []
+        idx = 0
+        while idx + 1 < len(parts):
+            s_cand = parts[idx]
+            g_cand = parts[idx + 1]
+            if (
+                surname_re.match(s_cand)
+                and given_re.match(g_cand)
+                and not venue_kw_re.search(s_cand)
+                and not venue_kw_re.search(g_cand)
+            ):
+                clean_s = re.sub(r"^(?:and|&)\s+", "", s_cand).strip()
+                author_items.append(f"{clean_s}, {g_cand}")
+                idx += 2
+            else:
+                break
+
+        if not author_items or idx >= len(parts) - 1:
+            return None
+
+        title_cand = parts[idx].strip().rstrip(".")
+        rest_venue = ", ".join(parts[idx + 1 :]).strip().rstrip(".")
+        if len(title_cand.split()) < 4 or not venue_kw_re.search(rest_venue):
+            return None
+
+        yr, yr_suffix = extract_publication_year(rest_venue, prefer_last=True)
+        if not yr:
+            return None
+
+        parsed_authors = [a for item in author_items for a in parse_authors(item)]
+        if not parsed_authors:
+            return None
+
+        citation = Citation(
+            raw_text=text,
+            citation_type=CitationType.REFERENCE_LIST,
+            style=CitationStyle.ACM,
+            matched_pattern="acm_comma_journal",
+            numeric_index=int(m.group("index")),
+            authors=parsed_authors,
+            year=yr,
+            year_suffix=yr_suffix,
+            title=title_cand,
+            title_normalized=self._normalize_title(title_cand),
+        )
+        self._parse_venue(citation, rest_venue)
+        if not citation.venue:
+            citation.venue = rest_venue
+        doi_m = re.search(r"10\.\d{4,9}/[^\s\]\)\,;]+", text)
+        if doi_m:
+            citation.doi = doi_m.group(0).rstrip(".")
         citation.confidence = self._estimate_confidence(citation)
         return citation
 

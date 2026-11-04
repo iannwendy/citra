@@ -237,17 +237,28 @@ class CitationLinker:
                             if (bib.reference_id or f"ref-{idx:04d}") == link.reference_id:
                                 bib_matched.add(idx)
                                 break
-                best_link = next(
-                    (lnk for lnk in links if lnk.status == CitationMappingStatus.MATCHED),
-                    links[0],
+                status_priority = {
+                    "missing_reference": 5,
+                    "in_text_mismatch": 4,
+                    "ambiguous_mapping": 3,
+                    "style_inconsistent": 2,
+                    "unresolved": 1,
+                    "matched": 0,
+                }
+                priority_link = max(
+                    links,
+                    key=lambda lnk: status_priority.get(
+                        lnk.status.value if hasattr(lnk.status, "value") else str(lnk.status),
+                        0,
+                    ),
                 )
                 cit.mapping_status = (
-                    best_link.status.value
-                    if hasattr(best_link.status, "value")
-                    else str(best_link.status)
+                    priority_link.status.value
+                    if hasattr(priority_link.status, "value")
+                    else str(priority_link.status)
                 )
-                cit.mapping_confidence = best_link.confidence
-                cit.citation_link = best_link
+                cit.mapping_confidence = priority_link.confidence
+                cit.citation_link = links[0]
                 cit.citation_links = list(links)
             else:
                 # No match → MISSING_REFERENCE. Also set raw so lookups succeed.
@@ -273,7 +284,8 @@ class CitationLinker:
                 lnk
                 for lnk in result.links
                 if lnk.reference_id == ref_id
-                and getattr(lnk.status, "value", lnk.status) == "matched"
+                and getattr(lnk.status, "value", lnk.status)
+                in ("matched", "in_text_mismatch", "ambiguous_mapping")
             ]
             if i in bib_matched and matched_links:
                 bib.mapping_status = CitationMappingStatus.MATCHED.value
@@ -752,24 +764,40 @@ class CitationLinker:
                             method=MappingMethod.FUZZY,
                         )
 
-        # Pass 3: Personal author with year difference when author surname uniquely matches in bib.authors
+        # Pass 3: Personal author with year difference when author surname matches in bib.authors
         if year.isdigit() and len(author_folded) >= 4 and not _INSTITUTIONAL_AUTHOR_RE.search(author):
             yr_int = int(year)
+            year_diff_cands: list[tuple[int, int, Citation, bool]] = []
             for bib_idx, bib in enumerate(bib_citations):
                 if not bib.authors or not bib.year or not str(bib.year).isdigit():
                     continue
                 bib_first = self._fold_author_key(self._normalize_last_name(bib.authors[0]))
                 bib_raw_folded = self._fold_author_key(getattr(bib.authors[0], "raw", "") or "")
                 short_first = bib_first.split()[-1] if " " in bib_first else bib_first
-                max_yr_diff = 15 if (len(author_folded.split()) >= 3 and len(bib.authors) >= 2) else 9
-                if author_folded in (bib_first, short_first, bib_raw_folded) and abs(int(bib.year) - yr_int) <= max_yr_diff:
-                    return CitationLink(
-                        occurrence_id=occ_id,
-                        reference_id=bib.reference_id or f"ref-{bib_idx:04d}",
-                        status=CitationMappingStatus.MATCHED,
-                        confidence=self.fuzzy_confidence,
-                        method=MappingMethod.AUTHOR_YEAR,
-                    )
+                is_vn_fullname_access = len(author_folded.split()) >= 3 and len(bib.authors) >= 2
+                max_yr_diff = 15 if is_vn_fullname_access else 9
+                yr_diff = abs(int(bib.year) - yr_int)
+                if author_folded in (bib_first, short_first, bib_raw_folded) and yr_diff <= max_yr_diff:
+                    year_diff_cands.append((yr_diff, bib_idx, bib, is_vn_fullname_access))
+
+            if year_diff_cands:
+                year_diff_cands.sort(key=lambda item: (item[0], item[1]))
+                min_diff = year_diff_cands[0][0]
+                tied = [item for item in year_diff_cands if item[0] == min_diff]
+                _, best_idx, best_bib, is_vn_access = tied[0]
+                if len(tied) >= 2:
+                    link_status = CitationMappingStatus.AMBIGUOUS_MAPPING
+                elif min_diff >= 1 and not is_vn_access:
+                    link_status = CitationMappingStatus.IN_TEXT_MISMATCH
+                else:
+                    link_status = CitationMappingStatus.MATCHED
+                return CitationLink(
+                    occurrence_id=occ_id,
+                    reference_id=best_bib.reference_id or f"ref-{best_idx:04d}",
+                    status=link_status,
+                    confidence=self.fuzzy_confidence,
+                    method=MappingMethod.AUTHOR_YEAR,
+                )
 
         return None
 

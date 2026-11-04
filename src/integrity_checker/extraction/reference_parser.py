@@ -554,6 +554,11 @@ class ReferenceListParser:
         ieee_line_nums = [int(n) for n in re.findall(r"^\s*\[(\d{1,3})\]", text, flags=re.MULTILINE)]
         if len(ieee_line_nums) >= 2 or (len(ieee_line_nums) == 1 and ieee_line_nums[0] == 1):
             entries: list[str] = []
+            pre_ieee_lines: list[str] = []
+            standalone_unnumbered_re = re.compile(
+                r"^(?:[A-ZÀ-Ý][a-zA-ZÀ-ÿ'\-]+\s+[A-Z]{1,3}\.\s+[A-Z].*(?:\b(?:19|20)\d{2}\s*[;:(]|https?://|10\.\d{4,9}/)"
+                r"|[A-ZÀ-Ý][a-zA-ZÀ-ÿ'\-]+,\s+[A-Z]\..*\(\s*(?:19|20)\d{2}[a-z]?\s*\))"
+            )
             for line in text.splitlines():
                 line = line.strip()
                 if not line or _BIB_HEADER_LINE_RE.match(line):
@@ -561,10 +566,26 @@ class ReferenceListParser:
                 if re.match(r"^\[\d{1,3}\]", line) or re.match(
                     r"^\d{1,3}\)\s*(?:https?://|www\.)\S+", line, re.IGNORECASE
                 ):
+                    if pre_ieee_lines and not entries:
+                        pre_text = "\n".join(pre_ieee_lines)
+                        pre_split = self._split_by_year_boundary(pre_text)
+                        entries.extend(pre_split if pre_split else [pre_text])
+                        pre_ieee_lines.clear()
                     entries.append(line)
                 else:
                     if entries:
-                        entries[-1] = self._join_wrapped_line(entries[-1], line)
+                        prev_complete = bool(
+                            re.search(
+                                r"(?:\b(?:19|20)\d{2}[a-z]?[.)]|https?://\S+|10\.\d{4,9}/\S+)\s*$",
+                                entries[-1],
+                            )
+                        )
+                        if prev_complete and standalone_unnumbered_re.match(line):
+                            entries.append(line)
+                        else:
+                            entries[-1] = self._join_wrapped_line(entries[-1], line)
+                    else:
+                        pre_ieee_lines.append(line)
             result = [
                 e
                 for e in entries
