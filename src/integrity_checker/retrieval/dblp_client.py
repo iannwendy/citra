@@ -43,18 +43,33 @@ MIN_TITLE_SIMILARITY = 0.55
 _DBLP_DISAMBIG_RE = re.compile(r"\s+\d{4}$")
 _CORR_VOL_RE = re.compile(r"abs/(\d{4}\.\d{4,5})", re.IGNORECASE)
 _SHARED_DBLP_COOKIES = httpx.Cookies()
-_DBLP_LOOP_LOCKS: dict[int, tuple[asyncio.Semaphore, asyncio.Lock]] = {}
-_LAST_DBLP_REQ_AT: float = 0.0
+_DBLP_LOOP_COOKIES: dict[int, httpx.Cookies] = {}
+_DBLP_LOOP_LOCKS: dict[int, tuple[asyncio.Semaphore, asyncio.Lock, asyncio.Lock]] = {}
+_LAST_DBLP_REQ_AT: dict[int, float] = {}
+_DBLP_MIN_INTERVAL = 0.65
 _DBLP_CONSECUTIVE_FAILURES: dict[int, int] = {}
 _DBLP_CIRCUIT_OPEN_UNTIL: dict[int, float] = {}
 _DBLP_CIRCUIT_COOLDOWN_SEC = 45.0
 
 
-def _get_dblp_sync_primitives() -> tuple[asyncio.Semaphore, asyncio.Lock]:
+def _get_dblp_cookies() -> httpx.Cookies:
+    loop_id = id(asyncio.get_running_loop())
+    cookies = _DBLP_LOOP_COOKIES.get(loop_id)
+    if cookies is None:
+        cookies = httpx.Cookies()
+        if len(_SHARED_DBLP_COOKIES) > 0:
+            cookies.update(_SHARED_DBLP_COOKIES)
+        _DBLP_LOOP_COOKIES[loop_id] = cookies
+    elif len(cookies) == 0 and len(_SHARED_DBLP_COOKIES) > 0:
+        cookies.update(_SHARED_DBLP_COOKIES)
+    return cookies
+
+
+def _get_dblp_sync_primitives() -> tuple[asyncio.Semaphore, asyncio.Lock, asyncio.Lock]:
     loop = asyncio.get_running_loop()
     loop_id = id(loop)
     if loop_id not in _DBLP_LOOP_LOCKS:
-        _DBLP_LOOP_LOCKS[loop_id] = (asyncio.Semaphore(2), asyncio.Lock())
+        _DBLP_LOOP_LOCKS[loop_id] = (asyncio.Semaphore(2), asyncio.Lock(), asyncio.Lock())
     return _DBLP_LOOP_LOCKS[loop_id]
 
 
@@ -320,7 +335,7 @@ class DBLPClient(BaseScholarClient):
             self._last_status_code = 503
             return None
 
-        sem, challenge_lock = _get_dblp_sync_primitives()
+        sem, challenge_lock, _ = _get_dblp_sync_primitives()
         retryer = AsyncRetrying(
             stop=stop_after_attempt(self.max_retries),
             wait=wait_exponential(
@@ -335,8 +350,9 @@ class DBLPClient(BaseScholarClient):
             async for attempt in retryer:
                 with attempt:
                     async with sem:
+                        loop_cookies = _get_dblp_cookies()
                         # Serialize initial request when DBLP Anubis cookie has not been acquired yet
-                        if len(_SHARED_DBLP_COOKIES) == 0:
+                        if len(loop_cookies) == 0:
                             async with challenge_lock:
                                 resp = await self._execute_dblp_get(params)
                         else:
@@ -366,29 +382,39 @@ class DBLPClient(BaseScholarClient):
         return None
 
     async def _execute_dblp_get(self, params: dict[str, Any]) -> httpx.Response:
-        global _LAST_DBLP_REQ_AT
-        if len(_SHARED_DBLP_COOKIES) > 0:
-            elapsed = time.monotonic() - _LAST_DBLP_REQ_AT
-            if elapsed < 0.65:
-                await asyncio.sleep(0.65 - elapsed)
+        loop_id = id(asyncio.get_running_loop())
+        _, _, slot_lock = _get_dblp_sync_primitives()
+        loop_cookies = _get_dblp_cookies()
+        async with slot_lock:
+            now = time.monotonic()
+            last_at = (
+                _LAST_DBLP_REQ_AT.get(loop_id, 0.0)
+                if isinstance(_LAST_DBLP_REQ_AT, dict)
+                else float(_LAST_DBLP_REQ_AT or 0.0)
+            )
+            scheduled = max(now, last_at + _DBLP_MIN_INTERVAL) if last_at > 0 else now
+            if isinstance(_LAST_DBLP_REQ_AT, dict):
+                _LAST_DBLP_REQ_AT[loop_id] = scheduled
+            wait_sec = scheduled - now
+        if wait_sec > 0:
+            await asyncio.sleep(wait_sec)
         async with httpx.AsyncClient(
             timeout=self.timeout,
             follow_redirects=True,
-            cookies=_SHARED_DBLP_COOKIES,
+            cookies=loop_cookies,
         ) as client:
             resp = await client.get(
                 self.BASE_URL,
                 params=params,
                 headers=self._headers,
             )
-            _LAST_DBLP_REQ_AT = time.monotonic()
             refresh = resp.headers.get("refresh") if hasattr(resp, "headers") else None
             if resp.status_code == 202 and refresh and "url=" in refresh:
                 try:
                     wait_str, next_part = refresh.split(";", 1)
-                    wait_sec = min(float(wait_str.strip()), 3.0)
+                    wait_sec_c = min(float(wait_str.strip()), 3.0)
                     next_path = next_part.split("url=", 1)[1].strip()
-                    await asyncio.sleep(wait_sec + 0.5)
+                    await asyncio.sleep(wait_sec_c + 0.5)
                     challenge_url = (
                         f"{self.BASE_ORIGIN}{next_path}"
                         if next_path.startswith("/")
@@ -402,9 +428,9 @@ class DBLPClient(BaseScholarClient):
                             params=params,
                             headers=self._headers,
                         )
-                    _SHARED_DBLP_COOKIES.update(client.cookies)
+                    loop_cookies.update(client.cookies)
                 except Exception as chal_exc:  # noqa: BLE001
                     logger.debug(f"DBLP challenge follow failed: {chal_exc}")
             else:
-                _SHARED_DBLP_COOKIES.update(client.cookies)
+                loop_cookies.update(client.cookies)
             return resp

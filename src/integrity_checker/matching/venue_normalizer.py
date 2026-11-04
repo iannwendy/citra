@@ -38,8 +38,10 @@ VENUE_DICT: dict[str, list[str]] = {
         "NeurIPS",
         "NIPS",
         "Neural Information Processing Systems",
+        "Adv. Neural Inf. Process. Syst.",
     ],
     "International Conference on Machine Learning": ["ICML"],
+    "International Conference on Learning Representations": ["ICLR"],
     "Proceedings of the IEEE": ["Proc. IEEE", "PIEEE"],
     "IEEE Transactions on Pattern Analysis and Machine Intelligence": [
         "TPAMI",
@@ -63,12 +65,53 @@ VENUE_DICT: dict[str, list[str]] = {
     "New England Journal of Medicine": ["NEJM", "N. Engl. J. Med."],
     # Vietnamese journals
     "Tạp chí Khoa học và Công nghệ": ["TC KH&CN"],
-    # Common CS conferences (proceedings titles)
+    # Common CS / AI / NLP conferences (proceedings titles)
     "Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition": [
         "CVPR",
         "Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition",
+        "IEEE Conference on Computer Vision and Pattern Recognition",
+    ],
+    "Proceedings of the IEEE/CVF International Conference on Computer Vision": [
+        "ICCV",
+        "IEEE International Conference on Computer Vision",
     ],
     "European Conference on Computer Vision": ["ECCV"],
+    "Annual Meeting of the Association for Computational Linguistics": [
+        "ACL",
+        "Association for Computational Linguistics",
+        "Findings of the Association for Computational Linguistics: ACL",
+    ],
+    "Conference on Empirical Methods in Natural Language Processing": [
+        "EMNLP",
+        "Empirical Methods in Natural Language Processing",
+        "Findings of the Association for Computational Linguistics: EMNLP",
+    ],
+    "Conference of the North American Chapter of the Association for Computational Linguistics": [
+        "NAACL",
+        "NAACL-HLT",
+        "North American Chapter of the Association for Computational Linguistics",
+        "North American Chapter of the Association for Computational Linguistics: Human Language Technologies",
+    ],
+    "Conference of the European Chapter of the Association for Computational Linguistics": [
+        "EACL",
+    ],
+    "International Conference on Computational Linguistics": ["COLING"],
+    "AAAI Conference on Artificial Intelligence": [
+        "AAAI",
+        "Proceedings of the AAAI Conference on Artificial Intelligence",
+    ],
+    "International Joint Conference on Artificial Intelligence": ["IJCAI"],
+    "ACM SIGKDD Conference on Knowledge Discovery and Data Mining": ["KDD", "SIGKDD"],
+    "International ACM SIGIR Conference on Research and Development in Information Retrieval": [
+        "SIGIR",
+    ],
+    "The Web Conference": ["WWW", "International World Wide Web Conference"],
+    "ACM International Conference on Web Search and Data Mining": ["WSDM"],
+    "ACM International Conference on Information and Knowledge Management": ["CIKM"],
+    "International AAAI Conference on Web and Social Media": [
+        "ICWSM",
+        "International AAAI Conference on Weblogs and Social Media",
+    ],
 }
 
 
@@ -80,11 +123,53 @@ def _fold_diacritics(text: str) -> str:
     return "".join(c for c in nfd if unicodedata.category(c) != "Mn")
 
 
+_RUNNING_HEADER_SUFFIX_RE = re.compile(
+    r"\s+(?:TRƯỜNG\s+ĐẠI\s+HỌC|ĐẠI\s+HỌC\s+QUỐC\s+GIA|KHOA\s+CÔNG\s+NGHỆ\s+THÔNG\s+TIN|BỘ\s+GIÁO\s+DỤC\s+VÀ\s+ĐÀO\s+TẠO)\b.*$"
+)
+
+_ISO4_WORD_MAP: dict[str, str] = {
+    "adv": "advances",
+    "proc": "proceedings",
+    "inf": "information",
+    "process": "processing",
+    "syst": "systems",
+    "trans": "transactions",
+    "int": "international",
+    "conf": "conference",
+    "symp": "symposium",
+    "mach": "machine",
+    "learn": "learning",
+    "res": "research",
+    "comput": "computational",
+    "linguist": "linguistics",
+    "nat": "natural",
+    "lang": "language",
+    "artif": "artificial",
+    "intell": "intelligence",
+    "recognit": "recognition",
+    "lett": "letters",
+    "commun": "communications",
+    "j": "journal",
+}
+
+
+def _strip_running_header(text: str) -> str:
+    if not text:
+        return ""
+    return _RUNNING_HEADER_SUFFIX_RE.sub("", text).strip()
+
+
+def _expand_iso4_key(norm_key: str) -> str:
+    if not norm_key:
+        return ""
+    return " ".join(_ISO4_WORD_MAP.get(tok, tok) for tok in norm_key.split())
+
+
 def _normalize_key(text: str) -> str:
     """Canonical key cho dictionary lookup.
 
     Steps:
-        1. NFC + lowercase + fold diacritics.
+        1. Strip leaked running headers + NFC + lowercase + fold diacritics.
         2. Strip "The " prefix.
         3. Remove punctuation, normalize whitespace.
 
@@ -93,7 +178,8 @@ def _normalize_key(text: str) -> str:
     """
     if not text:
         return ""
-    s = _fold_diacritics(text).lower().strip()
+    cleaned = _strip_running_header(text)
+    s = _fold_diacritics(cleaned).lower().strip()
     if s.startswith("the "):
         s = s[4:]
     s = re.sub(r"[^\w\s]", " ", s)
@@ -107,13 +193,17 @@ def _has_issn(text: str) -> str | None:
     return m.group(0).upper() if m else None
 
 
-# Build reverse map: abbreviation → canonical full name.
+# Build reverse map: abbreviation → canonical full name (plus multi-map for shared acronyms like PRL).
 _REVERSE_DICT: dict[str, str] = {}
+_REVERSE_MULTI_DICT: dict[str, set[str]] = {}
 for _full, _abbrevs in VENUE_DICT.items():
     _canonical = _normalize_key(_full)
-    _REVERSE_DICT[_canonical] = _full
+    _REVERSE_DICT.setdefault(_canonical, _full)
+    _REVERSE_MULTI_DICT.setdefault(_canonical, set()).add(_full)
     for _ab in _abbrevs:
-        _REVERSE_DICT[_normalize_key(_ab)] = _full
+        _ab_key = _normalize_key(_ab)
+        _REVERSE_DICT.setdefault(_ab_key, _full)
+        _REVERSE_MULTI_DICT.setdefault(_ab_key, set()).add(_full)
 
 
 # ----- Fuzzy helpers (pure Python, no external deps) -----
@@ -166,33 +256,67 @@ class VenueNormalizer:
     def __init__(self, threshold: float = 0.85) -> None:
         self.threshold = threshold
         self.reverse_dict = _REVERSE_DICT
+        self.reverse_multi_dict = _REVERSE_MULTI_DICT
+
+    def _candidate_canonicals(self, venue: str | None) -> set[str]:
+        """Return all canonical full names matching a venue string (resolving shared acronyms & proceedings wrappers)."""
+        if not venue:
+            return set()
+        cleaned = _strip_running_header(venue)
+        matches: set[str] = set()
+        no_parens = re.sub(r"\s*[\(\[][^\)\]]+[\)\]]\s*", " ", cleaned).strip()
+        for cand_str in (cleaned, no_parens):
+            cand_key = _normalize_key(cand_str)
+            cand_no_proc = re.sub(
+                r"^(?:in\s+)?(?:proceedings\s+of\s+(?:the\s+)?|proc\s+(?:of\s+(?:the\s+)?)?)(?:\d{4}\s+|\d+(?:st|nd|rd|th)\s+)*(?:annual\s+)?",
+                "",
+                cand_key,
+            ).strip()
+            for k in (cand_key, cand_no_proc, _expand_iso4_key(cand_key), _expand_iso4_key(cand_no_proc)):
+                if k in self.reverse_multi_dict:
+                    matches.update(self.reverse_multi_dict[k])
+        for paren_m in re.findall(r"[\(\[]([^)\]]{2,20})[\)\]]", cleaned):
+            p_key = _normalize_key(paren_m)
+            if p_key in self.reverse_multi_dict:
+                matches.update(self.reverse_multi_dict[p_key])
+        if not matches:
+            # Substring match for long conference proceedings titles containing a canonical conference phrase (>= 4 words)
+            full_key = _expand_iso4_key(_normalize_key(cleaned))
+            if any(w in full_key.split() for w in ("proceedings", "conference", "meeting", "symposium", "workshop")):
+                for dict_key, full_set in self.reverse_multi_dict.items():
+                    if len(dict_key.split()) >= 4 and dict_key in full_key:
+                        matches.update(full_set)
+        return matches
 
     def normalize(self, venue: str | None) -> str:
         """Trả canonical full name nếu biết (trong dict), else normalized lowercase."""
         if not venue:
             return ""
-        key = _normalize_key(venue)
+        cleaned = _strip_running_header(venue)
+        key = _normalize_key(cleaned)
         if key in self.reverse_dict:
             return self.reverse_dict[key]
         # Try stripping 'Proceedings of (the)' or trailing parenthetical abbreviation e.g. '(NeurIPS)'
-        no_parens = re.sub(r"\s*[\(\[][^\)\]]+[\)\]]\s*", " ", venue).strip()
-        for cand_str in (no_parens, venue):
+        no_parens = re.sub(r"\s*[\(\[][^\)\]]+[\)\]]\s*", " ", cleaned).strip()
+        for cand_str in (no_parens, cleaned):
             cand_key = _normalize_key(cand_str)
             cand_no_proc = re.sub(
-                r"^(?:in\s+)?(?:proceedings\s+of\s+(?:the\s+)?|proc\s+(?:of\s+(?:the\s+)?)?)",
+                r"^(?:in\s+)?(?:proceedings\s+of\s+(?:the\s+)?|proc\s+(?:of\s+(?:the\s+)?)?)(?:\d{4}\s+|\d+(?:st|nd|rd|th)\s+)*(?:annual\s+)?",
                 "",
                 cand_key,
             ).strip()
-            if cand_key in self.reverse_dict:
-                return self.reverse_dict[cand_key]
-            if cand_no_proc in self.reverse_dict:
-                return self.reverse_dict[cand_no_proc]
-        for paren_m in re.findall(r"[\(\[]([^)\]]{2,15})[\)\]]", venue):
+            for k in (cand_key, cand_no_proc, _expand_iso4_key(cand_key), _expand_iso4_key(cand_no_proc)):
+                if k in self.reverse_dict:
+                    return self.reverse_dict[k]
+        for paren_m in re.findall(r"[\(\[]([^)\]]{2,20})[\)\]]", cleaned):
             p_key = _normalize_key(paren_m)
             if p_key in self.reverse_dict:
                 return self.reverse_dict[p_key]
+        cands = self._candidate_canonicals(cleaned)
+        if len(cands) == 1:
+            return next(iter(cands))
         # Try ISSN
-        issn = _has_issn(venue)
+        issn = _has_issn(cleaned)
         if issn:
             return f"<ISSN:{issn}>"
         # Fallback: just normalized form
@@ -203,7 +327,7 @@ class VenueNormalizer:
 
         Order:
             1. ISSN exact → 1.0
-            2. Dict lookup → 1.0
+            2. Dict / multi-dict lookup → 1.0
             3. Normalized exact → 1.0
             4. Fuzzy (token_set_ratio) → 0–1
         """
@@ -213,12 +337,20 @@ class VenueNormalizer:
         issn1, issn2 = _has_issn(v1), _has_issn(v2)
         if issn1 and issn2:
             return 1.0 if issn1 == issn2 else 0.0
+        cands1 = self._candidate_canonicals(v1)
+        cands2 = self._candidate_canonicals(v2)
+        if cands1 and cands2 and (cands1 & cands2):
+            return 1.0
         # Dict lookup
         norm1 = self.normalize(v1)
         norm2 = self.normalize(v2)
         if norm1 and norm2 and norm1 == norm2:
             return 1.0
-        # Fuzzy
+        # Fuzzy (with ISO-4 expansion if neither resolved to a distinct known journal)
+        if not (cands1 and cands2):
+            exp1 = _expand_iso4_key(_normalize_key(v1))
+            exp2 = _expand_iso4_key(_normalize_key(v2))
+            return max(_fuzzy_token_set_ratio(norm1, norm2), _fuzzy_token_set_ratio(exp1, exp2))
         return _fuzzy_token_set_ratio(norm1, norm2)
 
     def match(
@@ -241,6 +373,16 @@ class VenueNormalizer:
                 method="issn",
                 issn=issn1 if matched else None,
             )
+        cands1 = self._candidate_canonicals(v1)
+        cands2 = self._candidate_canonicals(v2)
+        if cands1 and cands2 and (cands1 & cands2):
+            shared = sorted(cands1 & cands2)[0]
+            return VenueMatchResult(
+                matched=True,
+                score=1.0,
+                method="dict",
+                canonical=shared,
+            )
         norm1 = self.normalize(v1)
         norm2 = self.normalize(v2)
         if norm1 == norm2 and norm1:
@@ -250,7 +392,7 @@ class VenueNormalizer:
                 method="dict",
                 canonical=norm1,
             )
-        fuzzy = _fuzzy_token_set_ratio(norm1, norm2)
+        fuzzy = self.similarity(v1, v2)
         return VenueMatchResult(
             matched=fuzzy >= thr,
             score=fuzzy,

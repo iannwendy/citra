@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import re
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -22,6 +23,45 @@ from integrity_checker.logging import get_logger
 from integrity_checker.logic.rules import _is_fake_url
 
 logger = get_logger(__name__)
+
+
+def clean_extracted_url(text_or_url: str | None) -> str:
+    """Extract and sanitize a URL from PDF text, repairing line wraps and bracket delimiters."""
+    if not text_or_url or not str(text_or_url).strip():
+        return ""
+    s = str(text_or_url).strip()
+    # Repair PDF line wraps right after scheme colon, percent-encodings, or path delimiters
+    s = re.sub(r"(https?:)\s+(//)", r"\1\2", s, flags=re.IGNORECASE)
+    for _ in range(3):
+        s_next = re.sub(r"(%)\s+([0-9A-Fa-f]{2})", r"\1\2", s)
+        s_next = re.sub(r"(%[0-9A-Fa-f])\s+([0-9A-Fa-f])", r"\1\2", s_next)
+        s_next = re.sub(
+            r"(%[0-9A-Fa-f]{2})\s+(%[0-9A-Fa-f]|[A-Za-z0-9._~\-])",
+            r"\1\2",
+            s_next,
+        )
+        s_next = re.sub(
+            r"(https?://[^\s<>\"\]]*?[/_~=\-&?#:])\s+([A-Za-z0-9%_~#])",
+            r"\1\2",
+            s_next,
+            flags=re.IGNORECASE,
+        )
+        if s_next == s:
+            break
+        s = s_next
+
+    m = re.search(r"https?://\S+", s, flags=re.IGNORECASE)
+    candidate = m.group(0) if m else s.lstrip("<[(\"'")
+    while candidate:
+        if (
+            candidate[-1] in ".,;:\"'>}"
+            or (candidate[-1] == ")" and candidate.count(")") > candidate.count("("))
+            or (candidate[-1] == "]" and candidate.count("]") > candidate.count("["))
+        ):
+            candidate = candidate[:-1]
+        else:
+            break
+    return candidate.strip()
 
 _WAYBACK_SEMS: dict[int, asyncio.Semaphore] = {}
 _WAYBACK_LOCKS: dict[int, asyncio.Lock] = {}
@@ -242,7 +282,9 @@ class LinkValidator:
         if not url or not str(url).strip():
             return LinkCheckResult(url="", status=LinkStatus.UNCHECKED)
 
-        clean_url = str(url).strip().rstrip(".,;:)\"'")
+        clean_url = clean_extracted_url(url)
+        if not clean_url:
+            return LinkCheckResult(url="", status=LinkStatus.UNCHECKED)
         is_fake, matched_domain = _is_fake_url(clean_url)
         if is_fake:
             return LinkCheckResult(
@@ -264,8 +306,8 @@ class LinkValidator:
                 status_code = resp.status_code
                 final_url = str(resp.url)
 
-                # Many academic publishers reject HEAD with 403/404/405; verify via lightweight GET
-                if status_code in (403, 404, 405):
+                # Many academic publishers/portals/WAFs reject HEAD; verify via lightweight GET stream
+                if status_code in (400, 401, 403, 404, 405, 406, 500, 501, 503):
                     async with client.stream("GET", clean_url) as get_resp:
                         status_code = get_resp.status_code
                         final_url = str(get_resp.url)

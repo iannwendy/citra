@@ -355,13 +355,36 @@ class CrossrefClient(BaseScholarClient):
             if full:
                 authors.append(full)
 
-        # Year — từ published print/online hoặc issued
+        # Year — ưu tiên event.start / container-title cho proceedings-article
+        # (tránh lấy ngày số hóa muộn ở published-online như ICWSM 2013 -> 2021)
         year: str | None = None
-        for date_key in ("published-print", "published-online", "issued", "created"):
-            date_parts = message.get(date_key, {}).get("date-parts", [[None]])
-            if date_parts and date_parts[0] and date_parts[0][0]:
-                year = str(date_parts[0][0])
-                break
+        if message.get("type") == "proceedings-article":
+            print_parts = message.get("published-print", {}).get("date-parts", [[None]])
+            if print_parts and print_parts[0] and print_parts[0][0]:
+                year = str(print_parts[0][0])
+            if not year:
+                event_parts = (
+                    (message.get("event") or {})
+                    .get("start", {})
+                    .get("date-parts", [[None]])
+                )
+                if event_parts and event_parts[0] and event_parts[0][0]:
+                    ev_y = int(event_parts[0][0])
+                    if 1900 <= ev_y <= 2100:
+                        year = str(ev_y)
+            if not year:
+                for c_title in (message.get("container-title") or []):
+                    m_conf_year = re.search(r"\b(19\d{2}|20\d{2})\b", str(c_title))
+                    if m_conf_year:
+                        year = m_conf_year.group(1)
+                        break
+
+        if not year:
+            for date_key in ("published-print", "published-online", "issued", "created"):
+                date_parts = message.get(date_key, {}).get("date-parts", [[None]])
+                if date_parts and date_parts[0] and date_parts[0][0]:
+                    year = str(date_parts[0][0])
+                    break
 
         # Venue
         venue: str | None = None

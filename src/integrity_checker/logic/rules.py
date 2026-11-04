@@ -750,8 +750,9 @@ class SymbolicRules:
         citation_authors: list[str] | None = None,
         citation_year: str | None = None,
         citation_raw: str | None = None,
+        citation_venue: str | None = None,
     ) -> RuleOutcome:
-        """Apply symbolic rules and enforce retraction post-conditions."""
+        """Apply symbolic rules and enforce retraction / clear venue conflict post-conditions."""
         outcome = self._apply_core(
             features=features,
             source=source,
@@ -765,6 +766,50 @@ class SymbolicRules:
             citation_year=citation_year,
             citation_raw=citation_raw,
         )
+        best_cand = source.best_candidate() if source and source.candidates else None
+        if citation_venue and best_cand and best_cand.venue:
+            _non_venue_pat = re.compile(
+                r"\b(?:arxiv|corr|preprint|biorxiv|medrxiv|ssrn|hal|zenodo|openreview|"
+                r"researchgate|sciencedirect|springer|elsevier|wiley|taylor|francis|"
+                r"ieee\s+xplore|acm\s+digital|lecture\s+notes|lncs|pubmed)\b",
+                re.IGNORECASE,
+            )
+            cv_clean = citation_venue.strip()
+            bv_clean = best_cand.venue.strip()
+            if (
+                len(cv_clean) >= 3
+                and len(bv_clean) >= 3
+                and cv_clean.lower() not in {"ieee", "acm"}
+                and bv_clean.lower() not in {"ieee", "acm"}
+                and not _non_venue_pat.search(cv_clean)
+                and not _non_venue_pat.search(bv_clean)
+                and not (citation_doi and "10.48550/arxiv" in str(citation_doi).lower())
+            ):
+                from integrity_checker.matching.venue_normalizer import VenueNormalizer
+
+                v_sim = VenueNormalizer().similarity(cv_clean, bv_clean)
+                if v_sim < 0.15 and outcome.label == ValidationLabel.METADATA_ERROR:
+                    if "venue" not in outcome.mismatched_fields:
+                        outcome.mismatched_fields.append("venue")
+                    if "R-VENUE-MISMATCH" not in outcome.triggered_rules:
+                        outcome.triggered_rules.append("R-VENUE-MISMATCH")
+                elif (
+                    v_sim < 0.10
+                    and outcome.label == ValidationLabel.VERIFIED
+                    and features.doi_exact_match
+                ):
+                    c_is_j = bool(re.search(r"\b(?:journal|transactions)\b", cv_clean, re.I))
+                    b_is_j = bool(re.search(r"\b(?:journal|transactions)\b", bv_clean, re.I))
+                    c_is_c = bool(re.search(r"\b(?:proceedings|conference|symposium|workshop)\b", cv_clean, re.I))
+                    b_is_c = bool(re.search(r"\b(?:proceedings|conference|symposium|workshop)\b", bv_clean, re.I))
+                    if (c_is_j and b_is_c and not c_is_c) or (c_is_c and b_is_j and not c_is_j):
+                        outcome.label = ValidationLabel.METADATA_ERROR
+                        outcome.confidence = min(outcome.confidence, 0.72)
+                        outcome.mismatched_fields = ["venue"]
+                        outcome.triggered_rules.append("R-VENUE-MISMATCH")
+                        outcome.reasoning += (
+                            f" Venue conflict detected: cited '{cv_clean}' vs canonical '{bv_clean}'."
+                        )
         is_retracted = bool(
             getattr(source, "is_retracted", False)
             or (hasattr(source, "has_retracted_candidate") and source.has_retracted_candidate())
@@ -982,10 +1027,11 @@ class SymbolicRules:
         url_status_code = getattr(source, "url_status_code", None)
         if not citation_url:
             raw_for_url = citation_raw or getattr(source, "citation_raw", "") or ""
-            url_m = re.search(r"https?://\S+", raw_for_url, re.IGNORECASE)
-            if url_m:
-                extracted_u = url_m.group(0).rstrip(".,;:)\"'")
-                if "doi.org/" not in extracted_u.lower():
+            if raw_for_url and re.search(r"https?:", raw_for_url, re.IGNORECASE):
+                from integrity_checker.retrieval.link_validator import clean_extracted_url
+
+                extracted_u = clean_extracted_url(raw_for_url)
+                if extracted_u.lower().startswith(("http://", "https://")) and "doi.org/" not in extracted_u.lower():
                     citation_url = extracted_u
 
         if not source.candidates or not source.best_candidate():

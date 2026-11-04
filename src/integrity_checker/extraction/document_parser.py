@@ -1716,9 +1716,11 @@ class DocumentParser:
                     )
                 ):
                     if grobid_refs and not grobid_refs[-1].url:
-                        u_m = re.search(r"https?://\S+", (ref.raw_text or ref.title or "").strip(), re.I)
-                        if u_m:
-                            grobid_refs[-1].url = u_m.group(0).rstrip(".,;)")
+                        from integrity_checker.retrieval.link_validator import clean_extracted_url
+
+                        extracted_u = clean_extracted_url(ref.raw_text or ref.title or "")
+                        if extracted_u.lower().startswith(("http://", "https://")):
+                            grobid_refs[-1].url = extracted_u
                     continue
 
                 # Coalesce consecutive split GROBID entries where the first half has only
@@ -2048,6 +2050,18 @@ class DocumentParser:
                     for g in grobid_refs
                 )
             )
+            # Preserve APA 7th author-list ellipsis ('... &' / '… &') when GROBID TEI stripped '...'
+            if not donor_is_multi_chunk and donor.raw_text:
+                donor_head = (
+                    donor.raw_text.split(donor.title, 1)[0]
+                    if donor.title and donor.title in donor.raw_text
+                    else donor.raw_text[:200]
+                )
+                if re.search(
+                    r"(?:\.\s*\.\s*\.|…)\s*(?:&|\band\b|[A-ZÀ-ÖØ-ÞĐ])",
+                    donor_head,
+                ):
+                    target._has_et_al_ellipsis = True  # type: ignore[attr-defined]
             # Restore dropped leading or trailing authors when GROBID missed co-authors on a line/hyphen break
             if (
                 donor.authors

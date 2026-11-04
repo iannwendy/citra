@@ -140,6 +140,18 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
     ],
     conclusion: "METADATA_ERROR",
   },
+  "R-VENUE-MISMATCH": {
+    id: "R-VENUE-MISMATCH",
+    name: "Publication Venue Conflict",
+    nameVi: "Sai lệch nơi công bố (Tạp chí / Hội nghị)",
+    description: "Cited journal or conference conflicts with canonical publication venue metadata",
+    descriptionVi: "Tên tạp chí hoặc hội nghị trích dẫn mâu thuẫn với nơi công bố chính thức của công trình",
+    conditions: [
+      { field: "venue_sim", operator: "<", value: "0.25" },
+      { field: "is_preprint_pair", operator: "=", value: "false" },
+    ],
+    conclusion: "METADATA_ERROR",
+  },
   "R-CHIMERIC-DOI-MISMATCH": {
     id: "R-CHIMERIC-DOI-MISMATCH",
     name: "Spliced / Chimeric DOI Hallucination",

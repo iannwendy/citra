@@ -83,9 +83,11 @@ class StyleProfile:
     evidence: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        # Backward compat: style= param maps to label=
+        # Bidirectional compat between label= and style=
         if self.style and not self.label:
             self.label = self.style
+        elif self.label and not self.style:
+            self.style = self.label
 
 
 class StyleDetector:
@@ -110,12 +112,22 @@ class StyleDetector:
 
         label, confidence, explanation = self._classify(ratios, features)
 
+        apa_total = features.body_apa_like + features.bib_apa_style + features.bib_chicago_style
+        numeric_total = (
+            features.body_ieee_like
+            + features.body_vancouver_like
+            + features.bib_ieee_style
+            + features.bib_vancouver_style
+        )
+
         return StyleProfile(
             label=label,
             confidence=confidence,
             features=features,
             ratios=ratios,
             explanation=explanation,
+            apa_count=apa_total,
+            numeric_count=numeric_total,
         )
 
     # -- internals --

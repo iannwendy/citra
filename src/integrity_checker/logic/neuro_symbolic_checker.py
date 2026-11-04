@@ -630,9 +630,14 @@ class NeuroSymbolicChecker:
                         and getattr(features, "content_is_aligned", False)
                     ):
                         known_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
+                    known_note = (
+                        "APIs failed but paper is well-documented."
+                        if (source.sources_failed or source.api_exhausted)
+                        else "Verified against curated canonical scholarly registry."
+                    )
                     base_reason = (
                         f"Known seminal paper verified via known papers database: '{paper_info.get('title')}'. "
-                        "APIs failed but paper is well-documented."
+                        f"{known_note}"
                     )
 
                     return self._apply_dead_link_exception(
@@ -679,9 +684,14 @@ class NeuroSymbolicChecker:
                     and getattr(features, "content_is_aligned", False)
                 ):
                     known_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
+                known_note = (
+                    "APIs failed but paper is well-documented."
+                    if (source.sources_failed or source.api_exhausted)
+                    else "Verified against curated canonical scholarly registry."
+                )
                 base_reason = (
                     f"Known seminal paper verified via known papers database: '{paper_info.get('title')}'. "
-                    "APIs failed but paper is well-documented."
+                    f"{known_note}"
                 )
 
                 return self._apply_dead_link_exception(
@@ -718,6 +728,7 @@ class NeuroSymbolicChecker:
             citation_authors=citation.authors,
             citation_year=citation.year,
             citation_raw=citation.raw_text,
+            citation_venue=citation.venue,
         )
 
         final_rules = list(outcome.triggered_rules)

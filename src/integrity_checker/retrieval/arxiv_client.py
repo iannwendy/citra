@@ -64,6 +64,9 @@ _STOPWORDS = frozenset({
 })
 
 _ARXIV_LOOP_SEMS: dict[int, asyncio.Semaphore] = {}
+_ARXIV_SLOT_LOCKS: dict[int, asyncio.Lock] = {}
+_LAST_ARXIV_REQ_AT: dict[int, float] = {}
+_ARXIV_MIN_INTERVAL = 1.0
 _ARXIV_CONSECUTIVE_TIMEOUTS: dict[int, int] = {}
 _ARXIV_CIRCUIT_OPEN_UNTIL: dict[int, float] = {}
 _ARXIV_CIRCUIT_COOLDOWN_SEC = 45.0
@@ -73,8 +76,15 @@ def _get_arxiv_sem() -> asyncio.Semaphore:
     loop = asyncio.get_running_loop()
     loop_id = id(loop)
     if loop_id not in _ARXIV_LOOP_SEMS:
-        _ARXIV_LOOP_SEMS[loop_id] = asyncio.Semaphore(3)
+        _ARXIV_LOOP_SEMS[loop_id] = asyncio.Semaphore(2)
     return _ARXIV_LOOP_SEMS[loop_id]
+
+
+def _get_arxiv_slot_lock() -> asyncio.Lock:
+    loop_id = id(asyncio.get_running_loop())
+    if loop_id not in _ARXIV_SLOT_LOCKS:
+        _ARXIV_SLOT_LOCKS[loop_id] = asyncio.Lock()
+    return _ARXIV_SLOT_LOCKS[loop_id]
 
 
 class ArxivClient(BaseScholarClient):
@@ -390,6 +400,7 @@ class ArxivClient(BaseScholarClient):
             return None
 
         sem = _get_arxiv_sem()
+        slot_lock = _get_arxiv_slot_lock()
         retryer = AsyncRetrying(
             stop=stop_after_attempt(self.max_retries),
             wait=wait_exponential(
@@ -403,14 +414,23 @@ class ArxivClient(BaseScholarClient):
         try:
             async for attempt in retryer:
                 with attempt:
-                    async with sem, httpx.AsyncClient(
-                        timeout=self.timeout, follow_redirects=True
-                    ) as client:
-                        resp = await client.get(
-                            self.BASE_URL,
-                            params=params,
-                            headers=self._headers,
-                        )
+                    async with sem:
+                        async with slot_lock:
+                            now_slot = time.monotonic()
+                            last_at = _LAST_ARXIV_REQ_AT.get(loop_id, 0.0)
+                            scheduled = max(now_slot, last_at + _ARXIV_MIN_INTERVAL) if last_at > 0 else now_slot
+                            _LAST_ARXIV_REQ_AT[loop_id] = scheduled
+                            wait_sec = scheduled - now_slot
+                        if wait_sec > 0:
+                            await asyncio.sleep(wait_sec)
+                        async with httpx.AsyncClient(
+                            timeout=self.timeout, follow_redirects=True
+                        ) as client:
+                            resp = await client.get(
+                                self.BASE_URL,
+                                params=params,
+                                headers=self._headers,
+                            )
                     self._last_status_code = resp.status_code
                     _ARXIV_CONSECUTIVE_TIMEOUTS[loop_id] = 0
                     if resp.status_code == 404:

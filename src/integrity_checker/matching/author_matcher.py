@@ -44,7 +44,8 @@ _GENERATIONAL_SUFFIXES = {"jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"}
 _ET_AL_MARKER_RE = re.compile(
     r"(?:\bet\s+al\.?(?:\b|$)|\bvà\s+cộng\s+sự\b|\bvà\s+cs\.?(?:\b|$)"
     r"|(?:^|[\s,;(\[])cs\.(?=\s|$|[),;\]])|\bvà\s+ctv\.?(?:\b|$)"
-    r"|\band\s+others\b|\bothers\b)",
+    r"|\band\s+others\b|\bothers\b"
+    r"|(?:\.\s*\.\s*\.|…)\s*(?:&|\band\b|[A-ZÀ-ÖØ-ÞĐ])|^\s*(?:\.\s*\.\s*\.|…)\s*$)",
     re.IGNORECASE,
 )
 _ET_AL_STRIP_RE = re.compile(
@@ -53,6 +54,7 @@ _ET_AL_STRIP_RE = re.compile(
     r"|\band\s+others\b|,\s*others\b|^\s*others\s*$).*$",
     re.IGNORECASE,
 )
+_LEADING_ELLIPSIS_RE = re.compile(r"^\s*(?:\.\s*\.\s*\.|…)\s*(?:&|\band\b)?\s*", re.IGNORECASE)
 
 # Strip punctuation EXCEPT apostrophe (which joins words like O'Brien, D'Angelo, L’Engle)
 _PUNCT_RE = re.compile(r"[^\w\s']", re.UNICODE)
@@ -142,6 +144,7 @@ def _canonicalize_last_name(name: str, *, fold_diacritics: bool = True) -> str:
     """
     if not name:
         return ""
+    name = _LEADING_ELLIPSIS_RE.sub("", name)
     name = _ET_AL_STRIP_RE.sub("", name).strip().rstrip(",;:")
     if not name:
         return ""
@@ -574,6 +577,24 @@ def author_match_score(
                     for b_obj, sig_b in cand_sigs
                 ):
                     cand_set.add(prim_c)
+        # Systematic East-Asian GivenName, SurnameInitial <-> Surname, GivenInitial across >=2 co-authors
+        if len(cited_sigs) >= 2 and len(cand_sigs) >= 2:
+            mutual_init_matches: list[str] = []
+            for a_obj, (prim_c, full_c, init_c) in cited_sigs:
+                if not prim_c or prim_c in cand_set or len(full_c) != 1:
+                    continue
+                given_c = init_c - {prim_c[0]}
+                if len(given_c) != 1:
+                    continue
+                for b_obj, (prim_b, full_b, init_b) in cand_sigs:
+                    if not prim_b or len(full_b) != 1 or _has_vietnamese_conflict(a_obj, b_obj):
+                        continue
+                    given_b = init_b - {prim_b[0]}
+                    if given_c == {prim_b[0]} and given_b == {prim_c[0]}:
+                        mutual_init_matches.append(prim_c)
+                        break
+            if len(set(mutual_init_matches)) >= 2:
+                cand_set.update(mutual_init_matches)
         # Check corporate / institutional acronym & full-name equivalence (e.g. "WHO" <-> "World Health Organization")
         for a in cited:
             prim_c = _author_to_last_name(a, fold_diacritics=fold_diacritics)

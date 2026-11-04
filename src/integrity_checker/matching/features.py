@@ -357,6 +357,8 @@ class FeatureCalculator:
 
     @staticmethod
     def _citation_has_et_al(citation: Citation, cited_authors: list) -> bool:
+        if getattr(citation, "_has_et_al_ellipsis", False):
+            return True
         if _has_et_al_indicator(cited_authors):
             return True
         if citation.raw_in_text_citation and _has_et_al_indicator(citation.raw_in_text_citation):

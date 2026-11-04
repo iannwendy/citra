@@ -1424,13 +1424,19 @@ class RetrievalOrchestrator:
     ) -> tuple[str | None, int | None, str | None]:
         """Validate citation.url via LinkValidator and return (status, status_code, archive_url)
         without mutating shared instance state across concurrent coroutines."""
-        if not citation.url and citation.raw_text:
-            url_m = re.search(r"https?://\S+", citation.raw_text, re.IGNORECASE)
-            if url_m:
-                citation.url = url_m.group(0).rstrip(".,;:)\"'>]")
+        from integrity_checker.retrieval.link_validator import (
+            LinkValidator,
+            clean_extracted_url,
+        )
+
+        if citation.url:
+            citation.url = clean_extracted_url(citation.url) or citation.url
+        elif citation.raw_text and re.search(r"https?:", citation.raw_text, re.IGNORECASE):
+            extracted = clean_extracted_url(citation.raw_text)
+            if extracted.lower().startswith(("http://", "https://")) and "doi.org/" not in extracted.lower():
+                citation.url = extracted
         if not citation.url or not self.enable_link_validation:
             return None, None, None
-        from integrity_checker.retrieval.link_validator import LinkValidator
 
         validator = self.link_validator or LinkValidator()
         link_res = await validator.validate_url(citation.url)

@@ -110,6 +110,8 @@ class CISCalculator:
                 "R-NONEXISTENT-DOI",
                 "R-DEAD-URL",
                 "R-BROKEN-LINK",
+                "R-DOI-CONFLICT",
+                "R-CHIMERIC-DOI-MISMATCH",
             }
             with_id = sum(1 for v in verdicts if v.citation.doi or v.citation.url)
             valid_id = sum(
@@ -119,9 +121,27 @@ class CISCalculator:
                 and not (set(v.triggered_rules or []) & invalid_id_rules)
             )
             res_id_validity = (valid_id / with_id) if with_id > 0 else 1.0
+            has_mapping_info = any(v.mapping_status is not None for v in verdicts)
+            if linking_result is not None and len(verdicts) >= 3 and has_mapping_info:
+                cited_res = sum(
+                    1
+                    for v in verdicts
+                    if (
+                        v.mapping_status.value
+                        if hasattr(v.mapping_status, "value")
+                        else str(v.mapping_status or "")
+                    )
+                    in ("matched", "in_text_mismatch", "ambiguous_mapping")
+                )
+                cited_ratio = cited_res / len(verdicts)
+                res_verified = (0.5 + 0.5 * cited_ratio) * res_id_validity
+                res_meta = (0.5 + 0.5 * cited_ratio) * res_id_validity
+            else:
+                res_verified = res_id_validity
+                res_meta = res_id_validity
             res_components = CISComponents(
-                verified_ratio=1.0,
-                metadata_accuracy=1.0,
+                verified_ratio=res_verified,
+                metadata_accuracy=res_meta,
                 in_text_bib_consistency=res_link_consistency,
                 format_consistency=res_format_consistency,
                 identifier_validity=res_id_validity,
@@ -193,7 +213,7 @@ class CISCalculator:
         #   a. Từ LinkingResult.links (nếu pipeline có chạy CitationLinker)
         #   b. Từ verdict.mapping_status (fallback nếu linker không chạy)
         in_text_bib_consistency = self._compute_link_consistency(
-            academic_verdicts, linking_result, penalties=self.penalties
+            verdicts, linking_result, penalties=self.penalties
         )
 
         # 4. Format consistency — TÍNH TỪ StyleDetector
@@ -210,6 +230,8 @@ class CISCalculator:
             "R-NONEXISTENT-DOI",
             "R-DEAD-URL",
             "R-BROKEN-LINK",
+            "R-DOI-CONFLICT",
+            "R-CHIMERIC-DOI-MISMATCH",
         }
         with_identifier = 0
         with_identifier_valid = 0
@@ -334,6 +356,14 @@ class CISCalculator:
 
                 logger.debug(f"CIS from ALL links: status_counts={status_counts}, penalty={penalty:.2f}, total={total}")
                 result = max(0.0, 1.0 - penalty / total)
+                # If 100% of bibliography entries are uncited and zero body citations matched,
+                # cap consistency at 0.50 because there is zero in-text <-> bibliography linkage.
+                if (
+                    verdicts
+                    and verdict_uncited == len(verdicts)
+                    and status_counts.get("matched", 0) == 0
+                ):
+                    result = min(result, 0.50)
                 logger.debug(f"CIS link consistency result: {result:.4f}")
                 return result
 
@@ -388,7 +418,22 @@ class CISCalculator:
                 base = 0.4
             elif "UNKNOWN" in style_value:
                 base = 0.5
-            elif "APA" in style_value or "IEEE" in style_value:
+            elif any(
+                tok in style_value
+                for tok in (
+                    "APA",
+                    "IEEE",
+                    "VANCOUVER",
+                    "ACM",
+                    "MLA",
+                    "CHICAGO",
+                    "HARVARD",
+                    "NATURE",
+                    "CSE",
+                    "ACS",
+                    "AMA",
+                )
+            ):
                 # Rõ ràng → score cao scaled by confidence
                 base = 0.8 + 0.2 * confidence  # 0.8-1.0
             else:

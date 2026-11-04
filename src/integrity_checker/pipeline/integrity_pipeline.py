@@ -1493,11 +1493,21 @@ class IntegrityPipeline:
             # Map label (e.g. 'APA-like') → linking style 'APA-LIKE'
             style_value = (ext_profile.label or "UNKNOWN").upper()
             ratios = ext_profile.ratios or {}
+            apa_count = (
+                ext_profile.apa_count
+                if getattr(ext_profile, "apa_count", 0)
+                else int(ratios.get("apa_count", 0) + ratios.get("APA_count", 0))
+            )
+            numeric_count = (
+                ext_profile.numeric_count
+                if getattr(ext_profile, "numeric_count", 0)
+                else int(ratios.get("ieee_count", 0) + ratios.get("IEEE_count", 0))
+            )
             return StyleProfile(
                 style=style_value,
                 confidence=ext_profile.confidence,
-                apa_count=ratios.get("apa_count", 0) + ratios.get("APA_count", 0),
-                numeric_count=ratios.get("ieee_count", 0) + ratios.get("IEEE_count", 0),
+                apa_count=apa_count,
+                numeric_count=numeric_count,
                 evidence={"ratios": dict(ratios), "explanation": ext_profile.explanation},
             )
         except Exception as e:  # noqa: BLE001
@@ -2032,6 +2042,30 @@ def _deserialize_citation_link(data: Any) -> CitationLink | None:
 
 def _serialize_verdict_for_json(v: CitationVerdict) -> dict[str, Any]:
     """CitationVerdict không JSON-serializable do Citation dataclass nested."""
+    archive_url = getattr(v, "archive_url", None) or (
+        getattr(v.matched_source, "archive_url", None) if v.matched_source else None
+    )
+    is_retracted = bool(
+        getattr(v, "is_retracted", False)
+        or (getattr(v.matched_source, "is_retracted", False) if v.matched_source else False)
+    )
+    matched_sources: list[dict[str, Any]] = []
+    if v.matched_source and getattr(v.matched_source, "candidates", None):
+        for cand in v.matched_source.candidates:
+            if not getattr(cand, "found", True):
+                continue
+            matched_sources.append(
+                {
+                    "source_name": cand.source_name,
+                    "title": cand.title,
+                    "authors": list(cand.authors or []),
+                    "year": cand.year,
+                    "doi": cand.doi,
+                    "venue": cand.venue,
+                    "url": cand.url,
+                    "confidence": cand.confidence,
+                }
+            )
     return {
         "citation_raw": v.citation.raw_text,
         "label": v.label.value,
@@ -2066,9 +2100,14 @@ def _serialize_verdict_for_json(v: CitationVerdict) -> dict[str, Any]:
             "url_status": getattr(v.matched_source, "url_status", None) if v.matched_source else None,
             "url_status_code": getattr(v.matched_source, "url_status_code", None) if v.matched_source else None,
             "checked_url": getattr(v.citation, "url", None) if v.citation else None,
+            "archive_url": archive_url,
+            "is_retracted": is_retracted,
         },
         "url_status": getattr(v.matched_source, "url_status", None) if v.matched_source else None,
         "url_status_code": getattr(v.matched_source, "url_status_code", None) if v.matched_source else None,
+        "archive_url": archive_url,
+        "is_retracted": is_retracted,
+        "matched_sources": matched_sources,
         "domain_exception": getattr(v, "domain_exception", False),
         # NEW v1.3: Provenance tracking
         "provenance": {

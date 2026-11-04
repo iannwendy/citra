@@ -113,11 +113,45 @@ describe('BatchUploadPage', () => {
   it('advertises PDF & DOCX support in both languages', async () => {
     const { unmount } = renderWithProviders(<BatchUploadPage />, { user: makeUser('teacher') });
     expect(screen.getAllByText(/PDF & DOCX/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/\.bib, \.ris/i).length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toMatch(/PDF Only/i);
     unmount();
     await i18n.changeLanguage('vi');
     renderWithProviders(<BatchUploadPage />, { user: makeUser('teacher') });
     expect(screen.getAllByText(/PDF & DOCX/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/\.bib, \.ris/i).length).toBeGreaterThan(0);
     expect(document.body.textContent).toContain('3 LUỒNG XỬ LÝ SONG SONG');
+  });
+
+  it('does not auto-redirect on mixed success/failure batch and retries failed file immediately', async () => {
+    let shouldFailSecond = true;
+    vi.spyOn(api, 'uploadEssay').mockImplementation(async (file: File) => {
+      if (file.name === 'bad.pdf' && shouldFailSecond) {
+        throw new Error('Corrupted PDF file');
+      }
+      return { essay_id: file.name === 'good.pdf' ? 201 : 202 } as never;
+    });
+    vi.spyOn(api, 'getEssayStatus').mockResolvedValue(completed);
+
+    const { container } = renderWithProviders(<BatchUploadPage />, { user: makeUser('user', 'pro') });
+    addFiles(container, [pdf('good.pdf'), pdf('bad.pdf')]);
+    fireEvent.click(screen.getByRole('button', { name: /start verification/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Complete')).toBeDefined();
+      expect(screen.getByText(/Corrupted PDF file/)).toBeDefined();
+    });
+
+    // Must stay on page and NOT show "All files processed — opening report…" while a file failed
+    expect(screen.queryByText(/opening report/i)).toBeNull();
+
+    // Clicking Retry after the batch finished must immediately re-run the failed item
+    shouldFailSecond = false;
+    const retryBtn = screen.getByTitle(/retry/i);
+    fireEvent.click(retryBtn);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Complete').length).toBe(2);
+    });
   });
 });

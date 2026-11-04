@@ -169,6 +169,7 @@ export function BatchUploadPage() {
       files.length > 0 &&
       stats.pending === 0 &&
       stats.processing === 0 &&
+      stats.failed === 0 &&
       stats.completed > 0
     ) {
       const completedFiles = files.filter(
@@ -192,6 +193,7 @@ export function BatchUploadPage() {
     files,
     stats.pending,
     stats.processing,
+    stats.failed,
     stats.completed,
     navigate,
   ]);
@@ -258,33 +260,36 @@ export function BatchUploadPage() {
     [setFileState, targetClassId]
   );
 
-  const processQueue = useCallback(async () => {
-    const pendingFiles = files.filter((f) => f.status === 'pending');
-    if (pendingFiles.length === 0) {
+  const processQueue = useCallback(
+    async (overridePending?: BatchFileItem[]) => {
+      const pendingFiles = overridePending ?? files.filter((f) => f.status === 'pending');
+      if (pendingFiles.length === 0) {
+        setQueueState({
+          isProcessing: false,
+          currentIndex: -1,
+          hasAutoNavigated: false,
+        });
+        return;
+      }
+
+      setQueueState({
+        isProcessing: true,
+        currentIndex: 0,
+        hasAutoNavigated: false,
+      });
+
+      // Real concurrency pool: up to BATCH_CONCURRENCY files upload + poll in parallel.
+      await runWithConcurrency(pendingFiles, BATCH_CONCURRENCY, processOne);
+
+      if (!isMountedRef.current) return;
       setQueueState({
         isProcessing: false,
         currentIndex: -1,
         hasAutoNavigated: false,
       });
-      return;
-    }
-
-    setQueueState({
-      isProcessing: true,
-      currentIndex: 0,
-      hasAutoNavigated: false,
-    });
-
-    // Real concurrency pool: up to BATCH_CONCURRENCY files upload + poll in parallel.
-    await runWithConcurrency(pendingFiles, BATCH_CONCURRENCY, processOne);
-
-    if (!isMountedRef.current) return;
-    setQueueState({
-      isProcessing: false,
-      currentIndex: -1,
-      hasAutoNavigated: false,
-    });
-  }, [files, processOne]);
+    },
+    [files, processOne]
+  );
 
   /**
    * Client-side plan pre-check (mirrors backend quota) so users get an
@@ -395,6 +400,11 @@ export function BatchUploadPage() {
   };
 
   const retryFile = (id: string) => {
+    const target = files.find((f) => f.id === id);
+    const updatedItem = target
+      ? { ...target, status: 'pending' as const, progress: 0, error: undefined }
+      : null;
+
     setFiles((prev) =>
       prev.map((f) =>
         f.id === id
@@ -407,6 +417,10 @@ export function BatchUploadPage() {
       navigateTimerRef.current = null;
     }
     setQueueState((prev) => ({ ...prev, hasAutoNavigated: false }));
+    if (updatedItem && !queueState.isProcessing) {
+      const otherPending = files.filter((f) => f.id !== id && f.status === 'pending');
+      void processQueue([updatedItem, ...otherPending]);
+    }
   };
 
   const handleStartVerification = () => {
@@ -753,16 +767,16 @@ export function BatchUploadPage() {
                 stats.pending === 0 &&
                 stats.processing === 0 && (
                   <>
-                    {stats.completed > 0 ? (
+                    {stats.completed > 0 && stats.failed === 0 ? (
                       <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         {t('batchUpload.allProcessedOpening')}
                       </span>
-                    ) : (
+                    ) : stats.completed === 0 ? (
                       <span className="text-xs font-mono text-red-600 dark:text-red-400">
                         {t('batchUpload.allFailedNotice')}
                       </span>
-                    )}
+                    ) : null}
                   </>
                 )}
 
