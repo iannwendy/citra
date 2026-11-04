@@ -23,6 +23,7 @@ from integrity_checker.matching.features import FeatureCalculator
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.models.validation import CitationVerdict, MatchFeatures, ValidationLabel
+from integrity_checker.retrieval.normalization import title_similarity
 from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
 
 if TYPE_CHECKING:
@@ -453,7 +454,8 @@ class NeuroSymbolicChecker:
                         for cand in other_cands
                     )
                     if not has_real_matching_candidate:
-                        # Title doesn't match and no other real paper matched → METADATA_ERROR
+                        # Title doesn't match and no other real paper matched → check whether
+                        # this is a spliced/chimeric DOI hallucination before returning METADATA_ERROR.
                         agreeing_other_cands = [
                             c
                             for c in other_cands
@@ -473,38 +475,61 @@ class NeuroSymbolicChecker:
                             is_retracted=getattr(source, "is_retracted", False),
                         )
                         features = self.feature_calculator.compute(citation, enhanced_source, citation_context)
-                        kp_rules = ["R-KNOWN-PAPER", "R-TITLE-MISMATCH"]
-                        kp_reason = (
-                            f"Known author '{citation.authors[0] if citation.authors else 'unknown'}' found, "
-                            f"but title '{citation_title}' does not match known paper '{known_title}' "
-                            f"(similarity: {title_sim:.2f}). This appears to be a wrong title attribution."
-                        )
-                        if (
-                            getattr(features, "cross_lingual_title_detected", False)
+                        is_cross_lingual_kp = (
+                            bool(getattr(features, "cross_lingual_title_detected", False))
                             and float(getattr(features, "cross_lingual_title_sim", 0.0) or 0.0) >= 0.58
-                        ):
-                            kp_rules.append("R-CROSS-LINGUAL-TITLE-MATCH")
-                            xl_sim = float(getattr(features, "cross_lingual_title_sim", 0.0) or 0.0)
-                            kp_reason = (
-                                f"Cross-lingual translated title detected (VI ↔ EN semantic alignment={xl_sim:.2f}). "
-                                f"Matched known publication, but foreign-language titles must be preserved in their "
-                                f"original language without translation."
-                            )
-
-                        return self._apply_dead_link_exception(
-                            CitationVerdict(
-                                citation=citation,
-                                label=ValidationLabel.METADATA_ERROR,
-                                confidence=0.75,
-                                matched_source=enhanced_source,
-                                features=features,
-                                reasoning=kp_reason,
-                                triggered_rules=kp_rules,
-                                mismatched_fields=["title"],
-                            ),
-                            enhanced_source,
                         )
-                    # Otherwise fall through to normal verification of the real matching candidate
+                        has_doi_matched_other_cand = bool(
+                            citation.doi
+                            and any(
+                                c.found and c.doi and FeatureCalculator._doi_matches(citation.doi, c.doi)
+                                for c in other_cands
+                            )
+                        )
+                        has_known_doi_conflict = bool(
+                            citation.doi
+                            and known_doi
+                            and not FeatureCalculator._doi_matches(citation.doi, known_doi)
+                            and "10.48550/arxiv" not in str(citation.doi).lower()
+                            and "10.48550/arxiv" not in str(known_doi).lower()
+                        )
+                        norm_kp_title_sim = title_similarity(citation_title, known_title)
+                        is_chimeric_known_bypass = bool(
+                            not is_cross_lingual_kp
+                            and citation.doi
+                            and norm_kp_title_sim < 0.30
+                            and (has_doi_matched_other_cand or has_known_doi_conflict)
+                        )
+                        if not is_chimeric_known_bypass:
+                            kp_rules = ["R-KNOWN-PAPER", "R-TITLE-MISMATCH"]
+                            kp_reason = (
+                                f"Known author '{citation.authors[0] if citation.authors else 'unknown'}' found, "
+                                f"but title '{citation_title}' does not match known paper '{known_title}' "
+                                f"(similarity: {title_sim:.2f}). This appears to be a wrong title attribution."
+                            )
+                            if is_cross_lingual_kp:
+                                kp_rules.append("R-CROSS-LINGUAL-TITLE-MATCH")
+                                xl_sim = float(getattr(features, "cross_lingual_title_sim", 0.0) or 0.0)
+                                kp_reason = (
+                                    f"Cross-lingual translated title detected (VI ↔ EN semantic alignment={xl_sim:.2f}). "
+                                    f"Matched known publication, but foreign-language titles must be preserved in their "
+                                    f"original language without translation."
+                                )
+
+                            return self._apply_dead_link_exception(
+                                CitationVerdict(
+                                    citation=citation,
+                                    label=ValidationLabel.METADATA_ERROR,
+                                    confidence=0.75,
+                                    matched_source=enhanced_source,
+                                    features=features,
+                                    reasoning=kp_reason,
+                                    triggered_rules=kp_rules,
+                                    mismatched_fields=["title"],
+                                ),
+                                enhanced_source,
+                            )
+                    # Otherwise fall through to normal verification of the real matching / chimeric candidate
                 else:
                     # Title matches known paper → VERIFIED
                     enhanced_source = SourceResult(

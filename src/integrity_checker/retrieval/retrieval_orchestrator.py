@@ -936,7 +936,6 @@ class RetrievalOrchestrator:
             else (link_validator is not None or (self.cache is None and env not in {"test", "testing"}))
         )
         self.link_validator = link_validator
-        self._last_archive_url: str | None = None
 
         # Rate limiters for all sources
         self._rate_limiters: dict[str, RateLimiter] = {
@@ -1384,21 +1383,28 @@ class RetrievalOrchestrator:
                 results.append(exc)
         return results
 
-    async def _validate_citation_url(self, citation: Citation) -> tuple[str | None, int | None]:
-        """Validate citation.url via LinkValidator if present and enabled."""
-        self._last_archive_url = None
+    async def _validate_citation_url_with_archive(
+        self, citation: Citation
+    ) -> tuple[str | None, int | None, str | None]:
+        """Validate citation.url via LinkValidator and return (status, status_code, archive_url)
+        without mutating shared instance state across concurrent coroutines."""
         if not citation.url and citation.raw_text:
             url_m = re.search(r"https?://\S+", citation.raw_text, re.IGNORECASE)
             if url_m:
-                citation.url = url_m.group(0).rstrip(".,;:)\"'")
+                citation.url = url_m.group(0).rstrip(".,;:)\"'>]")
         if not citation.url or not self.enable_link_validation:
-            return None, None
+            return None, None, None
         from integrity_checker.retrieval.link_validator import LinkValidator
 
         validator = self.link_validator or LinkValidator()
         link_res = await validator.validate_url(citation.url)
-        self._last_archive_url = getattr(link_res, "archive_url", None)
-        return link_res.status.value, link_res.status_code
+        archive_url = getattr(link_res, "archive_url", None)
+        return link_res.status.value, link_res.status_code, archive_url
+
+    async def _validate_citation_url(self, citation: Citation) -> tuple[str | None, int | None]:
+        """Validate citation.url via LinkValidator if present and enabled."""
+        status_val, status_code, _ = await self._validate_citation_url_with_archive(citation)
+        return status_val, status_code
 
     async def _enrich_missing_abstract(
         self,
@@ -1584,10 +1590,10 @@ class RetrievalOrchestrator:
                     source="local_db",
                     paper_id=local_candidate.paper_id if local_candidate else None,
                 )
-                url_status, url_status_code = await self._validate_citation_url(citation)
+                url_status, url_status_code, archive_url = await self._validate_citation_url_with_archive(citation)
                 local_result.url_status = url_status
                 local_result.url_status_code = url_status_code
-                local_result.archive_url = self._last_archive_url
+                local_result.archive_url = archive_url
                 return local_result
             else:
                 logger.debug(f"Local DB MISS: {citation.raw_text[:50]}")
@@ -1598,10 +1604,10 @@ class RetrievalOrchestrator:
             logger.debug(f"Known paper HIT: {citation.raw_text[:50]}")
             if self._local_db is not None:
                 self._sync_to_local_db(known_result.candidates, ["known_papers"])
-            url_status, url_status_code = await self._validate_citation_url(citation)
+            url_status, url_status_code, archive_url = await self._validate_citation_url_with_archive(citation)
             known_result.url_status = url_status
             known_result.url_status_code = url_status_code
-            known_result.archive_url = self._last_archive_url
+            known_result.archive_url = archive_url
             return known_result
 
         # ===== 2.4. Fast-path for known fake/reserved URL domains (RFC 2606 .invalid/.test/example.com) =====
@@ -1610,7 +1616,7 @@ class RetrievalOrchestrator:
 
             is_fake_u, _ = _is_fake_url(citation.url)
             if is_fake_u:
-                url_status, url_status_code = await self._validate_citation_url(citation)
+                url_status, url_status_code, archive_url = await self._validate_citation_url_with_archive(citation)
                 return SourceResult(
                     citation_raw=citation.raw_text,
                     candidates=[],
@@ -1620,7 +1626,7 @@ class RetrievalOrchestrator:
                     api_exhausted=False,
                     url_status=url_status,
                     url_status_code=url_status_code,
-                    archive_url=self._last_archive_url,
+                    archive_url=archive_url,
                 )
 
         # ===== 2.5. Skip general scholarly APIs for non-academic web/software/legal resources =====
@@ -1657,7 +1663,7 @@ class RetrievalOrchestrator:
                 logger.debug(
                     f"Skipping external scholarly APIs for web/software/legal resource: {citation.raw_text[:55]}"
                 )
-                url_status, url_status_code = await self._validate_citation_url(citation)
+                url_status, url_status_code, archive_url = await self._validate_citation_url_with_archive(citation)
                 return SourceResult(
                     citation_raw=citation.raw_text,
                     candidates=[],
@@ -1667,7 +1673,7 @@ class RetrievalOrchestrator:
                     api_exhausted=False,
                     url_status=url_status,
                     url_status_code=url_status_code,
-                    archive_url=self._last_archive_url,
+                    archive_url=archive_url,
                 )
 
         # ===== 3. Smart Multi-Stage External API Retrieval =====
@@ -1903,7 +1909,7 @@ class RetrievalOrchestrator:
             min_failures_for_unresolved = 2
         else:
             min_failures_for_unresolved = len(sources_queried) // 2 + 1
-        url_status, url_status_code = await self._validate_citation_url(citation)
+        url_status, url_status_code, archive_url = await self._validate_citation_url_with_archive(citation)
         if (
             not any_found
             and "huggingface" in sources_queried
@@ -1959,7 +1965,7 @@ class RetrievalOrchestrator:
                 api_exhausted=not has_clean_search_response,
                 url_status=url_status,
                 url_status_code=url_status_code,
-                archive_url=self._last_archive_url,
+                archive_url=archive_url,
             )
 
         # ===== 4. Quality filtering - remove garbage/unrelated candidates =====
@@ -2003,7 +2009,7 @@ class RetrievalOrchestrator:
             sources_failed=failed,
             url_status=url_status,
             url_status_code=url_status_code,
-            archive_url=self._last_archive_url,
+            archive_url=archive_url,
             is_retracted=is_retracted,
         )
 

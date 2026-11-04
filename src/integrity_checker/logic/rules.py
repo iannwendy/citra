@@ -1438,15 +1438,40 @@ class SymbolicRules:
             )
 
         # --- Rule 2b: Spliced / Chimeric DOI hallucination (valid DOI belonging to a completely different paper) ---
+        is_cross_lingual_title = bool(getattr(features, "cross_lingual_title_detected", False))
+        _chimeric_zero_content_overlap = False
         if (
             doi_match
-            and title_sim < 0.35
-            and author_sim < 0.20
-            and _has_live_source(source, verified_sources)
-            and "local_db" not in source.sources_succeeded
-            and not (not citation_authors and author_sim == 0.0 and title_sim >= 0.85)
+            and best
+            and best.title
+            and citation_raw
+            and features.title_sim_fuzzy < 0.45
+            and features.title_sim_semantic < 0.42
         ):
-            mismatched.extend(["doi", "title", "author"])
+            _stop = {"with", "from", "into", "over", "under", "using", "based", "study", "analysis", "review", "journal", "proceedings", "conference"}
+            _cand_tokens = {
+                w
+                for w in re.findall(r"[a-z0-9]{4,}", best.title.lower())
+                if w not in _stop
+            }
+            _raw_tokens = set(re.findall(r"[a-z0-9]{4,}", citation_raw.lower()))
+            if len(_cand_tokens) >= 3 and len(_cand_tokens & _raw_tokens) == 0:
+                _chimeric_zero_content_overlap = True
+
+        if (
+            doi_match
+            and _has_live_source(source, verified_sources)
+            and not is_cross_lingual_title
+            and not (not citation_authors and author_sim == 0.0 and title_sim >= 0.85)
+            and (
+                (title_sim < 0.35 and author_sim < 0.20)
+                or (features.title_sim_fuzzy < 0.25 and features.title_sim_semantic < 0.45)
+                or _chimeric_zero_content_overlap
+            )
+        ):
+            mismatched.extend(["doi", "title"])
+            if author_sim < 0.50:
+                mismatched.append("author")
             if year_dist > self.year_tolerance and year_dist < 900:
                 mismatched.append("year")
             triggered_rules.extend(["R-CHIMERIC-DOI-MISMATCH", "R-HALLUCINATED-SOURCE"])
@@ -1455,7 +1480,7 @@ class SymbolicRules:
                 confidence=max(0.0, 0.88 - style_penalty),
                 reasoning=(
                     f"Spliced/chimeric citation detected: cited DOI resolved to an unrelated work "
-                    f"(title similarity={title_sim:.2f} < 0.35, author overlap={author_sim:.2f} < 0.20). "
+                    f"(fuzzy title similarity={features.title_sim_fuzzy:.2f}, author overlap={author_sim:.2f}). "
                     f"Mismatched fields: {', '.join(mismatched)}."
                 ),
                 triggered_rules=triggered_rules,
@@ -1601,15 +1626,6 @@ class SymbolicRules:
         )
 
         if content_alignment_score > 0 and not is_missing_reference:
-            triggered_rules.append("R-CONTENT-ALIGNMENT")
-            if getattr(features, "cross_lingual_detected", False) and content_is_aligned:
-                triggered_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
-
-            # Rule: High content alignment + moderate title + author/year match = VERIFIED
-            # Neural can verify ONLY if:
-            # 1. Citation has a matched reference entry (not missing_reference)
-            # 2. Fuzzy title similarity >= 0.6 and author_sim >= 0.5 and year_dist <= year_tolerance
-            # 3. At least 2 sources confirm OR mapping is matched
             if (
                 content_is_aligned
                 and features.title_sim_fuzzy >= 0.6
@@ -1626,6 +1642,9 @@ class SymbolicRules:
                         and mapping_status.value == "matched"
                     )
                 ):
+                    triggered_rules.append("R-CONTENT-ALIGNMENT")
+                    if getattr(features, "cross_lingual_detected", False):
+                        triggered_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
                     return RuleOutcome(
                         label=ValidationLabel.VERIFIED,
                         confidence=max(0.0, 0.85 - style_penalty),
@@ -1638,13 +1657,36 @@ class SymbolicRules:
                         style_penalty=style_penalty,
                     )
 
+        # --- Rule 4a3: Local ACL / SQLite DB canonical match with metadata discrepancy → METADATA_ERROR ---
+        local_meta_err = self._rule_local_db_metadata_error(
+            source,
+            features,
+            style_penalty,
+            citation_doi=citation_doi,
+            citation_authors=citation_authors,
+        )
+        if local_meta_err:
+            return local_meta_err
+
+        if content_alignment_score > 0 and not is_missing_reference:
+            triggered_rules.append("R-CONTENT-ALIGNMENT")
+            if getattr(features, "cross_lingual_detected", False) and content_is_aligned:
+                triggered_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
+
+            has_non_live_missing_abstract = bool(
+                best
+                and best.source_name in _NON_LIVE_SOURCES
+                and not (best.abstract and str(best.abstract).strip())
+            )
             # Rule: Low content alignment + high fuzzy title & author match = SUSPECTED_HALLUCINATION
-            # Only applies when the candidate actually matches the cited paper's title & author
+            # Only applies when year is consistent and candidate is not a title-only local_db row
             if (
                 not content_is_aligned
                 and content_alignment_score >= 0.3
                 and features.title_sim_fuzzy >= 0.75
                 and author_sim >= 0.5
+                and year_dist <= self.year_tolerance
+                and not has_non_live_missing_abstract
             ):
                 triggered_rules.append("R-CONTENT-MISMATCH")
                 return RuleOutcome(
@@ -1715,17 +1757,6 @@ class SymbolicRules:
                 mismatched_fields=mismatched,
                 style_penalty=style_penalty,
             )
-
-        # --- Rule 4a3: Local ACL / SQLite DB canonical match with metadata discrepancy → METADATA_ERROR ---
-        local_meta_err = self._rule_local_db_metadata_error(
-            source,
-            features,
-            style_penalty,
-            citation_doi=citation_doi,
-            citation_authors=citation_authors,
-        )
-        if local_meta_err:
-            return local_meta_err
 
         # --- Rule 4b (NEW v1.3): METADATA_ERROR detection for known authors ---
         # If citation has known academic author + title mismatch + year mismatch

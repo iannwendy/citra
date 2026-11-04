@@ -268,6 +268,7 @@ class Repository:
         return list(
             self.session.query(VerdictRecord)
             .filter(VerdictRecord.essay_id == essay_id)
+            .order_by(VerdictRecord.id.asc())
             .all()
         )
 
@@ -282,6 +283,7 @@ class Repository:
         for v in (
             self.session.query(VerdictRecord)
             .filter(VerdictRecord.essay_id.in_(ids))
+            .order_by(VerdictRecord.id.asc())
             .all()
         ):
             out.setdefault(v.essay_id, []).append(v)

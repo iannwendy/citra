@@ -6,11 +6,13 @@ import asyncio
 import inspect
 import os
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
+from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
 from integrity_checker.api.deps import get_current_user, get_db, get_pipeline, require_admin
@@ -28,6 +30,81 @@ UPLOADS_DIR = PROJECT_ROOT / "data" / "essays" / "uploads"
 
 
 ALLOWED_UPLOAD_EXTENSIONS = (".pdf", ".docx", ".bib", ".ris")
+
+_QUOTA_CLAIM_LOCK = threading.Lock()
+
+
+def _claim_monthly_upload_slot_and_create_essay(
+    db: Session,
+    current_user: User,
+    *,
+    filename: str,
+    num_pages: int,
+    class_id: int | None = None,
+    structured_error: bool = False,
+) -> Any:
+    """Atomically enforce & increment monthly_uploads_used and insert the EssayRecord.
+
+    Prevents concurrent uploads (e.g. Batch Check BATCH_CONCURRENCY=3) from reading a
+    stale monthly_uploads_used snapshot, losing increments, or bypassing plan limits.
+    """
+    with _QUOTA_CLAIM_LOCK:
+        # Release any stale implicit read snapshot opened by get_current_user
+        db.expire(current_user)
+        db.commit()
+
+        fresh_user = db.get(User, current_user.id)
+        if fresh_user is None:
+            raise HTTPException(status_code=401, detail="User not found")
+
+        if ensure_user_quota_current(fresh_user):
+            db.commit()
+            db.refresh(fresh_user)
+
+        policy = get_user_plan_policy(fresh_user)
+        limit = int(policy.max_uploads_per_month)
+
+        res = db.execute(
+            update(User)
+            .where(
+                User.id == fresh_user.id,
+                func.coalesce(User.monthly_uploads_used, 0) < limit,
+            )
+            .values(monthly_uploads_used=func.coalesce(User.monthly_uploads_used, 0) + 1)
+            .execution_options(synchronize_session=False)
+        )
+        if (res.rowcount or 0) != 1:
+            db.rollback()
+            db.refresh(fresh_user)
+            used_now = int(fresh_user.monthly_uploads_used or limit)
+            msg = (
+                f"Monthly upload quota reached ({used_now}/{limit} documents "
+                f"on the {policy.name} plan). Please upgrade to Pro or Ultra to continue analyzing manuscripts."
+            )
+            if structured_error:
+                raise HTTPException(
+                    status_code=402,
+                    detail={
+                        "code": "MONTHLY_QUOTA_EXCEEDED",
+                        "message": msg,
+                        "used": used_now,
+                        "limit": limit,
+                        "current_tier": policy.tier,
+                    },
+                )
+            raise HTTPException(status_code=402, detail=msg)
+
+        repo = Repository(db)
+        essay = repo.create_essay_with_user(
+            filename=filename,
+            num_pages=num_pages,
+            user_id=fresh_user.id,
+            class_id=class_id,
+        )
+        repo.commit()
+        db.refresh(essay)
+        db.refresh(current_user)
+        return essay
 
 
 def _get_persisted_upload_path(essay_id: int, ext: str | None = None) -> Path:
@@ -116,6 +193,14 @@ async def _run_pipeline_task(
             )
 
         report = await loop.run_in_executor(None, _run_pipeline_sync)
+
+        # Guard against completely unreadable / corrupted files that yielded 0 pages and 0 citations
+        if int(getattr(report, "num_pages", 0) or 0) == 0 and not getattr(report, "extracted_citations", None):
+            sp_raw = getattr(report, "style_profile", None)
+            diag = sp_raw.get("document_diagnostics", {}) if isinstance(sp_raw, dict) else {}
+            p_warns = diag.get("parser_warnings", []) if isinstance(diag, dict) else []
+            if any("failed" in str(w).lower() for w in p_warns):
+                raise ValueError("Document file is corrupted or unreadable.")
 
         # Persist to DB using a fresh session BEFORE marking tracker complete
         session = get_session()
@@ -221,11 +306,12 @@ async def _run_pipeline_task(
     except Exception as exc:
         logger.exception(f"Pipeline failed for essay {essay_id}: {exc}")
         raw_err = str(exc)
-        safe_err = (
-            "Transient database disk I/O error"
-            if "disk I/O error" in raw_err
-            else "Analysis failed due to an internal processing error."
-        )
+        if "disk I/O error" in raw_err:
+            safe_err = "Transient database disk I/O error"
+        elif "corrupted or unreadable" in raw_err:
+            safe_err = "Document file is corrupted or unreadable."
+        else:
+            safe_err = "Analysis failed due to an internal processing error."
         tracker.fail(essay_id, safe_err)
     finally:
         if cleanup_file:
@@ -318,7 +404,6 @@ async def upload_essay(
     else:
         upload_ext = ".pdf"
 
-    ensure_user_quota_current(current_user)
     policy = get_user_plan_policy(current_user)
 
     # Respect module-level MAX_PDF_UPLOAD_BYTES if monkeypatched in tests (< 25MB),
@@ -335,9 +420,26 @@ async def upload_essay(
 
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded document file is empty")
+
+    detected_pages = 1 if upload_ext in (".bib", ".ris") else 0
     if upload_ext == ".pdf":
         if b"%PDF-" not in content[:1024]:
             raise HTTPException(status_code=400, detail="Invalid PDF file: missing %PDF- header")
+        try:
+            import fitz
+
+            with fitz.open(stream=content, filetype="pdf") as pdf_doc:
+                detected_pages = len(pdf_doc)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid or corrupted PDF file: unable to parse PDF structure",
+            ) from exc
+        if detected_pages <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid or empty PDF file: document contains 0 readable pages",
+            )
     elif upload_ext == ".docx":
         if not content.startswith(b"PK\x03\x04"):
             raise HTTPException(
@@ -373,28 +475,6 @@ async def upload_essay(
                 detail="Invalid RIS file: missing TY  - record header",
             )
 
-    # Enforce monthly upload quota for the user's subscription tier
-    used_uploads = int(current_user.monthly_uploads_used or 0)
-    if used_uploads >= policy.max_uploads_per_month:
-        raise HTTPException(
-            status_code=402,
-            detail=(
-                f"Monthly upload quota reached ({used_uploads}/{policy.max_uploads_per_month} documents "
-                f"on the {policy.name} plan). Please upgrade to Pro or Ultra to continue analyzing manuscripts."
-            ),
-        )
-
-    # Enforce per-document page limit if readable by PyMuPDF
-    detected_pages = 1 if upload_ext in (".bib", ".ris") else 0
-    if upload_ext == ".pdf":
-        try:
-            import fitz
-
-            with fitz.open(stream=content, filetype="pdf") as pdf_doc:
-                detected_pages = len(pdf_doc)
-        except Exception:
-            detected_pages = 0
-
     if detected_pages > policy.max_pages_per_pdf:
         raise HTTPException(
             status_code=402,
@@ -416,15 +496,15 @@ async def upload_essay(
             if class_id not in enrolled_ids:
                 raise HTTPException(status_code=403, detail="Not enrolled in this class")
 
-    # Create essay record immediately (num_pages=0 until pipeline fills it)
-    essay = repo.create_essay_with_user(
+    # Atomically claim 1 monthly upload slot and create essay record
+    essay = _claim_monthly_upload_slot_and_create_essay(
+        db,
+        current_user,
         filename=safe_filename,
         num_pages=detected_pages,
-        user_id=current_user.id,
         class_id=class_id,
+        structured_error=False,
     )
-    current_user.monthly_uploads_used = used_uploads + 1
-    repo.commit()
 
     if is_test_runtime():
         with tempfile.NamedTemporaryFile(delete=False, suffix=upload_ext) as tmp:
@@ -1903,34 +1983,14 @@ async def generate_sandbox_pdf_manuscript(
             },
         )
 
-    ensure_user_quota_current(current_user)
-    policy = get_user_plan_policy(current_user)
-    used_uploads = int(current_user.monthly_uploads_used or 0)
-    if used_uploads >= policy.max_uploads_per_month:
-        raise HTTPException(
-            status_code=402,
-            detail={
-                "code": "MONTHLY_QUOTA_EXCEEDED",
-                "message": (
-                    f"Monthly upload quota reached ({used_uploads}/{policy.max_uploads_per_month} documents "
-                    f"on the {policy.name} plan). Please upgrade to Pro or Ultra to continue analyzing manuscripts."
-                ),
-                "used": used_uploads,
-                "limit": policy.max_uploads_per_month,
-                "current_tier": policy.tier,
-            },
-        )
-
-    # Create essay row & launch full IntegrityPipeline (In-Text <-> Refs + 15+ DBs)
-    repo = Repository(db)
-    essay = repo.create_essay_with_user(
+    # Atomically claim 1 monthly upload slot & launch full IntegrityPipeline
+    essay = _claim_monthly_upload_slot_and_create_essay(
+        db,
+        current_user,
         filename=custom_filename,
         num_pages=num_pages,
-        user_id=current_user.id,
+        structured_error=True,
     )
-    current_user.monthly_uploads_used = used_uploads + 1
-    db.commit()
-    db.refresh(essay)
 
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     persisted_path = _get_persisted_upload_path(essay.id, ext=".pdf")
