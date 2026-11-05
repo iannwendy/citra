@@ -27,7 +27,6 @@ import re
 from typing import Any
 from urllib.parse import quote
 
-import httpx
 import yaml
 
 from integrity_checker.config import get_settings
@@ -35,6 +34,7 @@ from integrity_checker.logging import get_logger
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate
 from integrity_checker.retrieval.base import BaseScholarClient
+from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import normalize_doi, title_similarity
 
 logger = get_logger(__name__)
@@ -120,7 +120,6 @@ class TechStandardClient(BaseScholarClient):
             ),
             "Accept": "application/json",
         }
-        self._last_status_code: int | None = None
 
     @classmethod
     def extract_rfc_number(cls, citation: Citation) -> int | None:
@@ -204,6 +203,7 @@ class TechStandardClient(BaseScholarClient):
 
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Lookup IETF RFC standard, PyPI package, NPM package, or GitHub repository."""
+        self._reset_http_telemetry()
         rfc_num = self.extract_rfc_number(citation)
         if rfc_num is not None:
             rfc_cand = await self._lookup_rfc(rfc_num, citation=citation)
@@ -228,11 +228,8 @@ class TechStandardClient(BaseScholarClient):
             if gh_cand is not None:
                 return gh_cand
 
-        return SourceCandidate(
-            source_name=self.name,
-            found=False,
-            error=f"TechStandard: no results for '{(citation.title or citation.raw_text)[:60]}'",
-        )
+        preview = (citation.title or citation.url or citation.raw_text or "")[:60]
+        return self._build_miss_or_error_candidate("TechStandard", preview)
 
     async def _lookup_rfc(
         self,
@@ -590,45 +587,45 @@ class TechStandardClient(BaseScholarClient):
         """Fetch and parse `CITATION.cff` from `raw.githubusercontent.com/{owner}/{repo}/HEAD/CITATION.cff`."""
         cff_url = f"{self.GITHUB_RAW_BASE}/{repo_slug}/HEAD/CITATION.cff"
         try:
-            async with httpx.AsyncClient(
-                timeout=min(self.timeout, 3.5),
+            client = get_shared_http_client(follow_redirects=True)
+            resp = await client.get(
+                cff_url,
                 headers={"User-Agent": self._headers["User-Agent"]},
-                follow_redirects=True,
-            ) as client:
-                resp = await client.get(cff_url)
-                if resp.status_code != 200 or not resp.text:
-                    return None
-                parsed = yaml.safe_load(resp.text)
-                if not isinstance(parsed, dict):
-                    return None
+                timeout=min(self.timeout, 3.5),
+            )
+            if resp.status_code != 200 or not resp.text:
+                return None
+            parsed = yaml.safe_load(resp.text)
+            if not isinstance(parsed, dict):
+                return None
 
-                title = self._clean_text(parsed.get("title"))
-                abstract = self._clean_text(parsed.get("abstract") or parsed.get("message"))
-                doi = normalize_doi(str(parsed.get("doi") or ""))
-                date_rel = str(parsed.get("date-released") or "")
-                yr_m = re.search(r"\b(19|20)\d{2}\b", date_rel)
-                year = yr_m.group(0) if yr_m else None
+            title = self._clean_text(parsed.get("title"))
+            abstract = self._clean_text(parsed.get("abstract") or parsed.get("message"))
+            doi = normalize_doi(str(parsed.get("doi") or ""))
+            date_rel = str(parsed.get("date-released") or "")
+            yr_m = re.search(r"\b(19|20)\d{2}\b", date_rel)
+            year = yr_m.group(0) if yr_m else None
 
-                authors: list[str] = []
-                for a in parsed.get("authors") or []:
-                    if isinstance(a, dict):
-                        given = str(a.get("given-names") or "").strip()
-                        family = str(a.get("family-names") or "").strip()
-                        name_str = str(a.get("name") or "").strip()
-                        if given and family:
-                            authors.append(f"{given} {family}")
-                        elif family:
-                            authors.append(family)
-                        elif name_str:
-                            authors.append(name_str)
+            authors: list[str] = []
+            for a in parsed.get("authors") or []:
+                if isinstance(a, dict):
+                    given = str(a.get("given-names") or "").strip()
+                    family = str(a.get("family-names") or "").strip()
+                    name_str = str(a.get("name") or "").strip()
+                    if given and family:
+                        authors.append(f"{given} {family}")
+                    elif family:
+                        authors.append(family)
+                    elif name_str:
+                        authors.append(name_str)
 
-                return {
-                    "title": title,
-                    "abstract": abstract,
-                    "doi": doi,
-                    "year": year,
-                    "authors": authors,
-                }
+            return {
+                "title": title,
+                "abstract": abstract,
+                "doi": doi,
+                "year": year,
+                "authors": authors,
+            }
         except Exception as exc:  # noqa: BLE001
             logger.debug(f"GitHub CITATION.cff lookup skipped for {repo_slug}: {exc}")
             return None
@@ -674,19 +671,19 @@ class TechStandardClient(BaseScholarClient):
         url: str,
         extra_headers: dict[str, str] | None = None,
     ) -> dict[str, Any] | None:
-        self._last_status_code = None
         req_headers = extra_headers or self._headers
         try:
-            async with httpx.AsyncClient(
-                timeout=self.timeout,
+            client = get_shared_http_client(follow_redirects=True)
+            resp = await client.get(
+                url,
                 headers=req_headers,
-                follow_redirects=True,
-            ) as client:
-                resp = await client.get(url)
-                self._last_status_code = resp.status_code
-                if resp.status_code != 200:
-                    return None
-                return resp.json()
+                timeout=self.timeout,
+            )
+            self._record_http_response(resp)
+            if resp.status_code != 200:
+                return None
+            return resp.json()
         except Exception as exc:  # noqa: BLE001
+            self._record_transport_error(exc)
             logger.debug(f"TechStandard request failed for {url}: {exc}")
             return None

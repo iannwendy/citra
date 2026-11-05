@@ -23,13 +23,12 @@ import re
 from typing import Any
 from urllib.parse import quote
 
-import httpx
-
 from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate
 from integrity_checker.retrieval.base import BaseScholarClient
+from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     author_match_score,
     is_book_review_mismatch,
@@ -139,6 +138,7 @@ class WikidataOpenCitationsClient(BaseScholarClient):
 
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Lookup DOI via OpenCitations Index v2 first, then query Wikidata Knowledge Graph."""
+        self._reset_http_telemetry()
         doi_norm = normalize_doi(citation.doi) if citation.doi else None
         if doi_norm:
             oc_cand = await self._lookup_opencitations_doi(doi_norm, citation=citation)
@@ -150,11 +150,7 @@ class WikidataOpenCitationsClient(BaseScholarClient):
             return wd_cand
 
         preview = (citation.title or doi_norm or citation.raw_text or "")[:60]
-        return SourceCandidate(
-            source_name=self.name,
-            found=False,
-            error=f"Wikidata/OpenCitations: no results for '{preview}'",
-        )
+        return self._build_miss_or_error_candidate("Wikidata/OpenCitations", preview)
 
     async def _lookup_opencitations_doi(
         self,
@@ -164,7 +160,10 @@ class WikidataOpenCitationsClient(BaseScholarClient):
         """Query OpenCitations Meta v1 (with Index v2 fallback) for `/metadata/doi:{doi}`."""
         encoded_doi = quote(doi, safe="/")
         data = await self._fetch_json(f"{self.OPENCITATIONS_META_BASE}/metadata/doi:{encoded_doi}")
-        if not isinstance(data, list) or not data or not isinstance(data[0], dict):
+        if (
+            (not isinstance(data, list) or not data or not isinstance(data[0], dict))
+            and self._last_status_code != 429
+        ):
             data = await self._fetch_json(f"{self.OPENCITATIONS_BASE}/metadata/doi:{encoded_doi}")
         if not isinstance(data, list) or not data or not isinstance(data[0], dict):
             return None
@@ -263,6 +262,8 @@ class WikidataOpenCitationsClient(BaseScholarClient):
                 "limit": 5,
             }
             search_res = await self._fetch_json(self.WIKIDATA_API_URL, params=params)
+            if search_res is None and self._last_status_code == 429:
+                break
             items = (search_res or {}).get("search") if isinstance(search_res, dict) else None
             if isinstance(items, list):
                 for it in items:
@@ -483,15 +484,18 @@ class WikidataOpenCitationsClient(BaseScholarClient):
         params: dict[str, Any] | None = None,
     ) -> Any:
         try:
-            async with httpx.AsyncClient(
-                timeout=self.timeout,
+            client = get_shared_http_client(follow_redirects=True)
+            resp = await client.get(
+                url,
+                params=params,
                 headers=self._headers,
-                follow_redirects=True,
-            ) as client:
-                resp = await client.get(url, params=params)
-                if resp.status_code != 200:
-                    return None
-                return resp.json()
+                timeout=self.timeout,
+            )
+            self._record_http_response(resp)
+            if resp.status_code != 200:
+                return None
+            return resp.json()
         except Exception as exc:  # noqa: BLE001
+            self._record_transport_error(exc)
             logger.debug(f"Wikidata/OpenCitations request failed for {url}: {exc}")
             return None

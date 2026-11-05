@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import asyncio
 import os
+import random
 import re
+import threading
 import time
+from contextvars import ContextVar
 from typing import Any
 
 import httpx
@@ -31,6 +34,7 @@ from integrity_checker.logging import get_logger
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate
 from integrity_checker.retrieval.base import BaseScholarClient
+from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     author_key,
     author_match_score,
@@ -65,11 +69,13 @@ _STOPWORDS = frozenset({
 
 _ARXIV_LOOP_SEMS: dict[int, asyncio.Semaphore] = {}
 _ARXIV_SLOT_LOCKS: dict[int, asyncio.Lock] = {}
+_ARXIV_GLOBAL_SLOT_LOCK = threading.Lock()
 _LAST_ARXIV_REQ_AT: dict[int, float] = {}
 _ARXIV_MIN_INTERVAL = 1.0
 _ARXIV_CONSECUTIVE_TIMEOUTS: dict[int, int] = {}
 _ARXIV_CIRCUIT_OPEN_UNTIL: dict[int, float] = {}
 _ARXIV_CIRCUIT_COOLDOWN_SEC = 45.0
+_ARXIV_TIMED_OUT: ContextVar[bool] = ContextVar("_ARXIV_TIMED_OUT", default=False)
 
 
 def _get_arxiv_sem() -> asyncio.Semaphore:
@@ -109,8 +115,6 @@ class ArxivClient(BaseScholarClient):
         )
         self.max_retries = max_retries or min(settings.retrieval.retry.max_attempts, 2)
         self._backoff = settings.retrieval.retry.backoff
-        self._last_status_code: int | None = None
-        self._last_timed_out: bool = False
         self._headers = {
             "User-Agent": (
                 f"EssayIntegrityChecker/0.2 (mailto:{self.contact_email})"
@@ -119,9 +123,18 @@ class ArxivClient(BaseScholarClient):
             ),
         }
 
+    @property
+    def _last_timed_out(self) -> bool:
+        return _ARXIV_TIMED_OUT.get()
+
+    @_last_timed_out.setter
+    def _last_timed_out(self, value: bool) -> None:
+        _ARXIV_TIMED_OUT.set(bool(value))
+
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Lookup by exact arXiv ID first; fallback to title/author search."""
-        self._last_status_code = None
+        self._reset_http_telemetry()
+        self._last_timed_out = False
 
         # 1. Exact arXiv ID lookup if present in DOI, URL, venue, or raw_text
         arxiv_id = self.extract_arxiv_id(citation)
@@ -225,6 +238,10 @@ class ArxivClient(BaseScholarClient):
                     break
 
         if not entries:
+            if self._last_status_code == 429:
+                return self._build_miss_or_error_candidate("arXiv", citation.title[:50])
+            if self._last_status_code is not None and self._last_status_code >= 500:
+                return self._build_miss_or_error_candidate("arXiv", citation.title[:60])
             if self._last_timed_out and not had_successful_http:
                 return SourceCandidate(
                     source_name=self.name,
@@ -394,15 +411,18 @@ class ArxivClient(BaseScholarClient):
         self._last_timed_out = False
         loop_id = id(asyncio.get_running_loop())
         now = time.monotonic()
-        if _ARXIV_CIRCUIT_OPEN_UNTIL.get(loop_id, 0.0) > now:
+        with _ARXIV_GLOBAL_SLOT_LOCK:
+            open_until = _ARXIV_CIRCUIT_OPEN_UNTIL.get(loop_id, 0.0)
+        if open_until > now:
             self._last_timed_out = True
             logger.debug("arXiv circuit breaker open — skipping request")
             return None
 
         sem = _get_arxiv_sem()
         slot_lock = _get_arxiv_slot_lock()
+        seen_429 = 0
         retryer = AsyncRetrying(
-            stop=stop_after_attempt(self.max_retries),
+            stop=stop_after_attempt(min(self.max_retries, 2)),
             wait=wait_exponential(
                 multiplier=self._backoff.multiplier,
                 min=min(self._backoff.initial_seconds, 1.0),
@@ -416,25 +436,42 @@ class ArxivClient(BaseScholarClient):
                 with attempt:
                     async with sem:
                         async with slot_lock:
-                            now_slot = time.monotonic()
-                            last_at = _LAST_ARXIV_REQ_AT.get(loop_id, 0.0)
-                            scheduled = max(now_slot, last_at + _ARXIV_MIN_INTERVAL) if last_at > 0 else now_slot
-                            _LAST_ARXIV_REQ_AT[loop_id] = scheduled
-                            wait_sec = scheduled - now_slot
+                            with _ARXIV_GLOBAL_SLOT_LOCK:
+                                now_slot = time.monotonic()
+                                if loop_id in _LAST_ARXIV_REQ_AT and _LAST_ARXIV_REQ_AT[loop_id] == 0.0:
+                                    _LAST_ARXIV_REQ_AT.clear()
+                                    last_at = 0.0
+                                else:
+                                    last_at = max(_LAST_ARXIV_REQ_AT.values(), default=0.0)
+                                scheduled = (
+                                    max(now_slot, last_at + _ARXIV_MIN_INTERVAL)
+                                    if last_at > 0
+                                    else now_slot
+                                )
+                                _LAST_ARXIV_REQ_AT[loop_id] = scheduled
+                                wait_sec = scheduled - now_slot
                         if wait_sec > 0:
                             await asyncio.sleep(wait_sec)
-                        async with httpx.AsyncClient(
-                            timeout=self.timeout, follow_redirects=True
-                        ) as client:
-                            resp = await client.get(
-                                self.BASE_URL,
-                                params=params,
-                                headers=self._headers,
-                            )
-                    self._last_status_code = resp.status_code
-                    _ARXIV_CONSECUTIVE_TIMEOUTS[loop_id] = 0
+                        client = get_shared_http_client(follow_redirects=True)
+                        resp = await client.get(
+                            self.BASE_URL,
+                            params=params,
+                            headers=self._headers,
+                            timeout=self.timeout,
+                        )
+                    retry_after = self._record_http_response(resp)
+                    with _ARXIV_GLOBAL_SLOT_LOCK:
+                        _ARXIV_CONSECUTIVE_TIMEOUTS[loop_id] = 0
                     if resp.status_code == 404:
                         return None
+                    if resp.status_code == 429:
+                        seen_429 += 1
+                        if seen_429 >= 2 or (retry_after is not None and retry_after > 3.0):
+                            return None
+                        await asyncio.sleep(
+                            (retry_after or random.uniform(0.8, 1.5))
+                            + random.uniform(0.05, 0.25)
+                        )
                     if resp.status_code == 429 or resp.status_code >= 500:
                         if getattr(resp, "_request", None) is None:
                             resp._request = httpx.Request("GET", self.BASE_URL)
@@ -444,18 +481,21 @@ class ArxivClient(BaseScholarClient):
                     return resp.text
         except RetryError as exc:
             self._last_timed_out = True
-            fails = _ARXIV_CONSECUTIVE_TIMEOUTS.get(loop_id, 0) + 1
-            _ARXIV_CONSECUTIVE_TIMEOUTS[loop_id] = fails
-            if fails >= 2:
-                _ARXIV_CIRCUIT_OPEN_UNTIL[loop_id] = time.monotonic() + _ARXIV_CIRCUIT_COOLDOWN_SEC
-                logger.warning(
-                    f"arXiv retry exhausted ({fails} consecutive failures); opening circuit breaker for {_ARXIV_CIRCUIT_COOLDOWN_SEC:.0f}s: {exc}"
-                )
-            else:
-                logger.warning(f"arXiv retry exhausted: {exc}")
+            self._record_transport_error(exc)
+            with _ARXIV_GLOBAL_SLOT_LOCK:
+                fails = _ARXIV_CONSECUTIVE_TIMEOUTS.get(loop_id, 0) + 1
+                _ARXIV_CONSECUTIVE_TIMEOUTS[loop_id] = fails
+                if fails >= 2:
+                    _ARXIV_CIRCUIT_OPEN_UNTIL[loop_id] = time.monotonic() + _ARXIV_CIRCUIT_COOLDOWN_SEC
+                    logger.warning(
+                        f"arXiv retry exhausted ({fails} consecutive failures); opening circuit breaker for {_ARXIV_CIRCUIT_COOLDOWN_SEC:.0f}s: {exc}"
+                    )
+                else:
+                    logger.warning(f"arXiv retry exhausted: {exc}")
             return None
         except Exception as exc:  # noqa: BLE001
             self._last_timed_out = True
+            self._record_transport_error(exc)
             logger.warning(f"arXiv error: {exc}")
             return None
         return None

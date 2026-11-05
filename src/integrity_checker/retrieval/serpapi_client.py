@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import asyncio
 import os
+import random
 import re
+from contextvars import ContextVar
 from typing import Any
 
 import httpx
@@ -32,6 +34,7 @@ from integrity_checker.logging import get_logger
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate
 from integrity_checker.retrieval.base import BaseScholarClient
+from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import title_similarity
 
 # Minimum title similarity để chấp nhận một organic result.
@@ -67,6 +70,9 @@ _SERPAPI_QUOTA_KEYWORDS = (
 
 _DOMAIN_ONLY_TOKEN_RE = re.compile(r"^[a-z0-9.-]+\.[a-z]{2,6}$", re.IGNORECASE)
 _PURE_YEAR_RE = re.compile(r"^\d{4}$")
+
+_LAST_SERPER_ERR_VAR: ContextVar[str | None] = ContextVar("_LAST_SERPER_ERR_VAR", default=None)
+_LAST_SERPAPI_ERR_VAR: ContextVar[str | None] = ContextVar("_LAST_SERPAPI_ERR_VAR", default=None)
 
 logger = get_logger(__name__)
 
@@ -117,14 +123,30 @@ class SerpApiClient(BaseScholarClient):
 
         self.max_retries = max_retries or settings.retrieval.retry.max_attempts
         self._backoff = settings.retrieval.retry.backoff
-        self._last_api_error: str | None = None
-        self._last_serper_error: str | None = None
+        self._last_api_error = None
+        self._last_serper_error = None
 
         if not self.serper_api_key and not self.api_key:
             logger.warning(
                 "Google Scholar fallback: No API key found. "
                 "Set SERPER_API_KEY (primary) or SERPAPI_API_KEY (fallback) in .env"
             )
+
+    @property
+    def _last_serper_error(self) -> str | None:
+        return _LAST_SERPER_ERR_VAR.get()
+
+    @_last_serper_error.setter
+    def _last_serper_error(self, value: str | None) -> None:
+        _LAST_SERPER_ERR_VAR.set(value)
+
+    @property
+    def _last_api_error(self) -> str | None:
+        return _LAST_SERPAPI_ERR_VAR.get()
+
+    @_last_api_error.setter
+    def _last_api_error(self, value: str | None) -> None:
+        _LAST_SERPAPI_ERR_VAR.set(value)
 
     @classmethod
     def reset_circuit_breakers(cls) -> None:
@@ -146,6 +168,7 @@ class SerpApiClient(BaseScholarClient):
 
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Lookup paper trên Google Scholar qua Serper.dev (ưu tiên 1) -> SerpApi (dự phòng 2)."""
+        self._reset_http_telemetry()
         has_serper = bool(self.serper_api_key)
         has_serpapi = bool(self.api_key)
 
@@ -338,6 +361,7 @@ class SerpApiClient(BaseScholarClient):
             "Content-Type": "application/json",
         }
         payload: dict[str, Any] = {"q": query}
+        seen_429 = 0
 
         retry = AsyncRetrying(
             stop=stop_after_attempt(min(self.max_retries, 3)),
@@ -363,12 +387,14 @@ class SerpApiClient(BaseScholarClient):
         try:
             async for attempt in retry:
                 with attempt:
-                    async with httpx.AsyncClient(timeout=self.timeout) as http_client:
-                        resp = await http_client.post(
-                            self.SERPER_SCHOLAR_URL,
-                            headers=headers,
-                            json=payload,
-                        )
+                    http_client = get_shared_http_client()
+                    resp = await http_client.post(
+                        self.SERPER_SCHOLAR_URL,
+                        headers=headers,
+                        json=payload,
+                        timeout=self.timeout,
+                    )
+                    retry_after = self._record_http_response(resp)
 
                     status = resp.status_code
                     if status == 200:
@@ -439,7 +465,22 @@ class SerpApiClient(BaseScholarClient):
                         self._last_serper_error = f"Serper HTTP 429: {err_summary}"
                         return None, False
 
-                    if status == 429 or status >= 500:
+                    if status == 429:
+                        self._last_serper_error = f"Serper HTTP 429: {err_summary}"
+                        seen_429 += 1
+                        if seen_429 >= 2 or (retry_after is not None and retry_after > 3.0):
+                            return None, False
+                        await asyncio.sleep(
+                            (retry_after or random.uniform(0.6, 1.2))
+                            + random.uniform(0.05, 0.25)
+                        )
+                        raise httpx.HTTPStatusError(
+                            self._last_serper_error,
+                            request=resp.request,
+                            response=resp,
+                        )
+
+                    if status >= 500:
                         self._last_serper_error = f"Serper HTTP {status}: {err_summary}"
                         raise httpx.HTTPStatusError(
                             self._last_serper_error,
@@ -451,16 +492,19 @@ class SerpApiClient(BaseScholarClient):
                     return None, False
 
             return None, False
-        except RetryError:
+        except RetryError as exc:
+            self._record_transport_error(exc)
             logger.warning(f"Serper Scholar retry exhausted for query: {query[:60]}")
             if not self._last_serper_error:
                 self._last_serper_error = "Serper retry exhausted"
             return None, False
         except httpx.HTTPError as exc:
+            self._record_transport_error(exc)
             self._last_serper_error = str(exc) or exc.__class__.__name__
             logger.warning(f"Serper Scholar HTTP error: {self._last_serper_error}")
             return None, False
         except Exception as exc:  # noqa: BLE001
+            self._record_transport_error(exc)
             self._last_serper_error = str(exc) or exc.__class__.__name__
             logger.error(f"Serper Scholar unexpected error: {exc}")
             return None, False
@@ -512,17 +556,20 @@ class SerpApiClient(BaseScholarClient):
             reraise=False,
         )
 
+        def _run_sync_in_thread() -> tuple[dict | None, str | None]:
+            self._last_api_error = None
+            res = self._sync_search(query, citation.year, bool(citation.title))
+            return res, self._last_api_error
+
         try:
             async for attempt in retry:
                 with attempt:
-                    # SerpApi SDK client is sync, run in thread pool
-                    result = await asyncio.get_running_loop().run_in_executor(
+                    # SerpApi SDK client is sync, run in thread pool and propagate task-local error
+                    result, api_err = await asyncio.get_running_loop().run_in_executor(
                         None,
-                        self._sync_search,
-                        query,
-                        citation.year,
-                        bool(citation.title),
+                        _run_sync_in_thread,
                     )
+                    self._last_api_error = api_err
                     return result
             return None
         except RetryError:

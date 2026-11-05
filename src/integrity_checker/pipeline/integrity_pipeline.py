@@ -21,6 +21,10 @@ import hashlib
 import inspect
 import json
 import re
+import threading
+from collections import deque
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -57,6 +61,90 @@ from integrity_checker.models.validation import (
 )
 from integrity_checker.retrieval import RetrievalOrchestrator
 from integrity_checker.retrieval.normalization import citation_key
+
+
+class _CrossLoopAsyncSemaphore:
+    """Async-native FIFO semaphore shared safely across multiple worker event loops."""
+
+    def __init__(self, limit: int) -> None:
+        self._limit = max(1, int(limit))
+        self._lock = threading.Lock()
+        self._active = 0
+        self._waiters: deque[tuple[asyncio.AbstractEventLoop, asyncio.Event]] = deque()
+
+    @property
+    def limit(self) -> int:
+        return self._limit
+
+    @property
+    def active_count(self) -> int:
+        with self._lock:
+            return self._active
+
+    @asynccontextmanager
+    async def acquire(self) -> AsyncIterator[None]:
+        loop = asyncio.get_running_loop()
+        wait_ev: asyncio.Event | None = None
+        with self._lock:
+            if self._active < self._limit and not self._waiters:
+                self._active += 1
+            else:
+                wait_ev = asyncio.Event()
+                self._waiters.append((loop, wait_ev))
+
+        if wait_ev is not None:
+            try:
+                await wait_ev.wait()
+            except BaseException:
+                with self._lock:
+                    try:
+                        self._waiters.remove((loop, wait_ev))
+                        already_granted = False
+                    except ValueError:
+                        already_granted = True
+                if already_granted:
+                    self._release()
+                raise
+
+        try:
+            yield
+        finally:
+            self._release()
+
+    def _release(self) -> None:
+        next_waiter: tuple[asyncio.AbstractEventLoop, asyncio.Event] | None = None
+        with self._lock:
+            while self._waiters:
+                cand_loop, cand_ev = self._waiters.popleft()
+                if not cand_loop.is_closed():
+                    next_waiter = (cand_loop, cand_ev)
+                    break
+            if next_waiter is None:
+                self._active = max(0, self._active - 1)
+        if next_waiter is not None:
+            try:
+                next_waiter[0].call_soon_threadsafe(next_waiter[1].set)
+            except RuntimeError:
+                self._release()
+
+
+_GLOBAL_RETRIEVAL_SEM_LOCK = threading.Lock()
+_GLOBAL_RETRIEVAL_SEM: _CrossLoopAsyncSemaphore | None = None
+_GLOBAL_RETRIEVAL_SEM_LIMIT: int = 0
+
+
+def _get_global_retrieval_semaphore() -> _CrossLoopAsyncSemaphore:
+    """Return process-wide cross-loop semaphore capping concurrent citation retrievals."""
+    global _GLOBAL_RETRIEVAL_SEM, _GLOBAL_RETRIEVAL_SEM_LIMIT
+    try:
+        desired = max(1, int(get_settings().retrieval.max_global_retrievals))
+    except Exception:
+        desired = 12
+    with _GLOBAL_RETRIEVAL_SEM_LOCK:
+        if _GLOBAL_RETRIEVAL_SEM is None or desired != _GLOBAL_RETRIEVAL_SEM_LIMIT:
+            _GLOBAL_RETRIEVAL_SEM = _CrossLoopAsyncSemaphore(desired)
+            _GLOBAL_RETRIEVAL_SEM_LIMIT = desired
+        return _GLOBAL_RETRIEVAL_SEM
 
 logger = get_logger(__name__)
 
@@ -764,8 +852,13 @@ class IntegrityPipeline:
             message=f"Querying academic databases for {len(unique_list)} unique papers...",
         )
         # FIX v1.7: Only retrieve for verifiable citations (references, not in-text).
-        # Limit concurrent paper retrievals to avoid HTTP 429 bursts on scholarly APIs.
-        retrieval_sem = asyncio.Semaphore(8)
+        # Limit concurrent paper retrievals both per-essay and globally across worker loops
+        # to eliminate HTTP 429 bursts on scholarly APIs during deadline upload spikes.
+        per_essay_limit = max(
+            1, int(getattr(get_settings().retrieval, "per_essay_retrievals", 6))
+        )
+        retrieval_sem = asyncio.Semaphore(per_essay_limit)
+        global_retrieval_sem = _get_global_retrieval_semaphore()
         from integrity_checker.retrieval.retrieval_orchestrator import _ALLOW_SERPAPI_OVERRIDE
 
         retrieve_params = inspect.signature(self.orchestrator.retrieve).parameters
@@ -775,7 +868,7 @@ class IntegrityPipeline:
         )
 
         async def _bounded_retrieve(cit: Citation) -> SourceResult:
-            async with retrieval_sem:
+            async with retrieval_sem, global_retrieval_sem.acquire():
                 token = _ALLOW_SERPAPI_OVERRIDE.set(allow_serpapi)
                 try:
                     if supports_allow_serpapi_kwarg and allow_serpapi is not None:

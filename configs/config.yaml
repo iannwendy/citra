@@ -101,15 +101,21 @@ retrieval:
       max_seconds: 120.0   # FIX: Increased from 10.0 to 120.0
       multiplier: 1.5
   rate_limits:
-    crossref_per_sec: 10.0    # With polite pool
-    openalex_per_sec: 50.0    # With polite pool
-    dblp_per_sec: 3.0
-    arxiv_per_sec: 2.0
+    crossref_per_sec: 25.0    # Crossref Polite Pool (max 50/s -> 25/s safe headroom)
+    openalex_per_sec: 8.0     # OpenAlex Polite Pool (official max 10/s -> 8/s safe headroom)
+    dblp_per_sec: 1.5         # DBLP polite interval (~0.65s/req)
+    arxiv_per_sec: 1.0        # arXiv official ToS (1 req/s, single connection)
     openlibrary_per_sec: 3.0
     europepmc_per_sec: 5.0
     serper_per_sec: 5.0       # Serper.dev Google Scholar primary fallback
     serpapi_per_sec: 1.0      # SerpApi Google Scholar secondary fallback
-  contact_email: "noreply@citra.edu.vn"   # cho Crossref polite pool
+  max_concurrent_pipelines: 3
+  max_concurrent_grobid: 2
+  max_global_retrievals: 12
+  per_essay_retrievals: 6
+  singleflight_enabled: true
+  negative_cache_ttl_seconds: 21600
+  contact_email: "noreply@citra.edu.vn"   # cho Crossref & OpenAlex polite pool
 
 # --- Matching thresholds ---
 # TODO(user): tối ưu trên validation set trong tuần 10–11

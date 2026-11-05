@@ -6,7 +6,9 @@ Docs: https://docs.openalex.org/
 
 from __future__ import annotations
 
+import asyncio
 import os
+import random
 import re
 from typing import Any
 
@@ -24,6 +26,7 @@ from integrity_checker.logging import get_logger
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate
 from integrity_checker.retrieval.base import BaseScholarClient
+from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     author_match_score,
     is_book_review_mismatch,
@@ -218,8 +221,14 @@ class OpenAlexClient(BaseScholarClient):
             if (citation.authors and best_cand and best_cand.authors)
             else 1.0
         )
-        if "filter" in params and (
-            best_cand is None or best_sim < 0.90 or (citation.authors and best_auth_sim == 0.0)
+        if (
+            "filter" in params
+            and self._last_status_code not in (429, 500, 502, 503, 504)
+            and (
+                best_cand is None
+                or best_sim < 0.90
+                or (citation.authors and best_auth_sim == 0.0)
+            )
         ):
             unfiltered_data = await self._fetch_json_with_retry(
                 "/works",
@@ -243,6 +252,12 @@ class OpenAlexClient(BaseScholarClient):
                     best_cand, best_raw, best_sim = alt_cand, alt_raw, alt_sim
 
         if not results or best_cand is None or best_raw is None:
+            if self._last_status_code == 429:
+                return SourceCandidate(
+                    source_name=self.name,
+                    found=False,
+                    error=f"OpenAlex: rate limited (429) for '{title[:60]}'",
+                )
             return SourceCandidate(
                 source_name=self.name,
                 found=False,
@@ -281,17 +296,15 @@ class OpenAlexClient(BaseScholarClient):
     async def _fetch_json_with_retry(
         self, path: str, params: dict[str, Any] | None = None
     ) -> dict | None:
-        """GET với tenacity retry + exponential backoff.
-
-        Backoff config: initial=5s, max=60s, multiplier=2.0 (từ settings)
-        """
+        """GET với shared Keep-Alive HTTP pool, Retry-After, và bounded retry."""
         url = f"{self.BASE_URL}{path}"
+        seen_429 = 0
         retry = AsyncRetrying(
-            stop=stop_after_attempt(self.max_retries),
+            stop=stop_after_attempt(min(self.max_retries, 3)),
             wait=wait_exponential(
                 multiplier=self._backoff.multiplier,
                 min=self._backoff.initial_seconds,
-                max=self._backoff.max_seconds,
+                max=min(self._backoff.max_seconds, 12.0),
             ),
             retry=retry_if_exception_type(
                 (httpx.HTTPError, httpx.TimeoutException)
@@ -301,26 +314,42 @@ class OpenAlexClient(BaseScholarClient):
         try:
             async for attempt in retry:
                 with attempt:
-                    async with httpx.AsyncClient(timeout=self.timeout) as client:
-                        resp = await client.get(
-                            url, headers=self._headers, params=params or {}
+                    client = get_shared_http_client(follow_redirects=True)
+                    resp = await client.get(
+                        url,
+                        headers=self._headers,
+                        params=params or {},
+                        timeout=self.timeout,
+                    )
+                    retry_after = self._record_http_response(resp)
+                    if resp.status_code == 404:
+                        return None
+                    if resp.status_code == 429:
+                        seen_429 += 1
+                        if seen_429 >= 2 or (retry_after is not None and retry_after > 3.0):
+                            return None
+                        await asyncio.sleep(
+                            (retry_after or random.uniform(0.6, 1.2))
+                            + random.uniform(0.05, 0.25)
                         )
-                        self._last_status_code = resp.status_code
-                        if resp.status_code == 404:
-                            return None
-                        if resp.status_code == 429 or resp.status_code >= 500:
-                            resp.raise_for_status()
-                        if resp.status_code != 200:
-                            logger.warning(
-                                f"OpenAlex {resp.status_code}: {url}"
-                            )
-                            return None
-                        return resp.json()
+                        if getattr(resp, "_request", None) is None:
+                            resp._request = httpx.Request("GET", url)
+                        resp.raise_for_status()
+                    if resp.status_code >= 500:
+                        if getattr(resp, "_request", None) is None:
+                            resp._request = httpx.Request("GET", url)
+                        resp.raise_for_status()
+                    if resp.status_code != 200:
+                        logger.warning(f"OpenAlex {resp.status_code}: {url}")
+                        return None
+                    return resp.json()
             return None
-        except RetryError:
+        except RetryError as exc:
+            self._record_transport_error(exc)
             logger.error(f"OpenAlex retry exhausted: {url}")
             return None
         except httpx.HTTPError as e:
+            self._record_transport_error(e)
             logger.error(f"OpenAlex HTTP error: {e}")
             return None
 

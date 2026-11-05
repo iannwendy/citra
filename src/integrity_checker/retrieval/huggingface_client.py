@@ -17,14 +17,13 @@ import re
 from typing import Any
 from urllib.parse import quote
 
-import httpx
-
 from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate
 from integrity_checker.retrieval.arxiv_client import ArxivClient
 from integrity_checker.retrieval.base import BaseScholarClient
+from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     title_similarity,
     title_tokens,
@@ -130,6 +129,7 @@ class HuggingFaceClient(BaseScholarClient):
 
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Lookup Hugging Face Paper, Model, or Dataset."""
+        self._reset_http_telemetry()
         # 1. Direct arXiv ID paper lookup on Hugging Face Papers API
         arxiv_id = ArxivClient.extract_arxiv_id(citation)
         kind, target = self.extract_hf_target(citation)
@@ -141,32 +141,35 @@ class HuggingFaceClient(BaseScholarClient):
             paper_cand = await self._lookup_paper(arxiv_id, citation=citation)
             if paper_cand and paper_cand.found:
                 return paper_cand
+            if self._last_status_code == 429:
+                return self._build_miss_or_error_candidate("HuggingFace", arxiv_id)
 
         # 2. Direct Model or Dataset repo lookup
         if kind in ("models", "datasets") and target:
             repo_cand = await self._lookup_repo(kind, target, citation=citation)
             if repo_cand and repo_cand.found:
                 return repo_cand
+            if self._last_status_code == 429:
+                return self._build_miss_or_error_candidate("HuggingFace", target)
             # Try the other kind (e.g. dataset referenced without /datasets/ prefix)
             alt_kind = "datasets" if kind == "models" else "models"
             alt_cand = await self._lookup_repo(alt_kind, target, citation=citation)
             if alt_cand and alt_cand.found:
                 return alt_cand
+            if self._last_status_code == 429:
+                return self._build_miss_or_error_candidate("HuggingFace", target)
 
         # 3. Search Hugging Face Daily Papers / Models by title
         raw_title = (citation.title or "").strip()
         if not raw_title and citation.raw_text:
             raw_title = " ".join(title_tokens(citation.raw_text)[:12])
-        if raw_title and len(raw_title) >= 4:
+        if raw_title and len(raw_title) >= 4 and self._last_status_code != 429:
             search_cand = await self._search_papers_or_models(raw_title, citation=citation)
             if search_cand and search_cand.found:
                 return search_cand
 
-        return SourceCandidate(
-            source_name=self.name,
-            found=False,
-            error=f"HuggingFace: no results for '{(target or raw_title or citation.raw_text)[:60]}'",
-        )
+        preview = (target or raw_title or citation.raw_text or "")[:60]
+        return self._build_miss_or_error_candidate("HuggingFace", preview)
 
     async def _lookup_paper(
         self,
@@ -352,15 +355,18 @@ class HuggingFaceClient(BaseScholarClient):
     ) -> Any:
         url = f"{self.BASE_URL}{path}"
         try:
-            async with httpx.AsyncClient(
-                timeout=self.timeout,
+            client = get_shared_http_client(follow_redirects=True)
+            resp = await client.get(
+                url,
+                params=params,
                 headers=self._headers,
-                follow_redirects=True,
-            ) as client:
-                resp = await client.get(url, params=params)
-                if resp.status_code != 200:
-                    return None
-                return resp.json()
+                timeout=self.timeout,
+            )
+            self._record_http_response(resp)
+            if resp.status_code != 200:
+                return None
+            return resp.json()
         except Exception as exc:  # noqa: BLE001
+            self._record_transport_error(exc)
             logger.debug(f"HuggingFace request failed for {url}: {exc}")
             return None

@@ -371,6 +371,7 @@ export interface EssayStatus {
   elapsed_seconds: number;
   finished_at: number | null;
   error: string | null;
+  queue_position?: number | null;
   document_diagnostics?: DocumentDiagnostics | null;
 }
 

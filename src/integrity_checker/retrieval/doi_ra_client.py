@@ -23,13 +23,12 @@ import re
 from typing import Any
 from urllib.parse import quote
 
-import httpx
-
 from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate
 from integrity_checker.retrieval.base import BaseScholarClient
+from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     normalize_doi,
     title_similarity,
@@ -66,6 +65,7 @@ class DoiRaClient(BaseScholarClient):
 
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Verify DOI registration agency and fetch CSL-JSON metadata."""
+        self._reset_http_telemetry()
         if not citation.doi:
             return SourceCandidate(
                 source_name=self.name,
@@ -83,6 +83,10 @@ class DoiRaClient(BaseScholarClient):
 
         ra_info = await self.check_registration_agency(doi_norm)
         if ra_info is None:
+            if self._last_status_code == 429 or (
+                self._last_status_code is not None and self._last_status_code >= 500
+            ):
+                return self._build_miss_or_error_candidate("DOI RA", doi_norm)
             return SourceCandidate(
                 source_name=self.name,
                 found=False,
@@ -138,6 +142,13 @@ class DoiRaClient(BaseScholarClient):
                 confidence=0.88,
             )
 
+        if self._last_status_code == 429 or (
+            self._last_status_code is not None and self._last_status_code >= 500
+        ):
+            cand = self._build_miss_or_error_candidate("DOI RA", doi_norm)
+            cand.external_ids = {"doi_ra": ra_name}
+            return cand
+
         return SourceCandidate(
             source_name=self.name,
             found=False,
@@ -153,20 +164,18 @@ class DoiRaClient(BaseScholarClient):
             "Accept": "application/json",
         }
         try:
-            async with httpx.AsyncClient(
-                timeout=self.timeout,
-                headers=headers,
-                follow_redirects=True,
-            ) as client:
-                resp = await client.get(url)
-                if resp.status_code == 404:
-                    return {"DOI": doi, "status": "DOI does not exist"}
-                if resp.status_code != 200:
-                    return None
-                data = resp.json()
-                if isinstance(data, list) and data and isinstance(data[0], dict):
-                    return {str(k): str(v) for k, v in data[0].items() if v is not None}
+            client = get_shared_http_client(follow_redirects=True)
+            resp = await client.get(url, headers=headers, timeout=self.timeout)
+            self._record_http_response(resp)
+            if resp.status_code == 404:
+                return {"DOI": doi, "status": "DOI does not exist"}
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            if isinstance(data, list) and data and isinstance(data[0], dict):
+                return {str(k): str(v) for k, v in data[0].items() if v is not None}
         except Exception as exc:  # noqa: BLE001
+            self._record_transport_error(exc)
             logger.debug(f"DOI RA lookup failed for '{doi}': {exc}")
             return None
         return None
@@ -179,19 +188,17 @@ class DoiRaClient(BaseScholarClient):
             "Accept": "application/vnd.citationstyles.csl+json, application/json",
         }
         try:
-            async with httpx.AsyncClient(
-                timeout=self.timeout,
-                headers=headers,
-                follow_redirects=True,
-            ) as client:
-                resp = await client.get(url)
-                if resp.status_code != 200:
-                    return None
-                data = resp.json()
-                if not isinstance(data, dict):
-                    return None
-                return self._csl_to_candidate(data, default_doi=doi, ra_name=ra_name)
+            client = get_shared_http_client(follow_redirects=True)
+            resp = await client.get(url, headers=headers, timeout=self.timeout)
+            self._record_http_response(resp)
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            if not isinstance(data, dict):
+                return None
+            return self._csl_to_candidate(data, default_doi=doi, ra_name=ra_name)
         except Exception as exc:  # noqa: BLE001
+            self._record_transport_error(exc)
             logger.debug(f"CSL-JSON lookup failed for '{doi}': {exc}")
             return None
 

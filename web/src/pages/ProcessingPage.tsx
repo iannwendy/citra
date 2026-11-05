@@ -228,6 +228,10 @@ export function ProcessingPage() {
 
   const isDone = status?.status === 'completed';
   const isFailed = status?.status === 'failed';
+  const isQueued = status?.status === 'queued';
+  const queuePos = status?.queue_position ?? null;
+
+  const effectiveProgress = isQueued ? 0 : progress;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-10">
@@ -246,6 +250,11 @@ export function ProcessingPage() {
                 ID #{essayId}
               </Badge>
             )}
+            {isQueued && queuePos !== null && (
+              <Badge className="font-mono text-[11px] bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-300 border border-amber-300/70 dark:border-amber-700/70">
+                {lang === 'vi' ? `Hàng đợi #${queuePos}` : `Queue #${queuePos}`}
+              </Badge>
+            )}
             {status?.elapsed_seconds !== undefined && status.elapsed_seconds > 0 && (
               <span className="inline-flex items-center gap-1 text-xs font-mono text-slate-500 dark:text-slate-400">
                 <Clock className="h-3.5 w-3.5" />
@@ -262,9 +271,13 @@ export function ProcessingPage() {
                 ? lang === 'vi'
                   ? 'Phân tích hoàn tất'
                   : 'Analysis complete'
-                : lang === 'vi'
-                  ? 'Đang phân tích tài liệu học thuật'
-                  : 'Analyzing document'}
+                : isQueued
+                  ? lang === 'vi'
+                    ? `Đang xếp hàng xử lý${queuePos ? ` (Vị trí #${queuePos})` : ''}`
+                    : `Queued for analysis${queuePos ? ` (Position #${queuePos})` : ''}`
+                  : lang === 'vi'
+                    ? 'Đang phân tích tài liệu học thuật'
+                    : 'Analyzing document'}
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400">
             {isFailed
@@ -275,9 +288,13 @@ export function ProcessingPage() {
                 ? lang === 'vi'
                   ? 'Đang chuyển hướng tới báo cáo kiểm chứng chi tiết…'
                   : 'Redirecting to your verification report…'
-                : lang === 'vi'
-                  ? 'Quá trình bóc tách GROBID và đối chiếu đa CSDL học thuật có thể mất 30–60 giây tùy độ dài PDF.'
-                  : 'This may take a few minutes depending on document size.'}
+                : isQueued
+                  ? lang === 'vi'
+                    ? 'Hệ thống đang điều phối lưu lượng theo thứ tự nộp (FIFO) để đảm bảo tốc độ ổn định và tránh giới hạn truy cập từ các CSDL học thuật.'
+                    : 'Your submission is queued in FIFO order to prevent external scholarly API rate limiting during peak traffic.'
+                  : lang === 'vi'
+                    ? 'Quá trình bóc tách GROBID và đối chiếu đa CSDL học thuật có thể mất 30–60 giây tùy độ dài PDF.'
+                    : 'This may take a few minutes depending on document size.'}
           </p>
         </div>
 
@@ -290,6 +307,28 @@ export function ProcessingPage() {
           </Button>
         )}
       </div>
+
+      {/* Queued FIFO banner during high-traffic deadline bursts */}
+      {isQueued && (
+        <div
+          data-testid="queued-processing-banner"
+          className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/80 dark:bg-indigo-950/40 p-4 text-xs text-indigo-900 dark:text-indigo-200 flex items-start gap-3"
+        >
+          <Loader2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold font-display">
+              {lang === 'vi'
+                ? `Bài nộp đang trong hàng đợi thông minh${queuePos ? ` — Vị trí hiện tại: #${queuePos}` : ''}`
+                : `Submission in smart admission queue${queuePos ? ` — Current position: #${queuePos}` : ''}`}
+            </p>
+            <p className="mt-0.5 text-indigo-800/90 dark:text-indigo-300/90">
+              {lang === 'vi'
+                ? 'Trang này sẽ tự động cập nhật ngay khi tới lượt phân tích tài liệu của bạn — không cần tải lại trang.'
+                : 'This page updates automatically as soon as a worker slot opens — no refresh needed.'}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Failed banner */}
       {isFailed && (
@@ -380,13 +419,19 @@ export function ProcessingPage() {
 
           <div className="flex items-center gap-2.5">
             <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
-              {isFailed ? 'FAILED' : isDone ? 'COMPLETE' : 'EXECUTING'}
+              {isFailed
+                ? 'FAILED'
+                : isDone
+                  ? 'COMPLETE'
+                  : isQueued
+                    ? `QUEUED${queuePos ? ` (#${queuePos})` : ''}`
+                    : 'EXECUTING'}
             </span>
             <Badge
               variant="secondary"
               className="font-mono text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
             >
-              {progress}%
+              {effectiveProgress}%
             </Badge>
           </div>
         </div>
@@ -394,7 +439,7 @@ export function ProcessingPage() {
         <div className="p-4 sm:p-6 space-y-6">
           {/* Progress Bar */}
           <div>
-            <Progress value={progress} className="h-2.5" />
+            <Progress value={effectiveProgress} className="h-2.5" />
             {status && !isDone && !isFailed && (
               <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-2">
                 &gt; {status.message}
@@ -405,7 +450,9 @@ export function ProcessingPage() {
           {/* 8-Step Pipeline Trace */}
           <div className="space-y-2.5">
             {STEP_LABELS.map((step, idx) => {
-              const s = stepStatus(idx, backendIndex, isDone || isFailed);
+              const s = isQueued
+                ? 'pending'
+                : stepStatus(idx, backendIndex, isDone || isFailed);
 
               return (
                 <div

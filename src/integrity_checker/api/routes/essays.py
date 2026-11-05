@@ -16,13 +16,14 @@ from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
 from integrity_checker.api.deps import get_current_user, get_db, get_pipeline, require_admin
-from integrity_checker.api.progress import get_tracker
+from integrity_checker.api.progress import get_pipeline_admission_controller, get_tracker
 from integrity_checker.billing.plans import ensure_user_quota_current, get_user_plan_policy
 from integrity_checker.config import PROJECT_ROOT, is_test_runtime
 from integrity_checker.db.models import CitationRecord, User, VerdictRecord
 from integrity_checker.db.repository import Repository
 from integrity_checker.models.api_schemas import EssayUploadResponse
 from integrity_checker.pipeline.integrity_pipeline import IntegrityPipeline
+from integrity_checker.retrieval.http_pool import close_loop_http_clients
 
 router = APIRouter()
 
@@ -147,52 +148,61 @@ async def _run_pipeline_task(
         its own lock, so cross-thread updates are fine."""
         tracker.update(
             essay_id,
+            status="processing",
+            queue_position=None,
             step=step_key,
             step_index=step_index,
             **stats,
         )
 
     try:
-        max_citations: int | None = None
-        allow_serpapi: bool | None = None
-        if user_id:
-            policy_session = get_session()
-            try:
-                user_obj = Repository(policy_session).get_user_by_id(user_id)
-                if user_obj is not None:
-                    policy = get_user_plan_policy(user_obj)
-                    max_citations = policy.max_citations_per_essay
-                    allow_serpapi = policy.allow_serpapi_fallback
-            finally:
-                policy_session.close()
+        async with get_pipeline_admission_controller().acquire(essay_id, tracker=tracker) as admitted:
+            if not admitted:
+                logger.info(f"Queued essay {essay_id} was cancelled before pipeline execution")
+                return
 
-        # Offload heavy CPU work to the default executor so the event loop
-        # stays free to serve other requests (status polls, etc.).
-        # run_in_executor requires a sync callable; we wrap run_async in a
-        # sync runner that creates its own event loop in the worker thread.
-        loop = asyncio.get_running_loop()
+            max_citations: int | None = None
+            allow_serpapi: bool | None = None
+            if user_id:
+                policy_session = get_session()
+                try:
+                    user_obj = Repository(policy_session).get_user_by_id(user_id)
+                    if user_obj is not None:
+                        policy = get_user_plan_policy(user_obj)
+                        max_citations = policy.max_citations_per_essay
+                        allow_serpapi = policy.allow_serpapi_fallback
+                finally:
+                    policy_session.close()
 
-        def _run_pipeline_sync() -> Any:
-            call_kwargs: dict[str, Any] = {
-                "essay_id": essay_id,
-                "progress_callback": _progress_to_threadlocal,
-            }
-            sig_params = inspect.signature(pipeline.run_async).parameters
-            has_var_kw = any(
-                p.kind == inspect.Parameter.VAR_KEYWORD for p in sig_params.values()
-            )
-            if "max_citations" in sig_params or has_var_kw:
-                call_kwargs["max_citations"] = max_citations
-            if "allow_serpapi" in sig_params or has_var_kw:
-                call_kwargs["allow_serpapi"] = allow_serpapi
-            return asyncio.run(
-                pipeline.run_async(
-                    tmp_path,
-                    **call_kwargs,
+            # Offload heavy CPU work to the default executor so the event loop
+            # stays free to serve other requests (status polls, etc.).
+            # run_in_executor requires a sync callable; we wrap run_async in a
+            # sync runner that creates its own event loop in the worker thread.
+            loop = asyncio.get_running_loop()
+
+            def _run_pipeline_sync() -> Any:
+                call_kwargs: dict[str, Any] = {
+                    "essay_id": essay_id,
+                    "progress_callback": _progress_to_threadlocal,
+                }
+                sig_params = inspect.signature(pipeline.run_async).parameters
+                has_var_kw = any(
+                    p.kind == inspect.Parameter.VAR_KEYWORD for p in sig_params.values()
                 )
-            )
+                if "max_citations" in sig_params or has_var_kw:
+                    call_kwargs["max_citations"] = max_citations
+                if "allow_serpapi" in sig_params or has_var_kw:
+                    call_kwargs["allow_serpapi"] = allow_serpapi
 
-        report = await loop.run_in_executor(None, _run_pipeline_sync)
+                async def _runner() -> Any:
+                    try:
+                        return await pipeline.run_async(tmp_path, **call_kwargs)
+                    finally:
+                        await close_loop_http_clients()
+
+                return asyncio.run(_runner())
+
+            report = await loop.run_in_executor(None, _run_pipeline_sync)
 
         # Guard against completely unreadable / corrupted files that yielded 0 pages and 0 citations
         if int(getattr(report, "num_pages", 0) or 0) == 0 and not getattr(report, "extracted_citations", None):
@@ -520,7 +530,7 @@ async def upload_essay(
 
     # Initialize real-time progress tracker so GET /status returns something useful
     tracker = get_tracker()
-    tracker.init(essay.id)
+    init_state = tracker.init(essay.id)
 
     # Register background pipeline — runs after response is sent to client
     background_tasks.add_task(
@@ -532,13 +542,17 @@ async def upload_essay(
         cleanup_file,
     )
 
+    upload_summary: dict[str, Any] = {"status": init_state.status}
+    if init_state.queue_position is not None:
+        upload_summary["queue_position"] = init_state.queue_position
+
     return EssayUploadResponse(
         essay_id=essay.id,
         filename=essay.filename,
         num_pages=0,  # Updated by background task once pipeline finishes
         num_citations=0,
         citations=[],
-        summary={"status": "processing"},
+        summary=upload_summary,
     )
 
 
@@ -623,6 +637,7 @@ def get_essay_status(
             "elapsed_seconds": float((persisted_snap or {}).get("elapsed_seconds", 0.0) or 0.0),
             "finished_at": (persisted_snap or {}).get("finished_at"),
             "error": None,
+            "queue_position": None,
             "document_diagnostics": doc_diag,
         }
 
@@ -662,6 +677,7 @@ def get_essay_status(
         "elapsed_seconds": 0.0,
         "finished_at": None,
         "error": None,
+        "queue_position": None,
     }
 
 
@@ -1225,7 +1241,8 @@ def delete_essay(
     if current_user.role != "admin" and essay.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Clean up progress tracker and persisted PDF / DOCX / BIB / RIS
+    # Clean up queued admission slot, progress tracker, and persisted PDF / DOCX / BIB / RIS
+    get_pipeline_admission_controller().cancel(essay_id)
     get_tracker().clear(essay_id)
     for ext_to_clean in ALLOWED_UPLOAD_EXTENSIONS:
         _get_persisted_upload_path(essay_id, ext=ext_to_clean).unlink(missing_ok=True)

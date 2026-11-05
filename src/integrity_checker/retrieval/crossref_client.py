@@ -6,7 +6,9 @@ Docs: https://api.crossref.org/swagger-ui/index.html
 
 from __future__ import annotations
 
+import asyncio
 import os
+import random
 import re
 from typing import Any
 from urllib.parse import quote
@@ -25,6 +27,7 @@ from integrity_checker.logging import get_logger
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate
 from integrity_checker.retrieval.base import BaseScholarClient
+from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     author_match_score,
     is_book_review_mismatch,
@@ -232,22 +235,19 @@ class CrossrefClient(BaseScholarClient):
     async def _fetch_json_with_retry(
         self, path: str, params: dict[str, Any] | None = None
     ) -> dict | None:
-        """GET với tenacity retry + exponential backoff.
+        """GET với shared Keep-Alive HTTP pool, Retry-After, và bounded retry.
 
-        Retry on:
-            - httpx.HTTPError (network)
-            - 429 Too Many Requests
-            - 5xx server errors
-
-        Backoff config: initial=5s, max=60s, multiplier=2.0 (từ settings)
+        - HTTP 429: thông báo tức thì cho RateLimiter; tối đa 1 retry nếu Retry-After <= 3s.
+        - HTTP 5xx / lỗi mạng: retry tối đa min(max_retries, 3).
         """
         url = f"{self.BASE_URL}{path}"
+        seen_429 = 0
         retry = AsyncRetrying(
-            stop=stop_after_attempt(self.max_retries),
+            stop=stop_after_attempt(min(self.max_retries, 3)),
             wait=wait_exponential(
                 multiplier=self._backoff.multiplier,
                 min=self._backoff.initial_seconds,
-                max=self._backoff.max_seconds,
+                max=min(self._backoff.max_seconds, 12.0),
             ),
             retry=retry_if_exception_type(
                 (httpx.HTTPError, httpx.TimeoutException)
@@ -257,28 +257,43 @@ class CrossrefClient(BaseScholarClient):
         try:
             async for attempt in retry:
                 with attempt:
-                    async with httpx.AsyncClient(timeout=self.timeout) as client:
-                        resp = await client.get(
-                            url, headers=self._headers, params=params or {}
+                    client = get_shared_http_client(follow_redirects=True)
+                    resp = await client.get(
+                        url,
+                        headers=self._headers,
+                        params=params or {},
+                        timeout=self.timeout,
+                    )
+                    retry_after = self._record_http_response(resp)
+                    if resp.status_code == 404:
+                        # 404 = not found, không retry
+                        return None
+                    if resp.status_code == 429:
+                        seen_429 += 1
+                        if seen_429 >= 2 or (retry_after is not None and retry_after > 3.0):
+                            return None
+                        await asyncio.sleep(
+                            (retry_after or random.uniform(0.6, 1.2))
+                            + random.uniform(0.05, 0.25)
                         )
-                        self._last_status_code = resp.status_code
-                        if resp.status_code == 404:
-                            # 404 = not found, không retry
-                            return None
-                        if resp.status_code == 429 or resp.status_code >= 500:
-                            # Retry-worthy
-                            resp.raise_for_status()
-                        if resp.status_code != 200:
-                            logger.warning(
-                                f"Crossref {resp.status_code}: {url}"
-                            )
-                            return None
-                        return resp.json()
+                        if getattr(resp, "_request", None) is None:
+                            resp._request = httpx.Request("GET", url)
+                        resp.raise_for_status()
+                    if resp.status_code >= 500:
+                        if getattr(resp, "_request", None) is None:
+                            resp._request = httpx.Request("GET", url)
+                        resp.raise_for_status()
+                    if resp.status_code != 200:
+                        logger.warning(f"Crossref {resp.status_code}: {url}")
+                        return None
+                    return resp.json()
             return None
-        except RetryError:
+        except RetryError as exc:
+            self._record_transport_error(exc)
             logger.error(f"Crossref retry exhausted: {url}")
             return None
         except httpx.HTTPError as e:
+            self._record_transport_error(e)
             logger.error(f"Crossref HTTP error: {e}")
             return None
 

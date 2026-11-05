@@ -352,12 +352,18 @@ class DataCiteClient(BaseScholarClient):
         path: str,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
+        import asyncio
+        import random
+
+        from integrity_checker.retrieval.http_pool import get_shared_http_client
+
         url = f"{self.BASE_URL}{path}"
+        seen_429 = 0
         retryer = AsyncRetrying(
-            stop=stop_after_attempt(self.max_retries),
+            stop=stop_after_attempt(min(self.max_retries, 3)),
             wait=wait_exponential(
                 multiplier=self._backoff.initial_seconds,
-                max=self._backoff.max_seconds,
+                max=min(self._backoff.max_seconds, 10.0),
                 exp_base=self._backoff.multiplier,
             ),
             retry=retry_if_exception_type(
@@ -368,21 +374,32 @@ class DataCiteClient(BaseScholarClient):
         try:
             async for attempt in retryer:
                 with attempt:
-                    async with httpx.AsyncClient(
-                        timeout=self.timeout,
+                    client = get_shared_http_client(follow_redirects=True)
+                    resp = await client.get(
+                        url,
+                        params=params,
                         headers=self._headers,
-                        follow_redirects=True,
-                    ) as client:
-                        resp = await client.get(url, params=params)
-                        self._last_status_code = resp.status_code
-                        if resp.status_code == 404:
+                        timeout=self.timeout,
+                    )
+                    retry_after = self._record_http_response(resp)
+                    if resp.status_code == 404:
+                        return None
+                    if resp.status_code == 429:
+                        seen_429 += 1
+                        if seen_429 >= 2 or (retry_after is not None and retry_after > 3.0):
                             return None
-                        if resp.status_code == 429 or resp.status_code >= 500:
-                            raise _RetryableHTTPError(f"HTTP {resp.status_code}")
-                        if resp.status_code >= 400:
-                            return None
-                        return resp.json()
+                        await asyncio.sleep(
+                            (retry_after or random.uniform(0.6, 1.2))
+                            + random.uniform(0.05, 0.25)
+                        )
+                        raise _RetryableHTTPError("HTTP 429")
+                    if resp.status_code >= 500:
+                        raise _RetryableHTTPError(f"HTTP {resp.status_code}")
+                    if resp.status_code >= 400:
+                        return None
+                    return resp.json()
         except (RetryError, Exception) as exc:  # noqa: BLE001
+            self._record_transport_error(exc)
             logger.debug(f"DataCite request failed for {url}: {exc}")
             return None
         return None

@@ -21,13 +21,12 @@ import re
 from typing import Any
 from urllib.parse import quote
 
-import httpx
-
 from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate
 from integrity_checker.retrieval.base import BaseScholarClient
+from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     author_match_score,
     is_book_review_mismatch,
@@ -80,6 +79,7 @@ class NcbiBiorxivClient(BaseScholarClient):
 
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Route 10.1101/* DOIs to bioRxiv/medRxiv API first, then NCBI Entrez E-Utilities."""
+        self._reset_http_telemetry()
         doi_norm = normalize_doi(citation.doi) if citation.doi else None
         if doi_norm and self.is_biorxiv_doi(doi_norm):
             bio_cand = await self._lookup_biorxiv_doi(doi_norm, citation=citation)
@@ -91,11 +91,7 @@ class NcbiBiorxivClient(BaseScholarClient):
             return ncbi_cand
 
         query_preview = (citation.title or doi_norm or citation.raw_text or "")[:60]
-        return SourceCandidate(
-            source_name=self.name,
-            found=False,
-            error=f"NCBI/bioRxiv: no results for '{query_preview}'",
-        )
+        return self._build_miss_or_error_candidate("NCBI/bioRxiv", query_preview)
 
     async def _lookup_biorxiv_doi(
         self,
@@ -106,6 +102,8 @@ class NcbiBiorxivClient(BaseScholarClient):
         for server in ("biorxiv", "medrxiv"):
             url = f"{self.BIORXIV_BASE_URL}/details/{server}/{quote(doi, safe='/')}/na/json"
             data = await self._fetch_json(url)
+            if self._last_status_code == 429:
+                return None
             collection = (data or {}).get("collection") or []
             if isinstance(collection, list) and collection:
                 item = collection[-1]  # Latest version of preprint
@@ -198,7 +196,13 @@ class NcbiBiorxivClient(BaseScholarClient):
 
         search_data = await self._fetch_json(f"{self.NCBI_BASE_URL}/esearch.fcgi", params=base_params)
         id_list = ((search_data or {}).get("esearchresult") or {}).get("idlist") or []
-        if (not isinstance(id_list, list) or not id_list) and doi_norm and raw_title and len(raw_title) >= 4:
+        if (
+            (not isinstance(id_list, list) or not id_list)
+            and self._last_status_code != 429
+            and doi_norm
+            and raw_title
+            and len(raw_title) >= 4
+        ):
             # Fallback to PubMed title search if the preprint/regional DOI is not indexed as [LID]
             fallback_params = dict(base_params)
             fallback_params["term"] = f"{raw_title}[Title]"
@@ -267,7 +271,7 @@ class NcbiBiorxivClient(BaseScholarClient):
 
         # Enrich abstract via efetch XML if missing
         pmid = best_cand.external_ids.get("pmid")
-        if pmid and not best_cand.abstract:
+        if pmid and not best_cand.abstract and self._last_status_code != 429:
             best_cand.abstract = await self._fetch_pubmed_abstract(pmid)
 
         best_cand.found = True
@@ -328,22 +332,24 @@ class NcbiBiorxivClient(BaseScholarClient):
         if self.api_key:
             params["api_key"] = self.api_key
         try:
-            async with httpx.AsyncClient(
-                timeout=self.timeout,
+            client = get_shared_http_client(follow_redirects=True)
+            resp = await client.get(
+                f"{self.NCBI_BASE_URL}/efetch.fcgi",
+                params=params,
                 headers=self._headers,
-                follow_redirects=True,
-            ) as client:
-                resp = await client.get(f"{self.NCBI_BASE_URL}/efetch.fcgi", params=params)
-                if resp.status_code != 200:
-                    return None
-                matches = re.findall(
-                    r"<AbstractText[^>]*>(.*?)</AbstractText>",
-                    resp.text,
-                    flags=re.DOTALL | re.IGNORECASE,
-                )
-                if matches:
-                    joined = " ".join(self._clean_text(m) or "" for m in matches).strip()
-                    return joined if len(joined) >= 25 else None
+                timeout=self.timeout,
+            )
+            self._record_http_response(resp)
+            if resp.status_code != 200:
+                return None
+            matches = re.findall(
+                r"<AbstractText[^>]*>(.*?)</AbstractText>",
+                resp.text,
+                flags=re.DOTALL | re.IGNORECASE,
+            )
+            if matches:
+                joined = " ".join(self._clean_text(m) or "" for m in matches).strip()
+                return joined if len(joined) >= 25 else None
         except Exception as exc:  # noqa: BLE001
             logger.debug(f"NCBI efetch abstract failed for PMID {pmid}: {exc}")
         return None
@@ -363,15 +369,18 @@ class NcbiBiorxivClient(BaseScholarClient):
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         try:
-            async with httpx.AsyncClient(
-                timeout=self.timeout,
+            client = get_shared_http_client(follow_redirects=True)
+            resp = await client.get(
+                url,
+                params=params,
                 headers=self._headers,
-                follow_redirects=True,
-            ) as client:
-                resp = await client.get(url, params=params)
-                if resp.status_code != 200:
-                    return None
-                return resp.json()
+                timeout=self.timeout,
+            )
+            self._record_http_response(resp)
+            if resp.status_code != 200:
+                return None
+            return resp.json()
         except Exception as exc:  # noqa: BLE001
+            self._record_transport_error(exc)
             logger.debug(f"NCBI/bioRxiv request failed for {url}: {exc}")
             return None

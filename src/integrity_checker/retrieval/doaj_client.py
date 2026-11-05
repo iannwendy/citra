@@ -16,13 +16,12 @@ import re
 from typing import Any
 from urllib.parse import quote
 
-import httpx
-
 from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate
 from integrity_checker.retrieval.base import BaseScholarClient
+from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     author_match_score,
     is_book_review_mismatch,
@@ -66,12 +65,15 @@ class DOAJClient(BaseScholarClient):
 
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Lookup article in DOAJ by DOI first, then by title search."""
+        self._reset_http_telemetry()
         if citation.doi:
             doi_norm = normalize_doi(citation.doi)
             if doi_norm:
                 by_doi = await self._lookup_by_doi(doi_norm, citation=citation)
                 if by_doi and by_doi.found:
                     return by_doi
+                if self._last_status_code == 429:
+                    return self._build_miss_or_error_candidate("DOAJ", doi_norm)
 
         return await self._lookup_by_title(citation)
 
@@ -123,7 +125,7 @@ class DOAJClient(BaseScholarClient):
             params={"pageSize": 5},
         )
         results = (data or {}).get("results") if isinstance(data, dict) else None
-        if not isinstance(results, list) or not results:
+        if (not isinstance(results, list) or not results) and self._last_status_code != 429:
             toks = [t for t in title_tokens(clean_query) if len(t) >= 3][:8]
             if len(toks) >= 2:
                 and_expr = " AND ".join(toks)
@@ -133,10 +135,10 @@ class DOAJClient(BaseScholarClient):
                     params={"pageSize": 5},
                 )
         if not data:
-            return SourceCandidate(
-                source_name=self.name,
-                found=False,
-                error=f"DOAJ: no response for '{clean_query[:60]}'",
+            return self._build_miss_or_error_candidate(
+                "DOAJ",
+                clean_query,
+                clean_miss_error=f"DOAJ: no response for '{clean_query[:60]}'",
             )
 
         results = data.get("results") or []
@@ -257,15 +259,18 @@ class DOAJClient(BaseScholarClient):
     ) -> dict[str, Any] | None:
         url = f"{self.BASE_URL}{path}"
         try:
-            async with httpx.AsyncClient(
-                timeout=self.timeout,
+            client = get_shared_http_client(follow_redirects=True)
+            resp = await client.get(
+                url,
+                params=params,
                 headers=self._headers,
-                follow_redirects=True,
-            ) as client:
-                resp = await client.get(url, params=params)
-                if resp.status_code != 200:
-                    return None
-                return resp.json()
+                timeout=self.timeout,
+            )
+            self._record_http_response(resp)
+            if resp.status_code != 200:
+                return None
+            return resp.json()
         except Exception as exc:  # noqa: BLE001
+            self._record_transport_error(exc)
             logger.debug(f"DOAJ request failed for {url}: {exc}")
             return None

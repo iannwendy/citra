@@ -12,6 +12,7 @@ import asyncio
 import html
 import os
 import re
+import threading
 import time
 from typing import Any
 
@@ -45,6 +46,7 @@ _CORR_VOL_RE = re.compile(r"abs/(\d{4}\.\d{4,5})", re.IGNORECASE)
 _SHARED_DBLP_COOKIES = httpx.Cookies()
 _DBLP_LOOP_COOKIES: dict[int, httpx.Cookies] = {}
 _DBLP_LOOP_LOCKS: dict[int, tuple[asyncio.Semaphore, asyncio.Lock, asyncio.Lock]] = {}
+_DBLP_GLOBAL_SLOT_LOCK = threading.Lock()
 _LAST_DBLP_REQ_AT: dict[int, float] = {}
 _DBLP_MIN_INTERVAL = 0.65
 _DBLP_CONSECUTIVE_FAILURES: dict[int, int] = {}
@@ -329,15 +331,20 @@ class DBLPClient(BaseScholarClient):
         )
 
     async def _fetch_json_with_retry(self, params: dict[str, Any]) -> dict[str, Any] | None:
+        import random
+
         loop_id = id(asyncio.get_running_loop())
         now = time.monotonic()
-        if now < _DBLP_CIRCUIT_OPEN_UNTIL.get(loop_id, 0.0):
+        with _DBLP_GLOBAL_SLOT_LOCK:
+            open_until = _DBLP_CIRCUIT_OPEN_UNTIL.get(loop_id, 0.0)
+        if now < open_until:
             self._last_status_code = 503
             return None
 
         sem, challenge_lock, _ = _get_dblp_sync_primitives()
+        seen_429 = 0
         retryer = AsyncRetrying(
-            stop=stop_after_attempt(self.max_retries),
+            stop=stop_after_attempt(min(self.max_retries, 2)),
             wait=wait_exponential(
                 multiplier=self._backoff.multiplier,
                 min=min(self._backoff.initial_seconds, 1.0),
@@ -357,80 +364,103 @@ class DBLPClient(BaseScholarClient):
                                 resp = await self._execute_dblp_get(params)
                         else:
                             resp = await self._execute_dblp_get(params)
-                        self._last_status_code = resp.status_code
+                        retry_after = self._record_http_response(resp)
                         if resp.status_code == 404:
-                            _DBLP_CONSECUTIVE_FAILURES[loop_id] = 0
+                            with _DBLP_GLOBAL_SLOT_LOCK:
+                                _DBLP_CONSECUTIVE_FAILURES[loop_id] = 0
                             return None
+                        if resp.status_code == 429:
+                            seen_429 += 1
+                            if seen_429 >= 2 or (retry_after is not None and retry_after > 3.0):
+                                return None
+                            await asyncio.sleep(
+                                (retry_after or random.uniform(0.7, 1.4))
+                                + random.uniform(0.05, 0.25)
+                            )
                         if resp.status_code == 429 or resp.status_code >= 500:
                             if getattr(resp, "_request", None) is None:
                                 resp._request = httpx.Request("GET", self.BASE_URL)
                             resp.raise_for_status()
                         if resp.status_code != 200:
                             return None
-                        _DBLP_CONSECUTIVE_FAILURES[loop_id] = 0
+                        with _DBLP_GLOBAL_SLOT_LOCK:
+                            _DBLP_CONSECUTIVE_FAILURES[loop_id] = 0
                         return resp.json()
         except RetryError as exc:
-            fails = _DBLP_CONSECUTIVE_FAILURES.get(loop_id, 0) + 1
-            _DBLP_CONSECUTIVE_FAILURES[loop_id] = fails
-            if fails >= 2:
-                _DBLP_CIRCUIT_OPEN_UNTIL[loop_id] = time.monotonic() + _DBLP_CIRCUIT_COOLDOWN_SEC
+            self._record_transport_error(exc)
+            with _DBLP_GLOBAL_SLOT_LOCK:
+                fails = _DBLP_CONSECUTIVE_FAILURES.get(loop_id, 0) + 1
+                _DBLP_CONSECUTIVE_FAILURES[loop_id] = fails
+                if fails >= 2:
+                    _DBLP_CIRCUIT_OPEN_UNTIL[loop_id] = time.monotonic() + _DBLP_CIRCUIT_COOLDOWN_SEC
             logger.warning(f"DBLP retry exhausted: {exc}")
             return None
         except Exception as exc:  # noqa: BLE001
+            self._record_transport_error(exc)
             logger.warning(f"DBLP error: {exc}")
             return None
         return None
 
     async def _execute_dblp_get(self, params: dict[str, Any]) -> httpx.Response:
+        from integrity_checker.retrieval.http_pool import get_shared_http_client
+
         loop_id = id(asyncio.get_running_loop())
-        _, _, slot_lock = _get_dblp_sync_primitives()
         loop_cookies = _get_dblp_cookies()
-        async with slot_lock:
+        with _DBLP_GLOBAL_SLOT_LOCK:
             now = time.monotonic()
-            last_at = (
-                _LAST_DBLP_REQ_AT.get(loop_id, 0.0)
-                if isinstance(_LAST_DBLP_REQ_AT, dict)
-                else float(_LAST_DBLP_REQ_AT or 0.0)
-            )
-            scheduled = max(now, last_at + _DBLP_MIN_INTERVAL) if last_at > 0 else now
             if isinstance(_LAST_DBLP_REQ_AT, dict):
+                if loop_id in _LAST_DBLP_REQ_AT and _LAST_DBLP_REQ_AT[loop_id] == 0.0:
+                    _LAST_DBLP_REQ_AT.clear()
+                    last_at = 0.0
+                else:
+                    last_at = max(_LAST_DBLP_REQ_AT.values(), default=0.0)
+                scheduled = max(now, last_at + _DBLP_MIN_INTERVAL) if last_at > 0 else now
                 _LAST_DBLP_REQ_AT[loop_id] = scheduled
+            else:
+                last_at = float(_LAST_DBLP_REQ_AT or 0.0)
+                scheduled = max(now, last_at + _DBLP_MIN_INTERVAL) if last_at > 0 else now
             wait_sec = scheduled - now
         if wait_sec > 0:
             await asyncio.sleep(wait_sec)
-        async with httpx.AsyncClient(
+        client = get_shared_http_client(follow_redirects=True)
+        if len(loop_cookies) > 0:
+            client.cookies.update(loop_cookies)
+        resp = await client.get(
+            self.BASE_URL,
+            params=params,
+            headers=self._headers,
             timeout=self.timeout,
-            follow_redirects=True,
-            cookies=loop_cookies,
-        ) as client:
-            resp = await client.get(
-                self.BASE_URL,
-                params=params,
-                headers=self._headers,
-            )
-            refresh = resp.headers.get("refresh") if hasattr(resp, "headers") else None
-            if resp.status_code == 202 and refresh and "url=" in refresh:
-                try:
-                    wait_str, next_part = refresh.split(";", 1)
-                    wait_sec_c = min(float(wait_str.strip()), 3.0)
-                    next_path = next_part.split("url=", 1)[1].strip()
-                    await asyncio.sleep(wait_sec_c + 0.5)
-                    challenge_url = (
-                        f"{self.BASE_ORIGIN}{next_path}"
-                        if next_path.startswith("/")
-                        else next_path
+        )
+        refresh = resp.headers.get("refresh") if hasattr(resp, "headers") else None
+        if resp.status_code == 202 and refresh and "url=" in refresh:
+            try:
+                wait_str, next_part = refresh.split(";", 1)
+                wait_sec_c = min(float(wait_str.strip()), 3.0)
+                next_path = next_part.split("url=", 1)[1].strip()
+                await asyncio.sleep(wait_sec_c + 0.5)
+                challenge_url = (
+                    f"{self.BASE_ORIGIN}{next_path}"
+                    if next_path.startswith("/")
+                    else next_path
+                )
+                resp = await client.get(
+                    challenge_url, headers=self._headers, timeout=self.timeout
+                )
+                if resp.status_code == 202:
+                    await asyncio.sleep(0.6)
+                    resp = await client.get(
+                        self.BASE_URL,
+                        params=params,
+                        headers=self._headers,
+                        timeout=self.timeout,
                     )
-                    resp = await client.get(challenge_url, headers=self._headers)
-                    if resp.status_code == 202:
-                        await asyncio.sleep(0.6)
-                        resp = await client.get(
-                            self.BASE_URL,
-                            params=params,
-                            headers=self._headers,
-                        )
-                    loop_cookies.update(client.cookies)
-                except Exception as chal_exc:  # noqa: BLE001
-                    logger.debug(f"DBLP challenge follow failed: {chal_exc}")
-            else:
                 loop_cookies.update(client.cookies)
-            return resp
+                with _DBLP_GLOBAL_SLOT_LOCK:
+                    _SHARED_DBLP_COOKIES.update(client.cookies)
+            except Exception as chal_exc:  # noqa: BLE001
+                logger.debug(f"DBLP challenge follow failed: {chal_exc}")
+        else:
+            loop_cookies.update(client.cookies)
+            with _DBLP_GLOBAL_SLOT_LOCK:
+                _SHARED_DBLP_COOKIES.update(client.cookies)
+        return resp

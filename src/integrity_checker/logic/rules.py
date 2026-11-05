@@ -1175,23 +1175,51 @@ class SymbolicRules:
                     style_penalty=style_penalty,
                 )
 
+            rate_limited_sources = [
+                s
+                for s, err in (source.sources_failed or {}).items()
+                if any(
+                    marker in (err or "").lower()
+                    for marker in ("429", "rate limit", "backoff")
+                )
+            ]
+
             if source.sources_failed and not source.sources_succeeded:
+                rules_out = ["R-FAIL-ALL"]
+                reasoning_msg = (
+                    "All external scholarly APIs failed or timed out — insufficient evidence to conclude."
+                )
+                if rate_limited_sources:
+                    rules_out.append("R-RATE-LIMITED-ABSTAIN")
+                    reasoning_msg = (
+                        f"External scholarly APIs experienced HTTP 429 rate limiting / backoff "
+                        f"({', '.join(rate_limited_sources)}) — abstaining from hallucination verdict."
+                    )
                 return RuleOutcome(
                     label=ValidationLabel.UNRESOLVED,
                     confidence=0.3,
-                    reasoning="All external scholarly APIs failed or timed out — insufficient evidence to conclude.",
-                    triggered_rules=["R-FAIL-ALL"],
+                    reasoning=reasoning_msg,
+                    triggered_rules=rules_out,
                     mismatched_fields=[],
                     style_penalty=style_penalty,
+                )
+
+            fallback_rules = ["R-NO-CANDIDATE"]
+            fallback_reasoning = (
+                "No matching candidates found across queried scholarly databases "
+                "(Crossref/OpenAlex/DBLP/arXiv/OpenLibrary/Europe PMC) — insufficient evidence to conclude."
+            )
+            if rate_limited_sources:
+                fallback_rules.append("R-RATE-LIMITED-ABSTAIN")
+                fallback_reasoning = (
+                    f"Insufficient clean scholarly responses because {', '.join(rate_limited_sources)} "
+                    f"hit HTTP 429 rate limits — abstaining from hallucination verdict."
                 )
             return RuleOutcome(
                 label=ValidationLabel.UNRESOLVED,
                 confidence=0.5,
-                reasoning=(
-                    "No matching candidates found across queried scholarly databases "
-                    "(Crossref/OpenAlex/DBLP/arXiv/OpenLibrary/Europe PMC) — insufficient evidence to conclude."
-                ),
-                triggered_rules=["R-NO-CANDIDATE"],
+                reasoning=fallback_reasoning,
+                triggered_rules=fallback_rules,
                 mismatched_fields=[],
                 style_penalty=style_penalty,
             )

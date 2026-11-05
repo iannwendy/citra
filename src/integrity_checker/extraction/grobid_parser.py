@@ -33,6 +33,7 @@ import hashlib
 import json
 import logging
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -50,6 +51,26 @@ logger = logging.getLogger(__name__)
 # TEI XML namespace
 _TEI_NS = "http://www.tei-c.org/ns/1.0"
 _TEI = "{" + _TEI_NS + "}"
+
+_GROBID_SEM_LOCK = threading.Lock()
+_GROBID_SEM: threading.BoundedSemaphore | None = None
+_GROBID_SEM_LIMIT: int = 0
+
+
+def _get_grobid_semaphore() -> threading.BoundedSemaphore:
+    """Return a process-wide BoundedSemaphore capping concurrent GROBID PDF calls."""
+    global _GROBID_SEM, _GROBID_SEM_LIMIT
+    try:
+        from integrity_checker.config import get_settings
+
+        desired = max(1, int(get_settings().retrieval.max_concurrent_grobid))
+    except Exception:
+        desired = 2
+    with _GROBID_SEM_LOCK:
+        if _GROBID_SEM is None or desired != _GROBID_SEM_LIMIT:
+            _GROBID_SEM = threading.BoundedSemaphore(desired)
+            _GROBID_SEM_LIMIT = desired
+        return _GROBID_SEM
 
 
 @dataclass
@@ -180,7 +201,7 @@ def call_grobid_fulltext(
         http_post_fn = _default_post
 
     try:
-        with open(pdf_path, "rb") as f:
+        with _get_grobid_semaphore(), open(pdf_path, "rb") as f:
             filename = Path(pdf_path).name if pdf_path else "document.pdf"
             files = {"input": (filename, f, "application/pdf")}
             raw_consol = (

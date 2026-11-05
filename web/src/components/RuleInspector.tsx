@@ -337,6 +337,18 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
     ],
     conclusion: "UNRESOLVED",
   },
+  "R-RATE-LIMITED-ABSTAIN": {
+    id: "R-RATE-LIMITED-ABSTAIN",
+    name: "Rate-Limit Abstention Guard (HTTP 429)",
+    nameVi: "Bảo vệ từ chối phán quyết do giới hạn tần suất (HTTP 429)",
+    description: "External scholarly APIs returned HTTP 429 rate-limit responses — system abstains instead of flagging suspected hallucination",
+    descriptionVi: "Các API học thuật tạm thời giới hạn tần suất truy cập (HTTP 429) — hệ thống chuyển sang chờ rà soát thay vì gắn cờ ngụy tạo oan",
+    conditions: [
+      { field: "rate_limited_sources", operator: ">", value: "0" },
+      { field: "candidates", operator: "=", value: "0" },
+    ],
+    conclusion: "UNRESOLVED",
+  },
   "R-NO-CANDIDATE": {
     id: "R-NO-CANDIDATE",
     name: "No Matching Candidates",

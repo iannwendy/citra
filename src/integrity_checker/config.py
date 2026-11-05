@@ -301,14 +301,14 @@ class SourceToggleConfig(BaseModel):
 
 
 class RateLimitsConfig(BaseModel):
-    # Crossref: moderate with polite pool (10 req/s)
-    crossref_per_sec: float = 10.0
-    # OpenAlex: high with polite pool (50 req/s)
-    openalex_per_sec: float = 50.0
-    # DBLP: CS/AI publication API (3 req/s polite rate)
-    dblp_per_sec: float = 3.0
-    # arXiv: preprint Atom API (2 req/s polite rate)
-    arxiv_per_sec: float = 2.0
+    # Crossref: Polite Pool allows 50 req/s; 25 req/s keeps safe 50% headroom under bursts
+    crossref_per_sec: float = 25.0
+    # OpenAlex: Official Polite Pool cap is 10 req/s; 8 req/s prevents HTTP 429
+    openalex_per_sec: float = 8.0
+    # DBLP: CS/AI publication API (~1.5 req/s polite rate)
+    dblp_per_sec: float = 1.5
+    # arXiv: preprint Atom API (official ToS: max 1 req/s, single connection)
+    arxiv_per_sec: float = 1.0
     # OpenLibrary / Google Books: book & textbook API (3 req/s)
     openlibrary_per_sec: float = 3.0
     # Europe PMC / PubMed: biomedical & psychology API (5 req/s)
@@ -339,13 +339,13 @@ class RetryBackoffConfig(BaseModel):
     """Exponential backoff config for retry logic.
 
     Defaults tuned for rate-limit recovery:
-    - initial_seconds: Start at 5s (more aggressive than old 1s)
-    - max_seconds: Cap at 60s (old: 10s) for sustained rate limits
-    - multiplier: 2x per attempt
+    - initial_seconds: Start at 1s for transient network hiccups
+    - max_seconds: Cap at 120s for sustained rate limits
+    - multiplier: 1.5x per attempt
     """
 
     initial_seconds: float = 1.0
-    max_seconds: float = 120.0  # FIX: Increased from 60 to 120 for sustained rate limits
+    max_seconds: float = 120.0
     multiplier: float = 1.5
 
 
@@ -353,17 +353,25 @@ class RetryConfig(BaseModel):
     """Tenacity retry + exponential backoff — MỚI v1.2."""
 
     enabled: bool = True
-    max_attempts: int = 5  # FIX: Increased from 3 to 5 for better resilience
-    backoff: RetryBackoffConfig = Field(default_factory=RetryBackoffConfig)  # FIX: Was missing, now explicit
+    max_attempts: int = 5
+    backoff: RetryBackoffConfig = Field(default_factory=RetryBackoffConfig)
 
 
 class RetrievalConfig(BaseModel):
     sources: SourceToggleConfig = Field(default_factory=SourceToggleConfig)
     per_source_top_k: int = 5
     parallel: bool = True
-    retry: RetryConfig = Field(default_factory=RetryConfig)   # MỚI v1.2
+    retry: RetryConfig = Field(default_factory=RetryConfig)
     rate_limits: RateLimitsConfig = Field(default_factory=RateLimitsConfig)
     contact_email: str = "noreply@citra.edu.vn"
+    # Deadline burst & HTTP 429 protection controls
+    max_concurrent_pipelines: int = 3
+    max_concurrent_grobid: int = 2
+    max_global_retrievals: int = 12
+    per_essay_retrievals: int = 6
+    singleflight_enabled: bool = True
+    negative_cache_ttl_seconds: int = 21600
+    negative_cache_max_entries: int = 4096
 
 
 # --- Matching (giữ nguyên v1.1, sẽ tinh chỉnh ở tuần 10–11) ---
@@ -566,6 +574,19 @@ class Settings(BaseSettings):
             self.serper_api_key = os.environ["SERPER_API_KEY"]
         if os.getenv("SERPAPI_API_KEY"):
             self.serpapi_api_key = os.environ["SERPAPI_API_KEY"]
+        for env_key, attr_name in (
+            ("MAX_CONCURRENT_PIPELINES", "max_concurrent_pipelines"),
+            ("MAX_CONCURRENT_GROBID", "max_concurrent_grobid"),
+            ("MAX_GLOBAL_RETRIEVALS", "max_global_retrievals"),
+        ):
+            raw_val = os.getenv(env_key)
+            if raw_val and raw_val.strip():
+                try:
+                    parsed = int(raw_val.strip())
+                    if parsed >= 1:
+                        setattr(self.retrieval, attr_name, parsed)
+                except ValueError:
+                    pass
 
         is_explicit_prod = self.app.env.strip().lower() in ("production", "prod", "live")
         if is_test_runtime():

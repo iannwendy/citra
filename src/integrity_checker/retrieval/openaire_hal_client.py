@@ -18,13 +18,12 @@ import os
 import re
 from typing import Any
 
-import httpx
-
 from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate
 from integrity_checker.retrieval.base import BaseScholarClient
+from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     author_match_score,
     is_book_review_mismatch,
@@ -69,6 +68,7 @@ class OpenAIREHalClient(BaseScholarClient):
 
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Query HAL Open Science first (fast Solr JSON), then fallback to OpenAIRE Graph."""
+        self._reset_http_telemetry()
         hal_cand = await self._lookup_hal(citation)
         if hal_cand and hal_cand.found:
             return hal_cand
@@ -78,11 +78,7 @@ class OpenAIREHalClient(BaseScholarClient):
             return oa_cand
 
         query_preview = (citation.title or citation.doi or citation.raw_text or "")[:60]
-        return SourceCandidate(
-            source_name=self.name,
-            found=False,
-            error=f"OpenAIRE/HAL: no results for '{query_preview}'",
-        )
+        return self._build_miss_or_error_candidate("OpenAIRE/HAL", query_preview)
 
     async def _lookup_hal(self, citation: Citation) -> SourceCandidate | None:
         """Search HAL Open Science API (`https://api.archives-ouvertes.fr/search/`)."""
@@ -106,6 +102,8 @@ class OpenAIREHalClient(BaseScholarClient):
                     cand.found = True
                     cand.confidence = 0.96
                     return cand
+            if self._last_status_code == 429:
+                return None
 
         raw_title = (citation.title or "").strip()
         if not raw_title and citation.raw_text:
@@ -343,15 +341,18 @@ class OpenAIREHalClient(BaseScholarClient):
     ) -> dict[str, Any] | None:
         try:
             req_timeout = min(self.timeout, 2.5) if "openaire.eu" in url else self.timeout
-            async with httpx.AsyncClient(
-                timeout=req_timeout,
+            client = get_shared_http_client(follow_redirects=True)
+            resp = await client.get(
+                url,
+                params=params,
                 headers=self._headers,
-                follow_redirects=True,
-            ) as client:
-                resp = await client.get(url, params=params)
-                if resp.status_code != 200:
-                    return None
-                return resp.json()
+                timeout=req_timeout,
+            )
+            self._record_http_response(resp)
+            if resp.status_code != 200:
+                return None
+            return resp.json()
         except Exception as exc:  # noqa: BLE001
+            self._record_transport_error(exc)
             logger.debug(f"OpenAIRE/HAL request failed for {url}: {exc}")
             return None

@@ -19,8 +19,13 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import copy
 import hashlib
 import re
+import threading
+import time
+from collections import OrderedDict
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from integrity_checker.config import get_settings
@@ -35,6 +40,11 @@ from integrity_checker.retrieval.dblp_client import DBLPClient
 from integrity_checker.retrieval.doaj_client import DOAJClient
 from integrity_checker.retrieval.doi_ra_client import DoiRaClient
 from integrity_checker.retrieval.europepmc_client import EuropePMCClient
+from integrity_checker.retrieval.http_pool import (
+    get_shared_http_client,
+    reset_rate_limit_callback,
+    set_rate_limit_callback,
+)
 from integrity_checker.retrieval.huggingface_client import HuggingFaceClient
 from integrity_checker.retrieval.ncbi_biorxiv_client import NcbiBiorxivClient
 from integrity_checker.retrieval.normalization import (
@@ -66,6 +76,151 @@ logger = get_logger(__name__)
 _ALLOW_SERPAPI_OVERRIDE: contextvars.ContextVar[bool | None] = contextvars.ContextVar(
     "_allow_serpapi_override", default=None
 )
+
+
+class _InFlightEntry:
+    """Shared state for a single coalesced in-flight citation lookup across event loops."""
+
+    __slots__ = ("waiters", "result", "error", "done")
+
+    def __init__(self) -> None:
+        self.waiters: list[tuple[asyncio.AbstractEventLoop, asyncio.Event]] = []
+        self.result: SourceResult | None = None
+        self.error: BaseException | None = None
+        self.done: bool = False
+
+
+class _CrossLoopSingleflight:
+    """Thread-safe & cross-event-loop Singleflight (in-flight request coalescer).
+
+    When 50 students submit essays near a deadline citing the same paper concurrently
+    across coroutines or worker threads, only the leader executes external API calls;
+    all followers await completion and receive independent deep-copied ``SourceResult``s.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._inflight: dict[str, _InFlightEntry] = {}
+        self.coalesced_hits: int = 0
+
+    @property
+    def inflight_count(self) -> int:
+        with self._lock:
+            return len(self._inflight)
+
+    async def run(
+        self,
+        key: str,
+        coro_fn: Callable[[], Awaitable[SourceResult]],
+    ) -> tuple[SourceResult, bool]:
+        """Execute ``coro_fn`` once per concurrent ``key``.
+
+        Returns:
+            Tuple ``(result, was_coalesced_follower)``.
+        """
+        loop = asyncio.get_running_loop()
+        wait_event: asyncio.Event | None = None
+        with self._lock:
+            existing = self._inflight.get(key)
+            if existing is not None and not existing.done:
+                wait_event = asyncio.Event()
+                existing.waiters.append((loop, wait_event))
+                self.coalesced_hits += 1
+                entry = existing
+                is_leader = False
+            else:
+                entry = _InFlightEntry()
+                self._inflight[key] = entry
+                is_leader = True
+
+        if not is_leader:
+            assert wait_event is not None
+            await wait_event.wait()
+            if entry.error is not None:
+                raise entry.error
+            assert entry.result is not None
+            return copy.deepcopy(entry.result), True
+
+        try:
+            res = await coro_fn()
+            snapshot = copy.deepcopy(res)
+            with self._lock:
+                entry.result = snapshot
+                entry.done = True
+                if self._inflight.get(key) is entry:
+                    self._inflight.pop(key, None)
+                waiters = list(entry.waiters)
+                entry.waiters.clear()
+            for w_loop, w_ev in waiters:
+                try:
+                    w_loop.call_soon_threadsafe(w_ev.set)
+                except RuntimeError:
+                    pass
+            return res, False
+        except BaseException as exc:
+            with self._lock:
+                entry.error = exc
+                entry.done = True
+                if self._inflight.get(key) is entry:
+                    self._inflight.pop(key, None)
+                waiters = list(entry.waiters)
+                entry.waiters.clear()
+            for w_loop, w_ev in waiters:
+                try:
+                    w_loop.call_soon_threadsafe(w_ev.set)
+                except RuntimeError:
+                    pass
+            raise
+
+
+class _TTLNegativeCache:
+    """Thread-safe bounded LRU TTL cache for verified clean scholarly misses.
+
+    Stores ONLY clean HTTP 200 misses (0 candidates across >= 3 APIs with zero 429/5xx/timeout
+    errors). Transient rate-limit or network failures are NEVER cached.
+    """
+
+    def __init__(self, ttl_seconds: int = 21600, max_entries: int = 4096) -> None:
+        self._ttl = max(0, int(ttl_seconds))
+        self._max_entries = max(0, int(max_entries))
+        self._lock = threading.Lock()
+        self._store: OrderedDict[str, tuple[float, SourceResult]] = OrderedDict()
+        self.hits: int = 0
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._store)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+    def get(self, key: str) -> SourceResult | None:
+        if self._ttl <= 0 or self._max_entries <= 0:
+            return None
+        now = time.monotonic()
+        with self._lock:
+            item = self._store.get(key)
+            if item is None:
+                return None
+            expires_at, stored = item
+            if now >= expires_at:
+                self._store.pop(key, None)
+                return None
+            self._store.move_to_end(key)
+            self.hits += 1
+            return copy.deepcopy(stored)
+
+    def set(self, key: str, result: SourceResult) -> None:
+        if self._ttl <= 0 or self._max_entries <= 0:
+            return
+        expires_at = time.monotonic() + self._ttl
+        snapshot = copy.deepcopy(result)
+        with self._lock:
+            self._store[key] = (expires_at, snapshot)
+            self._store.move_to_end(key)
+            while len(self._store) > self._max_entries:
+                self._store.popitem(last=False)
 
 
 # Known NLP/ML papers - không bao giờ là hallucination
@@ -948,6 +1103,16 @@ class RetrievalOrchestrator:
         self._serpapi_limiter: RateLimiter | None = None
         self._serpapi_limiter_mode: str | None = None
 
+        # Cross-loop Singleflight coalescer & verified clean-miss TTL cache
+        self._singleflight_enabled: bool = bool(
+            getattr(settings, "singleflight_enabled", True)
+        )
+        self._singleflight = _CrossLoopSingleflight()
+        self._negative_cache = _TTLNegativeCache(
+            ttl_seconds=int(getattr(settings, "negative_cache_ttl_seconds", 21600)),
+            max_entries=int(getattr(settings, "negative_cache_max_entries", 4096)),
+        )
+
         # Local database
         self._local_db: LocalDatabase | None = None
         if self.use_local_db:
@@ -1527,28 +1692,112 @@ class RetrievalOrchestrator:
             if ref_doi and ref_doi.lower().startswith("10.18653/v1/"):
                 acl_id = ref_doi.split("10.18653/v1/", 1)[1].strip("/")
                 if acl_id:
-                    import httpx
-
-                    async with httpx.AsyncClient(timeout=4.0, follow_redirects=True) as client:
-                        resp = await client.get(f"https://aclanthology.org/{acl_id}/")
-                        if resp.status_code == 200:
-                            m = re.search(
-                                r'<div class="card-body acl-abstract">.*?<span>(.*?)</span>',
-                                resp.text,
-                                re.S | re.I,
-                            )
-                            if m:
-                                acl_abs = re.sub(r"<[^>]+>", " ", m.group(1))
-                                acl_abs = re.sub(r"\s+", " ", acl_abs).strip()
-                                if len(acl_abs) >= 40:
-                                    for fc in found_cands:
-                                        if not fc.abstract:
-                                            fc.abstract = acl_abs
-                                    return acl_abs
+                    client = get_shared_http_client(
+                        "acl_anthology",
+                        timeout=4.0,
+                        follow_redirects=True,
+                    )
+                    resp = await client.get(f"https://aclanthology.org/{acl_id}/")
+                    if resp.status_code == 200:
+                        m = re.search(
+                            r'<div class="card-body acl-abstract">.*?<span>(.*?)</span>',
+                            resp.text,
+                            re.S | re.I,
+                        )
+                        if m:
+                            acl_abs = re.sub(r"<[^>]+>", " ", m.group(1))
+                            acl_abs = re.sub(r"\s+", " ", acl_abs).strip()
+                            if len(acl_abs) >= 40:
+                                for fc in found_cands:
+                                    if not fc.abstract:
+                                        fc.abstract = acl_abs
+                                return acl_abs
         except Exception as exc:  # noqa: BLE001
             logger.debug(f"Abstract enrichment skipped: {exc}")
 
         return None
+
+    @classmethod
+    def _singleflight_citation_key(
+        cls,
+        citation: Citation,
+        *,
+        serpapi_enabled: bool,
+    ) -> str:
+        """Build a canonical, formatting-agnostic lookup key for Singleflight & Negative Cache."""
+        doi_part = normalize_doi(citation.doi) or ""
+        arxiv_part = (cls._extract_arxiv_id(citation) or "").lower()
+        title_part = " ".join((citation.title or "").split()).casefold()
+        year_part = str(citation.year or "").strip()[:4]
+        authors_part = ",".join(sorted(author_keys(citation.authors)))
+        url_part = (citation.url or "").strip()
+        pattern_part = (citation.matched_pattern or "").strip()
+        raw_fallback = (
+            ""
+            if (doi_part or arxiv_part or len(title_part) >= 8)
+            else " ".join((citation.raw_text or "").split()).casefold()
+        )
+        canonical = "|".join(
+            [
+                doi_part,
+                arxiv_part,
+                title_part,
+                year_part,
+                authors_part,
+                url_part,
+                pattern_part,
+                raw_fallback,
+                f"serp={int(bool(serpapi_enabled))}",
+            ]
+        ).encode("utf-8")
+        return hashlib.sha256(canonical).hexdigest()[:24]
+
+    @staticmethod
+    def _is_cacheable_clean_miss(citation: Citation, result: SourceResult) -> bool:
+        """Return True ONLY when >= 3 scholarly APIs returned clean HTTP 200 misses
+        with ZERO 429/5xx/timeout/backoff/quota errors and no citation URL.
+        """
+        if result.candidates or result.sources_succeeded:
+            return False
+        if citation.url or result.url_status is not None:
+            return False
+        if len(result.sources_queried) < 3 or not result.sources_failed:
+            return False
+
+        clean_markers = (
+            "no results",
+            "no title match",
+            "does not exist",
+            "not found",
+            "no matching",
+        )
+        transient_markers = (
+            "429",
+            "rate limit",
+            "timeout",
+            "timed out",
+            "connect",
+            "500",
+            "502",
+            "503",
+            "504",
+            "backoff",
+            "unavailable",
+            "quota",
+            "credits",
+            "request failed",
+            "network",
+        )
+        clean_count = 0
+        for err in result.sources_failed.values():
+            err_l = (err or "").lower()
+            if any(tm in err_l for tm in transient_markers):
+                return False
+            if any(cm in err_l for cm in clean_markers):
+                clean_count += 1
+            else:
+                return False
+        return clean_count >= 3
 
     async def retrieve(
         self,
@@ -1556,7 +1805,56 @@ class RetrievalOrchestrator:
         *,
         allow_serpapi: bool | None = None,
     ) -> SourceResult:
-        """Main retrieval entry point with smart domain-aware staged execution.
+        """Main retrieval entry point with Cross-Loop Singleflight coalescing,
+        verified clean-miss TTL Negative Cache, and smart domain-aware staged execution.
+        """
+        # Legacy explicit DiskCache test adapter bypasses Singleflight/NegativeCache
+        if self.cache is not None or not self._singleflight_enabled:
+            return await self._retrieve_uncached(citation, allow_serpapi=allow_serpapi)
+
+        effective_allow_serpapi = (
+            allow_serpapi
+            if allow_serpapi is not None
+            else _ALLOW_SERPAPI_OVERRIDE.get()
+        )
+        serpapi_enabled = bool(get_settings().retrieval.sources.serpapi) and (
+            effective_allow_serpapi is not False
+        )
+        sf_key = self._singleflight_citation_key(
+            citation, serpapi_enabled=serpapi_enabled
+        )
+
+        # Check verified clean-miss TTL Negative Cache first (only when no URL needs live check)
+        if not citation.url:
+            neg_hit = self._negative_cache.get(sf_key)
+            if neg_hit is not None:
+                neg_hit.citation_raw = citation.raw_text
+                logger.debug(
+                    f"Negative Cache HIT (clean miss): '{(citation.title or citation.raw_text)[:50]}'"
+                )
+                return neg_hit
+
+        result, was_coalesced = await self._singleflight.run(
+            sf_key,
+            lambda: self._retrieve_uncached(citation, allow_serpapi=allow_serpapi),
+        )
+        if was_coalesced:
+            result.citation_raw = citation.raw_text
+            logger.debug(
+                f"Singleflight COALESCED in-flight lookup for: '{(citation.title or citation.raw_text)[:50]}'"
+            )
+        elif self._is_cacheable_clean_miss(citation, result):
+            self._negative_cache.set(sf_key, result)
+
+        return result
+
+    async def _retrieve_uncached(
+        self,
+        citation: Citation,
+        *,
+        allow_serpapi: bool | None = None,
+    ) -> SourceResult:
+        """Uncached multi-stage retrieval pipeline executed by the Singleflight leader.
 
         Flow:
             1. Check local database first (Tier 0) + enrich abstract if missing
@@ -1718,6 +2016,30 @@ class RetrievalOrchestrator:
             and any(p.search(citation.doi.lower()) for p in _FABRICATED_DOI_PATTERNS)
         )
         tier1_sufficient = self._is_tier1_sufficient(valid, citation)
+
+        # Rescue backup when Tier 1 returned 0 matches due to HTTP 429 / backoff and Tier 2 was empty (e.g. books)
+        if (
+            not tier2_clients
+            and not any(c.found for c in valid)
+            and not is_known_fabricated_doi_prefix
+            and not self._six_core_only_explicit_mode
+            and any(
+                any(m in (err or "").lower() for m in ("429", "rate limit", "backoff"))
+                for err in failed.values()
+            )
+        ):
+            enabled_map = {c.name: c for c in self.clients()}
+            for backup_name in ("datacite", "doaj", "openaire_hal"):
+                b_client = enabled_map.get(backup_name)
+                if b_client is not None and b_client.name not in sources_queried:
+                    b_lim = self._rate_limiters.get(b_client.name)
+                    if b_lim is None or not (
+                        hasattr(b_lim, "should_fast_fail") and b_lim.should_fast_fail() is True
+                    ):
+                        tier2_clients.append(b_client)
+                        if len(tier2_clients) >= 2:
+                            break
+
         if tier2_clients and not tier1_sufficient and not is_known_fabricated_doi_prefix:
             logger.debug(
                 f"Tier 1 insufficient for '{(citation.title or citation.raw_text)[:45]}' "
@@ -1830,19 +2152,17 @@ class RetrievalOrchestrator:
                 (citation.authors or citation.raw_text)
                 and _is_fake_author_name(citation.raw_text, citation.authors)[0]
             )
+            clean_markers = (
+                "no results",
+                "no title match",
+                "does not exist",
+                "not found",
+                "no matching",
+            )
             clean_miss_count = sum(
                 1
                 for err in failed.values()
-                if any(
-                    marker in (err or "").lower()
-                    for marker in (
-                        "no results",
-                        "no title match",
-                        "does not exist",
-                        "not found",
-                        "no matching",
-                    )
-                )
+                if any(marker in (err or "").lower() for marker in clean_markers)
             )
             has_hard_api_failure = any(
                 any(
@@ -1862,13 +2182,29 @@ class RetrievalOrchestrator:
                 )
                 for err in failed.values()
             )
-            if has_future_year or has_fake_author or (
-                clean_miss_count >= 3 and not has_hard_api_failure
+            primary_wide_graphs_clean = (
+                "crossref" in sources_queried
+                and "openalex" in sources_queried
+                and any(
+                    marker in (failed.get("crossref") or "").lower()
+                    for marker in clean_markers
+                )
+                and any(
+                    marker in (failed.get("openalex") or "").lower()
+                    for marker in clean_markers
+                )
+            )
+            if (
+                has_future_year
+                or has_fake_author
+                or (clean_miss_count >= 3 and not has_hard_api_failure)
+                or (clean_miss_count >= 4 and primary_wide_graphs_clean)
             ):
                 serpapi_quota_guard_skip = True
                 logger.info(
                     f"SerpApi Quota Guard: skipping paid lookup for '{(citation.title or citation.raw_text)[:45]}' "
                     f"(clean_misses={clean_miss_count}, hard_failure={has_hard_api_failure}, "
+                    f"primary_clean={primary_wide_graphs_clean}, "
                     f"future_year={has_future_year}, fake_author={has_fake_author})"
                 )
 
@@ -2566,14 +2902,15 @@ class RetrievalOrchestrator:
         client: BaseScholarClient,
         citation: Citation,
     ) -> SourceCandidate:
-        """Apply rate limit then call API.
-
-        FIX: Now reports rate limit status to the limiter so it can adjust
-        backoff timing based on 429 responses.
-        """
+        """Apply adaptive AIMD rate limit + instant HTTP 429 callback then call API."""
         limiter = self._rate_limiters.get(client.name)
         if limiter:
-            if limiter.is_in_backoff() is True:
+            fast_fail = (
+                limiter.should_fast_fail() is True
+                if hasattr(limiter, "should_fast_fail")
+                else limiter.is_in_backoff() is True
+            )
+            if fast_fail:
                 logger.debug(
                     f"Skipping {client.name} lookup while rate-limit backoff is active"
                 )
@@ -2584,13 +2921,37 @@ class RetrievalOrchestrator:
                 )
             await limiter.wait()
 
-        cand = await client.lookup(citation)
+        notified_429 = False
 
-        # FIX: Report rate limit status so limiter can adjust backoff
+        def _on_http_429(source_name: str, retry_after: float | None) -> None:
+            nonlocal notified_429
+            if limiter and source_name == client.name and not notified_429:
+                notified_429 = True
+                if isinstance(retry_after, (int, float)):
+                    limiter.report_rate_limited(float(retry_after))
+                else:
+                    limiter.report_rate_limited()
+
+        cb_token = set_rate_limit_callback(_on_http_429) if limiter else None
+        try:
+            cand = await client.lookup(citation)
+        finally:
+            if cb_token is not None:
+                reset_rate_limit_callback(cb_token)
+
         if limiter:
-            if cand.error and '429' in cand.error:
-                limiter.report_rate_limited()
-            else:
+            err_lower = (cand.error or "").lower()
+            is_429 = bool(
+                cand.error and ("429" in cand.error or "rate limit" in err_lower)
+            )
+            if is_429:
+                if not notified_429:
+                    retry_after_val = getattr(client, "_last_retry_after", None)
+                    if isinstance(retry_after_val, (int, float)):
+                        limiter.report_rate_limited(float(retry_after_val))
+                    else:
+                        limiter.report_rate_limited()
+            elif not notified_429:
                 limiter.report_success()
 
         return cand
@@ -2956,11 +3317,31 @@ class RetrievalOrchestrator:
             )
             self._serpapi_limiter_mode = "serpapi"
 
-        # Apply rate limit
+        # Apply rate limit & backoff guard
         if self._serpapi_limiter:
+            if (
+                hasattr(self._serpapi_limiter, "should_fast_fail")
+                and self._serpapi_limiter.should_fast_fail() is True
+            ):
+                return SourceCandidate(
+                    source_name="serpapi",
+                    found=False,
+                    error="Google Scholar fallback: skipped (rate-limit backoff active)",
+                )
             await self._serpapi_limiter.wait()
 
         logger.debug(
             f"Google Scholar fallback for: {citation.title[:40] if citation.title else citation.raw_text[:40]}"
         )
-        return await self.serpapi.lookup(citation)
+        cand = await self.serpapi.lookup(citation)
+        if self._serpapi_limiter and isinstance(cand, SourceCandidate):
+            err_l = (cand.error or "").lower()
+            if cand.error and ("429" in cand.error or "rate limit" in err_l):
+                retry_after_val = getattr(self.serpapi, "_last_retry_after", None)
+                if isinstance(retry_after_val, (int, float)):
+                    self._serpapi_limiter.report_rate_limited(float(retry_after_val))
+                else:
+                    self._serpapi_limiter.report_rate_limited()
+            else:
+                self._serpapi_limiter.report_success()
+        return cand

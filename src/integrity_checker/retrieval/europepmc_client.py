@@ -327,16 +327,22 @@ class EuropePMCClient(BaseScholarClient):
         )
 
     async def _fetch_json_with_retry(self, params: dict[str, Any]) -> dict[str, Any] | None:
+        import asyncio
+        import random
+
+        from integrity_checker.retrieval.http_pool import get_shared_http_client
+
         if time.monotonic() < EuropePMCClient._backoff_until:
             self._last_status_code = 503
             return None
 
+        seen_429 = 0
         retryer = AsyncRetrying(
-            stop=stop_after_attempt(self.max_retries),
+            stop=stop_after_attempt(min(self.max_retries, 3)),
             wait=wait_exponential(
                 multiplier=self._backoff.multiplier,
-                min=min(self._backoff.initial_seconds, 2.0),
-                max=min(self._backoff.max_seconds, 15.0),
+                min=min(self._backoff.initial_seconds, 1.5),
+                max=min(self._backoff.max_seconds, 10.0),
             ),
             retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
             reraise=False,
@@ -344,19 +350,27 @@ class EuropePMCClient(BaseScholarClient):
         try:
             async for attempt in retryer:
                 with attempt:
-                    async with httpx.AsyncClient(timeout=self.timeout) as client:
-                        resp = await client.get(
-                            self.BASE_URL,
-                            params=params,
-                            headers=self._headers,
-                        )
-                    self._last_status_code = resp.status_code
+                    client = get_shared_http_client(follow_redirects=True)
+                    resp = await client.get(
+                        self.BASE_URL,
+                        params=params,
+                        headers=self._headers,
+                        timeout=self.timeout,
+                    )
+                    retry_after = self._record_http_response(resp)
                     if resp.status_code == 404:
                         return None
-                    if resp.status_code in (429, 502, 503, 504):
-                        EuropePMCClient._backoff_until = time.monotonic() + 60.0
-                        if resp.status_code == 503:
+                    if resp.status_code == 503:
+                        EuropePMCClient._backoff_until = time.monotonic() + 30.0
+                        return None
+                    if resp.status_code == 429:
+                        seen_429 += 1
+                        if seen_429 >= 2 or (retry_after is not None and retry_after > 3.0):
                             return None
+                        await asyncio.sleep(
+                            (retry_after or random.uniform(0.6, 1.2))
+                            + random.uniform(0.05, 0.25)
+                        )
                     if resp.status_code == 429 or resp.status_code >= 500:
                         if getattr(resp, "_request", None) is None:
                             resp._request = httpx.Request("GET", self.BASE_URL)
@@ -365,9 +379,11 @@ class EuropePMCClient(BaseScholarClient):
                         return None
                     return resp.json()
         except RetryError as exc:
+            self._record_transport_error(exc)
             logger.warning(f"EuropePMC retry exhausted: {exc}")
             return None
         except Exception as exc:  # noqa: BLE001
+            self._record_transport_error(exc)
             logger.warning(f"EuropePMC error: {exc}")
             return None
         return None
