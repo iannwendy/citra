@@ -2,7 +2,7 @@ import { useState, useEffect, useContext, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AuthContext } from '@/contexts/AuthContext';
-import { api } from '@/api/client';
+import { api, type GoogleLoginPayload } from '@/api/client';
 
 interface GoogleTokenResponse {
   access_token?: string;
@@ -98,9 +98,16 @@ function GoogleLogoIcon() {
 interface GoogleAuthButtonProps {
   onError: (msg: string) => void;
   disabled?: boolean;
+  beforeAuth?: () => boolean;
+  googlePayloadExtras?: Partial<GoogleLoginPayload>;
 }
 
-export function GoogleAuthButton({ onError, disabled = false }: GoogleAuthButtonProps) {
+export function GoogleAuthButton({
+  onError,
+  disabled = false,
+  beforeAuth,
+  googlePayloadExtras,
+}: GoogleAuthButtonProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const authContext = useContext(AuthContext);
@@ -158,10 +165,14 @@ export function GoogleAuthButton({ onError, disabled = false }: GoogleAuthButton
 
         verifyingBackendRef.current = true;
         try {
+          const payload: GoogleLoginPayload = {
+            access_token: response.access_token,
+            ...googlePayloadExtras,
+          };
           if (loginWithGoogle) {
-            await loginWithGoogle({ access_token: response.access_token });
+            await loginWithGoogle(payload);
           } else {
-            await api.googleLogin({ access_token: response.access_token });
+            await api.googleLogin(payload);
           }
           navigate('/dashboard');
         } catch (err) {
@@ -189,6 +200,9 @@ export function GoogleAuthButton({ onError, disabled = false }: GoogleAuthButton
   };
 
   const handleGoogleClick = async () => {
+    if (beforeAuth && !beforeAuth()) {
+      return;
+    }
     onError('');
     setGoogleLoading(true);
 

@@ -101,6 +101,13 @@ interface WrapperOptions {
   initialRoute?: string;
   /** Override QueryClient; default = fresh client with retries disabled */
   queryClient?: QueryClient;
+  /** Optional overrides for AuthContext methods (e.g. logout spy) */
+  authOverrides?: Partial<{
+    login: (username: string, password: string) => Promise<void>;
+    loginWithGoogle: (payload: import('@/api/client').GoogleLoginPayload) => Promise<void>;
+    logout: () => Promise<void>;
+    refreshUser: () => Promise<void>;
+  }>;
 }
 
 function makeWrapper(options: WrapperOptions = {}) {
@@ -120,6 +127,7 @@ function makeWrapper(options: WrapperOptions = {}) {
     },
     initialRoute = '/',
     queryClient = createTestQueryClient(),
+    authOverrides,
   } = options;
 
   return function Wrapper({ children }: { children: ReactNode }) {
@@ -138,6 +146,7 @@ function makeWrapper(options: WrapperOptions = {}) {
                   loginWithGoogle: async () => {},
                   logout: async () => {},
                   refreshUser: async () => {},
+                  ...authOverrides,
                 }}
               >
                 {children}
@@ -154,8 +163,8 @@ export function renderWithProviders(
   ui: ReactElement,
   options: WrapperOptions & RenderOptions = {},
 ) {
-  const { user, initialRoute, queryClient, ...renderOpts } = options;
-  const Wrapper = makeWrapper({ user, initialRoute, queryClient });
+  const { user, initialRoute, queryClient, authOverrides, ...renderOpts } = options;
+  const Wrapper = makeWrapper({ user, initialRoute, queryClient, authOverrides });
   return render(ui, { wrapper: Wrapper, ...renderOpts });
 }
 

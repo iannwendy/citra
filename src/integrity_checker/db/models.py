@@ -69,6 +69,9 @@ class User(Base):
     cancel_at_period_end: Mapped[bool] = mapped_column(Integer, default=0)
     monthly_uploads_used: Mapped[int] = mapped_column(Integer, default=0)
     quota_reset_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # v2.4 — Personal data protection consent proof (Luật 91/2025/QH15 & Nghị định 356/2025/NĐ-CP)
+    privacy_consented_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    privacy_policy_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     sessions: Mapped[list[Session]] = relationship(back_populates="user", cascade="all, delete-orphan")
     auth_tokens: Mapped[list[AuthToken]] = relationship(

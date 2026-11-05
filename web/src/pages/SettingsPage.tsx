@@ -3,7 +3,7 @@
  * Central configuration hub for user preferences
  */
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Settings,
@@ -24,6 +24,8 @@ import {
   Copy,
   Trash2,
   Plus,
+  AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import {
   api,
@@ -34,6 +36,7 @@ import {
 } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRole } from '@/hooks/useRole';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { getQuotaView } from '@/lib/quotaDisplay';
 import { useTheme, type Theme } from '@/contexts/ThemeContext';
@@ -65,15 +68,78 @@ const STORAGE_KEY_NOTIFICATIONS = 'settings_notifications';
 
 export function SettingsPage(): JSX.Element {
   const toast = useToast();
+  const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, logout } = useAuth();
   const { planTier, isBasic, quota, isAdmin } = useRole();
 
   const [subscription, setSubscription] = useState<SubscriptionSummary | null>(null);
   const [transactions, setTransactions] = useState<BillingTransactionItem[]>([]);
   const [billingLoading, setBillingLoading] = useState(false);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+
+  // Self-service account deletion & consent withdrawal (DLCN-03)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteConfirmUsername, setDeleteConfirmUsername] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const userHasPassword = user?.has_password !== false;
+  const deleteDialog = useModalA11y<HTMLDivElement>(
+    deleteModalOpen && Boolean(user),
+    () => setDeleteModalOpen(false),
+    { disableEscape: deletingAccount },
+  );
+
+  const handleDeleteMyAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || deletingAccount) return;
+    setDeleteError('');
+
+    if (userHasPassword) {
+      if (!deletePassword) {
+        setDeleteError(
+          i18n.language?.startsWith('vi')
+            ? 'Vui lòng nhập mật khẩu hiện tại để xác nhận.'
+            : 'Please enter your current password to confirm.',
+        );
+        return;
+      }
+    } else {
+      if (deleteConfirmUsername.trim() !== user.username) {
+        setDeleteError(
+          i18n.language?.startsWith('vi')
+            ? `Vui lòng nhập chính xác tên đăng nhập "${user.username}".`
+            : `Please type your exact username "${user.username}".`,
+        );
+        return;
+      }
+    }
+
+    setDeletingAccount(true);
+    try {
+      await api.deleteMyAccount(
+        userHasPassword
+          ? { current_password: deletePassword }
+          : { confirm_username: deleteConfirmUsername.trim() },
+      );
+      setDeleteModalOpen(false);
+      await logout();
+      navigate('/');
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error
+          ? err.message
+          : i18n.language?.startsWith('vi')
+            ? 'Không thể xóa tài khoản. Vui lòng kiểm tra lại thông tin xác nhận.'
+            : 'Could not delete account. Please check your confirmation input.',
+      );
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
 
   // Personal Developer API Keys (X-API-Key, Task 6.4)
   const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([]);
@@ -857,6 +923,100 @@ export function SettingsPage(): JSX.Element {
         </div>
       </div>
 
+      {/* Personal Data Protection & Account Deletion Section (DLCN-03) */}
+      <div
+        data-testid="settings-privacy-section"
+        className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
+      >
+        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
+            </div>
+            <Separator orientation="vertical" className="h-4" />
+            <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-slate-100">
+              {t('privacyCompliance.settingsSectionTitle')}
+            </h2>
+          </div>
+          <span className="text-[11px] font-mono text-slate-400">05</span>
+        </div>
+
+        <div className="p-6 space-y-5">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+            {t('privacyCompliance.settingsSectionSubtitle')}
+          </p>
+
+          <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/40 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                  {t('privacyCompliance.consentStatusLabel')}
+                </span>
+                {user?.privacy_consented_at ? (
+                  <Badge
+                    variant="outline"
+                    className="text-[11px] font-mono border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 bg-emerald-50/70 dark:bg-emerald-950/50"
+                  >
+                    {t('privacyCompliance.consentedBadge')} · v
+                    {user.privacy_policy_version || '1.0'}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[11px] font-mono">
+                    {t('privacyCompliance.legacyAccountBadge')}
+                  </Badge>
+                )}
+              </div>
+              {user?.privacy_consented_at && (
+                <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                  {new Date(user.privacy_consented_at).toLocaleString(
+                    currentLang === 'vi' ? 'vi-VN' : 'en-US',
+                  )}
+                </p>
+              )}
+            </div>
+
+            <Link
+              to="/privacy"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors shrink-0"
+            >
+              <span>{t('privacyCompliance.viewPolicyBtn')}</span>
+              <ExternalLink className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          <div className="rounded-xl border border-red-200/80 dark:border-red-900/50 bg-red-50/50 dark:bg-red-950/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-red-900 dark:text-red-200 flex items-center gap-1.5">
+                <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0" />
+                {t('privacyCompliance.deleteAccountZoneTitle')}
+              </h3>
+              <p className="text-xs text-red-800/90 dark:text-red-300/80 leading-relaxed">
+                {t('privacyCompliance.deleteAccountZoneDesc')}
+              </p>
+            </div>
+
+            <Button
+              type="button"
+              variant="destructive"
+              data-testid="settings-delete-account-btn"
+              onClick={() => {
+                setDeletePassword('');
+                setDeleteConfirmUsername('');
+                setDeleteError('');
+                setDeleteModalOpen(true);
+              }}
+              className="shrink-0 rounded-xl text-xs font-semibold cursor-pointer"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              {t('privacyCompliance.deleteAccountBtn')}
+            </Button>
+          </div>
+        </div>
+      </div>
+
       {/* About Section */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
@@ -872,7 +1032,7 @@ export function SettingsPage(): JSX.Element {
               {t('settings.about')}
             </h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400">05</span>
+          <span className="text-[11px] font-mono text-slate-400">06</span>
         </div>
 
         <div className="p-6 space-y-3">
@@ -883,6 +1043,108 @@ export function SettingsPage(): JSX.Element {
           />
         </div>
       </div>
+
+      {/* Self-service Account Deletion Confirmation Modal */}
+      {deleteModalOpen && user && (
+        <div
+          data-testid="delete-account-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 animate-[fadeIn_180ms_ease-out]"
+        >
+          <div
+            {...deleteDialog.dialogProps}
+            className="w-full max-w-md rounded-2xl border border-red-200 dark:border-red-900/60 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden outline-none animate-[scaleIn_220ms_cubic-bezier(0.22,1,0.36,1)]"
+          >
+            <div className="h-1.5 w-full bg-gradient-to-r from-red-600 via-red-500 to-amber-500" />
+            <form onSubmit={handleDeleteMyAccount} className="p-6 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-xl bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 shrink-0 animate-icon-pop">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3
+                    id={deleteDialog.titleId}
+                    className="font-display text-base font-bold text-slate-900 dark:text-slate-100"
+                  >
+                    {t('privacyCompliance.deleteModalTitle')}
+                  </h3>
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                    {t('privacyCompliance.deleteAccountZoneDesc')}
+                  </p>
+                </div>
+              </div>
+
+              {deleteError && (
+                <div className="rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/50 px-3 py-2 text-xs text-red-700 dark:text-red-300 font-medium animate-error-shake">
+                  {deleteError}
+                </div>
+              )}
+
+              {userHasPassword ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="delete-account-password" className="text-xs font-semibold">
+                    {t('privacyCompliance.deleteModalPasswordLabel')}
+                  </Label>
+                  <input
+                    id="delete-account-password"
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    placeholder={t('privacyCompliance.deleteModalPasswordPlaceholder')}
+                    data-testid="delete-account-password-input"
+                    autoComplete="current-password"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="delete-account-username" className="text-xs font-semibold">
+                    {t('privacyCompliance.deleteModalUsernameLabel', {
+                      username: user.username,
+                    })}
+                  </Label>
+                  <input
+                    id="delete-account-username"
+                    type="text"
+                    value={deleteConfirmUsername}
+                    onChange={(e) => setDeleteConfirmUsername(e.target.value)}
+                    placeholder={t('privacyCompliance.deleteModalUsernamePlaceholder')}
+                    data-testid="delete-account-username-input"
+                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={deletingAccount}
+                  onClick={() => setDeleteModalOpen(false)}
+                  className="rounded-xl text-xs"
+                >
+                  {t('privacyCompliance.deleteModalCancelBtn')}
+                </Button>
+                <Button
+                  type="submit"
+                  variant="destructive"
+                  disabled={deletingAccount}
+                  data-testid="delete-account-confirm-btn"
+                  className="rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  {deletingAccount ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                      <span>...</span>
+                    </>
+                  ) : (
+                    t('privacyCompliance.deleteModalConfirmBtn')
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       <ConfirmationModal
         isOpen={confirmCancelOpen}
         variant="danger"

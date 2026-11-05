@@ -14,6 +14,7 @@ import {
   Layers,
   GraduationCap,
   ArrowRight,
+  ShieldCheck,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useRole } from '@/hooks/useRole';
@@ -634,6 +635,30 @@ export function BatchUploadPage() {
             <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mb-3">
               {t('batchUpload.orClickBrowse')} · {t('batchUpload.pdfOnly')}
             </p>
+          </div>
+
+          {/* Author authorization & cross-border scholarly API notice (DLCN-02) */}
+          <div
+            data-testid="batch-upload-privacy-notice"
+            className="rounded-[14px] border border-amber-300/80 dark:border-amber-800/60 bg-amber-50/65 dark:bg-amber-950/25 px-4 py-3.5 flex items-start gap-3 font-solva-sans text-[12px] leading-[19px] text-amber-950 dark:text-amber-200 transition-colors"
+          >
+            <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] bg-white/90 dark:bg-amber-950/70 border border-amber-300/80 dark:border-amber-800 text-amber-700 dark:text-amber-300 shadow-2xs">
+              <ShieldCheck className="h-3.5 w-3.5" />
+            </span>
+            <div className="min-w-0">
+              <span className="font-semibold">
+                {t('privacyCompliance.batchNoticeTitle')}:{' '}
+              </span>
+              {t('privacyCompliance.batchNoticeBody')}{' '}
+              <Link
+                to="/privacy#third-parties"
+                className="inline-flex items-center gap-1 font-semibold underline underline-offset-3 hover:opacity-80 transition-opacity"
+              >
+                <span>{t('privacyCompliance.policyLinkLabel')}</span>
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+              .
+            </div>
           </div>
 
           {/* File List */}

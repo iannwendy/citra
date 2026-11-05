@@ -296,6 +296,7 @@ async def test_bug17_atomic_monthly_upload_quota_under_concurrency(tmp_path) -> 
                     "username": "batch_student",
                     "email": "batch_student@example.com",
                     "password": "Password123!",
+                    "privacy_consent": True,
                 },
             )
             assert reg.status_code in (200, 201), reg.text

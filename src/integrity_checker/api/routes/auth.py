@@ -234,6 +234,9 @@ HARDCODED_USER_FULL_NAMES = {
 }
 
 
+CURRENT_PRIVACY_POLICY_VERSION = "1.0"
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -244,6 +247,8 @@ class GoogleLoginRequest(BaseModel):
     access_token: str | None = None
     code: str | None = None
     redirect_uri: str | None = None
+    privacy_consent: bool | None = None
+    privacy_policy_version: str | None = Field(default=None, max_length=20)
 
 
 class GoogleConfigResponse(BaseModel):
@@ -263,6 +268,8 @@ class RegisterRequest(BaseModel):
     full_name: str | None = Field(default=None, max_length=120)
     institution: str | None = Field(default=None, max_length=255)
     lang: str = "vi"
+    privacy_consent: bool = False
+    privacy_policy_version: str | None = Field(default=None, max_length=20)
 
 
 class RegisterResponse(BaseModel):
@@ -333,6 +340,8 @@ class UserResponse(BaseModel):
     cancel_at_period_end: bool = False
     current_period_end: str | None = None
     quota: dict | None = None
+    privacy_consented_at: str | None = None
+    privacy_policy_version: str | None = None
 
 
 class MessageResponse(BaseModel):
@@ -423,6 +432,12 @@ def _to_response_dict(user: User) -> dict:
         "cancel_at_period_end": sub["cancel_at_period_end"],
         "current_period_end": sub["current_period_end"],
         "quota": sub["quota"],
+        "privacy_consented_at": (
+            user.privacy_consented_at.isoformat()
+            if getattr(user, "privacy_consented_at", None)
+            else None
+        ),
+        "privacy_policy_version": getattr(user, "privacy_policy_version", None),
     }
 
 
@@ -804,6 +819,11 @@ def google_login(
             updates["full_name"] = full_name[:120]
         if not user.avatar_path and picture and picture.startswith("https://"):
             updates["avatar_path"] = picture[:500]
+        if request.privacy_consent and not getattr(user, "privacy_consented_at", None):
+            updates["privacy_consented_at"] = datetime.now(UTC)
+            updates["privacy_policy_version"] = (
+                request.privacy_policy_version or CURRENT_PRIVACY_POLICY_VERSION
+            )[:20]
         if updates:
             user = repo.update_user(user.id, **updates) or user
 
@@ -830,6 +850,12 @@ def google_login(
         safe_picture = (
             picture[:500] if picture and picture.startswith("https://") else None
         )
+        consented_at = datetime.now(UTC) if request.privacy_consent else None
+        policy_ver = (
+            (request.privacy_policy_version or CURRENT_PRIVACY_POLICY_VERSION)[:20]
+            if request.privacy_consent
+            else None
+        )
         user = repo.create_user(
             username=username,
             password_hash=random_password_hash,
@@ -842,6 +868,8 @@ def google_login(
             google_id=google_id,
             auth_provider="google",
             username_customized=False,
+            privacy_consented_at=consented_at,
+            privacy_policy_version=policy_ver,
         )
         # Issue a 24-hour initial password setup token and email the link to the user's Google email
         setup_expires = datetime.now(UTC) + timedelta(hours=24)
@@ -874,6 +902,12 @@ def register(
     db=Depends(get_db),
 ):
     """Self-register a new account (creates inactive user and sends HTML activation email)."""
+    if not request.privacy_consent:
+        raise HTTPException(
+            status_code=400,
+            detail="PRIVACY_CONSENT_REQUIRED: You must agree to the Personal Data Protection Policy before creating an account.",
+        )
+
     username = request.username.strip()
     if not _is_valid_username_format(username):
         raise HTTPException(
@@ -893,6 +927,9 @@ def register(
     password_hash = _hash_password(request.password)
     full_name = request.full_name.strip() if request.full_name else None
     institution = request.institution.strip() if request.institution else None
+    policy_version = (
+        request.privacy_policy_version or CURRENT_PRIVACY_POLICY_VERSION
+    ).strip()[:20]
 
     user = repo.create_user(
         username=username,
@@ -903,6 +940,8 @@ def register(
         institution=institution,
         is_active=False,
         email_verified=False,
+        privacy_consented_at=datetime.now(UTC),
+        privacy_policy_version=policy_version,
     )
 
     settings = get_settings()

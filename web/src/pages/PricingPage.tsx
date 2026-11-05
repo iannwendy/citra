@@ -2221,6 +2221,13 @@ function PricingSolvaFooter({ lang }: { lang: Lang }) {
         { label: lang === 'vi' ? 'Đăng nhập' : 'Sign in', to: '/login' },
         { label: lang === 'vi' ? 'Tạo tài khoản' : 'Create account', to: '/register' },
         { label: lang === 'vi' ? 'Câu hỏi thường gặp' : 'Billing FAQ', href: '#pricing-faq' },
+        {
+          label:
+            lang === 'vi'
+              ? 'Chính sách bảo vệ dữ liệu'
+              : 'Personal Data Policy',
+          to: '/privacy',
+        },
       ],
     },
   ];

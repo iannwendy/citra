@@ -759,7 +759,7 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     expect(screen.getByTestId('sidebar-quota-text').textContent).toBe('2 / 50');
   });
 
-  it('ProcessingPage renders 15+ source retrieval tiles, 30 symbolic rules label, and clean telemetry message for Student/Ultra users', async () => {
+  it('ProcessingPage renders clean step telemetry and omits federated source retrieval tiles', async () => {
     vi.spyOn(api, 'getEssayStatus').mockResolvedValue({
       status: 'processing',
       step: 'comparing',
@@ -792,19 +792,30 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('federated-source-retrieval-card')).toBeDefined();
+      expect(
+        screen.getByText(/Compared 42 source hits across 5 databases/i),
+      ).toBeDefined();
     });
 
-    expect(
-      screen.getByText(/Compared 42 source hits across 5 databases/i),
-    ).toBeDefined();
     expect(screen.getByText('15+ INDEXES')).toBeDefined();
     expect(screen.getByText('30 SYMBOLIC RULES')).toBeDefined();
-    expect(screen.getByText('Local ACL FTS5 (128K+)')).toBeDefined();
-    expect(screen.getByText('IETF RFC / PyPI / NPM / GitHub')).toBeDefined();
-    expect(screen.getByText('Wikidata / OpenCitations')).toBeDefined();
-    expect(screen.getByText('Seminal Whitelist')).toBeDefined();
+    expect(screen.queryByTestId('federated-source-retrieval-card')).toBeNull();
+    expect(screen.queryByText('Local ACL FTS5 (128K+)')).toBeNull();
+    expect(screen.queryByText('Seminal Whitelist')).toBeNull();
     expect(document.body.textContent).not.toContain('интерактив');
+  });
+
+  it('UploadPage omits internal pipeline summary text and 3-step architecture cards for all roles', async () => {
+    vi.spyOn(api, 'listEnrolledClasses').mockResolvedValue([]);
+
+    renderWithAuth(<UploadPage />, {
+      user: createMockUser({ plan_tier: 'pro', role: 'teacher' }),
+    });
+
+    expect(screen.queryByText(/Pipeline:\s*(PDF\/DOCX|Bóc tách PDF\/DOCX)/i)).toBeNull();
+    expect(screen.queryByText(/STEP 01/i)).toBeNull();
+    expect(screen.queryByText(/STEP 02/i)).toBeNull();
+    expect(screen.queryByText(/STEP 03/i)).toBeNull();
   });
 
   it('SandboxPage LiveCitationSandbox samples random ACL papers, injects defense suite, edits metadata, and generates full PDF manuscript', async () => {

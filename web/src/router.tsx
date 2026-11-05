@@ -84,6 +84,7 @@ const PricingPage = lazyWithRetry(() => import('./pages/PricingPage').then((m) =
 const StripeDemoCheckoutPage = lazyWithRetry(() => import('./pages/StripeDemoCheckoutPage').then((m) => ({ default: m.StripeDemoCheckoutPage })));
 const BillingSuccessPage = lazyWithRetry(() => import('./pages/BillingSuccessPage').then((m) => ({ default: m.BillingSuccessPage })));
 const SharedReportPage = lazyWithRetry(() => import('./pages/SharedReportPage').then((m) => ({ default: m.SharedReportPage })));
+const PrivacyPolicyPage = lazyWithRetry(() => import('./pages/PrivacyPolicyPage').then((m) => ({ default: m.PrivacyPolicyPage })));
 
 // Route-level ErrorBoundary that overrides React Router's raw "Unexpected Application Error!"
 // screen and automatically recovers from stale dynamic import chunk errors after deployments.
@@ -194,6 +195,7 @@ const PAGE_TITLE_ROUTES: Array<{ pattern: string; title: string }> = [
   { pattern: '/admin/audit', title: 'Audit Log' },
   { pattern: '/settings', title: 'Settings' },
   { pattern: '/pricing', title: 'Pricing & Plans' },
+  { pattern: '/privacy', title: 'Privacy Policy' },
   { pattern: '/billing/checkout', title: 'Stripe Checkout' },
   { pattern: '/billing/success', title: 'Payment Confirmed' },
   { pattern: '/teacher/classes', title: 'My Classes' },
@@ -289,6 +291,10 @@ export const router = createBrowserRouter([
       {
         path: '/pricing',
         element: <HybridPricingRoute />,
+      },
+      {
+        path: '/privacy',
+        element: withSuspense(PrivacyPolicyPage),
       },
       {
         path: '/verify/share/:token',

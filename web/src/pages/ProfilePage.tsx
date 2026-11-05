@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Save,
@@ -588,6 +589,47 @@ export function ProfilePage() {
               )}
             </div>
           </form>
+        </div>
+      </div>
+
+      {/* Personal Data Rights & Account Deletion IDE Container (DLCN-03) */}
+      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
+            </div>
+            <Separator orientation="vertical" className="h-4" />
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <h2 className="font-display text-sm font-semibold text-slate-900 dark:text-slate-100">
+              {t('privacyCompliance.settingsSectionTitle')}
+            </h2>
+          </div>
+          <span className="text-[11px] font-mono text-slate-400">
+            personal_data.rights
+          </span>
+        </div>
+
+        <div className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed max-w-xl">
+            {t('privacyCompliance.settingsSectionSubtitle')}
+          </p>
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <Link
+              to="/privacy"
+              className="inline-flex items-center px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-950/60 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              {t('privacyCompliance.policyLinkLabel')}
+            </Link>
+            <Link
+              to="/settings"
+              className="inline-flex items-center px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-2xs transition-colors"
+            >
+              {t('privacyCompliance.deleteAccountBtn')}
+            </Link>
+          </div>
         </div>
       </div>
     </div>

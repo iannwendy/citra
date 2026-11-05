@@ -62,6 +62,8 @@ describe('Auth Pages (Register, Activate, Forgot & Reset Password)', () => {
       { target: { value: 'Pass12345' } },
     );
 
+    fireEvent.click(screen.getByTestId('register-privacy-consent-checkbox'));
+
     fireEvent.click(
       screen.getByRole('button', { name: /create account|đăng ký tài khoản/i }),
     );

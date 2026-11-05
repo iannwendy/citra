@@ -266,6 +266,16 @@ def _run_inline_migrations(engine: Engine) -> None:
                 "ALTER TABLE users ADD COLUMN quota_reset_at DATETIME"
             )
 
+        # --- users (v2.4 — Personal data protection consent proof) ---
+        if "privacy_consented_at" not in user_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE users ADD COLUMN privacy_consented_at DATETIME"
+            )
+        if "privacy_policy_version" not in user_cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE users ADD COLUMN privacy_policy_version VARCHAR(20)"
+            )
+
         # --- billing_transactions (v2.4 — Promo Code & Multi-Payment Method fields) ---
         bt_cols = _col_names("billing_transactions")
         if bt_cols:

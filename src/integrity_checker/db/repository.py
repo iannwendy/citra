@@ -561,6 +561,8 @@ class Repository:
         auth_provider: str = "local",
         avatar_path: str | None = None,
         username_customized: bool | None = None,
+        privacy_consented_at: datetime | None = None,
+        privacy_policy_version: str | None = None,
     ) -> User:
         if can_override_verdicts is None:
             can_override_verdicts = role in ("admin", "teacher")
@@ -583,6 +585,8 @@ class Repository:
             auth_provider=auth_provider,
             username_customized=1 if username_customized else 0,
             google_onboarded=1 if username_customized else 0,
+            privacy_consented_at=privacy_consented_at,
+            privacy_policy_version=privacy_policy_version,
         )
         self.session.add(user)
         self.session.flush()
@@ -599,6 +603,8 @@ class Repository:
             "current_period_end",
             "stripe_subscription_id",
             "google_id",
+            "privacy_consented_at",
+            "privacy_policy_version",
         }
         for key, value in kwargs.items():
             if value is None and key not in nullable_fields:
@@ -890,18 +896,74 @@ class Repository:
             self.session.flush()
 
     def delete_user(self, user_id: int) -> bool:
+        from integrity_checker.api.progress import get_tracker
+        from integrity_checker.api.routes import essays as essays_routes
+        from integrity_checker.api.services.avatar_service import get_avatar_service
+
         user = self.session.get(User, user_id)
         if not user:
             return False
-        # Clean up classes taught by this user and detach essay references
+
+        # Best-effort cleanup of local avatar file
+        if user.avatar_path:
+            get_avatar_service().delete(user.avatar_path)
+
+        # 1. Purge all essays owned by this user + child verdicts/citations/audit_logs + uploaded files
+        essay_ids = [
+            row[0]
+            for row in self.session.query(EssayRecord.id)
+            .filter(EssayRecord.user_id == user_id)
+            .all()
+        ]
+        if essay_ids:
+            verdict_ids = [
+                row[0]
+                for row in self.session.query(VerdictRecord.id)
+                .filter(VerdictRecord.essay_id.in_(essay_ids))
+                .all()
+            ]
+            if verdict_ids:
+                self.session.query(AuditLog).filter(
+                    AuditLog.verdict_id.in_(verdict_ids)
+                ).delete(synchronize_session=False)
+            self.session.query(VerdictRecord).filter(
+                VerdictRecord.essay_id.in_(essay_ids)
+            ).delete(synchronize_session=False)
+            self.session.query(CitationRecord).filter(
+                CitationRecord.essay_id.in_(essay_ids)
+            ).delete(synchronize_session=False)
+            self.session.query(EssayRecord).filter(
+                EssayRecord.id.in_(essay_ids)
+            ).delete(synchronize_session=False)
+
+            tracker = get_tracker()
+            for eid in essay_ids:
+                tracker.clear(eid)
+                for ext in essays_routes.ALLOWED_UPLOAD_EXTENSIONS:
+                    persisted = essays_routes.UPLOADS_DIR / f"{eid}{ext}"
+                    try:
+                        persisted.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+
+        # 2. Clean up classes taught by this user while preserving students' own essays
         for cls in self.list_classes_for_teacher(user_id):
             self.session.query(EssayRecord).filter(EssayRecord.class_id == cls.id).update(
                 {EssayRecord.class_id: None}, synchronize_session=False
             )
+            self.session.query(ClassMembership).filter(
+                ClassMembership.class_id == cls.id
+            ).delete(synchronize_session=False)
             self.session.delete(cls)
-        self.session.query(EssayRecord).filter(EssayRecord.user_id == user_id).update(
-            {EssayRecord.user_id: None}, synchronize_session=False
+
+        # 3. Clean up promo redemptions / creator links (SQLite does not enforce FK cascade by default)
+        self.session.query(PromoRedemption).filter(
+            PromoRedemption.user_id == user_id
+        ).delete(synchronize_session=False)
+        self.session.query(PromoCode).filter(PromoCode.created_by == user_id).update(
+            {PromoCode.created_by: None}, synchronize_session=False
         )
+
         self.session.delete(user)
         self.session.flush()
         return True

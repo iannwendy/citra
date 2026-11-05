@@ -18,8 +18,10 @@ import {
   KeyRound,
   Building2,
   BadgeCheck,
+  Check,
   CheckCircle2,
   RefreshCw,
+  ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,6 +47,8 @@ export function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [privacyConsent, setPrivacyConsent] = useState(false);
+  const [consentShake, setConsentShake] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -94,6 +98,13 @@ export function RegisterPage() {
       return;
     }
 
+    if (!privacyConsent) {
+      setError(t('privacyCompliance.consentRequiredError'));
+      setConsentShake(false);
+      window.requestAnimationFrame(() => setConsentShake(true));
+      return;
+    }
+
     setLoading(true);
     try {
       const resp = await api.register({
@@ -103,6 +114,8 @@ export function RegisterPage() {
         full_name: fullName.trim() || undefined,
         institution: institution.trim() || undefined,
         lang,
+        privacy_consent: true,
+        privacy_policy_version: '1.0',
       });
       setRegisteredEmail(resp.email);
       setCooldown(60);
@@ -475,6 +488,66 @@ export function RegisterPage() {
                   confirmPassword={confirmPassword}
                 />
 
+                {/* Explicit Personal Data Protection Consent (Luật 91/2025/QH15 & NĐ 356/2025/NĐ-CP) */}
+                <div
+                  style={{
+                    backgroundColor: privacyConsent
+                      ? undefined
+                      : 'var(--solva-surface)',
+                    borderColor: privacyConsent
+                      ? undefined
+                      : 'var(--solva-border)',
+                  }}
+                  className={`rounded-[12px] border p-3.5 transition-all duration-200 ${
+                    privacyConsent
+                      ? 'bg-emerald-50/75 dark:bg-emerald-950/35 border-emerald-300/90 dark:border-emerald-800/80'
+                      : ''
+                  } ${consentShake ? 'animate-error-shake border-red-400 dark:border-red-700' : ''}`}
+                >
+                  <label className="flex items-start gap-3 cursor-pointer select-none group">
+                    <span className="relative mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={privacyConsent}
+                        onChange={(e) => {
+                          setPrivacyConsent(e.target.checked);
+                          setConsentShake(false);
+                          if (e.target.checked && error) setError('');
+                        }}
+                        data-testid="register-privacy-consent-checkbox"
+                        className="peer sr-only"
+                      />
+                      <span
+                        className={`flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border transition-all duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-[#1C1A15] dark:peer-focus-visible:ring-[#FBFAF6] ${
+                          privacyConsent
+                            ? 'bg-[#1C1A15] border-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:border-[#FBFAF6] dark:text-[#1C1A15]'
+                            : 'bg-white dark:bg-[#141310] border-[#D4CFC3] dark:border-[#3F3A30] group-hover:border-[#1C1A15] dark:group-hover:border-[#FBFAF6]'
+                        }`}
+                      >
+                        {privacyConsent && (
+                          <Check className="h-3 w-3 stroke-[2.75] animate-icon-pop" />
+                        )}
+                      </span>
+                    </span>
+                    <span className="font-solva-sans text-[12px] leading-[18.5px] text-[#56524A] dark:text-[#A8A296]">
+                      <span className="inline-flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-[#1C1A15] dark:text-[#FBFAF6] mr-1.5">
+                        <ShieldCheck className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span>91/2025/QH15</span>
+                      </span>
+                      {t('privacyCompliance.consentCheckboxPrefix')}
+                      <Link
+                        to="/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-[#1C1A15] dark:text-[#FBFAF6] underline underline-offset-3 decoration-[#1C1A15]/40 dark:decoration-[#FBFAF6]/40 hover:opacity-80 transition-opacity"
+                      >
+                        {t('privacyCompliance.policyLinkLabel')}
+                      </Link>
+                      {t('privacyCompliance.consentCheckboxSuffix')}
+                    </span>
+                  </label>
+                </div>
+
                 <Button
                   type="submit"
                   disabled={loading}
@@ -495,7 +568,23 @@ export function RegisterPage() {
                 </Button>
               </form>
 
-              <GoogleAuthButton onError={setError} disabled={loading} />
+              <GoogleAuthButton
+                onError={setError}
+                disabled={loading}
+                beforeAuth={() => {
+                  if (!privacyConsent) {
+                    setError(t('privacyCompliance.consentRequiredError'));
+                    setConsentShake(false);
+                    window.requestAnimationFrame(() => setConsentShake(true));
+                    return false;
+                  }
+                  return true;
+                }}
+                googlePayloadExtras={{
+                  privacy_consent: true,
+                  privacy_policy_version: '1.0',
+                }}
+              />
 
               <div className="mt-5 pt-4 border-t border-slate-200/70 dark:border-slate-800/70 text-center text-xs sm:text-sm text-slate-600 dark:text-slate-400">
                 <span>{t('auth.alreadyHaveAccount')} </span>

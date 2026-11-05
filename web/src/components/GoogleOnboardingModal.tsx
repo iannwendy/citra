@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Sparkles,
   Lock,
   Mail,
+  Check,
   CheckCircle2,
+  ShieldCheck,
   AlertCircle,
   Loader2,
   X,
@@ -19,7 +21,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useModalA11y } from '@/hooks/useModalA11y';
 
 export function GoogleOnboardingModal() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const location = useLocation();
   const { user, refreshUser } = useAuth();
@@ -28,27 +30,32 @@ export function GoogleOnboardingModal() {
   const [username, setUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [privacyConsent, setPrivacyConsent] = useState(false);
+  const [consentShake, setConsentShake] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [error, setError] = useState('');
   const [emailSentMsg, setEmailSentMsg] = useState('');
+
+  const requiresPrivacyConsent = Boolean(user && !user.privacy_consented_at);
 
   useEffect(() => {
     if (!user?.needs_onboarding) {
       setOpen(false);
       return;
     }
-    // Don't cover the Profile page if the user navigated there directly to edit
-    if (location.pathname === '/profile') {
+    // Don't cover the Profile or Privacy Policy page
+    if (location.pathname === '/profile' || location.pathname === '/privacy') {
       setOpen(false);
       return;
     }
     const dismissKey = `google_onboarding_dismissed_${user.id}`;
-    if (sessionStorage.getItem(dismissKey) === '1') {
+    if (sessionStorage.getItem(dismissKey) === '1' && user.privacy_consented_at) {
       setOpen(false);
       return;
     }
     setUsername(user.username || '');
+    setPrivacyConsent(Boolean(user.privacy_consented_at));
     setOpen(true);
   }, [user, location.pathname]);
 
@@ -123,11 +130,21 @@ export function GoogleOnboardingModal() {
       }
     }
 
+    if (requiresPrivacyConsent && !privacyConsent) {
+      setError(t('privacyCompliance.consentRequiredError'));
+      setConsentShake(false);
+      window.requestAnimationFrame(() => setConsentShake(true));
+      return;
+    }
+
     setSaving(true);
     try {
       await api.updateMe({
         username: trimmedUsername,
         complete_onboarding: true,
+        ...(requiresPrivacyConsent || privacyConsent
+          ? { privacy_consent: true, privacy_policy_version: '1.0' }
+          : {}),
       });
       if (newPassword) {
         await api.changeMyPassword({
@@ -298,6 +315,59 @@ export function GoogleOnboardingModal() {
                   : `If left blank, you can still set a password anytime on your Profile page or via the link sent to ${user.email}.`}
               </p>
             </div>
+
+            {requiresPrivacyConsent && (
+              <div
+                className={`rounded-[12px] border p-3.5 transition-all duration-200 ${
+                  privacyConsent
+                    ? 'bg-emerald-50/75 dark:bg-emerald-950/35 border-emerald-300/90 dark:border-emerald-800/80'
+                    : 'bg-[#F4F2EC]/80 dark:bg-[#1E1C17]/80 border-[#E7E3D9] dark:border-[#332F26]'
+                } ${consentShake ? 'animate-error-shake border-red-400 dark:border-red-700' : ''}`}
+              >
+                <label className="flex items-start gap-3 cursor-pointer select-none group">
+                  <span className="relative mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={privacyConsent}
+                      onChange={(e) => {
+                        setPrivacyConsent(e.target.checked);
+                        setConsentShake(false);
+                        if (e.target.checked && error) setError('');
+                      }}
+                      data-testid="onboarding-privacy-consent-checkbox"
+                      className="peer sr-only"
+                    />
+                    <span
+                      className={`flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border transition-all duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-[#1C1A15] dark:peer-focus-visible:ring-[#FBFAF6] ${
+                        privacyConsent
+                          ? 'bg-[#1C1A15] border-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:border-[#FBFAF6] dark:text-[#1C1A15]'
+                          : 'bg-white dark:bg-[#141310] border-[#D4CFC3] dark:border-[#3F3A30] group-hover:border-[#1C1A15] dark:group-hover:border-[#FBFAF6]'
+                      }`}
+                    >
+                      {privacyConsent && (
+                        <Check className="h-3 w-3 stroke-[2.75] animate-icon-pop" />
+                      )}
+                    </span>
+                  </span>
+                  <span className="font-solva-sans text-[12px] leading-[18.5px] text-[#56524A] dark:text-[#A8A296]">
+                    <span className="inline-flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-[#1C1A15] dark:text-[#FBFAF6] mr-1.5">
+                      <ShieldCheck className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>91/2025/QH15</span>
+                    </span>
+                    {t('privacyCompliance.consentCheckboxPrefix')}
+                    <Link
+                      to="/privacy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-[#1C1A15] dark:text-[#FBFAF6] underline underline-offset-3 decoration-[#1C1A15]/40 dark:decoration-[#FBFAF6]/40 hover:opacity-80 transition-opacity"
+                    >
+                      {t('privacyCompliance.policyLinkLabel')}
+                    </Link>
+                    {t('privacyCompliance.consentCheckboxSuffix')}
+                  </span>
+                </label>
+              </div>
+            )}
 
             <div className="flex items-center justify-end gap-2.5 pt-2">
               <Button

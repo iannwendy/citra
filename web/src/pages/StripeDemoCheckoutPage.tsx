@@ -244,7 +244,7 @@ const BILLING_COUNTRIES = [
 ];
 
 export function StripeDemoCheckoutPage() {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { refreshUser } = useAuth();
@@ -1767,6 +1767,32 @@ export function StripeDemoCheckoutPage() {
                 </Button>
               </div>
             )}
+
+            {/* Sensitive Payment Data Notice (DLCN-02, Luật 91/2025/QH15 & NĐ 356/2025/NĐ-CP) */}
+            <div
+              data-testid="checkout-sensitive-data-notice"
+              className="rounded-[14px] border border-[#E7E3D9] dark:border-[#332F26] bg-[#F4F2EC]/85 dark:bg-[#1E1C17]/80 p-3.5 flex items-start gap-3 font-solva-sans text-[11.5px] leading-[18px] text-[#56524A] dark:text-[#A8A296]"
+            >
+              <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] bg-white dark:bg-[#141310] border border-[#E7E3D9] dark:border-[#332F26] text-[#1C1A15] dark:text-[#FBFAF6] shadow-2xs">
+                <Lock className="h-3.5 w-3.5" />
+              </span>
+              <div className="min-w-0">
+                <span className="font-medium text-[#1C1A15] dark:text-[#FBFAF6]">
+                  {t('privacyCompliance.checkoutSensitiveTitle')}:{' '}
+                </span>
+                {t('privacyCompliance.checkoutSensitiveBody')}{' '}
+                <Link
+                  to="/privacy#sensitive-data"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-medium text-[#1C1A15] dark:text-[#FBFAF6] underline underline-offset-3 decoration-[#1C1A15]/40 dark:decoration-[#FBFAF6]/40 hover:opacity-75 transition-opacity"
+                >
+                  <span>{t('privacyCompliance.policyLinkLabel')}</span>
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+                .
+              </div>
+            </div>
 
             <p className="text-[11px] text-center text-slate-500 flex items-center justify-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />

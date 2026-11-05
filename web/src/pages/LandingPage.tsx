@@ -4462,6 +4462,13 @@ function SolvaFooter({ lang }: { lang: Lang }) {
         { label: lang === 'vi' ? 'Đăng nhập' : 'Sign in', to: '/login' },
         { label: lang === 'vi' ? 'Đăng ký tài khoản' : 'Create account', to: '/register' },
         { label: lang === 'vi' ? 'Câu hỏi thường gặp' : 'FAQ', href: '#faq' },
+        {
+          label:
+            lang === 'vi'
+              ? 'Chính sách bảo vệ dữ liệu'
+              : 'Personal Data Policy',
+          to: '/privacy',
+        },
       ],
     },
   ];

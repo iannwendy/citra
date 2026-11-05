@@ -15,6 +15,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from integrity_checker.api.deps import get_current_user, get_db, require_admin
 from integrity_checker.api.routes.auth import (
+    CURRENT_PRIVACY_POLICY_VERSION,
     _create_token,
     _dispatch_email_task,
     _ensure_utc,
@@ -70,6 +71,15 @@ class UserSelfUpdate(BaseModel):
     email: EmailStr | None = None
     full_name: str | None = Field(default=None, max_length=120)
     complete_onboarding: bool | None = None
+    privacy_consent: bool | None = None
+    privacy_policy_version: str | None = Field(default=None, max_length=20)
+
+
+class DeleteMyAccountRequest(BaseModel):
+    """Confirmation payload for self-service account deletion & consent withdrawal."""
+
+    current_password: str | None = None
+    confirm_username: str | None = None
 
 
 class PasswordChange(BaseModel):
@@ -110,6 +120,8 @@ class UserResponse(BaseModel):
     cancel_at_period_end: bool = False
     current_period_end: str | None = None
     quota: dict | None = None
+    privacy_consented_at: str | None = None
+    privacy_policy_version: str | None = None
 
 
 class MessageResponse(BaseModel):
@@ -155,6 +167,12 @@ def _to_response(user: User) -> UserResponse:
         cancel_at_period_end=sub["cancel_at_period_end"],
         current_period_end=sub["current_period_end"],
         quota=sub["quota"],
+        privacy_consented_at=(
+            user.privacy_consented_at.isoformat()
+            if getattr(user, "privacy_consented_at", None)
+            else None
+        ),
+        privacy_policy_version=getattr(user, "privacy_policy_version", None),
     )
 
 
@@ -329,6 +347,59 @@ def update_user(
     return _to_response(user)
 
 
+@router.delete("/me", response_model=MessageResponse)
+def delete_my_account(
+    request: DeleteMyAccountRequest | None = None,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+):
+    """Self-service account deletion & consent withdrawal (Luật 91/2025/QH15, NĐ 356/2025/NĐ-CP).
+
+    NOTE: Registered BEFORE ``DELETE /{user_id}`` so FastAPI matches ``/me`` as a
+    literal segment instead of parsing ``"me"`` as an integer ``user_id``.
+    """
+    repo = Repository(db)
+
+    if current_user.role == "admin":
+        active_admins = [
+            u for u in repo.get_all_users() if u.role == "admin" and u.is_active
+        ]
+        if len(active_admins) <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete the last active admin account.",
+            )
+
+    provider = getattr(current_user, "auth_provider", None) or "local"
+    has_password = "local" in provider
+    body = request or DeleteMyAccountRequest()
+
+    if has_password:
+        if not body.current_password or not _verify_password(
+            body.current_password, current_user.password_hash
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Current password is incorrect.",
+            )
+    else:
+        confirmed = (body.confirm_username or "").strip()
+        if not confirmed or confirmed != current_user.username:
+            raise HTTPException(
+                status_code=400,
+                detail="Please enter your exact username to confirm account deletion.",
+            )
+
+    repo.delete_user_sessions(current_user.id)
+    success = repo.delete_user(current_user.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="User not found")
+    repo.commit()
+    return MessageResponse(
+        message="Your account and personal data have been permanently deleted."
+    )
+
+
 @router.delete("/{user_id}", response_model=MessageResponse)
 def delete_user(
     user_id: int,
@@ -405,6 +476,17 @@ def update_me(
     if request.complete_onboarding:
         update_data["username_customized"] = True
         update_data["google_onboarded"] = True
+
+    if request.privacy_consent is False:
+        raise HTTPException(
+            status_code=400,
+            detail="PRIVACY_CONSENT_REQUIRED: Privacy policy consent is required.",
+        )
+    if request.privacy_consent is True:
+        update_data["privacy_consented_at"] = datetime.now(UTC)
+        update_data["privacy_policy_version"] = (
+            request.privacy_policy_version or CURRENT_PRIVACY_POLICY_VERSION
+        ).strip()[:20]
 
     email_changed_to: str | None = None
     if request.email is not None:

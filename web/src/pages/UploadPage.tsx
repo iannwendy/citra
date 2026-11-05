@@ -6,9 +6,6 @@ import {
   X,
   Loader2,
   AlertCircle,
-  Quote,
-  Database,
-  GitBranch,
   Layers,
   CheckCircle2,
   ArrowRight,
@@ -16,16 +13,12 @@ import {
   GraduationCap,
   KeyRound,
   FlaskConical,
+  Globe,
 } from 'lucide-react';
 import { api, type Class } from '../api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRole } from '@/hooks/useRole';
 import { getQuotaView } from '@/lib/quotaDisplay';
-import {
-  SCHOLARLY_APIS_LABEL,
-  SYMBOLIC_RULES_COUNT,
-  SYMBOLIC_RULES_RANGE,
-} from '@/lib/productFacts';
 import { useToast } from '@/contexts/ToastContext';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
@@ -222,33 +215,6 @@ export function UploadPage() {
       }
     }
   };
-
-  const pipelinePillars = [
-    {
-      step: '01',
-      icon: Quote,
-      title: t('auth.featureExtraction'),
-      desc: t('auth.featureExtractionDesc'),
-      tag: 'GROBID TEI-XML',
-      tone: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
-    },
-    {
-      step: '02',
-      icon: Database,
-      title: t('auth.featureRetrieval'),
-      desc: t('auth.featureRetrievalDesc'),
-      tag: `${SCHOLARLY_APIS_LABEL} Scholarly APIs`,
-      tone: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
-    },
-    {
-      step: '03',
-      icon: GitBranch,
-      title: t('auth.featureVerification'),
-      desc: t('auth.featureVerificationDesc'),
-      tag: `Rules ${SYMBOLIC_RULES_RANGE} · CIS`,
-      tone: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
-    },
-  ];
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-8">
@@ -570,14 +536,32 @@ export function UploadPage() {
             </Alert>
           )}
 
-          {/* Action Bar */}
-          <div className="mt-6 pt-5 border-t border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-xs font-mono text-slate-500 dark:text-slate-400 min-w-0">
-              {lang === 'vi'
-                ? `Pipeline: Bóc tách PDF/DOCX → ${SCHOLARLY_APIS_LABEL} CSDL Học thuật → ${SYMBOLIC_RULES_COUNT} Luật Neuro-Symbolic`
-                : `Pipeline: PDF/DOCX Extraction → ${SCHOLARLY_APIS_LABEL} Scholarly Indexes → ${SYMBOLIC_RULES_COUNT} Symbolic Rules`}
+          {/* Cross-border scholarly API & data processing notice (DLCN-02) */}
+          <div
+            data-testid="upload-privacy-notice"
+            className="mt-4 rounded-[14px] border border-[#E7E3D9] dark:border-[#332F26] bg-[#F4F2EC]/80 dark:bg-[#1E1C17]/75 px-4 py-3 flex items-start gap-3 font-solva-sans text-[12px] leading-[19px] text-[#56524A] dark:text-[#A8A296] transition-colors"
+          >
+            <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] bg-white dark:bg-[#141310] border border-[#E7E3D9] dark:border-[#332F26] text-[#1C1A15] dark:text-[#FBFAF6] shadow-2xs">
+              <Globe className="h-3.5 w-3.5" />
+            </span>
+            <div className="min-w-0">
+              <span className="font-medium text-[#1C1A15] dark:text-[#FBFAF6]">
+                {t('privacyCompliance.uploadNoticeTitle')}:{' '}
+              </span>
+              {t('privacyCompliance.uploadNoticeBody')}{' '}
+              <Link
+                to="/privacy#third-parties"
+                className="inline-flex items-center gap-1 font-medium text-[#1C1A15] dark:text-[#FBFAF6] underline underline-offset-3 decoration-[#1C1A15]/40 dark:decoration-[#FBFAF6]/40 hover:opacity-75 transition-opacity"
+              >
+                <span>{t('privacyCompliance.policyLinkLabel')}</span>
+                <ArrowRight className="h-3 w-3" />
+              </Link>
+              .
             </div>
+          </div>
 
+          {/* Action Bar */}
+          <div className="mt-6 pt-5 border-t border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row items-center sm:justify-end gap-4">
             <Button
               size="lg"
               onClick={handleUpload}
@@ -599,38 +583,6 @@ export function UploadPage() {
           </div>
         </div>
       </Card>
-
-      {/* 3-Step Verification Pipeline Architecture Strip (Teacher / Admin only) */}
-      {!isUser && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {pipelinePillars.map((pillar) => {
-            const Icon = pillar.icon;
-            return (
-              <Card
-                key={pillar.step}
-                className="p-4 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <div className={`p-2 rounded-xl border ${pillar.tone}`}>
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      STEP {pillar.step} · {pillar.tag}
-                    </span>
-                  </div>
-                  <h3 className="font-display font-bold text-sm text-slate-900 dark:text-white">
-                    {pillar.title}
-                  </h3>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-                    {pillar.desc}
-                  </p>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      )}
 
       <UpgradeModal
         open={upgradeModalOpen}

@@ -921,6 +921,8 @@ export interface User {
   cancel_at_period_end?: boolean;
   current_period_end?: string | null;
   quota?: UserQuota | null;
+  privacy_consented_at?: string | null;
+  privacy_policy_version?: string | null;
 }
 
 export interface GoogleConfigResponse {
@@ -933,6 +935,8 @@ export interface GoogleLoginPayload {
   access_token?: string;
   code?: string;
   redirect_uri?: string;
+  privacy_consent?: boolean;
+  privacy_policy_version?: string;
 }
 
 export interface UserCreate {
@@ -962,6 +966,13 @@ export interface UserSelfUpdate {
   email?: string | null;
   full_name?: string | null;
   complete_onboarding?: boolean | null;
+  privacy_consent?: boolean | null;
+  privacy_policy_version?: string | null;
+}
+
+export interface DeleteMyAccountPayload {
+  current_password?: string;
+  confirm_username?: string;
 }
 
 export interface PasswordChange {
@@ -976,6 +987,8 @@ export interface RegisterPayload {
   full_name?: string;
   institution?: string;
   lang?: string;
+  privacy_consent?: boolean;
+  privacy_policy_version?: string;
 }
 
 export interface RegisterResponse {
@@ -1226,6 +1239,12 @@ export const api = {
   updateMe: (data: UserSelfUpdate) =>
     request<User>('/users/me', {
       method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  deleteMyAccount: (data: DeleteMyAccountPayload) =>
+    request<{ message: string }>('/users/me', {
+      method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),

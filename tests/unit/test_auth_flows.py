@@ -50,6 +50,7 @@ class TestRegisterAndActivateFlow:
                 "full_name": "Nguyễn Bảo Minh",
                 "institution": "Ton Duc Thang University",
                 "lang": "vi",
+                "privacy_consent": True,
             },
         )
         assert resp.status_code == 200, resp.text
@@ -113,6 +114,7 @@ class TestRegisterAndActivateFlow:
                 "username": "bad user space",
                 "email": "a@example.com",
                 "password": "password123",
+                "privacy_consent": True,
             },
         )
         assert bad_user.status_code == 400
@@ -124,6 +126,7 @@ class TestRegisterAndActivateFlow:
                 "username": "scholar1",
                 "email": "scholar1@example.com",
                 "password": "password123",
+                "privacy_consent": True,
             },
         )
         assert ok.status_code == 200
@@ -135,6 +138,7 @@ class TestRegisterAndActivateFlow:
                 "username": "scholar1",
                 "email": "other@example.com",
                 "password": "password123",
+                "privacy_consent": True,
             },
         )
         assert dup_u.status_code == 400
@@ -147,6 +151,7 @@ class TestRegisterAndActivateFlow:
                 "username": "scholar2",
                 "email": "SCHOLAR1@EXAMPLE.COM",
                 "password": "password123",
+                "privacy_consent": True,
             },
         )
         assert dup_e.status_code == 400
@@ -162,6 +167,7 @@ class TestRegisterAndActivateFlow:
                 "username": "resend_user",
                 "email": "resend@example.com",
                 "password": "password123",
+                "privacy_consent": True,
             },
         )
         first_token = email_svc.outbox[-1].token
@@ -208,6 +214,7 @@ class TestRegisterAndActivateFlow:
                 "username": "exp_user",
                 "email": "exp@example.com",
                 "password": "password123",
+                "privacy_consent": True,
             },
         )
         tok = email_svc.outbox[-1].token
@@ -239,6 +246,7 @@ class TestForgotPasswordAndResetFlow:
                 "email": "lan@example.com",
                 "password": "OldPassword123",
                 "full_name": "PGS.TS Nguyễn Thị Lan",
+                "privacy_consent": True,
             },
         )
         act_tok = email_svc.outbox[-1].token
@@ -529,6 +537,7 @@ class TestGoogleOAuthFlow:
                 "username": "custom_handle",
                 "email": "linked@tdtu.edu.vn",
                 "password": "LocalPassword123",
+                "privacy_consent": True,
             },
         )
         assert reg.status_code == 200
@@ -815,6 +824,7 @@ class TestAmbiguousAndAdversarialAuthEdgeCases:
                 "username": "Scholar_Alpha",
                 "email": "alpha1@tdtu.edu.vn",
                 "password": "SafePassword123!",
+                "privacy_consent": True,
             },
         )
         assert reg.status_code == 200
@@ -828,6 +838,7 @@ class TestAmbiguousAndAdversarialAuthEdgeCases:
                 "username": "scholar_alpha",
                 "email": "alpha2@tdtu.edu.vn",
                 "password": "SafePassword123!",
+                "privacy_consent": True,
             },
         )
         assert dup_lower.status_code == 400
@@ -839,6 +850,7 @@ class TestAmbiguousAndAdversarialAuthEdgeCases:
                 "username": "SCHOLAR_ALPHA",
                 "email": "alpha3@tdtu.edu.vn",
                 "password": "SafePassword123!",
+                "privacy_consent": True,
             },
         )
         assert dup_upper.status_code == 400
@@ -895,6 +907,7 @@ class TestAmbiguousAndAdversarialAuthEdgeCases:
                     "username": reserved,
                     "email": f"{reserved.lower()}@tdtu.edu.vn",
                     "password": "SafePassword123!",
+                    "privacy_consent": True,
                 },
             )
             assert r.status_code == 400, f"Reserved username {reserved} should be blocked"
@@ -977,6 +990,7 @@ class TestAmbiguousAndAdversarialAuthEdgeCases:
                     "username": bad,
                     "email": "valid_test@tdtu.edu.vn",
                     "password": "SafePassword123!",
+                    "privacy_consent": True,
                 },
             )
             assert reg_r.status_code in (400, 422), f"Expected {bad!r} to fail registration"
@@ -1020,6 +1034,7 @@ class TestAmbiguousAndAdversarialAuthEdgeCases:
                     "username": "pw_tester",
                     "email": "pw_tester@tdtu.edu.vn",
                     "password": bad_pw,
+                    "privacy_consent": True,
                 },
             )
             assert r_reg.status_code == 400, f"Expected 400 on register for {bad_pw!r}, got {r_reg.status_code}"
