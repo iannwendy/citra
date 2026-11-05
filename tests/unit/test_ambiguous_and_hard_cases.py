@@ -557,7 +557,7 @@ class TestCaseGroupDNeuroSymbolicBorderlineAndChimericCases:
         """Preprint arXiv DOI (10.48550/arXiv.*) vs published venue DOI is not treated as a DOI conflict when title & authors match."""
         rules = SymbolicRules()
         cand = SourceCandidate(
-            source_name="semantic_scholar",
+            source_name="dblp",
             found=True,
             title="Deep Residual Learning for Image Recognition",
             authors=["Kaiming He", "Xiangyu Zhang", "Shaoqing Ren", "Jian Sun"],
@@ -568,8 +568,8 @@ class TestCaseGroupDNeuroSymbolicBorderlineAndChimericCases:
         source = SourceResult(
             citation_raw="He, K., et al. (2015). Deep Residual Learning for Image Recognition. https://doi.org/10.48550/arXiv.1512.03385",
             candidates=[cand],
-            sources_queried=["semantic_scholar"],
-            sources_succeeded=["semantic_scholar"],
+            sources_queried=["dblp"],
+            sources_succeeded=["dblp"],
         )
         features = MatchFeatures(
             title_sim_fuzzy=0.98,

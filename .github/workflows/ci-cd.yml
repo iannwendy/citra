@@ -139,6 +139,8 @@ jobs:
           GCE_HOST: ${{ secrets.GCE_HOST }}
           GCE_USER: ${{ secrets.GCE_USER }}
           GCE_SSH_PRIVATE_KEY: ${{ secrets.GCE_SSH_PRIVATE_KEY }}
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+          SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
         run: |
           echo "Deploying CITRA commit ${{ github.sha }} to https://citra.io.vn..."
           if [ -z "$GCE_SSH_PRIVATE_KEY" ] || [ -z "$GCE_HOST" ] || [ -z "$GCE_USER" ]; then
@@ -150,6 +152,25 @@ jobs:
           printf '%s\n' "$GCE_SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$GCE_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          if [ -n "$SERPER_API_KEY" ]; then
+            printf '%s' "$SERPER_API_KEY" | ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$GCE_USER@$GCE_HOST" '
+              VAL=$(cat)
+              if [ -f /opt/citra/.env ]; then
+                sudo sed -i "/^SERPER_API_KEY=/d;/^S2_API_KEY=/d;/^COREAPI_API_KEY=/d" /opt/citra/.env
+                printf "\nSERPER_API_KEY=%s\n" "$VAL" | sudo tee -a /opt/citra/.env >/dev/null
+              fi
+            '
+          fi
+          if [ -n "$SERPAPI_API_KEY" ]; then
+            printf '%s' "$SERPAPI_API_KEY" | ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$GCE_USER@$GCE_HOST" '
+              VAL=$(cat)
+              if [ -f /opt/citra/.env ] && ! grep -q "^SERPAPI_API_KEY=." /opt/citra/.env 2>/dev/null; then
+                sudo sed -i "/^SERPAPI_API_KEY=/d" /opt/citra/.env
+                printf "\nSERPAPI_API_KEY=%s\n" "$VAL" | sudo tee -a /opt/citra/.env >/dev/null
+              fi
+            '
+          fi
 
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$GCE_USER@$GCE_HOST" '
             set -e
@@ -165,7 +186,7 @@ jobs:
             sudo chown -R 1000:1000 /opt/citra/data
             sudo chmod -R ug+rwX /opt/citra/data
             if [ -f /opt/citra/.env ] && ! grep -q "^GOOGLE_CLIENT_ID=" /opt/citra/.env 2>/dev/null; then
-              printf '\nGOOGLE_CLIENT_ID=429053368516-7uia3j5uavajvbkhd7hq6lih9a65n22u.apps.googleusercontent.com\n' | sudo tee -a /opt/citra/.env >/dev/null
+              printf "\nGOOGLE_CLIENT_ID=429053368516-7uia3j5uavajvbkhd7hq6lih9a65n22u.apps.googleusercontent.com\n" | sudo tee -a /opt/citra/.env >/dev/null
             fi
 
             echo ">>> [3/4] Building and rolling out updated containers (grobid, api & web)..."

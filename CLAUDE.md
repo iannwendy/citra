@@ -74,10 +74,11 @@ essay-integrity-checker/
    - **Europe PMC REST API** — PubMed/MEDLINE, biomedical, clinical, psychology & life sciences
    - **Hugging Face Hub API (`HuggingFaceClient`)** — AI/NLP models, datasets (e.g., `vinai/phobert-base`) & Daily Papers
    - **IETF Datatracker RFC & PyPI JSON API (`TechStandardClient`)** — Technical RFC standards (`RFC 2616`, `RFC 9110`) & Python software packages
-3. **Tier 2 (Global DOI RA & Fallback):**
+3. **Tier 2 / Tier 3 (Global DOI RA, Knowledge Graph & Google Scholar Fallback Router):**
    - **Global DOI Registration Agency & Content Negotiation (`DoiRaClient`)** — Verifies regional DOIs across JaLC (Japan), CNKI/istic (China), mEDRA (EU), KISTI (Korea), Airiti (Taiwan) via `doi.org/doiRA/{doi}` and `application/vnd.citationstyles.csl+json`, or confirms non-existent DOIs (`NOT_EXIST`)
-   - **SerpAPI (Google Scholar)** when primary tiers return no high-confidence match (with snippet abstract extraction)
-4. **Cross-Source Abstract Enrichment (`_enrich_missing_abstract`):** Automatically enriches missing abstracts across `OpenAlex` (DOI + title-mirror fallback), `DataCite`, `Europe PMC`, `NCBI Entrez / bioRxiv`, `DOAJ`, `arXiv`, `Semantic Scholar`, `CORE`, and `OpenLibrary/Google Books`, persisting enriched abstracts back to `data/local_papers.db`.
+   - **Wikidata Knowledge Graph & OpenCitations (`WikidataOpenCitationsClient`)** — Free fallback for international standards (ISO/NIST/IEEE/OWASP/WCAG), clinical manuals (DSM-5/ICD-11), and open citations
+   - **Google Scholar Fallback Router (`GoogleScholarFallbackClient` / `SerpApiClient`)** — Async `httpx.AsyncClient` primary lookup via **Serper.dev (`/scholar`)** (`SERPER_API_KEY`, 2,500 free queries) with automatic circuit-breaker failover to **SerpApi (`google_scholar`)** (`SERPAPI_API_KEY`) when primary tiers return no match (`source_name="serpapi"`)
+4. **Cross-Source Abstract Enrichment (`_enrich_missing_abstract`):** Automatically enriches missing abstracts across `OpenAlex` (DOI + title-mirror fallback), `DataCite`, `Europe PMC`, `NCBI Entrez / bioRxiv`, `DOAJ`, `OpenAIRE/HAL`, `Hugging Face`, `arXiv`, and `OpenLibrary/Google Books`, persisting enriched abstracts back to `data/local_papers.db`.
 5. **Active Link, DOI & Wayback Machine Validator (`LinkValidator`):** Asynchronous `HEAD`/`GET` reachability checks for URLs and DOIs (`R-DEAD-LINK`, `R-URL-UNREACHABLE`), paired with **Internet Archive Wayback Machine Availability API (`archive.org/wayback/available`)** fallback to distinguish Link Rot (`LinkStatus.ARCHIVED_ALIVE` + `R-WAYBACK-ARCHIVED` + `archive_url`) from AI-fabricated dead URLs (`LinkStatus.DEAD_LINK`).
 6. **Retraction Watch Guardrail (`R-RETRACTED-PAPER`):** Automatically flags retracted papers (`is_retracted=True`) as `METADATA_ERROR` with `retracted_paper` mismatch warning, preventing retracted studies from being marked `VERIFIED`.
 

@@ -505,7 +505,6 @@ async def test_bug_20_local_db_rejects_partial_title_or_wrong_author_and_queries
     orchestrator = RetrievalOrchestrator(
         crossref=mock_crossref,
         openalex=mock_openalex,
-        semantic_scholar=_make_empty_client("semantic_scholar"),
         europepmc=_make_empty_client("europepmc"),
         dblp=_make_empty_client("dblp"),
         arxiv=_make_empty_client("arxiv"),

@@ -157,7 +157,7 @@ class CitationVerdict:
 
     # NEW v1.3: Provenance tracking
     sources_succeeded: list[str] = field(default_factory=list)  # e.g. ["crossref", "openalex"]
-    sources_failed: dict[str, str] = field(default_factory=dict)  # e.g. {"semantic_scholar": "429 Too Many Requests"}
+    sources_failed: dict[str, str] = field(default_factory=dict)  # e.g. {"dblp": "429 Too Many Requests"}
     api_exhausted: bool = False  # True if all external APIs failed
     used_local_db: bool = False  # True if result came from local database
     style_penalty: float = 0.0

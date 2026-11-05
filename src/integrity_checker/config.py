@@ -296,10 +296,8 @@ class SourceToggleConfig(BaseModel):
     tech_standard: bool = True
     wikidata_opencitations: bool = True
     wayback_fallback: bool = True
-    serpapi: bool = True  # Fallback khi các API free gặp lỗi mạng/timeout
-    serpapi_quota_guard: bool = True  # Chặn đốt quota SerpAPI khi >=3 API free trả về HTTP 200 rỗng
-    semantic_scholar: bool = False  # Replaced by DBLP/arXiv/OpenLibrary/EuropePMC
-    coreapi: bool = False  # Replaced by DBLP/arXiv/OpenLibrary/EuropePMC
+    serpapi: bool = True  # Google Scholar Fallback Router (Serper.dev -> SerpApi)
+    serpapi_quota_guard: bool = True  # Chặn đốt quota Scholar khi >=3 API free trả về HTTP 200 rỗng
 
 
 class RateLimitsConfig(BaseModel):
@@ -331,11 +329,10 @@ class RateLimitsConfig(BaseModel):
     tech_standard_per_sec: float = 5.0
     # Wikidata Knowledge Graph & OpenCitations API (5 req/s)
     wikidata_opencitations_per_sec: float = 5.0
-    # SerpApi: conservative fallback (rate limit depends on subscription)
+    # Serper.dev Google Scholar primary fallback (5 req/s)
+    serper_per_sec: float = 5.0
+    # SerpApi Google Scholar secondary fallback (rate limit depends on subscription)
     serpapi_per_sec: float = 1.0
-    # Legacy sources (disabled by default)
-    semantic_scholar_per_sec: float = 1.0
-    coreapi_per_sec: float = 0.5
 
 
 class RetryBackoffConfig(BaseModel):
@@ -451,7 +448,7 @@ class DisclaimerConfig(BaseModel):
         "Hệ thống này chỉ hỗ trợ giảng viên rà soát tính toàn vẹn trích dẫn "
         "trong tiểu luận. Hai lớp kết quả (đối chiếu in-text ↔ reference entry "
         "và độ tin cậy nguồn) đều là gợi ý dựa trên bằng chứng từ các cơ sở dữ "
-        "liệu học thuật công khai (Crossref, OpenAlex, Semantic Scholar, CORE) "
+        "liệu học thuật công khai (Crossref, OpenAlex, DBLP, arXiv) "
         "và quy luật Neuro-Symbolic có thể giải thích. Kết luận "
         "`SUSPECTED_HALLUCINATION` chỉ là suspect — không đồng nghĩa nguồn bị "
         "bịa. Giảng viên là người ra quyết định cuối cùng. Hệ thống KHÔNG tự động "
@@ -495,9 +492,8 @@ class Settings(BaseSettings):
 
     # Env override
     contact_email: str = "noreply@citra.edu.vn"
-    s2_api_key: str = ""
-    serpapi_api_key: str = ""  # SerpApi API key (SERPAPI_API_KEY)
-    coreapi_api_key: str = ""  # CORE API key (COREAPI_API_KEY)
+    serper_api_key: str = ""  # Serper.dev Google Scholar primary fallback key (SERPER_API_KEY)
+    serpapi_api_key: str = ""  # SerpApi Google Scholar secondary fallback key (SERPAPI_API_KEY)
     config_file: Path | None = None
 
     model_config = SettingsConfigDict(
@@ -566,12 +562,10 @@ class Settings(BaseSettings):
             self.retrieval.contact_email = os.environ["CONTACT_EMAIL"]
         elif self.contact_email and self.contact_email != "noreply@citra.edu.vn":
             self.retrieval.contact_email = self.contact_email
-        if os.getenv("S2_API_KEY"):
-            self.s2_api_key = os.environ["S2_API_KEY"]
+        if os.getenv("SERPER_API_KEY"):
+            self.serper_api_key = os.environ["SERPER_API_KEY"]
         if os.getenv("SERPAPI_API_KEY"):
             self.serpapi_api_key = os.environ["SERPAPI_API_KEY"]
-        if os.getenv("COREAPI_API_KEY"):
-            self.coreapi_api_key = os.environ["COREAPI_API_KEY"]
 
         is_explicit_prod = self.app.env.strip().lower() in ("production", "prod", "live")
         if is_test_runtime():

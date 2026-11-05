@@ -2,7 +2,8 @@
 
 Bao gồm:
 - BaseScholarClient (abstract)
-- CrossrefClient, OpenAlexClient, SemanticScholarClient, CoreAPIClient
+- CrossrefClient, OpenAlexClient, DBLPClient, ArxivClient, OpenLibraryClient, EuropePMCClient, etc.
+- GoogleScholarFallbackClient / SerpApiClient (Serper.dev -> SerpApi Google Scholar fallback router)
 - RetrievalOrchestrator (gộp kết quả)
 - RateLimiter (async-safe token bucket)
 - LocalDatabase (SQLite với FTS5)
@@ -10,7 +11,6 @@ Bao gồm:
 
 from integrity_checker.retrieval.arxiv_client import ArxivClient
 from integrity_checker.retrieval.base import BaseScholarClient
-from integrity_checker.retrieval.coreapi_client import CoreAPIClient
 from integrity_checker.retrieval.crossref_client import CrossrefClient
 from integrity_checker.retrieval.datacite_client import DataCiteClient
 from integrity_checker.retrieval.dblp_client import DBLPClient
@@ -24,26 +24,26 @@ from integrity_checker.retrieval.openalex_client import OpenAlexClient
 from integrity_checker.retrieval.openlibrary_client import OpenLibraryClient
 from integrity_checker.retrieval.rate_limiter import RateLimiter
 from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
-from integrity_checker.retrieval.semantic_scholar_client import SemanticScholarClient
+from integrity_checker.retrieval.serpapi_client import GoogleScholarFallbackClient, SerpApiClient
 from integrity_checker.retrieval.tech_standard_client import TechStandardClient
 from integrity_checker.retrieval.wikidata_opencitations_client import WikidataOpenCitationsClient
 
 __all__ = [
     "ArxivClient",
     "BaseScholarClient",
-    "CoreAPIClient",
     "CrossrefClient",
     "DataCiteClient",
     "DBLPClient",
     "DOAJClient",
     "DoiRaClient",
     "EuropePMCClient",
+    "GoogleScholarFallbackClient",
     "HuggingFaceClient",
     "NcbiBiorxivClient",
     "OpenAIREHalClient",
     "OpenAlexClient",
     "OpenLibraryClient",
-    "SemanticScholarClient",
+    "SerpApiClient",
     "TechStandardClient",
     "WikidataOpenCitationsClient",
     "RetrievalOrchestrator",

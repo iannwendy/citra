@@ -42,7 +42,7 @@ class TestAnalyzeConsensus:
         r = _result(
             _cand("crossref", doi="10.1234/abc"),
             _cand("openalex", doi="10.1234/abc"),
-            _cand("semantic_scholar", doi="10.1234/abc"),
+            _cand("dblp", doi="10.1234/abc"),
         )
         breakdown = analyze_consensus(r)
         assert breakdown.independent_source_count == 3
@@ -115,7 +115,7 @@ class TestStrongestConsensus:
         r = _result(
             _cand("crossref", doi="10.1234/abc"),
             _cand("openalex", doi="10.1234/abc"),
-            _cand("semantic_scholar", doi="10.5678/xyz"),
+            _cand("dblp", doi="10.5678/xyz"),
         )
         breakdown = analyze_consensus(r)
         # 2 sources agree on 'abc', 1 on 'xyz' → strongest = (2, doi:10.1234/abc)
@@ -130,7 +130,7 @@ class TestShortcuts:
         r = _result(
             _cand("crossref", doi="10.1234/abc"),
             _cand("openalex", doi="10.1234/abc"),
-            _cand("semantic_scholar", doi="10.1234/abc"),
+            _cand("dblp", doi="10.1234/abc"),
         )
         assert best_consensus_score(r) == 3
 
@@ -139,7 +139,7 @@ class TestShortcuts:
             _cand("crossref", doi="10.1234/abc"),
             _cand("crossref", doi="10.5678/xyz"),  # same source, different doi
             _cand("openalex", doi="10.1234/abc"),
-            _cand("semantic_scholar", found=False),
+            _cand("dblp", found=False),
         )
         sources = get_all_unique_sources(r)
         assert sources == {"crossref", "openalex"}

@@ -13,7 +13,7 @@ def test_no_candidate_no_api_success_returns_unresolved() -> None:
     source = SourceResult(
         citation_raw="test",
         candidates=[],
-        sources_queried=["crossref", "openalex", "semantic_scholar", "coreapi"],
+        sources_queried=["crossref", "openalex", "dblp", "datacite"],
         sources_succeeded=[],
         sources_failed={},
     )
@@ -274,13 +274,13 @@ def test_substantive_citation_no_scholarly_record_returns_suspected_hallucinatio
     source = SourceResult(
         citation_raw=raw,
         candidates=[],
-        sources_queried=["crossref", "openalex", "semantic_scholar", "coreapi"],
+        sources_queried=["crossref", "openalex", "dblp", "datacite"],
         sources_succeeded=[],
         sources_failed={
             "crossref": "Crossref: no results for 'Quantum Neural Networks'",
             "openalex": "OpenAlex: no results for 'Quantum Neural Networks'",
-            "semantic_scholar": "S2: no title match (0.21) for 'Quantum Neural Networks'",
-            "coreapi": "CoreAPI: no results for 'Quantum Neural Networks'",
+            "dblp": "DBLP: no title match (0.21) for 'Quantum Neural Networks'",
+            "datacite": "DataCite: no results for 'Quantum Neural Networks'",
         },
     )
     outcome = rules.apply(
@@ -302,12 +302,12 @@ def test_nonexistent_doi_no_candidates_returns_suspected_hallucination() -> None
     source = SourceResult(
         citation_raw=raw,
         candidates=[],
-        sources_queried=["crossref", "openalex", "semantic_scholar"],
+        sources_queried=["crossref", "openalex", "dblp"],
         sources_succeeded=[],
         sources_failed={
             "crossref": "Crossref: no results for 'Hyperbolic Graph Transformers'",
             "openalex": "OpenAlex: no results for 'Hyperbolic Graph Transformers'",
-            "semantic_scholar": "S2: no results for 'Hyperbolic Graph Transformers'",
+            "dblp": "DBLP: no results for 'Hyperbolic Graph Transformers'",
         },
     )
     outcome = rules.apply(

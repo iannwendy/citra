@@ -42,25 +42,28 @@ async def test_api_result_is_synced_then_reused_from_local_db(tmp_path) -> None:
         title="New API Paper",
         authors=["Roe, John"],
         year="2021",
+        abstract="We introduce a new API paper with full abstract metadata.",
         confidence=0.9,
     )
 
     first_clients = [
         _client("crossref", api_candidate),
         _client("openalex", SourceCandidate(source_name="openalex", found=False, error="not found")),
-        _client(
-            "semantic_scholar",
-            SourceCandidate(source_name="semantic_scholar", found=False, error="not found"),
-        ),
-        _client("coreapi", SourceCandidate(source_name="coreapi", found=False, error="not used")),
+        _client("dblp", SourceCandidate(source_name="dblp", found=False, error="not found")),
+        _client("arxiv", SourceCandidate(source_name="arxiv", found=False, error="not found")),
+        _client("openlibrary", SourceCandidate(source_name="openlibrary", found=False, error="not found")),
+        _client("europepmc", SourceCandidate(source_name="europepmc", found=False, error="not found")),
     ]
     first = RetrievalOrchestrator(
         crossref=first_clients[0],
         openalex=first_clients[1],
-        semantic_scholar=first_clients[2],
-        coreapi=first_clients[3],
+        dblp=first_clients[2],
+        arxiv=first_clients[3],
+        openlibrary=first_clients[4],
+        europepmc=first_clients[5],
         local_db=db,
         use_local_db=True,
+        enable_link_validation=False,
         parallel=True,
     )
     first_result = await first.retrieve(citation)
@@ -69,14 +72,20 @@ async def test_api_result_is_synced_then_reused_from_local_db(tmp_path) -> None:
     assert db.find_by_doi("https://doi.org/10.5555/new-api-paper") is not None
     assert first_clients[0].lookup.await_count == 1
 
-    second_clients = [_client(name) for name in ("crossref", "openalex", "semantic_scholar", "coreapi")]
+    second_clients = [
+        _client(name)
+        for name in ("crossref", "openalex", "dblp", "arxiv", "openlibrary", "europepmc")
+    ]
     second = RetrievalOrchestrator(
         crossref=second_clients[0],
         openalex=second_clients[1],
-        semantic_scholar=second_clients[2],
-        coreapi=second_clients[3],
+        dblp=second_clients[2],
+        arxiv=second_clients[3],
+        openlibrary=second_clients[4],
+        europepmc=second_clients[5],
         local_db=db,
         use_local_db=True,
+        enable_link_validation=False,
         parallel=True,
     )
     second_result = await second.retrieve(
@@ -103,17 +112,24 @@ async def test_existing_doi_in_local_db_skips_all_external_clients(tmp_path) -> 
             authors=["Doe, Jane"],
             year=2020,
             venue="Test Journal",
+            abstract="Verified paper abstract stored in local SQLite FTS5 database.",
         )
     )
 
-    clients = [_client(name) for name in ("crossref", "openalex", "semantic_scholar", "coreapi")]
+    clients = [
+        _client(name)
+        for name in ("crossref", "openalex", "dblp", "arxiv", "openlibrary", "europepmc")
+    ]
     orchestrator = RetrievalOrchestrator(
         crossref=clients[0],
         openalex=clients[1],
-        semantic_scholar=clients[2],
-        coreapi=clients[3],
+        dblp=clients[2],
+        arxiv=clients[3],
+        openlibrary=clients[4],
+        europepmc=clients[5],
         local_db=db,
         use_local_db=True,
+        enable_link_validation=False,
         parallel=True,
     )
     result = await orchestrator.retrieve(

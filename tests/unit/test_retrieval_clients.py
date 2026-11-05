@@ -1,4 +1,4 @@
-"""Unit tests cho 4 retrieval HTTP clients (Crossref, OpenAlex, S2, CoreAPI).
+"""Unit tests cho core retrieval HTTP clients (Crossref, OpenAlex).
 
 Mock HTTP responses via httpx.MockTransport để tránh gọi API thật.
 Reference: v1.2 §3.6 — tuần 8.
@@ -13,10 +13,8 @@ import pytest
 
 from integrity_checker.matching.author_parser import Author
 from integrity_checker.models.citation import Citation
-from integrity_checker.retrieval.coreapi_client import CoreAPIClient
 from integrity_checker.retrieval.crossref_client import CrossrefClient
 from integrity_checker.retrieval.openalex_client import OpenAlexClient
-from integrity_checker.retrieval.semantic_scholar_client import SemanticScholarClient
 
 # ---------- Mock helpers ----------
 
@@ -236,237 +234,6 @@ class TestOpenAlexClient:
 
 
 # ============================================================
-# Semantic Scholar tests
-# ============================================================
-
-class TestSemanticScholarClient:
-    """Test SemanticScholarClient với mocked HTTP."""
-
-    @pytest.fixture
-    def client(self):
-        return SemanticScholarClient(api_key="test-key")
-
-    @pytest.mark.asyncio
-    async def test_lookup_by_doi(self, client):
-        """DOI exact lookup qua /paper/DOI:{doi}."""
-        def handler(request: httpx.Request) -> httpx.Response:
-            assert "/paper/DOI:10.1234/abc" in str(request.url)
-            assert request.headers.get("x-api-key") == "test-key"
-            return httpx.Response(
-                200,
-                json={
-                    "paperId": "abc123",
-                    "title": "A study of X",
-                    "authors": [{"name": "John Smith"}],
-                    "year": 2020,
-                    "venue": "Journal A",
-                    "externalIds": {"DOI": "10.1234/abc"},
-                    "url": "https://semanticscholar.org/paper/abc123",
-                },
-            )
-
-        with _patch_httpx(handler):
-            cit = _make_citation(doi="10.1234/abc")
-            result = await client.lookup(cit)
-
-        assert result.found is True
-        assert result.confidence == 1.0
-        assert result.doi == "10.1234/abc"
-        assert result.external_ids.get("DOI") == "10.1234/abc"
-
-    def test_extract_arxiv_id_from_url(self, client):
-        """arXiv ID extraction từ URL, DOI, và raw_text."""
-        assert client._extract_arxiv_id(_make_citation(
-            url="https://arxiv.org/abs/2106.12345"
-        )) == "2106.12345"
-        # Version suffix stripped
-        assert client._extract_arxiv_id(_make_citation(
-            url="https://arxiv.org/abs/2106.12345v2"
-        )) == "2106.12345"
-        # pdf URL
-        assert client._extract_arxiv_id(_make_citation(
-            url="https://arxiv.org/pdf/2106.12345.pdf"
-        )) == "2106.12345"
-        # DataCite arXiv DOI
-        assert client._extract_arxiv_id(_make_citation(
-            doi="10.48550/arXiv.1706.03762"
-        )) == "1706.03762"
-        # raw_text with arXiv ID
-        assert client._extract_arxiv_id(_make_citation(
-            raw_text="Devlin et al. (2019). BERT. arXiv:1810.04805."
-        )) == "1810.04805"
-        # No arXiv
-        assert client._extract_arxiv_id(_make_citation(
-            url="https://example.com/paper"
-        )) is None
-
-    @pytest.mark.asyncio
-    async def test_arxiv_doi_uses_arxiv_endpoint_directly(self, client):
-        """10.48550/arXiv.* DOI skips /paper/DOI: and calls /paper/ARXIV:{id}."""
-        called_urls: list[str] = []
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            called_urls.append(str(request.url))
-            assert "/paper/ARXIV:1706.03762" in str(request.url)
-            return httpx.Response(
-                200,
-                json={
-                    "paperId": "204e3073870fae3d05bcbc2f6a8e263d9b72e776",
-                    "title": "Attention is All you Need",
-                    "authors": [{"name": "Ashish Vaswani"}],
-                    "year": 2017,
-                    "venue": "Neural Information Processing Systems",
-                    "externalIds": {"ArXiv": "1706.03762"},
-                    "url": "https://www.semanticscholar.org/paper/204e3073870fae3d05bcbc2f6a8e263d9b72e776",
-                },
-            )
-
-        with _patch_httpx(handler):
-            cit = _make_citation(
-                doi="10.48550/arXiv.1706.03762",
-                title="Attention Is All You Need",
-            )
-            result = await client.lookup(cit)
-
-        assert len(called_urls) == 1
-        assert result.found is True
-        assert result.confidence == 1.0
-        assert result.doi == "10.48550/arxiv.1706.03762"
-        assert result.external_ids.get("arxiv") == "1706.03762"
-
-
-# ============================================================
-# CoreAPI tests
-# ============================================================
-
-class TestCoreAPIClient:
-    """Test CoreAPIClient với mocked HTTP."""
-
-    @pytest.fixture
-    def client(self):
-        return CoreAPIClient(api_key="test-key", contact_email="test@example.com")
-
-    @pytest.mark.asyncio
-    async def test_lookup_by_doi_success(self, client):
-        """DOI exact lookup trả về candidate với confidence=1.0."""
-        def handler(request: httpx.Request) -> httpx.Response:
-            url_str = str(request.url)
-            assert "/search/works/" in url_str
-            # doi: gets URL-encoded as doi%3A in the query string
-            assert "doi%3A" in url_str or "doi:" in url_str
-            return httpx.Response(
-                200,
-                json={
-                    "totalHits": 1,
-                    "results": [
-                        {
-                            "id": 148303725,
-                            "title": "Attention Is All You Need",
-                            "doi": "10.48550/arXiv.1706.03762",
-                            "authors": [{"name": "Vaswani"}],
-                            "yearPublished": 2017,
-                            "journals": [{"title": "NeurIPS"}],
-                            "downloadUrl": "https://arxiv.org/abs/1706.03762",
-                        }
-                    ],
-                },
-            )
-
-        with _patch_httpx(handler):
-            cit = _make_citation(doi="10.48550/arXiv.1706.03762")
-            result = await client.lookup(cit)
-
-        assert result.found is True
-        assert result.confidence == 1.0
-        assert result.title == "Attention Is All You Need"
-        assert result.year == "2017"
-        assert result.venue == "NeurIPS"
-
-    @pytest.mark.asyncio
-    async def test_lookup_by_title(self, client):
-        """Title search fallback."""
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(
-                200,
-                json={
-                    "totalHits": 1,
-                    "results": [
-                        {
-                            "title": "BERT: Pre-training of Deep Bidirectional Transformers",
-                            "doi": "10.48550/arXiv.1810.04805",
-                            "authors": [{"name": "Devlin"}],
-                            "yearPublished": 2018,
-                        }
-                    ],
-                },
-            )
-
-        with _patch_httpx(handler):
-            cit = _make_citation(title="BERT Pre-training")
-            result = await client.lookup(cit)
-
-        assert result.found is True
-        assert result.confidence == 0.7  # Search match
-
-    @pytest.mark.asyncio
-    async def test_lookup_by_title_rejects_unrelated_result(self, client):
-        """Unrelated search hit with low title similarity returns found=False."""
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(
-                200,
-                json={
-                    "totalHits": 1,
-                    "results": [
-                        {
-                            "title": "Completely Unrelated Agricultural Survey in Brazil",
-                            "doi": "10.1000/unrelated",
-                            "authors": [{"name": "Other Author"}],
-                            "yearPublished": 2020,
-                        }
-                    ],
-                },
-            )
-
-        with _patch_httpx(handler):
-            cit = _make_citation(title="Deep Residual Learning for Image Recognition")
-            result = await client.lookup(cit)
-
-        assert result.found is False
-        assert "no title match" in (result.error or "")
-
-    def test_sanitize_query_removes_lucene_special_chars(self, client):
-        """_sanitize_query strips colons and hyphens that cause CORE API 500 errors."""
-        q = client._sanitize_query("RoBERTa: A Robustly Optimized BERT Pretraining Approach (Low-Rank)")
-        assert ":" not in q
-        assert "-" not in q
-        assert "(" not in q
-        assert "RoBERTa" in q
-        assert "Low Rank" in q
-
-    def test_normalize_doi(self, client):
-        """_normalize_doi handles various DOI formats."""
-        assert client._normalize_doi("10.1234/ABC") == "10.1234/abc"
-        assert client._normalize_doi("doi:10.1234/abc") == "10.1234/abc"
-        assert client._normalize_doi("https://doi.org/10.1234/abc") == "10.1234/abc"
-
-    @pytest.mark.asyncio
-    async def test_no_results(self, client):
-        """No results returns found=False."""
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(
-                200,
-                json={"total": 0, "results": []},
-            )
-
-        with _patch_httpx(handler):
-            cit = _make_citation(title="Nonexistent Paper Title XYZ123")
-            result = await client.lookup(cit)
-
-        assert result.found is False
-        assert "no results" in result.error
-
-
-# ============================================================
 # Integration: error handling
 # ============================================================
 
@@ -490,7 +257,7 @@ class TestRetryBehavior:
 
 
 class TestClientAbstractExtraction:
-    """Test abstract extraction and deduplication across all 4 clients (Phase 2)."""
+    """Test abstract extraction and deduplication across active clients."""
 
     def test_crossref_strips_jats_xml_from_abstract(self):
         cand = CrossrefClient._message_to_candidate(
@@ -518,25 +285,19 @@ class TestClientAbstractExtraction:
         )
         assert cand.abstract == "The dominant sequence transduction models"
 
-    def test_semantic_scholar_extracts_abstract(self):
-        cand = SemanticScholarClient._paper_to_candidate(
+    def test_serper_scholar_extracts_snippet_abstract(self):
+        from integrity_checker.retrieval.serpapi_client import GoogleScholarFallbackClient
+
+        cand = GoogleScholarFallbackClient._serper_result_to_candidate(
             {
-                "title": "BERT",
-                "abstract": "We introduce a new language representation model called BERT.",
-                "externalIds": {"DOI": "10.18653/v1/N19-1423"},
+                "title": "BERT: Pre-training of Deep Bidirectional Transformers",
+                "publicationInfo": "J Devlin, MW Chang, K Lee - NAACL, 2019 - aclanthology.org",
+                "year": 2019,
+                "snippet": "We introduce a new language representation model called BERT.",
+                "link": "https://aclanthology.org/N19-1423/",
             }
         )
         assert cand.abstract == "We introduce a new language representation model called BERT."
-
-    def test_coreapi_extracts_abstract(self):
-        cand = CoreAPIClient._work_to_candidate(
-            {
-                "title": "RoBERTa",
-                "abstract": "Language model pretraining has led to significant performance gains.",
-                "doi": "10.48550/arXiv.1907.11692",
-            }
-        )
-        assert cand.abstract == "Language model pretraining has led to significant performance gains."
 
     def test_dedupe_candidates_preserves_abstract_when_merging_doi(self):
         from integrity_checker.models.source import SourceCandidate
@@ -550,15 +311,15 @@ class TestClientAbstractExtraction:
             confidence=0.95,
             abstract=None,
         )
-        c_s2 = SourceCandidate(
-            source_name="semantic_scholar",
+        c_openalex = SourceCandidate(
+            source_name="openalex",
             found=True,
             doi="10.1038/nature14539",
             title="Deep learning",
             confidence=0.85,
             abstract="Deep learning allows computational models that are composed of multiple processing layers.",
         )
-        deduped = RetrievalOrchestrator._dedupe_candidates([c_crossref, c_s2])
+        deduped = RetrievalOrchestrator._dedupe_candidates([c_crossref, c_openalex])
         assert len(deduped) == 1
         assert deduped[0].source_name == "crossref"
-        assert deduped[0].abstract == c_s2.abstract
+        assert deduped[0].abstract == c_openalex.abstract

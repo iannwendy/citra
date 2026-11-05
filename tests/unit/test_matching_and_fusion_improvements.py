@@ -98,7 +98,7 @@ def test_cross_candidate_metadata_fusion_enriches_missing_fields() -> None:
     )
     # Candidate 2 has the same title and year, plus full authors and venue
     cand2 = SourceCandidate(
-        source_name="SemanticScholar",
+        source_name="dblp",
         found=True,
         title="Attention Is All You Need",
         authors=["Ashish Vaswani", "Noam Shazeer", "Niki Parmar"],

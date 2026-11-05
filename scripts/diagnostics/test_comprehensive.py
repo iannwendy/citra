@@ -176,7 +176,6 @@ async def run_thesis_test():
     from integrity_checker.retrieval.crossref_client import CrossrefClient
     from integrity_checker.retrieval.openalex_client import OpenAlexClient
     from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
-    from integrity_checker.retrieval.semantic_scholar_client import SemanticScholarClient
 
     print("\n" + "="*70)
     print("TEST 1: VietDepression_Research_Article.pdf")
@@ -186,7 +185,6 @@ async def run_thesis_test():
     orchestrator = RetrievalOrchestrator(
         crossref=CrossrefClient(),
         openalex=OpenAlexClient(),
-        semantic_scholar=SemanticScholarClient(),
         arxiv=ArxivClient(),
         parallel=False,
     )
@@ -243,7 +241,6 @@ async def run_scenario_test(scenario_file: str, scenario_name: str):
     from integrity_checker.retrieval.crossref_client import CrossrefClient
     from integrity_checker.retrieval.openalex_client import OpenAlexClient
     from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
-    from integrity_checker.retrieval.semantic_scholar_client import SemanticScholarClient
 
     print("\n" + "="*70)
     print(f"TEST: {scenario_name}")
@@ -253,7 +250,6 @@ async def run_scenario_test(scenario_file: str, scenario_name: str):
     orchestrator = RetrievalOrchestrator(
         crossref=CrossrefClient(),
         openalex=OpenAlexClient(),
-        semantic_scholar=SemanticScholarClient(),
         arxiv=ArxivClient(),
         parallel=False,
     )

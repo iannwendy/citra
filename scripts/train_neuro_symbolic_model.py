@@ -858,7 +858,7 @@ def _run_symbolic_rule_on_item(rules: SymbolicRules, item: dict[str, Any]) -> tu
     source = SourceResult(
         citation_raw="Author A (2021). Substantive Scholarly Paper Title in Proceedings.",
         candidates=cands,
-        sources_queried=["crossref", "openalex", "semantic_scholar", "arxiv", "dblp"],
+        sources_queried=["crossref", "openalex", "datacite", "arxiv", "dblp"],
         sources_succeeded=["crossref", "openalex"] if has_cand else [],
         sources_failed=(
             {}

@@ -1,12 +1,10 @@
-"""RetrievalOrchestrator — gộp kết quả từ 4 nguồn theo strategy đa nguồn.
+"""RetrievalOrchestrator — gộp kết quả theo chiến lược truy hồi đa nguồn phân tầng.
 
 Đề cương §5.4 — thứ tự ưu tiên:
-    1. Local Database (SQLite) - kiểm tra trước
-    2. DOI exact match (Crossref)
-    3. Crossref bibliographic query
-    4. OpenAlex title/author/year
-    5. Semantic Scholar supplement
-    6. arXiv preprint fallback (chỉ khi cần)
+    1. Local Database (SQLite FTS5) & Known Papers (Tier 0)
+    2. DOI exact match & bibliographic query (Crossref, OpenAlex, DBLP, DataCite, DOI RA)
+    3. Chuyên ngành (arXiv, Europe PMC, NCBI/bioRxiv, OpenLibrary, DOAJ, OpenAIRE/HAL, Wikidata)
+    4. Google Scholar Fallback Router (Serper.dev `/scholar` -> SerpApi `google_scholar`)
 
 Sau khi có candidate từ các nguồn, dedupe theo DOI/normalized title.
 
@@ -31,7 +29,6 @@ from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.retrieval.arxiv_client import ArxivClient
 from integrity_checker.retrieval.base import BaseScholarClient
-from integrity_checker.retrieval.coreapi_client import CoreAPIClient
 from integrity_checker.retrieval.crossref_client import CrossrefClient
 from integrity_checker.retrieval.datacite_client import DataCiteClient
 from integrity_checker.retrieval.dblp_client import DBLPClient
@@ -51,8 +48,10 @@ from integrity_checker.retrieval.openaire_hal_client import OpenAIREHalClient
 from integrity_checker.retrieval.openalex_client import OpenAlexClient
 from integrity_checker.retrieval.openlibrary_client import OpenLibraryClient
 from integrity_checker.retrieval.rate_limiter import RateLimiter
-from integrity_checker.retrieval.semantic_scholar_client import SemanticScholarClient
-from integrity_checker.retrieval.serpapi_client import SerpApiClient
+from integrity_checker.retrieval.serpapi_client import (
+    GoogleScholarFallbackClient,
+    SerpApiClient,
+)
 from integrity_checker.retrieval.tech_standard_client import TechStandardClient
 from integrity_checker.retrieval.wikidata_opencitations_client import (
     WikidataOpenCitationsClient,
@@ -840,7 +839,7 @@ class RetrievalOrchestrator:
         - arXiv Atom API (exact arXiv IDs & recent AI/ML/CS/Math preprints)
         - OpenLibrary + Google Books API (Books, ISBNs, multi-edition textbooks)
         - Europe PMC REST API (PubMed/MEDLINE, biomedical, psychology, health)
-        - SerpApi Google Scholar (Last-resort fallback when free APIs find 0 matches)
+        - Google Scholar Fallback Router (Serper.dev `/scholar` -> SerpApi `google_scholar` when free APIs find 0 matches)
     """
 
     def __init__(
@@ -859,8 +858,6 @@ class RetrievalOrchestrator:
         huggingface: HuggingFaceClient | None = None,
         tech_standard: TechStandardClient | None = None,
         wikidata_opencitations: WikidataOpenCitationsClient | None = None,
-        semantic_scholar: SemanticScholarClient | None = None,
-        coreapi: CoreAPIClient | None = None,
         serpapi: SerpApiClient | None = None,
         parallel: bool = True,
         cache: DiskCache | None = None,
@@ -890,9 +887,6 @@ class RetrievalOrchestrator:
             contact_email=contact_email
         )
 
-        # Legacy clients retained for backward compatibility when explicitly injected or enabled
-        self._s2_explicit = semantic_scholar is not None
-        self._coreapi_explicit = coreapi is not None
         self._extended_clients_explicit = any(
             c is not None
             for c in (
@@ -913,12 +907,6 @@ class RetrievalOrchestrator:
             any(c is not None for c in (crossref, openalex, dblp, arxiv, openlibrary, europepmc))
             and not self._extended_clients_explicit
         )
-        self._legacy_explicit_mode = (
-            (self._s2_explicit or self._coreapi_explicit)
-            and not self._new_clients_explicit
-        )
-        self.semantic_scholar = semantic_scholar or SemanticScholarClient()
-        self.coreapi = coreapi or CoreAPIClient(contact_email=contact_email)
         self.serpapi = serpapi  # Lazy init - không tạo nếu không có API key
         self.parallel = parallel
         # Backward-compatible injection point for tests/legacy callers.  The
@@ -955,12 +943,10 @@ class RetrievalOrchestrator:
             self.wikidata_opencitations.name: RateLimiter(
                 getattr(settings.rate_limits, "wikidata_opencitations_per_sec", 5.0)
             ),
-            self.semantic_scholar.name: RateLimiter(settings.rate_limits.semantic_scholar_per_sec),
         }
-        if settings.sources.coreapi or self._coreapi_explicit:
-            self._rate_limiters[self.coreapi.name] = RateLimiter(settings.rate_limits.coreapi_per_sec)
-        # SerpApi rate limiter (lazy init)
+        # Google Scholar fallback rate limiter (lazy init: Serper primary / SerpApi secondary)
         self._serpapi_limiter: RateLimiter | None = None
+        self._serpapi_limiter_mode: str | None = None
 
         # Local database
         self._local_db: LocalDatabase | None = None
@@ -977,13 +963,6 @@ class RetrievalOrchestrator:
 
     def clients(self) -> list[BaseScholarClient]:
         """Trả về danh sách các active clients theo cấu hình."""
-        if self._legacy_explicit_mode:
-            settings = get_settings().retrieval
-            result = [self.crossref, self.openalex, self.semantic_scholar]
-            if settings.sources.coreapi or self._coreapi_explicit:
-                result.append(self.coreapi)
-            return result
-
         src_cfg = get_settings().retrieval.sources
         result: list[BaseScholarClient] = []
         if src_cfg.crossref and self.crossref is not None:
@@ -1015,10 +994,6 @@ class RetrievalOrchestrator:
                 result.append(self.tech_standard)
             if getattr(src_cfg, "wikidata_opencitations", True) and self.wikidata_opencitations is not None:
                 result.append(self.wikidata_opencitations)
-        if (src_cfg.semantic_scholar or self._s2_explicit) and self.semantic_scholar is not None:
-            result.append(self.semantic_scholar)
-        if (src_cfg.coreapi or self._coreapi_explicit) and self.coreapi is not None:
-            result.append(self.coreapi)
         return result
 
     @classmethod
@@ -1161,20 +1136,6 @@ class RetrievalOrchestrator:
         - Tier 1 runs immediately in parallel (2–3 targeted sources).
         - Tier 2 only runs if Tier 1 does not achieve strong verified consensus.
         """
-        if self._legacy_explicit_mode:
-            use_coreapi = (
-                self._coreapi_explicit or get_settings().retrieval.sources.coreapi
-            )
-            if self.is_arxiv_doi(citation.doi):
-                t1 = [c for c in [self.semantic_scholar] if c is not None]
-                if use_coreapi and self.coreapi is not None:
-                    t1.append(self.coreapi)
-                return t1, []
-            t1 = [c for c in [self.crossref, self.openalex, self.semantic_scholar] if c is not None]
-            if use_coreapi and self.coreapi is not None:
-                t1.append(self.coreapi)
-            return t1, []
-
         src_cfg = get_settings().retrieval.sources
         enabled: dict[str, BaseScholarClient] = {}
         if src_cfg.crossref and self.crossref is not None:
@@ -1206,10 +1167,6 @@ class RetrievalOrchestrator:
                 enabled["tech_standard"] = self.tech_standard
             if getattr(src_cfg, "wikidata_opencitations", True) and self.wikidata_opencitations is not None:
                 enabled["wikidata_opencitations"] = self.wikidata_opencitations
-        if (src_cfg.semantic_scholar or self._s2_explicit) and self.semantic_scholar is not None:
-            enabled["semantic_scholar"] = self.semantic_scholar
-        if (src_cfg.coreapi or self._coreapi_explicit) and self.coreapi is not None:
-            enabled["coreapi"] = self.coreapi
 
         def _pick(names: list[str]) -> list[BaseScholarClient]:
             return [enabled[n] for n in names if n in enabled]
@@ -1243,9 +1200,9 @@ class RetrievalOrchestrator:
             return tier1, tier2
 
         # 1. Explicit arXiv DOI (10.48550/arXiv.*): Crossref DOI endpoint returns 404,
-        # so route to arXiv, DataCite, DBLP, OpenAlex, and S2/CORE.
+        # so route to arXiv, DataCite, DBLP, and OpenAlex.
         if signals["is_arxiv_doi"]:
-            tier1 = _pick(["arxiv", "datacite", "dblp", "openalex", "semantic_scholar", "coreapi"])
+            tier1 = _pick(["arxiv", "datacite", "dblp", "openalex"])
             tier2 = _pick(["huggingface"])
             return tier1, tier2
 
@@ -1465,8 +1422,6 @@ class RetrievalOrchestrator:
         """Best-effort abstract enrichment across abstract-capable APIs when a matched
         candidate (from local_db, Crossref, or DBLP) has no abstract yet.
         """
-        if self._legacy_explicit_mode:
-            return None
         found_cands = [c for c in candidates if c.found]
         if not found_cands or any(c.abstract and c.abstract.strip() for c in found_cands):
             return None
@@ -1516,8 +1471,6 @@ class RetrievalOrchestrator:
                 "openaire_hal",
                 "huggingface",
                 "openlibrary",
-                "semantic_scholar",
-                "coreapi",
             ):
                 c = enabled_clients.get(name)
                 if c is None or c.name in already_queried:
@@ -1661,7 +1614,7 @@ class RetrievalOrchestrator:
             return known_result
 
         # ===== 2.4. Fast-path for known fake/reserved URL domains (RFC 2606 .invalid/.test/example.com) =====
-        if not self._legacy_explicit_mode and not self._six_core_only_explicit_mode and citation.url:
+        if not self._six_core_only_explicit_mode and citation.url:
             from integrity_checker.logic.rules import _is_fake_url
 
             is_fake_u, _ = _is_fake_url(citation.url)
@@ -1683,7 +1636,7 @@ class RetrievalOrchestrator:
         # If the resource is a Hugging Face model/dataset, IETF RFC/PyPI/NPM/GitHub package, or
         # international technical standard (ISO/NIST/IEEE/OWASP/WCAG), allow the dedicated
         # specialist client to verify its metadata before returning.
-        if not self._legacy_explicit_mode and self.is_web_or_legal_resource(citation):
+        if self.is_web_or_legal_resource(citation):
             signals_early = self.classify_citation_domain(citation)
             specialist_clients: list[BaseScholarClient] = []
             if not self._six_core_only_explicit_mode:
@@ -1786,8 +1739,7 @@ class RetrievalOrchestrator:
             )
         )
         if (
-            not self._legacy_explicit_mode
-            and not self._six_core_only_explicit_mode
+            not self._six_core_only_explicit_mode
             and cit_doi_norm
             and not has_exact_doi_cand
             and not is_known_fabricated_doi_prefix
@@ -1812,8 +1764,7 @@ class RetrievalOrchestrator:
         # Khi mọi API ở Tier 1 + Tier 2 + DOI RA đều không tìm thấy (0 found) và arXiv chưa được gọi,
         # luôn thử qua arXiv một lượt cuối trước khi gọi fallback tiếp theo.
         if (
-            not self._legacy_explicit_mode
-            and not any(c.found for c in valid)
+            not any(c.found for c in valid)
             and not nonexistent_registry_confirmed
             and self.arxiv is not None
             and getattr(get_settings().retrieval.sources, "arxiv", True)
@@ -1831,8 +1782,7 @@ class RetrievalOrchestrator:
         # World Bank), tiêu chuẩn kỹ thuật (ISO/NIST/IEEE/OWASP/WCAG), cẩm nang lâm sàng (DSM-5,
         # ICD-11) hoặc DOI mở chưa tìm thấy ở các bước trên trước khi phải dùng đến SerpApi.
         if (
-            not self._legacy_explicit_mode
-            and not self._six_core_only_explicit_mode
+            not self._six_core_only_explicit_mode
             and not any(c.found for c in valid)
             and not nonexistent_registry_confirmed
             and self.wikidata_opencitations is not None
@@ -1862,8 +1812,7 @@ class RetrievalOrchestrator:
         # khi >= 3 API học thuật miễn phí đã trả về HTTP 200 "no results" sạch sẽ mà không bị lỗi mạng/429).
         serpapi_quota_guard_skip = False
         if (
-            not self._legacy_explicit_mode
-            and not self._six_core_only_explicit_mode
+            not self._six_core_only_explicit_mode
             and getattr(get_settings().retrieval.sources, "serpapi_quota_guard", True)
             and not any(c.found for c in deduped)
         ):
@@ -2964,27 +2913,54 @@ class RetrievalOrchestrator:
         return list(bucket.values())
 
     async def _lookup_serpapi_fallback(self, citation: Citation) -> SourceCandidate | None:
-        """SerpApi fallback - chỉ gọi khi các API free thất bại.
+        """Tier-3 Google Scholar fallback (Serper.dev `/scholar` primary -> SerpApi secondary).
 
         Returns:
-            SourceCandidate nếu có API key và tìm thấy, None nếu không có key.
+            SourceCandidate nếu có ít nhất một API key (Serper hoặc SerpApi),
+            None nếu cả hai API key đều chưa được cấu hình.
         """
-        # Lazy init SerpApi client
+        # Lazy init GoogleScholarFallbackClient
         if self.serpapi is None:
             settings = get_settings()
-            if not settings.serpapi_api_key:
-                logger.debug("SerpApi: No API key, skipping fallback")
+            serper_key = (getattr(settings, "serper_api_key", "") or "").strip()
+            serpapi_key = (getattr(settings, "serpapi_api_key", "") or "").strip()
+            if not serper_key and not serpapi_key:
+                logger.debug("Google Scholar fallback: No SERPER_API_KEY or SERPAPI_API_KEY, skipping fallback")
                 return None
-            self.serpapi = SerpApiClient(api_key=settings.serpapi_api_key)
-            # Init rate limiter
+            self.serpapi = GoogleScholarFallbackClient(
+                serper_api_key=serper_key,
+                api_key=serpapi_key,
+            )
+            rate_cfg = settings.retrieval.rate_limits
+            use_serper_rate = bool(serper_key and not SerpApiClient._serper_quota_exhausted)
+            active_rate = (
+                getattr(rate_cfg, "serper_per_sec", 5.0)
+                if use_serper_rate
+                else rate_cfg.serpapi_per_sec
+            )
+            self._serpapi_limiter = RateLimiter(active_rate)
+            self._serpapi_limiter_mode = "serper" if use_serper_rate else "serpapi"
+            logger.info(
+                f"Google Scholar fallback: Initialized GoogleScholarFallbackClient "
+                f"(serper={'enabled' if serper_key else 'disabled'}, "
+                f"serpapi={'enabled' if serpapi_key else 'disabled'})"
+            )
+        elif (
+            self._serpapi_limiter_mode == "serper"
+            and SerpApiClient._serper_quota_exhausted
+            and getattr(self.serpapi, "api_key", "")
+        ):
+            # Dynamically step down rate limit if Serper exhausted credits mid-run and fell back to SerpApi
             self._serpapi_limiter = RateLimiter(
                 get_settings().retrieval.rate_limits.serpapi_per_sec
             )
-            logger.info("SerpApi: Initialized as fallback client")
+            self._serpapi_limiter_mode = "serpapi"
 
         # Apply rate limit
         if self._serpapi_limiter:
             await self._serpapi_limiter.wait()
 
-        logger.debug(f"SerpApi fallback for: {citation.title[:40] if citation.title else citation.raw_text[:40]}")
+        logger.debug(
+            f"Google Scholar fallback for: {citation.title[:40] if citation.title else citation.raw_text[:40]}"
+        )
         return await self.serpapi.lookup(citation)

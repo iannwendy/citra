@@ -537,7 +537,7 @@ class TestExtremeNeuralEdgeCases:
             citation_raw=cit.raw_text,
             candidates=[
                 SourceCandidate(
-                    source_name="semantic_scholar",
+                    source_name="openalex",
                     found=True,
                     title="BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
                     authors=["Jacob Devlin", "Ming-Wei Chang", "Kenton Lee", "Kristina Toutanova"],
@@ -548,8 +548,8 @@ class TestExtremeNeuralEdgeCases:
                     score=0.98,
                 )
             ],
-            sources_queried=["semantic_scholar"],
-            sources_succeeded=["semantic_scholar"],
+            sources_queried=["openalex"],
+            sources_succeeded=["openalex"],
         )
         verdict = checker.check(cit, src, citation_context=cit._occurrence_contexts[0]["context"])
         assert verdict.features.stance_label == "contradiction_risk"

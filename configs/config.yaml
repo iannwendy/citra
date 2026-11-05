@@ -91,8 +91,6 @@ retrieval:
     openlibrary: true
     europepmc: true
     serpapi: true
-    semantic_scholar: false
-    coreapi: false
   per_source_top_k: 5
   parallel: true
   retry:                 # FIX Bug 3: Increased for better resilience
@@ -109,9 +107,8 @@ retrieval:
     arxiv_per_sec: 2.0
     openlibrary_per_sec: 3.0
     europepmc_per_sec: 5.0
-    serpapi_per_sec: 1.0
-    semantic_scholar_per_sec: 1.0
-    coreapi_per_sec: 0.5
+    serper_per_sec: 5.0       # Serper.dev Google Scholar primary fallback
+    serpapi_per_sec: 1.0      # SerpApi Google Scholar secondary fallback
   contact_email: "noreply@citra.edu.vn"   # cho Crossref polite pool
 
 # --- Matching thresholds ---
@@ -169,7 +166,7 @@ disclaimer:
     Hệ thống này chỉ hỗ trợ giảng viên rà soát tính toàn vẹn trích dẫn trong tiểu luận.
     Hai lớp kết quả (đối chiếu in-text ↔ reference entry và độ tin cậy nguồn) đều là
     gợi ý dựa trên bằng chứng từ các cơ sở dữ liệu học thuật công khai (Crossref, OpenAlex,
-    Semantic Scholar, arXiv) và quy luật Neuro-Symbolic có thể giải thích. Kết luận
+    DBLP, arXiv) và quy luật Neuro-Symbolic có thể giải thích. Kết luận
     `SUSPECTED_HALLUCINATION` chỉ là suspect — không đồng nghĩa nguồn bị bịa. Giảng viên
     là người ra quyết định cuối cùng. Hệ thống KHÔNG tự động kết luận gian lận học thuật,
     KHÔNG kiểm chứng claim-level, và KHÔNG xem việc trích cùng một nguồn nhiều lần là

@@ -370,8 +370,8 @@ class TestKnownGroundTruthHardCases:
         source = SourceResult(
             citation_raw=citation.raw_text,
             candidates=[],
-            sources_queried=["crossref", "openalex", "semantic_scholar", "arxiv", "doaj"],
-            sources_succeeded=["crossref", "openalex", "semantic_scholar", "arxiv", "doaj"],
+            sources_queried=["crossref", "openalex", "dblp", "arxiv", "doaj"],
+            sources_succeeded=["crossref", "openalex", "dblp", "arxiv", "doaj"],
             url_status="dead_link",
             url_status_code=404,
             archive_url=None,
@@ -680,7 +680,7 @@ class TestRealPdfEndToEndAndBeforeAfterBenchmark:
                 is_retracted=False,  # Legacy did not extract retraction status
             ),
             3: SourceResult(citation_raw=by_idx[3].raw_text, candidates=[], sources_queried=["crossref"], sources_succeeded=["crossref"]),
-            4: SourceResult(citation_raw=by_idx[4].raw_text, candidates=[], sources_queried=["crossref", "openalex", "semantic_scholar"], sources_succeeded=["crossref", "openalex", "semantic_scholar"]),
+            4: SourceResult(citation_raw=by_idx[4].raw_text, candidates=[], sources_queried=["crossref", "openalex", "dblp"], sources_succeeded=["crossref", "openalex", "dblp"]),
             5: SourceResult(citation_raw=by_idx[5].raw_text, candidates=[], sources_queried=["crossref", "openalex"], sources_succeeded=["crossref", "openalex"]),
             6: SourceResult(citation_raw=by_idx[6].raw_text, candidates=[], sources_queried=["crossref", "openalex"], sources_succeeded=["crossref", "openalex"]),
             7: SourceResult(citation_raw=by_idx[7].raw_text, candidates=[], sources_queried=["crossref", "openalex"], sources_succeeded=["crossref", "openalex"]),
@@ -693,7 +693,7 @@ class TestRealPdfEndToEndAndBeforeAfterBenchmark:
                 url_status="dead_link",  # Legacy had no Wayback Machine fallback -> falsely flags SUSPECTED_HALLUCINATION!
                 url_status_code=404,
             ),
-            10: SourceResult(citation_raw=by_idx[10].raw_text, candidates=[], sources_queried=["crossref", "openalex", "semantic_scholar"], sources_succeeded=["crossref", "openalex", "semantic_scholar"]),
+            10: SourceResult(citation_raw=by_idx[10].raw_text, candidates=[], sources_queried=["crossref", "openalex", "dblp"], sources_succeeded=["crossref", "openalex", "dblp"]),
         }
 
         legacy_verdicts = [
@@ -854,8 +854,8 @@ class TestRealPdfEndToEndAndBeforeAfterBenchmark:
             10: SourceResult(
                 citation_raw=by_idx[10].raw_text,
                 candidates=[],
-                sources_queried=["crossref", "openalex", "semantic_scholar", "doi_ra"],
-                sources_succeeded=["crossref", "openalex", "semantic_scholar", "doi_ra"],
+                sources_queried=["crossref", "openalex", "dblp", "doi_ra"],
+                sources_succeeded=["crossref", "openalex", "dblp", "doi_ra"],
             ),
         }
 

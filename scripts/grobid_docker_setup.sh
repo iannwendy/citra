@@ -226,8 +226,9 @@ export GROBID_ENABLED="true"
 # Optional: contact email cho scholarly APIs polite pool
 export CONTACT_EMAIL="${CONTACT_EMAIL:-student@tdtu.edu.vn}"
 
-# Optional: Semantic Scholar API key (tăng rate limit)
-export S2_API_KEY="${S2_API_KEY:-}"
+# Optional: Tier-3 Google Scholar fallback keys (Serper.dev primary -> SerpApi secondary)
+export SERPER_API_KEY="${SERPER_API_KEY:-}"
+export SERPAPI_API_KEY="${SERPAPI_API_KEY:-}"
 
 # Verify:
 echo "GROBID health:"

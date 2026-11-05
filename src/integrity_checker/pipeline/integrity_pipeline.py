@@ -873,8 +873,6 @@ class IntegrityPipeline:
             "tech_standard": "RFC/PyPI/NPM/GitHub",
             "wikidata_opencitations": "Wikidata/OpenCitations",
             "doi_ra": "DOI RA",
-            "semantic_scholar": "Semantic Scholar",
-            "core": "CORE",
             "serpapi": "Google Scholar",
         }
         _total_hits = sum(_src_hits.values())

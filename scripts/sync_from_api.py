@@ -33,7 +33,7 @@ def sync_paper_to_db(
     Args:
         db: LocalDatabase instance
         source_candidate: SourceCandidate from retrieval
-        source: Source of the data ('crossref', 'openalex', 'semantic_scholar', 'arxiv')
+        source: Source of the data ('crossref', 'openalex', 'dblp', 'arxiv')
 
     Returns:
         True if paper was added, False if already exists or failed

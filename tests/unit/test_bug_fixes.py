@@ -81,11 +81,11 @@ class TestBug3NetworkResilience:
             f"Expected timeout=30.0, got {client.timeout}"
         )
 
-    def test_semantic_scholar_client_timeout_increased(self):
-        """Verify SemanticScholarClient timeout increased from 10 to 30."""
-        from integrity_checker.retrieval.semantic_scholar_client import SemanticScholarClient
+    def test_scholar_fallback_client_timeout_default(self):
+        """Verify GoogleScholarFallbackClient / SerpApiClient default timeout is 30.0."""
+        from integrity_checker.retrieval.serpapi_client import GoogleScholarFallbackClient
 
-        client = SemanticScholarClient()
+        client = GoogleScholarFallbackClient(serper_api_key="test", api_key="test")
         assert client.timeout == 30.0, (
             f"Expected timeout=30.0, got {client.timeout}"
         )
@@ -168,7 +168,7 @@ class TestBug5KnownPapers:
         source = SourceResult(
             citation_raw=citation.raw_text,
             candidates=[],
-            sources_queried=["crossref", "openalex", "semantic_scholar"],
+            sources_queried=["crossref", "openalex", "dblp"],
             sources_succeeded=[],
             sources_failed={"crossref": "timeout", "openalex": "timeout"},
         )
