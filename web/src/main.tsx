@@ -6,6 +6,7 @@ import { router } from './router';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { VerificationProgressProvider } from './contexts/VerificationProgressContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { queryClient } from '@/lib/queryClient';
 import './i18n';
@@ -51,7 +52,13 @@ globalWithRoot.__citraReactRoot.render(
         <ThemeProvider>
           <ToastProvider position="bottom-right" maxToasts={5}>
             <AuthProvider>
-              <RouterProvider router={router} />
+              <VerificationProgressProvider
+                onNavigate={(path) => {
+                  void router.navigate(path);
+                }}
+              >
+                <RouterProvider router={router} />
+              </VerificationProgressProvider>
             </AuthProvider>
           </ToastProvider>
         </ThemeProvider>

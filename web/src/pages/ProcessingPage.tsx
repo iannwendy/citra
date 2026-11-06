@@ -14,9 +14,11 @@ import {
   Terminal,
   Clock,
   ArrowRight,
+  Upload,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, type EssayStatus } from '@/api/client';
+import { useVerificationProgress } from '@/contexts/VerificationProgressContext';
 import {
   SCHOLARLY_APIS_LABEL,
   SYMBOLIC_RULES_COUNT,
@@ -123,8 +125,14 @@ function stepStatus(
 export function ProcessingPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const {
+    activeSingleCheck,
+    syncSingleCheckFromStatus,
+    acknowledgeSingleCheck,
+    registerProcessingPageMount,
+  } = useVerificationProgress();
 
   const numericId = id ? parseInt(id, 10) : null;
   const essayId = numericId !== null && !isNaN(numericId) ? numericId : null;
@@ -132,6 +140,11 @@ export function ProcessingPage() {
   const [status, setStatus] = useState<EssayStatus | null>(null);
   const [redirecting, setRedirecting] = useState(false);
   const queryClient = useQueryClient();
+
+  useEffect(
+    () => registerProcessingPageMount(essayId),
+    [essayId, registerProcessingPageMount],
+  );
 
   useEffect(() => {
     if (essayId === null) return;
@@ -144,6 +157,7 @@ export function ProcessingPage() {
         if (cancelled) return;
         consecutiveErrors = 0;
         setStatus(snap);
+        syncSingleCheckFromStatus(essayId, snap);
         if (snap.status === 'failed' || snap.status === 'completed') {
           if (timer) clearInterval(timer);
         }
@@ -151,7 +165,7 @@ export function ProcessingPage() {
         consecutiveErrors += 1;
         if (!cancelled && consecutiveErrors >= 5) {
           if (timer) clearInterval(timer);
-          setStatus({
+          const failedSnap: EssayStatus = {
             status: 'failed',
             step: 'parsing',
             step_index: 0,
@@ -167,7 +181,9 @@ export function ProcessingPage() {
               err instanceof Error
                 ? err.message
                 : 'Unable to fetch processing status.',
-          });
+          };
+          setStatus(failedSnap);
+          syncSingleCheckFromStatus(essayId, failedSnap);
         }
       }
     };
@@ -177,7 +193,7 @@ export function ProcessingPage() {
       cancelled = true;
       if (timer) clearInterval(timer);
     };
-  }, [essayId]);
+  }, [essayId, syncSingleCheckFromStatus]);
 
   useEffect(() => {
     if (essayId === null) return;
@@ -190,13 +206,14 @@ export function ProcessingPage() {
     const finish = () => {
       if (cancelled) return;
       setRedirecting(true);
-      timer = setTimeout(
-        () => navigate(`/verification/report/${id}`),
-        failed ? 3000 : 1500
-      );
+      timer = setTimeout(() => {
+        acknowledgeSingleCheck(essayId);
+        navigate(`/verification/report/${id}`);
+      }, failed ? 3000 : 1500);
     };
 
     if (done) {
+      void queryClient.invalidateQueries({ queryKey: ['essays'] });
       api
         .getEssay(essayId)
         .then((report) => {
@@ -212,7 +229,7 @@ export function ProcessingPage() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [essayId, status?.status, id, navigate, queryClient]);
+  }, [essayId, status?.status, id, navigate, queryClient, acknowledgeSingleCheck]);
 
   const backendIndex = status
     ? Math.min(STEP_KEY_TO_INDEX[status.step] ?? 0, STEP_LABELS.length - 1)
@@ -232,12 +249,19 @@ export function ProcessingPage() {
   const queuePos = status?.queue_position ?? null;
 
   const effectiveProgress = isQueued ? 0 : progress;
+  const trackedFilename =
+    essayId !== null &&
+    activeSingleCheck?.essayId === essayId &&
+    activeSingleCheck.filename &&
+    !activeSingleCheck.filename.startsWith('ID #')
+      ? activeSingleCheck.filename
+      : null;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-10">
       {/* Executive Header Banner */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 min-w-0">
           <div className="flex items-center gap-2.5 flex-wrap">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-semibold text-indigo-700 dark:text-indigo-300">
               <Terminal className="h-3 w-3" />
@@ -248,6 +272,16 @@ export function ProcessingPage() {
             {essayId && (
               <Badge variant="secondary" className="font-mono text-[11px]">
                 ID #{essayId}
+              </Badge>
+            )}
+            {trackedFilename && (
+              <Badge
+                variant="outline"
+                data-testid="processing-filename-badge"
+                title={trackedFilename}
+                className="font-mono text-[11px] max-w-[200px] sm:max-w-[260px] truncate"
+              >
+                {trackedFilename}
               </Badge>
             )}
             {isQueued && queuePos !== null && (
@@ -298,14 +332,32 @@ export function ProcessingPage() {
           </p>
         </div>
 
-        {id && (
-          <Button asChild variant="outline" size="sm" className="rounded-xl shrink-0">
-            <Link to={`/verification/report/${id}`}>
-              <span>{lang === 'vi' ? 'Mở Báo cáo' : 'Open Report'}</span>
-              <ArrowRight className="h-4 w-4" />
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="rounded-xl shrink-0"
+          >
+            <Link to="/upload?new=1" data-testid="processing-new-upload-btn">
+              <Upload className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>{t('upload.checkAnotherFile')}</span>
             </Link>
           </Button>
-        )}
+          {id && (
+            <Button asChild variant="outline" size="sm" className="rounded-xl shrink-0">
+              <Link
+                to={`/verification/report/${id}`}
+                onClick={() => {
+                  if (essayId !== null) acknowledgeSingleCheck(essayId);
+                }}
+              >
+                <span>{lang === 'vi' ? 'Mở Báo cáo' : 'Open Report'}</span>
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Queued FIFO banner during high-traffic deadline bursts */}

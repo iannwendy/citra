@@ -5,6 +5,7 @@ import { render, type RenderOptions } from '@testing-library/react';
 import { AuthContext } from '@/contexts/AuthContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+import { VerificationProgressProvider } from '@/contexts/VerificationProgressContext';
 import type { PlanTier, User, UserQuota } from '@/api/client';
 
 export function createTestQueryClient(): QueryClient {
@@ -149,7 +150,9 @@ function makeWrapper(options: WrapperOptions = {}) {
                   ...authOverrides,
                 }}
               >
-                {children}
+                <VerificationProgressProvider>
+                  {children}
+                </VerificationProgressProvider>
               </AuthContext.Provider>
             </MemoryRouter>
           </ToastProvider>

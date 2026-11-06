@@ -19,10 +19,12 @@ import {
   Sparkles,
   FlaskConical,
   Tag,
+  Loader2,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
+import { useVerificationProgress } from '@/contexts/VerificationProgressContext';
 import { getQuotaView } from '@/lib/quotaDisplay';
 import { useRole, type UserCapability, type UserRole } from '@/hooks/useRole';
 import { ThemeToggle, useTheme } from '@/contexts/ThemeContext';
@@ -97,6 +99,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const { user, logout } = useAuth();
+  const {
+    activeSingleCheck,
+    isSingleCheckInFlight,
+    acknowledgeSingleCheck,
+    isBatchActive,
+    batchStats,
+  } = useVerificationProgress();
   const { has, role, planTier, isBasic, quota, canBatchUpload, isAdmin } = useRole();
   const { toggleTheme } = useTheme();
   const toast = useToast();
@@ -109,6 +118,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     : 'en';
 
   const sidebarQuota = getQuotaView(quota, currentLang, { isAdmin });
+
+  // Auto-acknowledge a finished single check once the user views its report
+  useEffect(() => {
+    const match = location.pathname.match(/^\/verification\/report\/(\d+)/);
+    if (match) {
+      const viewedId = parseInt(match[1], 10);
+      if (!Number.isNaN(viewedId)) {
+        acknowledgeSingleCheck(viewedId);
+      }
+    }
+  }, [location.pathname, acknowledgeSingleCheck]);
 
   const handleToggleLanguage = () => {
     const next = currentLang === 'en' ? 'vi' : 'en';
@@ -149,6 +169,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isActive = (path: string) =>
     location.pathname === path ||
+    (path === '/upload' && location.pathname.startsWith('/verification/processing')) ||
     (path !== '/dashboard' && location.pathname.startsWith(`${path}/`));
 
   const handleLogout = async () => {
@@ -181,7 +202,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </a>
 
       {/* Mobile & Tablet Sticky Header Bar (< lg) */}
-      <header className="lg:hidden fixed top-0 inset-x-0 z-30 h-14 px-3.5 sm:px-6 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between gap-3">
+      <header className="lg:hidden fixed top-0 inset-x-0 z-30 h-14 px-3.5 sm:px-6 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           <button
             onClick={() => setMobileOpen(true)}
@@ -213,7 +234,28 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {(isSingleCheckInFlight || isBatchActive) && (
+            <button
+              type="button"
+              data-testid="mobile-active-progress-pill"
+              onClick={() =>
+                navigate(isSingleCheckInFlight ? '/upload' : '/batch-upload')
+              }
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/80 dark:border-indigo-800/80 text-[11px] font-mono font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100/80 dark:hover:bg-indigo-900/70 transition-colors cursor-pointer shrink-0"
+            >
+              <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+              <span>
+                {isSingleCheckInFlight
+                  ? activeSingleCheck?.status === 'queued'
+                    ? currentLang === 'vi'
+                      ? 'Hàng đợi'
+                      : 'Queued'
+                    : `${activeSingleCheck?.progress ?? 0}%`
+                  : `${batchStats.completed}/${batchStats.total}`}
+              </span>
+            </button>
+          )}
           <NotificationCenterButton lang={currentLang} compact />
         </div>
       </header>
@@ -290,6 +332,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     {visibleItems.map((item) => {
                       const Icon = item.icon;
                       const active = isActive(item.path);
+                      const showSingleBadge =
+                        item.path === '/upload' && isSingleCheckInFlight;
+                      const showBatchBadge =
+                        item.path === '/batch-upload' && isBatchActive;
+
                       return (
                         <Link
                           key={item.path}
@@ -308,7 +355,35 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                             <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-indigo-600 dark:bg-indigo-400" />
                           )}
                           <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-indigo-600 dark:text-indigo-400' : ''}`} />
-                          <span>{t(item.labelKey)}</span>
+                          <span className="truncate">{t(item.labelKey)}</span>
+                          {showSingleBadge && (
+                            <span
+                              data-testid="sidebar-single-progress-badge"
+                              aria-hidden="true"
+                              className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/70 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-700/70 shrink-0"
+                            >
+                              <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                              <span>
+                                {activeSingleCheck?.status === 'queued'
+                                  ? currentLang === 'vi'
+                                    ? 'Chờ'
+                                    : 'Queue'
+                                  : `${activeSingleCheck?.progress ?? 0}%`}
+                              </span>
+                            </span>
+                          )}
+                          {showBatchBadge && (
+                            <span
+                              data-testid="sidebar-batch-progress-badge"
+                              aria-hidden="true"
+                              className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/70 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-700/70 shrink-0"
+                            >
+                              <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                              <span>
+                                {batchStats.completed}/{batchStats.total}
+                              </span>
+                            </span>
+                          )}
                         </Link>
                       );
                     })}

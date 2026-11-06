@@ -218,7 +218,20 @@
     "uploadSuccess": "Tài liệu đã được tải lên thành công!",
     "uploadFailed": "Tải lên thất bại. Vui lòng thử lại.",
     "processing": "Đang xử lý tài liệu...",
-    "processingComplete": "Xử lý hoàn tất!"
+    "processingComplete": "Xử lý hoàn tất!",
+    "checkAnotherFile": "Kiểm tra tài liệu khác",
+    "activeBackgroundTitle": "Đang phân tích ngầm tài liệu",
+    "activeBackgroundDesc": "{{filename}} vẫn đang được hệ thống kiểm chứng ở chế độ nền.",
+    "viewLiveProgress": "Xem tiến trình",
+    "uploadingInBackground": "Đang tải {{filename}} lên máy chủ kiểm chứng...",
+    "recentCompletedTitle": "Kiểm chứng hoàn tất: {{filename}}",
+    "recentCompletedDesc": "Tài liệu của bạn đã xử lý xong ở chế độ nền và sẵn sàng để xem báo cáo.",
+    "recentFailedTitle": "Phân tích gặp sự cố: {{filename}}",
+    "openReport": "Mở báo cáo",
+    "dismissNotice": "Ẩn thông báo",
+    "toastCompletedTitle": "Kiểm chứng hoàn tất!",
+    "toastCompletedDesc": "{{filename}} đã sẵn sàng để xem báo cáo.",
+    "toastFailedTitle": "Phân tích tài liệu thất bại"
   },
   "sandbox": {
     "title": "Live Citation Sandbox",
@@ -251,7 +264,15 @@
     "fileTooLarge": "{{name}} có dung lượng {{size}} — giới hạn gói {{plan}} là {{max}} MB mỗi tệp.",
     "notEnoughUploads": "Gói {{plan}} chỉ còn {{remaining}} lượt kiểm tra trong tháng — bạn đã chọn {{count}} tệp.",
     "noBatchAccess": "Gói {{plan}} không bao gồm tính năng tải lên hàng loạt.",
-    "upgradeFeature": "Tải lên hàng loạt lớn hơn"
+    "upgradeFeature": "Tải lên hàng loạt lớn hơn",
+    "backgroundActiveBanner": "Hàng đợi vẫn tiếp tục xử lý ngầm ngay cả khi bạn chuyển sang mục khác.",
+    "backgroundCompletedNotice": "Đã hoàn tất xử lý ngầm ({{completed}}/{{total}} tệp hoàn tất).",
+    "openHistory": "Xem danh sách báo cáo",
+    "reloadInterrupted": "Phiên tải lên bị gián đoạn khi tải lại trang — vui lòng xóa và chọn lại tệp này.",
+    "toastBatchCompletedTitle": "Kiểm tra hàng loạt hoàn tất!",
+    "toastBatchCompletedDesc": "Đã xử lý xong {{completed}}/{{total}} tài liệu.",
+    "toastBatchMixedTitle": "Kiểm tra hàng loạt kết thúc có lỗi",
+    "toastBatchMixedDesc": "{{completed}} hoàn tất, {{failed}} thất bại."
   },
   "history": {
     "title": "Báo cáo xác minh",

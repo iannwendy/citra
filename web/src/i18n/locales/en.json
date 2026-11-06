@@ -218,7 +218,20 @@
     "uploadSuccess": "Document uploaded successfully!",
     "uploadFailed": "Upload failed. Please try again.",
     "processing": "Processing your document...",
-    "processingComplete": "Processing complete!"
+    "processingComplete": "Processing complete!",
+    "checkAnotherFile": "Check Another File",
+    "activeBackgroundTitle": "Verification running in background",
+    "activeBackgroundDesc": "{{filename}} is currently being analyzed in the background.",
+    "viewLiveProgress": "View Progress",
+    "uploadingInBackground": "Uploading {{filename}} to verification server...",
+    "recentCompletedTitle": "Recent verification complete: {{filename}}",
+    "recentCompletedDesc": "Your manuscript finished processing in the background and is ready for review.",
+    "recentFailedTitle": "Recent verification failed: {{filename}}",
+    "openReport": "Open Report",
+    "dismissNotice": "Dismiss",
+    "toastCompletedTitle": "Verification complete!",
+    "toastCompletedDesc": "{{filename}} is ready to view.",
+    "toastFailedTitle": "Verification failed"
   },
   "sandbox": {
     "title": "Live Citation Sandbox",
@@ -251,7 +264,15 @@
     "fileTooLarge": "{{name}} is {{size}} — the {{plan}} plan limit is {{max}} MB per file.",
     "notEnoughUploads": "Only {{remaining}} monthly checks remain on your {{plan}} plan — you queued {{count}} files.",
     "noBatchAccess": "Batch upload is not included in your {{plan}} plan.",
-    "upgradeFeature": "Larger batch uploads"
+    "upgradeFeature": "Larger batch uploads",
+    "backgroundActiveBanner": "Batch queue continues running in the background even if you switch tabs.",
+    "backgroundCompletedNotice": "Background batch finished ({{completed}}/{{total}} completed).",
+    "openHistory": "View Reports",
+    "reloadInterrupted": "Upload interrupted by page reload — please remove and re-select this file.",
+    "toastBatchCompletedTitle": "Batch verification complete!",
+    "toastBatchCompletedDesc": "Completed {{completed}}/{{total}} manuscripts.",
+    "toastBatchMixedTitle": "Batch verification finished with errors",
+    "toastBatchMixedDesc": "{{completed}} completed, {{failed}} failed."
   },
   "history": {
     "title": "Verification Reports",

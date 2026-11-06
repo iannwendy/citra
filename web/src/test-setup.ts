@@ -21,4 +21,11 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   });
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  try {
+    sessionStorage.clear();
+  } catch {
+    // Ignore if unavailable
+  }
+});

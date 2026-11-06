@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Upload,
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { api, type Class } from '../api/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useVerificationProgress } from '@/contexts/VerificationProgressContext';
 import { useRole } from '@/hooks/useRole';
 import { getQuotaView } from '@/lib/quotaDisplay';
 import { useToast } from '@/contexts/ToastContext';
@@ -44,8 +45,15 @@ const ACCEPTED_MIME = {
 export function UploadPage() {
   const { t, i18n } = useTranslation();
   const { refreshUser } = useAuth();
+  const {
+    activeSingleCheck,
+    isSingleCheckInFlight,
+    startSingleUpload,
+    acknowledgeSingleCheck,
+    registerUploadPageMount,
+  } = useVerificationProgress();
   const toast = useToast();
-  const { isUser, isTeacher, isAdmin, planTier, isBasic, quota, canBatchUpload } = useRole();
+  const { isUser, isAdmin, planTier, isBasic, quota, canBatchUpload } = useRole();
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -61,9 +69,14 @@ export function UploadPage() {
     feature?: string;
   }>({});
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const forceNewUpload = searchParams.get('new') === '1';
 
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const quotaView = getQuotaView(quota, lang, { isAdmin });
+
+  useEffect(() => registerUploadPageMount(), [registerUploadPageMount]);
 
   useEffect(() => {
     api
@@ -189,7 +202,7 @@ export function UploadPage() {
     setUploading(true);
     setError(null);
     try {
-      const response = await api.uploadEssay(file, selectedClassId);
+      const response = await startSingleUpload(file, selectedClassId);
       await refreshUser();
       navigate(`/verification/processing/${response.essay_id}`);
     } catch (e) {
@@ -216,8 +229,142 @@ export function UploadPage() {
     }
   };
 
+  // Automatically restore the live 8-step ProcessingPage UI when user clicks
+  // "Kiểm Tra Mới" (/upload) while an essay is actively queued/processing in background,
+  // unless they explicitly clicked "Check Another File" (?new=1).
+  if (
+    !forceNewUpload &&
+    isSingleCheckInFlight &&
+    activeSingleCheck?.essayId != null &&
+    location.pathname === '/upload'
+  ) {
+    return <Navigate to={`/verification/processing/${activeSingleCheck.essayId}`} replace />;
+  }
+
+  const isUploadingInBackground =
+    !forceNewUpload &&
+    activeSingleCheck?.status === 'uploading' &&
+    activeSingleCheck.essayId == null;
+  const effectiveUploading = uploading || isUploadingInBackground;
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-8">
+      {/* Live banner when HTTP upload is still in-flight after switching tabs */}
+      {isUploadingInBackground && activeSingleCheck && (
+        <div
+          data-testid="uploading-in-background-banner"
+          className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/85 dark:bg-indigo-950/45 p-4 flex items-center gap-3 text-xs text-indigo-900 dark:text-indigo-200 shadow-2xs"
+        >
+          <Loader2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold truncate">
+              {t('upload.uploadingInBackground', { filename: activeSingleCheck.filename })}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Live banner when user clicked "Check Another File" (?new=1) while a check is still running */}
+      {forceNewUpload && isSingleCheckInFlight && activeSingleCheck?.essayId != null && (
+        <div
+          data-testid="active-single-check-banner"
+          className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/85 dark:bg-indigo-950/45 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-indigo-900 dark:text-indigo-200 shadow-2xs"
+        >
+          <div className="flex items-start gap-3 min-w-0">
+            <Loader2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-bold font-display text-sm">
+                  {t('upload.activeBackgroundTitle')}
+                </p>
+                <Badge variant="secondary" className="font-mono text-[10px]">
+                  ID #{activeSingleCheck.essayId} · {activeSingleCheck.progress}%
+                </Badge>
+              </div>
+              <p className="mt-0.5 text-indigo-800/90 dark:text-indigo-300/90 break-words [overflow-wrap:anywhere]">
+                {t('upload.activeBackgroundDesc', { filename: activeSingleCheck.filename })}
+              </p>
+            </div>
+          </div>
+
+          <Button
+            asChild
+            size="sm"
+            className="h-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shrink-0 w-full sm:w-auto"
+          >
+            <Link to={`/verification/processing/${activeSingleCheck.essayId}`}>
+              <span>{t('upload.viewLiveProgress')}</span>
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </Button>
+        </div>
+      )}
+
+      {/* Recent background check completed / failed notice so user knows their prior file finished */}
+      {!isSingleCheckInFlight &&
+        activeSingleCheck &&
+        !activeSingleCheck.acknowledged &&
+        (activeSingleCheck.status === 'completed' || activeSingleCheck.status === 'failed') && (
+          <div
+            data-testid="recent-single-check-banner"
+            className={`rounded-2xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs ${
+              activeSingleCheck.status === 'completed'
+                ? 'border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/85 dark:bg-emerald-950/35 text-emerald-950 dark:text-emerald-200'
+                : 'border-red-200 dark:border-red-900/70 bg-red-50/85 dark:bg-red-950/35 text-red-950 dark:text-red-200'
+            }`}
+          >
+            <div className="flex items-start gap-3 min-w-0">
+              {activeSingleCheck.status === 'completed' ? (
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+              ) : (
+                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+              )}
+              <div className="min-w-0">
+                <p className="font-bold font-display text-sm break-words [overflow-wrap:anywhere]">
+                  {activeSingleCheck.status === 'completed'
+                    ? t('upload.recentCompletedTitle', { filename: activeSingleCheck.filename })
+                    : t('upload.recentFailedTitle', { filename: activeSingleCheck.filename })}
+                </p>
+                <p className="text-xs opacity-90 mt-0.5 break-words [overflow-wrap:anywhere]">
+                  {activeSingleCheck.status === 'completed'
+                    ? t('upload.recentCompletedDesc')
+                    : activeSingleCheck.error || t('upload.uploadFailed')}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+              {activeSingleCheck.essayId != null && (
+                <Button
+                  asChild
+                  size="sm"
+                  className={`h-9 rounded-xl font-semibold flex-1 sm:flex-initial ${
+                    activeSingleCheck.status === 'completed'
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-red-600 hover:bg-red-700 text-white'
+                  }`}
+                >
+                  <Link
+                    to={`/verification/report/${activeSingleCheck.essayId}`}
+                    onClick={() => acknowledgeSingleCheck(activeSingleCheck.essayId ?? undefined)}
+                  >
+                    <span>{t('upload.openReport')}</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              )}
+              <button
+                type="button"
+                aria-label={t('upload.dismissNotice')}
+                onClick={() => acknowledgeSingleCheck()}
+                className="p-2 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
       {/* Executive Header Banner */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1.5">
@@ -565,10 +712,10 @@ export function UploadPage() {
             <Button
               size="lg"
               onClick={handleUpload}
-              disabled={!file || uploading}
+              disabled={!file || effectiveUploading}
               className="w-full sm:w-auto shrink-0 whitespace-nowrap h-11 px-7 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-md shadow-indigo-600/20 disabled:opacity-50 btn-shimmer"
             >
-              {uploading ? (
+              {effectiveUploading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span>{t('upload.uploading')}</span>

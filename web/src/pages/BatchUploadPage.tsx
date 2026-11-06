@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef, useEffect, useMemo } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -19,6 +19,13 @@ import {
 import { api } from '../api/client';
 import { useRole } from '@/hooks/useRole';
 import type { Class } from '@/api/client';
+import {
+  BATCH_CONCURRENCY,
+  batchTiming,
+  useVerificationProgress,
+  type BatchFileItem,
+  type BatchFileStatus,
+} from '@/contexts/VerificationProgressContext';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -28,32 +35,17 @@ import { Select } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { UpgradeModal } from '@/components/UpgradeModal';
-import { runWithConcurrency } from '@/lib/concurrencyPool';
 import { isUnlimitedValue } from '@/lib/quotaDisplay';
+
+export { BATCH_CONCURRENCY, batchTiming };
 
 /* ============================================================
    Batch Upload Page (Scholarly Precision shadcn/ui v2.0)
-   Upload multiple PDFs for concurrent analysis
+   Upload multiple PDFs for concurrent analysis with persistent
+   background queue across SPA route transitions.
    ============================================================ */
 
 const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.bib', '.ris'];
-
-type FileStatus = 'pending' | 'uploading' | 'processing' | 'completed' | 'failed';
-
-interface BatchFileItem {
-  id: string;
-  file: File;
-  status: FileStatus;
-  progress: number;
-  essayId?: number;
-  error?: string;
-}
-
-interface QueueState {
-  isProcessing: boolean;
-  currentIndex: number;
-  hasAutoNavigated: boolean;
-}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return bytes + ' B';
@@ -61,7 +53,7 @@ function formatBytes(bytes: number): string {
   return (bytes / 1024 / 1024).toFixed(2) + ' MB';
 }
 
-function getStatusIcon(status: FileStatus) {
+function getStatusIcon(status: BatchFileStatus) {
   switch (status) {
     case 'pending':
       return <Clock className="h-4 w-4 text-slate-400" />;
@@ -75,7 +67,9 @@ function getStatusIcon(status: FileStatus) {
   }
 }
 
-function getStatusVariant(status: FileStatus): 'muted' | 'default' | 'verified' | 'destructive' {
+function getStatusVariant(
+  status: BatchFileStatus,
+): 'muted' | 'default' | 'verified' | 'destructive' {
   switch (status) {
     case 'pending':
       return 'muted';
@@ -89,7 +83,11 @@ function getStatusVariant(status: FileStatus): 'muted' | 'default' | 'verified' 
   }
 }
 
-function getStatusText(status: FileStatus, progress: number, t: TFunction): string {
+function getStatusText(
+  status: BatchFileStatus,
+  progress: number,
+  t: TFunction,
+): string {
   switch (status) {
     case 'pending':
       return t('batchUpload.pending');
@@ -106,21 +104,38 @@ function getStatusText(status: FileStatus, progress: number, t: TFunction): stri
   }
 }
 
-/** Number of files uploaded + polled at the same time. */
-export const BATCH_CONCURRENCY = 3;
-
-/** Status poll timing (mutable so tests can shorten the interval). */
-export const batchTiming = { pollIntervalMs: 2000 };
-
 export function BatchUploadPage() {
   const { t, i18n } = useTranslation();
   const { isTeacher, isAdmin, planTier, quota, canBatchUpload } = useRole();
+  const {
+    batchFiles: files,
+    batchQueueState: queueState,
+    batchStats: stats,
+    isBatchActive,
+    batchTargetClassId: targetClassId,
+    setBatchTargetClassId: setTargetClassId,
+    addBatchFiles,
+    removeBatchFile,
+    clearBatchFiles,
+    retryBatchFile,
+    startBatchQueue,
+    markBatchAutoNavigated,
+    registerBatchPageMount,
+  } = useVerificationProgress();
+
   const [quotaProblems, setQuotaProblems] = useState<string[]>([]);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [classes, setClasses] = useState<Class[]>([]);
-  const [targetClassId, setTargetClassId] = useState<number | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const navigateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
+  const navigate = useNavigate();
 
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+
+  useEffect(() => registerBatchPageMount(), [registerBatchPageMount]);
 
   useEffect(() => {
     if (isTeacher || isAdmin) {
@@ -130,30 +145,6 @@ export function BatchUploadPage() {
         .catch(() => setClasses([]));
     }
   }, [isTeacher, isAdmin]);
-
-  const [files, setFiles] = useState<BatchFileItem[]>([]);
-  const [dragActive, setDragActive] = useState(false);
-  const [queueState, setQueueState] = useState<QueueState>({
-    isProcessing: false,
-    currentIndex: -1,
-    hasAutoNavigated: false,
-  });
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const navigateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isMountedRef = useRef(true);
-  const navigate = useNavigate();
-
-  const stats = useMemo(
-    () => ({
-      pending: files.filter((f) => f.status === 'pending').length,
-      processing: files.filter(
-        (f) => f.status === 'uploading' || f.status === 'processing'
-      ).length,
-      completed: files.filter((f) => f.status === 'completed').length,
-      failed: files.filter((f) => f.status === 'failed').length,
-    }),
-    [files]
-  );
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -174,11 +165,11 @@ export function BatchUploadPage() {
       stats.completed > 0
     ) {
       const completedFiles = files.filter(
-        (f) => f.status === 'completed' && f.essayId !== undefined
+        (f) => f.status === 'completed' && f.essayId !== undefined,
       );
       if (completedFiles.length === 0) return;
 
-      setQueueState((prev) => ({ ...prev, hasAutoNavigated: true }));
+      markBatchAutoNavigated();
       navigateTimerRef.current = setTimeout(() => {
         if (!isMountedRef.current) return;
         if (completedFiles.length === 1 && completedFiles[0].essayId) {
@@ -196,101 +187,9 @@ export function BatchUploadPage() {
     stats.processing,
     stats.failed,
     stats.completed,
+    markBatchAutoNavigated,
     navigate,
   ]);
-
-  const setFileState = useCallback((id: string, patch: Partial<BatchFileItem>) => {
-    setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)));
-  }, []);
-
-  /** Upload one file and poll its pipeline status until it settles. */
-  const processOne = useCallback(
-    async (fileItem: BatchFileItem) => {
-      if (!isMountedRef.current) return;
-      setFileState(fileItem.id, { status: 'uploading' });
-      try {
-        const response = await api.uploadEssay(fileItem.file, targetClassId);
-        if (!isMountedRef.current) return;
-        setFileState(fileItem.id, {
-          status: 'processing',
-          essayId: response.essay_id,
-          progress: 0,
-        });
-
-        let attempts = 0;
-        const maxAttempts = 150;
-        while (attempts < maxAttempts && isMountedRef.current) {
-          await new Promise((resolve) => setTimeout(resolve, batchTiming.pollIntervalMs));
-          if (!isMountedRef.current) return;
-          attempts++;
-
-          try {
-            const status = await api.getEssayStatus(response.essay_id);
-            if (!isMountedRef.current) return;
-            if (status.status === 'completed') {
-              setFileState(fileItem.id, { status: 'completed', progress: 100 });
-              return;
-            }
-            if (status.status === 'failed') {
-              setFileState(fileItem.id, {
-                status: 'failed',
-                error: status.error || 'Processing failed',
-              });
-              return;
-            }
-            const progress = Math.round(
-              (status.step_index / Math.max(1, status.total_steps)) * 100
-            );
-            setFileState(fileItem.id, { status: 'processing', progress });
-          } catch {
-            // Continue polling
-          }
-        }
-
-        if (attempts >= maxAttempts && isMountedRef.current) {
-          setFileState(fileItem.id, { status: 'failed', error: 'Processing timeout' });
-        }
-      } catch (error) {
-        if (!isMountedRef.current) return;
-        setFileState(fileItem.id, {
-          status: 'failed',
-          error: error instanceof Error ? error.message : 'Upload failed',
-        });
-      }
-    },
-    [setFileState, targetClassId]
-  );
-
-  const processQueue = useCallback(
-    async (overridePending?: BatchFileItem[]) => {
-      const pendingFiles = overridePending ?? files.filter((f) => f.status === 'pending');
-      if (pendingFiles.length === 0) {
-        setQueueState({
-          isProcessing: false,
-          currentIndex: -1,
-          hasAutoNavigated: false,
-        });
-        return;
-      }
-
-      setQueueState({
-        isProcessing: true,
-        currentIndex: 0,
-        hasAutoNavigated: false,
-      });
-
-      // Real concurrency pool: up to BATCH_CONCURRENCY files upload + poll in parallel.
-      await runWithConcurrency(pendingFiles, BATCH_CONCURRENCY, processOne);
-
-      if (!isMountedRef.current) return;
-      setQueueState({
-        isProcessing: false,
-        currentIndex: -1,
-        hasAutoNavigated: false,
-      });
-    },
-    [files, processOne]
-  );
 
   /**
    * Client-side plan pre-check (mirrors backend quota) so users get an
@@ -306,9 +205,16 @@ export function BatchUploadPage() {
       problems.push(t('batchUpload.noBatchAccess', { plan }));
       return problems;
     }
-    if (!isUnlimitedValue(quota.max_batch_files) && pending.length > quota.max_batch_files) {
+    if (
+      !isUnlimitedValue(quota.max_batch_files) &&
+      pending.length > quota.max_batch_files
+    ) {
       problems.push(
-        t('batchUpload.tooManyFiles', { plan, max: quota.max_batch_files, count: pending.length })
+        t('batchUpload.tooManyFiles', {
+          plan,
+          max: quota.max_batch_files,
+          count: pending.length,
+        }),
       );
     }
     if (
@@ -320,20 +226,20 @@ export function BatchUploadPage() {
           plan,
           remaining: Math.max(0, quota.monthly_uploads_remaining),
           count: pending.length,
-        })
+        }),
       );
     }
     if (!isUnlimitedValue(quota.max_file_size_mb)) {
       const maxBytes = quota.max_file_size_mb * 1024 * 1024;
       for (const item of pending) {
-        if (item.file.size > maxBytes) {
+        if (item.fileSize > maxBytes) {
           problems.push(
             t('batchUpload.fileTooLarge', {
-              name: item.file.name,
-              size: formatBytes(item.file.size),
+              name: item.fileName,
+              size: formatBytes(item.fileSize),
               plan,
               max: quota.max_file_size_mb,
-            })
+            }),
           );
         }
       }
@@ -348,85 +254,67 @@ export function BatchUploadPage() {
     else if (e.type === 'dragleave') setDragActive(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
+  const addFiles = useCallback(
+    (newFiles: File[]) => {
+      if (newFiles.length === 0) return;
+      if (navigateTimerRef.current) {
+        clearTimeout(navigateTimerRef.current);
+        navigateTimerRef.current = null;
+      }
+      addBatchFiles(newFiles);
+    },
+    [addBatchFiles],
+  );
 
-    const droppedFiles = Array.from(e.dataTransfer.files).filter((file) => {
-      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-      return ACCEPTED_EXTENSIONS.includes(ext);
-    });
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragActive(false);
 
-    addFiles(droppedFiles);
-  }, []);
+      const droppedFiles = Array.from(e.dataTransfer.files).filter((file) => {
+        const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+        return ACCEPTED_EXTENSIONS.includes(ext);
+      });
+
+      addFiles(droppedFiles);
+    },
+    [addFiles],
+  );
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const selectedFiles = Array.from(e.target.files);
       addFiles(selectedFiles);
+      e.target.value = '';
     }
-  };
-
-  const addFiles = (newFiles: File[]) => {
-    const batchFiles: BatchFileItem[] = newFiles.map((file) => ({
-      id: crypto.randomUUID(),
-      file,
-      status: 'pending',
-      progress: 0,
-    }));
-    setFiles((prev) => [...prev, ...batchFiles]);
-    if (navigateTimerRef.current) {
-      clearTimeout(navigateTimerRef.current);
-      navigateTimerRef.current = null;
-    }
-    setQueueState((prev) => ({ ...prev, hasAutoNavigated: false }));
   };
 
   const removeFile = (id: string) => {
-    setFiles((prev) => prev.filter((f) => f.id !== id));
+    removeBatchFile(id);
   };
 
   const clearAll = () => {
-    setFiles([]);
     if (navigateTimerRef.current) {
       clearTimeout(navigateTimerRef.current);
       navigateTimerRef.current = null;
     }
-    setQueueState({
-      isProcessing: false,
-      currentIndex: -1,
-      hasAutoNavigated: false,
-    });
+    clearBatchFiles();
   };
 
   const retryFile = (id: string) => {
-    const target = files.find((f) => f.id === id);
-    const updatedItem = target
-      ? { ...target, status: 'pending' as const, progress: 0, error: undefined }
-      : null;
-
-    setFiles((prev) =>
-      prev.map((f) =>
-        f.id === id
-          ? { ...f, status: 'pending', progress: 0, error: undefined }
-          : f
-      )
-    );
     if (navigateTimerRef.current) {
       clearTimeout(navigateTimerRef.current);
       navigateTimerRef.current = null;
     }
-    setQueueState((prev) => ({ ...prev, hasAutoNavigated: false }));
-    if (updatedItem && !queueState.isProcessing) {
-      const otherPending = files.filter((f) => f.id !== id && f.status === 'pending');
-      void processQueue([updatedItem, ...otherPending]);
-    }
+    retryBatchFile(id);
   };
 
   const handleStartVerification = () => {
     if (files.length === 0 || queueState.isProcessing) return;
-    const problems = checkBatchAgainstQuota(files.filter((f) => f.status === 'pending'));
+    const problems = checkBatchAgainstQuota(
+      files.filter((f) => f.status === 'pending'),
+    );
     setQuotaProblems(problems);
     if (problems.length > 0) {
       setUpgradeOpen(true);
@@ -436,8 +324,7 @@ export function BatchUploadPage() {
       clearTimeout(navigateTimerRef.current);
       navigateTimerRef.current = null;
     }
-    setQueueState((prev) => ({ ...prev, hasAutoNavigated: false }));
-    processQueue();
+    void startBatchQueue();
   };
 
   const pendingCount = stats.pending;
@@ -511,6 +398,50 @@ export function BatchUploadPage() {
         </Button>
       </div>
 
+      {/* Live Background Persistence Banner when Batch is Actively Processing */}
+      {isBatchActive && (
+        <div
+          data-testid="batch-background-active-banner"
+          className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/85 dark:bg-indigo-950/45 px-4 py-3 flex items-center gap-3 text-xs text-indigo-900 dark:text-indigo-200 shadow-2xs"
+        >
+          <Loader2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0" />
+          <p className="font-medium break-words [overflow-wrap:anywhere]">
+            {t('batchUpload.backgroundActiveBanner')}
+          </p>
+        </div>
+      )}
+
+      {/* Completed-in-Background Notice when User Returns After Batch Settled */}
+      {!isBatchActive &&
+        queueState.hasAutoNavigated &&
+        stats.completed > 0 &&
+        stats.pending === 0 && (
+          <div
+            data-testid="batch-background-completed-notice"
+            className="rounded-2xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/85 dark:bg-emerald-950/35 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-emerald-950 dark:text-emerald-200 shadow-2xs"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span className="font-semibold break-words [overflow-wrap:anywhere]">
+                {t('batchUpload.backgroundCompletedNotice', {
+                  completed: stats.completed,
+                  total: files.length,
+                })}
+              </span>
+            </div>
+            <Button
+              asChild
+              size="sm"
+              className="h-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shrink-0 w-full sm:w-auto"
+            >
+              <Link to="/history">
+                <span>{t('batchUpload.openHistory')}</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </div>
+        )}
+
       {/* 4 Queue Telemetry Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {queueMetrics.map((m) => (
@@ -522,7 +453,9 @@ export function BatchUploadPage() {
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                 {m.label}
               </span>
-              <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md ${m.badge}`}>
+              <span
+                className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md ${m.badge}`}
+              >
                 {m.idx}
               </span>
             </div>
@@ -545,7 +478,8 @@ export function BatchUploadPage() {
             </div>
             <Separator orientation="vertical" className="h-4" />
             <span className="font-mono text-xs text-slate-700 dark:text-slate-300 font-semibold">
-              batch_ingest_queue.py · {files.length} {t('batchUpload.files').toLowerCase()}
+              batch_ingest_queue.py · {files.length}{' '}
+              {t('batchUpload.files').toLowerCase()}
             </span>
           </div>
 
@@ -566,7 +500,10 @@ export function BatchUploadPage() {
                   <GraduationCap className="h-5 w-5" />
                 </div>
                 <div>
-                  <Label htmlFor="batch-class-select" className="font-semibold text-sm text-slate-900 dark:text-white">
+                  <Label
+                    htmlFor="batch-class-select"
+                    className="font-semibold text-sm text-slate-900 dark:text-white"
+                  >
                     {t('batchUpload.assignToClass')}
                   </Label>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -580,7 +517,9 @@ export function BatchUploadPage() {
                   id="batch-class-select"
                   value={targetClassId ?? ''}
                   onChange={(e) =>
-                    setTargetClassId(e.target.value ? Number(e.target.value) : null)
+                    setTargetClassId(
+                      e.target.value ? Number(e.target.value) : null,
+                    )
                   }
                   wrapperClassName="w-full"
                 >
@@ -689,24 +628,27 @@ export function BatchUploadPage() {
                       #{idx + 1}
                     </span>
 
-                    <FileFormatIcon filename={fileItem.file.name} size="sm" />
+                    <FileFormatIcon filename={fileItem.fileName} size="sm" />
 
                     <div className="flex-1 min-w-0">
                       <p
                         className="text-sm font-semibold text-slate-900 dark:text-white truncate"
-                        title={fileItem.file.name}
+                        title={fileItem.fileName}
                       >
-                        {fileItem.file.name}
+                        {fileItem.fileName}
                       </p>
                       <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                        {formatBytes(fileItem.file.size)}
+                        {formatBytes(fileItem.fileSize)}
                         {fileItem.essayId && ` · ID #${fileItem.essayId}`}
                       </p>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0 ml-auto sm:ml-0">
                       {getStatusIcon(fileItem.status)}
-                      <Badge variant={getStatusVariant(fileItem.status)} className="font-mono text-[11px]">
+                      <Badge
+                        variant={getStatusVariant(fileItem.status)}
+                        className="font-mono text-[11px]"
+                      >
                         {getStatusText(fileItem.status, fileItem.progress, t)}
                       </Badge>
                     </div>
@@ -730,16 +672,17 @@ export function BatchUploadPage() {
                           <ExternalLink className="h-4 w-4" />
                         </button>
                       )}
-                      {fileItem.status === 'failed' && (
-                        <button
-                          onClick={() => retryFile(fileItem.id)}
-                          disabled={queueState.isProcessing}
-                          className="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
-                          title={t('common.retry')}
-                        >
-                          <RefreshCw className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-                        </button>
-                      )}
+                      {fileItem.status === 'failed' &&
+                        Boolean(fileItem.file || fileItem.essayId != null) && (
+                          <button
+                            onClick={() => retryFile(fileItem.id)}
+                            disabled={queueState.isProcessing}
+                            className="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                            title={t('common.retry')}
+                          >
+                            <RefreshCw className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                          </button>
+                        )}
                       {!queueState.isProcessing && (
                         <button
                           onClick={() => removeFile(fileItem.id)}
@@ -761,7 +704,7 @@ export function BatchUploadPage() {
                     key={f.id}
                     className="text-xs font-mono text-red-600 dark:text-red-400 px-3 py-2 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 break-words [overflow-wrap:anywhere]"
                   >
-                    {f.file.name}: {f.error}
+                    {f.fileName}: {f.error}
                   </div>
                 ))}
             </div>
@@ -788,6 +731,7 @@ export function BatchUploadPage() {
 
             <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
               {!queueState.isProcessing &&
+                !queueState.hasAutoNavigated &&
                 files.length > 0 &&
                 stats.pending === 0 &&
                 stats.processing === 0 && (
