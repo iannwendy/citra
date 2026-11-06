@@ -99,14 +99,25 @@ jobs:
         run: npm test
 
   # ============================================================================
-  # STAGE 3: Docker & Compose Production Configuration Verification
+  # STAGE 3: Docker Compose Validation & GHCR Image Build/Push (ghcr.io)
   # ============================================================================
   docker-config-verify:
-    name: Validate Docker & Compose Config
+    name: Validate Compose & Build Images (GHCR)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      ghcr_owner: ${{ steps.meta.outputs.owner }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Normalize GHCR owner
+        id: meta
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "owner=$OWNER" >> "$GITHUB_OUTPUT"
 
       - name: Validate Docker Compose Configurations
         run: |
@@ -117,10 +128,57 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Verify Web Production Image Build
-        run: |
-          cp -n .env.example .env || true
-          JWT_SECRET="${{ env.JWT_SECRET }}" docker compose -f docker-compose.prod.yml build web
+      - name: Log in to GitHub Container Registry (ghcr.io)
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Web Production Image (PR / non-main verification)
+        if: ${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./web
+          file: ./web/Dockerfile
+          push: false
+          load: true
+          build-args: |
+            VITE_API_BASE_URL=/api
+            VITE_GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID || '429053368516-7uia3j5uavajvbkhd7hq6lih9a65n22u.apps.googleusercontent.com' }}
+          tags: ghcr.io/${{ steps.meta.outputs.owner }}/citra-web:ci
+          cache-from: type=gha,scope=citra-web
+          cache-to: type=gha,scope=citra-web,mode=max
+
+      - name: Build & Push API Image to GHCR (main)
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/citra-api:${{ github.sha }}
+            ghcr.io/${{ steps.meta.outputs.owner }}/citra-api:latest
+          cache-from: type=gha,scope=citra-api
+          cache-to: type=gha,scope=citra-api,mode=max
+
+      - name: Build & Push Web Image to GHCR (main)
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: docker/build-push-action@v6
+        with:
+          context: ./web
+          file: ./web/Dockerfile
+          push: true
+          build-args: |
+            VITE_API_BASE_URL=/api
+            VITE_GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID || '429053368516-7uia3j5uavajvbkhd7hq6lih9a65n22u.apps.googleusercontent.com' }}
+          tags: |
+            ghcr.io/${{ steps.meta.outputs.owner }}/citra-web:${{ github.sha }}
+            ghcr.io/${{ steps.meta.outputs.owner }}/citra-web:latest
+          cache-from: type=gha,scope=citra-web
+          cache-to: type=gha,scope=citra-web,mode=max
 
   # ============================================================================
   # STAGE 4: Automated Production Deployment (https://citra.io.vn)
@@ -130,19 +188,26 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend-verify, frontend-verify, docker-config-verify]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: read
+      packages: read
     concurrency:
       group: citra-production-deploy
       cancel-in-progress: false
     steps:
-      - name: Deploy latest commit to Production VM via SSH
+      - name: Deploy pre-built GHCR images to Production VM via SSH
         env:
           GCE_HOST: ${{ secrets.GCE_HOST }}
           GCE_USER: ${{ secrets.GCE_USER }}
           GCE_SSH_PRIVATE_KEY: ${{ secrets.GCE_SSH_PRIVATE_KEY }}
           SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
           SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_ACTOR: ${{ github.actor }}
+          GHCR_OWNER: ${{ needs.docker-config-verify.outputs.ghcr_owner }}
+          CITRA_IMAGE_TAG: ${{ github.sha }}
         run: |
-          echo "Deploying CITRA commit ${{ github.sha }} to https://citra.io.vn..."
+          echo "Deploying CITRA commit ${{ github.sha }} via GHCR to https://citra.io.vn..."
           if [ -z "$GCE_SSH_PRIVATE_KEY" ] || [ -z "$GCE_HOST" ] || [ -z "$GCE_USER" ]; then
             echo "Error: Missing GCE_HOST, GCE_USER, or GCE_SSH_PRIVATE_KEY secrets."
             exit 1
@@ -172,7 +237,12 @@ jobs:
             '
           fi
 
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$GCE_USER@$GCE_HOST" '
+          # Authenticate VPS Docker client with GHCR over stdin (supports private & public packages)
+          printf '%s' "$GHCR_TOKEN" | ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$GCE_USER@$GCE_HOST" \
+            "sudo docker login ghcr.io -u '$GHCR_ACTOR' --password-stdin >/dev/null"
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$GCE_USER@$GCE_HOST" \
+            "GHCR_OWNER='$GHCR_OWNER' CITRA_IMAGE_TAG='$CITRA_IMAGE_TAG' bash -s" << 'EOF'
             set -e
             echo ">>> [1/4] Syncing /opt/citra with origin/main..."
             sudo chown -R "$USER":1000 /opt/citra
@@ -185,11 +255,15 @@ jobs:
             sudo mkdir -p /opt/citra/data/essays/uploads /opt/citra/data/avatars /opt/citra/data/cache/grobid /opt/citra/data/logs
             sudo chown -R 1000:1000 /opt/citra/data
             sudo chmod -R ug+rwX /opt/citra/data
-            if [ -f /opt/citra/.env ] && ! grep -q "^GOOGLE_CLIENT_ID=" /opt/citra/.env 2>/dev/null; then
-              printf "\nGOOGLE_CLIENT_ID=429053368516-7uia3j5uavajvbkhd7hq6lih9a65n22u.apps.googleusercontent.com\n" | sudo tee -a /opt/citra/.env >/dev/null
+            if [ -f /opt/citra/.env ]; then
+              if ! grep -q "^GOOGLE_CLIENT_ID=" /opt/citra/.env 2>/dev/null; then
+                printf "\nGOOGLE_CLIENT_ID=429053368516-7uia3j5uavajvbkhd7hq6lih9a65n22u.apps.googleusercontent.com\n" | sudo tee -a /opt/citra/.env >/dev/null
+              fi
+              sudo sed -i "/^GHCR_OWNER=/d;/^CITRA_IMAGE_TAG=/d" /opt/citra/.env
+              printf "GHCR_OWNER=%s\nCITRA_IMAGE_TAG=%s\n" "$GHCR_OWNER" "$CITRA_IMAGE_TAG" | sudo tee -a /opt/citra/.env >/dev/null
             fi
 
-            echo ">>> [3/4] Building and rolling out updated containers (grobid, api & web)..."
+            echo ">>> [3/4] Pulling pre-built images from ghcr.io and rolling out containers (zero server build)..."
             CURRENT_GROBID_IMG=$(sudo docker inspect --format="{{.Config.Image}}" essay-check-grobid 2>/dev/null || true)
             CURRENT_GROBID_RUNNING=$(sudo docker inspect --format="{{.State.Running}}" essay-check-grobid 2>/dev/null || true)
             if [ "$CURRENT_GROBID_IMG" != "grobid/grobid:0.9.1-crf" ] || [ "$CURRENT_GROBID_RUNNING" != "true" ]; then
@@ -200,10 +274,15 @@ jobs:
               sudo docker compose -f docker-compose.prod.yml up -d grobid
               sudo docker rmi lfoppiano/grobid:0.8.0 2>/dev/null || true
             fi
-            sudo docker compose -f docker-compose.prod.yml build api web
+
+            sudo GHCR_OWNER="$GHCR_OWNER" CITRA_IMAGE_TAG="$CITRA_IMAGE_TAG" \
+              docker compose -f docker-compose.prod.yml pull api web
             sudo docker rm -f $(sudo docker ps -aq --filter "name=integrity-api" --filter "name=integrity-web") 2>/dev/null || true
-            sudo docker compose -f docker-compose.prod.yml up -d --no-build --remove-orphans api web
+            sudo GHCR_OWNER="$GHCR_OWNER" CITRA_IMAGE_TAG="$CITRA_IMAGE_TAG" \
+              docker compose -f docker-compose.prod.yml up -d --no-build --remove-orphans api web
+            sudo docker logout ghcr.io >/dev/null 2>&1 || true
             sudo docker image prune -f >/dev/null 2>&1 || true
+            sudo docker builder prune -af >/dev/null 2>&1 || true
 
             echo ">>> [4/4] Verifying container health (API, GROBID & Web) on 127.0.0.1:8000 and https://citra.io.vn..."
             HEALTHY=0
@@ -212,7 +291,7 @@ jobs:
                  && curl -sf http://127.0.0.1:8000/api/health | grep -q "\"available\":true" \
                  && curl -sf https://citra.io.vn/api/health >/dev/null; then
                 HEALTHY=1
-                echo "Production deployment verified healthy (GROBID 0.9.1-crf + API + Web) on https://citra.io.vn (attempt $i)!"
+                echo "Production deployment verified healthy (GROBID 0.9.1-crf + GHCR API/Web:$CITRA_IMAGE_TAG) on https://citra.io.vn (attempt $i)!"
                 break
               fi
               sleep 2
@@ -224,4 +303,4 @@ jobs:
               sudo docker compose -f docker-compose.prod.yml logs --tail=50 grobid api web
               exit 1
             fi
-          '
+          EOF

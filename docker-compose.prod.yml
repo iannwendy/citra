@@ -2,7 +2,8 @@
 # docker-compose.prod.yml — Essay Integrity Checker (Production)
 #
 # Usage:
-#   docker compose -f docker-compose.prod.yml up --build -d
+#   docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d --no-build
+#   docker compose -f docker-compose.prod.yml up --build -d   # (Optional local build fallback)
 #   docker compose -f docker-compose.prod.yml ps
 #   docker compose -f docker-compose.prod.yml logs -f api web
 # =====================================================================
@@ -40,9 +41,10 @@ services:
       start_period: 120s
 
   # ---------------------------------------------------------------------------
-  # API — FastAPI backend (Production: no --reload, no source bind mounts)
+  # API — FastAPI backend (Production: pre-built GHCR image + local build fallback)
   # ---------------------------------------------------------------------------
   api:
+    image: ghcr.io/${GHCR_OWNER:-iannwendy}/citra-api:${CITRA_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
@@ -95,6 +97,7 @@ services:
   # Web — Nginx Static SPA + /api Reverse Proxy
   # ---------------------------------------------------------------------------
   web:
+    image: ghcr.io/${GHCR_OWNER:-iannwendy}/citra-web:${CITRA_IMAGE_TAG:-latest}
     build:
       context: ./web
       dockerfile: Dockerfile
