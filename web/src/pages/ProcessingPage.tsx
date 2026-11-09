@@ -138,8 +138,14 @@ export function ProcessingPage() {
   const essayId = numericId !== null && !isNaN(numericId) ? numericId : null;
 
   const [status, setStatus] = useState<EssayStatus | null>(null);
+  const [displayedStepIndex, setDisplayedStepIndex] = useState<number>(0);
   const [redirecting, setRedirecting] = useState(false);
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    setDisplayedStepIndex(0);
+    setRedirecting(false);
+  }, [essayId]);
 
   useEffect(
     () => registerProcessingPageMount(essayId),
@@ -188,18 +194,51 @@ export function ProcessingPage() {
       }
     };
     void tick();
-    timer = setInterval(tick, 1500);
+    timer = setInterval(tick, 800);
     return () => {
       cancelled = true;
       if (timer) clearInterval(timer);
     };
   }, [essayId, syncSingleCheckFromStatus]);
 
+  const backendIndex = status
+    ? Math.min(STEP_KEY_TO_INDEX[status.step] ?? 0, STEP_LABELS.length - 1)
+    : 0;
+
+  const isDone = status?.status === 'completed';
+  const isFailed = status?.status === 'failed';
+  const isQueued = status?.status === 'queued';
+  const queuePos = status?.queue_position ?? null;
+
+  const targetStepIndex = isQueued
+    ? 0
+    : isDone
+      ? STEP_LABELS.length
+      : backendIndex;
+
+  useEffect(() => {
+    if (isQueued) {
+      setDisplayedStepIndex(0);
+      return;
+    }
+    if (isFailed) {
+      setDisplayedStepIndex(backendIndex);
+      return;
+    }
+    if (displayedStepIndex >= targetStepIndex) {
+      return;
+    }
+    const stepTimer = setTimeout(() => {
+      setDisplayedStepIndex((prev) => Math.min(prev + 1, targetStepIndex));
+    }, 220);
+    return () => clearTimeout(stepTimer);
+  }, [displayedStepIndex, targetStepIndex, isQueued, isFailed, backendIndex]);
+
+  const visualDone = isDone && displayedStepIndex >= STEP_LABELS.length;
+
   useEffect(() => {
     if (essayId === null) return;
-    const done = status?.status === 'completed';
-    const failed = status?.status === 'failed';
-    if (!done && !failed) return;
+    if (!visualDone && !isFailed) return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -209,10 +248,10 @@ export function ProcessingPage() {
       timer = setTimeout(() => {
         acknowledgeSingleCheck(essayId);
         navigate(`/verification/report/${id}`);
-      }, failed ? 3000 : 1500);
+      }, isFailed ? 3000 : 1200);
     };
 
-    if (done) {
+    if (visualDone) {
       void queryClient.invalidateQueries({ queryKey: ['essays'] });
       api
         .getEssay(essayId)
@@ -229,24 +268,15 @@ export function ProcessingPage() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [essayId, status?.status, id, navigate, queryClient, acknowledgeSingleCheck]);
-
-  const backendIndex = status
-    ? Math.min(STEP_KEY_TO_INDEX[status.step] ?? 0, STEP_LABELS.length - 1)
-    : 0;
+  }, [essayId, visualDone, isFailed, id, navigate, queryClient, acknowledgeSingleCheck]);
 
   const progress = status
     ? Math.round(
-        ((backendIndex + (status.status === 'completed' ? 1 : 0)) /
+        (Math.min(displayedStepIndex, STEP_LABELS.length) /
           STEP_LABELS.length) *
           100
       )
     : 0;
-
-  const isDone = status?.status === 'completed';
-  const isFailed = status?.status === 'failed';
-  const isQueued = status?.status === 'queued';
-  const queuePos = status?.queue_position ?? null;
 
   const effectiveProgress = isQueued ? 0 : progress;
   const trackedFilename =
@@ -301,7 +331,7 @@ export function ProcessingPage() {
               ? lang === 'vi'
                 ? 'Phân tích gặp sự cố'
                 : 'Analysis failed'
-              : isDone
+              : visualDone
                 ? lang === 'vi'
                   ? 'Phân tích hoàn tất'
                   : 'Analysis complete'
@@ -318,7 +348,7 @@ export function ProcessingPage() {
               ? lang === 'vi'
                 ? 'Đã xảy ra lỗi trong quá trình xử lý pipeline.'
                 : 'An error occurred during processing.'
-              : isDone
+              : visualDone
                 ? lang === 'vi'
                   ? 'Đang chuyển hướng tới báo cáo kiểm chứng chi tiết…'
                   : 'Redirecting to your verification report…'
@@ -473,7 +503,7 @@ export function ProcessingPage() {
             <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
               {isFailed
                 ? 'FAILED'
-                : isDone
+                : visualDone
                   ? 'COMPLETE'
                   : isQueued
                     ? `QUEUED${queuePos ? ` (#${queuePos})` : ''}`
@@ -492,7 +522,7 @@ export function ProcessingPage() {
           {/* Progress Bar */}
           <div>
             <Progress value={effectiveProgress} className="h-2.5" />
-            {status && !isDone && !isFailed && (
+            {status && !visualDone && !isFailed && (
               <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-2">
                 &gt; {status.message}
               </p>
@@ -504,11 +534,13 @@ export function ProcessingPage() {
             {STEP_LABELS.map((step, idx) => {
               const s = isQueued
                 ? 'pending'
-                : stepStatus(idx, backendIndex, isDone || isFailed);
+                : stepStatus(idx, displayedStepIndex, visualDone || isFailed);
 
               return (
                 <div
                   key={idx}
+                  data-testid={`pipeline-step-${idx + 1}`}
+                  data-step-status={s}
                   className={`flex items-start gap-3.5 p-3 rounded-xl border transition-all duration-200 ${
                     s === 'active'
                       ? 'bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 shadow-2xs'
@@ -562,7 +594,7 @@ export function ProcessingPage() {
                       {lang === 'vi' ? step.detailsVi : step.detailsEn}
                     </p>
 
-                    {idx === 2 && status && (
+                    {idx === 2 && status && displayedStepIndex >= 2 && (
                       <div className="flex flex-wrap gap-2 sm:gap-3 mt-2 text-xs font-mono">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
                           <Quote className="h-3 w-3 text-indigo-500" />
@@ -575,7 +607,7 @@ export function ProcessingPage() {
                       </div>
                     )}
 
-                    {idx === 3 && status && (
+                    {idx === 3 && status && displayedStepIndex >= 3 && (
                       <div className="flex gap-3 mt-2 text-xs font-mono">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300">
                           <Check className="h-3 w-3" />
@@ -592,7 +624,7 @@ export function ProcessingPage() {
       </Card>
 
       {/* Completion banner */}
-      {(isDone || redirecting) && (
+      {(visualDone || redirecting) && (
         <div className="p-6 rounded-2xl bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center shadow-xs">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-900/60 mb-3">
             <FileCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />

@@ -735,7 +735,7 @@ class IntegrityPipeline:
             "parser_warnings": list(parser_warnings or []),
         }
 
-        # 1c. Citation linking (in-text ↔ reference) — v1.2 §3.5
+        # 1c. Finalize extracted citations & prepare body pages for discovery — Step 03/08 (extracting)
         _emit(
             "extracting",
             2,
@@ -743,18 +743,30 @@ class IntegrityPipeline:
             references_found=len(ref_citations),
             message=f"Found {len(in_text_citations)} in-text + {len(ref_citations)} references",
         )
+        body_pages_for_discovery = self._filter_body_pages_for_discovery(
+            document_pages, ref_citations
+        )
+
+        # 1d. Citation linking (in-text ↔ reference) — v1.2 §3.5 — Step 04/08 (linking)
+        _emit(
+            "linking",
+            3,
+            citations_found=len(in_text_citations),
+            references_found=len(ref_citations),
+            message=f"Linking {len(in_text_citations)} in-text citations to {len(ref_citations)} references...",
+        )
         linking_result = self._run_linking(in_text_citations, ref_citations, style_profile)
         link_by_raw_text = self._build_link_lookup(linking_result.links)
         # v1.9 — lossless view: one occurrence may cite several references
         # ("[9, 10]"), and the single-slot map above keeps only the last.
         links_by_key_multi = self._build_link_lookup_multi(linking_result.links)
 
-        # 1d. Populate metadata for in-text citations from matched references
+        # 1d-bis. Populate metadata for in-text citations from matched references
         # FIX: For numeric citations like "[1]" that have no title/author/year,
         # copy metadata from the matched reference entry
         self._populate_citation_metadata(in_text_citations, ref_citations, link_by_raw_text)
 
-        # 1d-bis. Extract the surrounding sentence for every in-text
+        # 1d-ter. Extract the surrounding sentence for every in-text
         # occurrence. This runs BEFORE the verdict loop so a reference-list
         # verdict can borrow the context of the occurrence that cites it —
         # a bibliography entry has no sentence of its own.
@@ -766,9 +778,6 @@ class IntegrityPipeline:
         occurrences_by_reference_id = self._extract_all_occurrence_contexts(
             in_text_citations,
             links_by_key_multi,
-        )
-        body_pages_for_discovery = self._filter_body_pages_for_discovery(
-            document_pages, ref_citations
         )
 
         # 1e. Merge citations theo priority (cho retrieval/checker).
@@ -983,9 +992,15 @@ class IntegrityPipeline:
             message=f"Compared {_total_hits} source hits across {len(_src_status)} databases{_hit_breakdown}",
         )
 
-        verdicts: list[CitationVerdict] = []
-        # FIX v1.7: Only iterate over verifiable (reference) citations for verdicts.
-        # In-text citations are verified via linking only (mapping_status attached below).
+        accepted = inspect.signature(self.checker.check).parameters
+        supports_precomputed_features = (
+            "precomputed_features" in accepted
+            and hasattr(self.checker, "compare_evidence")
+        )
+        staged_verdict_inputs: list[tuple[Citation, SourceResult, Any, float, Any, list, str | None]] = []
+        prepared_verdict_inputs: list[tuple[Citation, SourceResult, Any, float, Any, list, str | None, Any]] = []
+
+        # Step 06/08 (comparing): Resolve contexts, link mappings, and compute candidate & neural evidence alignment
         for citation, source in verdict_pairs:
             # NEW v1.2 §3.2.2 (task #33) — compute mapping_status TRƯỚC rules
             # để SymbolicRules có input cho AMBIGUOUS_MAPPING rule.
@@ -1165,25 +1180,111 @@ class IntegrityPipeline:
             # (Previously the local variable was only used inside the checker call.)
             citation.context = citation_context
 
+            staged_verdict_inputs.append(
+                (
+                    citation,
+                    source,
+                    mapping_status,
+                    mapping_confidence,
+                    citation_link,
+                    citation_links_verdict,
+                    citation_context,
+                )
+            )
+
+        if supports_precomputed_features and hasattr(self.checker, "prewarm_comparison_batch"):
+            await asyncio.to_thread(
+                self.checker.prewarm_comparison_batch,
+                [(c, s, ctx) for c, s, _, _, _, _, ctx in staged_verdict_inputs],
+            )
+
+        for pair_idx, (
+            citation,
+            source,
+            mapping_status,
+            mapping_confidence,
+            citation_link,
+            citation_links_verdict,
+            citation_context,
+        ) in enumerate(staged_verdict_inputs, start=1):
+            precomputed_features = None
+            if supports_precomputed_features:
+                precomputed_features = await asyncio.to_thread(
+                    self.checker.compare_evidence,
+                    citation,
+                    source,
+                    citation_context,
+                )
+                if len(staged_verdict_inputs) >= 6 and (
+                    pair_idx % 8 == 0 or pair_idx == len(staged_verdict_inputs)
+                ):
+                    _emit(
+                        "comparing",
+                        5,
+                        sources_queried=_src_status,
+                        message=(
+                            f"Compared candidate metadata & neural evidence for "
+                            f"{pair_idx}/{len(staged_verdict_inputs)} citations{_hit_breakdown}"
+                        ),
+                    )
+
+            prepared_verdict_inputs.append(
+                (
+                    citation,
+                    source,
+                    mapping_status,
+                    mapping_confidence,
+                    citation_link,
+                    citation_links_verdict,
+                    citation_context,
+                    precomputed_features,
+                )
+            )
+
+        # Step 07/08 (checking): Apply 30 neuro-symbolic rules & Platt calibration
+        _emit(
+            "checking",
+            6,
+            citations_found=len(in_text_citations) or len(verdict_pairs),
+            references_found=len(ref_citations) or len(verdict_pairs),
+            message=f"Applying 30 neuro-symbolic rules & Platt calibration to {len(verdict_pairs)} citations...",
+        )
+
+        verdicts: list[CitationVerdict] = []
+        # FIX v1.7: Only iterate over verifiable (reference) citations for verdicts.
+        # In-text citations are verified via linking only (mapping_status attached below).
+        for (
+            citation,
+            source,
+            mapping_status,
+            mapping_confidence,
+            citation_link,
+            citation_links_verdict,
+            citation_context,
+            precomputed_features,
+        ) in prepared_verdict_inputs:
             # NEW v1.3: Provenance tracking - compute before calling checker
             api_exhausted = IntegrityPipeline._is_source_rate_limit_or_api_exhausted(source)
             used_local_db = source.sources_succeeded == ["local_db"] if source.sources_succeeded else False
 
             # Pass mapping_status + style_profile + citation_context + provenance vào checker
-            check_kwargs = {
+            check_kwargs: dict[str, Any] = {
                 "mapping_status": mapping_status,
                 "style_profile": style_profile,
                 "citation_context": citation_context,
                 "api_exhausted": api_exhausted,
                 "used_local_db": used_local_db,
             }
+            if precomputed_features is not None:
+                check_kwargs["precomputed_features"] = precomputed_features
             # Older injected checkers (used by downstream integrations and
             # legacy tests) do not accept the v1.3 provenance parameters.
-            accepted = inspect.signature(self.checker.check).parameters
+            accepted_now = inspect.signature(self.checker.check).parameters
             check_kwargs = {
                 key: value
                 for key, value in check_kwargs.items()
-                if key in accepted
+                if key in accepted_now
+                or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in accepted_now.values())
             }
             verdict = await asyncio.to_thread(
                 self.checker.check, citation, source, **check_kwargs
@@ -1257,6 +1358,15 @@ class IntegrityPipeline:
             citations_found=len(in_text_citations) or len(verdicts),
             references_found=len(ref_citations) or len(verdicts),
             message=f"Applied verification rules to {len(verdicts)} citations",
+        )
+
+        # Step 08/08 (scoring): Linking summary + CIS calculation + report generation
+        _emit(
+            "scoring",
+            7,
+            citations_found=len(in_text_citations) or len(all_citations),
+            references_found=len(ref_citations) or len(verdicts),
+            message="Calculating Citation Integrity Score (CIS) and building verification report...",
         )
 
         # 3. Linking summary (counts per CitationMappingStatus) — cho Web UI dashboard

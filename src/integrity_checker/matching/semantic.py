@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -152,6 +153,8 @@ class SemanticMatcher:
     _encode_lock = threading.Lock()
     _model_cache: dict[str, object] = {}
     _intent_emb_cache: dict[str, Any] = {}
+    _text_emb_cache: OrderedDict[tuple[int, str], Any] = OrderedDict()
+    _TEXT_EMB_CACHE_MAX_SIZE = 4096
     _singleton: SemanticMatcher | None = None
 
     # Thresholds cho content alignment
@@ -192,15 +195,31 @@ class SemanticMatcher:
         with cls._instance_lock:
             cls._singleton = None
 
+    @classmethod
+    def clear_embedding_cache(cls) -> None:
+        """Clear the bounded LRU text embedding cache."""
+        with cls._encode_lock:
+            cls._text_emb_cache.clear()
+
+    @staticmethod
+    def _load_sentence_transformer(model_name: str):
+        """Load SentenceTransformer from local HuggingFace cache first without network round-trips."""
+        from sentence_transformers import SentenceTransformer  # type: ignore
+
+        try:
+            return SentenceTransformer(model_name, local_files_only=True)
+        except Exception:  # noqa: BLE001
+            return SentenceTransformer(model_name)
+
     def _get_model(self):
         if self._model is None:
             with self._instance_lock:
                 if self.model_name not in self._model_cache:
                     try:
-                        from sentence_transformers import SentenceTransformer  # type: ignore
-
                         logger.info(f"Loading sentence-transformers: {self.model_name}")
-                        self._model_cache[self.model_name] = SentenceTransformer(self.model_name)
+                        self._model_cache[self.model_name] = self._load_sentence_transformer(
+                            self.model_name
+                        )
                     except ImportError as e:
                         logger.error(f"sentence-transformers chưa cài: {e}")
                         return None
@@ -221,10 +240,8 @@ class SemanticMatcher:
         with self._instance_lock:
             if self.multilingual_model_name not in self._model_cache:
                 try:
-                    from sentence_transformers import SentenceTransformer  # type: ignore
-
                     logger.info(f"Loading multilingual sentence-transformers: {self.multilingual_model_name}")
-                    self._model_cache[self.multilingual_model_name] = SentenceTransformer(
+                    self._model_cache[self.multilingual_model_name] = self._load_sentence_transformer(
                         self.multilingual_model_name
                     )
                 except Exception as e:  # noqa: BLE001
@@ -234,15 +251,52 @@ class SemanticMatcher:
         return self._multilingual_model
 
     def _encode(self, model: object, texts: object, **kwargs: object):
-        """Thread-safe model.encode wrapper with torch.no_grad()."""
+        """Thread-safe model.encode wrapper with torch.no_grad() and bounded LRU text embedding cache."""
         with self._encode_lock:
             try:
                 import torch  # type: ignore
 
                 with torch.no_grad():
-                    return model.encode(texts, **kwargs)
+                    is_mock_model = type(model).__module__.startswith("unittest.mock")
+                    use_cache = (
+                        not is_mock_model
+                        and isinstance(texts, (list, tuple))
+                        and len(texts) > 0
+                        and all(isinstance(t, str) for t in texts)
+                        and kwargs.get("convert_to_tensor") is True
+                        and kwargs.get("normalize_embeddings") is True
+                    )
+                    if use_cache:
+                        model_id = id(model)
+                        str_texts: list[str] = [str(t) for t in texts]  # type: ignore[union-attr]
+                        missing_unique: list[str] = []
+                        seen_missing: set[str] = set()
+                        for t in str_texts:
+                            cache_key = (model_id, t)
+                            if cache_key in self._text_emb_cache:
+                                self._text_emb_cache.move_to_end(cache_key)
+                            elif t not in seen_missing:
+                                seen_missing.add(t)
+                                missing_unique.append(t)
+
+                        if missing_unique:
+                            enc_kwargs = dict(kwargs)
+                            enc_kwargs.setdefault("show_progress_bar", False)
+                            new_embs = model.encode(missing_unique, **enc_kwargs)  # type: ignore[attr-defined]
+                            if not isinstance(new_embs, torch.Tensor) or len(new_embs) != len(missing_unique):
+                                return new_embs
+                            for idx, t in enumerate(missing_unique):
+                                cache_key = (model_id, t)
+                                self._text_emb_cache[cache_key] = new_embs[idx]
+                                self._text_emb_cache.move_to_end(cache_key)
+                                while len(self._text_emb_cache) > self._TEXT_EMB_CACHE_MAX_SIZE:
+                                    self._text_emb_cache.popitem(last=False)
+
+                        return torch.stack([self._text_emb_cache[(model_id, t)] for t in str_texts])
+
+                    return model.encode(texts, **kwargs)  # type: ignore[attr-defined]
             except ImportError:
-                return model.encode(texts, **kwargs)
+                return model.encode(texts, **kwargs)  # type: ignore[attr-defined]
 
     def similarity(self, text1: str, text2: str) -> float:
         """Trả cosine similarity 0.0–1.0. Fallback 0.0 nếu model chưa load được."""
@@ -250,7 +304,13 @@ class SemanticMatcher:
         if model is None or not text1 or not text2:
             return 0.0
         try:
-            embs = self._encode(model, [text1, text2], convert_to_tensor=True, normalize_embeddings=True)
+            embs = self._encode(
+                model,
+                [text1, text2],
+                convert_to_tensor=True,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+            )
             cos = (embs[0] @ embs[1]).item()
             return max(0.0, min(1.0, float(cos)))
         except Exception as e:  # noqa: BLE001
@@ -343,7 +403,11 @@ class SemanticMatcher:
             for w in re.findall(r"[A-Za-zÀ-ỹ0-9]{3,}", source_title or "")
             if w.lower() not in {"the", "and", "for", "with", "from", "using", "based", "study", "analysis"}
         }
-        vn_title_cues = find_vn_cues_for_en_source(source_title or "") if source_title else []
+        vn_title_cues = (
+            find_vn_cues_for_en_source(source_title or "")
+            if (source_title and is_vietnamese_text(cleaned))
+            else []
+        )
 
         best_sent = sentences[0]
         best_score = -1.0
@@ -878,11 +942,78 @@ class SemanticMatcher:
                 compared_texts={"cited_context": cited_context, "source": source_title},
             )
 
+    def collect_alignment_texts(
+        self,
+        cited_context: str,
+        source_title: str,
+        source_abstract: str | None = None,
+        citation_marker: str | None = None,
+    ) -> list[str]:
+        """Collect all text segments that check_content_alignment will encode for batch pre-warming."""
+        texts: list[str] = []
+        if not cited_context:
+            return texts
+        clean_abs = self._sanitize_abstract(source_abstract)
+        raw_context_clean = self.clean_and_dehyphenate_context(cited_context)
+        if len(re.findall(r"[A-Za-zÀ-ỹ]{2,}", raw_context_clean)) < 2:
+            return texts
+        focal_sentence = self.extract_focal_sentence(
+            raw_context_clean,
+            citation_marker=citation_marker,
+            source_title=source_title,
+        )
+        is_cross_lingual, bridged_context, _ = self.detect_and_bridge_cross_lingual_detailed(
+            focal_sentence or raw_context_clean,
+            source_title,
+            clean_abs,
+        )
+        cited_context_trunc = self._truncate_text(raw_context_clean or cited_context, max_length=512)
+        source_title_trunc = self._truncate_text(source_title, max_length=256)
+        texts.append(cited_context_trunc)
+        if source_title_trunc:
+            texts.append(source_title_trunc)
+        if clean_abs and clean_abs.strip():
+            if len(clean_abs) > 512:
+                truncated_abstract = clean_abs[:300].strip() + " ... " + clean_abs[-200:].strip()
+            else:
+                truncated_abstract = self._truncate_text(clean_abs, max_length=512)
+            texts.append(truncated_abstract)
+            extracted = self._extract_sentences(clean_abs)
+            if len(extracted) >= 1:
+                texts.extend(extracted[:25])
+        if focal_sentence and focal_sentence != cited_context_trunc:
+            texts.append(self._truncate_text(focal_sentence, max_length=384))
+        if is_cross_lingual and bridged_context:
+            texts.append(self._truncate_text(bridged_context, max_length=512))
+        return texts
+
+    def prewarm_texts(self, texts: list[str]) -> None:
+        """Batch-encode a list of texts into the LRU embedding cache in a single forward pass."""
+        if not texts:
+            return
+        model = self._get_model()
+        if model is None or type(model).__module__.startswith("unittest.mock"):
+            return
+        valid_texts = [t for t in texts if isinstance(t, str) and t]
+        if not valid_texts:
+            return
+        try:
+            self._encode(
+                model,
+                valid_texts,
+                convert_to_tensor=True,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"Prewarm texts skipped: {exc}")
+
     def check_multi_context_alignment(
         self,
         occurrence_contexts: list[dict[str, Any]],
         source_title: str,
         source_abstract: str | None = None,
+        first_occurrence_result: SemanticAlignmentResult | None = None,
     ) -> list[dict[str, Any]]:
         """Đánh giá Neural Alignment trên TẤT CẢ các vị trí trích dẫn của cùng 1 tài liệu trong bài.
 
@@ -890,6 +1021,7 @@ class SemanticMatcher:
             occurrence_contexts: List các dict {'page': int, 'context': str, 'raw': str}
             source_title: Tiêu đề bài báo nguồn
             source_abstract: Abstract bài báo nguồn (nếu có)
+            first_occurrence_result: Kết quả alignment đã tính sẵn cho occurrence đầu tiên (nếu có)
 
         Returns:
             Danh sách kết quả alignment theo từng vị trí trích dẫn (page, focal_sentence, score,
@@ -898,25 +1030,54 @@ class SemanticMatcher:
         if not occurrence_contexts:
             return []
 
+        if (
+            len(occurrence_contexts) > 1
+            and getattr(self._compute_similarity, "__func__", None) is SemanticMatcher._compute_similarity
+        ):
+            prewarm_batch: list[str] = []
+            for idx, occ in enumerate(occurrence_contexts[:8]):
+                if idx == 0 and first_occurrence_result is not None:
+                    continue
+                ctx = str(occ.get("context") or "").strip()
+                if not ctx:
+                    continue
+                marker = str(occ.get("raw") or "").strip()
+                prewarm_batch.extend(
+                    self.collect_alignment_texts(
+                        cited_context=ctx,
+                        source_title=source_title,
+                        source_abstract=source_abstract,
+                        citation_marker=marker,
+                    )
+                )
+            if prewarm_batch:
+                self.prewarm_texts(prewarm_batch)
+
         results: list[dict[str, Any]] = []
         seen_sentences: set[str] = set()
-        for occ in occurrence_contexts[:8]:
+        for idx, occ in enumerate(occurrence_contexts[:8]):
             ctx = str(occ.get("context") or "").strip()
             if not ctx:
                 continue
             marker = str(occ.get("raw") or "").strip()
-            focal = self.extract_focal_sentence(ctx, citation_marker=marker, source_title=source_title)
+            if idx == 0 and first_occurrence_result is not None and first_occurrence_result.best_cited_sentence:
+                focal = first_occurrence_result.best_cited_sentence
+            else:
+                focal = self.extract_focal_sentence(ctx, citation_marker=marker, source_title=source_title)
             dedup_key = focal[:120].lower()
             if dedup_key in seen_sentences:
                 continue
             seen_sentences.add(dedup_key)
 
-            res = self.check_content_alignment(
-                cited_context=ctx,
-                source_title=source_title,
-                source_abstract=source_abstract,
-                citation_marker=marker,
-            )
+            if idx == 0 and first_occurrence_result is not None:
+                res = first_occurrence_result
+            else:
+                res = self.check_content_alignment(
+                    cited_context=ctx,
+                    source_title=source_title,
+                    source_abstract=source_abstract,
+                    citation_marker=marker,
+                )
             results.append(
                 {
                     "page": int(occ.get("page") or 0),

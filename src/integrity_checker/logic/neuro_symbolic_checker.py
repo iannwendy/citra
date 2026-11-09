@@ -175,6 +175,29 @@ class NeuroSymbolicChecker:
                 NeuroSymbolicChecker._hybrid_scorer = HybridMLScorer.load_default()
             self.hybrid_scorer = NeuroSymbolicChecker._hybrid_scorer
 
+    def prewarm_comparison_batch(
+        self,
+        items: list[tuple[Citation, SourceResult, str | None]],
+    ) -> None:
+        """Batch pre-encode all unique texts across the citation batch in a single forward pass."""
+        if hasattr(self.feature_calculator, "prewarm_batch"):
+            self.feature_calculator.prewarm_batch(items)
+
+    def compare_evidence(
+        self,
+        citation: Citation,
+        source: SourceResult,
+        citation_context: str | None = None,
+    ) -> MatchFeatures | None:
+        """Step 06/08 (comparing): Precompute candidate comparison & neural evidence alignment features."""
+        raw_text = (citation.raw_text or "").strip()
+        if citation.matched_pattern == "vn_legal_document" or is_vn_legal_reference(raw_text):
+            return None
+        is_known, paper_info = RetrievalOrchestrator.is_known_paper(citation)
+        if is_known and paper_info:
+            return None
+        return self.feature_calculator.compute(citation, source, citation_context)
+
     def check(
         self,
         citation: Citation,
@@ -185,6 +208,7 @@ class NeuroSymbolicChecker:
         # NEW v1.3: Provenance tracking
         api_exhausted: bool = False,
         used_local_db: bool = False,
+        precomputed_features: MatchFeatures | None = None,
     ) -> CitationVerdict:
         """Trả CitationVerdict đầy đủ (label + confidence + reasoning + features).
 
@@ -731,7 +755,11 @@ class NeuroSymbolicChecker:
                 )
 
         # Compute features với context (nếu có) cho Neural content alignment
-        features = self.feature_calculator.compute(citation, source, citation_context)
+        features = (
+            precomputed_features
+            if precomputed_features is not None
+            else self.feature_calculator.compute(citation, source, citation_context)
+        )
 
         # Apply symbolic rules với content alignment features
         outcome = self.rules.apply(

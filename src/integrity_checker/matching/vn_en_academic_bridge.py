@@ -368,7 +368,11 @@ def normalize_vn_spelling(text: str) -> str:
     """Chuẩn hóa Unicode NFC, sửa lỗi font PDF tiếng Việt (Ƣ/ƣ -> Ư/ư) và đồng nhất quy tắc đặt dấu thanh (oà/òa, uỷ/ủy, lí/lý)."""
     if not text:
         return ""
+    if text.isascii():
+        return text
     norm = unicodedata.normalize("NFC", text)
+    if norm.isascii():
+        return norm
     if "\u01a2" in norm or "\u01a3" in norm:
         norm = norm.replace("\u01a2", "Ư").replace("\u01a3", "ư")
     for pat, repl in _VN_TONE_NORM_REGEXES:
@@ -385,6 +389,27 @@ def normalize_vn_spelling(text: str) -> str:
 def _get_sorted_bridge() -> tuple[tuple[str, str], ...]:
     """Sắp xếp từ điển theo độ dài cụm tiếng Việt giảm dần để ưu tiên khớp cụm từ chuyên ngành dài trước."""
     return tuple(sorted(VN_EN_ACADEMIC_BRIDGE, key=lambda pair: len(pair[0]), reverse=True))
+
+
+@lru_cache(maxsize=1)
+def _get_indexed_en_bridge() -> tuple[tuple[str, frozenset[str], tuple[str, ...]], ...]:
+    """Pre-index English keywords for each Vietnamese concept phrase to avoid repeated regex compilation."""
+    _stop = {"and", "for", "the", "with", "law", "data", "model", "system", "study"}
+    indexed: list[tuple[str, frozenset[str], tuple[str, ...]]] = []
+    seen_vn: set[str] = set()
+    for vn_phrase, en_equiv in _get_sorted_bridge():
+        if vn_phrase in seen_vn:
+            continue
+        seen_vn.add(vn_phrase)
+        en_words = tuple(
+            w.lower()
+            for w in re.findall(r"[A-Za-z0-9-]{3,}", en_equiv)
+            if w.lower() not in _stop
+        )
+        plain_words = frozenset(w for w in en_words if "-" not in w)
+        hyphen_words = tuple(w for w in en_words if "-" in w)
+        indexed.append((vn_phrase, plain_words, hyphen_words))
+    return tuple(indexed)
 
 
 def is_vietnamese_text(text: str, min_diacritics: int = 2) -> bool:
@@ -475,6 +500,23 @@ def bridge_vn_to_en(
     return True, f"{cited_context} ({bridge_str})", bridged_concepts
 
 
+@lru_cache(maxsize=512)
+def _find_vn_cues_cached(
+    source_title: str,
+    source_abstract: str,
+) -> tuple[str, ...]:
+    src_full_lower = f"{source_title} {source_abstract}".lower().strip()
+    if not src_full_lower:
+        return ()
+
+    src_words = set(re.findall(r"[a-z0-9]{3,}", src_full_lower))
+    vn_cues: list[str] = []
+    for vn_phrase, plain_words, hyphen_words in _get_indexed_en_bridge():
+        if plain_words & src_words or any(hw in src_full_lower for hw in hyphen_words):
+            vn_cues.append(vn_phrase)
+    return tuple(vn_cues)
+
+
 def find_vn_cues_for_en_source(
     source_title: str,
     source_abstract: str | None = None,
@@ -482,24 +524,7 @@ def find_vn_cues_for_en_source(
     """Dịch ngược từ khóa trong Title/Abstract tiếng Anh sang danh sách cụm khái niệm tiếng Việt
     (phục vụ Implicit Body Discovery và Cross-Lingual Title Matching).
     """
-    src_full_lower = f"{source_title or ''} {source_abstract or ''}".lower()
-    if not src_full_lower.strip():
-        return []
-
-    vn_cues: list[str] = []
-    seen_vn: set[str] = set()
-    for vn_phrase, en_equiv in _get_sorted_bridge():
-        if vn_phrase in seen_vn:
-            continue
-        en_words = [
-            w.lower()
-            for w in re.findall(r"[A-Za-z0-9-]{3,}", en_equiv)
-            if w.lower() not in {"and", "for", "the", "with", "law", "data", "model", "system", "study"}
-        ]
-        if any(re.search(rf"\b{re.escape(ew)}\b", src_full_lower) for ew in en_words):
-            seen_vn.add(vn_phrase)
-            vn_cues.append(vn_phrase)
-    return vn_cues
+    return list(_find_vn_cues_cached(source_title or "", source_abstract or ""))
 
 
 def compute_cross_lingual_concept_overlap(

@@ -360,9 +360,8 @@ class VancouverFormat:
 
         # Case 1: 2-segment short preprint / web report ("Authors. Title, [Month] YYYY[a-z]?. [URL/DOI]")
         m2 = re.match(
-            r'^(?P<title>(?:[^.]|\.(?!\s+[A-Z])|\.\s+(?=[a-z][^.]*\s+\S+\s+\S+\s+\S+\s+\S+,\s*(?:18|19|20)\d{2}\b)){2,}?),\s*(?:[A-Za-z]+\.?\s+)?(?P<year>(?:18|19|20)\d{2})(?P<suffix>[a-z])?\.(?:\s*(?P<rest>(?:URL\s+)?https?://.+|doi:\s*\S+.*))?$',
+            r'^(?P<title>(?:[^.]|\.(?!\s+[A-Z])|\.\s+(?=[a-z][^.]*\s+\S+\s+\S+\s+\S+\s+\S+,\s*(?:18|19|20)\d{2}\b)){2,}?),\s*(?:[A-Za-z]+\.?\s+)?(?P<year>(?:18|19|20)\d{2})(?P<suffix>[a-z])?\.(?:\s*(?P<rest>(?:(?i:URL)\s+)?(?i:https?)://.+|(?i:doi):\s*\S+.*))?$',
             remainder,
-            re.I,
         )
         if m2:
             title_str = m2.group('title').strip()

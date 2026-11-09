@@ -1715,7 +1715,7 @@ class ReferenceListParser:
         entry = re.sub(r"\s*\[trans\s*:[^\]]*\]?\s*$", "", entry, flags=re.IGNORECASE).strip()
         # Strip Wingdings / Private Use Area bullets, dangling access-time prefix ("10:15 Kruse..."), meta-analysis leading asterisk ("*Adil, A."), or template ellipsis ("… Vaswani, A.")
         entry = re.sub(r"^\s*[\uf0a7\uf0b7\uf0d8\uf0fc\uf076•●▪▫]+\s*", "", entry)
-        entry = re.sub(r"^\s*\d{1,2}:\d{2}(?::\d{2})?\s+(?=[A-ZÀ-Ý])", "", entry)
+        entry = re.sub(r"^\s*\d{1,2}:\d{2}(?::\d{2})?\.?\s+(?=[A-ZÀ-Ý])", "", entry)
         entry = re.sub(r"^\s*(?:page\s+)?(?:\d+\s+)?of\s+\d{1,4}\s+(?=[A-ZÀ-Ý])", "", entry, flags=re.IGNORECASE)
         entry = re.sub(r"^\s*(?:\*|\u2026|\.{2,})\s*(?=[A-ZÀ-Ý])", "", entry)
         # Strip Slavic/European Harvard key prefix (e.g. "Ewing 2002 – Ewing E.T. (2002) ...")

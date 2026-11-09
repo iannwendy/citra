@@ -100,6 +100,17 @@ def create_app() -> FastAPI:
             except Exception as exc:
                 logger.debug(f"Could not pre-warm local_papers.db stats: {exc}")
 
+            try:
+                from integrity_checker.matching.semantic import SemanticMatcher
+
+                matcher = SemanticMatcher.get_instance()
+                model = matcher._get_model()
+                if model is not None:
+                    matcher._get_intent_embeddings(model)
+                    logger.info("Pre-warmed SemanticMatcher model & intent embeddings")
+            except Exception as exc:
+                logger.debug(f"Could not pre-warm SemanticMatcher model: {exc}")
+
         threading.Thread(target=_prewarm_local_papers_stats, daemon=True).start()
 
     # Ensure avatars directory exists before mounting

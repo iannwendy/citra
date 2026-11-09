@@ -39,6 +39,58 @@ class FeatureCalculator:
         self.semantic = semantic or SemanticMatcher.get_instance()
         self.enable_content_alignment = enable_content_alignment
 
+    def prewarm_batch(
+        self,
+        items: list[tuple[Citation, SourceResult, str | None]],
+    ) -> None:
+        """Batch-encode all unique title, abstract, and context strings across all citations in one pass."""
+        if not items or not hasattr(self.semantic, "prewarm_texts"):
+            return
+        texts_to_warm: list[str] = []
+        collect_fn = getattr(self.semantic, "collect_alignment_texts", None)
+        for citation, source, citation_context in items:
+            c_primary, c_alts = self._strip_medium_tags_and_extract_alt_titles(
+                citation.title or citation.raw_text or ""
+            )
+            if c_primary:
+                texts_to_warm.append(c_primary)
+            texts_to_warm.extend(c_alts)
+            for cand in (source.candidates or []):
+                if not cand.found:
+                    continue
+                cand_primary, cand_alts = self._strip_medium_tags_and_extract_alt_titles(
+                    cand.title or ""
+                )
+                if cand_primary:
+                    texts_to_warm.append(cand_primary)
+                texts_to_warm.extend(cand_alts)
+                if self.enable_content_alignment and callable(collect_fn) and citation_context:
+                    texts_to_warm.extend(
+                        collect_fn(
+                            cited_context=citation_context,
+                            source_title=cand.title or "",
+                            source_abstract=getattr(cand, "abstract", None),
+                            citation_marker=citation.raw_in_text_citation,
+                        )
+                    )
+                    occ_contexts = getattr(citation, "_occurrence_contexts", None)
+                    if isinstance(occ_contexts, list):
+                        for occ in occ_contexts[:8]:
+                            if not isinstance(occ, dict):
+                                continue
+                            occ_ctx = str(occ.get("context") or "").strip()
+                            if occ_ctx:
+                                texts_to_warm.extend(
+                                    collect_fn(
+                                        cited_context=occ_ctx,
+                                        source_title=cand.title or "",
+                                        source_abstract=getattr(cand, "abstract", None),
+                                        citation_marker=str(occ.get("raw") or "").strip() or None,
+                                    )
+                                )
+        if texts_to_warm:
+            self.semantic.prewarm_texts(texts_to_warm)
+
     def compute(
         self,
         citation: Citation,
@@ -206,7 +258,15 @@ class FeatureCalculator:
                             best.abstract = cand_abs
                             break
 
+            occ_contexts = getattr(citation, "_occurrence_contexts", None)
             inferred_marker = citation.raw_in_text_citation
+            if (
+                not inferred_marker
+                and isinstance(occ_contexts, list)
+                and len(occ_contexts) >= 1
+                and isinstance(occ_contexts[0], dict)
+            ):
+                inferred_marker = str(occ_contexts[0].get("raw") or "").strip() or None
             if not inferred_marker and citation.authors and citation.year:
                 a0 = citation.authors[0]
                 first_surname = (
@@ -240,17 +300,44 @@ class FeatureCalculator:
                     bridged_concepts.append(bc)
 
             # Evaluate multi-occurrence neural alignment when reference is cited multiple times
-            occ_contexts = getattr(citation, "_occurrence_contexts", None)
             if (
                 isinstance(occ_contexts, list)
                 and len(occ_contexts) >= 1
                 and hasattr(self.semantic, "check_multi_context_alignment")
             ):
-                occurrence_alignments = self.semantic.check_multi_context_alignment(
-                    occ_contexts,
-                    source_title=best.title or "",
-                    source_abstract=resolved_abstract,
-                )
+                first_occ = occ_contexts[0] if isinstance(occ_contexts[0], dict) else {}
+                first_ctx = str(first_occ.get("context") or "").strip()
+                first_matches_primary = bool(first_ctx and first_ctx == (citation_context or "").strip())
+                if len(occ_contexts) == 1 and first_matches_primary:
+                    occurrence_alignments = [
+                        {
+                            "page": int(first_occ.get("page") or 0),
+                            "marker": str(first_occ.get("raw") or inferred_marker or "").strip(),
+                            "focal_sentence": best_cited_sentence or first_ctx,
+                            "score": content_alignment_score,
+                            "confidence": content_alignment_confidence,
+                            "is_aligned": content_is_aligned,
+                            "intent": citation_intent,
+                            "stance": stance_label,
+                            "best_evidence_sentence": best_evidence_sentence,
+                            "cross_lingual_detected": bool(getattr(alignment_result, "cross_lingual_detected", False)),
+                            "bridged_concepts": list(getattr(alignment_result, "bridged_concepts", None) or []),
+                        }
+                    ]
+                else:
+                    try:
+                        occurrence_alignments = self.semantic.check_multi_context_alignment(
+                            occ_contexts,
+                            source_title=best.title or "",
+                            source_abstract=resolved_abstract,
+                            first_occurrence_result=alignment_result if first_matches_primary else None,
+                        )
+                    except TypeError:
+                        occurrence_alignments = self.semantic.check_multi_context_alignment(
+                            occ_contexts,
+                            source_title=best.title or "",
+                            source_abstract=resolved_abstract,
+                        )
                 if len(occurrence_alignments) >= 2:
                     if not context_source:
                         context_source = "multi_occurrence"
