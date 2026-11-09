@@ -1130,6 +1130,42 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
 
             raw_authors.append((sn, fn))
 
+        # Coalesce consecutive <author> nodes when GROBID split a compound surname or middle name
+        # into a surname-less node (e.g. "Valentina Di Iasio" -> [("Di", "Valentina"), ("", "Iasio")],
+        # "Huđek Kanižaj, Ivona" -> [("Kanižaj", "Huđek"), ("", "Ivona")],
+        # "Tibor János Karlovitz" -> [("János", "Tibor"), ("", "Karlovitz")]).
+        if raw_ref_text and len(raw_authors) >= 2:
+            _PARTICLES = {
+                "di", "de", "del", "della", "da", "dos", "das", "van", "von",
+                "le", "la", "du", "st", "st.", "el", "al", "bin", "ibn",
+            }
+            coalesced_authors: list[tuple[str, str]] = []
+            idx_a = 0
+            while idx_a < len(raw_authors):
+                sn1, fn1 = raw_authors[idx_a]
+                if (
+                    idx_a + 1 < len(raw_authors)
+                    and sn1
+                    and fn1
+                    and not raw_authors[idx_a + 1][0]
+                    and raw_authors[idx_a + 1][1]
+                ):
+                    fn2 = raw_authors[idx_a + 1][1].strip()
+                    if f"{fn1} {sn1} {fn2}" in raw_ref_text:
+                        if sn1.lower() in _PARTICLES:
+                            coalesced_authors.append((f"{sn1} {fn2}", fn1))
+                        else:
+                            coalesced_authors.append((fn2, f"{fn1} {sn1}"))
+                        idx_a += 2
+                        continue
+                    if f"{fn1} {sn1}, {fn2}" in raw_ref_text:
+                        coalesced_authors.append((f"{fn1} {sn1}", fn2))
+                        idx_a += 2
+                        continue
+                coalesced_authors.append((sn1, fn1))
+                idx_a += 1
+            raw_authors = coalesced_authors
+
         authors: list[GrobidAuthor] = []
         _DEGREE_TOKENS = {
             "phd", "md", "esq", "cscs", "rscc", "bs", "ms", "mph",
