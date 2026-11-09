@@ -13,10 +13,10 @@ from __future__ import annotations
 import copy
 import shutil
 from pathlib import Path
+
 from fontTools.ttLib import TTFont
 from fontTools.ttLib.removeOverlaps import removeOverlaps
 from fontTools.ttLib.tables._g_l_y_f import Glyph, GlyphCoordinates
-
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 PUBLIC_FONTS_DIR = ROOT_DIR / "web" / "public" / "fonts"

@@ -5,8 +5,9 @@ and Sentient-Regular.woff2 with valid TrueType simple contours and accurate hori
 """
 
 from pathlib import Path
-from fontTools.ttLib import TTFont
+
 import pytest
+from fontTools.ttLib import TTFont
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 FONT_PATHS = [
