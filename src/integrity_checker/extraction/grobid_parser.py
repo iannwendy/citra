@@ -585,9 +585,9 @@ def _split_single_merged_raw_reference(text: str) -> list[str]:
     if m1:
         return [m1.group(1).strip(), m1.group(2).strip()]
 
-    # Case 2: Book entry ending with "YYYY." or URL followed by a quoted web entry with URL
+    # Case 2: Book entry ending with ", YYYY." (with a title before the imprint) or URL followed by a quoted web entry with URL
     m2 = re.match(
-        r"^(.+?(?:\b(?:19|20)\d{2}\.|https?://\S+\.))\s+((?:[A-Z][A-Za-z0-9.\s'\u2019-]{1,40}\.\s+)?[\"\u201c].+[\"\u201d]\s+[A-Z].*(?:https?://|www\.|\b[a-z0-9-]+\.(?:com|org|edu|gov|net)/).*)$",
+        r"^(.+?(?:\.\s+[^.]+?,\s*(?:19|20)\d{2}\.|https?://\S+\.))\s+((?:[A-Z][A-Za-z0-9.\s'\u2019-]{1,40}\.\s+)?[\"\u201c].+[\"\u201d]\s+[A-Z].*(?:https?://|www\.|\b[a-z0-9-]+\.(?:com|org|edu|gov|net)/).*)$",
         text,
     )
     if m2:
@@ -1042,7 +1042,7 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
         if raw_ref_text:
             org_m = re.match(
                 r"^(?:\[\s*\d+\s*\]\s*)?([A-Z][A-Za-z0-9.\s&'\u2019-]{2,80}?)\.?\s*"
-                r"(?:\(\s*(?:(?:19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)\b|\.\s*[\"\u201c]|\.\s+(?:19|20)\d{2}:)",
+                r"(?:\(\s*(?:(?:19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)\b|\.\s*[\"\u201c]|\.\s+(?:18|19|20)\d{2}[a-z]?[.:])",
                 raw_ref_text,
                 re.IGNORECASE,
             )
@@ -1063,7 +1063,7 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
                     ]
             elif not authors:
                 anon_m = re.match(
-                    r"^[\"\u201c].+?[\"\u201d]\s*([A-Z][A-Za-z0-9\s&'\u2019-]{2,55}?)[,.]",
+                    r"^[\"\u201c].+?[\"\u201d]\s*(?:(?:18|19|20)\d{2}[a-z]?\.\s*)?([A-Z][A-Za-z0-9\s&'\u2019-]{2,55}?)[,.]",
                     raw_ref_text,
                 )
                 if anon_m:
@@ -1260,17 +1260,28 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
             if yr_parens:
                 auth_head_end = yr_parens.start()
             else:
-                mla_head = re.match(
-                    r"^(?:III,\s*)?[A-Z][A-Za-z'\u2019-]+,\s*"
-                    r"(?:"
-                    r"[A-Z][a-zA-Z.\s-]+?,\s*and\s+(?:[A-Z]\.\s*|[A-Z][a-zA-Z-]+\s+)+[A-Z][a-zA-Z'\u2019-]+\."
-                    r"|(?:[A-Z]\.\s*){1,3}"
-                    r"|[A-Z][a-zA-Z-]+(?:\.|\s+(?:[A-Z]\.\s*){1,2})"
-                    r")\s*",
-                    raw_ref_text,
+                cad_yr_m = re.search(
+                    r"(?<=[.,]\s)(?:18|19|20)\d{2}[a-z]?(?:/(?:18|19|20)\d{2})?\.\s+",
+                    raw_ref_text[:220],
                 )
-                if mla_head:
-                    auth_head_end = mla_head.end()
+                if cad_yr_m and not re.search(
+                    r"\b(?:Press|Publishers?|Publishing|Books|Inc|Ltd|pp|vol|no|ed|Accessed|Retrieved)\s*[.,]\s*$",
+                    raw_ref_text[:cad_yr_m.start()],
+                    re.IGNORECASE,
+                ):
+                    auth_head_end = cad_yr_m.start()
+                else:
+                    mla_head = re.match(
+                        r"^(?:III,\s*)?[A-Z][A-Za-z'\u2019-]+,\s*"
+                        r"(?:"
+                        r"[A-Z][a-zA-Z.\s-]+?,\s*and\s+(?:[A-Z]\.\s*|[A-Z][a-zA-Z-]+\s+)+[A-Z][a-zA-Z'\u2019-]+\."
+                        r"|(?:[A-Z]\.\s*){1,3}"
+                        r"|[A-Z][a-zA-Z-]+(?:\.|\s+(?:[A-Z]\.\s*){1,2})"
+                        r")\s*",
+                        raw_ref_text,
+                    )
+                    if mla_head:
+                        auth_head_end = mla_head.end()
 
             had_removed_authors = False
             if auth_head_end is not None and len(authors) >= 2:
@@ -1330,6 +1341,11 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
                         title = m_title.group(1).strip()
                 elif auth_head_end is not None:
                     after_auth = raw_ref_text[auth_head_end:].strip()
+                    after_auth = re.sub(
+                        r"^(?:18|19|20)\d{2}[a-z]?(?:/(?:18|19|20)\d{2})?\.\s*",
+                        "",
+                        after_auth,
+                    ).strip()
                     m_title = re.match(r"^([^.]{2,180})\.", after_auth)
                     if m_title:
                         title = m_title.group(1).strip()
@@ -1472,6 +1488,10 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
                 raw_ref_text,
                 re.IGNORECASE,
             )
+            chicago_ad_m = re.search(
+                r"(?:^|[.,]\s+)(?P<yr>(?:18|19|20)\d{2})[a-z]?(?:/(?:18|19|20)\d{2})?[.,:]\s+(?=[\"\u201cA-Z])",
+                raw_ref_text[:220],
+            )
             if apa_date_m and apa_date_m.start() <= max(180, int(len(raw_ref_text) * 0.68)):
                 yr_tok = apa_date_m.group("yr").strip()
                 if re.match(r"^(?:19|20)\d{2}", yr_tok):
@@ -1479,6 +1499,16 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
                 elif re.match(r"^n\.?\s*d\.?", yr_tok, re.I):
                     # Explicit (n.d.) entry: do not let GROBID use a year from the URL or title
                     year = None
+            elif (
+                chicago_ad_m
+                and chicago_ad_m.end() < len(raw_ref_text) * 0.65
+                and not re.search(
+                    r"\b(?:Press|Publishers?|Publishing|Books|Inc|Ltd|pp|vol|no|ed|Accessed|Retrieved)\s*$",
+                    raw_ref_text[:chicago_ad_m.start()],
+                    re.IGNORECASE,
+                )
+            ):
+                year = chicago_ad_m.group("yr")[:4]
             else:
                 # 2. Ignore journal founding years like "(1974-)", page ranges, DOIs, and Accessed dates when a publication year exists
                 cleaned_for_yr = re.sub(r"\(\s*(?:18|19|20)\d{2}-\s*\)", "", raw_ref_text)
@@ -1497,12 +1527,12 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
                     cleaned_for_yr,
                     flags=re.IGNORECASE,
                 )
-                yr_matches = re.findall(r"\b((?:17|18|19|20)\d{2})\b", non_accessed)
+                yr_matches = re.findall(r"\b((?:17|18|19|20)\d{2})[a-z]?\b", non_accessed)
                 if yr_matches:
                     if not year or year not in yr_matches:
                         year = yr_matches[-1]
                 elif not year:
-                    acc_matches = re.findall(r"\b((?:19|20)\d{2})\b", raw_ref_text)
+                    acc_matches = re.findall(r"\b((?:19|20)\d{2})[a-z]?\b", raw_ref_text)
                     if acc_matches:
                         year = acc_matches[-1]
 

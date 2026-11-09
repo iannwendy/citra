@@ -1095,6 +1095,11 @@ class CitationLinker:
             years_to_index = [bib_yr]
             if bib.year and str(bib.year) not in years_to_index:
                 years_to_index.append(str(bib.year))
+            for y1, y2 in re.findall(r"\b((?:18|19|20)\d{2})/((?:18|19|20)\d{2})\b", bib.raw_text or ""):
+                if y1 in years_to_index or y2 in years_to_index:
+                    for y_alt in (y1, y2):
+                        if y_alt not in years_to_index:
+                            years_to_index.append(y_alt)
             if bib.year is None or bib.matched_pattern == "vn_legal_document":
                 for yr_m in re.findall(r"\b((?:18|19|20)\d{2})\b", bib.raw_text or ""):
                     if yr_m not in years_to_index:

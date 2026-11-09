@@ -217,7 +217,15 @@ def _grobid_bib_to_citation(bib: GrobidBibEntry, order_index: int) -> Citation:
         raw_parts.append(", ".join(authors_raw))
     if year:
         suffix_str = year_suffix if year_suffix else ""
-        raw_parts.append(f"({year}{suffix_str})")
+        slash_yr_m = (
+            re.search(rf"\b({re.escape(year)}/(?:18|19|20)\d{{2}}|(?:18|19|20)\d{{2}}/{re.escape(year)})\b", raw_ref_str)
+            if raw_ref_str
+            else None
+        )
+        if slash_yr_m:
+            raw_parts.append(f"({slash_yr_m.group(1)}{suffix_str})")
+        else:
+            raw_parts.append(f"({year}{suffix_str})")
     if title:
         raw_parts.append(title)
     if venue:
