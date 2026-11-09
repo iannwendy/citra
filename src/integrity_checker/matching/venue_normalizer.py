@@ -350,7 +350,28 @@ class VenueNormalizer:
         if not (cands1 and cands2):
             exp1 = _expand_iso4_key(_normalize_key(v1))
             exp2 = _expand_iso4_key(_normalize_key(v2))
-            return max(_fuzzy_token_set_ratio(norm1, norm2), _fuzzy_token_set_ratio(exp1, exp2))
+            base_sim = max(_fuzzy_token_set_ratio(norm1, norm2), _fuzzy_token_set_ratio(exp1, exp2))
+            if base_sim < 0.85:
+                s1_clean = re.sub(r"\s+\d{2,4}$", "", norm1).strip()
+                s2_clean = re.sub(r"\s+\d{2,4}$", "", norm2).strip()
+                short_s, long_s = (
+                    (s1_clean, exp2) if len(s1_clean) <= len(s2_clean) else (s2_clean, exp1)
+                )
+                if re.fullmatch(r"[a-z]{3,7}", short_s):
+                    stop_words = {
+                        "in", "of", "the", "on", "for", "and", "at", "to", "a", "an", "with", "by",
+                    }
+                    content_words = [
+                        w
+                        for w in long_s.split()
+                        if w.isalpha() and w not in stop_words
+                    ]
+                    initials = "".join(w[0] for w in content_words)
+                    if len(content_words) >= len(short_s) and (
+                        initials == short_s or initials.endswith(short_s)
+                    ):
+                        return 0.90
+            return base_sim
         return _fuzzy_token_set_ratio(norm1, norm2)
 
     def match(

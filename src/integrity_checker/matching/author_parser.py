@@ -118,14 +118,15 @@ _CORPORATE_AUTHOR_RE = re.compile(
     r"|World\s+Health|United\s+Nations|World\s+Bank|Reserve\s+Bank|General\s+Statistics"
     r"|International\s+Monetary|European\s+Union|National\s+Institute|Australian\s+Council"
     r"|Barnes\s*&\s*Noble|Bookish\s+Goblin|ReadDown|Goodreads|Calibraint|Fortinet|FireEye"
-    r"|Radware|MITRE|IBM|OpenRocket|MathWorks|Statista|Liberty\s+Rocketry)\b"
+    r"|Radware|MITRE|IBM|OpenRocket|MathWorks|Statista|Vietdata|Liberty\s+Rocketry)\b"
     r"|\b(?:of|for)\s+(?:the\s+)?[A-ZÀ-Ý]"
     r"|\b(?:PTNT|GD&ĐT|KH&CN|GTVT|TN&MT|LĐTB&XH|Association|Organization|Organisation"
     r"|Ministry|Department|University|Institute|Institution|Council|Government|Corporation"
-    r"|Administration|Center|Centre|Research|Advisors|Project|Team|Developers|Clinics"
+    r"|Company|Group|Administration|Center|Centre|Research|Advisors|Project|Team|Developers|Clinics"
     r"|Foundation|Society|Federation|Encyclopedia|Archive|Initiative|Network|Contributors"
     r"|Guard|Force|Command|Commission|Intelligence|Security|Deals|Drug"
-    r"|LLC|Inc|Ltd|Corp|GmbH|PLC|OpenAI|Anthropic|DeepMind|DeepSeek|Meta\s+AI|Hugging\s*Face)\b",
+    r"|LLC|Inc|Ltd|Corp|GmbH|PLC|OpenAI|Anthropic|DeepMind|DeepSeek|Meta\s+AI|Hugging\s*Face)\b"
+    r"|^[^,]+?\s+\((?-i:[A-ZĐ][A-ZĐ0-9&/\-]{1,11})\)\s*$",
     re.IGNORECASE,
 )
 
@@ -213,6 +214,11 @@ def normalize_author(raw: str) -> Author:
     raw = _strip_author_credentials(unicodedata.normalize("NFC", raw))
     if not raw:
         return Author(last_name="", raw="")
+
+    # Repair OCR period-after-surname + single initial (e.g. "Kruse. o." -> "Kruse, O.")
+    ocr_init_m = re.match(rf"^({_UPPER_VN}[a-zA-ZÀ-ỹ'\u2019\-]+)\.\s+([A-Za-zÀ-ỹ])\.?$", raw)
+    if ocr_init_m:
+        raw = f"{ocr_init_m.group(1)}, {ocr_init_m.group(2).upper()}."
 
     # FIX: Handle "et al." / "và cộng sự" / "và cs." / "và ctv." pattern - NOT part of the author name
     et_al_match = re.search(
@@ -347,6 +353,9 @@ def parse_authors(raw: str, format_name: str | None = None) -> list[Author]:
     raw_nfc = _strip_author_credentials(unicodedata.normalize("NFC", raw.strip()))
     if not raw_nfc:
         return []
+    ocr_single_m = re.match(rf"^({_UPPER_VN}[a-zA-ZÀ-ỹ'\u2019\-]+)\.\s+([A-Za-zÀ-ỹ])\.?$", raw_nfc)
+    if ocr_single_m:
+        raw_nfc = f"{ocr_single_m.group(1)}, {ocr_single_m.group(2).upper()}."
     if _is_corporate_author(raw_nfc):
         corp_author = normalize_author(raw_nfc)
         return [corp_author] if corp_author.last_name else []
@@ -763,7 +772,30 @@ def _split_apa_authors(text: str) -> list[Author]:
         # Anything else (a trailing title/venue after the author block, full
         # first names, mixed lists) keeps the match-based heuristics below.
 
-    matches = list(_APA_AUTHOR_RE.finditer(text))
+    raw_matches = list(_APA_AUTHOR_RE.finditer(text))
+    matches = []
+    for m in raw_matches:
+        # Reject mid-word split (e.g. "Blitzer, R" inside "John Blitzer, Ryan McDonald")
+        if m.end() < len(text) and text[m.end()].isalpha():
+            continue
+        # Reject false "Surname, Initials" match across forward-initials or FirstName LastName pairs
+        # (e.g. "Montgomery, E. A." inside "D. C. Montgomery, E. A. Peck", or
+        # "Summerville, S." inside "A. Summerville, S. Snodgrass", or
+        # "Chitti, P." inside "Sridevi Chitti, P. Ramchandar Rao")
+        before_seg = re.split(r"[,;&]|\band\b|\bvà\b", text[:m.start()], flags=re.IGNORECASE)[-1]
+        after_tail = text[m.end():]
+        has_preceding_given_or_init = bool(before_seg.strip()) and not all(
+            _is_particle(tok) for tok in before_seg.split()
+        )
+        followed_by_surname_no_comma = bool(
+            re.match(
+                rf"\s+(?!and\b|và\b|et\s+al\b)(?:{_PARTICLES_GROUP}\s*)?{_UPPER_VN}[A-Za-zÀ-ỹ]",
+                after_tail,
+            )
+        )
+        if has_preceding_given_or_init and followed_by_surname_no_comma:
+            continue
+        matches.append(m)
     if matches:
         authors = []
         # For each match, also process any text AFTER it that looks like "FirstName LastName"

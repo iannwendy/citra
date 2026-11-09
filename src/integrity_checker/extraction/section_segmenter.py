@@ -68,21 +68,22 @@ class SectionType(str, Enum):
 # Pattern ở ĐẦU dòng (line-start), case-insensitive, cho phép số + whitespace trước.
 
 _BIBLIOGRAPHY_HEADERS = re.compile(
-    r"^\s*(?:(?:(?:chương|phần|mục|chapter|section)\s+)?(?:\d+(?:\.\d+)*|I{1,3}|IV|V|VI{0,3}|IX|X)[\.\):]?\s+|[A-Z][\.\)]\s+)?(?:"
+    r"^\s*(?:(?:(?:chương|phần|mục|chapter|section|part)\s+)?(?:\d+(?:\.\d+)*|X{0,2}(?:I{1,3}|IV|V|VI{0,3}|IX|X))(?:\s*[\.\):\-–—]+\s*|\s+)|[A-Z][\.\)]\s+)?(?:"
     r"references?|reference\s+list|bibliography|works?\s+cited|literature(?:\s+cited)?|"
     r"notes(?:\s+and\s+references)?|endnotes?|"
     r"bibliografia(?:/bibliografía/bibliographie/works?\s+cited)?|bibliografía|bibliographie|"
     r"referências(?:\s+bibliográficas)?|referencias(?:\s+bibliográficas)?|daftar\s+pustaka|"
     r"(?:[^/\n]{2,50}/\s*)?list\s+of\s+references|"
-    r"danh\s+mục\s+tài\s+liệu(?:\s+[tk]ham\s+khảo)?|(?:các\s+)?(?:tài\s+liệu|bài\s+viết|nguồn|link)\s+[tk]ham\s+khảo|tham\s+khảo|"
-    r"tài\s+liệu\s+trích\s+dẫn|"
+    r"danh\s+mục\s+tài\s+liệu(?:\s+[tk]ham\s+khảo(?:\s*(?:,|và)\s*trích\s+dẫn)?)?|"
+    r"(?:các\s+)?(?:tài\s+liệu|bài\s+viết|nguồn|link)\s+[tk]ham\s+khảo(?:\s*(?:,|và)\s*trích\s+dẫn)?|"
+    r"tham\s+khảo|tài\s+liệu\s+trích\s+dẫn|tài\s+liệu|"
     r"参考文献|参考文献$"
-    r")\s*[:.]?\s*$",
+    r")(?:\s*\(\s*\))?\s*[:.]?\s*$",
     re.IGNORECASE,
 )
 
 _APPENDIX_HEADERS = re.compile(
-    r"^\s*(?:(?:\d+|I{1,3}|IV|V|VI{0,3}|IX|X|[A-Z])\.?\s+)?(?:"
+    r"^\s*(?:(?:\d+|X{0,2}(?:I{1,3}|IV|V|VI{0,3}|IX|X)|[A-Z])\.?\s+)?(?:"
     r"(?:appendix|appendices|phụ\s*lục|annex)"
     r"(?:\s+for\b[^,;]*|\s+[A-Z0-9]{1,3}(?:\s*[:.\-—–]?\s*[^,;]{1,80})?|\s*[:.\-—–]\s*[^,;]{1,80})?|"
     r"self[- ]?evaluation(?:\s+table|\s+form|\s+rubric)?|bảng\s+tự\s+đánh\s+giá|"
@@ -98,7 +99,12 @@ _POST_BIB_APPENDIX_SINGLE_LINE_RE = re.compile(
     r"|Attention\s+Visualizations"
     r"|Acknowledge?ments?"
     r"|Extended\s+Data(?:\s+Figures?|\s+Tables?)?"
-    r")$"
+    r"|(?:Chỉ\s+mục|Index)"
+    r"|(?:\d+(?:\.\d+)+[\.\)]?\s+)?(?:Chi\s+tiết\s+phân\s+công(?:\s+công\s+việc)?|Bảng\s+phân\s+công\s+công\s+việc|Đánh\s+giá\s+mức\s+độ\s+hoàn\s+thành)\s*:?"
+    r"|Khối\s+li[ệê]u\s+được\s+trích\s+dẫn\s*:?"
+    r"|[-•●▪▫\uf0a7\uf0b7\uf0d8\uf0fc\uf076]*\s*(?:Phần\s+mềm\s+và\s+thư\s+viện|Công\s+cụ\s+và\s+thư\s+viện)\s+(?:được\s+)?sử\s+dụng\s*:?"
+    r")$",
+    re.IGNORECASE,
 )
 
 _FOOTNOTE_PATTERN = re.compile(r"^\s*\d{1,3}\.\s+\S")   # "1. Text..."
@@ -203,9 +209,14 @@ class SectionSegmenter:
                     appendix_line_idx=app_line_idx if mid_page_appendix else None,
                 ))
         else:
-            # Không có bibliography → fallback toàn bộ document là BODY
+            # Không có bibliography → BODY kéo tới trước APPENDIX (nếu có) hoặc hết document
+            body_end = (
+                (app_start if mid_page_appendix else max(1, app_start - 1))
+                if app_start
+                else doc.num_pages
+            )
             sections.append(self._build_section(
-                SectionType.BODY, 1, doc.num_pages, doc
+                SectionType.BODY, 1, body_end, doc
             ))
             fn_bib = self._extract_footnote_bibliography_section(doc)
             if fn_bib is not None:
@@ -309,6 +320,25 @@ class SectionSegmenter:
                         app_idx,
                     )
                     break
+        elif doc.num_pages >= 4:
+            for page in doc.pages:
+                if page.page_num <= doc.num_pages * 0.5:
+                    continue
+                if self._is_toc_like_page(page.text or ""):
+                    continue
+                lines_p = (page.text or "").splitlines()
+                import unicodedata
+
+                for idx_l, raw_l in enumerate(lines_p):
+                    st_l = unicodedata.normalize("NFC", raw_l.strip())
+                    if not st_l or st_l.islower():
+                        continue
+                    if _APPENDIX_HEADERS.match(st_l):
+                        appendix_start = page.page_num
+                        appendix_line_idx = idx_l
+                        break
+                if appendix_start:
+                    break
 
         return {
             "biblio_start": biblio_start,
@@ -332,12 +362,36 @@ class SectionSegmenter:
 
         candidate_start = 0
 
+        sql_code_re = re.compile(
+            r"\b(?:INSERT\s+INTO|CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE|SELECT\s+\*\s+FROM|FOREIGN\s+KEY|PRIMARY\s+KEY|UPDATE\s+\w+\s+SET)\b",
+            re.IGNORECASE,
+        )
+        iso_date_re = re.compile(r"\b(?:19|20)\d{2}\s*[-/]\s*\d{1,2}\s*[-/]\s*\d{1,2}\b")
+
         for page in doc.pages:
             if page.page_num < start_scan_at:
                 continue
 
             lines = page.text.splitlines()
             if not lines:
+                continue
+
+            if len(sql_code_re.findall(page.text or "")) >= 2:
+                continue
+
+            # Skip pages where an explicit APPENDIX / PHỤ LỤC heading precedes the first [1]/1. marker
+            import unicodedata
+
+            nfc_lines = [unicodedata.normalize("NFC", ln) for ln in lines]
+            first_marker_idx = next(
+                (i for i, ln in enumerate(nfc_lines) if ieee_line_re.match(ln.strip())),
+                None,
+            )
+            if first_marker_idx is not None and any(
+                _APPENDIX_HEADERS.match(ln.strip()) and not ln.strip().islower()
+                for ln in nfc_lines[:first_marker_idx]
+                if ln.strip()
+            ):
                 continue
 
             # Count IEEE / numbered reference lines
@@ -348,9 +402,10 @@ class SectionSegmenter:
                 dot_nums = [
                     int(m.group(1))
                     for ln in lines
-                    if (m := dot_num_re.match(ln.strip()))
+                    if (m := dot_num_re.match(ln.strip())) and not ln.strip().endswith(":")
                 ]
-                yr_hits = len(re.findall(r"\b(?:18|19|20)\d{2}\b", page.text or ""))
+                text_no_iso_dates = iso_date_re.sub("", page.text or "")
+                yr_hits = len(re.findall(r"\b(?:18|19|20)\d{2}\b", text_no_iso_dates))
                 has_seq = any(b == a + 1 for a, b in zip(dot_nums, dot_nums[1:], strict=False))
                 if not (has_seq and yr_hits >= 3 and len(dot_nums) >= 4):
                     ieee_count = bracket_count
@@ -423,15 +478,58 @@ class SectionSegmenter:
         return doc.num_pages
 
     @staticmethod
+    def _is_toc_like_page(text: str) -> bool:
+        """Return True when page text looks like a Table of Contents page."""
+        import unicodedata
+
+        nonempty = [
+            unicodedata.normalize("NFC", ln.strip())
+            for ln in (text or "").splitlines()
+            if ln.strip()
+        ]
+        if not nonempty:
+            return False
+        has_toc_title = any(
+            re.match(
+                r"^(?:mục\s+lục|table\s+of\s+contents|contents|danh\s+mục\s+(?:bảng|hình))\s*:?$",
+                ln,
+                re.IGNORECASE,
+            )
+            for ln in nonempty[:8]
+        )
+        dot_leader_count = sum(1 for ln in nonempty if re.search(r"(?:\.\s*){4,}\d+\s*$", ln))
+        # LaTeX article/report TOC without dot leaders on \section rows:
+        # alternating numbered section/bib heading line + standalone page number line
+        standalone_page_pairs = sum(
+            1
+            for a, b in zip(nonempty, nonempty[1:], strict=False)
+            if re.fullmatch(r"\d{1,3}", b)
+            and not re.fullmatch(r"\d{1,3}", a)
+            and (
+                re.match(r"^(?:(?:chương|phần|mục|chapter|section)\s+\d+|\d+(?:\.\d+)*|[IVXLC]+[\.\)])\s+[A-ZÀ-Ý]", a, re.IGNORECASE)
+                or bool(_BIBLIOGRAPHY_HEADERS.match(a))
+                or bool(_APPENDIX_HEADERS.match(a))
+            )
+        )
+        is_dense_latex_toc = (
+            standalone_page_pairs >= 3
+            and standalone_page_pairs * 2 >= len(nonempty) * 0.35
+        )
+        return bool(has_toc_title or dot_leader_count >= 3 or is_dense_latex_toc)
+
+    @staticmethod
     def _find_bibliography_header_line_idx(page: Page) -> int | None:
         """Return 0-indexed line number of bibliography header on `page`, or None."""
-        lines = page.text.splitlines()
+        import unicodedata
+
+        lines = [unicodedata.normalize("NFC", ln) for ln in page.text.splitlines()]
         table_col_re = re.compile(
             r"(?:Entities(?:,\s*n)?|Entity|Attribute|Recall|Precision|F1(?:\s*Score)?|Accuracy|Score|Metric|Support|"
             r"Strengths?|Weaknesses|Limitations?|Advantages|Disadvantages|Sensor\s+Type|Aspect|Comparison|Criterion|Criteria|Carbon\s+source)"
             r"(?:\s+(?:Recall|Precision|F1(?:\s*Score)?))*",
             re.IGNORECASE,
         )
+        page_is_toc = SectionSegmenter._is_toc_like_page(page.text or "")
         for idx, line in enumerate(lines):
             stripped = line.strip()
             if not stripped or stripped.islower():
@@ -448,6 +546,43 @@ class SectionSegmenter:
                     continue
                 prev_window = "\n".join(lines[max(0, idx - 12) : idx])
                 next_nonempty = [ln.strip() for ln in lines[idx + 1 : idx + 14] if ln.strip()]
+                # Reject Table-of-Contents entry (e.g. LaTeX TOC "Tài liệu tham khảo\n34" or dot-leader TOC pages)
+                if page_is_toc:
+                    has_immediate_refs = sum(
+                        1
+                        for ln in next_nonempty[:6]
+                        if re.search(
+                            r"^(?:\[\s*\d+\s*\]|\d{1,3}[\.\)]\s+[A-ZÀ-Ý].*\b(?:18|19|20)\d{2}\b)|https?://|doi:",
+                            ln,
+                            re.IGNORECASE,
+                        )
+                        or (
+                            len(ln) >= 35
+                            and not re.search(r"(?:\.\s*){4,}\d+\s*$", ln)
+                            and bool(re.search(r"\b(?:18|19|20)\d{2}\b", ln))
+                        )
+                    )
+                    if (
+                        (next_nonempty and re.fullmatch(r"\d{1,3}", next_nonempty[0]) and has_immediate_refs == 0)
+                        or has_immediate_refs == 0
+                    ):
+                        continue
+                # Guard standalone Vietnamese LaTeX \refname "Tài liệu": require immediate [1] reference entry
+                if re.fullmatch(
+                    r"(?:(?:\d+(?:\.\d+)*|X{0,2}(?:I{1,3}|IV|V|VI{0,3}|IX|X)|[A-Z])[\.\)]?\s+)?tài\s+liệu\s*[:.]?",
+                    stripped,
+                    re.IGNORECASE,
+                ):
+                    has_bracket_one = any(re.match(r"^\[\s*1\s*\]\s+\S", ln) for ln in next_nonempty[:2])
+                    has_bib_cue_tl = bool(
+                        re.search(
+                            r"^\[\s*2\s*\]|\b(?:18|19|20)\d{2}\b|https?://|doi:",
+                            "\n".join(next_nonempty[:6]),
+                            re.IGNORECASE | re.MULTILINE,
+                        )
+                    )
+                    if not (has_bracket_one and has_bib_cue_tl):
+                        continue
                 m_sub = re.match(r"^\s*(\d+)\.(\d+)\b", stripped)
                 if m_sub and next_nonempty:
                     next_sec_prefix = f"{m_sub.group(1)}.{int(m_sub.group(2)) + 1}"
@@ -524,13 +659,23 @@ class SectionSegmenter:
     @staticmethod
     def _find_appendix_header_line_idx(page: Page, min_line_idx: int = 0) -> int | None:
         """Return 0-indexed line number of appendix header on `page` (at or after `min_line_idx`), or None."""
-        lines = page.text.splitlines()
+        import unicodedata
+
+        lines = [unicodedata.normalize("NFC", ln) for ln in page.text.splitlines()]
         for idx in range(max(0, min_line_idx), len(lines)):
             stripped = lines[idx].strip()
             if not stripped or stripped.islower():
                 continue
             if _APPENDIX_HEADERS.match(stripped) or _POST_BIB_APPENDIX_SINGLE_LINE_RE.match(stripped):
                 return idx
+            # Split-line subsection number before post-bib stop header (e.g. "6.2.\nChi tiết phân công công việc")
+            if re.fullmatch(r"(?:\d+(?:\.\d+)+|X{0,2}(?:I{1,3}|IV|V|VI{0,3}|IX|X))[\.\)]?", stripped) and idx + 1 < len(lines):
+                for j_nx in range(idx + 1, min(idx + 3, len(lines))):
+                    nx_s = lines[j_nx].strip()
+                    if nx_s:
+                        if _APPENDIX_HEADERS.match(nx_s) or _POST_BIB_APPENDIX_SINGLE_LINE_RE.match(nx_s):
+                            return idx
+                        break
             # Two-line LaTeX \appendix \section{...}: standalone "A" / "A." followed by section title line
             if stripped in ("A", "A.", "Appendix A") and idx + 1 < len(lines):
                 if stripped in ("A", "A."):
@@ -600,6 +745,18 @@ class SectionSegmenter:
                 if p.page_num == start_page:
                     hdr_idx = self._find_bibliography_header_line_idx(p)
                     if hdr_idx is not None and hdr_idx > 0:
+                        # Include standalone section/Roman numeral on preceding line (e.g. "IV.\nTÀI LIỆU THAM KHẢO")
+                        for prev_i in range(hdr_idx - 1, max(-1, hdr_idx - 3), -1):
+                            prev_s = lines[prev_i].strip()
+                            if not prev_s:
+                                continue
+                            if re.fullmatch(
+                                r"(?:X{0,2}(?:I{1,3}|IV|V|VI{0,3}|IX|X)|\d+(?:\.\d+)*)[\.\)]?",
+                                prev_s,
+                                re.IGNORECASE,
+                            ):
+                                hdr_idx = prev_i
+                            break
                         pre_text = "\n".join(lines[:hdr_idx]).strip()
                         if len(pre_text) >= 60:
                             metadata["pre_header_body_text"] = pre_text

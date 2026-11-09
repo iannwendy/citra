@@ -116,7 +116,7 @@ class TestReferenceParsingAllFormats:
                 CitationStyle.IEEE,
                 "2016",
                 "Deep residual learning for image recognition",
-                ["he", "zhang", "sun"],
+                ["he", "zhang", "ren", "sun"],
                 2,
             ),
             (

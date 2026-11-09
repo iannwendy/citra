@@ -305,6 +305,36 @@ class IEEEFormat:
                     title_raw = remainder[second_open + 1:second_close].strip().rstrip(',').rstrip()
         venue_year = remainder[close_q + 1:].strip().lstrip(',').strip()
 
+        # Guard 1: Quoted journal name after unquoted title, e.g.
+        # '[9] J. Ross Quinlan. Simplifying decision trees. "International journal of man-machine studies", 27(3):221–234, 1987.'
+        m_quoted_journal = re.match(
+            r'^(?P<real_auth>.+?(?<!\b[A-Z]))\.\s+(?P<real_title>[A-ZÀ-Ý][^.]{4,})\.$',
+            authors_part,
+        )
+        if (
+            m_quoted_journal
+            and re.search(r'\b[a-z]{3,}\b', m_quoted_journal.group('real_title'))
+            and not re.search(r',\s*[A-Z]\.|\band\s+[A-Z]', m_quoted_journal.group('real_title'))
+            and re.match(
+                r'^(?:vol\.?\s*\d+|no\.?\s*\d+|pp?\.?\s*\d+|\d+\s*\(\s*\d+\s*\)|\d+\s*:\s*\d+|(?:19|20)\d{2}\b)',
+                venue_year,
+                re.IGNORECASE,
+            )
+        ):
+            authors_part = m_quoted_journal.group('real_auth').strip()
+            venue_year = f'{title_raw}, {venue_year}'.strip(', ')
+            title_raw = m_quoted_journal.group('real_title').strip()
+        else:
+            # Guard 2: Unquoted title prefix ending with colon before quoted subtitle, e.g.
+            # '[2] Anees Kazi, ... and Nassir Navab. Inceptiongcn: "receptive field aware ...". In IPMI, 2019.'
+            m_colon_sub = re.match(
+                r'^(?P<real_auth>.+?(?<!\b[A-Z]))\.\s+(?P<t_prefix>[A-Za-z0-9À-ỹ][A-Za-z0-9À-ỹ\-_/\s]{1,50}):$',
+                authors_part,
+            )
+            if m_colon_sub:
+                authors_part = m_colon_sub.group('real_auth').strip()
+                title_raw = f"{m_colon_sub.group('t_prefix').strip()}: {title_raw}"
+
         # Extract year: ignore page numbers/ranges (e.g., pp. 1895–1923), volume/issue
         # numbers, DOIs, URLs, and arXiv IDs, while preferring publication year over
         # access year (Accessed: ... YYYY).

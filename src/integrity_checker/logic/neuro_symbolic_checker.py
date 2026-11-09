@@ -106,6 +106,15 @@ _WEB_RESOURCE_PATTERNS: tuple[re.Pattern[str], ...] = (
         r'/book-blog/|/book-review|spicy-chapters|#BookTok)',
         re.IGNORECASE,
     ),
+    # Vietnamese web portals, access dates, microcontroller vendor notes, and developer tutorial sites
+    re.compile(
+        r'(?:\((?:[a-z0-9-]+\.)+(?:gov\.vn|org\.vn|edu\.vn|vn)\)\s*\.?\s*$|'
+        r'\bTruy\s+cập\s+ngày\s+\d{1,2}\s*(?:[/-]|tháng)\s*\d{1,2}\s*(?:[/-]|năm)\s*(?:19|20)\d{2}\b|'
+        r'\bCổng\s+thông\s+tin\s+điện\s+tử|'
+        r'\bSTMicroelectronics\b.*\b(?:STM32|CMSIS)\b|'
+        r'^\s*(?:\[\s*\d+\s*\]\s*|\d{1,3}[\.\)]\s*)?(?:Baeldung|DataCamp|GeeksforGeeks|W3Schools|TutorialsPoint|Viblo|TopDev)\s*,)',
+        re.IGNORECASE,
+    ),
 )
 
 
@@ -508,7 +517,18 @@ class NeuroSymbolicChecker:
                 )
                 title_sim_threshold = 0.5  # Below this = likely wrong title
 
-                if title_sim < title_sim_threshold:
+                known_t_low = known_title.lower().strip()
+                is_chapter_in_known_book = len(known_t_low) >= 6 and (
+                    known_t_low in (citation.venue or "").lower()
+                    or bool(
+                        re.search(
+                            rf"\bin\s+{re.escape(known_t_low)}\b",
+                            (citation.raw_text or "").lower(),
+                        )
+                    )
+                )
+
+                if title_sim < title_sim_threshold and not is_chapter_in_known_book:
                     # Check if a live/local_db source already found a real paper matching citation.title
                     # (e.g., another paper by the same first author in the same year, like Kaiser & Bengio 2016)
                     has_real_matching_candidate = any(

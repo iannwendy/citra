@@ -150,7 +150,7 @@ logger = get_logger(__name__)
 
 # Bump whenever extraction/linking output shape changes so previously cached
 # (and possibly wrong) reports are recomputed instead of served from disk.
-_REPORT_CACHE_VERSION = "report-v16"
+_REPORT_CACHE_VERSION = "report-v18"
 
 # NEW v1.7: Only retrieve + verify REFERENCE_LIST citations (and DOI/URL inline
 # with enough metadata). In-text citations are verified via linking only.
@@ -1166,16 +1166,7 @@ class IntegrityPipeline:
             citation.context = citation_context
 
             # NEW v1.3: Provenance tracking - compute before calling checker
-            has_clean_empty_search = any(
-                "no results for" in (err or "").lower()
-                or "no title match" in (err or "").lower()
-                for err in (source.sources_failed or {}).values()
-            )
-            api_exhausted = (
-                len(source.sources_succeeded) == 0
-                and len(source.sources_failed) > 0
-                and not has_clean_empty_search
-            )
+            api_exhausted = IntegrityPipeline._is_source_rate_limit_or_api_exhausted(source)
             used_local_db = source.sources_succeeded == ["local_db"] if source.sources_succeeded else False
 
             # Pass mapping_status + style_profile + citation_context + provenance vào checker
@@ -1423,6 +1414,29 @@ class IntegrityPipeline:
         context = " ".join(context.split())  # Normalize whitespace
 
         return context if len(context) > 20 else None
+
+    @staticmethod
+    def _is_source_rate_limit_or_api_exhausted(source: SourceResult) -> bool:
+        """Return True when live retrieval failed due to API exhaustion or rate-limit backoff on core scholarly indexes."""
+        if len(source.sources_succeeded) > 0 or len(source.sources_failed) == 0:
+            return False
+        primary_scholarly = {"openalex", "dblp", "arxiv", "crossref", "europepmc", "openlibrary"}
+        for src_name, err in (source.sources_failed or {}).items():
+            err_l = (err or "").lower()
+            if src_name in primary_scholarly and (
+                "rate-limit backoff" in err_l
+                or "rate limit" in err_l
+                or "429" in err_l
+                or "timed out" in err_l
+                or "timeout" in err_l
+            ):
+                return True
+        has_clean_empty_search = any(
+            "no results for" in (err or "").lower()
+            or "no title match" in (err or "").lower()
+            for err in (source.sources_failed or {}).values()
+        )
+        return not has_clean_empty_search
 
     @staticmethod
     def _find_text_span(

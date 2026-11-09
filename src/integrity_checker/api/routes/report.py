@@ -720,6 +720,13 @@ def _json_response(
     }
     verdict_list = []
     citation_types = {c.raw_text: c.citation_type for c in citations}
+    _non_matched_intext_statuses = (
+        "missing_reference",
+        "in_text_mismatch",
+        "ambiguous_mapping",
+        "style_inconsistent",
+        "unresolved",
+    )
     for c in citations:
         if getattr(c, "citation_type", None) in {"in_text", "numeric"}:
             raw_link_json = getattr(c, "citation_link_json", None)
@@ -734,13 +741,13 @@ def _json_response(
                         for pl in parsed_links:
                             if isinstance(pl, dict):
                                 l_status = pl.get("status")
-                                if l_status in ("missing_reference", "in_text_mismatch", "ambiguous_mapping"):
+                                if l_status in _non_matched_intext_statuses:
                                     linking_summary[l_status] = linking_summary.get(l_status, 0) + 1
                 except Exception:  # noqa: BLE001
                     counted_from_json = False
             if not counted_from_json:
                 c_status = getattr(c, "mapping_status", None)
-                if c_status in ("missing_reference", "in_text_mismatch", "ambiguous_mapping"):
+                if c_status in _non_matched_intext_statuses:
                     linking_summary[c_status] = linking_summary.get(c_status, 0) + 1
 
     for v in verdicts:

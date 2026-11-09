@@ -504,13 +504,14 @@ class LocalDatabase:
         rows: list[sqlite3.Row] = []
         with self._get_conn() as conn:
             if query_tokens:
-                fts_query = " AND ".join(f'"{token}"' for token in query_tokens)
+                fts_query = " AND ".join(f'title:"{token}"' for token in query_tokens)
                 rows = conn.execute(
                     """
                     SELECT p.*
                     FROM papers_fts
                     JOIN papers p ON papers_fts.rowid = p.id
                     WHERE papers_fts MATCH ?
+                    ORDER BY length(p.title) ASC
                     LIMIT ?
                     """,
                     (fts_query, max(limit * 20, 50)),
@@ -518,13 +519,14 @@ class LocalDatabase:
 
             if not rows and len(query_tokens) >= 3:
                 # Fallback if first token lost a hyphen (e.g. "Scikitlearn" vs "Scikit-learn")
-                sub_fts = " AND ".join(f'"{token}"' for token in query_tokens[1:])
+                sub_fts = " AND ".join(f'title:"{token}"' for token in query_tokens[1:])
                 rows = conn.execute(
                     """
                     SELECT p.*
                     FROM papers_fts
                     JOIN papers p ON papers_fts.rowid = p.id
                     WHERE papers_fts MATCH ?
+                    ORDER BY length(p.title) ASC
                     LIMIT ?
                     """,
                     (sub_fts, max(limit * 20, 50)),

@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import re
+import threading
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -52,6 +53,13 @@ def clean_extracted_url(text_or_url: str | None) -> str:
 
     m = re.search(r"https?://\S+", s, flags=re.IGNORECASE)
     candidate = m.group(0) if m else s.lstrip("<[(\"'")
+    # Split concatenated URLs where a second http(s):// was glued after a dash or word char
+    candidate = re.split(
+        r"(?<=[^\s:/=?&])[-–—](?=https?://)|(?<=[^\s:/=?&\-–—])(?=https?://)",
+        candidate,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
     while candidate:
         if (
             candidate[-1] in ".,;:\"'>}"
@@ -66,6 +74,8 @@ def clean_extracted_url(text_or_url: str | None) -> str:
 _WAYBACK_SEMS: dict[int, asyncio.Semaphore] = {}
 _WAYBACK_LOCKS: dict[int, asyncio.Lock] = {}
 _WAYBACK_LAST_AT: dict[int, float] = {}
+_WAYBACK_GLOBAL_LOCK = threading.Lock()
+_WAYBACK_GLOBAL_LAST_AT: float = 0.0
 _WAYBACK_MIN_INTERVAL = 0.25
 # Cache confirmed Wayback lookups: url -> (archive_url, archive_timestamp)
 _WAYBACK_CACHE: dict[str, tuple[str | None, str | None]] = {}
@@ -178,6 +188,7 @@ class LinkValidator:
             cached_url, cached_ts = _WAYBACK_CACHE[cache_key]
             return cached_url, cached_ts, True
 
+        global _WAYBACK_GLOBAL_LAST_AT
         sem, lock, loop_id = _get_wayback_concurrency()
         backoffs = (0.0, 0.35, 0.75)
         last_exc: Exception | None = None
@@ -187,10 +198,13 @@ class LinkValidator:
                 await asyncio.sleep(backoff_sec)
             async with sem:
                 async with lock:
-                    now = time.monotonic()
-                    scheduled = max(now, _WAYBACK_LAST_AT.get(loop_id, 0.0) + _WAYBACK_MIN_INTERVAL)
-                    _WAYBACK_LAST_AT[loop_id] = scheduled
-                    wait_sec = scheduled - now
+                    with _WAYBACK_GLOBAL_LOCK:
+                        now = time.monotonic()
+                        last_at = max(_WAYBACK_GLOBAL_LAST_AT, _WAYBACK_LAST_AT.get(loop_id, 0.0))
+                        scheduled = max(now, last_at + _WAYBACK_MIN_INTERVAL)
+                        _WAYBACK_GLOBAL_LAST_AT = scheduled
+                        _WAYBACK_LAST_AT[loop_id] = scheduled
+                        wait_sec = scheduled - now
                 if wait_sec > 0:
                     await asyncio.sleep(wait_sec)
 
@@ -302,9 +316,14 @@ class LinkValidator:
                 follow_redirects=True,
                 headers=self.DEFAULT_HEADERS,
             ) as client:
-                resp = await client.head(clean_url)
-                status_code = resp.status_code
-                final_url = str(resp.url)
+                try:
+                    resp = await client.head(clean_url)
+                    status_code = resp.status_code
+                    final_url = str(resp.url)
+                except httpx.TimeoutException:
+                    async with client.stream("GET", clean_url) as get_resp:
+                        status_code = get_resp.status_code
+                        final_url = str(get_resp.url)
 
                 # Many academic publishers/portals/WAFs reject HEAD; verify via lightweight GET stream
                 if status_code in (400, 401, 403, 404, 405, 406, 500, 501, 503):
@@ -354,6 +373,24 @@ class LinkValidator:
                 error=f"Timeout: {exc}",
             )
         except httpx.ConnectError as exc:
+            err_detail = f"{exc} {repr(exc)}"
+            if any(
+                tok in err_detail
+                for tok in (
+                    "CERTIFICATE_VERIFY_FAILED",
+                    "SSLCertVerificationError",
+                    "[SSL:",
+                    "certificate verify failed",
+                )
+            ):
+                logger.debug(
+                    f"LinkValidator TLS certificate verification issue on live host '{clean_url}': {exc}"
+                )
+                return LinkCheckResult(
+                    url=clean_url,
+                    status=LinkStatus.RESTRICTED_ALIVE,
+                    error=f"TLS certificate chain incomplete on live host: {exc}",
+                )
             logger.debug(f"LinkValidator connect/DNS error for '{clean_url}': {exc}")
             _LAST_WAYBACK_OK.set(True)
             wb_url, wb_ts = await self._check_wayback_machine(clean_url)

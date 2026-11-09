@@ -19,8 +19,8 @@ from integrity_checker.models.citation import Citation, CitationStyle, CitationT
 
 # Header / footer keywords để phát hiện reference section
 _REFERENCE_HEADERS = re.compile(
-    r"^\s*(?:(?:(?:chương|phần|mục|chapter|section)\s+)?(?:\d+(?:\.\d+)*|I{1,3}|IV|V|VI{0,3}|IX|X)[\.\):]?\s+|[A-Z][\.\)]\s+)?(references?|reference\s+list|bibliography|works?\s+cited|literature(?:\s+cited)?|cited\s+literature|notes(?:\s+and\s+references)?|endnotes?"
-    r"|danh\s+mục\s+tài\s+liệu(?:\s+[tk]ham\s+khảo)?|(?:các\s+)?(?:tài\s+liệu|bài\s+viết|nguồn|link)\s+[tk]ham\s+khảo|tham\s+khảo|tài\s+liệu\s+trích\s+dẫn)\s*[:.]?\s*$",
+    r"^\s*(?:(?:(?:chương|phần|mục|chapter|section|part)\s+)?(?:\d+(?:\.\d+)*|X{0,2}(?:I{1,3}|IV|V|VI{0,3}|IX|X))(?:\s*[\.\):\-–—]+\s*|\s+)|[A-Z][\.\)]\s+)?(references?|reference\s+list|bibliography|works?\s+cited|literature(?:\s+cited)?|cited\s+literature|notes(?:\s+and\s+references)?|endnotes?"
+    r"|danh\s+mục\s+tài\s+liệu(?:\s+[tk]ham\s+khảo(?:\s*(?:,|và)\s*trích\s+dẫn)?)?|(?:các\s+)?(?:tài\s+liệu|bài\s+viết|nguồn|link)\s+[tk]ham\s+khảo(?:\s*(?:,|và)\s*trích\s+dẫn)?|tham\s+khảo|tài\s+liệu\s+trích\s+dẫn|tài\s+liệu)(?:\s*\(\s*\))?\s*[:.]?\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -171,10 +171,18 @@ def _is_date_only_citation(extracted_text: str) -> bool:
     ):
         return True
 
+    # Statistical coefficient / test statistic parentheticals: "(Cramér's V)", "(Cohen's d)", "(Cronbach's alpha)"
+    if re.match(
+        r"^[A-ZÀ-Ý][A-Za-zÀ-ỹ]+['’]s\s+(?:[A-Za-z]|[αβγδχ]|alpha|beta|gamma|delta|tau|rho|kappa|lambda|omega)$",
+        inner,
+        re.IGNORECASE,
+    ):
+        return True
+
     # Non-citation range, chemistry/math label, or biblical chapter parenthetical:
     # "(Years 1–3)", "(ages 18-25)", "(Acts 18)", "(Scope 1, 2, 3)", "(Scheme 1)", "(Compound 2)", "(Round 1)"
     if re.match(
-        r"^(?:years?|ages?|grades?|phases?|steps?|stages?|rounds?|cycles?|iterations?|passes?|tiers?|splits?|clusters?|topics?|tasks?|items?|itemsets?|optimizations?|sites?|points?|nodes?|edges?|blocks?|heads?|prompts?|queries|query|samples?|users?|comments?|labels?|versions?|drafts?|folds?|epochs?|batches?|layers?|seeds?|scores?|ranks?|rates?|ratios?|indices|index|values?|limits?|codes?|errors?|ports?|pins?|leds?|vlans?|vtps?|ospf|rip|nat|acl|dhcp|dns|ssh|http|https|status|llama|qwen|gpt|yolo|bert|resnet|vner|vlsp|xml|javascript|typescript|trang|hình|ảnh|bảng|mục|chương|phần|bước|nhóm|loại|câu|bài|đoạn|dòng|cột|top|stt|mssv|weeks?|months?|days?|chapters?|subchapters?|sections?|scopes?|parts?|clauses?|tables?|figures?|figs?\.?|schemes?|charts?|entries|entry|runs?|compounds?|reactions?|pathways?|models?|equations?|eqs?\.?|experiments?|trials?|cases?|groups?|types?|classes|levels?|rules?|theorems?|lemmas?|propositions?|corollaries|definitions?|examples?|algorithms?|listings?|appendices|appendix|supplements?|notes?|acts|genesis|exodus|psalms?|matthew|mark|luke|john|romans|corinthians)\s+(?:\d|[A-Z]\b)",
+        r"^(?:years?|ages?|grades?|phases?|steps?|stages?|rounds?|cycles?|iterations?|passes?|tiers?|splits?|clusters?|topics?|tasks?|items?|itemsets?|optimizations?|sites?|points?|nodes?|edges?|blocks?|heads?|prompts?|queries|query|samples?|users?|comments?|labels?|versions?|drafts?|folds?|epochs?|batches?|layers?|seeds?|scores?|ranks?|rates?|ratios?|indices|index|values?|limits?|codes?|errors?|err|msg|messages?|logic|priority|gpio|irq|states?|modes?|bits?|bytes?|flags?|channels?|timers?|ports?|pins?|leds?|vlans?|vtps?|ospf|rip|nat|acl|dhcp|dns|ssh|http|https|status|llama|qwen|gpt|yolo|bert|resnet|vner|vlsp|xml|javascript|typescript|trang|hình|ảnh|bảng|mục|chương|phần|bước|nhóm|loại|câu|bài|đoạn|dòng|cột|top|stt|mssv|weeks?|months?|days?|chapters?|subchapters?|sections?|scopes?|parts?|clauses?|tables?|figures?|figs?\.?|schemes?|charts?|entries|entry|runs?|compounds?|reactions?|pathways?|models?|equations?|eqs?\.?|experiments?|trials?|cases?|groups?|types?|classes|levels?|rules?|theorems?|lemmas?|propositions?|corollaries|definitions?|examples?|algorithms?|listings?|appendices|appendix|supplements?|notes?|acts|genesis|exodus|psalms?|matthew|mark|luke|john|romans|corinthians)\s+(?:\d|[A-Z]\b)",
         inner,
         re.IGNORECASE,
     ):
@@ -318,6 +326,9 @@ class CitationExtractor:
             r"(?:\s+(?:Recall|Precision|F1(?:\s*Score)?))*",
             re.IGNORECASE,
         )
+        from integrity_checker.extraction.section_segmenter import SectionSegmenter
+
+        page_is_toc = SectionSegmenter._is_toc_like_page(raw_text or "")
         for m in _REFERENCE_HEADERS.finditer(raw_text or ""):
             matched_word = (m.group(1) or "").strip()
             if matched_word.islower():
@@ -327,6 +338,34 @@ class CitationExtractor:
             before_lines = [ln.strip() for ln in prev_win.splitlines()[-6:] if ln.strip()]
             if sum(1 for ln in (before_lines + after_lines[:8]) if table_col_re.fullmatch(ln)) >= 2:
                 continue
+            if page_is_toc:
+                has_immediate_refs = sum(
+                    1
+                    for ln in after_lines[:6]
+                    if re.search(
+                        r"^(?:\[\s*\d+\s*\]|\d{1,3}[\.\)]\s+[A-ZÀ-Ý].*\b(?:18|19|20)\d{2}\b)|https?://|doi:",
+                        ln,
+                        re.IGNORECASE,
+                    )
+                    or (
+                        len(ln) >= 35
+                        and not re.search(r"(?:\.\s*){4,}\d+\s*$", ln)
+                        and bool(re.search(r"\b(?:18|19|20)\d{2}\b", ln))
+                    )
+                )
+                if has_immediate_refs == 0:
+                    continue
+            if re.fullmatch(r"tài\s+liệu", matched_word, re.IGNORECASE):
+                has_bracket_one = any(re.match(r"^\[\s*1\s*\]\s+\S", ln) for ln in after_lines[:2])
+                has_bib_cue_tl = bool(
+                    re.search(
+                        r"^\[\s*2\s*\]|\b(?:18|19|20)\d{2}\b|https?://|doi:",
+                        "\n".join(after_lines[:6]),
+                        re.IGNORECASE | re.MULTILINE,
+                    )
+                )
+                if not (has_bracket_one and has_bib_cue_tl):
+                    continue
             m_sub = re.match(r"^\s*(\d+)\.(\d+)\b", m.group(0).strip())
             if m_sub and after_lines:
                 if after_lines[0].startswith(f"{m_sub.group(1)}.{int(m_sub.group(2)) + 1}"):
@@ -556,11 +595,19 @@ class CitationExtractor:
                     line_suffix_b = search_text[m.end() : line_end_b]
                     full_line_b = search_text[line_start_b:line_end_b]
                     context_prefix_b = re.sub(r"\s+", " ", search_text[max(0, raw_start - 60) : raw_start])
-                    # Reject code array indexing (e.g. X.shape[1], arr[0], matrix[1, 2], dp[1][2], axs[1].plot, parts[1].trim(), doc[1];, byte[4096], int a[100], [[37, 95], [449, 95]])
+                    # Reject code array indexing, XPath predicates (/KetQua[1]/KyNang[1]), Word exported comments (Commented [1]:), and R console vector lines (## [1] 0.84)
                     if (
                         re.search(
-                            r"(?:[A-Za-z0-9_](?:\[\s*[^\]]*\s*\])+|[A-Za-z0-9_]\.[A-Za-z_][A-Za-z0-9_]*|[A-Za-z0-9_]+_[A-Za-z0-9_]+|\b(?:byte|int|char|float|double|long|short|uint\d*|int\d*|bool|string)(?:\s+[A-Za-z_][A-Za-z0-9_]*)?\s*|\b(?:buffer|arr|array|vec|vector|matrix|tensor|dp|mat|grid|axs|ax|plt|parts|args|argv|df|coefficients|weights|biases|params|dims?)(?:\[\s*[^\]]*\s*\])*\s*|\[\s*)$",
+                            r"(?:[A-Za-z0-9_](?:\[\s*[^\]]*\s*\])+|[A-Za-z0-9_]\.[A-Za-z_][A-Za-z0-9_]*|[A-Za-z0-9_]+_[A-Za-z0-9_]+|(?:^|[\s\"'=(,\]])/[A-Za-z_][A-Za-z0-9_.-]*|\bCommented\s*|\b(?:byte|int|char|float|double|long|short|uint\d*|int\d*|bool|string)(?:\s+[A-Za-z_][A-Za-z0-9_]*)?\s*|\b(?:buffer|arr|array|vec|vector|matrix|tensor|dp|mat|grid|axs|ax|plt|parts|args|argv|df|coefficients|weights|biases|params|dims?)(?:\[\s*[^\]]*\s*\])*\s*|\[\s*)$",
                             line_prefix_b,
+                        )
+                        or (
+                            re.search(r"[A-Za-z0-9_\]\)]$", line_prefix_b)
+                            and re.match(r"^/[A-Za-z_]", line_suffix_b)
+                        )
+                        or re.match(
+                            r"^\s*(?:##\s*|>\s*)\[\s*\d+\s*\]\s+(?:-?\d+\.\d+|TRUE|FALSE|NA|\"[^\"]*\")",
+                            full_line_b,
                         )
                         or re.match(
                             r"^\.[A-Za-z_][A-Za-z0-9_]*|^\[|^\s*\](?:\s*,|\s*\])|^\s*(?:=(?!=)|[+\-*/%]=|==|!=|<=|>=)",
@@ -693,12 +740,31 @@ class CitationExtractor:
                         raw,
                         flags=re.IGNORECASE,
                     ).strip()
-                    # Skip common-noun page/year parentheticals or pre-1900 historical founding years
+                    # Skip common-noun page/year parentheticals, political/movie/hardware mentions, or pre-1900 historical founding years
                     if re.match(
-                        r"^(?:Networks?|Papers?|Tables?|Figures?|Chapters?|Sections?|Parts?|Equations?|Models?|Systems?)\s+\(",
+                        r"^(?:Networks?|Papers?|Tables?|Figures?|Chapters?|Sections?|Parts?|Equations?|Models?|Systems?|Đảng)\s*[\(\[]",
                         raw,
                         re.IGNORECASE,
                     ):
+                        continue
+                    if re.match(
+                        r"^(?:[A-Z][a-z]+\s+)?(?:I|II|III|IV|V|VI|VII|VIII|IX|X)\s*[\(\[]\s*(?:19|20)\d{2}\s*[\)\]]$",
+                        raw,
+                    ):
+                        accepted_spans.add(span_key)
+                        continue
+                    narrative_ctx_prefix = re.sub(
+                        r"\s+", " ", search_text[max(0, raw_start - 60) : raw_start]
+                    )
+                    if (
+                        not re.search(r"\b(?:et\s+al\.?|và\s+cộng\s+sự|và\s+cs\.?|&|and)\b", raw, re.IGNORECASE)
+                        and re.search(
+                            r"\b(?:bộ\s+phim|phim|tác\s+phẩm\s+điện\s+ảnh|hệ\s+thống(?:\s+dịch(?:\s+máy)?)?|dòng\s+máy|trường\s+thi|chiến\s+dịch|phong\s+trào|khởi\s+nghĩa|hiệp\s+định|tỉnh|thành\s+phố)\s+$",
+                            narrative_ctx_prefix,
+                            re.IGNORECASE,
+                        )
+                    ):
+                        accepted_spans.add(span_key)
                         continue
                     if re.search(r"[\(\[]\s*(?:1[0-7]\d{2})\s*[\)\]]$", raw):
                         continue

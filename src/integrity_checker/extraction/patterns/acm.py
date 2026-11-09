@@ -105,7 +105,9 @@ _ACM_BOOK = CompiledPattern.create(
     pattern=(
         r'^\[\s*(?P<index>\d+)\s*\]\s*'  # [N]
         r'(?P<authors>[^.]+?),\s+'  # Authors,
-        r'(?P<title>(?!and\b|&\s)[^,.]+?)[.,]\s+'  # Book title. or ,
+        r'(?P<title>(?!and\b|&\s)(?!(?i:(?:\d+(?:st|nd|rd|th)|first|second|third|revised)\s+ed\b))[^,.]+?)'  # Book title
+        r'(?:[.,]\s*(?i:(?:\d+(?:st|nd|rd|th)|first|second|third|fourth|fifth|revised)\s+ed(?:ition|\.)?))?'  # Optional edition
+        r'[.,]\s+'
         r'(?P<publisher>[^,.]+?),\s*'  # Publisher,
         r'(?P<year>(?:19|20)\d{2})'  # Required 4-digit year
         r'\.?$'
@@ -374,18 +376,61 @@ class ACMFormat:
                 citation.numeric_index = numeric_index
             return citation
 
+        # Try title-first draft/textbook with Copyright line (e.g. "[10] Speech and Language Processing. Daniel Jurafsky & James H. Martin. Copyright c 2019...")
+        citation = self._try_parse_title_first_copyright(text)
+        if citation:
+            if numeric_index and citation.numeric_index is None:
+                citation.numeric_index = numeric_index
+            return citation
+
         # Fallback
         return self._parse_acm_fallback(text)
+
+    def _try_parse_title_first_copyright(self, text: str) -> Citation | None:
+        """Parse title-first draft/textbook format ('[N] Title. Author1 & Author2. Copyright ... YYYY')."""
+        m = re.match(
+            r'^\[\s*(?P<index>\d+)\s*\]\s*(?P<title>[A-Z][^.?!]{4,120}?)\.\s+'
+            r'(?P<authors>[A-ZÀ-Ý](?:[^.?!]|\b[A-Z]\.){3,120}?(?:\s+&\s+|\s+and\s+)[A-ZÀ-Ý](?:[^.?!]|\b[A-Z]\.){2,80}?)\.\s+'
+            r'(?P<venue>Copyright\b.*?(?P<year>(?:19|20)\d{2}).*)$',
+            text,
+            re.IGNORECASE,
+        )
+        if not m:
+            return None
+        title = m.group('title').strip()
+        authors = self._parse_authors(m.group('authors').strip())
+        if not authors:
+            return None
+        citation = Citation(
+            raw_text=text,
+            citation_type=CitationType.REFERENCE_LIST,
+            style=CitationStyle.ACM,
+            matched_pattern='acm_title_first_copyright',
+            numeric_index=int(m.group('index')),
+            authors=authors,
+            year=m.group('year'),
+            title=title,
+            title_normalized=self._normalize_title(title),
+        )
+        citation.confidence = self._estimate_confidence(citation)
+        return citation
 
     def _try_parse_year_first(self, text: str) -> Citation | None:
         """Try to parse ACM 2017+ official year-first format."""
         match = _ACM_YEAR_FIRST.search(text)
         if not match:
             return None
+        authors_raw = match.group('authors').strip()
+        title = match.group('title').strip().rstrip('.')
+        if (
+            len(title) < 4
+            or title.lower() in {'p', 'pp', 'vol', 'no', 'ch', 'ed', 'eds'}
+            or re.search(r'\bet\s+al\.\s+\S|\bIn\s*:', authors_raw, re.IGNORECASE)
+        ):
+            return None
         year_raw = match.group('year')
         year = year_raw[:4]
         year_suffix = year_raw[4:] if len(year_raw) > 4 else None
-        title = match.group('title').strip().rstrip('.')
         citation = Citation(
             raw_text=text,
             citation_type=CitationType.REFERENCE_LIST,
@@ -535,15 +580,36 @@ class ACMFormat:
         if index:
             citation.numeric_index = int(index)
 
-        # Extract authors
+        # Extract authors (guard against comma-separated book title prefix swallowed into authors,
+        # e.g. "[6] Robin Nixon, Learning PHP, MySQL & JavaScript, O’Reilly Media, 2018.")
         authors_str = match.group('authors')
+        title = match.group('title').strip()
+        if authors_str and ',' in authors_str:
+            a_parts = [p.strip() for p in authors_str.split(',') if p.strip()]
+            title_head_re = re.compile(
+                r'^(?:Learning|Programming|Introducing|Introduction|Mastering|Beginning|Understanding|'
+                r'Building|Designing|Developing|Modern|Practical|Effective|Essential|Applied|Advanced|'
+                r'Fundamentals|Principles|Hands-On|Head\s+First|Exploring|Using|Complete|Definitive)\b',
+                re.IGNORECASE,
+            )
+            for idx_ap in range(1, len(a_parts)):
+                if title_head_re.match(a_parts[idx_ap]):
+                    shifted = ', '.join(a_parts[idx_ap:])
+                    title = f'{shifted}, {title}'
+                    authors_str = ', '.join(a_parts[:idx_ap])
+                    break
         if authors_str:
             citation.authors = self._parse_authors(authors_str)
         if not citation.authors:
             return None
 
         # Extract title (remove quotes and trailing period)
-        title = match.group('title').strip()
+        if re.match(
+            r'^(?:(?:\d+(?:st|nd|rd|th)|first|second|third|revised)\s+ed(?:ition|\.)?|[A-Z]\.\s*[A-Z][a-z]+)$',
+            title,
+            re.IGNORECASE,
+        ):
+            return None
         # Strip ASCII and curly quotes
         for q in ['"', '"', '"', '"', '"', '"']:
             if title.startswith(q) and title.endswith(q):
@@ -611,6 +677,15 @@ class ACMFormat:
             return None
         if re.search(r'\b(?:vol|no|pp)\b', authors_str or '', re.IGNORECASE):
             return None
+        # Reject when unquoted book title followed by ". Publisher, Year" caused `title` to become bare publisher/copyright/edition
+        if re.match(
+            r'^(?:MIT\s+Press|Springer(?:-Verlag)?|Elsevier|Wiley|Pearson(?:\s+Education)?|McGraw-Hill|Addison-Wesley|Prentice\s+Hall|O[\'\u2019]Reilly(?:\s+Media)?|Academic\s+Press|CRC\s+Press|Morgan\s+Kaufmann|(?:Cambridge|Oxford|Harvard|Princeton|Stanford)\s+University\s+Press|Copyright\b.*|(?:\d+(?:st|nd|rd|th)|first|second|third|revised)\s+ed(?:ition|\.)?)$',
+            title.rstrip('.'),
+            re.IGNORECASE,
+        ):
+            return None
+        if authors_str and re.search(r',?\s+and\s+[A-ZÀ-Ý][^,]+,\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ\s]{3,}$', authors_str):
+            return None
         if authors_str:
             citation.authors = self._parse_authors(authors_str)
         if not citation.authors:
@@ -649,6 +724,10 @@ class ACMFormat:
             citation.year = year_str[:4]
             if len(year_str) > 4:
                 citation.year_suffix = year_str[4:]
+        elif venue:
+            venue_yr_m = re.search(r'\b((?:19|20)\d{2})\b', re.sub(r'https?://\S+', '', venue))
+            if venue_yr_m:
+                citation.year = venue_yr_m.group(1)
 
         # Extract DOI if present
         doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
@@ -683,6 +762,15 @@ class ACMFormat:
         if re.search(r',\s*(?:vol|no|pp)\s*$', title, re.IGNORECASE):
             return None
         if re.search(r'\b(?:vol|no|pp)\b', authors_str or '', re.IGNORECASE):
+            return None
+        # Reject when unquoted book title followed by ". Publisher, Year" caused `title` to become bare publisher/copyright/edition
+        if re.match(
+            r'^(?:MIT\s+Press|Springer(?:-Verlag)?|Elsevier|Wiley|Pearson(?:\s+Education)?|McGraw-Hill|Addison-Wesley|Prentice\s+Hall|O[\'\u2019]Reilly(?:\s+Media)?|Academic\s+Press|CRC\s+Press|Morgan\s+Kaufmann|(?:Cambridge|Oxford|Harvard|Princeton|Stanford)\s+University\s+Press|Copyright\b.*|(?:\d+(?:st|nd|rd|th)|first|second|third|revised)\s+ed(?:ition|\.)?)$',
+            title.rstrip('.'),
+            re.IGNORECASE,
+        ):
+            return None
+        if authors_str and re.search(r',?\s+and\s+[A-ZÀ-Ý][^,]+,\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ\s]{3,}$', authors_str):
             return None
         if authors_str:
             citation.authors = self._parse_authors(authors_str)
@@ -750,15 +838,36 @@ class ACMFormat:
         if index:
             citation.numeric_index = int(index)
 
-        # Extract authors
+        # Extract authors (guard against comma-separated book title prefix swallowed into authors,
+        # e.g. "[6] Robin Nixon, Learning PHP, MySQL & JavaScript, O’Reilly Media, 2018.")
         authors_str = match.group('authors')
+        title = match.group('title').strip()
+        if authors_str and ',' in authors_str:
+            a_parts = [p.strip() for p in authors_str.split(',') if p.strip()]
+            title_head_re = re.compile(
+                r'^(?:Learning|Programming|Introducing|Introduction|Mastering|Beginning|Understanding|'
+                r'Building|Designing|Developing|Modern|Practical|Effective|Essential|Applied|Advanced|'
+                r'Fundamentals|Principles|Hands-On|Head\s+First|Exploring|Using|Complete|Definitive)\b',
+                re.IGNORECASE,
+            )
+            for idx_ap in range(1, len(a_parts)):
+                if title_head_re.match(a_parts[idx_ap]):
+                    shifted = ', '.join(a_parts[idx_ap:])
+                    title = f'{shifted}, {title}'
+                    authors_str = ', '.join(a_parts[:idx_ap])
+                    break
         if authors_str:
             citation.authors = self._parse_authors(authors_str)
         if not citation.authors:
             return None
 
         # Extract title (remove quotes and trailing period)
-        title = match.group('title').strip()
+        if re.match(
+            r'^(?:(?:\d+(?:st|nd|rd|th)|first|second|third|revised)\s+ed(?:ition|\.)?|[A-Z]\.\s*[A-Z][a-z]+)$',
+            title,
+            re.IGNORECASE,
+        ):
+            return None
         # Strip ASCII and curly quotes
         for q in ['"', '"', '"', '"', '"', '"']:
             if title.startswith(q) and title.endswith(q):
@@ -863,15 +972,36 @@ class ACMFormat:
         if index:
             citation.numeric_index = int(index)
 
-        # Extract authors
+        # Extract authors (guard against comma-separated book title prefix swallowed into authors,
+        # e.g. "[6] Robin Nixon, Learning PHP, MySQL & JavaScript, O’Reilly Media, 2018.")
         authors_str = match.group('authors')
+        title = match.group('title').strip()
+        if authors_str and ',' in authors_str:
+            a_parts = [p.strip() for p in authors_str.split(',') if p.strip()]
+            title_head_re = re.compile(
+                r'^(?:Learning|Programming|Introducing|Introduction|Mastering|Beginning|Understanding|'
+                r'Building|Designing|Developing|Modern|Practical|Effective|Essential|Applied|Advanced|'
+                r'Fundamentals|Principles|Hands-On|Head\s+First|Exploring|Using|Complete|Definitive)\b',
+                re.IGNORECASE,
+            )
+            for idx_ap in range(1, len(a_parts)):
+                if title_head_re.match(a_parts[idx_ap]):
+                    shifted = ', '.join(a_parts[idx_ap:])
+                    title = f'{shifted}, {title}'
+                    authors_str = ', '.join(a_parts[:idx_ap])
+                    break
         if authors_str:
             citation.authors = self._parse_authors(authors_str)
         if not citation.authors:
             return None
 
         # Extract title (remove quotes and trailing period)
-        title = match.group('title').strip()
+        if re.match(
+            r'^(?:(?:\d+(?:st|nd|rd|th)|first|second|third|revised)\s+ed(?:ition|\.)?|[A-Z]\.\s*[A-Z][a-z]+)$',
+            title,
+            re.IGNORECASE,
+        ):
+            return None
         # Strip ASCII and curly quotes
         for q in ['"', '"', '"', '"', '"', '"']:
             if title.startswith(q) and title.endswith(q):

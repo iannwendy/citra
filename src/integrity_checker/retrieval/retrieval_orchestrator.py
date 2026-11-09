@@ -51,6 +51,7 @@ from integrity_checker.retrieval.normalization import (
     author_key,
     author_keys,
     author_match_score,
+    is_book_review_mismatch,
     normalize_doi,
     title_similarity,
 )
@@ -438,6 +439,22 @@ _KNOWN_PAPERS: dict[tuple[str, str], dict] = {
         "doi": "10.48550/arXiv.1506.06726",
         "authors": ["Kiros", "Zhu", "Salakhutdinov", "Zemel"],
     },
+    # ===== Classic CS/SE/OR/Stats Textbooks frequently hijacked by journal book reviews =====
+    ("booch", "2005"): {
+        "title": "The Unified Modeling Language User Guide",
+        "doi": None,
+        "authors": ["Booch", "Rumbaugh", "Jacobson"],
+    },
+    ("hillier", "2015"): {
+        "title": "Introduction to Operations Research",
+        "doi": None,
+        "authors": ["Hillier", "Lieberman"],
+    },
+    ("montgomery", "2012"): {
+        "title": "Introduction to Linear Regression Analysis",
+        "doi": None,
+        "authors": ["Montgomery", "Peck", "Vining"],
+    },
     ("turian", "2010"): {
         "title": "Word Representations: A Simple and General Method for Semi-Supervised Learning",
         "doi": "10.3115/1830354.1830356",
@@ -779,6 +796,18 @@ _KNOWN_PAPERS: dict[tuple[str, str], dict] = {
             "scholarly documents into structured TEI XML header metadata and bibliographic references."
         ),
     },
+    ("nakamoto", "2008"): {
+        "title": "Bitcoin: A Peer-to-Peer Electronic Cash System",
+        "doi": None,
+        "authors": ["Nakamoto"],
+        "venue": "bitcoin.org",
+    },
+    ("pedregosa", "2011"): {
+        "title": "Scikit-learn: Machine Learning in Python",
+        "doi": None,
+        "authors": ["Pedregosa", "Varoquaux", "Gramfort", "Michel", "Thirion"],
+        "venue": "Journal of Machine Learning Research",
+    },
 }
 
 # Venue-Year whitelist cho top conferences
@@ -977,7 +1006,40 @@ _WEB_RESOURCE_PATTERNS = [
         r"geeksforgeeks\.org|machinelearningmastery\.com|tutorialspoint\.com|techiedelight\.com|"
         r"zetcode\.com|tutorialhorizon\.com|colah\.github\.io|towardsdatascience\.com|"
         r"w3schools\.com|javatpoint\.com|baeldung\.com|freecodecamp\.org|dev\.to|"
-        r"freetuts\.net|v1study\.com|congdongjava\.com|viblo\.asia|topdev\.vn)",
+        r"freetuts\.net|v1study\.com|congdongjava\.com|viblo\.asia|topdev\.vn|"
+        r"(?:[a-z0-9-]+\.)*gov\.vn|dantri\.com\.vn|vnexpress\.net|tuoitre\.vn|thanhnien\.vn|"
+        r"vietnamnet\.vn|baochinhphu\.vn|chinhphu\.vn|tapchitaichinh\.vn|cafef\.vn|vneconomy\.vn|"
+        r"vtv\.vn|vov\.vn|nhandan\.vn|laodong\.vn|tienphong\.vn|plo\.vn|znews\.vn|zingnews\.vn|"
+        r"luatvietnam\.vn|thuvienphapluat\.vn|incorp\.asia|misa\.vn|brandsvietnam\.com|"
+        r"advertisingvietnam\.com|glints\.com|topcv\.vn|pace\.edu\.vn|medium\.com)",
+        re.IGNORECASE,
+    ),
+    # Bare official software/framework documentation, hardware datasheets, and Wikipedia (without DOI)
+    re.compile(
+        r"\b(?:Pandas|NumPy|SciPy|Matplotlib|Scikit-learn|TensorFlow|PyTorch|Keras|Django|Flask|"
+        r"FastAPI|React(?:\.js)?|Vue(?:\.js)?|Angular|Next\.js|Node\.js|Express(?:\.js)?|PHP|"
+        r"MySQL|PostgreSQL|MongoDB|Redis|Docker|Kubernetes|Bootstrap|Tailwind\s*CSS|Spring\s*Boot|"
+        r"Laravel|Flutter|Android|Firebase|OpenCV|Unity|Arduino|ESP-IDF)\s+"
+        r"(?:Official\s+|Developer\s+|User\s+)?(?:Documentation|Docs|Manual|Reference\s+Manual|User\s+Guide)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:ESP32(?:-[A-Z0-9]+)?|ESP8266|STM32[A-Z0-9]*|ATmega\d+[A-Z]*|PIC1[68]F\w*|"
+        r"Arduino\s+\w+|Raspberry\s+Pi(?:\s+\d+)?|MPU-?\d+|DHT11|DHT22|HC-SR04|SIM\d+|L298N|DS18B20)\b"
+        r"[^.]{0,60}\b(?:Datasheet|Technical\s+Reference\s+Manual|Reference\s+Manual|"
+        r"Hardware\s+Design\s+Guidelines|Product\s+Specification)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^\s*(?:\[\s*\d+\s*\]\s*|\d{1,3}[\.\)]\s*)?Wikipedia(?:\s+contributors)?\s*[,.]",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:\((?:[a-z0-9-]+\.)+(?:gov\.vn|org\.vn|edu\.vn|vn)\)\s*\.?\s*$|"
+        r"\bTruy\s+cập\s+ngày\s+\d{1,2}\s*(?:[/-]|tháng)\s*\d{1,2}\s*(?:[/-]|năm)\s*(?:19|20)\d{2}\b|"
+        r"\bCổng\s+thông\s+tin\s+điện\s+tử|"
+        r"\bSTMicroelectronics\b.*\b(?:STM32|CMSIS)\b|"
+        r"^\s*(?:\[\s*\d+\s*\]\s*|\d{1,3}[\.\)]\s*)?(?:Baeldung|DataCamp|GeeksforGeeks|W3Schools|TutorialsPoint|Viblo|TopDev)\s*,)",
         re.IGNORECASE,
     ),
 ]
@@ -1207,22 +1269,55 @@ class RetrievalOrchestrator:
                 )
             )
         )
+        scholarly_paper_url_re = (
+            r"(?:doi\.org/10\.|(?:^|[./])arxiv\.org/(?:abs|pdf|html)/|"
+            r"aclanthology\.org/[A-Za-z0-9.\-]+/?$|"
+            r"ieeexplore\.ieee\.org/document/|dl\.acm\.org/doi/|"
+            r"link\.springer\.com/(?:article|chapter)/|"
+            r"sciencedirect\.com/science/article/|"
+            r"nature\.com/articles/|onlinelibrary\.wiley\.com/doi/|"
+            r"ncbi\.nlm\.nih\.gov/pmc/articles/|pubmed\.ncbi\.nlm\.nih\.gov/\d|"
+            r"jmlr\.org/papers/|mlr\.press/|openreview\.net/|nips\.cc/|neurips\.cc/|"
+            r"thecvf\.com/|aaai\.org/|ijcai\.org/|usenix\.org/|ssrn\.com/|"
+            r"researchgate\.net/|semanticscholar\.org/|hal\.science/|hal\.archives-ouvertes\.fr/|"
+            r"zenodo\.org/|biorxiv\.org/|medrxiv\.org/|tandfonline\.com/doi/|"
+            r"sagepub\.com/doi/|oup\.com/|cambridge\.org/core/|mdpi\.com/|"
+            r"frontiersin\.org/articles/|plos\.org/|jstor\.org/stable/)"
+        )
         if is_bare_url_entry:
             from integrity_checker.logic.rules import _is_fake_url
 
             is_fake, _ = _is_fake_url(citation.url or compact_url)
             if is_fake:
                 return False
-            scholarly_paper_url_re = (
-                r"(?:doi\.org/10\.|(?:^|[./])arxiv\.org/(?:abs|pdf|html)/|"
-                r"aclanthology\.org/[A-Za-z0-9.\-]+/?$|"
-                r"ieeexplore\.ieee\.org/document/|dl\.acm\.org/doi/|"
-                r"link\.springer\.com/(?:article|chapter)/|"
-                r"sciencedirect\.com/science/article/|"
-                r"nature\.com/articles/|onlinelibrary\.wiley\.com/doi/|"
-                r"ncbi\.nlm\.nih\.gov/pmc/articles/|pubmed\.ncbi\.nlm\.nih\.gov/\d)"
-            )
             if not re.search(scholarly_paper_url_re, compact_url, re.IGNORECASE):
+                return True
+        inline_url_m = re.search(r"https?://\S+", raw_text, re.IGNORECASE)
+        effective_url = (
+            (citation.url or "").strip()
+            or (inline_url_m.group(0).rstrip(".,;:)\"']>") if inline_url_m else "")
+        )
+        if effective_url and re.match(r"^https?://", effective_url, re.IGNORECASE):
+            from integrity_checker.logic.rules import _PERIODICAL_JOURNAL_SIGNAL_RE, _is_fake_url
+
+            url_clean = effective_url
+            is_fake_u, _ = _is_fake_url(url_clean)
+            if (
+                not is_fake_u
+                and not re.search(scholarly_paper_url_re, url_clean, re.IGNORECASE)
+                and not re.search(r"\.(?:edu|ac\.[a-z]{2,3})/.*\.pdf\b", url_clean, re.IGNORECASE)
+                and not re.search(r"/article/(?:view|download)/|\bvjol\.info\.vn\b", url_clean, re.IGNORECASE)
+                and not _PERIODICAL_JOURNAL_SIGNAL_RE.search(raw_text)
+                and (
+                    re.search(
+                        r"(?:\bRetrieved\b[^.]{0,60}\bfrom|\bTruy\s+cập\b[^.]{0,60}\b(?:từ|tại)|"
+                        r"\bCó\s+tại\s*:|\[Online\]\.\s*Available\s*:)\s*https?://",
+                        raw_text,
+                        re.IGNORECASE,
+                    )
+                    or (not citation.authors and not citation.year)
+                )
+            ):
                 return True
         for pattern in _WEB_RESOURCE_PATTERNS:
             if (
@@ -2127,6 +2222,7 @@ class RetrievalOrchestrator:
             )
 
         deduped = self._dedupe_candidates(valid, citation=citation)
+        deduped, succeeded = self._filter_quality_candidates(deduped, succeeded, citation)
 
         # ===== 4. SerpApi Fallback + Smart Quota Guard =====
         # Chỉ gọi SerpApi khi KHÔNG có candidate nào found, ID không bị xác nhận là không tồn tại,
@@ -2493,6 +2589,16 @@ class RetrievalOrchestrator:
                         if citation.authors:
                             if not r_paper.authors or author_match_score(citation.authors, r_paper.authors) < 0.50:
                                 continue
+                            if is_book_review_mismatch(
+                                citation.title,
+                                citation.authors,
+                                r_paper.title,
+                                r_paper.authors,
+                                citation_venue=citation.venue,
+                                citation_raw=citation.raw_text,
+                                candidate_venue=r_paper.venue,
+                            ):
+                                continue
                         if r_sim > best_score:
                             best_score = r_sim
                             best_paper = r_paper
@@ -2836,6 +2942,7 @@ class RetrievalOrchestrator:
             from integrity_checker.retrieval.normalization import (
                 author_match_score,
                 is_book_review_mismatch,
+                title_tokens,
             )
 
             # Check 2: Title is not too short (unless citation itself has a matching short title like 'Galatians' or 'Proverbs')
@@ -2852,14 +2959,67 @@ class RetrievalOrchestrator:
                     continue
 
             # Check 2b: Filter out book reviews when citation is citing the book itself
-            if is_book_review_mismatch(citation.title, citation.authors, cand.title, cand.authors):
+            if is_book_review_mismatch(
+                citation.title,
+                citation.authors,
+                cand.title,
+                cand.authors,
+                citation_venue=citation.venue,
+                citation_raw=citation.raw_text,
+                candidate_venue=cand.venue,
+            ):
                 logger.debug(f"Filtering out book review candidate='{cand.title}' for book citation")
                 continue
 
-            # Check 3: Has at least one author
-            if not cand.authors or len(cand.authors) < min_author_count:
-                logger.debug(f"Filtering out candidate with no authors (title='{cand.title}')")
+            # Check 2c: Short 1-2 word title (e.g. "Consistency models", "Deep learning")
+            # must not match a longer multi-word title with completely disjoint authors
+            cit_t_toks = title_tokens(citation.title) if citation.title else []
+            cand_t_toks = title_tokens(cand.title) if cand.title else []
+            if (
+                0 < len(cit_t_toks) <= 2
+                and len(cand_t_toks) > len(cit_t_toks)
+                and citation.authors
+                and cand.authors
+                and author_match_score(citation.authors, cand.authors) == 0.0
+                and not (
+                    citation.doi
+                    and cand.doi
+                    and normalize_doi(citation.doi) == normalize_doi(cand.doi)
+                )
+            ):
+                logger.debug(
+                    f"Filtering out short-title substring collision candidate='{cand.title}' "
+                    f"for short title='{citation.title}'"
+                )
                 continue
+
+            # Check 3: Has at least one author (preserve authorless institutional standards / exact DOI records)
+            if not cand.authors or len(cand.authors) < min_author_count:
+                cit_doi_norm = normalize_doi(citation.doi) if citation.doi else None
+                cand_doi_norm = normalize_doi(cand.doi) if cand.doi else None
+                is_exact_doi_cand = bool(
+                    cit_doi_norm and cand_doi_norm and cit_doi_norm == cand_doi_norm
+                )
+                if is_exact_doi_cand or cand.source_name in {
+                    "tech_standard",
+                    "wikidata_opencitations",
+                    "doi_ra",
+                }:
+                    fallback_author = (
+                        cand.venue.strip()
+                        if cand.venue and cand.venue.strip()
+                        else (
+                            str(citation.authors[0]).strip()
+                            if citation.authors and str(citation.authors[0]).strip()
+                            else "Institutional Standard"
+                        )
+                    )
+                    cand.authors = [fallback_author]
+                else:
+                    logger.debug(
+                        f"Filtering out candidate with no authors (title='{cand.title}')"
+                    )
+                    continue
 
             # Check 4: DOI is not suspicious
             if cand.doi:
@@ -3249,7 +3409,15 @@ class RetrievalOrchestrator:
                     and not sec_is_book_review
                 ):
                     primary.doi = secondary.doi
-                if not primary.venue and secondary.venue and same_authors and not sec_is_book_review:
+                if (
+                    secondary.venue
+                    and same_authors
+                    and not sec_is_book_review
+                    and (
+                        not primary.venue
+                        or (len(primary.venue.strip()) <= 8 and len(secondary.venue.strip()) >= 15)
+                    )
+                ):
                     primary.venue = secondary.venue
                 if not primary.url and secondary.url and same_authors and not sec_is_book_review:
                     primary.url = secondary.url

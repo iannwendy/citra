@@ -7,7 +7,7 @@ from pathlib import Path
 
 from integrity_checker.extraction.base import BasePDFParser, Document, Page
 
-MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", "200"))
+MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", "500"))
 
 
 class MuPdfParser(BasePDFParser):
@@ -133,7 +133,11 @@ class MuPdfParser(BasePDFParser):
             for idx in range(page_limit):
                 try:
                     page = doc[idx]
-                    text = self._extract_page_text_reading_order(page)
+                    import unicodedata
+
+                    text = unicodedata.normalize(
+                        "NFC", self._extract_page_text_reading_order(page)
+                    )
                     stripped = text.strip()
                     char_len = len(stripped)
                     total_extractable_chars += char_len

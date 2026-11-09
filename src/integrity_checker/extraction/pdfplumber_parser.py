@@ -7,7 +7,7 @@ from pathlib import Path
 
 from integrity_checker.extraction.base import BasePDFParser, Document, Page
 
-MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", "200"))
+MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", "500"))
 
 
 class PdfPlumberParser(BasePDFParser):
@@ -43,7 +43,9 @@ class PdfPlumberParser(BasePDFParser):
                 )
             for idx, page in enumerate(pdf.pages[:MAX_PDF_PAGES]):
                 try:
-                    text = page.extract_text() or ""
+                    import unicodedata
+
+                    text = unicodedata.normalize("NFC", page.extract_text() or "")
                     has_text = len(text.strip()) > 0
                     pages.append(
                         Page(page_num=idx + 1, text=text, has_text_layer=has_text)

@@ -185,7 +185,12 @@ _THESIS_OR_REPORT_SIGNAL_RE = re.compile(
     r"technical\s+report|working\s+paper|white\s+paper|policy\s+brief|fact\s+sheet|"
     r"u\.?s\.?\s+department\s+of|ministry\s+of|world\s+health\s+organization|united\s+nations|"
     r"national\s+institute\s+of|centers\s+for\s+disease\s+control|bureau\s+of\s+labor\s+statistics|"
-    r"substance\s+abuse\s+and\s+mental\s+health|security\s+risk\s+advisors|crowdstrike|mandiant"
+    r"substance\s+abuse\s+and\s+mental\s+health|security\s+risk\s+advisors|crowdstrike|mandiant|"
+    r"khóa\s+luận(?:\s+tốt\s+nghiệp)?|khoá\s+luận(?:\s+tốt\s+nghiệp)?|"
+    r"luận\s+văn(?:\s+thạc\s+sĩ|\s+tốt\s+nghiệp)?|luận\s+án(?:\s+tiến\s+sĩ)?|"
+    r"đồ\s+án\s+tốt\s+nghiệp|tiểu\s+luận|masterarbeit|bachelorarbeit|"
+    r"báo\s+cáo\s+(?:thường\s+niên|tài\s+chính|phân\s+tích|thị\s+trường|tổng\s+kết|nghiên\s+cứu)|"
+    r"annual\s+report|financial\s+report|sổ\s+tay\s+vận\s+hành"
     r")\b",
     re.IGNORECASE,
 )
@@ -214,6 +219,12 @@ _BOOK_PUBLISHER_SIGNAL_RE = re.compile(
     r"intervarsity\s+press|ivp\s+academic|ivp\s+books|brazos\s+press|thomas\s+nelson|"
     r"b&h\s+publishing|b&h\s+academic|holman|tyndale|moody\s+publishers|waterbrook|"
     r"westminster\s+john\s+knox|fortress\s+press|abingdon\s+press|ignatius\s+press|"
+    r"cody-cassidy\s+press|morgan\s+kaufmann|free\s+press|manning\s+publications|no\s+starch\s+press|apress|packt|"
+    r"phi\s+learning|library\s+of\s+congress\s+cataloging|"
+    r"giáo\s+trình|bài\s+giảng|tập\s+bài\s+giảng|đề\s+cương\s+bài\s+giảng|tài\s+liệu\s+học\s+tập|"
+    r"tài\s+liệu\s+hướng\s+dẫn|cẩm\s+nang|sách\s+chuyên\s+khảo|chủ\s+biên|"
+    r"lưu\s+hành\s+nội\s+bộ|trường\s+đại\s+học|đại\s+học\s+(?:quốc\s+gia|bách\s+khoa|cần\s+thơ|dân\s+lập|kinh\s+tế|sư\s+phạm|thái\s+nguyên)|"
+    r"đh\s+kinh\s+tế|học\s+viện|văn\s+hóa\s+thông\s+tin|thư\s+viện\s+quốc\s+gia\s+việt\s+nam|"
     r"nhà\s+xuất\s+bản|\bnxb\b"
     r")\b",
     re.IGNORECASE,
@@ -256,7 +267,11 @@ def _is_non_journal_or_unindexed_source(
     if url and re.match(r"^https?://", url, re.IGNORECASE):
         if not re.search(r"(?:doi\.org|arxiv\.org|aclanthology\.org|ieee\.org|acm\.org|springer\.com|sciencedirect\.com|nature\.com|wiley\.com)", url, re.IGNORECASE):
             return True, "web_resource"
-    if re.search(r"\b(?:youtube\.com|youtu\.be|\[Video\]|\[Online\]|Retrieved\s+[A-Z][a-z]+\s+\d{1,2},\s+\d{4},\s+from\s+https?://)\b", combined, re.IGNORECASE):
+    if re.search(
+        r"(?:\b(?:youtube\.com|youtu\.be|Retrieved\s+[A-Z][a-z]+\s+\d{1,2},\s+\d{4},\s+from\s+https?://)\b|(?:^|[\s.,;])\[(?:Video|Online)\](?!\w)|\bTruy\s+cập\s+ngày\s+\d{1,2}\s*(?:[/-]|tháng)\s*\d{1,2}\s*(?:[/-]|năm)\s*(?:19|20)\d{2}\b)",
+        combined,
+        re.IGNORECASE,
+    ):
         return True, "web_resource"
 
     # 3. Classical literature, philosophy, plays, or Bible editions
@@ -1301,7 +1316,22 @@ class SymbolicRules:
             )
 
         # --- Rule 1a-ext: Technical standard (IETF RFC / PyPI / NPM / GitHub) or Hugging Face / Wikidata ---
-        if best and best.source_name == "tech_standard" and features.title_sim_fuzzy >= 0.80:
+        tech_dehyph_match = False
+        if best and best.source_name == "tech_standard" and best.title:
+            raw_no_url = re.sub(r"https?://\S+", " ", citation_raw or source.citation_raw or "")
+            raw_dehyph = re.sub(r"[-_/–—]+", " ", raw_no_url).lower()
+            best_toks = [
+                t
+                for t in re.findall(r"[a-z0-9]+", re.sub(r"[-_/]+", " ", best.title.lower()))
+                if len(t) >= 2
+            ]
+            if (
+                len(best_toks) >= 2
+                and all(re.search(rf"\b{re.escape(t)}\b", raw_dehyph) for t in best_toks)
+                and (not citation_authors or author_sim >= 0.50)
+            ):
+                tech_dehyph_match = True
+        if best and best.source_name == "tech_standard" and (features.title_sim_fuzzy >= 0.80 or tech_dehyph_match):
             ext_ids = best.external_ids or {}
             triggered_rules.append("R-RFC-VERIFIED")
             if "github_repo" in ext_ids:
@@ -1835,6 +1865,45 @@ class SymbolicRules:
                     mismatched_fields=[],
                     style_penalty=style_penalty,
                 )
+
+        # Guard: Domestic Vietnamese theses, university textbooks, and unindexed periodicals
+        # frequently collide on common Vietnamese author names (e.g. "Trần Thị Hồng", "Nguyễn Văn Trường")
+        # or broad topic phrases against unrelated newer Crossref/DOAJ articles. Abstain to UNRESOLVED
+        # instead of falsely blaming the student for METADATA_ERROR.
+        if (
+            not doi_match
+            and not (citation_doi and str(citation_doi).strip())
+            and title_sim < self.title_sim_verified
+            and (year_dist > 2 or author_sim < 0.50)
+        ):
+            raw_for_vn = citation_raw or source.citation_raw or ""
+            if re.search(
+                r"[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]",
+                raw_for_vn,
+                re.IGNORECASE,
+            ):
+                is_vn_unindexed, vn_unindexed_kind = _is_non_journal_or_unindexed_source(
+                    raw_for_vn,
+                    citation_url=citation_url,
+                    citation_doi=citation_doi,
+                    citation_authors=citation_authors,
+                )
+                if is_vn_unindexed and vn_unindexed_kind in (
+                    "thesis_or_report",
+                    "book_or_monograph",
+                    "domestic_unindexed_periodical",
+                ):
+                    return RuleOutcome(
+                        label=ValidationLabel.UNRESOLVED,
+                        confidence=0.50,
+                        reasoning=(
+                            f"Domestic Vietnamese source ({vn_unindexed_kind.replace('_', ' ')}) is not indexed in "
+                            f"international scholarly registries; weak cross-work search candidate rejected."
+                        ),
+                        triggered_rules=["R-UNINDEXED-BOOK-OR-SOURCE"],
+                        mismatched_fields=[],
+                        style_penalty=0.0,
+                    )
 
         # --- Rule 4a2: Single/multi live source partial match (author/year/title discrepancy) → METADATA_ERROR ---
         if (

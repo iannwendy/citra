@@ -521,6 +521,8 @@ class CitationLinker:
                     ))
                 else:
                     fuzzy_semi = self._try_fuzzy_author_year(occ_id, author_part, year_part, bib_citations)
+                    if fuzzy_semi is None:
+                        fuzzy_semi = self._try_org_author(cit, occ_id, author_part, year_part, bib_citations)
                     if fuzzy_semi is not None:
                         multi_links.append(fuzzy_semi)
                     elif not has_trailing_secondary:
@@ -1109,9 +1111,17 @@ class CitationLinker:
                         candidate_names = [last_name]
                         if raw_auth and "," not in raw_auth and raw_auth.lower() != (last_name or "").lower():
                             candidate_names.append(raw_auth)
+                        elif raw_auth and "," in raw_auth and auth_idx == 0:
+                            fam_p, giv_p = [x.strip() for x in raw_auth.split(",", 1)]
+                            if fam_p and giv_p and re.search(r"[A-Za-zÀ-ỹ]{2,}", giv_p):
+                                candidate_names.append(f"{fam_p} {giv_p}")
+                                candidate_names.append(f"{giv_p} {fam_p}")
                         # Extract explicit parenthesized/bracketed acronym in corporate author name (e.g. "World Health Organization (WHO)")
-                        for acr_m in re.findall(r"[\(\[]([A-ZĐ]{2,12})[\)\]]", raw_auth):
+                        for acr_m in re.findall(r"[\(\[]([A-ZĐ0-9&/\-]{2,12})[\)\]]", raw_auth):
                             candidate_names.append(acr_m)
+                        base_org = re.sub(r"\s*[\(\[][A-ZĐ0-9&/\-]{2,12}[\)\]]\s*", " ", raw_auth).strip()
+                        if base_org and base_org != raw_auth:
+                            candidate_names.append(base_org)
                         if _INSTITUTIONAL_AUTHOR_RE.search(raw_auth):
                             org_words = [
                                 w for w in re.split(r"\W+", raw_auth)
@@ -1177,6 +1187,16 @@ class CitationLinker:
                     candidate_names = [last_name]
                     if raw_auth and "," not in raw_auth and raw_auth.lower() != (last_name or "").lower():
                         candidate_names.append(raw_auth)
+                    elif raw_auth and "," in raw_auth and auth_idx == 0:
+                        fam_p, giv_p = [x.strip() for x in raw_auth.split(",", 1)]
+                        if fam_p and giv_p and re.search(r"[A-Za-zÀ-ỹ]{2,}", giv_p):
+                            candidate_names.append(f"{fam_p} {giv_p}")
+                            candidate_names.append(f"{giv_p} {fam_p}")
+                    for acr_m in re.findall(r"[\(\[]([A-ZĐ0-9&/\-]{2,12})[\)\]]", raw_auth):
+                        candidate_names.append(acr_m)
+                    base_org = re.sub(r"\s*[\(\[][A-ZĐ0-9&/\-]{2,12}[\)\]]\s*", " ", raw_auth).strip()
+                    if base_org and base_org != raw_auth:
+                        candidate_names.append(base_org)
                     for cname in candidate_names:
                         if not cname:
                             continue

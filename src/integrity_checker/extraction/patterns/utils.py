@@ -81,13 +81,13 @@ def extract_doi(text: str) -> str | None:
 
 URL_PATTERN = CompiledPattern.create(
     name="url",
-    pattern=r"https?://[^\s\]\)\,;]+",
+    pattern=r"https?://(?:[^\s\]\)\,;()]|\([^\s\]\)\,;()]*\))+",
     pattern_type=PatternType.UTILITY,
     description="URL: Matches http(s)://... format (Uniform Resource Locator)",
 )
 
 # Pre-compiled regex for direct use
-_URL_REGEX = re.compile(r"https?://[^\s\]\)\,;]+")
+_URL_REGEX = re.compile(r"https?://(?:[^\s\]\)\,;()]|\([^\s\]\)\,;()]*\))+")
 
 
 def extract_url(text: str) -> str | None:
@@ -109,17 +109,34 @@ def extract_url(text: str) -> str | None:
     """
     if not text:
         return None
-    match = _URL_REGEX.search(text)
+    repaired_text = re.sub(
+        r"\b(https?://)\s+(?=[A-Za-z0-9][^\s/]*\.[a-z]{2,})",
+        r"\1",
+        text,
+        flags=re.IGNORECASE,
+    )
+    match = _URL_REGEX.search(repaired_text)
     if match:
         url = match.group(0)
+        # Split concatenated URLs (e.g. "https://github.com/a/b-https://github.com/c/d" or "...pdfhttps://...")
+        scheme_end = url.find("://") + 3
+        second_url_m = re.search(
+            r"(?<!=[a-zA-Z0-9])(?<!\?url=)(?<!&url=)-?(?=https?://)",
+            url[scheme_end:],
+            flags=re.IGNORECASE,
+        )
+        if second_url_m:
+            url = url[: scheme_end + second_url_m.start()]
         url = re.sub(
-            r"[\(\[](?:ac-?\s*cessed|re-?\s*trieved)\b.*$",
+            r"[\(\[](?:ac-?\s*cessed|re-?\s*trieved|truy\s*cập)\b.*$",
             "",
             url,
             flags=re.IGNORECASE,
         )
-        # Clean trailing punctuation
-        url = url.rstrip(".,;:)'\"\u2019\u201d")
+        # Clean trailing punctuation while preserving balanced parentheses in URL path
+        url = url.rstrip(".,;:'\"\u2019\u201d")
+        while url.endswith(")") and url.count(")") > url.count("("):
+            url = url[:-1].rstrip(".,;:'\"\u2019\u201d")
         host_m = re.match(r"^https?://([^/\s]+)", url, re.IGNORECASE)
         if not host_m or ("." not in host_m.group(1) and host_m.group(1).lower() != "localhost"):
             return None

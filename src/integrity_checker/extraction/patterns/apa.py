@@ -701,6 +701,9 @@ class APAFormat:
         suffix = match.group("suffix") or match.groupdict().get("nd_suffix")
         citation.year_suffix = suffix if suffix else None
         citation.title = title_raw.rstrip(".,;").strip()
+        citation.title, venue_raw = self._split_trailing_comma_edition_or_publisher(
+            citation.title, venue_raw
+        )
         citation.title_normalized = self._normalize_title(citation.title)
         if venue_raw:
             self._parse_venue(citation, venue_raw)
@@ -795,6 +798,17 @@ class APAFormat:
             venue = real_site
             citation.authors = [_make_corp_author(real_site)]
 
+        # Quoted title followed by comma + venue inside `title` group:
+        # e.g. '18. Pedregosa, F. et al. (2011), "Scikit-learn: Machine Learning in Python", Journal..., 12, pp. 2825–2830.'
+        quoted_comma_m = re.match(
+            r'^["\u201c\u2018](?P<qt>[^"\u201d\u2019]{4,})["\u201d\u2019]\s*,\s*(?P<qv>.+)$',
+            title,
+        )
+        if quoted_comma_m:
+            title = quoted_comma_m.group("qt").strip()
+            qv = quoted_comma_m.group("qv").strip()
+            venue = f"{qv}. {venue}".strip() if venue else qv
+
         # TDTU Vietnamese thesis format uses a comma after (Luận án ...), e.g.:
         # "Title (Luận án Tiến sĩ kinh tế), Trường Đại học Kinh tế Tp. HCM, Việt Nam."
         combined_tv = f"{title}. {venue}"
@@ -808,6 +822,7 @@ class APAFormat:
             title = thesis_comma_m.group("t").strip()
             venue = thesis_comma_m.group("v").strip()
 
+        title, venue = self._split_trailing_comma_edition_or_publisher(title, venue)
         citation.title = title
         citation.title_normalized = self._normalize_title(title)
 
@@ -829,15 +844,55 @@ class APAFormat:
         return citation
 
     @staticmethod
+    def _split_trailing_comma_edition_or_publisher(
+        title: str, venue: str
+    ) -> tuple[str, str]:
+        """Split trailing ', <Edition>, <Publisher>' or ', <KnownPublisher>' off comma-delimited APA book titles."""
+        clean_t = title.strip().rstrip(".,;")
+        if not clean_t or "," not in clean_t:
+            return title, venue
+
+        # Case 1: Title, <Edition>[, <Publisher>]
+        ed_m = re.match(
+            r"^(?P<t>.+?),\s*(?P<ed_pub>(?:(?:\d+(?:st|nd|rd|th)|First|Second|Third|Fourth|Fifth|Sixth|Seventh|Eighth|Ninth|Tenth|Revised)\s+Ed(?:ition|\.)?)(?:,\s*.+)?)$",
+            clean_t,
+            flags=re.IGNORECASE,
+        )
+        if ed_m and len(ed_m.group("t").strip()) >= 6:
+            new_t = ed_m.group("t").strip()
+            ed_pub = ed_m.group("ed_pub").strip()
+            new_v = f"{ed_pub}. {venue}".strip() if venue else ed_pub
+            return new_t, new_v
+
+        # Case 2: Title, <KnownBookPublisher> (when venue is empty)
+        if not venue:
+            pub_m = re.match(
+                r"^(?P<t>.+?),\s*(?P<pub>(?:Pearson(?:\s+Education)?|Addison-Wesley(?:\s+Professional)?|"
+                r"McGraw-Hill(?:\s+Education)?|Prentice\s+Hall|O['\u2019]Reilly(?:\s+Media)?|"
+                r"John\s+Wiley(?:\s*&\s*Sons)?|Wiley|Springer(?:\s+Nature|-Verlag)?|Elsevier|"
+                r"Academic\s+Press|CRC\s+Press|MIT\s+Press|Morgan\s+Kaufmann|Manning(?:\s+Publications)?|"
+                r"Apress|Packt(?:\s+Publishing)?|No\s+Starch\s+Press|Cengage(?:\s+Learning)?|PHI\s+Learning|"
+                r"(?:Cambridge|Oxford|Harvard|Princeton|Stanford|Yale)\s+University\s+Press|"
+                r"Routledge|SAGE(?:\s+Publications)?)(?:,\s*[A-Za-z\s.]+)?)$",
+                clean_t,
+                flags=re.IGNORECASE,
+            )
+            if pub_m and len(pub_m.group("t").strip()) >= 6:
+                return pub_m.group("t").strip(), pub_m.group("pub").strip()
+
+        return title, venue
+
+    @staticmethod
     def _extract_url_into(citation: Citation, text: str) -> None:
         """Extract non-DOI URL into citation.url, handling line-break spaces after https://."""
         if citation.url:
             return
-        url_match = re.search(r"(https?://\s*[^\s\]\)\,;]+)", text, re.IGNORECASE)
-        if url_match:
-            raw_url = re.sub(r"\s+", "", url_match.group(1)).rstrip(".,;")
-            if not re.search(r"doi\.org/10\.\d{4,9}/", raw_url, re.IGNORECASE):
-                citation.url = raw_url
+        from integrity_checker.extraction.patterns.utils import extract_url
+
+        repaired = re.sub(r"(https?://)\s+", r"\1", text, flags=re.IGNORECASE)
+        extracted = extract_url(repaired)
+        if extracted and not re.search(r"doi\.org/10\.\d{4,9}/", extracted, re.IGNORECASE):
+            citation.url = extracted
 
     def _parse_apa_numbered_entry(
         self, match: re.Match, text: str

@@ -167,6 +167,10 @@ def is_book_review_mismatch(
     citation_authors: Iterable[object] | object | None,
     candidate_title: str | None,
     candidate_authors: Iterable[object] | object | None,
+    *,
+    citation_venue: str | None = None,
+    citation_raw: str | None = None,
+    candidate_venue: str | None = None,
 ) -> bool:
     """Return True if candidate is a book review while the citation is citing the book itself."""
     c_title = (citation_title or "").strip()
@@ -189,6 +193,51 @@ def is_book_review_mismatch(
                     and not re.search(rf"\b{re.escape(qk)}\b", c_title_norm)
                 ):
                     return True
+
+        # Detect journal book reviews where Crossref lists [Reviewer, BookAuthor1, BookAuthor2]
+        # in a periodical journal while the citation cites a multi-edition textbook/monograph.
+        cand_list = (
+            list(candidate_authors)
+            if isinstance(candidate_authors, Iterable)
+            and not isinstance(candidate_authors, (str, bytes))
+            else [candidate_authors]
+        )
+        first_cand_key = author_key(cand_list[0]) if cand_list else ""
+        q_keys = author_keys(citation_authors)
+        cit_context_str = " ".join(
+            p for p in (c_title, citation_venue or "", citation_raw or "") if p
+        )
+        has_book_signal = bool(
+            re.search(
+                r"\b(?:\d+(?:st|nd|rd|th)|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|revised)\s+ed(?:ition|\.)?\b"
+                r"|\b(?:mcgraw-hill|wiley|john\s+wiley|pearson|addison-wesley|prentice\s+hall|o['\u2019]reilly|"
+                r"mit\s+press|university\s+press|cengage|crc\s+press|morgan\s+kaufmann|routledge)\b",
+                cit_context_str,
+                re.IGNORECASE,
+            )
+            and not re.search(
+                r"\b(?:journal\s+of|transactions\s+on|proceedings\s+of|technometrics|biometrics)\b",
+                citation_venue or "",
+                re.IGNORECASE,
+            )
+        )
+        cand_is_periodical_journal = bool(
+            candidate_venue
+            and re.search(
+                r"\b(?:journal|review|reviews|technometrics|biometrics|biometrika|"
+                r"american\s+statistician|annals|quarterly|bulletin|magazine|interfaces|gazette|transactions)\b",
+                candidate_venue,
+                re.IGNORECASE,
+            )
+        )
+        if (
+            has_book_signal
+            and cand_is_periodical_journal
+            and first_cand_key
+            and q_keys
+            and first_cand_key not in q_keys
+        ):
+            return True
     return False
 
 
@@ -210,12 +259,12 @@ def title_similarity(query: str | None, candidate: str | None) -> float:
     candidate_tokens = set(title_tokens(candidate))
     if not query_tokens or not candidate_tokens:
         return 0.0
-    if query_tokens <= candidate_tokens:
+    if query_tokens < candidate_tokens and len(query_tokens) >= 3:
         norm_q = normalize_text(query)
         norm_c = normalize_text(candidate)
         if (
             len(query_tokens) / len(candidate_tokens) >= 0.60
-            or (len(query_tokens) >= 3 and norm_c.startswith(norm_q))
+            or norm_c.startswith(norm_q)
         ):
             return 0.95
     intersection = len(query_tokens & candidate_tokens)

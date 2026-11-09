@@ -99,6 +99,7 @@ vn_legal_reports/
 style_corpora/
 tdtu_github_reports/
 TDTU_PDF/
+VN_UNI_PDF_BATCH2/
 
 # Kilo Code agent state (worktrees/state, không phải config)
 .kilo/worktrees/
