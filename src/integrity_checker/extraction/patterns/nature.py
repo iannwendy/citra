@@ -639,10 +639,10 @@ class NatureFormat:
             '',
             text,
         ).strip()
-        # Strip trailing access/retrieval date clauses (e.g. "(Accessed: Oct. 31, 2026)")
+        # Strip trailing access/retrieval date clauses (e.g. "(Accessed: Oct. 31, 2026)" or "(March 9, 2024)")
         # so the access year is never mistaken for the publication year.
         cleaned_text = re.sub(
-            r'\s*(?:[\(\[]\s*(?:Accessed|Retrieved|Last\s+accessed)\b[^)\]]*[\)\]]|\b(?:Accessed|Retrieved)\s*:?\s*[A-Za-z0-9.,\s\-/]+)\.?$',
+            r'\s*(?:[\(\[]\s*(?:Accessed|Retrieved|Last\s+accessed)\b[^)\]]*[\)\]]|\(\s*(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},\s*(?:19|20)\d{2}\s*\)|\b(?:Accessed|Retrieved)\s*:?\s*[A-Za-z0-9.,\s\-/]+)\.?$',
             '',
             cleaned_text,
             flags=re.IGNORECASE,
@@ -704,6 +704,8 @@ class NatureFormat:
                 if dp.strip()
             ]
             if len(dot_parts) >= 2:
+                if re.fullmatch(r'(?:18|19|20)\d{2}[a-z]?', dot_parts[1].strip()):
+                    return None
                 citation.authors = self._parse_authors(dot_parts[0])
                 citation.title = dot_parts[1].rstrip('.')
                 citation.title_normalized = self._normalize_title(citation.title)

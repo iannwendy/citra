@@ -1571,22 +1571,15 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
                     cleaned = authors[0].full_name[:-2].strip().rstrip(",.")
                     authors = [GrobidAuthor(full_name=cleaned, first_name=None, last_name=cleaned.split(",")[0].strip())]
 
-        # Recover OSCOLA book title & authors when GROBID placed the book title into <author>
-        # e.g. "Butler J, Undoing Gender (Routledge 2004)" or "Preciado PB, Countersexual Manifesto (Columbia University Press 2018)"
-        if not title and raw_ref_text:
+        # Recover OSCOLA book title & authors when GROBID placed the book title (or main title before ':') into <author>
+        # e.g. "Butler J, Undoing Gender (Routledge 2004)" or "Adler L, Gay Priori: A Queer Critical Legal Studies Approach to Law Reform (1st ed, Duke University Press 2018)"
+        if raw_ref_text and (not title or len(authors) >= 2):
             oscola_m = re.match(
                 r"^(?P<authors>[A-ZÀ-Ý][A-Za-zÀ-ỹ'\u2019\-]+\s+[A-Z]{1,3}(?:\s*(?:,\s*|\s+and\s+|\s*&\s*)[A-ZÀ-Ý][A-Za-zÀ-ỹ'\u2019\-]+\s+[A-Z]{1,3})*),\s+"
                 r"(?P<title>[^()]{2,160}?)\s*\((?P<imprint>[^()]*?\b(?P<yr>(?:18|19|20)\d{2})[a-z]?)\)\s*\.?$",
                 raw_ref_text.strip(),
             )
             if oscola_m:
-                title = oscola_m.group("title").strip().rstrip(".,")
-                year = year or oscola_m.group("yr")
-                imprint_pub = re.sub(
-                    r"\b(?:18|19|20)\d{2}[a-z]?\b", "", oscola_m.group("imprint")
-                ).strip(" ,;:")
-                if imprint_pub and not venue:
-                    venue = imprint_pub
                 oscola_authors: list[GrobidAuthor] = []
                 for am in re.finditer(
                     r"([A-ZÀ-Ý][A-Za-zÀ-ỹ'\u2019\-]+)\s+([A-Z]{1,3})\b",
@@ -1600,8 +1593,16 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
                             last_name=sn_o,
                         )
                     )
-                if oscola_authors:
-                    authors = oscola_authors
+                if not title or (oscola_authors and len(oscola_authors) < len(authors)):
+                    title = oscola_m.group("title").strip().rstrip(".,")
+                    year = year or oscola_m.group("yr")
+                    imprint_pub = re.sub(
+                        r"\b(?:18|19|20)\d{2}[a-z]?\b", "", oscola_m.group("imprint")
+                    ).strip(" ,;:")
+                    if imprint_pub and not venue:
+                        venue = imprint_pub
+                    if oscola_authors:
+                        authors = oscola_authors
 
         # Recover unquoted multi-author book entry when GROBID left both title and authors empty
         # e.g. "Ferguson, N., Schneier, B., Kohno, T. Cryptography Engineering: Design Principles and Practical Applications. Wiley, 2010."

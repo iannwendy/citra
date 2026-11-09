@@ -703,6 +703,17 @@ class APAFormat:
         suffix = match.group("suffix") or match.groupdict().get("nd_suffix")
         citation.year_suffix = suffix if suffix else None
         citation.title = title_raw.rstrip(".,;").strip()
+        if (
+            citation.title.lower() == "www"
+            and clean_auth
+            and re.match(r"^[a-z0-9\-]+(?:\.[a-z0-9\-]+)+", venue_raw, re.I)
+        ):
+            dom_token = venue_raw.split()[0].rstrip(".,;")
+            real_site = f"{citation.title}.{dom_token}"
+            real_title = clean_auth.strip().rstrip(".")
+            citation.title = real_title
+            venue_raw = real_site
+            citation.authors = [_make_corp_author(real_site)]
         citation.title, venue_raw = self._split_trailing_comma_edition_or_publisher(
             citation.title, venue_raw
         )
@@ -780,28 +791,56 @@ class APAFormat:
             venue = rest_venue.strip()
 
         # Detect Title-first anonymous APA entry where the article title precedes (Year)/(n.d.)
-        # and only the site/publisher name + URL follow (Year):
+        # and only the site/publisher name + URL (or Www.domain.tld / DD.M.YYYY statute date) follow (Year):
         # e.g. "CAC payback period vs LTV: CAC ratio. (2022). MetricHQ. https://..."
-        venue_without_url = re.sub(r"\s*(?:https?://|www\.)\S+\s*", "", venue).strip().rstrip(".")
+        # or "[52] Schneider Electric EVLink Parking — CISA. (2019, January 31). Www.cisa.gov. https://..."
+        # or "Regulation on Educational Degrees and Studies (1978/530). 29.6.1978."
         if (
-            not venue_without_url
+            title.lower() == "www"
             and authors_str
-            and not re.search(r"[A-Z][a-z]+,\s*[A-Z]\.", authors_str)
-            and (
-                any(ch in authors_str for ch in (":", "?", "|"))
-                or authors_str[0].islower()
-                or re.search(
-                    r"\b(?:what\s+is|how\s+to|metrics\s+for|state\s+of|top\s+\d+|top\s+fitness|growth|statistics|payback\s+period)\b",
-                    authors_str,
-                    re.I,
-                )
-            )
+            and re.match(r"^[a-z0-9\-]+(?:\.[a-z0-9\-]+)+", venue, re.I)
         ):
+            dom_token = venue.split()[0].rstrip(".,;")
+            real_site = f"{title}.{dom_token}"
             real_title = authors_str.strip().rstrip(".")
-            real_site = title.strip().rstrip(".")
             title = real_title
             venue = real_site
-            citation.authors = [_make_corp_author(real_site)]
+            if " — " in real_title:
+                org_part = real_title.rsplit(" — ", 1)[-1].strip()
+                citation.authors = [_make_corp_author(org_part)]
+            else:
+                citation.authors = [_make_corp_author(real_site)]
+        elif (
+            re.fullmatch(r"\d{1,2}", title)
+            and authors_str
+            and re.match(r"^\d{1,2}\.(?:18|19|20)\d{2}\.?$", venue.strip())
+        ):
+            full_date = f"{title}.{venue.strip().rstrip('.')}"
+            real_title = authors_str.strip().rstrip(".")
+            title = real_title
+            venue = full_date
+            citation.authors = [_make_corp_author(real_title)]
+        else:
+            venue_without_url = re.sub(r"\s*(?:https?://|www\.)\S+\s*", "", venue).strip().rstrip(".")
+            if (
+                not venue_without_url
+                and authors_str
+                and not re.search(r"[A-Z][a-z]+,\s*[A-Z]\.", authors_str)
+                and (
+                    any(ch in authors_str for ch in (":", "?", "|"))
+                    or authors_str[0].islower()
+                    or re.search(
+                        r"\b(?:what\s+is|how\s+to|metrics\s+for|state\s+of|top\s+\d+|top\s+fitness|growth|statistics|payback\s+period)\b",
+                        authors_str,
+                        re.I,
+                    )
+                )
+            ):
+                real_title = authors_str.strip().rstrip(".")
+                real_site = title.strip().rstrip(".")
+                title = real_title
+                venue = real_site
+                citation.authors = [_make_corp_author(real_site)]
 
         # Quoted title followed by comma + venue inside `title` group:
         # e.g. '18. Pedregosa, F. et al. (2011), "Scikit-learn: Machine Learning in Python", Journal..., 12, pp. 2825–2830.'

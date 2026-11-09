@@ -1717,10 +1717,15 @@ class DocumentParser:
                         continue
 
                 # Filter out DOI-less/URL-less GROBID entries extracted from outside BIBLIOGRAPHY
-                # (e.g. Author Contributions / Acknowledgments / Chapter Summaries / Appendix prompts in BODY or APPENDIX)
+                # (e.g. Author Contributions / Acknowledgments / Chapter Summaries / Appendix prompts / discursive footnotes in BODY or APPENDIX)
                 if (
                     not ref.doi
-                    and (not ref.url or "target:" in (ref.raw_text or "").lower() or "provided insight into" in (ref.raw_text or "").lower())
+                    and (
+                        not ref.url
+                        or not ref.authors
+                        or "target:" in (ref.raw_text or "").lower()
+                        or "provided insight into" in (ref.raw_text or "").lower()
+                    )
                     and non_bib_words_norm
                     and bib_words_norm
                 ):
@@ -1756,7 +1761,22 @@ class DocumentParser:
                 # Coalesce standalone URL/DOI/Retrieved fragment split by GROBID from the preceding entry
                 if (
                     not ref.authors
-                    and not ref.title
+                    and (
+                        not ref.title
+                        or (
+                            not ref.year
+                            and (ref.title or "").strip().lower()
+                            in {
+                                "jstor",
+                                "ebscohost",
+                                "proquest",
+                                "sciencedirect",
+                                "pubmed",
+                                "researchgate",
+                                "url",
+                            }
+                        )
+                    )
                     and not ref.venue
                     and (
                         ref.doi
@@ -1984,12 +2004,23 @@ class DocumentParser:
 
         def _enrich_grobid_ref(target: Citation, donor: Citation) -> None:
             """Fill in missing fields on a GROBID reference from its regex counterpart."""
+            years_conflict = bool(
+                target.year
+                and donor.year
+                and str(target.year)[:4].isdigit()
+                and str(donor.year)[:4].isdigit()
+                and str(target.year)[:4] != str(donor.year)[:4]
+            )
+            donor_is_multi_chunk = (
+                len(donor.raw_text or "") > max(len(target.raw_text or "") * 2.2, 320)
+                or years_conflict
+            )
             donor_first_author = (
                 (getattr(donor.authors[0], "raw", None) or str(donor.authors[0]))
                 if donor.authors
                 else ""
             )
-            if not target.authors and donor.authors:
+            if not target.authors and donor.authors and not donor_is_multi_chunk:
                 donor_auth_strs = [
                     getattr(a, "raw", None) or str(a) for a in donor.authors
                 ]
