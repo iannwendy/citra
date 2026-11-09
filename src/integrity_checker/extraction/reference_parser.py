@@ -603,8 +603,8 @@ class ReferenceListParser:
             result = [
                 e
                 for e in entries
-                if len(e) > 20
-                or re.match(r"^(?:\[\d{1,3}\]|\d{1,3}\))\s*(?:https?://|www\.)\S+", e, re.IGNORECASE)
+                if len(e) >= 20
+                or re.match(r"^(?:\[\d{1,3}\]|\d{1,3}\))\s*(?:https?://|www\.|(?:EN|ISO|IEC|ASTM|DIN|UNE|BS|IEEE|ANSI)\s+\d)\S+", e, re.IGNORECASE)
             ]
             if len(result) >= 2:
                 # FIX: Check if any entries contain multiple [N] references (inline merge)

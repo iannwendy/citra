@@ -669,9 +669,23 @@ class IEEEFormat:
                 else:
                     body_no_idx = re.sub(r'^\[\s*\d+\s*\]\s*', '', text).strip()
                     body_no_url = re.sub(r'https?://\S+|\bwww\.\S+', '', body_no_idx).strip().rstrip('.,; ')
-                    if citation.year:
+                    body_no_url = re.sub(
+                        r'\b(?:retaken|retrieved|accessed|downloaded|available)\s+from\s*:?\s*$',
+                        '',
+                        body_no_url,
+                        flags=re.IGNORECASE,
+                    ).strip().rstrip('.,; ')
+                    if re.match(
+                        r'^(?:EN|ISO|IEC|ASTM|DIN|UNE|BS|IEEE|ANSI)\s+[A-Z0-9\-:]+$',
+                        body_no_url,
+                    ):
+                        citation.title = body_no_url
+                        citation.title_normalized = self._normalize_title(body_no_url)
+                        before_yr = ''
+                        after_yr = ''
+                    elif citation.year:
                         yr_split = re.split(
-                            rf'(?:[.,]\s*|\s*\(\s*)\b{re.escape(citation.year)}{re.escape(citation.year_suffix or "")}\b\s*\)?',
+                            rf'(?:[.,]\s*|\s*\(\s*(?:\d{{1,2}}[/.-]\d{{1,2}}[/.-])?)\b{re.escape(citation.year)}{re.escape(citation.year_suffix or "")}\b\s*\)?',
                             body_no_url,
                             maxsplit=1,
                         )

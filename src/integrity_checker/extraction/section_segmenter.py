@@ -101,6 +101,8 @@ _POST_BIB_APPENDIX_SINGLE_LINE_RE = re.compile(
     r"|Acknowledge?ments?"
     r"|Extended\s+Data(?:\s+Figures?|\s+Tables?)?"
     r"|(?:Chỉ\s+mục|Index)"
+    r"|List\s+of\s+(?:Abbreviations|Symbols|Figures|Tables|Graphs|Illustrations|Acronyms|Notations)"
+    r"|Lista\s+de\s+(?:abreviaturas|s[íi]mbolos|figuras|tablas|gr[áa]ficos)"
     r"|(?:\d+(?:\.\d+)+[\.\)]?\s+)?(?:Chi\s+tiết\s+phân\s+công(?:\s+công\s+việc)?|Bảng\s+phân\s+công\s+công\s+việc|Đánh\s+giá\s+mức\s+độ\s+hoàn\s+thành)\s*:?"
     r"|Khối\s+li[ệê]u\s+được\s+trích\s+dẫn\s*:?"
     r"|[-•●▪▫\uf0a7\uf0b7\uf0d8\uf0fc\uf076]*\s*(?:Phần\s+mềm\s+và\s+thư\s+viện|Công\s+cụ\s+và\s+thư\s+viện)\s+(?:được\s+)?sử\s+dụng\s*:?"
@@ -280,7 +282,14 @@ class SectionSegmenter:
                     last_pg = next((pg for pg in doc.pages if pg.page_num == final_block_start), None)
                     first_yr_hits = len(re.findall(r"\b(?:18|19|20)\d{2}\b", first_pg.text or "")) if first_pg else 0
                     last_yr_hits = len(re.findall(r"\b(?:18|19|20)\d{2}\b", last_pg.text or "")) if last_pg else 0
-                    if (
+                    first_has_seq_brackets = bool(
+                        first_pg
+                        and re.search(r"^\s*\[\s*1\s*\]\s+\S", first_pg.text or "", re.MULTILINE)
+                        and re.search(r"^\s*\[\s*2\s*\]\s+\S", first_pg.text or "", re.MULTILINE)
+                    )
+                    if first_has_seq_brackets and first_yr_hits >= 4:
+                        biblio_start = later[0]
+                    elif (
                         final_block_start - later[0] >= 3
                         and later[0] < doc.num_pages * 0.78
                         and last_yr_hits >= 4
@@ -590,6 +599,26 @@ class SectionSegmenter:
                     if next_nonempty[0].startswith(next_sec_prefix):
                         continue
                 if re.fullmatch(r"references?\s*[:.]?", stripped, re.IGNORECASE):
+                    prev_nonpage = [
+                        ln.strip()
+                        for ln in lines[:idx]
+                        if ln.strip() and not re.fullmatch(r"\d{1,3}", ln.strip())
+                    ]
+                    if (
+                        len(prev_nonpage) >= 2
+                        and all(
+                            1 <= len(ln.split()) <= 5
+                            and len(ln) <= 32
+                            and not ln.endswith(".")
+                            and not re.fullmatch(r"(?:\d+(?:\.\d+)*|[IVXLC]+)[\.\)]?", ln)
+                            for ln in prev_nonpage[-2:]
+                        )
+                        and not any(
+                            re.match(r"^\s*(?:\[\s*1\s*\]|1\.)\s+\S", ln)
+                            for ln in next_nonempty[:2]
+                        )
+                    ):
+                        continue
                     if re.search(r"\b[A-Z]{2,}_[A-Z]{2,}\b", "\n".join(nearby_lines)) and not re.search(
                         r"\b(?:18|19|20)\d{2}\b|\[\d+\]|https?://|doi:",
                         "\n".join(next_nonempty[:8]),

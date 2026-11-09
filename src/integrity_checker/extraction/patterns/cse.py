@@ -738,6 +738,15 @@ class CSEFormat:
                     citation.title = part
                     citation.title_normalized = self._normalize_title(part)
                     break
+        if not citation.title:
+            body_no_idx = re.sub(
+                r'^(?:\[\s*\d+\s*\]|\(\s*\d+\s*\)|\d+\.)\s*',
+                '',
+                text_no_url,
+            ).strip().rstrip('.')
+            if len(body_no_idx) >= 5:
+                citation.title = body_no_idx
+                citation.title_normalized = self._normalize_title(body_no_idx)
 
         # Extract DOI
         doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)

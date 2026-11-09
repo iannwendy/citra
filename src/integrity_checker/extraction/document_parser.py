@@ -548,7 +548,7 @@ class DocumentParser:
                 logger.warning("GROBID TEI body linking failed: %s", exc)
 
         # 3.4 Appendix citations (chỉ track, không analyse)
-        appendix_citations = self._extract_appendix_citations(sections)
+        appendix_citations = self._extract_appendix_citations(sections, text_doc)
 
         return ParsedDocument(
             document=text_doc,
@@ -1665,9 +1665,12 @@ class DocumentParser:
 
         bib_words_norm = re.sub(r"\W+", " ", bib_text_norm).strip()
         non_bib_words_norm = re.sub(r"\W+", " ", non_bib_text_norm).strip()
+        appendix_words_norm = re.sub(r"\W+", " ", appendix_text_norm).strip()
 
         grobid_refs: list[Citation] = []
         if not has_no_bib_section and grobid is not None and grobid.is_available and grobid.bibliography:
+            from integrity_checker.extraction.grobid_adapter import _is_duplicate_reference
+
             raw_grobid_refs = self._grobid_to_citations(grobid)
             for ref in raw_grobid_refs:
                 if _is_fake_entry(ref.raw_text):
@@ -1675,6 +1678,43 @@ class DocumentParser:
                         f"Filtered fake GROBID entry before indexing: {ref.raw_text[:50]}..."
                     )
                     continue
+
+                ref_auth_join = " ".join(str(a) for a in (ref.authors or []))
+                if (
+                    re.search(r"\.{5,}", ref.raw_text or "")
+                    or re.search(r"\.{5,}", ref_auth_join)
+                    or re.match(
+                        r"^(?:Gr[áa]fico|Tabla|Figura|Figure|Table|Graph)\s+\d+\b",
+                        (ref.raw_text or ref.title or "").strip(),
+                        re.IGNORECASE,
+                    )
+                ):
+                    continue
+
+                # Filter out duplicate GROBID entries extracted from a secondary bibliography in APPENDIX
+                # (e.g. a translated summary 'Referencias' at the back of the thesis) when the primary
+                # BIBLIOGRAPHY section contains at most 1 copy of the entry.
+                if (
+                    appendix_words_norm
+                    and bib_words_norm
+                    and grobid_refs
+                    and _is_duplicate_reference(ref, grobid_refs)
+                ):
+                    dup_probe_words = re.sub(
+                        r"\W+",
+                        " ",
+                        (ref.title or ref.raw_text or "").lower(),
+                    ).split()
+                    dup_snip = " ".join(dup_probe_words[:6]) if len(dup_probe_words) >= 4 else ""
+                    if (
+                        dup_snip
+                        and dup_snip in appendix_words_norm
+                        and bib_words_norm.count(dup_snip) <= 1
+                    ):
+                        logger.debug(
+                            f"Filtered secondary-appendix duplicate GROBID entry: {ref.raw_text[:50]}..."
+                        )
+                        continue
 
                 # Filter out DOI-less/URL-less GROBID entries extracted from outside BIBLIOGRAPHY
                 # (e.g. Author Contributions / Acknowledgments / Chapter Summaries / Appendix prompts in BODY or APPENDIX)
@@ -1861,7 +1901,15 @@ class DocumentParser:
 
                     entries = self._reference_parser._split_entries(section_text)
                     for idx, entry in enumerate(entries, start=len(all_citations) + 1):
-                        if len(entry) < 20 and not is_vn_legal_reference(entry.strip()):
+                        if (
+                            len(entry) < 20
+                            and not is_vn_legal_reference(entry.strip())
+                            and not re.match(
+                                r"^\s*\[\d{1,3}\]\s*(?:EN|ISO|IEC|ASTM|DIN|UNE|BS|IEEE|ANSI)\s+\d",
+                                entry.strip(),
+                                re.IGNORECASE,
+                            )
+                        ):
                             continue
                         if _is_essay_title_entry(entry):
                             continue
@@ -1918,9 +1966,25 @@ class DocumentParser:
                 else ""
             )
             if not target.authors and donor.authors:
-                target.authors = [
+                donor_auth_strs = [
                     getattr(a, "raw", None) or str(a) for a in donor.authors
                 ]
+                target.authors = donor_auth_strs
+                # If GROBID placed the author/organization name into target.title when authors=[]
+                # (e.g. "[13] Engineering Archives. (1/05/2019). Tensile Test." -> GROBID title="Engineering Archives"),
+                # replace target.title with donor.title and rebuild raw_text.
+                if (
+                    target.title
+                    and donor.title
+                    and target.title.strip().lower() != donor.title.strip().lower()
+                    and target.title.strip().lower() in " ".join(donor_auth_strs).lower()
+                ):
+                    target.title = donor.title
+                    target.title_normalized = donor.title_normalized
+                auth_prefix = ", ".join(donor_auth_strs)
+                if auth_prefix and not (target.raw_text or "").lower().startswith(auth_prefix.lower()):
+                    raw_body = re.sub(r"^\s*\[\s*\d+\s*\]\s*", "", target.raw_text or "").strip()
+                    target.raw_text = f"{auth_prefix} {raw_body}".strip()
             elif (
                 donor.authors
                 and len(donor.authors) == 1
@@ -2151,10 +2215,17 @@ class DocumentParser:
                     target.raw_text = f"{(target.raw_text or '').rstrip('. ')}. {donor.title}"
                     if target.venue and target.venue not in target.raw_text:
                         target.raw_text = f"{target.raw_text.rstrip('. ')}. {target.venue}"
+            target_already_confirmed = bool(
+                getattr(target, "_num_idx_confirmed", False)
+                and target.numeric_index is not None
+                and donor.numeric_index is not None
+                and target.numeric_index != donor.numeric_index
+            )
             if (
                 donor.numeric_index is not None
                 and not donor_is_multi_chunk
                 and not donor_idx_taken
+                and not target_already_confirmed
             ):
                 target.numeric_index = donor.numeric_index
                 target._num_idx_confirmed = True  # type: ignore[attr-defined]
@@ -2170,6 +2241,7 @@ class DocumentParser:
             if (
                 not donor_is_multi_chunk
                 and not donor_idx_taken
+                and not target_already_confirmed
                 and donor.raw_text
                 and re.match(r"^\s*\[\s*\d+\s*\]", donor.raw_text)
             ):
@@ -2284,9 +2356,29 @@ class DocumentParser:
                     logger.debug(f"Skipping regex duplicate by DOI: {c.raw_text[:50]}")
                     continue
 
-            # Check key match
+            # Check key match (prefer an unconfirmed GROBID duplicate when c has a distinct numeric_index)
             if key in grobid_by_key:
-                _enrich_grobid_ref(grobid_by_key[key], c)
+                g_key_target = grobid_by_key[key]
+                if (
+                    c.numeric_index is not None
+                    and getattr(g_key_target, "_num_idx_confirmed", False)
+                    and g_key_target.numeric_index != c.numeric_index
+                ):
+                    alt_g = next(
+                        (
+                            g
+                            for g in grobid_refs
+                            if self._citation_key(g) == key
+                            and (
+                                not getattr(g, "_num_idx_confirmed", False)
+                                or g.numeric_index == c.numeric_index
+                            )
+                        ),
+                        None,
+                    )
+                    if alt_g is not None:
+                        g_key_target = alt_g
+                _enrich_grobid_ref(g_key_target, c)
                 logger.debug(f"Skipping regex duplicate by key: {c.raw_text[:50]}")
                 continue
 
@@ -2294,6 +2386,19 @@ class DocumentParser:
             c_url_norm = (c.url or "").strip().rstrip("/.,;").lower()
             if c_url_norm:
                 url_match_g = next(
+                    (
+                        g
+                        for g in grobid_refs
+                        if (g.url or "").strip().rstrip("/.,;").lower() == c_url_norm
+                        and (not c.year or not g.year or str(c.year) == str(g.year))
+                        and (
+                            c.numeric_index is None
+                            or not getattr(g, "_num_idx_confirmed", False)
+                            or g.numeric_index == c.numeric_index
+                        )
+                    ),
+                    None,
+                ) or next(
                     (
                         g
                         for g in grobid_refs
@@ -2309,6 +2414,18 @@ class DocumentParser:
 
             # Check GROBID refs directly
             dup_match = next(
+                (
+                    g
+                    for g in grobid_refs
+                    if _is_duplicate_reference(c, [g])
+                    and (
+                        c.numeric_index is None
+                        or not getattr(g, "_num_idx_confirmed", False)
+                        or g.numeric_index == c.numeric_index
+                    )
+                ),
+                None,
+            ) or next(
                 (g for g in grobid_refs if _is_duplicate_reference(c, [g])),
                 None,
             )
@@ -2477,22 +2594,63 @@ class DocumentParser:
         return (title_norm, year, first_author)
 
     def _extract_appendix_citations(
-        self, sections: list[DocumentSection]
+        self,
+        sections: list[DocumentSection],
+        source_doc: Document | None = None,
     ) -> list[Citation]:
         """Trích citations ở appendix (out-of-scope MVP, nhưng track)."""
         citations: list[Citation] = []
+        by_page = {p.page_num: p for p in (source_doc.pages if source_doc else [])}
+        dot_leader_re = re.compile(r"(?:\.\s*){4,}\d+\s*$")
         for section in sections:
             if section.section_type != SectionType.APPENDIX:
                 continue
             if not section.text:
                 continue
-            doc = Document(
-                file_path="",
-                num_pages=section.end_page - section.start_page + 1,
-                pages=[
-                    Page(page_num=section.start_page, text=section.text, has_text_layer=True)
-                ],
-            )
+            page_nums = [
+                n
+                for n in sorted(by_page)
+                if section.start_page <= n <= section.end_page and by_page[n].text
+            ]
+            # If the appendix contains a translated summary with its own separate bibliography
+            # header (e.g. 'Referencias' [1]..[16] renumbering citations differently from the
+            # main thesis), do not extract citations from that secondary summary block.
+            if page_nums and any(
+                self._section_segmenter._page_has_bibliography_header(by_page[n])
+                for n in page_nums
+            ):
+                continue
+            if page_nums:
+                clean_pages: list[Page] = []
+                for n in page_nums:
+                    raw_lines = (by_page[n].text or "").splitlines()
+                    kept_lines = [ln for ln in raw_lines if not dot_leader_re.search(ln.strip())]
+                    cleaned_txt = "\n".join(kept_lines).strip()
+                    if cleaned_txt:
+                        clean_pages.append(Page(page_num=n, text=cleaned_txt, has_text_layer=True))
+                if not clean_pages:
+                    continue
+                doc = Document(
+                    file_path="",
+                    num_pages=max(p.page_num for p in clean_pages),
+                    pages=clean_pages,
+                )
+            else:
+                kept_lines = [
+                    ln
+                    for ln in section.text.splitlines()
+                    if not dot_leader_re.search(ln.strip())
+                ]
+                cleaned_txt = "\n".join(kept_lines).strip()
+                if not cleaned_txt:
+                    continue
+                doc = Document(
+                    file_path="",
+                    num_pages=section.end_page - section.start_page + 1,
+                    pages=[
+                        Page(page_num=section.start_page, text=cleaned_txt, has_text_layer=True)
+                    ],
+                )
             citations.extend(self._citation_extractor.extract_from_document(doc))
         return citations
 

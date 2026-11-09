@@ -704,7 +704,12 @@ def _title_author_year_match(a: Citation, b: Citation) -> bool:
             first_b = _get_author_names(b.authors[:1])
             same_first_author = bool(first_a & first_b)
             if same_first_author:
-                if overlap >= 3 or (overlap > 0 and overlap >= min_words * 0.5):
+                a_clean = re.sub(r"\s+", " ", re.sub(r"\W+", " ", a.title.lower())).strip()
+                b_clean = re.sub(r"\s+", " ", re.sub(r"\W+", " ", b.title.lower())).strip()
+                is_prefix = len(min(a_clean, b_clean, key=len)) >= 12 and (
+                    a_clean.startswith(b_clean) or b_clean.startswith(a_clean)
+                )
+                if is_prefix or (overlap > 0 and overlap >= min_words * 0.6):
                     return True
             else:
                 if overlap >= 3 and overlap >= max_words * 0.65:
