@@ -55,7 +55,23 @@ class TextPreprocessor:
             text = text.replace(lig, expanded)
         return text
 
+    _LATEX_SPACING_ACCENTS = {
+        "\u00b4": "\u0301",  # ´ acute
+        "\u00a8": "\u0308",  # ¨ diaeresis / umlaut
+        "\u02c6": "\u0302",  # ˆ circumflex
+        "\u02dc": "\u0303",  # ˜ tilde
+        "\u02c7": "\u030c",  # ˇ caron
+        "\u02d8": "\u0306",  # ˘ breve
+        "\u02d9": "\u0307",  # ˙ dot above
+        "\u02dd": "\u030b",  # ˝ double acute
+    }
+    _LATEX_ACCENT_RE = re.compile(r"([\u00b4\u00a8\u02c6\u02dc\u02c7\u02d8\u02d9\u02dd])([A-Za-z])")
+
     def _normalize_unicode(self, text: str) -> str:
+        # Convert LaTeX Type1 spacing accents preceding a letter (e.g. "Kir´aly", "K¨uhn")
+        text = self._LATEX_ACCENT_RE.sub(
+            lambda m: m.group(2) + self._LATEX_SPACING_ACCENTS[m.group(1)], text
+        )
         # NFC: chuẩn hóa ký tự có dấu về dạng precomposed
         return unicodedata.normalize("NFC", text)
 

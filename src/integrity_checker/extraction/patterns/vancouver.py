@@ -288,8 +288,9 @@ class VancouverFormat:
         # ACS parenthesized number prefix: (1) ...
         if re.match(r'^\(\s*\d+\s*\)', text):
             return True
-        # Quoted title right after author/year boundary (Chicago / MLA / IEEE / ACM)
-        if re.search(r'(?:[.,]|\b\d{4}\.)\s*["\u201c][^"\u201d]{4,}["\u201d]', text):
+        # Quoted title right after author/year boundary (Chicago / MLA / IEEE / ACM),
+        # unless the quote is only the prefix before a colon subtitle ("Quote": Subtitle.)
+        if re.search(r'(?:[.,]|\b\d{4}\.)\s*["\u201c][^"\u201d]{4,}["\u201d](?!\s*:)', text):
             return True
         # Nature: (Year). or (Publisher, Year). at end of entry
         if re.search(r'\(\s*(?:[^()]{2,80},\s*)?(?:19|20)\d{2}[a-z]?\s*\)(?:,?\s*pp?\.\s*[\d–-]+)?\.?$', text):
@@ -359,7 +360,7 @@ class VancouverFormat:
 
         # Case 1: 2-segment short preprint / web report ("Authors. Title, [Month] YYYY[a-z]?. [URL/DOI]")
         m2 = re.match(
-            r'^(?P<title>(?:[^.?!]|\.(?!\s)){2,}?),\s*(?:[A-Za-z]+\.?\s+)?(?P<year>(?:18|19|20)\d{2})(?P<suffix>[a-z])?\.(?:\s*(?P<rest>(?:URL\s+)?https?://.+|doi:\s*\S+.*))?$',
+            r'^(?P<title>(?:[^.]|\.(?!\s+[A-Z])|\.\s+(?=[a-z][^.]*\s+\S+\s+\S+\s+\S+\s+\S+,\s*(?:18|19|20)\d{2}\b)){2,}?),\s*(?:[A-Za-z]+\.?\s+)?(?P<year>(?:18|19|20)\d{2})(?P<suffix>[a-z])?\.(?:\s*(?P<rest>(?:URL\s+)?https?://.+|doi:\s*\S+.*))?$',
             remainder,
             re.I,
         )
@@ -391,12 +392,12 @@ class VancouverFormat:
         # Case 2: 3-segment plainnat ("Authors. Title[.?!] Venue, YYYY[a-z]?. [URL/DOI]")
         title_end_m = None
         for tm in re.finditer(
-            r'([.?!])\s+(?=[A-ZÀ-Ý0-9"\u201c\u2018]|in\s|arXiv\b|CoRR\b|abs/|http|doi:)',
+            r'([.?!])\s+(?=[A-ZÀ-Ý0-9"\u201c\u2018]|in\s|arXiv\b|CoRR\b|abs/|http|doi:|[a-z][a-zA-Z&\s\-]{1,35},\s*(?:18|19|20)\d{2}\b)',
             remainder,
         ):
             t_pref = remainder[: tm.start()]
             if tm.group(1) == '.' and (
-                re.search(r'(?:^|[\s.\-])[A-ZÀ-Ý]$', t_pref)
+                re.search(r'(?:^|[\s.\-])[A-Za-zÀ-Ý]$', t_pref)
                 or re.search(r'\b(?:vs|dr|mr|mrs|ms|st|fig|eq|al|etc|cf|e\.g|i\.e)$', t_pref, re.I)
             ):
                 continue
@@ -410,7 +411,7 @@ class VancouverFormat:
         ].strip()
         venue_rest = remainder[title_end_m.end() :].strip()
         yr, yr_suf = extract_publication_year(venue_rest, prefer_last=True)
-        if not yr:
+        if not yr and not re.match(r'^(?:URL\s+)?https?://\S+', venue_rest, re.I):
             return None
 
         citation = Citation(

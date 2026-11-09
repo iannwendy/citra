@@ -874,7 +874,7 @@ class ReferenceListParser:
         # "URL https://doi.or\ng/10.48550/...", "URL https://arxiv.\norg/abs/...", "https:\n//...")
         nxt_first = nxt_s.split()[0]
         if re.match(r"^[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+$", nxt_first):
-            if re.search(r"(?:https?://\S+|https?:|\b10\.\d{4,9}/\S+)[/\-_?&=:#~]$", prev_s, re.IGNORECASE):
+            if re.search(r"(?:(?:https?://\S+|\b10\.\d{4,9}/\S+)[/\-_?&=:#~]|https?:)$", prev_s, re.IGNORECASE):
                 return prev_s + nxt_s
             if re.search(r"https?://[^\s/]*$", prev_s, re.IGNORECASE) and re.match(
                 r"^(?://|/|[a-z0-9_~%#-]+(?:/|\.[a-z]{2,4}\b))", nxt_first
@@ -1078,9 +1078,9 @@ class ReferenceListParser:
             r"(?:,\s*|\.\s+|\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Spring|Summer|Fall|Autumn|Winter)\.?\s+)(?:18|19|20)\d{2}[a-z]?\."
             r"|(?:,\s*|\(\s*)(?:18|19|20)\d{2}[a-z]?\)?(?:,\s*|\s*:\s*)(?:pp?\.\s*)?\d+(?:\s*[\-–]\s*\d+)?\."
             r"|\((?:[^()]+:\s+)?[^()]+,\s*(?:18|19|20)\d{2}[a-z]?\)\."
-            r"|(?:URL\s+)?https?://\S+"
-            r"|\bdoi:\s*10\.\d{4,9}/\S+"
-            r"|\b10\.\d{4,9}/\S+"
+            r"|(?:URL\s+)?https?://\S+(?:\s+[a-z0-9]{1,8}){0,3}\.?"
+            r"|\bdoi:\s*10\.\d{4,9}/\S+(?:\s+[a-z0-9]{1,8}){0,3}\.?"
+            r"|\b10\.\d{4,9}/\S+(?:\s+[a-z0-9]{1,8}){0,3}\.?"
             r"|\bISBN\s+[0-9\-X]+\."
             r")\s*$",
             re.IGNORECASE,
@@ -1114,6 +1114,13 @@ class ReferenceListParser:
             # Do not split if curr ends with an incomplete URL/DOI that wraps onto nxt
             if re.search(r"https?://[^\s/]*$|https?:$", curr, re.I):
                 continue
+            nxt_first_tok = nxt.split()[0] if nxt.split() else ""
+            if (
+                re.search(r"(?:https?://\S+|https?:|\b10\.\d{4,9}/\S+)[/\-_?&=:#~]$", curr, re.I)
+                and nxt_first_tok
+                and re.match(r"^[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+$", nxt_first_tok)
+            ):
+                continue
             if (
                 re.search(r"(?:https?://|\b10\.\d{4,9}/)\S+$", curr, re.I)
                 and not curr.endswith((".", ",", ";", ")"))
@@ -1126,7 +1133,10 @@ class ReferenceListParser:
             ):
                 continue
 
-            has_year = bool(re.search(r"\b(?:18|19|20)\d{2}[a-z]?\b", curr))
+            has_year = bool(
+                re.search(r"\b(?:18|19|20)\d{2}[a-z]?\b", curr)
+                or re.search(r"\.\s+(?:URL\s+)?https?://\S+\.$", curr, re.I)
+            )
             if has_year and end_re.search(curr) and re.match(
                 r"^(?:[A-ZÀ-ÝĂÂĐÊÔƠƯ]|[\u2014\u2013\u2012―—–_-]{2,}\.?|-\s*,\s*[A-ZÀ-Ý]\.|\.\s+[\"\u201c\u2018'A-ZÀ-Ý])",
                 nxt,
@@ -1544,6 +1554,11 @@ class ReferenceListParser:
             if (
                 counts[stripped] >= 2
                 and len(stripped) < 100  # Increased from 80 to catch more headers
+                and (
+                    len(stripped.split()) >= 2
+                    or (stripped.isupper() and len(stripped) >= 4 and stripped.upper() != "URL")
+                )
+                and not re.fullmatch(r"(?:[A-ZÀ-Ý]\.\s*)+", stripped)
                 and not re.search(r"(?:19|20)\d{2}|\bdoi\s*:|\b10\.\d{4,9}/|\bpp?\.\s*\d+|\bProceedings\s+of\b", stripped, re.IGNORECASE)
                 and "http" not in stripped.lower()
                 and not re.match(r"^\s*(?:\[\d{1,3}\]|\d{1,3}\s*[\.\)])\s+[A-ZÀ-Ý]", stripped)

@@ -105,7 +105,8 @@ def _fold_diacritics(text: str) -> str:
 
     Dùng NFD + filter combining marks + Vietnamese Đ/đ replacement.
     """
-    nfd = unicodedata.normalize("NFD", text.replace("đ", "d").replace("Đ", "D"))
+    cleaned = re.sub(r"[\u00b4\u00a8\u02c6\u02dc\u02c7\u02d8\u02d9\u02dd](?=[A-Za-z])", "", text)
+    nfd = unicodedata.normalize("NFD", cleaned.replace("đ", "d").replace("Đ", "D"))
     return "".join(c for c in nfd if unicodedata.category(c) != "Mn")
 
 

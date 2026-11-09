@@ -712,6 +712,12 @@ class SectionSegmenter:
                         1
                         for ln in lines[idx + 1 : min(len(lines), idx + 25)]
                         if re.match(r"^\s*(?:\[\d{1,3}\]|\d{1,3}\.)(?:\s|$)", ln.strip())
+                        and "?" not in ln
+                        and not re.match(
+                            r"^\s*\d{1,3}\.\s+(?:If|How|What|Why|When|Where|Which|Who|Do|Does|Did|Can|Could|Would|Should)\b",
+                            ln.strip(),
+                            re.IGNORECASE,
+                        )
                     )
                     if following_ref_markers >= 2:
                         continue

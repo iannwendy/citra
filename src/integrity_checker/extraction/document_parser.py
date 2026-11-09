@@ -2385,17 +2385,26 @@ class DocumentParser:
             # When GROBID has already extracted a substantive bibliography (>= 5 entries),
             # do not append noisy cross-style fallback fragments or unsplit multi-entry chunks.
             if len(grobid_refs) >= 5:
-                if (c.matched_pattern or "") in {
-                    "harvard_article",
-                    "harvard_book",
-                    "apa_fallback",
-                    "chicago_fallback",
-                    "mla_fallback",
-                    "vancouver_reference_entry",
-                    "nature_book",
-                    "acm_fallback",
-                    "unquoted_book_entry",
-                } or len(c.raw_text or "") > 420:
+                is_noisy_vancouver = (
+                    (c.matched_pattern or "") == "vancouver_reference_entry"
+                    and (not c.authors or len(grobid_refs) >= len(regex_refs) - 2)
+                )
+                if (
+                    (c.matched_pattern or "")
+                    in {
+                        "harvard_article",
+                        "harvard_book",
+                        "apa_fallback",
+                        "chicago_fallback",
+                        "mla_fallback",
+                        "vancouver_fallback",
+                        "nature_book",
+                        "acm_fallback",
+                        "unquoted_book_entry",
+                    }
+                    or is_noisy_vancouver
+                    or len(c.raw_text or "") > 420
+                ):
                     logger.debug(
                         f"Skipping noisy regex fallback ({c.matched_pattern}) when GROBID is present: {c.raw_text[:50]}"
                     )

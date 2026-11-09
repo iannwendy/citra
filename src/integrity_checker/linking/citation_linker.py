@@ -1371,8 +1371,12 @@ class CitationLinker:
 
     def _extract_author_year(self, text: str) -> tuple[str | None, str | None, str | None]:
         """Trích (author, year, year_suffix) từ APA-style (Author, Year) hoặc (Author, n.d.)."""
-        # Normalize newlines to spaces to handle line breaks in extracted text
-        text_normalized = text.replace("\n", " ").replace("\r", " ")
+        # Normalize newlines to spaces and strip LaTeX spacing accents to handle PDF extraction artifacts
+        text_normalized = re.sub(
+            r"[\u00b4\u00a8\u02c6\u02dc\u02c7\u02d8\u02d9\u02dd](?=[A-Za-z])",
+            "",
+            text.replace("\n", " ").replace("\r", " "),
+        )
 
         # Try standard APA format: (Author, Year) or (Author et al., Year)
         m = _APA_YEAR_RE.search(text_normalized)
