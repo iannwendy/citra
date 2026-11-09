@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 # (Author, Year) / (Author Year) / [Author, Year] / [Author Year] / (Author, Year, tr. 15) / (Author 2020, 25) / (Author, 2020: 25) / (Author, n.d.)
 _APA_YEAR_RE = re.compile(
     r"[\(\[][\"\u201c\u201d'\u2018\u2019]?([A-Za-zÀ-ỹ][A-Za-zÀ-ỹ0-9/'\u2019\u2018.\s,&\-\u2013\u2014\[\]:]*?)(?:,[\"\u201d\u2019']?\s*|\s+)((?:18|19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)"
-    r"(?:\s*[,:]\s*(?:pp?\.?|tr\.?|trang|с\.?|p\.?)?\s*\d+(?:\s*[,–\-]\s*\d+)*)?[\)\]]",
+    r"(?:\s*[,:]\s*(?:pp?\.?|tr\.?|trang|с\.?|p\.?)?\s*(?:\d+|[ivxlcdm]+)(?:\s*[,–\-]\s*(?:\d+|[ivxlcdm]+))*)?[\)\]]",
     re.IGNORECASE,
 )
 # Regex cho MLA / Chicago in-text author-page: (Smith 25), [Cole, p. 247], (Smith and Doe 42), (Smith et al. 105),
@@ -56,12 +56,12 @@ _MLA_AUTHOR_PAGE_RE = re.compile(
 # Regex cho Author et al. / và cộng sự (Year) or Author et al. Year format
 _APA_ETAL_YEAR_RE = re.compile(
     r"([A-Za-zÀ-ỹ'\u2019.\s,&\-]+?)\s+(?:et\s+a?l\.?|và\s+cộng\s+sự|và\s+cs\.?|và\s+ctv\.?|và\s+cộng\s+tác\s+viên)\s*"
-    r"(?:[\(\[]\s*((?:18|19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)(?:\s*,\s*[^)\]]*)?\s*[\)\]]|((?:18|19|20)\d{2}[a-z]?)\b)",
+    r"(?:[\(\[]\s*((?:18|19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)(?:\s*[,:]\s*[^)\]]*)?\s*[\)\]]|((?:18|19|20)\d{2}[a-z]?)\b)",
     re.IGNORECASE,
 )
 # Narrative citation: ``Author et al. (2018)`` or ``Author (2018)`` or ``Author [2018]`` or ``Author A và Author B (2018)``.
 _NARRATIVE_YEAR_RE = re.compile(
-    r"([A-Za-zÀ-ỹ][A-Za-zÀ-ỹ0-9/'\u2019.\s,&\-\[\]]*?)\s*[\(\[]\s*((?:18|19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)(?:\s*,\s*[^)\]]*)?\s*[\)\]]",
+    r"([A-Za-zÀ-ỹ][A-Za-zÀ-ỹ0-9/'\u2019.\s,&\-\[\]]*?)\s*[\(\[]\s*((?:18|19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)(?:\s*[,:]\s*[^)\]]*)?\s*[\)\]]",
     re.IGNORECASE,
 )
 # Secondary citation (trích dẫn gián tiếp): "(Smith, 2005, dẫn theo Tran, 2016)" / "Smith (2005, as cited in Tran, 2016)" / "(quoted in Smith, 2020)"
@@ -476,7 +476,24 @@ class CitationLinker:
         if cit.citation_type == CitationType.IN_TEXT and ";" in cit.raw_text:
             multi_links: list[CitationLink] = []
             has_trailing_secondary = bool(_SECONDARY_CITATION_RE.search(cit.raw_text))
-            for part in cit.raw_text.split(";"):
+            raw_semi_parts = cit.raw_text.split(";")
+            merged_semi_parts: list[str] = []
+            buf_semi = ""
+            for rp in raw_semi_parts:
+                rp_clean = rp.strip().strip("()[]")
+                buf_semi = f"{buf_semi}, {rp.strip()}" if buf_semi else rp.strip()
+                if (
+                    re.search(r"\b(?:18|19|20)\d{2}\b|\bn\.?\s*d\.?\b|\b\d{1,4}\b", rp, re.I)
+                    or not rp_clean.isupper()
+                ):
+                    merged_semi_parts.append(buf_semi)
+                    buf_semi = ""
+            if buf_semi:
+                if merged_semi_parts:
+                    merged_semi_parts[-1] = f"{merged_semi_parts[-1]}, {buf_semi}"
+                else:
+                    merged_semi_parts.append(buf_semi)
+            for part in merged_semi_parts:
                 # Splitting removes the outer closing parenthesis from every
                 # component except the last one.  Parse each component as a
                 # standalone APA key and repair PDF line-break hyphenation.
