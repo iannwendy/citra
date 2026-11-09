@@ -65,7 +65,7 @@ class TextPreprocessor:
         "\u02d9": "\u0307",  # ˙ dot above
         "\u02dd": "\u030b",  # ˝ double acute
     }
-    _LATEX_ACCENT_RE = re.compile(r"([\u00b4\u00a8\u02c6\u02dc\u02c7\u02d8\u02d9\u02dd])([A-Za-z])")
+    _LATEX_ACCENT_RE = re.compile(r"([\u00b4\u00a8\u02c6\u02dc\u02c7\u02d8\u02d9\u02dd])\s*([A-Za-z])")
 
     def _normalize_unicode(self, text: str) -> str:
         # Convert LaTeX Type1 spacing accents preceding a letter (e.g. "Kir´aly", "K¨uhn")

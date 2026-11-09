@@ -1530,7 +1530,7 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
                         after_auth,
                     ).strip()
                     m_title = re.match(r"^([^.]{2,180})\.", after_auth)
-                    if m_title:
+                    if m_title and not re.match(r"^,\s*[A-Z]", m_title.group(1).strip()):
                         title = m_title.group(1).strip()
                 if (
                     old_title

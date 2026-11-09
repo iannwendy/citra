@@ -454,7 +454,19 @@ class ReferenceListParser:
         if ref_range is None:
             return []
         start, end = ref_range
-        raw_text = "\n".join(p.text for p in doc.pages if start <= p.page_num <= end)
+        page_texts: list[str] = []
+        for p in doc.pages:
+            if not (start <= p.page_num <= end) or not p.text:
+                continue
+            p_text = p.text
+            if p.page_num == start:
+                p_lines = p_text.splitlines()
+                for ln_i, ln_s in enumerate(p_lines):
+                    if _BIB_HEADER_LINE_RE.match(ln_s.strip()):
+                        p_text = "\n".join(p_lines[ln_i:])
+                        break
+            page_texts.append(p_text)
+        raw_text = "\n".join(page_texts)
         # Light normalize — KHÔNG qua _fix_broken_lines
         pp = self.extractor.preprocessor
         section_text = pp._normalize_unicode(pp._fix_ligatures(raw_text))
@@ -1485,7 +1497,7 @@ class ReferenceListParser:
             re.IGNORECASE,
         )
         post_bib_stop_re = re.compile(
-            r"^\s*(?:[-•●▪▫\uf0a7\uf0b7\uf0d8\uf0fc\uf076]+\s*)?(?:(?:\d+(?:\.\d+)+)[\.\)]?\s*)?(?:Ngày\s+nhận\s+bài|ABSTRACT|SUMMARY|TÓM\s+TẮT|Thông\s+tin\s+tác\s+giả|Author\s+information"
+            r"^\s*(?:[-•●▪▫\uf0a7\uf0b7\uf0d8\uf0fc\uf076]+\s*)?(?:(?:\d+(?:\.\d+)+)[\.\)]?\s*)?(?:Ngày\s+nhận\s+bài|ABSTRACT|SUMMARY|TÓM\s+TẮT|Thông\s+tin\s+tác\s+giả|Author\s+information|(?:Author\s+)?Biograph(?:y|ies)|About\s+the\s+Authors?"
             r"|(?:INDIVIDUAL\s+PROJECT\s+)?SELF[- ]?EVALUATION|BẢNG\s+TỰ\s+ĐÁNH\s+GIÁ|PHỤ\s*LỤC"
             r"|Chỉ\s+mục|Index|Khối\s+li[ệê]u\s+được\s+trích\s+dẫn"
             r"|Chi\s+tiết\s+phân\s+công(?:\s+công\s+việc)?|Bảng\s+phân\s+công\s+công\s+việc|Đánh\s+giá\s+mức\s+độ\s+hoàn\s+thành"
@@ -1530,10 +1542,10 @@ class ReferenceListParser:
                 and not any(re.match(r"^\s*\[\d+\]", rem_ln) for rem_ln in lines[idx_ln + 1 :])
             ):
                 break
-            # Skip standalone page numbers or PDF font encoding bullet '®'
+            # Skip standalone page numbers, page fractions ("16/20"), or PDF font encoding bullet '®'
             # (unless the previous line ended mid-DOI/URL, e.g. "...2020.acl-main.\n740")
             if re.fullmatch(
-                r"(?:\d{1,4}|\[\d{3,4}\]|®|Trang\s+\d{1,4}|\d{1,4}\s*\|\s*Page)",
+                r"(?:\d{1,4}|\d{1,4}\s*/\s*\d{1,4}|\[\d{3,4}\]|®|Trang\s+\d{1,4}(?:\s*/\s*\d{1,4})?|\d{1,4}\s*\|\s*Page)",
                 stripped,
                 re.IGNORECASE,
             ):
@@ -1564,6 +1576,26 @@ class ReferenceListParser:
                     ):
                         cleaned.append(stripped)
                 continue
+            # Skip standalone date running footers/headers (e.g. PLOS ONE "November 9, 2026" or "November 9, 2026 20/20")
+            date_footer_m = re.fullmatch(
+                r"(?:(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},?\s+(?:19|20)\d{2}|\d{1,2}\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+(?:19|20)\d{2})(?:\s+(?:Page\s+)?\d{1,4}(?:\s*(?:/|of)\s*\d{1,4})?)?",
+                stripped,
+                re.IGNORECASE,
+            )
+            if date_footer_m:
+                prev_nonempty = next((c_ln.strip() for c_ln in reversed(cleaned) if c_ln.strip()), "")
+                next_raw_nonempty = next((rem.strip() for rem in lines[idx_ln + 1 :] if rem.strip()), "")
+                if (
+                    counts[stripped] >= 2
+                    or re.search(r"\d{1,4}\s*/\s*\d{1,4}$", stripped)
+                    or re.fullmatch(r"\d{1,4}(?:\s*/\s*\d{1,4})?", next_raw_nonempty)
+                    or not re.search(
+                        r"\b(?:retrieved|accessed|cited|updated|published|posted|on|dated|from)\s*$|[(,\[]\s*$",
+                        prev_nonempty,
+                        re.IGNORECASE,
+                    )
+                ):
+                    continue
             # Skip bibliography header lines
             if _BIB_HEADER_LINE_RE.match(stripped):
                 continue
@@ -1592,8 +1624,14 @@ class ReferenceListParser:
                 and not re.match(r"^\s*(?:\[\d{1,3}\]|\d{1,3}\s*[\.\)])\s+[A-ZÀ-Ý]", stripped)
             ):
                 continue
-            # Strip HTML-to-PDF hyperlink anchor artifact "return to text" and LaTeX pagebackref page numbers
+            # Strip HTML-to-PDF hyperlink anchor artifact "return to text", LaTeX pagebackref page numbers, and inline date+page footers
             line = re.sub(r"\s+\breturn\s+to(?:\s+text)?\b\s*$", ".", line, flags=re.IGNORECASE)
+            line = re.sub(
+                r"\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+\d{1,2},?\s+(?:19|20)\d{2}\s+\d{1,4}\s*/\s*\d{1,4}\s*$",
+                "",
+                line,
+                flags=re.IGNORECASE,
+            )
             line = re.sub(
                 r"((?:(?:18|19|20)\d{2}[a-z]?|https?://\S+|10\.\d{4,9}/\S+)\.)\s+\d{1,3}(?:,\s*\d{1,3})*\s*$",
                 r"\1",
@@ -1878,7 +1916,9 @@ class ReferenceListParser:
                 if is_fallback != allow_fallback:
                     continue
                 has_title = bool(citation.title)
-                has_year = bool(citation.year)
+                has_year = bool(citation.year) or bool(
+                    re.search(r"\(\s*n\.?\s*d\.?(?:-[a-z])?\s*\)", entry, re.IGNORECASE)
+                )
                 has_numeric_index = citation.numeric_index is not None
                 # Never let the short-title book pattern (``nature_book``)
                 # claim an entry whose title is a stray token: it drops the
