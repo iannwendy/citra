@@ -188,6 +188,7 @@ def call_grobid_fulltext(
     url = f"{config.url.rstrip('/')}/api/processFulltextDocument"
     timeout = config.timeout_seconds
 
+    is_default_http = http_post_fn is None
     if http_post_fn is None:
         try:
             import requests
@@ -200,30 +201,53 @@ def call_grobid_fulltext(
 
         http_post_fn = _default_post
 
-    try:
-        with _get_grobid_semaphore(), open(pdf_path, "rb") as f:
-            filename = Path(pdf_path).name if pdf_path else "document.pdf"
-            files = {"input": (filename, f, "application/pdf")}
-            raw_consol = (
-                str(config.consolidate_header[0]).strip()
-                if config.consolidate_header
-                else "0"
-            )
-            consol_header = raw_consol if raw_consol in {"0", "1", "2", "3"} else "0"
-            data = {
-                "consolidateHeader": consol_header,
-                "consolidateCitations": "0",
-                "includeRawCitations": "1",
-                "teiCoordinates": "figure,head,biblStruct,snote,formula",
-            }
-            response = http_post_fn(url, files=files, data=data, timeout=timeout)
-        if response.status_code != 200:
+    max_attempts = 3 if is_default_http else 1
+    raw_consol = (
+        str(config.consolidate_header[0]).strip()
+        if config.consolidate_header
+        else "0"
+    )
+    consol_header = raw_consol if raw_consol in {"0", "1", "2", "3"} else "0"
+    data = {
+        "consolidateHeader": consol_header,
+        "consolidateCitations": "0",
+        "includeRawCitations": "1",
+        "teiCoordinates": "figure,head,biblStruct,snote,formula",
+    }
+    filename = Path(pdf_path).name if pdf_path else "document.pdf"
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with _get_grobid_semaphore(), open(pdf_path, "rb") as f:
+                files = {"input": (filename, f, "application/pdf")}
+                response = http_post_fn(url, files=files, data=data, timeout=timeout)
+            if response.status_code == 200:
+                return response.text
+            if response.status_code in {502, 503, 504} and attempt < max_attempts:
+                import time
+
+                time.sleep(1.0 * attempt)
+                continue
             logger.warning("GROBID returned %d", response.status_code)
             return ""
-        return response.text
-    except Exception as exc:
-        logger.warning("GROBID call failed: %s", exc)
-        return ""
+        except OSError as exc:
+            # Missing local file or transient connection reset/disconnect
+            if isinstance(exc, FileNotFoundError) or attempt >= max_attempts:
+                logger.warning("GROBID call failed: %s", exc)
+                return ""
+            import time
+
+            logger.info("GROBID transient error on attempt %d/%d (%s), retrying...", attempt, max_attempts, exc)
+            time.sleep(1.0 * attempt)
+        except Exception as exc:
+            if attempt >= max_attempts:
+                logger.warning("GROBID call failed: %s", exc)
+                return ""
+            import time
+
+            logger.info("GROBID transient error on attempt %d/%d (%s), retrying...", attempt, max_attempts, exc)
+            time.sleep(1.0 * attempt)
+    return ""
 
 
 def compute_sha256(pdf_path: str) -> str:

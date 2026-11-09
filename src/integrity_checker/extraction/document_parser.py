@@ -280,6 +280,7 @@ class DocumentParser:
             not is_docx
             and not is_scanned_empty_pdf
             and use_service_manager
+            and self._grobid_post_fn is None
             and self.config.extraction.grobid.enabled
         ):
             try:
@@ -289,46 +290,47 @@ class DocumentParser:
 
         if not is_docx and not is_scanned_empty_pdf and self.config.extraction.grobid.enabled:
             try:
-                # Check if GROBID is available (via service manager)
-                grobid_available = (
-                    grobid_manager and grobid_manager.check_health().value == "available"
-                )
+                # 1. Try disk cache first (does not require live container health check)
+                cached_tei = grobid_manager.get_from_cache(pdf_path) if grobid_manager else None
+                if cached_tei:
+                    logger.info("Using cached TEI XML for: %s", pdf_path)
+                    grobid_out = parse_tei(cached_tei)
+                    if grobid_out and grobid_out.is_available:
+                        grobid_status = "available"
+                        parser_used = "grobid"
 
-                if grobid_available:
-                    grobid_status = "available"
-                    parser_used = "grobid"
+                # 2. If cache miss (or invalid cache), call GROBID service or injected mock
+                if grobid_out is None or not grobid_out.is_available:
+                    grobid_available = bool(
+                        grobid_manager and grobid_manager.check_health().value == "available"
+                    )
 
-                    # Try to get from cache first
-                    cached_tei = grobid_manager.get_from_cache(pdf_path)
-
-                    if cached_tei:
-                        logger.info("Using cached TEI XML for: %s", pdf_path)
-                        grobid_out = parse_tei(cached_tei)
-                    else:
-                        # Call GROBID via service manager
+                    if grobid_available:
+                        grobid_status = "available"
+                        parser_used = "grobid"
                         grobid_out = self._load_grobid_tei(pdf_path, grobid_manager)
 
-                    # Save to cache if successful
-                    if grobid_out and grobid_out.is_available:
-                        tei_xml = grobid_out.raw_tei_xml
-                        if tei_xml:
-                            grobid_manager.save_to_cache(pdf_path, tei_xml)
-
-                else:
-                    # GROBID not available via service manager
-                    # Still try via injected grobid_post_fn (for tests/mock)
-                    if self._grobid_post_fn is not None:
-                        # Use injected mock/test function
-                        grobid_out = self._load_grobid_tei(pdf_path)
+                        # Save to cache if successful
                         if grobid_out and grobid_out.is_available:
-                            grobid_status = "available"
-                            parser_used = "grobid"
+                            tei_xml = grobid_out.raw_tei_xml
+                            if tei_xml:
+                                grobid_manager.save_to_cache(pdf_path, tei_xml)
+
+                    else:
+                        # GROBID not available via service manager
+                        # Still try via injected grobid_post_fn (for tests/mock)
+                        if self._grobid_post_fn is not None:
+                            # Use injected mock/test function
+                            grobid_out = self._load_grobid_tei(pdf_path)
+                            if grobid_out and grobid_out.is_available:
+                                grobid_status = "available"
+                                parser_used = "grobid"
+                            else:
+                                grobid_status = _set_fallback_warning(grobid_manager, grobid_status, warnings)
+                                parser_used = "regex"
                         else:
                             grobid_status = _set_fallback_warning(grobid_manager, grobid_status, warnings)
                             parser_used = "regex"
-                    else:
-                        grobid_status = _set_fallback_warning(grobid_manager, grobid_status, warnings)
-                        parser_used = "regex"
 
                 if grobid_out is None or not grobid_out.is_available:
                     if not grobid_out:
