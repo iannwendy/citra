@@ -481,3 +481,76 @@ def test_pipeline_emits_all_eight_steps_in_strict_order_with_separated_comparing
         f"Expected checker.check to run during 'checking' (Step 6), but ran during {checker_called_at_step}"
     )
 
+
+def test_plos_one_footer_and_author_biographies_do_not_create_duplicate_reference() -> None:
+    """PLOS ONE date+page footers ('November 9, 2026\\n20/20') and post-bibliography 'Author Biographies'
+    must not corrupt the final reference's year to 2026 or spawn a duplicate 54th reference."""
+    from integrity_checker.extraction.document_parser import DocumentParser
+    from integrity_checker.extraction.reference_parser import ReferenceListParser
+    from integrity_checker.models.citation import Citation, CitationStyle, CitationType
+
+    rp = ReferenceListParser()
+    bib_text = (
+        "References\n"
+        "52. Wolf T, Debut L, Sanh V, Chaumond J, Delangue C, Moi A, et al. Transformers: State-of-the-art "
+        "natural language processing. In: Proceedings of the 2020 Conference on Empirical Methods in Natural "
+        "Language Processing: System Demonstrations; 2020. p. 38-45. doi:10.18653/v1/2020.emnlp-demos.6.\n"
+        "53. Pedregosa F, Varoquaux G, Gramfort A, Michel V, Thirion B, Grisel O, et al. Scikit-learn: Machine "
+        "learning in Python. J Mach Learn Res. 2011;12(85):2825-30. Available from:\n"
+        "https://jmlr.org/papers/v12/pedregosa11a.html.\n"
+        "November 9, 2026\n"
+        "20/20\n"
+        "Author Biographies\n"
+        "Nguyen Bao Minh is currently an undergraduate student at Ton Duc Thang University. "
+        "His research interests include Natural Language Processing (e-mail: 523h0054@student.tdtu.edu.vn).\n"
+    )
+    entries = rp._split_entries(bib_text)
+    assert len(entries) == 2
+
+    c53 = rp._parse_entry(entries[1], order_index=53, page_num=20)
+    assert c53 is not None
+    assert str(c53.year) == "2011"
+    assert c53.title == "Scikit-learn: Machine learning in Python"
+    assert c53.url == "https://jmlr.org/papers/v12/pedregosa11a.html"
+
+    # Even if GROBID and regex both emit #53, _merge_reference_lists must deduplicate into 1 entry
+    dp = DocumentParser()
+    grobid_53 = Citation(
+        raw_text="Pedregosa, F, Varoquaux, G (2011) Scikit-learn: Machine learning in Python J Mach Learn Res https://jmlr.org/papers/v12/pedregosa11a.html",
+        citation_type=CitationType.REFERENCE_LIST,
+        style=CitationStyle.VANCOUVER,
+        authors=["Pedregosa, F", "Varoquaux, G"],
+        year="2011",
+        title="Scikit-learn: Machine learning in Python",
+        venue="J Mach Learn Res",
+        url="https://jmlr.org/papers/v12/pedregosa11a.html",
+        order_index=53,
+        numeric_index=53,
+    )
+    merged = dp._merge_reference_lists([grobid_53], [c53])
+    assert len(merged) == 1
+    assert str(merged[0].year) == "2011"
+
+    # Quoted lexical frequency counts ("cố lên" [730], "hãy chia sẻ" [75]) must not be extracted as numeric citations
+    from integrity_checker.extraction.base import Document, Page
+    from integrity_checker.extraction.citation_extractor import CitationExtractor
+
+    ce = CitationExtractor(preserve_occurrences=True)
+    freq_doc = Document(
+        file_path="sample.pdf",
+        num_pages=1,
+        pages=[
+            Page(
+                page_num=5,
+                text=(
+                    'The 22 contextual phrases in Table 2 match only 820 records '
+                    '(0.65%: led by "cố lên" [730], "hãy chia sẻ" [75], "cười chết" [6], '
+                    '"chết cười" [3], "hãy đi khám" [3], "đừng nghĩ quẩn" [2], and "đừng tự tử" [1]).'
+                ),
+            )
+        ],
+    )
+    assert ce.extract_from_document(freq_doc) == []
+
+
+

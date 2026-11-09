@@ -1716,6 +1716,30 @@ class DocumentParser:
                         )
                         continue
 
+                # Filter out GROBID entries hallucinated from Author Biographies (ORCID / e-mail / research interests prose)
+                if not ref.doi and (
+                    "orcid.org/" in (ref.url or "").lower()
+                    or re.search(
+                        r"\b(?:(?:his|her|their)\s+research\s+(?:interests?\s+include|focuses\s+on)|(?:he|she)\s+is\s+currently\s+an?\s+(?:undergraduate|graduate|postdoctoral|ph\.?d\.?|master)|received\s+the\s+(?:b\.?s\.?|m\.?s\.?|m\.?sc\.?|ph\.?d\.?)\s+degree|\(e-?mail\s*:\s*\S+@\S+)\b",
+                        f"{ref.raw_text or ''} {ref.title or ''} {ref_auth_join}",
+                        re.IGNORECASE,
+                    )
+                ):
+                    if not (
+                        ref.url
+                        and "orcid.org/" not in (ref.url or "").lower()
+                        and ref.title
+                        and not re.search(
+                            r"\b(?:(?:he|she)\s+is\s+interested\s+in|(?:his|her|their)\s+research\s+(?:interests?\s+include|focuses\s+on)|\(e-?mail\s*:)\b",
+                            ref.title,
+                            re.IGNORECASE,
+                        )
+                    ):
+                        logger.debug(
+                            f"Filtered author-biography GROBID entry before indexing: {ref.raw_text[:50]}..."
+                        )
+                        continue
+
                 # Filter out DOI-less/URL-less GROBID entries extracted from outside BIBLIOGRAPHY
                 # (e.g. Author Contributions / Acknowledgments / Chapter Summaries / Appendix prompts / discursive footnotes in BODY or APPENDIX)
                 if (
@@ -1723,6 +1747,7 @@ class DocumentParser:
                     and (
                         not ref.url
                         or not ref.authors
+                        or "orcid.org/" in (ref.url or "").lower()
                         or "target:" in (ref.raw_text or "").lower()
                         or "provided insight into" in (ref.raw_text or "").lower()
                     )
@@ -2116,10 +2141,23 @@ class DocumentParser:
                     and d_clean.lower().endswith(t_clean.lower())
                     and len(d_clean) > len(t_clean) + 2
                 )
+                is_bio_bleed_title = bool(
+                    re.search(
+                        r"\b(?:(?:he|she)\s+is\s+(?:currently\b|interested\s+in\b)|(?:his|her|their)\s+research\s+(?:interests?\b|focuses\b))",
+                        t_clean,
+                        re.IGNORECASE,
+                    )
+                    and not re.search(
+                        r"\b(?:(?:he|she)\s+is\s+(?:currently\b|interested\s+in\b)|(?:his|her|their)\s+research\s+(?:interests?\b|focuses\b))",
+                        d_clean,
+                        re.IGNORECASE,
+                    )
+                )
                 if (
                     f"[{t_clean.lower()}]" in d_clean.lower()
                     or re.search(r"',\s*'", t_clean)
                     or is_colon_prefix_drop
+                    or is_bio_bleed_title
                     or (
                         d_clean.count("-") > t_clean.count("-")
                         and re.sub(r"[\s\-–]+", "", t_clean.lower())
@@ -2527,7 +2565,15 @@ class DocumentParser:
                 )
             ):
                 g_num = grobid_by_num[c.numeric_index]
-                if g_num.year == c.year or (g_num.doi and c.doi and g_num.doi.lower() == c.doi.lower()):
+                g_num_url_norm = (g_num.url or "").strip().rstrip("/.,;").lower()
+                g_num_author = self._citation_key(g_num)[2]
+                c_author = self._citation_key(c)[2]
+                if (
+                    g_num.year == c.year
+                    or (g_num.doi and c.doi and g_num.doi.lower() == c.doi.lower())
+                    or (c_url_norm and g_num_url_norm and c_url_norm == g_num_url_norm)
+                    or (g_num_author and c_author and g_num_author == c_author)
+                ):
                     _enrich_grobid_ref(g_num, c)
                     logger.debug(
                         f"Skipping regex duplicate at same numeric_index={c.numeric_index}: {c.raw_text[:50]}"

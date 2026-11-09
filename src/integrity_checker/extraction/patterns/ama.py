@@ -83,7 +83,7 @@ _AMA_REFERENCE_ARTICLE = CompiledPattern.create(
         r"(?:;(?P<volume>\d+)"  # ;Volume
         r"(?:\((?P<issue>[^)]+)\))?"  # (Issue)
         r"(?::(?P<pages>[\d–-]+))?)?"  # :Pages
-        r"(?:\.\s*(?P<rest>(?:doi:\s*\S+|https?://\S+)?)|\.?)$"
+        r"(?:\.\s*(?P<rest>(?:doi:\s*\S+|(?:(?:Available\s+from|URL)\s*:?\s*)?https?://\S+)?\.?)|\.?)$"
     ),
     pattern_type=PatternType.REFERENCE_ENTRY,
     description="AMA article: N. Authors. Title. Journal. YEAR;Vol(Issue):Pages.",
@@ -382,6 +382,9 @@ class AMAFormat:
         doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
         if doi_match:
             citation.doi = doi_match.group(0).rstrip('.')
+        url_match = re.search(r'https?://[^\s\]\)\,;]+', text)
+        if url_match:
+            citation.url = url_match.group(0).rstrip('.')
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -449,6 +452,9 @@ class AMAFormat:
         doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
         if doi_match:
             citation.doi = doi_match.group(0).rstrip('.')
+        url_match = re.search(r'https?://[^\s\]\)\,;]+', text)
+        if url_match:
+            citation.url = url_match.group(0).rstrip('.')
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -497,6 +503,9 @@ class AMAFormat:
         doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
         if doi_match:
             citation.doi = doi_match.group(0).rstrip('.')
+        url_match = re.search(r'https?://[^\s\]\)\,;]+', text)
+        if url_match:
+            citation.url = url_match.group(0).rstrip('.')
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -544,6 +553,9 @@ class AMAFormat:
         doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
         if doi_match:
             citation.doi = doi_match.group(0).rstrip('.')
+        url_match = re.search(r'https?://[^\s\]\)\,;]+', text)
+        if url_match:
+            citation.url = url_match.group(0).rstrip('.')
 
         citation.confidence = self._estimate_confidence(citation)
         return citation

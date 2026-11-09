@@ -80,7 +80,7 @@ _VANCOUVER_REFERENCE_ENTRY = CompiledPattern.create(
         r"(?:\((?P<issue>[^)]+)\))?"  # Optional issue in parens
         r"(?::(?P<pages>[\d–-]+))?"  # Optional pages
         r")?"
-        r"(?:\.\s*(?P<rest>(?:doi:\s*\S+|https?://\S+)?)|\.?)$"
+        r"(?:\.\s*(?P<rest>(?:doi:\s*\S+|(?:(?:Available\s+from|URL)\s*:?\s*)?https?://\S+)?\.?)|\.?)$"
     ),
     pattern_type=PatternType.REFERENCE_ENTRY,
     description="Vancouver reference: Authors. Title. Venue. YEAR;Vol(Issue):Pages.",
@@ -98,7 +98,7 @@ _VANCOUVER_NUMBERED_REFERENCE = CompiledPattern.create(
         r"(?:;(?P<volume>\d+)"
         r"(?:\((?P<issue>[^)]+)\))?"
         r"(?::(?P<pages>[\d–-]+))?)?"
-        r"(?:\.\s*(?P<rest>(?:doi:\s*\S+|https?://\S+)?)|\.?)$"
+        r"(?:\.\s*(?P<rest>(?:doi:\s*\S+|(?:(?:Available\s+from|URL)\s*:?\s*)?https?://\S+)?\.?)|\.?)$"
     ),
     pattern_type=PatternType.REFERENCE_ENTRY,
     description="Numbered Vancouver: [1] Authors. Title. Venue. YEAR.",
@@ -147,7 +147,7 @@ _VANCOUVER_PERIOD_NUMBERED = CompiledPattern.create(
         r"(?:;(?P<volume>\d+)"
         r"(?:\((?P<issue>[^)]+)\))?"
         r"(?::(?P<pages>[\d–-]+))?)?"
-        r"(?:\.\s*(?P<rest>(?:doi:\s*\S+|https?://\S+)?)|\.?)$"
+        r"(?:\.\s*(?P<rest>(?:doi:\s*\S+|(?:(?:Available\s+from|URL)\s*:?\s*)?https?://\S+)?\.?)|\.?)$"
     ),
     pattern_type=PatternType.REFERENCE_ENTRY,
     description="Period-numbered Vancouver: 1. Authors. Title. Venue. YEAR.",
@@ -574,6 +574,9 @@ class VancouverFormat:
         doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
         if doi_match:
             citation.doi = doi_match.group(0).rstrip('.')
+        url_match = re.search(r'https?://[^\s\]\)\,;]+', text)
+        if url_match:
+            citation.url = url_match.group(0).rstrip('.')
 
         citation.confidence = self._estimate_confidence(citation)
         return citation
@@ -629,6 +632,9 @@ class VancouverFormat:
         doi_match = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
         if doi_match:
             citation.doi = doi_match.group(0).rstrip('.')
+        url_match = re.search(r'https?://[^\s\]\)\,;]+', text)
+        if url_match:
+            citation.url = url_match.group(0).rstrip('.')
 
         citation.confidence = self._estimate_confidence(citation)
         return citation

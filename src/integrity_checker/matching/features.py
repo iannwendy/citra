@@ -194,6 +194,31 @@ class FeatureCalculator:
             ]
             if same_work_dists:
                 year_dist = min(year_dist, min(same_work_dists))
+            # Online-First / IEEE Early Access -> Final Print Volume/Issue 2-year gap:
+            # When the DOI embeds the Online-First year (e.g. 10.1109/TKDE.2021.3078898 -> .2021.)
+            # while the reference cites the final journal volume/issue year 2 years later (e.g. 2023;35(1):770-83).
+            if (
+                year_dist == 2
+                and doi_match
+                and best.doi
+                and citation.year
+                and best.year
+                and str(citation.year)[:4].isdigit()
+                and str(best.year)[:4].isdigit()
+                and int(str(citation.year)[:4]) - int(str(best.year)[:4]) == 2
+                and f".{str(best.year)[:4]}." in best.doi.lower()
+                and (
+                    bool(citation.volume and citation.pages)
+                    or bool(
+                        re.search(
+                            r"\b(?:19|20)\d{2}\s*;\s*\d+\s*\([^)]+\)\s*:\s*\d+|\bvol\.?\s*\d+.*\bpp?\.?\s*\d+",
+                            citation.raw_text or "",
+                            re.IGNORECASE,
+                        )
+                    )
+                )
+            ):
+                year_dist = 0
 
         # FIX Phase 3 (BUG-21): Recognize exact arXiv ID match when candidate returned its
         # published conference/journal DOI alongside external_ids["arxiv"] (or vice versa)

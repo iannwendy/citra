@@ -646,6 +646,27 @@ class CitationExtractor:
                         )
                     ):
                         continue
+                    # Reject corpus/lexical frequency counts in brackets right after quoted terms
+                    # e.g. 'led by "cố lên" [730], "hãy chia sẻ" [75], "cười chết" [6], "chết cười" [3], "hãy đi khám" [3]'
+                    if len(bracket_nums) == 1 and re.search(r"[\'\"\u2018\u2019\u201c\u201d]\s*$", line_prefix_b):
+                        quote_freq_win = re.sub(
+                            r"\s+",
+                            " ",
+                            search_text[max(0, raw_start - 250) : min(len(search_text), m.end() + 250)],
+                        )
+                        quote_freq_nums = [
+                            int(n)
+                            for n in re.findall(
+                                r"[\'\"\u2018\u201c][^\'\"\u2019\u201d]{1,60}[\'\"\u2019\u201d]\s*\[\s*(\d+)\s*\]",
+                                quote_freq_win,
+                            )
+                        ]
+                        if len(quote_freq_nums) >= 3 and (
+                            any(n >= 300 for n in quote_freq_nums)
+                            or len(quote_freq_nums) != len(set(quote_freq_nums))
+                            or all(a >= b for a, b in zip(quote_freq_nums, quote_freq_nums[1:], strict=False))
+                        ):
+                            continue
                 if (
                     citation_type == CitationType.NUMERIC
                     or re.match(r"^\[\s*\d+\s*\]$", raw)

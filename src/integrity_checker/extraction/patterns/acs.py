@@ -140,8 +140,8 @@ _ACS_BOOK = CompiledPattern.create(
         _ACS_PREFIX
         + r"(?P<authors>.+?)\.\s+(?!(?:[A-ZÀ-Ý]\.|;|and\b))"
         + r"(?P<title>[^;]+?);\s*"
-        + r"(?P<publisher>[^:;]+?):\s*"
-        + r"(?P<place>[^,]+?),\s*"
+        + r"(?P<publisher>[A-Za-zÀ-ÿ][^:;]{1,80}?):\s*"
+        + r"(?P<place>(?!https?://)[A-Za-zÀ-ÿ][^,;:]{1,60}?),\s*"
         + r"(?P<year>(?:19|20)\d{2})\.?"
         + r"(?P<rest>.*)$"
     ),
