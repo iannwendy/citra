@@ -134,7 +134,8 @@ _LONG_TEXT_NO_YEAR_RE = re.compile(r"^[A-Za-z]{50,}")
 # (used to drop it wherever it lands once running headers/page numbers have been stripped).
 _BIB_HEADER_LINE_RE = re.compile(
     r"^\s*(?:[-*•●+\uf0a7\uf0b7\uf0d8\uf0fc\uf076]\s*)?(?:(?:(?:chương|phần|mục|chapter|section|part)\s+)?(?:\d+(?:\.\d+)*|[A-Z]|[IVXLC]+)\s*[\.\):\-–—]?\s*)?(?:"
-    r"references?|reference\s+list|bibliography|works?\s+cited|literature(?:\s+cited)?|notes(?:\s+and\s+references)?|endnotes?"
+    r"references?|reference\s+list|bibliography|works?\s+cited|literature(?:\s+cited)?|cited\s+literature|notes(?:\s+and\s+references)?|endnotes?"
+    r"|sources|list\s+of\s+sources|reference\s+sources|sources\s+and\s+literature|literature\s+and\s+sources"
     r"|bibliografia(?:/bibliografía/bibliographie/works?\s+cited)?|bibliografía|bibliographie"
     r"|referências(?:\s+bibliográficas)?|referencias(?:\s+bibliográficas)?|daftar\s+pustaka"
     r"|(?:[^/\n]{2,50}/\s*)?list\s+of\s+references"

@@ -19,7 +19,7 @@ from integrity_checker.models.citation import Citation, CitationStyle, CitationT
 
 # Header / footer keywords để phát hiện reference section
 _REFERENCE_HEADERS = re.compile(
-    r"^\s*(?:(?:(?:chương|phần|mục|chapter|section|part)\s+)?(?:\d+(?:\.\d+)*|X{0,2}(?:I{1,3}|IV|V|VI{0,3}|IX|X))(?:\s*[\.\):\-–—]+\s*|\s+)|[A-Z][\.\)]\s+)?(references?|reference\s+list|bibliography|works?\s+cited|literature(?:\s+cited)?|cited\s+literature|notes(?:\s+and\s+references)?|endnotes?"
+    r"^\s*(?:(?:(?:chương|phần|mục|chapter|section|part)\s+)?(?:\d+(?:\.\d+)*|X{0,2}(?:I{1,3}|IV|V|VI{0,3}|IX|X))(?:\s*[\.\):\-–—]+\s*|\s+)|[A-Z][\.\)]\s+)?(references?|reference\s+list|bibliography|works?\s+cited|literature(?:\s+cited)?|cited\s+literature|sources|list\s+of\s+sources|reference\s+sources|sources\s+and\s+literature|literature\s+and\s+sources|notes(?:\s+and\s+references)?|endnotes?"
     r"|danh\s+mục\s+tài\s+liệu(?:\s+[tk]ham\s+khảo(?:\s*(?:,|và)\s*trích\s+dẫn)?)?|(?:các\s+)?(?:tài\s+liệu|bài\s+viết|nguồn|link)\s+[tk]ham\s+khảo(?:\s*(?:,|và)\s*trích\s+dẫn)?|tham\s+khảo|tài\s+liệu\s+trích\s+dẫn|tài\s+liệu)(?:\s*\(\s*\))?\s*[:.]?\s*$",
     re.IGNORECASE | re.MULTILINE,
 )

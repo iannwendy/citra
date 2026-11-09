@@ -69,7 +69,8 @@ class SectionType(str, Enum):
 
 _BIBLIOGRAPHY_HEADERS = re.compile(
     r"^\s*(?:(?:(?:chương|phần|mục|chapter|section|part)\s+)?(?:\d+(?:\.\d+)*|X{0,2}(?:I{1,3}|IV|V|VI{0,3}|IX|X))(?:\s*[\.\):\-–—]+\s*|\s+)|[A-Z][\.\)]\s+)?(?:"
-    r"references?|reference\s+list|bibliography|works?\s+cited|literature(?:\s+cited)?|"
+    r"references?|reference\s+list|bibliography|works?\s+cited|literature(?:\s+cited)?|cited\s+literature|"
+    r"sources|list\s+of\s+sources|reference\s+sources|sources\s+and\s+literature|literature\s+and\s+sources|"
     r"notes(?:\s+and\s+references)?|endnotes?|"
     r"bibliografia(?:/bibliografía/bibliographie/works?\s+cited)?|bibliografía|bibliographie|"
     r"referências(?:\s+bibliográficas)?|referencias(?:\s+bibliográficas)?|daftar\s+pustaka|"
@@ -626,6 +627,22 @@ class SectionSegmenter:
                     if not stripped.endswith(":") and has_ref_items < 2:
                         continue
                     if has_ref_items < 1:
+                        continue
+                if re.fullmatch(
+                    r"(?:(?:\d+(?:\.\d+)*|X{0,2}(?:I{1,3}|IV|V|VI{0,3}|IX|X)|[A-Z])[\.\)]?\s+)?sources\s*[:.]?",
+                    stripped,
+                    re.IGNORECASE,
+                ):
+                    if re.search(r"\b(?:table|bảng|figure|hình)\s+\d+", prev_window, re.IGNORECASE):
+                        prev_nonempty = [ln.strip() for ln in lines[max(0, idx - 4) : idx] if ln.strip()]
+                        if not prev_nonempty or not prev_nonempty[-1].endswith("."):
+                            continue
+                    has_src_refs = sum(
+                        1
+                        for ln in next_nonempty[:8]
+                        if re.search(r"^(?:\[\d+\]|\d{1,2}[\.\)])|https?://|doi:|\b(?:18|19|20)\d{2}\b", ln, re.IGNORECASE)
+                    )
+                    if has_src_refs < 1:
                         continue
                 if re.fullmatch(r"literature\s*[:.]?", stripped, re.IGNORECASE):
                     if re.search(r"\b(?:table|bảng)\s+\d+", prev_window, re.IGNORECASE):
