@@ -228,7 +228,7 @@ _URL_BOUNDARY_RE = re.compile(
     r"(?:"
     r"\s+Accessed\s+(?:\d{1,2}\s+)?[A-Za-z.]+\s+(?:19|20)\d{2}\.?"
     r"|\s*\(\s*accessed\s+(?:\d{1,2}\s+)?[A-Za-z.]+\s+(?:19|20)\d{2}\s*\)\.?"
-    r"|\s*(?:[,;.]\s*)?(?:\[|\()?\s*(?:truy\s+cập\s+(?:lần\s+cuối\s+)?(?:ngày\s+)?|ngày\s+(?:truy\s+cập\s*:?\s*)?|accessed\s+(?:on\s+)?)?\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*(?:19|20)\d{2}(?:\]|\))?\.?"
+    r"|\s*(?:[,;.]\s*)?(?:\[|\()?\s*(?:truy\s+cập\s+(?:lần\s+cuối\s+)?(?:ngày\s+)?|ngày\s+(?:truy\s+cập\s*:?\s*)?|accessed\s+(?:on\s+)?)?\d{1,2}\.?\s*[./-]\s*\d{1,2}\.?\s*[./-]\s*(?:19|20)\d{2}(?:\]|\))?\.?"
     r")?",
     re.IGNORECASE,
 )
@@ -1958,10 +1958,20 @@ class ReferenceListParser:
         or omitted (e.g., '[1] Đỗ Văn Đại, Title, Nxb. Hồng Đức, 2023', '8. Title. https://..., ngày 30/8/2024')."""
         if not _STRICT_VN_DIACRITIC_RE.search(entry):
             return None
-        # Do not intercept APA entries that have (Year) or (n.d.) right after the author block
+        # 'đ' (Croatian/Serbian/Slovene/Sami) and 'ă' (Romanian) also exist in non-Vietnamese alphabets.
+        # Require either a uniquely Vietnamese vowel/tone mark or a Vietnamese bibliographic keyword.
+        if not re.search(
+            r"[ằắẳẵặầấẩẫậềếểễệồốổỗộơờớởỡợưừứửữựảạẻẽẹỉĩịỏọủũụỳỷỹỵ]"
+            r"|\b(?:Nxb|NXB|Nhà\s+xuất\s+bản|Tạp\s+chí|Luận\s+văn|Luận\s+án|Khóa\s+luận|chủ\s+biên|truy\s+cập|Việt\s+Nam|Hà\s+Nội)\b",
+            entry,
+            re.IGNORECASE,
+        ):
+            return None
+        # Do not intercept APA entries that have (Year) or (n.d.) or Chicago Author-Date (. YYYY.) right after the author block
         if re.search(
             r"^\s*(?:\[\s*\d+\s*\]|\d{1,3}\s*[\.\)])?\s*[^()]{2,600}\(\s*(?:(?:\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*)?(?:18|19|20)\d{2}[a-z]?(?:\s*[,–\-/]\s*[^)]*)?|n\.?\s*d\.?(?:-[a-z])?)\s*\)"
-            r"|\(\s*(?:(?:\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*)?(?:18|19|20)\d{2}[a-z]?(?:\s*[,–\-/]\s*[^)]*)?|n\.?\s*d\.?(?:-[a-z])?)\s*\)\s*[.,:]\s+\S",
+            r"|\(\s*(?:(?:\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*)?(?:18|19|20)\d{2}[a-z]?(?:\s*[,–\-/]\s*[^)]*)?|n\.?\s*d\.?(?:-[a-z])?)\s*\)\s*[.,:]\s+\S"
+            r"|^\s*(?:\[\s*\d+\s*\]|\d{1,3}\s*[\.\)])?\s*[^.]{2,200}\.\s+(?:18|19|20)\d{2}[a-z]?(?:/(?:18|19|20)\d{2})?\.\s+\S",
             entry,
             re.IGNORECASE,
         ):

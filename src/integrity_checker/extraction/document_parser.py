@@ -1774,15 +1774,18 @@ class DocumentParser:
         # For Vietnamese bibliographies (containing 'tài liệu tham khảo' or Vietnamese legal/traditional
         # entries), regex_refs preserves exact Vietnamese names, titles, legal document codes, and
         # sequential numbering without GROBID's body-footnote bleed or [trans: ...] English duplication.
+        vn_matched_count = sum(
+            1
+            for r in regex_refs
+            if r.matched_pattern in ("vn_legal_document", "vn_traditional_entry")
+        )
         is_vietnamese_bib = bool(
             regex_refs
             and len(bib_text_norm.strip()) >= 40
             and (
                 "tài liệu tham khảo" in bib_text_norm
-                or any(
-                    r.matched_pattern in ("vn_legal_document", "vn_traditional_entry")
-                    for r in regex_refs
-                )
+                or vn_matched_count >= max(2, int(len(regex_refs) * 0.25))
+                or (len(regex_refs) <= 3 and vn_matched_count >= 1)
             )
         )
         if is_vietnamese_bib:
