@@ -95,6 +95,7 @@ web/playwright-report/
 
 # Bộ đề tham chiếu (20 PDF) & corpora thực nghiệm — dữ liệu nội bộ, không commit
 20-theses/
+200-theses/
 vn_legal_reports/
 style_corpora/
 tdtu_github_reports/
