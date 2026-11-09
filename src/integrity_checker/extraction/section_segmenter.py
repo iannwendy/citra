@@ -408,13 +408,20 @@ class SectionSegmenter:
             ieee_count = sum(1 for ln in lines if ieee_line_re.match(ln.strip()))
             bracket_count = sum(1 for ln in lines if bracket_line_re.match(ln.strip()))
             if bracket_count < 3 and ieee_count >= 3:
-                # For dot-numbered lines without brackets, verify sequential numbers (1, 2, 3...) and years
+                # For dot-numbered lines without brackets, verify sequential numbers (1, 2, 3...)
+                # and require publication years inside the numbered items themselves (not prose above/below a table).
                 dot_nums = [
                     int(m.group(1))
                     for ln in lines
                     if (m := dot_num_re.match(ln.strip())) and not ln.strip().endswith(":")
                 ]
-                text_no_iso_dates = iso_date_re.sub("", page.text or "")
+                dot_item_lines = [
+                    ln
+                    for i_ln, ln in enumerate(lines)
+                    if dot_num_re.match(ln.strip())
+                    or (i_ln > 0 and dot_num_re.match(lines[i_ln - 1].strip()))
+                ]
+                text_no_iso_dates = iso_date_re.sub("", "\n".join(dot_item_lines))
                 yr_hits = len(re.findall(r"\b(?:18|19|20)\d{2}\b", text_no_iso_dates))
                 has_seq = any(b == a + 1 for a, b in zip(dot_nums, dot_nums[1:], strict=False))
                 if not (has_seq and yr_hits >= 3 and len(dot_nums) >= 4):
@@ -599,9 +606,14 @@ class SectionSegmenter:
                     if next_nonempty[0].startswith(next_sec_prefix):
                         continue
                 if re.fullmatch(r"references?\s*[:.]?", stripped, re.IGNORECASE):
+                    # Only inspect non-empty lines AFTER any standalone page-number line in the running header
+                    last_page_num_line = -1
+                    for p_idx in range(idx):
+                        if re.fullmatch(r"\d{1,3}", lines[p_idx].strip()):
+                            last_page_num_line = p_idx
                     prev_nonpage = [
                         ln.strip()
-                        for ln in lines[:idx]
+                        for ln in lines[last_page_num_line + 1 : idx]
                         if ln.strip() and not re.fullmatch(r"\d{1,3}", ln.strip())
                     ]
                     if (
@@ -615,7 +627,11 @@ class SectionSegmenter:
                         )
                         and not any(
                             re.match(r"^\s*(?:\[\s*1\s*\]|1\.)\s+\S", ln)
-                            for ln in next_nonempty[:2]
+                            or re.search(
+                                r"^[A-ZÀ-Ý][A-Za-zÀ-ỹ'\u2019\-]+,\s+[A-Z].*\b(?:18|19|20)\d{2}\b",
+                                ln,
+                            )
+                            for ln in next_nonempty[:3]
                         )
                     ):
                         continue
