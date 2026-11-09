@@ -2057,7 +2057,12 @@ class DocumentParser:
             donor_idx_taken = bool(
                 donor.numeric_index is not None
                 and any(
-                    g is not target and g.numeric_index == donor.numeric_index
+                    g is not target
+                    and g.numeric_index == donor.numeric_index
+                    and (
+                        getattr(g, "_num_idx_confirmed", False)
+                        or bool(re.match(r"^\s*\[\s*\d+\s*\]", g.raw_text or ""))
+                    )
                     for g in grobid_refs
                 )
             )
@@ -2152,6 +2157,7 @@ class DocumentParser:
                 and not donor_idx_taken
             ):
                 target.numeric_index = donor.numeric_index
+                target._num_idx_confirmed = True  # type: ignore[attr-defined]
             if (
                 donor.style
                 and donor.style.value != "unknown"
@@ -2314,7 +2320,14 @@ class DocumentParser:
             # Check same numeric_index slot (e.g. [10] in GROBID vs [10] in regex
             # when GROBID and regex parsed slightly different title/author boundaries
             # from the exact same numbered bibliography entry)
-            if c.numeric_index is not None and c.numeric_index in grobid_by_num:
+            if (
+                c.numeric_index is not None
+                and c.numeric_index in grobid_by_num
+                and (
+                    abs(len(grobid_refs) - len(regex_refs)) <= 2
+                    or bool(re.match(r"^\s*\[\s*\d+\s*\]", grobid_by_num[c.numeric_index].raw_text or ""))
+                )
+            ):
                 g_num = grobid_by_num[c.numeric_index]
                 if g_num.year == c.year or (g_num.doi and c.doi and g_num.doi.lower() == c.doi.lower()):
                     _enrich_grobid_ref(g_num, c)
@@ -2388,7 +2401,11 @@ class DocumentParser:
                     )
                     continue
 
-            # Mark as merged source
+            # Mark as merged source and normalize Author objects to strings
+            if c.authors:
+                c.authors = [
+                    getattr(a, "raw", None) or str(a) for a in c.authors
+                ]
             c.source = "merged"
             c.source_confidence = c.confidence
             merged.append(c)
@@ -2402,6 +2419,8 @@ class DocumentParser:
             and len({c.numeric_index for c in merged}) == len(merged)
         ):
             merged.sort(key=lambda c: c.numeric_index or 0)
+            for idx_ord, c in enumerate(merged, start=1):
+                c.order_index = idx_ord
 
         # Re-index order_index
         for idx, c in enumerate(merged, start=1):

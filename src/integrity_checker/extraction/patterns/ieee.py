@@ -666,6 +666,30 @@ class IEEEFormat:
                     venue_str = book_m.group('venue').strip()
                     if venue_str:
                         self._parse_venue(citation, venue_str)
+                else:
+                    body_no_idx = re.sub(r'^\[\s*\d+\s*\]\s*', '', text).strip()
+                    body_no_url = re.sub(r'https?://\S+|\bwww\.\S+', '', body_no_idx).strip().rstrip('.,; ')
+                    if citation.year:
+                        yr_split = re.split(
+                            rf'(?:[.,]\s*|\s*\(\s*)\b{re.escape(citation.year)}{re.escape(citation.year_suffix or "")}\b\s*\)?',
+                            body_no_url,
+                            maxsplit=1,
+                        )
+                        before_yr = yr_split[0].strip().rstrip('.,; ')
+                        after_yr = yr_split[1].strip().lstrip('.,;: ').rstrip('.,; ') if len(yr_split) > 1 else ''
+                    else:
+                        before_yr = body_no_url
+                        after_yr = ''
+                    if after_yr and len(after_yr) >= 5:
+                        if before_yr and not citation.authors:
+                            citation.authors = self._parse_authors(before_yr)
+                        title_cand = after_yr.split('. ')[0].strip().rstrip('.,;')
+                        if len(title_cand) >= 4:
+                            citation.title = title_cand
+                            citation.title_normalized = self._normalize_title(title_cand)
+                    elif before_yr and len(before_yr) >= 5:
+                        citation.title = before_yr
+                        citation.title_normalized = self._normalize_title(before_yr)
 
         # Extract URL if present
         url_m = re.search(r'https?://[^\s\]\)\,;]+|\bwww\.[a-zA-Z0-9.-]+\.[a-z]{2,}(?:/[^\s\]\)\,;]*)?', text, re.IGNORECASE)

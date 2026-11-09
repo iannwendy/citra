@@ -652,12 +652,12 @@ def _title_author_year_match(a: Citation, b: Citation) -> bool:
             return False
 
     # Author must have significant overlap when both citations have authors
-    def _get_author_names(cit) -> set:
-        """Extract author names as strings from citation."""
-        if not cit.authors:
+    def _get_author_names(authors_list) -> set:
+        """Extract author names as strings from author list."""
+        if not authors_list:
             return set()
         out = set()
-        for auth in cit.authors:
+        for auth in authors_list:
             if isinstance(auth, str):
                 tokens = [t.strip().lower() for t in re.split(r"[,\s]+", auth) if len(t.strip()) >= 2]
                 if tokens:
@@ -671,8 +671,8 @@ def _title_author_year_match(a: Citation, b: Citation) -> bool:
                         out.add(tok)
         return out
 
-    a_authors = _get_author_names(a)
-    b_authors = _get_author_names(b)
+    a_authors = _get_author_names(a.authors)
+    b_authors = _get_author_names(b.authors)
     both_have_authors = bool(a_authors and b_authors)
 
     if both_have_authors:
@@ -682,15 +682,26 @@ def _title_author_year_match(a: Citation, b: Citation) -> bool:
 
     # Title similarity (word overlap on normalized alphanumeric tokens)
     if a.title and b.title:
-        a_words = {w for w in re.split(r"\W+", a.title.lower()) if len(w) >= 2}
-        b_words = {w for w in re.split(r"\W+", b.title.lower()) if len(w) >= 2}
+        _STOP = {"the", "in", "of", "on", "to", "for", "and", "or", "with", "from", "by", "an", "as", "at", "into"}
+        a_all = {w for w in re.split(r"\W+", a.title.lower()) if len(w) >= 2}
+        b_all = {w for w in re.split(r"\W+", b.title.lower()) if len(w) >= 2}
+        a_words = (a_all - _STOP) or a_all
+        b_words = (b_all - _STOP) or b_all
         if not a_words or not b_words:
             return False
         overlap = len(a_words & b_words)
         min_words = min(len(a_words), len(b_words))
+        max_words = max(len(a_words), len(b_words))
         if both_have_authors:
-            if overlap >= 3 or (overlap > 0 and overlap >= min_words * 0.5):
-                return True
+            first_a = _get_author_names(a.authors[:1])
+            first_b = _get_author_names(b.authors[:1])
+            same_first_author = bool(first_a & first_b)
+            if same_first_author:
+                if overlap >= 3 or (overlap > 0 and overlap >= min_words * 0.5):
+                    return True
+            else:
+                if overlap >= 3 and overlap >= max_words * 0.65:
+                    return True
         else:
             # When one side lacks authors, require stronger title agreement
             if a.title.lower().strip() == b.title.lower().strip():
