@@ -48,6 +48,9 @@ _MLA_INTEXT_PARENTHETICAL_PAGE = CompiledPattern.create(
         r"Stage|Step|Phase|Round|Cycle|Iteration|Pass|Tier|Split|Cluster|Topic|Task|"
         r"Level|Grade|Group|Type|Class|Model|Case|Test|Rule|Item|Itemset|Optimization|Site|Point|Edge|Head|"
         r"Prompt|Query|Sample|User|Comment|Label|Draft|Scheme|Chart|Compound|Reaction|"
+        r"Participant|Respondent|Interviewee|Informant|Subject|Patient|Client|Customer|Employee|Manager|"
+        r"Company|Firm|Organization|Scenario|Option|Alternative|Hypothesis|Question|Variable|Factor|"
+        r"Dimension|Category|Criterion|Annex|Exhibit|Schedule|Form|Protocol|Condition|Treatment|Control|Cohort|Subgroup|Segment|"
         r"Pathway|Experiment|Theorem|Lemma|Proposition|Corollary|Definition|Example|"
         r"Algorithm|Listing|Supplement|Note|Clause|Scope|VLAN|VTP|OSPF|DHCP|LLaMA|VNER|VLSP|XML|"
         r"Trang|Hình|Ảnh|Bảng|Mục|Chương|Phần|Bước|Nhóm|Loại|Câu|Bài|Đoạn|Dòng|Cột|Top|STT|MSSV|JavaScript|TypeScript|"
@@ -59,7 +62,7 @@ _MLA_INTEXT_PARENTHETICAL_PAGE = CompiledPattern.create(
         r"([A-ZÀ-Ý][a-zA-Zà-ÿ'\u2019]{2,}(?:\s+(?:III|II|IV|Jr\.?|Sr\.?))?"
         r"(?:\s+(?:and|&|và)\s+[A-ZÀ-Ý][a-zA-Zà-ÿ'\u2019]{2,}|\s+et\s+al\.)?)"
         r"(?:\s*,\s*pp?\.\s*|\s+)"
-        r"(?!(?:19|20)\d{2}\b)(\d{1,4}(?:[-–]\d{1,4})?(?:,\s*\d{1,4}(?:[-–]\d{1,4})?)*|(?!(?:LM|ML|DL|CV|ID|IC|VM|VL|IL|LC|DM|LD)\b)[IVXLCDM]{1,7})"
+        r"(?!(?:19|20)\d{2}\b)(\d{1,4}(?:[-–]\d{1,4})?(?:,\s*\d{1,4}(?:[-–]\d{1,4})?)*|(?!(?:LM|ML|DL|CV|ID|IC|VM|VL|IL|LC|DM|LD)\b)(?:[IVXLCDM]{2,7}|I))"
         r"|[A-ZÀ-Ý][a-zA-Zà-ÿ'\u2019]{2,}\s+et\s+al\.(?:\s*;\s*[A-ZÀ-Ý][a-zA-Zà-ÿ'\u2019]{2,}\s+et\s+al\.)*"
         r")\)"
     ),

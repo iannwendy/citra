@@ -42,8 +42,8 @@ logger = logging.getLogger(__name__)
 # Regex cho in-text APA / Harvard / Chicago / CSE pattern:
 # (Author, Year) / (Author Year) / [Author, Year] / [Author Year] / (Author, Year, tr. 15) / (Author 2020, 25) / (Author, 2020: 25) / (Author, n.d.)
 _APA_YEAR_RE = re.compile(
-    r"[\(\[][\"\u201c\u201d'\u2018\u2019]?([A-Za-zÀ-ỹ][A-Za-zÀ-ỹ0-9/'\u2019\u2018.\s,&\-\u2013\u2014\[\]:]*?)(?:,[\"\u201d\u2019']?\s*|\s+)((?:18|19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)"
-    r"(?:\s*[,:]\s*(?:pp?\.?|tr\.?|trang|с\.?|p\.?)?\s*(?:\d+|[ivxlcdm]+)(?:\s*[,–\-]\s*(?:\d+|[ivxlcdm]+))*)?[\)\]]",
+    r"[\(\[]\s*[\"\u201c\u201d'\u2018\u2019]?([A-Za-zÀ-ỹ][A-Za-zÀ-ỹ0-9/'\u2019\u2018.\s,&\-\u2013\u2014\[\]:]*?)(?:,[\"\u201d\u2019']?\s*|\s+(?!\d{4}\s*,\s*(?:18|19|20)\d{2}\b))((?:18|19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)"
+    r"(?:\s*[,:]\s*(?:pp?\.?|tr\.?|trang|с\.?|p\.?)?\s*(?:\d+|[ivxlcdm]+)(?:\s*[,–\-]\s*(?:\d+|[ivxlcdm]+))*)?\s*[\)\]]",
     re.IGNORECASE,
 )
 # Regex cho MLA / Chicago in-text author-page: (Smith 25), [Cole, p. 247], (Smith and Doe 42), (Smith et al. 105),
@@ -1346,10 +1346,10 @@ class CitationLinker:
         if _INSTITUTIONAL_AUTHOR_RE.search(author_stripped) or ":" in author_stripped:
             return author_stripped.strip(" .,")
 
-        # Multi-author in-text: "Zhang và Hanks", "Carr & Kemmis", "Simon, Smith & West"
-        # Split on " và ", " and ", " & ", or comma followed by another surname (2+ letters)
+        # Multi-author in-text: "Zhang và Hanks", "Carr & Kemmis", "Simon, Smith & West", "Al-Maroof& Al-Emran", "Godes&Mayzlin"
+        # Split on " và ", " and ", " & ", "&" before Capital+lower surname, or comma followed by another surname (2+ letters)
         multi_parts = re.split(
-            r"\s*,\s*(?:và|and|&)\s+|\s+(?:và|and|&)\s+|,\s*(?=[A-Za-zÀ-ỹ]{2,})",
+            r"\s*,\s*(?:và|and|&)\s*|\s+(?:và|and|&)\s+|\s*&\s*(?=[A-ZÀ-Ý][a-zà-ÿ])|,\s*(?=[A-Za-zÀ-ỹ]{2,})",
             author_stripped,
             flags=re.IGNORECASE,
         )

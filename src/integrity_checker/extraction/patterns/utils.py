@@ -284,6 +284,13 @@ def extract_year(text: str) -> str | None:
     non_accessed = _ACCESS_DATE_SPAN_REGEX.sub(" ", cleaned)
     no_bare_ranges = _BARE_PAGE_RANGE_REGEX.sub(" ", non_accessed)
     for candidate_text in (no_bare_ranges, non_accessed, cleaned):
+        if ";" not in candidate_text:
+            prog_yr_m = re.match(
+                r"^[\(\[]\s*[^,;()\]]+\s+\d{4}\s*,\s*((?:19|20)\d{2}[a-z]?)\s*[\)\]]$",
+                candidate_text.strip(),
+            )
+            if prog_yr_m:
+                return prog_yr_m.group(1)
         match = _YEAR_REGEX.search(candidate_text)
         if match:
             return match.group(0)
