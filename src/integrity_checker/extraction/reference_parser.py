@@ -377,6 +377,12 @@ def _is_fake_entry(entry: str) -> bool:
             or re.search(r"\b[a-z_]{2,}/(?:[a-z0-9_.]*)", text_stripped, re.IGNORECASE)
             or "\u037e" in text_stripped
             or "↔" in text_stripped
+            or re.search(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", text_stripped, re.I)
+            or re.search(
+                r"(?:--partition=|getnodeset\(|add!\(|Dirichlet\(|@timeit\b|Listing\s+[A-Z]\.\d+:|::AbstractGrid|::Symbol|\breturn\s+_[a-z]|=\s*\"=[0-9.]+\"|DUMP_STRING|Set\s+electric\s+charge\s+and\s+mass|Conveniance\s+method\s+for\s+creating)",
+                text_stripped,
+                re.IGNORECASE,
+            )
             or re.search(
                 r"\b(?:Precision,\s*Recall,\s*F1|JSONL\s+loader|Pairwise\s+Cohen)",
                 text_stripped,

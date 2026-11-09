@@ -459,6 +459,15 @@ def _normalize_raw_ref_text(raw_ref_text: str) -> str:
     if not raw_ref_text:
         return ""
     text = re.sub(r"\s+", " ", raw_ref_text).strip()
+    # Join broken protocol spacing: "https: //" -> "https://"
+    text = re.sub(r"\b(https?)\s*:\s*//\s*", r"\1://", text, flags=re.IGNORECASE)
+    # Strip trailing Appendix CVE prompt descriptions glued onto the last bibliography entry (e.g. 82.pdf b89)
+    text = re.sub(
+        r"\s+CVE-\d{4}-\d+\.?\s+describes\s+a\s+vulnerability\b.*$",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    ).strip()
     # Join broken percent-encoding across line wraps: "% 20" or "%F0... %9F..."
     text = re.sub(r"%\s+([0-9A-Fa-f]{2})", r"%\1", text)
     text = re.sub(r"(%[0-9A-Fa-f]{2}[0-9A-Za-z_%~:-]*)\s+(%[0-9A-Fa-f]{2})", r"\1\2", text)

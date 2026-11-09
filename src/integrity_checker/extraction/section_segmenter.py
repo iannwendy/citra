@@ -96,7 +96,7 @@ _APPENDIX_HEADERS = re.compile(
 
 _POST_BIB_APPENDIX_SINGLE_LINE_RE = re.compile(
     r"^(?:"
-    r"A(?:\.1)?\s+(?:Additional|Supplementary|Implementation|Experimental|Training|Model|Dataset|Evaluation|Proof|Proofs|Further|Extended|Detailed|Prompt|Prompts|Hyperparameter|Ablation|Human|Case|Error|More|Ethical|Broader|Limitation|Societal)\b[A-Za-z0-9\s,\-:–—()]{2,70}"
+    r"[A-C](?:\.1)?\s+(?:Additional|Supplementary|Implementation|Experimental|Training|Model|Dataset|Evaluation|Proof|Proofs|Further|Extended|Detailed|Prompt|Prompts|Hyperparameter|Ablation|Human|Case|Error|More|Ethical|Broader|Limitation|Societal|Installation|Source|Code|Usage|Setup|Configuration|Listing|Listings|Simulation|Software|Hardware|System|Technical|Mathematical|Derivation|Derivations|Questionnaire|Interview|Survey)\b[A-Za-z0-9\s,\-:–—()]{2,70}"
     r"|Attention\s+Visualizations"
     r"|Acknowledge?ments?"
     r"|Extended\s+Data(?:\s+Figures?|\s+Tables?)?"

@@ -1663,6 +1663,9 @@ class DocumentParser:
             and not bib_text_norm.strip()
         )
 
+        bib_words_norm = re.sub(r"\W+", " ", bib_text_norm).strip()
+        non_bib_words_norm = re.sub(r"\W+", " ", non_bib_text_norm).strip()
+
         grobid_refs: list[Citation] = []
         if not has_no_bib_section and grobid is not None and grobid.is_available and grobid.bibliography:
             raw_grobid_refs = self._grobid_to_citations(grobid)
@@ -1673,21 +1676,24 @@ class DocumentParser:
                     )
                     continue
 
-                # Filter out yearless/DOI-less/URL-less GROBID entries extracted from outside BIBLIOGRAPHY
-                # (e.g. Author Contributions / Acknowledgments in BODY or APPENDIX)
+                # Filter out DOI-less/URL-less GROBID entries extracted from outside BIBLIOGRAPHY
+                # (e.g. Author Contributions / Acknowledgments / Chapter Summaries / Appendix prompts in BODY or APPENDIX)
                 if (
-                    ref.year is None
-                    and not ref.doi
-                    and not ref.url
-                    and non_bib_text_norm
-                    and bib_text_norm
+                    not ref.doi
+                    and (not ref.url or "target:" in (ref.raw_text or "").lower() or "provided insight into" in (ref.raw_text or "").lower())
+                    and non_bib_words_norm
+                    and bib_words_norm
                 ):
-                    probe = (ref.title or ref.venue or ref.raw_text or "").strip().lower()
-                    probe_snip = probe[:35] if len(probe) >= 15 else ""
+                    probe_words = re.sub(
+                        r"\W+",
+                        " ",
+                        (ref.title or ref.venue or ref.raw_text or "").lower(),
+                    ).split()
+                    probe_snip = " ".join(probe_words[:7]) if len(probe_words) >= 5 else ""
                     if (
                         probe_snip
-                        and probe_snip in non_bib_text_norm
-                        and probe_snip not in bib_text_norm
+                        and probe_snip in non_bib_words_norm
+                        and probe_snip not in bib_words_norm
                     ):
                         logger.debug(
                             f"Filtered non-bibliography GROBID entry before indexing: {ref.raw_text[:50]}..."
@@ -1695,12 +1701,12 @@ class DocumentParser:
                         continue
                     # Also check if the trailing segment of raw_text (e.g. "conducted pre-training experiments")
                     # is prose from BODY/APPENDIX and absent from BIBLIOGRAPHY
-                    raw_probe = (ref.raw_text or "").strip().lower()
-                    tail_snip = raw_probe[-35:] if len(raw_probe) >= 25 else ""
+                    raw_words = re.sub(r"\W+", " ", (ref.raw_text or "").lower()).split()
+                    tail_snip = " ".join(raw_words[-7:]) if len(raw_words) >= 6 else ""
                     if (
                         tail_snip
-                        and tail_snip in non_bib_text_norm
-                        and tail_snip not in bib_text_norm
+                        and tail_snip in non_bib_words_norm
+                        and tail_snip not in bib_words_norm
                     ):
                         logger.debug(
                             f"Filtered non-bibliography GROBID prose entry before indexing: {ref.raw_text[:50]}..."
