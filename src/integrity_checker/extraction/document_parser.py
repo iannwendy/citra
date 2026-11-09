@@ -2264,11 +2264,13 @@ class DocumentParser:
         for c in regex_refs:
             key = self._citation_key(c)
 
-            # Check DOI match
+            # Check DOI match (only if publication years do not conflict)
             if c.doi and c.doi.lower() in grobid_by_doi:
-                _enrich_grobid_ref(grobid_by_doi[c.doi.lower()], c)
-                logger.debug(f"Skipping regex duplicate by DOI: {c.raw_text[:50]}")
-                continue
+                g_doi_ref = grobid_by_doi[c.doi.lower()]
+                if not c.year or not g_doi_ref.year or str(c.year) == str(g_doi_ref.year):
+                    _enrich_grobid_ref(g_doi_ref, c)
+                    logger.debug(f"Skipping regex duplicate by DOI: {c.raw_text[:50]}")
+                    continue
 
             # Check key match
             if key in grobid_by_key:
@@ -2276,7 +2278,7 @@ class DocumentParser:
                 logger.debug(f"Skipping regex duplicate by key: {c.raw_text[:50]}")
                 continue
 
-            # Check URL exact match before fuzzy duplicate scan
+            # Check URL exact match before fuzzy duplicate scan (only if years do not conflict)
             c_url_norm = (c.url or "").strip().rstrip("/.,;").lower()
             if c_url_norm:
                 url_match_g = next(
@@ -2284,6 +2286,7 @@ class DocumentParser:
                         g
                         for g in grobid_refs
                         if (g.url or "").strip().rstrip("/.,;").lower() == c_url_norm
+                        and (not c.year or not g.year or str(c.year) == str(g.year))
                     ),
                     None,
                 )
@@ -2320,6 +2323,8 @@ class DocumentParser:
             c_title_norm = re.sub(r"\s+", " ", c_title_norm).strip()
             overlap_g: Citation | None = None
             for g in grobid_refs:
+                if c.year and g.year and str(c.year) != str(g.year):
+                    continue
                 g_url_norm = (g.url or "").strip().rstrip("/.,;").lower()
                 if c_url_norm and g_url_norm and (c_url_norm == g_url_norm or c_url_norm in g_url_norm or g_url_norm in c_url_norm):
                     overlap_g = g

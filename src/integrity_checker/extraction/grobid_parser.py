@@ -479,12 +479,25 @@ def _normalize_raw_ref_text(raw_ref_text: str) -> str:
         text,
         flags=re.IGNORECASE,
     )
-    # Join URL paths broken after '/' or '-' before a lowercase slug/path or numeric DOI suffix
     text = re.sub(
-        r"((?:https?://|www\.)[^\s]+[/\-])\s+([a-z0-9_~%#][^\s]*)",
-        r"\1\2",
+        r"(#chp_\d+)\s+(sec_\d+)\s+(heading)\b",
+        r"\1_\2_\3",
         text,
+        flags=re.IGNORECASE,
     )
+    # Join URL paths broken after '/' or '-' or '=' before a slug/path or broken .pdf suffix (run up to 3 passes)
+    for _ in range(3):
+        text = re.sub(
+            r"((?:https?://|www\.)[^\s]+[/\-=])\s+([a-z0-9_~%#][^\s]*)",
+            r"\1\2",
+            text,
+        )
+        text = re.sub(
+            r"((?:https?://|www\.)\S+)\s+(\d+\.pdf)\b",
+            r"\1\2",
+            text,
+            flags=re.IGNORECASE,
+        )
     # Join DOIs broken after '-' or '/' before digits
     text = re.sub(
         r"\b(10\.\d{4,9}/[A-Za-z0-9._;()/-]+[-/])\s+(\d+[A-Za-z0-9._;()/-]*)",
@@ -611,13 +624,13 @@ def _split_single_merged_raw_reference(text: str) -> list[str]:
         if not rem or len(rem) < 20:
             continue
         # Do not split before trailing access date or "[St.]" surname prefix
-        if re.match(r"^(?:[\(\[]?(?:Accessed|Retrieved)\b|(?:St\.|De|Van|Von)\s*$)", rem, re.I):
+        if re.match(r"^(?:[\(\[]?(?:Accessed|Retrieved)\b|\(\s*\d{1,2}\.?\s*[./-]\s*\d{1,2}\.?\s*[./-]\s*(?:19|20)\d{2}\s*\)|(?:St\.|De|Van|Von)\s*$)", rem, re.I):
             continue
-        # Subcase 4a: Remainder starts with a new entry containing an APA parenthetical year/(n.d.) within 165 chars
+        # Subcase 4a: Remainder starts with a new entry containing an APA parenthetical year/(n.d.) or Chicago/Harvard author-year within 165 chars
         if (
             re.match(r"^[A-Z0-9\"\u201c]", rem)
             and re.search(
-                r"\(\s*(?:(?:19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)\b",
+                r"(?:\(\s*(?:(?:19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)\b|(?:[.,]\s*|\.\s+)(?:18|19|20)\d{2}[a-z]?(?:\s*,\s*\([a-z]\))?[.,]\s+[A-Z\"\u201c])",
                 rem[:165],
                 re.IGNORECASE,
             )
@@ -626,13 +639,13 @@ def _split_single_merged_raw_reference(text: str) -> list[str]:
             return [left, rem]
         # Subcase 4b: Remainder starts with a quoted title or Corporate Author + Title + URL
         if (
-            re.match(r"^(?:[\"\u201c][A-Z]|[A-Z][A-Za-z0-9\s&.'\u2019-]{2,60}\.\s+[A-Z\"\u201c])", rem)
+            re.match(r"^(?:[\"\u201c][A-Z]|[A-Z][A-Za-z0-9\s&.'\u2019-]{2,60}\.\s+[A-Z0-9\"\u201c])", rem)
             and re.search(r"https?://\S+", rem)
         ):
             left = text[:after_pos].strip()
             return [left, rem]
 
-    # Case 5: APA/Chicago book ending with Publisher (or City: Publisher, YYYY.) followed by another entry
+    # Case 5: APA/Chicago/Harvard book or article ending with Publisher/Venue followed by another Author (Year) / Author. Year. entry
     m5 = re.search(
         r"((?:\(\s*(?:19|20)\d{2}[^)]*\)\.\s+[^.]+?\.\s+[A-Z][A-Za-z&\s]+?(?:Publishers?|Press|Books|Inc\.|Ltd\.)\.)"
         r"|(?:\b[A-Z][A-Za-z.\s]+:\s+[A-Z][A-Za-z&\s.,]+?,\s*(?:19|20)\d{2}\.))\s+"
@@ -644,6 +657,28 @@ def _split_single_merged_raw_reference(text: str) -> list[str]:
         left = text[:split_at].strip()
         right = text[split_at:].strip()
         if len(left) >= 25 and len(right) >= 25:
+            return [left, right]
+
+    # Case 6: Glued APA / Harvard entries where a new Personal or Corporate Author + Year starts mid-string
+    for m6 in re.finditer(
+        r"(?<![,\bIn\b\bin\b\bby\b\band\b&])\s+"
+        r"(?=(?:"
+        r"[A-ZÀ-Ý][a-zA-ZÀ-ÿ'\u2019-]+(?:\s+[A-ZÀ-Ý][a-zA-ZÀ-ÿ'\u2019-]+)?,\s*(?:[A-ZÀ-Ý]\.\s*)+"
+        r"(?:(?:,\s*|\s+(?:&|and)\s+)[A-ZÀ-Ý][a-zA-ZÀ-ÿ'\u2019-]+,\s*(?:[A-ZÀ-Ý]\.\s*)+)*"
+        r"\s*(?:\(\s*(?:19|20)\d{2}[a-z]?\s*\)\.?|(?:19|20)\d{2}[a-z]?\.\s+[A-Z\"\u201c])"
+        r"|(?:World\s+Bank|Department\s+of\s+[A-Z][A-Za-z\s]+(?:\([A-Z]+\))?|OECD|Ministry\s+of\s+[A-Z][A-Za-z\s]+)"
+        r"[.,]\s*(?:19|20)\d{2}[a-z]?[.,]\s+[A-Z\"\u201c]"
+        r"))",
+        text,
+    ):
+        left = text[:m6.start()].strip()
+        right = text[m6.end():].strip()
+        if (
+            len(left) >= 45
+            and len(right) >= 35
+            and re.search(r"\b(?:18|19|20)\d{2}\b", left)
+            and not re.search(r"\b(?:In|in|by|and|ed\.|eds\.|edited\s+by)\s*$", left)
+        ):
             return [left, right]
 
     return [text]
@@ -801,6 +836,67 @@ def _parse_raw_bib_segment(raw_seg: str, entry_id: str) -> GrobidBibEntry:
     dash_m = re.match(r"^[\-\u2013\u2014_]{3,}\.?\s+(.+)$", seg_no_url)
     work_seg = dash_m.group(1).strip() if dash_m else seg_no_url
 
+    # Check if starts with Chicago Author-Date / Harvard author-year: "Author(s). YYYY. Title..." or "Author(s), YYYY. Title..."
+    cad_seg_m = (
+        re.match(
+            r"^(?P<head>[A-ZÀ-Ý][^\"\u201c]{1,180}?)[.,]\s+(?P<yr>(?:18|19|20)\d{2}[a-z]?(?:\s*,\s*\([a-z]\))?)[.,:]\s+(?P<tail>.+)$",
+            work_seg,
+        )
+        if not dash_m
+        else None
+    )
+    if cad_seg_m and not re.search(
+        r"\b(?:Press|Publishers?|Publishing|Books|Inc|Ltd|pp|vol|no|ed|Accessed|Retrieved)\s*$",
+        cad_seg_m.group("head"),
+        re.IGNORECASE,
+    ):
+        year = cad_seg_m.group("yr")[:4]
+        head = cad_seg_m.group("head").strip().rstrip(".,")
+        tail = cad_seg_m.group("tail").strip()
+        pers_matches = list(
+            re.finditer(
+                r"([A-ZÀ-Ý][A-Za-zÀ-ÿ'\u2019-]+),\s*((?:[A-ZÀ-Ý]\.\s*)+|[A-ZÀ-Ý][a-zA-ZÀ-ÿ'\u2019.-]+)",
+                head,
+            )
+        )
+        if pers_matches:
+            for pm in pers_matches:
+                sn = pm.group(1).strip()
+                fn = pm.group(2).strip().rstrip(".,")
+                if sn.lower() not in {"ed", "eds"}:
+                    authors.append(
+                        GrobidAuthor(full_name=f"{sn}, {fn}", first_name=fn, last_name=sn)
+                    )
+        elif head:
+            authors.append(GrobidAuthor(full_name=head, first_name=None, last_name=head))
+        q_tail_m = re.match(r"^[\"\u201c]([^\"\u201d]+)[\"\u201d]\.?\s*(.*)$", tail)
+        if q_tail_m:
+            title = q_tail_m.group(1).strip().rstrip(".,")
+            rem_v = q_tail_m.group(2).strip().rstrip(".")
+            if rem_v:
+                venue = re.sub(r",\s*\d+.*$", "", rem_v).strip()
+        else:
+            t_parts = [
+                p.strip().rstrip(".")
+                for p in re.split(r"(?<!\bvs)(?<!\bDr)(?<!\bMr)(?<!\bMs)(?<!\bJr)(?<!\bSr)(?<!\bSt)(?<!\b[A-Z])\.\s+", tail)
+                if p.strip()
+            ]
+            if t_parts:
+                title = t_parts[0]
+                if len(t_parts) >= 2:
+                    venue = t_parts[1]
+        return GrobidBibEntry(
+            id=entry_id,
+            authors=authors,
+            title=title,
+            year=year,
+            venue=venue,
+            doi=doi,
+            url=url,
+            raw_reference=seg,
+            raw_xml="",
+        )
+
     # Check if has quoted title: [Author.] "Title." Venue...
     q_m = re.match(
         r"^(?:([A-Z][^\"\u201c]{1,80}?)\.\s+)?[\"\u201c](.+)[\"\u201d]\.?\s*([A-Za-z0-9][^,.:]+)?",
@@ -895,6 +991,35 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
         )
 
         if raw_ref_text:
+            # 0. Merge broken decimal section-title continuation (e.g. 43.pdf b4 "Slovenia: 3." + b5 "9 Start-Up Funding...")
+            # or broken signed S3/query-string URL continuation (e.g. 100.pdf b18 + b19) into the previous entry.
+            if entries and (
+                (
+                    re.search(r":\s*\d+\.$", entries[-1].raw_reference or "")
+                    and re.match(r"^\d+\s+[A-Z]", raw_ref_text)
+                )
+                or re.match(
+                    r"^[A-Za-z0-9_%+=-]{12,}\s*&(?:X-Amz-|hash=|host=|pii=|tid=|sid=)",
+                    raw_ref_text,
+                )
+            ):
+                prev = entries[-1]
+                if re.search(r":\s*\d+\.$", prev.raw_reference or "") and re.match(r"^\d+\s+[A-Z]", raw_ref_text):
+                    glued_raw = _normalize_raw_ref_text(f"{prev.raw_reference}{raw_ref_text}")
+                else:
+                    glued_raw = _normalize_raw_ref_text(f"{prev.raw_reference}{raw_ref_text}")
+                prev.raw_reference = glued_raw
+                new_url, new_doi = _extract_url_and_doi_from_raw(glued_raw, bibl)
+                if new_url and (not prev.url or len(new_url) > len(prev.url)):
+                    prev.url = new_url
+                if new_doi and not prev.doi:
+                    prev.doi = new_doi
+                if re.match(r"^\d+\s+[A-Z]", raw_ref_text):
+                    m_rest_t = re.match(r"^(\d+\s+[^.]+?)\.(?:\s*https?://|\s|$)", raw_ref_text)
+                    if m_rest_t and prev.title:
+                        prev.title = f"{prev.title}.{m_rest_t.group(1).strip()}"
+                continue
+
             # 1. If GROBID started <listBibl> inside body footnotes (Chicago NB theses)
             # and this entry ends with "Bibliography" / "References" / "Works Cited",
             # discard all preceding footnote entries and skip this last footnote.
