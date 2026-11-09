@@ -624,6 +624,13 @@ def _is_duplicate_reference(cit: Citation, existing: list[Citation]) -> bool:
             ex_url = _normalize_url_for_dedup(getattr(existing_cit, "url", None))
             if not ex_url:
                 continue
+            if (
+                cit.year
+                and existing_cit.year
+                and str(cit.year) != str(existing_cit.year)
+                and "accessed" not in f"{cit.raw_text or ''} {existing_cit.raw_text or ''}".lower()
+            ):
+                continue
             if cit_url == ex_url:
                 return True
             if cit_url in ex_url or ex_url in cit_url:

@@ -97,7 +97,7 @@ _HARVARD_BOOK = CompiledPattern.create(
     name="harvard_book",
     pattern=(
         r"^"
-        r"(?P<authors>.+?)(?:\s+\(\s*(?P<year>(?:18|19|20)\d{2}[a-z]?)\s*\)\.?\s+|(?:,\s*|\s+)(?P<year2>(?:18|19|20)\d{2}[a-z]?)[.,:]?\s+)"
+        r"(?P<authors>.+?)(?:\s+\(\s*(?P<year>(?:18|19|20)\d{2}[a-z]?)\s*\)\.?\s+|(?:,\s*|\s+)(?P<year2>(?:18|19|20)\d{2}[a-z]?)(?:,\s*(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?)?[.,:]?\s+)"
         r"(?P<title>[^.]+?)[.,]\s+"
         r"(?:(?:\d+(?:st|nd|rd|th)\s+edn?\.?|[A-Za-z]+\s+edn?\.?)\s+)?"
         r"(?P<place_pub>[^.:]+:\s*[^.]+)\.?$"
@@ -113,7 +113,7 @@ _HARVARD_ARTICLE = CompiledPattern.create(
     name="harvard_article",
     pattern=(
         r"^"
-        r"(?P<authors>.+?)(?:\s+\(\s*(?P<year>(?:18|19|20)\d{2}[a-z]?)\s*\)\.?\s+|(?:,\s*|\s+)(?P<year2>(?:18|19|20)\d{2}[a-z]?)[.,:]?\s+)"
+        r"(?P<authors>.+?)(?:\s+\(\s*(?P<year>(?:18|19|20)\d{2}[a-z]?)\s*\)\.?\s+|(?:,\s*|\s+)(?P<year2>(?:18|19|20)\d{2}[a-z]?)(?:,\s*(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?)?[.,:]?\s+)"
         r"(?P<title>[^.]+?)[.,]\s+"
         r"(?P<venue>.+)$"
     ),
@@ -343,8 +343,11 @@ class HarvardFormat:
         ):
             return True
         # Reject if authors_str has a full given name (e.g. "Smith, John A. 2020." or "... and Jane Doe. 2020.")
-        # which is Chicago Author-Date, not Harvard ("Smith, J. A., 2020." or "Smith, JA 2020")
-        if re.search(r"(?:,\s+|\band\s+)[A-ZÀ-Ý][a-zà-ÿ]{2,}\b", auth_s):
+        # which is Chicago Author-Date, not Harvard ("Smith, J. A., 2020." or "Kim, W.C. and Mauborgne, R., 2005.")
+        if re.search(
+            r"(?:,\s+|\band\s+)[A-ZÀ-Ý][a-zà-ÿ]{2,}\b(?!(?:\s+[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+)?,\s*(?:[A-ZÀ-Ý]\.?\s*[-–]?\s*)+)",
+            auth_s,
+        ):
             return True
         if auth_s.endswith(".") and "," not in auth_s:
             return True

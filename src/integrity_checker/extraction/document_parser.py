@@ -2389,19 +2389,35 @@ class DocumentParser:
                     (c.matched_pattern or "") == "vancouver_reference_entry"
                     and (not c.authors or len(grobid_refs) >= len(regex_refs) - 2)
                 )
+                is_clean_harvard_or_apa = (
+                    (c.matched_pattern or "") in {"harvard_article", "harvard_book", "apa_fallback"}
+                    and bool(c.authors)
+                    and bool(c.year)
+                    and bool(c.title and len(c.title.strip()) >= 5)
+                    and len(c.raw_text or "") <= 350
+                    and bool(
+                        re.match(
+                            r"^(?:[A-ZÀ-Ý][A-Za-zÀ-ỹ'\u2019\-]+,\s+[A-Z]|(?:[A-Z]{2,12}|[A-ZÀ-Ý][A-Za-zÀ-ỹ0-9.'\u2019\-]+(?:\s+[A-ZÀ-Ýa-z][A-Za-zÀ-ỹ0-9.'\u2019\-]+){0,3})\s*[.,]*\s*(?:\(\s*(?:18|19|20)\d{2}|\s+(?:18|19|20)\d{2}\.))",
+                            (c.raw_text or "").strip(),
+                        )
+                    )
+                )
                 if (
-                    (c.matched_pattern or "")
-                    in {
-                        "harvard_article",
-                        "harvard_book",
-                        "apa_fallback",
-                        "chicago_fallback",
-                        "mla_fallback",
-                        "vancouver_fallback",
-                        "nature_book",
-                        "acm_fallback",
-                        "unquoted_book_entry",
-                    }
+                    (
+                        (c.matched_pattern or "")
+                        in {
+                            "harvard_article",
+                            "harvard_book",
+                            "apa_fallback",
+                            "chicago_fallback",
+                            "mla_fallback",
+                            "vancouver_fallback",
+                            "nature_book",
+                            "acm_fallback",
+                            "unquoted_book_entry",
+                        }
+                        and not is_clean_harvard_or_apa
+                    )
                     or is_noisy_vancouver
                     or len(c.raw_text or "") > 420
                 ):

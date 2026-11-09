@@ -144,7 +144,7 @@ _BIB_HEADER_LINE_RE = re.compile(
     r"|tài\s+liệu\s+trích\s+dẫn|nguồn\s+tài\s+liệu(?:\s+tham\s+khảo)?|tài\s+liệu"
     r"|(?:tài\s+liệu\s+(?:từ\s+)?|sách\s+)?(?:tiếng\s+vi[ệê]t|tiếng\s+anh|tiếng\s+pháp|tiếng\s+đức"
     r"|tiếng\s+nga|tiếng\s+trung|tiếng\s+nhật|nước\s+ngoài|internet|websites?|ebooks?|trang\s+web|trực\s+tuyến)"
-    r"|(?:vietnamese|english)(?:\s+references?)?"
+    r"|(?:vietnamese|english|academic|non-academic)(?:\s+references?)?"
     r"|stt|link|liên\s+kết|theo\s+chuẩn\s+ieee"
     r")(?:\s*\([^)\n]{0,65}\))?\s*[:.]?\s*$",
     re.IGNORECASE,
@@ -157,19 +157,19 @@ _LEADING_SUBHEADER_RE = re.compile(
     r"|(?:các\s+)?(?:tài\s+liệu|bài\s+viết|nguồn|link)\s+[tk]ham\s+khảo(?:\s+khác|\s*(?:,|và)\s*trích\s+dẫn)?|tham\s+khảo"
     r"|(?:tài\s+liệu\s+(?:từ\s+)?|sách\s+)?(?:tiếng\s+vi[ệê]t|tiếng\s+anh|tiếng\s+pháp|tiếng\s+đức"
     r"|tiếng\s+nga|tiếng\s+trung|tiếng\s+nhật|nước\s+ngoài|internet|websites?|ebooks?|trang\s+web|trực\s+tuyến)"
-    r"|(?:vietnamese|english)\s+references?"
+    r"|(?:vietnamese|english|academic|non-academic)\s+references?"
     r")(?:\s*\([^)\n]{0,65}\))?\s*[:.]?\s+",
     re.IGNORECASE,
 )
 
 _UPPER_VN_R = r"[A-ZÀ-ÝĂÂĐÊÔƠƯĨŨẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼẾỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴỶỸ]"
 _PERSONAL_AUTHOR_HEAD_R = (
-    rf"(?:\*\s*)?(?:(?:van|de|der|den|von|le|la|du|di|da)\s+)*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+"
-    rf"(?:,\s*(?:{_UPPER_VN_R}\.?\s*[-–]?\s*)+|[.,]\s*(?:[A-Za-zÀ-ỹ]\.\s*[-–]?\s*)+|\s+{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?=\s*,\s*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+,\s*{_UPPER_VN_R}\.))"
-    rf"(?:[;,]\s*(?:(?:\.\s*\.\s*\.|…)\s*)?(?:&\s*|và\s*|and\s*)?(?:(?:van|de|der|den|von)\s+)*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+,\s*(?:{_UPPER_VN_R}\.?\s*[-–]?\s*)+)*"
-    rf"(?:\s+(?:(?:\.\s*\.\s*\.|…)\s*(?:&|và|and)?|&|và|and)\s+(?:(?:van|de|der|den|von)\s+)*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+,\s*(?:{_UPPER_VN_R}\.?\s*[-–]?\s*)+)*"
+    rf"(?:\*\s*)?(?:(?:van|de|der|den|von|le|la|du|di|da|al|el)\s+)*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+"
+    rf"(?:,\s*(?:{_UPPER_VN_R}\.?\s*[-–]?\s*)+|[.,]\s*(?:[A-Za-zÀ-ỹ]\.\s*[-–]?\s*)+|\s+(?:{_UPPER_VN_R}\.\s*)+|\s+{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?=\s*,\s*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+,\s*{_UPPER_VN_R}\.)|,\s+{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?:\s+{_UPPER_VN_R}\.)?(?:,\s+(?:and\s+|&\s*)?{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?:\s+{_UPPER_VN_R}\.)?(?:\s+[a-zA-ZÀ-ỹ'\u2019\-]+)?)+)"
+    rf"(?:[;,]\s*(?:(?:\.\s*\.\s*\.|…)\s*)?(?:&\s*|và\s*|and\s*)?(?:(?:van|de|der|den|von|le|la|du|di|da|al|el)\s+)*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?:,\s*|\s+)(?:{_UPPER_VN_R}\.?\s*[-–]?\s*)+)*"
+    rf"(?:\s*(?:(?:\.\s*\.\s*\.|…)\s*(?:&|và|and)?|&|(?<=\s)(?:và|and))\s*(?:(?:van|de|der|den|von|le|la|du|di|da|al|el)\s+)*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?:,\s*|\s+)(?:{_UPPER_VN_R}\.?\s*[-–]?\s*)+)*"
     r"(?:\s*,?\s*(?:et\s+al\.?|và\s+cộng\s+sự|và\s+cs\.?|và\s+ctv\.?))?"
-    r"\s*\(\s*(?:(?:18|19|20)\d{2}[a-z]?(?:,\s*[A-Za-z]+\.?(?:\s+\d{1,2})?)?|n\.?\s*d\.?)\s*\)"
+    r"(?:(?:,\s*|\s+)\((?:Eds?\.?|Ed\.?|eds?\.?|chủ\s+biên)\)\.?)?\s*[.,]*\s*\(\s*(?:(?:18|19|20)\d{2}[a-z]?(?:,\s*[A-Za-z]+\.?(?:\s+\d{1,2})?)?|n\.?\s*d\.?)\s*\)"
 )
 _VN_FULLNAME_AUTHOR_HEAD_R = (
     rf"(?:(?<![\-–\d])\d{{1,3}}[^\S\n]*[\.\)][^\S\n]+)?{_UPPER_VN_R}[a-zà-ỹ]+(?:\s+{_UPPER_VN_R}[a-zà-ỹ]+){{1,4}}"
@@ -184,7 +184,8 @@ _DATED_WEB_AUTHOR_HEAD_R = (
 _CORP_AUTHOR_HEAD_R = (
     r"(?:(?:(?<![\-–\d])\d{1,3}[^\S\n]*[\.\)][^\S\n]+)?(?:Bộ|Tổng\s+cục|Ủy\s+ban|Uỷ\s+ban|Chính\s+phủ|Quốc\s+hội|Thủ\s+tướng|Ban\s+Chấp\s+hành|Đảng\s+Cộng\s+sản|Tòa\s+án|Toà\s+án|Viện\s+kiểm\s+sát|Thanh\s+tra|Kiểm\s+toán|Văn\s+phòng\s+Quốc\s+hội|Ngân\s+hàng|Tổ\s+chức|Hiệp\s+hội|Trường\s+Đại\s+học|Công\s+ước|Công\s+ty"
     r"|Department|Ministry|Reserve\s+Bank|World\s+Health|United\s+Nations|World\s+Bank|International\s+Labour|National\s+Assembly|Object\s+Management\s+Group)"
-    r"(?:[^().\n]|\b(?:TP|Tp)\.|\([A-Z0-9&/\-]{2,12}\)){0,85}?\.?\s*\(\s*(?:18|19|20)\d{2}(?:\s*[-–]\s*(?:18|19|20)\d{2})?[a-z]?\s*\)[.,:])"
+    r"(?:[^().\n]|\b(?:TP|Tp)\.|\([A-Z0-9&/\-]{2,12}\)){0,85}?\.?\s*\(\s*(?:18|19|20)\d{2}(?:\s*[-–]\s*(?:18|19|20)\d{2})?[a-z]?\s*\)[.,:]"
+    r"|(?!(?:Retrieved|Accessed|Available|Published|Reprinted|Adapted|Translated|In|Vol|No|Chapter|Section|Edition|Working|Technical|Master|Doctoral|PhD|See|Table|Figure)\b)(?:[A-Z]{2,12}|[A-ZÀ-Ý][a-zA-ZÀ-ỹ0-9'\u2019\-]+(?:\.[a-z]{2,6})?(?:\s+(?:[A-ZÀ-Ý][a-zA-ZÀ-ỹ0-9'\u2019\-]+|and|&|of|for|in|on|the|de|la)){0,4})\s*[.,]*\s*\(\s*(?:18|19|20)\d{2}[a-z]?\s*\)\.\s*(?=[A-ZÀ-Ý\"\u201c\u2018']))"
 )
 _LEGAL_HEAD_R = (
     r"(?:(?<![\-–\d])\d+[^\S\n]*[\.\)][^\S\n]+)?(?:Hiến\s+pháp(?:\s+nước\s+Cộng\s+hòa\s+xã\s+hội\s+chủ\s+nghĩa\s+Việt\s+Nam)?(?:\s+các)?(?:\s+năm|\s+\d{4})"
@@ -204,9 +205,10 @@ _CSE_AUTHOR_HEAD_R = (
     r"\s*\(\s*(?:18|19|20)\d{2}[a-z]?\s*\)"
 )
 _NAMEYEAR_DOT_AUTHOR_HEAD_R = (
-    rf"(?:Anonymous\.|(?:(?:van|de|der|den|von|le|la|du|di|da)\s+)*{_UPPER_VN_R}[A-Za-zÀ-ỹ'\u2019\-]+,\s+"
-    rf"(?:{_UPPER_VN_R}[A-Za-zÀ-ỹ.\s,&;\u00a0'\u2019\-]{{0,90}}?|\s*et\s+al\.)\.)"
-    r"\s+(?:18|19|20)\d{2}[a-z]?(?:\s*\[(?:18|19|20)\d{2}\])?\.\s+(?=[A-ZÀ-Ý\"\u201c\u2018])"
+    rf"(?:Anonymous\.|(?:(?:van|de|der|den|von|le|la|du|di|da|al|el)\s+)*{_UPPER_VN_R}[A-Za-zÀ-ỹ'\u2019\-]+,\s+"
+    rf"(?:{_UPPER_VN_R}[A-Za-zÀ-ỹ.\s,&;\u00a0'\u2019\-]{{0,90}}?|\s*et\s+al\.)\.,?"
+    r"|(?:Accenture|Commitment\s+2050|GSMA|OECD|UNESCO|UNICEF|UNCTAD|WTO|WHO|ILO|IMF|World\s+Bank|European\s+Commission),)"
+    r"\s+(?:18|19|20)\d{2}[a-z]?(?:,\s*(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?)?(?:\s*\[(?:18|19|20)\d{2}\])?\.\s+(?=[A-ZÀ-Ý\"\u201c\u2018'\d])"
 )
 _AU_HARVARD_AUTHOR_HEAD_R = (
     rf"(?:(?:van|de|der|den|von|le|la|du|di|da)\s+)*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+,\s+"
@@ -960,7 +962,7 @@ class ReferenceListParser:
                 continue
             # Never split inside an author list when the preceding segment has no year, n.d., URL/DOI, or legal keyword
             if not re.search(
-                r"\b(?:18|19|20)\d{2}\b|\bn\.?\s*d\.?\b|https?://|\bdoi\s*:|(?:\bBộ\s+luật|\bLuật|\bNghị\s+định|\bThông\s+tư|\bQuyết\s+định|\bHiến\s+pháp|\bPháp\s+lệnh|\bNghị\s+quyết|\bChỉ\s+thị)\b",
+                r"\b(?:18|19|20)\d{2}\b|\bn\.?\s*d\.?\b|https?://|\bdoi\s*:|\b10\.\d{4,9}/|\bpp?\.\s*[\d\-–]+\.|(?:\bBộ\s+luật|\bLuật|\bNghị\s+định|\bThông\s+tư|\bQuyết\s+định|\bHiến\s+pháp|\bPháp\s+lệnh|\bNghị\s+quyết|\bChỉ\s+thị)\b",
                 prev_seg,
                 re.IGNORECASE,
             ):
@@ -970,11 +972,11 @@ class ReferenceListParser:
                 r"\b(?:18|19|20)\d{2}\b|https?://|\bdoi\s*:", prev_seg, re.IGNORECASE
             ):
                 continue
-            # Must follow a sentence-ending period/semicolon, a URL/DOI, a CSE vol:page range, an access date, or a sub-header
+            # Must follow a sentence-ending period/semicolon, a URL/DOI, a CSE vol:page range, an ISBN/ISSN, an access date, or a sub-header
             if re.search(
-                r"(?:[\.;]|https?://\S+|\bdoi\s*:\s*10\.\d{4,9}/\S+|\b\d+\s*[:,\s]\s*\d+\s*[\-–]\s*\d+|\(\s*original\s+work\s+published\s+[^)]+\)|\b(?:Accessed|Retrieved|Truy\s+cập)[^()\n]{3,35}\d{2,4})\s+$"
+                r"(?:[\.;]|https?://\S+|\bdoi\s*:\s*10\.\d{4,9}/\S+|(?:[\),\s:]|\bpp?\.?\s*)\d+\s*[\-–]\s*\d+|\bIS[SB]N(?:-1[03])?\s*:?\s*[0-9Xx\-]{8,17}|\(\s*original\s+work\s+published\s+[^)]+\)|\b(?:Accessed|Retrieved|Truy\s+cập)[^()\n]{3,35}\d{2,4})\s+$"
                 r"|(?:văn\s+bản\s+(?:quy\s+phạm\s+)?pháp\s+luật|tài\s+liệu\s+tham\s+khảo"
-                r"|tiếng\s+việt|tiếng\s+anh|tiếng\s+pháp)(?:\s*\([^)\n]{0,65}\))?\s*[:.]?\s+$",
+                r"|tiếng\s+việt|tiếng\s+anh|tiếng\s+pháp|(?:academic|non-academic)\s+references?)(?:\s*\([^)\n]{0,65}\))?\s*[:.]?\s+$",
                 prefix,
                 flags=re.IGNORECASE,
             ) or (
@@ -1003,7 +1005,7 @@ class ReferenceListParser:
             # Trim any trailing sub-header that belongs to the next section
             piece = re.sub(
                 r"\s+(?:[A-Z]\.\s*)?(?:Văn\s+bản\s+(?:quy\s+phạm\s+)?pháp\s+luật"
-                r"|B\.\s*Tài\s+liệu\s+tham\s+khảo|Tiếng\s+Việt|Tiếng\s+Anh|Tiếng\s+Pháp)\s*[:.]?\s*$",
+                r"|B\.\s*Tài\s+liệu\s+tham\s+khảo|Tiếng\s+Việt|Tiếng\s+Anh|Tiếng\s+Pháp|(?:Academic|Non-academic)\s+references?)\s*[:.]?\s*$",
                 "",
                 piece,
                 flags=re.IGNORECASE,
@@ -1174,7 +1176,8 @@ class ReferenceListParser:
                     1
                     for ln in raw_nonempty
                     if re.search(
-                        r"\(\s*(?:(?:18|19|20)\d{2}[a-z]?(?:,\s*[A-Za-z]+\.?(?:\s+\d{1,2})?)?|n\.?\s*d\.?)\s*\)[.,:]?",
+                        r"\(\s*(?:(?:18|19|20)\d{2}[a-z]?(?:,\s*[A-Za-z]+\.?(?:\s+\d{1,2})?)?|n\.?\s*d\.?)\s*\)[.,:]?"
+                        r"|^[A-ZÀ-Ý][^\n]{1,120}?(?:\.,?|,)\s+(?:18|19|20)\d{2}[a-z]?(?:,\s*[A-Za-z]+)?\.\s+\S",
                         ln,
                     )
                 )
@@ -1196,6 +1199,10 @@ class ReferenceListParser:
                         r"|\((?:[^()]+:\s+)?[^()]+,\s*(?:18|19|20)\d{2}[a-z]?\)\.)(?:\s*(?:URL\s+\S+|https?://\S+|doi:\s*\S+))?\s*$",
                         ln,
                         re.IGNORECASE,
+                    )
+                    and not re.match(
+                        r"^[A-ZÀ-Ý][a-zA-ZÀ-ÿ'\u2019\-]+,\s+(?:[A-Z]\.\s*)+.*,\s*(?:18|19|20)\d{2}[a-z]?(?:,\s*[A-Za-z]+)?\.\s*$",
+                        ln,
                     )
                 )
                 if acl_yr_count >= 2 and acl_yr_count > comma_end_yr_count and acl_yr_count >= apa_yr_count:
@@ -1298,9 +1305,10 @@ class ReferenceListParser:
 
         # Step 1+2: Rejoin hyphen-broken and line-wrapped URLs BEFORE flattening newlines to spaces.
         joined_lines: list[str] = []
+        curr_entry_buf = ""
         for raw_ln in text.splitlines():
             s_ln = raw_ln.strip()
-            if not s_ln:
+            if not s_ln or _BIB_HEADER_LINE_RE.match(s_ln):
                 continue
             if joined_lines:
                 prev_ln = joined_lines[-1]
@@ -1309,14 +1317,29 @@ class ReferenceListParser:
                 if (
                     re.search(r"https?://\S+$", prev_ln, re.IGNORECASE)
                     and not s_first.startswith(("---", "--", "—", "–"))
+                    and not _INLINE_ENTRY_START_RE.match(s_ln)
                     and (
-                        re.match(r"^(?:\.[a-z]{2,10}/|[a-zA-Z0-9_~%#-]*[=&%_][a-zA-Z0-9_~%#=&.-]+)", s_first)
-                        or (len(s_ln.split()) == 1 and re.match(r"^[a-z0-9_~%#/.&=-]+\.?$", s_first))
+                        re.match(r"^(?:\.[a-z]{2,10}/|[a-zA-Z0-9_~%#+/-]*[=&%_+][a-zA-Z0-9_~%#=&.+/-]+)", s_first)
+                        or (len(s_ln.split()) == 1 and re.match(r"^[a-zA-Z0-9_~%#/.&+=-]+\.?$", s_first))
                     )
                 ):
                     joined_lines[-1] = prev_ln + s_ln
+                    curr_entry_buf += s_ln
                     continue
+                # If a new bibliography entry starts at column 0 of s_ln and the previous entry
+                # already has a year/URL and >=40 chars, ensure prev_ln has a terminal period so
+                # flattening newlines to spaces does not glue unpunctuated line endings (e.g. "New Jersey: Wiley\nAuthor (2016)").
+                if (
+                    _INLINE_ENTRY_START_RE.match(s_ln)
+                    and len(curr_entry_buf) >= 40
+                    and re.search(r"\b(?:18|19|20)\d{2}\b|\bn\.?\s*d\.?\b|https?://", curr_entry_buf, re.IGNORECASE)
+                    and not re.search(r"(?:[.,;&\-–—]|\b(?:and|và|in|of|for|from|to|by|with))\s*$", prev_ln, re.IGNORECASE)
+                    and not re.search(r"https?://\S+$", prev_ln, re.IGNORECASE)
+                ):
+                    joined_lines[-1] = prev_ln + "."
+                    curr_entry_buf = ""
             joined_lines.append(s_ln)
+            curr_entry_buf = f"{curr_entry_buf} {s_ln}".strip() if curr_entry_buf else s_ln
         text_rejoined = "\n".join(joined_lines)
         flat = re.sub(r"-\s*\n\s*", "-", text_rejoined)
         flat = re.sub(r"\s+", " ", flat).strip()
@@ -1368,8 +1391,13 @@ class ReferenceListParser:
                 chunk = flat[start:end].strip()
                 if (
                     url_chunks
-                    and not re.search(r"\b(?:18|19|20)\d{2}\b", chunk)
-                    and re.match(r"^[^.]{1,35}\.\s*url\s*:\s*(?:https?://|www\.)\S+", chunk, re.IGNORECASE)
+                    and (
+                        re.match(r"^(?:and|or|&|và|,)\s+(?:https?://|www\.)\S+\s*$", chunk, re.IGNORECASE)
+                        or (
+                            not re.search(r"\b(?:18|19|20)\d{2}\b", chunk)
+                            and re.match(r"^[^.]{1,35}\.\s*url\s*:\s*(?:https?://|www\.)\S+", chunk, re.IGNORECASE)
+                        )
+                    )
                 ):
                     url_chunks[-1] = f"{url_chunks[-1]} {chunk}"
                 elif len(chunk) > 20 or is_vn_legal_reference(chunk):
@@ -1435,7 +1463,7 @@ class ReferenceListParser:
         running_head_prefix_re = re.compile(r"^\s*Running\s+head\s*:.*$", re.IGNORECASE)
         allcaps_header_page_re = re.compile(r"^[A-Z0-9\s,'\-:]{4,70}\s+\d{1,3}\s*$")
         conf_running_header_re = re.compile(
-            r"^\s*(?:(?:Published|Under\s+review)\s+as\s+a\s+(?:conference|workshop)\s+paper\s+at\s+.+|Preprint\.?(?:\s+Under\s+review\.?)?|Page\s+\d+(?:\s+of\s+\d+)?|(?:\d{1,3}\s+)?[A-Z][A-Za-zÀ-ÿ\-]+\s+et\s+al\.(?:\s+\d{1,3})?)\s*$",
+            r"^\s*(?:(?:Published|Under\s+review)\s+as\s+a\s+(?:conference|workshop)\s+paper\s+at\s+.+|Preprint\.?(?:\s+Under\s+review\.?)?|(?:(?:Page\s+)?\d+\s+of\s+\d+|Page\s+\d+|of\s+\d{1,4})|(?:\d{1,3}\s+)?[A-Z][A-Za-zÀ-ÿ\-]+\s+et\s+al\.(?:\s+\d{1,3})?)\s*$",
             re.IGNORECASE,
         )
         vn_journal_furniture_re = re.compile(
@@ -1688,6 +1716,7 @@ class ReferenceListParser:
         # Strip Wingdings / Private Use Area bullets, dangling access-time prefix ("10:15 Kruse..."), meta-analysis leading asterisk ("*Adil, A."), or template ellipsis ("… Vaswani, A.")
         entry = re.sub(r"^\s*[\uf0a7\uf0b7\uf0d8\uf0fc\uf076•●▪▫]+\s*", "", entry)
         entry = re.sub(r"^\s*\d{1,2}:\d{2}(?::\d{2})?\s+(?=[A-ZÀ-Ý])", "", entry)
+        entry = re.sub(r"^\s*(?:page\s+)?(?:\d+\s+)?of\s+\d{1,4}\s+(?=[A-ZÀ-Ý])", "", entry, flags=re.IGNORECASE)
         entry = re.sub(r"^\s*(?:\*|\u2026|\.{2,})\s*(?=[A-ZÀ-Ý])", "", entry)
         # Strip Slavic/European Harvard key prefix (e.g. "Ewing 2002 – Ewing E.T. (2002) ...")
         entry = re.sub(

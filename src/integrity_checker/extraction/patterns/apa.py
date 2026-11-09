@@ -40,6 +40,7 @@ _STOPWORDS_AHEAD = (
     r"|Specifically|Furthermore|Moreover|Notably|Importantly|Additionally|Meanwhile"
     r"|Consequently|Nevertheless|Nonetheless|Therefore|Thus|Hence|Indeed|Instead"
     r"|Likewise|Otherwise|Subsequently|Accordingly|Alternatively|Finally|Overall"
+    r"|Also|First|Firstly|Second|Secondly|Third|Thirdly|Lastly"
     r"|Recently|Traditionally|Historically|Yet|Still|Even|While|Whereas|Because"
     r"|Since|When|Where|If|Unless|Until|After|Before|Once|Despite|Unlike|Like"
     r"|Table|Figure|Chapter|Section|Appendix|Part|Page|Papers|Networks"
@@ -169,8 +170,8 @@ _APA_SIMPLE_ENTRY = CompiledPattern.create(
     name="apa_simple_entry",
     pattern=(
         r"^"
-        r"(?P<authors>[A-Z][a-zÀ-ž]+(?:,\s*[A-Z]\.?\s*[A-Z]?[a-zÀ-ž]*)*)"
-        r"\s+\(\s*(?P<year>\d{4})(?P<suffix>[a-z])?\)"
+        r"(?P<authors>[A-Z][a-zA-ZÀ-ž0-9.'\u2019\-]+(?:,\s*[A-Z]\.?\s*[A-Z]?[a-zÀ-ž]*|\s+[A-Z][a-zA-ZÀ-ž0-9.'\u2019\-]+){0,5})"
+        r"\.?\s+\(\s*(?P<year>\d{4})(?P<suffix>[a-z])?\)"
         r"\.?\s*"
         r"(?P<title>[^\.]+?)"
         r"\.\s*"
@@ -694,7 +695,8 @@ class APAFormat:
             style=CitationStyle.APA,
             matched_pattern="apa_reference_entry",
         )
-        clean_auth = re.sub(r"^\s*(?:\[\s*\d+\s*\]|\d{1,3}\s*[\.\)])\s*", "", authors_raw).strip().rstrip(",")
+        clean_auth = re.sub(r"^\s*(?:\[\s*\d+\s*\]|\d{1,3}\s*[\.\)])\s*", "", authors_raw).strip()
+        clean_auth = re.sub(r"\s*,?\s*\((?:Eds?\.?|Ed\.?|eds?\.?|chủ\s+biên)\)[.,]*\s*$", "", clean_auth).rstrip("., ")
         if clean_auth:
             citation.authors = self._parse_authors(clean_auth)
         citation.year = match.group("year")
@@ -733,7 +735,8 @@ class APAFormat:
         # Extract authors (strip any leading [N] or N. marker before parsing)
         authors_str = match.group("authors")
         if authors_str:
-            authors_str = re.sub(r"^\s*(?:\[\s*\d+\s*\]|\d{1,3}\s*[\.\)])\s*", "", authors_str).strip().rstrip(",")
+            authors_str = re.sub(r"^\s*(?:\[\s*\d+\s*\]|\d{1,3}\s*[\.\)])\s*", "", authors_str).strip()
+            authors_str = re.sub(r"\s*,?\s*\((?:Eds?\.?|Ed\.?|eds?\.?|chủ\s+biên)\)[.,]*\s*$", "", authors_str).rstrip("., ")
             citation.authors = self._parse_authors(authors_str)
 
         # Extract year (for "(n.d.)" entries, only fallback to explicit Retrieved/Accessed year, not URL path years)
@@ -750,7 +753,7 @@ class APAFormat:
         title = match.group("title").strip()
         venue = match.group("venue").strip()
 
-        # Rejoin title if it was split at an abbreviation, middle initial, decimal, or inside parentheses (e.g. "Tp. HCM.", "fMRI vs. SPECT", "Dr. Amen", "Daniel G. Amen", "Version 24.12", "(5th ed., text rev.)")
+        # Rejoin title if it was split at an abbreviation, middle initial, decimal, or inside parentheses/quotes (e.g. "Tp. HCM.", "fMRI vs. SPECT", "Dr. Amen", "Daniel G. Amen", "Version 24.12", "(5th ed., text rev.)", "“Wilh. Wilhelmsen...”")
         while (
             (
                 re.search(
@@ -759,6 +762,8 @@ class APAFormat:
                 )
                 or (re.search(r"\d$", title) and re.match(r"^\d", venue))
                 or title.count("(") > title.count(")")
+                or (title.startswith("\u201c") and "\u201d" not in title and "\u201d" in venue)
+                or (title.startswith('"') and title.count('"') == 1 and '"' in venue)
             )
             and ". " in venue
         ):
