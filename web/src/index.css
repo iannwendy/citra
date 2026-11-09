@@ -1,9 +1,7 @@
-/* Self-hosted Sentient (Fontshare Editorial Serif) — Immune to CSP & zero external latency */
+/* Self-hosted Sentient (Fontshare Editorial Serif — Full 134/134 Vietnamese Glyph Coverage) — Immune to CSP & zero external latency */
 @font-face {
   font-family: 'Sentient';
-  src:
-    url('/fonts/Sentient-Light.woff2') format('woff2'),
-    url('https://cdn.fontshare.com/wf/43OAXICAEMXK2ZL74G7H76KFIYNEDOYN/35V5DYORRU36WSBMUAXF43PXJDG6AK72/M6X7C56BMVHUUEP2JAWS7SGZ7N6BGP7I.woff2') format('woff2');
+  src: url('/fonts/Sentient-Light.woff2') format('woff2');
   font-weight: 300;
   font-style: normal;
   font-display: swap;
@@ -11,9 +9,7 @@
 
 @font-face {
   font-family: 'Sentient';
-  src:
-    url('/fonts/Sentient-Regular.woff2') format('woff2'),
-    url('https://cdn.fontshare.com/wf/RVTZPYAA57KV4AMXRX7ZIPJXSTYCRP7A/36OUS5CBIXRKI2QU7G7OUHOK7HHA53Y2/SIH66VPT4WS2HIF5PEJNDU4INNUF54LG.woff2') format('woff2');
+  src: url('/fonts/Sentient-Regular.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -983,7 +979,7 @@
 @layer utilities {
   /* Typography */
   .font-display {
-    font-family: 'Source Serif 4', Georgia, serif;
+    font-family: 'Sentient', 'Source Serif 4', Georgia, serif;
   }
 
   .font-body {
@@ -1401,6 +1397,11 @@
   font-family: 'Sentient', 'Source Serif 4', Georgia, serif;
   font-weight: 300;
   letter-spacing: -0.05em;
+}
+
+html[lang='vi'] .font-solva-serif,
+.solva-editorial-root[data-lang='vi'] .font-solva-serif {
+  letter-spacing: -0.03em;
 }
 
 .font-solva-sans {

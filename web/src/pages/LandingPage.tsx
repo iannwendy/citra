@@ -407,7 +407,11 @@ export function LandingPage() {
   };
 
   return (
-    <div className="solva-editorial-root min-h-screen overflow-x-clip selection:bg-[#1C1A15] selection:text-[#FBFAF6]">
+    <div
+      lang={lang}
+      data-lang={lang}
+      className="solva-editorial-root min-h-screen overflow-x-clip selection:bg-[#1C1A15] selection:text-[#FBFAF6]"
+    >
       <SolvaHeader
         lang={lang}
         onToggleLanguage={toggleLanguage}
@@ -558,9 +562,9 @@ function SolvaHeader({
       }}
       className="fixed top-0 left-0 right-0 z-50"
     >
-      <div className="max-w-[1280px] mx-auto px-5 sm:px-6 lg:px-[40px] h-[64px] lg:h-[76px] flex items-center justify-between gap-4">
+      <div className="max-w-[1280px] mx-auto px-5 sm:px-6 lg:px-8 xl:px-[40px] h-[64px] lg:h-[76px] flex items-center justify-between gap-2 xl:gap-4">
         {/* Left: Brand Logo */}
-        <div className="flex items-center lg:w-[190px] shrink-0">
+        <div className="flex items-center shrink-0">
           <Link
             to="/"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
@@ -581,7 +585,7 @@ function SolvaHeader({
         {/* Center: Solva Navigation Links + Dropdown */}
         <nav
           aria-label="Primary Navigation"
-          className="hidden lg:flex items-center justify-center flex-1 gap-1"
+          className="hidden lg:flex items-center justify-center flex-1 min-w-0 gap-0.5 xl:gap-1"
         >
           {/* Dropdown Trigger (`Platform v` / `Kiến trúc v`) */}
           <div
@@ -593,7 +597,7 @@ function SolvaHeader({
               onClick={() => setDropdownOpen((prev) => !prev)}
               aria-expanded={dropdownOpen}
               style={{ color: 'var(--solva-muted)' }}
-              className="inline-flex items-center gap-[6px] h-[44px] px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal hover:opacity-80 transition-opacity cursor-pointer"
+              className="inline-flex items-center gap-[5px] h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity cursor-pointer"
             >
               <span>{lang === 'vi' ? 'Nền tảng' : 'Platform'}</span>
               <ChevronDown
@@ -650,7 +654,7 @@ function SolvaHeader({
           <a
             href="#interactive-demo"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Trình thẩm định' : 'Inspector'}
           </a>
@@ -658,7 +662,7 @@ function SolvaHeader({
           <a
             href="#how-it-works"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Quy trình' : 'Pipeline'}
           </a>
@@ -666,7 +670,7 @@ function SolvaHeader({
           <a
             href="#benchmark-120k"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center gap-1.5 h-[44px] px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal hover:opacity-80 transition-opacity"
+            className="inline-flex items-center gap-1.5 h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             <span>{lang === 'vi' ? 'Thực nghiệm 120K' : '120K Benchmark'}</span>
@@ -675,7 +679,7 @@ function SolvaHeader({
           <a
             href="#taxonomy"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Gói dịch vụ' : 'Taxonomy'}
           </a>
@@ -684,7 +688,7 @@ function SolvaHeader({
             to="/pricing"
             data-testid="landing-pricing-link"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Bảng giá' : 'Pricing'}
           </Link>
@@ -711,7 +715,7 @@ function SolvaHeader({
           <Link
             to={isAuthenticated ? '/dashboard' : '/login'}
             style={{ color: 'var(--solva-muted)' }}
-            className="hidden sm:inline-flex items-center h-[44px] px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal hover:opacity-80 transition-opacity"
+            className="hidden sm:inline-flex items-center h-[44px] px-[10px] xl:px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Đăng nhập' : 'Sign in'}
           </Link>

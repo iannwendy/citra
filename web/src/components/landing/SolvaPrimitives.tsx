@@ -338,13 +338,29 @@ export function SolvaTwoToneHeading({
     });
   }, []);
 
+  const normalizedPrimary = primary.normalize('NFC');
+  const normalizedSecondary = secondary ? secondary.normalize('NFC') : undefined;
+  const hasVietnamese =
+    /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ]/.test(
+      normalizedPrimary
+    ) ||
+    (normalizedSecondary
+      ? /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬÈÉẺẼẸÊỀẾỂỄỆÌÍỈĨỊÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢÙÚỦŨỤƯỪỨỬỮỰỲÝỶỸỴĐ]/.test(
+          normalizedSecondary
+        )
+      : false);
+
+  const leadingTrackingClass = hasVietnamese
+    ? 'leading-[1.15] tracking-[-0.03em]'
+    : 'leading-[1.06] tracking-[-0.05em]';
+
   const sizeClass =
     size === 'h1'
-      ? 'text-[40px] sm:text-[48px] xl:text-[56px] leading-[1.06] tracking-[-0.05em]'
-      : 'text-[34px] sm:text-[40px] xl:text-[48px] leading-[1.06] tracking-[-0.05em]';
+      ? `text-[40px] sm:text-[48px] xl:text-[56px] ${leadingTrackingClass}`
+      : `text-[34px] sm:text-[40px] xl:text-[48px] ${leadingTrackingClass}`;
 
-  const primaryWords = primary.trim().split(/\s+/);
-  const secondaryWords = secondary ? secondary.trim().split(/\s+/) : [];
+  const primaryWords = normalizedPrimary.trim().split(/\s+/);
+  const secondaryWords = normalizedSecondary ? normalizedSecondary.trim().split(/\s+/) : [];
   const isVisible = phase === 'visible';
   const wordY = phase === 'below' ? 28 : phase === 'above' ? -14 : 0;
 
