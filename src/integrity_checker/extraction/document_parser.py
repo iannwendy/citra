@@ -1753,22 +1753,46 @@ class DocumentParser:
                         )
                         continue
 
-                # Coalesce standalone URL fragment split by GROBID from the preceding entry
+                # Coalesce standalone URL/DOI/Retrieved fragment split by GROBID from the preceding entry
                 if (
                     not ref.authors
-                    and ref.year is None
-                    and re.match(
-                        r"^(?:URL(?:\s+https?://\S+)?|https?://\S+)$",
-                        (ref.raw_text or ref.title or "").strip(),
-                        re.IGNORECASE,
+                    and not ref.title
+                    and not ref.venue
+                    and (
+                        ref.doi
+                        or ref.url
+                        or re.match(
+                            r"^(?:URL(?:\s+https?://\S+)?|https?://\S+)$",
+                            (ref.raw_text or "").strip(),
+                            re.IGNORECASE,
+                        )
                     )
                 ):
-                    if grobid_refs and not grobid_refs[-1].url:
-                        from integrity_checker.retrieval.link_validator import clean_extracted_url
+                    if grobid_refs:
+                        prev_g = grobid_refs[-1]
+                        if ref.doi and not prev_g.doi:
+                            prev_g.doi = ref.doi
+                        if ref.url and not prev_g.url:
+                            prev_g.url = ref.url
+                        elif not prev_g.url:
+                            from integrity_checker.retrieval.link_validator import (
+                                clean_extracted_url,
+                            )
 
-                        extracted_u = clean_extracted_url(ref.raw_text or ref.title or "")
-                        if extracted_u.lower().startswith(("http://", "https://")):
-                            grobid_refs[-1].url = extracted_u
+                            extracted_u = clean_extracted_url(ref.raw_text or "")
+                            if extracted_u.lower().startswith(("http://", "https://")):
+                                prev_g.url = extracted_u
+                    continue
+
+                # Skip bogus URL-slug pseudo-author fragments with no title/venue/doi/url (e.g. "Pre_And_Post_Crisis_Study_On_Bahrain (2020)")
+                if (
+                    not ref.title
+                    and not ref.venue
+                    and not ref.doi
+                    and not ref.url
+                    and ref.authors
+                    and any("_" in str(a) for a in ref.authors)
+                ):
                     continue
 
                 # Coalesce consecutive split GROBID entries where the first half has only
@@ -2201,20 +2225,28 @@ class DocumentParser:
             if not target.year and donor.year:
                 target.year = donor.year
             if not target.title and donor.title:
-                target.title = donor.title
-                target.title_normalized = donor.title_normalized
-                if donor.authors and not donor_is_multi_chunk:
-                    target.authors = [
-                        getattr(a, "raw", None) or str(a) for a in donor.authors
-                    ]
-                if donor.year and (not target.year or str(target.year).startswith("190")):
-                    target.year = donor.year
-                if donor.venue and not target.venue:
-                    target.venue = donor.venue
-                if donor.title not in (target.raw_text or ""):
-                    target.raw_text = f"{(target.raw_text or '').rstrip('. ')}. {donor.title}"
-                    if target.venue and target.venue not in target.raw_text:
-                        target.raw_text = f"{target.raw_text.rstrip('. ')}. {target.venue}"
+                donor_t_clean = re.sub(
+                    r"[,\s]+(?:18|19|20)\d{2}[a-z]?\.?$", "", donor.title.strip()
+                ).strip()
+                is_publisher_only_title = bool(
+                    target.venue
+                    and donor_t_clean.lower() == target.venue.strip().lower()
+                )
+                if not is_publisher_only_title:
+                    target.title = donor.title
+                    target.title_normalized = donor.title_normalized
+                    if donor.authors and not donor_is_multi_chunk:
+                        target.authors = [
+                            getattr(a, "raw", None) or str(a) for a in donor.authors
+                        ]
+                    if donor.year and (not target.year or str(target.year).startswith("190")):
+                        target.year = donor.year
+                    if donor.venue and not target.venue:
+                        target.venue = donor.venue
+                    if donor.title not in (target.raw_text or ""):
+                        target.raw_text = f"{(target.raw_text or '').rstrip('. ')}. {donor.title}"
+                        if target.venue and target.venue not in target.raw_text:
+                            target.raw_text = f"{target.raw_text.rstrip('. ')}. {target.venue}"
             target_already_confirmed = bool(
                 getattr(target, "_num_idx_confirmed", False)
                 and target.numeric_index is not None
@@ -2272,10 +2304,10 @@ class DocumentParser:
                     target.raw_text = f"{target.raw_text}. Retrieved from {target.url}"
 
         # Coalesce adjacent split GROBID <biblStruct> fragments when GROBID split a
-        # single bibliography entry across two consecutive items (e.g., author+year
-        # header in b8 and colon-prefixed title+DOI in b9, or author+title in b20
-        # and trailing publisher+DOI in b21).
-        if len(grobid_refs) >= 2 and len(grobid_refs) > len(regex_refs) >= 5:
+        # single bibliography entry across two consecutive items (e.g., author(+year)
+        # header in b8 and title+DOI in b9, or author+title in b20 and trailing
+        # publisher/DOI in b21).
+        if len(grobid_refs) >= 2:
             coalesced_grobid: list[Citation] = []
             gi = 0
             while gi < len(grobid_refs):
@@ -2284,18 +2316,21 @@ class DocumentParser:
                     nxt = grobid_refs[gi + 1]
                     cur_has_title = bool((cur.title or "").strip())
                     nxt_has_title = bool((nxt.title or "").strip())
-                    # Split Pattern A: cur has authors+year only (no title/DOI/URL), nxt has title + same year
+                    # Split Pattern A: cur has authors(+optional year) only (no title/venue/DOI/URL), nxt has title
                     if (
                         not cur_has_title
+                        and not cur.venue
                         and not cur.doi
                         and not cur.url
                         and cur.authors
-                        and cur.year
                         and nxt_has_title
-                        and (not nxt.year or nxt.year == cur.year)
+                        and (not cur.year or not nxt.year or nxt.year == cur.year)
                         and len(nxt.authors or []) <= 1
                     ):
-                        nxt.authors = list(cur.authors)
+                        if not cur.year and nxt.authors:
+                            nxt.authors = list(cur.authors) + list(nxt.authors)
+                        else:
+                            nxt.authors = list(cur.authors)
                         nxt.year = nxt.year or cur.year
                         auth_str = ", ".join(str(a) for a in nxt.authors)
                         nxt.raw_text = f"{auth_str} ({nxt.year}) {nxt.title}" + (
@@ -2316,6 +2351,21 @@ class DocumentParser:
                         cur.doi = nxt.doi
                         cur.url = cur.url or nxt.url
                         cur.raw_text = f"{(cur.raw_text or '').rstrip('. ')}. {(nxt.raw_text or '').strip()}"
+                        coalesced_grobid.append(cur)
+                        gi += 2
+                        continue
+                    # Split Pattern C: cur has title, nxt has no title, no year, no venue, no DOI, no URL (trailing publisher/editor/org tail)
+                    if (
+                        cur_has_title
+                        and not nxt_has_title
+                        and not nxt.year
+                        and not nxt.venue
+                        and not nxt.doi
+                        and not nxt.url
+                    ):
+                        tail_txt = (nxt.raw_text or "").strip()
+                        if tail_txt:
+                            cur.raw_text = f"{(cur.raw_text or '').rstrip('. ')}. {tail_txt}"
                         coalesced_grobid.append(cur)
                         gi += 2
                         continue
@@ -2480,7 +2530,21 @@ class DocumentParser:
                 if len(g_title_norm) >= 12 and (g_title_norm in c_title_norm or g_title_norm in c_raw_norm):
                     overlap_g = g
                     break
-                if not g.title and len(c_title_norm) >= 3 and c_title_norm in g_raw_norm and (not g.year or not c.year or g.year == c.year):
+                g_venue_norm = re.sub(r"[^\w\s]", " ", (g.venue or "").lower())
+                g_venue_norm = re.sub(r"\s+", " ", g_venue_norm).strip()
+                if (
+                    not g.title
+                    and len(c_title_norm) >= 3
+                    and (
+                        c_title_norm in g_raw_norm
+                        or (
+                            len(g_venue_norm) >= 5
+                            and g_venue_norm in c_title_norm
+                            and self._citation_key(g)[2] == self._citation_key(c)[2]
+                        )
+                    )
+                    and (not g.year or not c.year or str(g.year) == str(c.year))
+                ):
                     overlap_g = g
                     break
                 if not g.title and c.authors and len(c.authors) >= 2:
@@ -2551,6 +2615,23 @@ class DocumentParser:
             c.source = "merged"
             c.source_confidence = c.confidence
             merged.append(c)
+
+        # Drop any remaining title-less GROBID fragment whose (first_author, year)
+        # already matches another merged entry that has a title (e.g. 83.pdf, 176.pdf).
+        titled_author_years = {
+            (self._citation_key(m)[2], str(m.year or ""))
+            for m in merged
+            if (m.title or "").strip() and self._citation_key(m)[2]
+        }
+        if titled_author_years:
+            merged = [
+                m
+                for m in merged
+                if (m.title or "").strip()
+                or m.doi
+                or m.url
+                or (self._citation_key(m)[2], str(m.year or "")) not in titled_author_years
+            ]
 
         # If all merged references have unique numeric_index values (e.g. when
         # regex filled in a numbered entry [16] that GROBID skipped), sort by

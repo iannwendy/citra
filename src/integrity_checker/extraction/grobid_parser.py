@@ -468,6 +468,19 @@ def _normalize_raw_ref_text(raw_ref_text: str) -> str:
         text,
         flags=re.IGNORECASE,
     ).strip()
+    # Strip trailing author biography sentences glued onto the last bibliography entry (e.g. 74.pdf b68)
+    text = re.sub(
+        r"\s+[A-ZÀ-Ý][A-Za-zÀ-ỹ\-]+\s+[A-ZÀ-Ý][A-Za-zÀ-ỹ\-]+\s+was\s+born\s+in\b.*$",
+        "",
+        text,
+    ).strip()
+    # Strip inline institutional repository footer watermarks injected mid-reference (e.g. 105.pdf)
+    text = re.sub(
+        r"\s*https?://etd\.uwc\.ac\.za/\s*",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    ).strip()
     # Join broken percent-encoding across line wraps: "% 20" or "%F0... %9F..."
     text = re.sub(r"%\s+([0-9A-Fa-f]{2})", r"%\1", text)
     text = re.sub(r"(%[0-9A-Fa-f]{2}[0-9A-Za-z_%~:-]*)\s+(%[0-9A-Fa-f]{2})", r"\1\2", text)
@@ -1557,6 +1570,65 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
                 if authors and authors[0].full_name.endswith(" X"):
                     cleaned = authors[0].full_name[:-2].strip().rstrip(",.")
                     authors = [GrobidAuthor(full_name=cleaned, first_name=None, last_name=cleaned.split(",")[0].strip())]
+
+        # Recover OSCOLA book title & authors when GROBID placed the book title into <author>
+        # e.g. "Butler J, Undoing Gender (Routledge 2004)" or "Preciado PB, Countersexual Manifesto (Columbia University Press 2018)"
+        if not title and raw_ref_text:
+            oscola_m = re.match(
+                r"^(?P<authors>[A-ZÀ-Ý][A-Za-zÀ-ỹ'\u2019\-]+\s+[A-Z]{1,3}(?:\s*(?:,\s*|\s+and\s+|\s*&\s*)[A-ZÀ-Ý][A-Za-zÀ-ỹ'\u2019\-]+\s+[A-Z]{1,3})*),\s+"
+                r"(?P<title>[^()]{2,160}?)\s*\((?P<imprint>[^()]*?\b(?P<yr>(?:18|19|20)\d{2})[a-z]?)\)\s*\.?$",
+                raw_ref_text.strip(),
+            )
+            if oscola_m:
+                title = oscola_m.group("title").strip().rstrip(".,")
+                year = year or oscola_m.group("yr")
+                imprint_pub = re.sub(
+                    r"\b(?:18|19|20)\d{2}[a-z]?\b", "", oscola_m.group("imprint")
+                ).strip(" ,;:")
+                if imprint_pub and not venue:
+                    venue = imprint_pub
+                oscola_authors: list[GrobidAuthor] = []
+                for am in re.finditer(
+                    r"([A-ZÀ-Ý][A-Za-zÀ-ỹ'\u2019\-]+)\s+([A-Z]{1,3})\b",
+                    oscola_m.group("authors"),
+                ):
+                    sn_o, fn_o = am.group(1).strip(), am.group(2).strip()
+                    oscola_authors.append(
+                        GrobidAuthor(
+                            full_name=f"{sn_o}, {fn_o}",
+                            first_name=fn_o,
+                            last_name=sn_o,
+                        )
+                    )
+                if oscola_authors:
+                    authors = oscola_authors
+
+        # Recover unquoted multi-author book entry when GROBID left both title and authors empty
+        # e.g. "Ferguson, N., Schneier, B., Kohno, T. Cryptography Engineering: Design Principles and Practical Applications. Wiley, 2010."
+        if not title and not authors and raw_ref_text:
+            multi_book_m = re.match(
+                r"^(?P<authors>(?:[A-ZÀ-Ý][A-Za-zÀ-ỹ'\u2019\-]+,\s*(?:[A-ZÀ-Ý]\.\s*)+(?:,\s*|\s+(?:and|&)\s+)?)+)\s+"
+                r"(?P<title>[^.]{4,200}?)\.\s*(?:(?P<venue>[^.]+?),\s*)?(?P<yr>(?:18|19|20)\d{2})\b",
+                raw_ref_text.strip(),
+            )
+            if multi_book_m:
+                title = multi_book_m.group("title").strip()
+                year = year or multi_book_m.group("yr")
+                if multi_book_m.group("venue") and not venue:
+                    venue = multi_book_m.group("venue").strip()
+                for pm in re.finditer(
+                    r"([A-ZÀ-Ý][A-Za-zÀ-ỹ'\u2019\-]+),\s*((?:[A-ZÀ-Ý]\.\s*)+)",
+                    multi_book_m.group("authors"),
+                ):
+                    sn_b = pm.group(1).strip()
+                    fn_b = pm.group(2).strip().rstrip(".")
+                    authors.append(
+                        GrobidAuthor(
+                            full_name=f"{sn_b}, {fn_b}",
+                            first_name=fn_b,
+                            last_name=sn_b,
+                        )
+                    )
 
         # Recover truncated title when GROBID stopped at an abbreviation ("vs.", "Dr.") or line-wrap preposition
         if title and raw_ref_text and re.search(
