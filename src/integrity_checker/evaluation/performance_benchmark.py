@@ -1829,6 +1829,7 @@ def _latex_escape(text: str) -> str:
         .replace("%", r"\%")
         .replace("&", r"\&")
         .replace("#", r"\#")
+        .replace("~", r"$\sim$")
         .replace("<->", r"$\leftrightarrow$")
     )
 
