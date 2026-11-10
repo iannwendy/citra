@@ -1,0 +1,1026 @@
+{
+  "generated_at": "2026-11-10T07:43:20Z",
+  "environment": {
+    "python_version": "3.14.6",
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "processor": "arm",
+    "iterations": 5,
+    "warmup_runs": 1,
+    "sbert_enabled": true
+  },
+  "scale_benchmarks": [
+    {
+      "tier_id": "short_paper_10p",
+      "label_vi": "Bài báo khoa học ngắn (~10 trang)",
+      "label_en": "Short Research Article (~10 pp.)",
+      "pdf_path": "TDTU_PDF/098_uit_vnuhcm_Vietnamese_Hate_Speech_Detection_in_Gaming_Domain_Edited_Report.pdf",
+      "num_pages": 12,
+      "in_text_citations": 31,
+      "references": 24,
+      "iterations": 5,
+      "steps": [
+        {
+          "step_key": "parsing",
+          "step_index": 0,
+          "step_label": "1. Document Parsing & Section Segmentation",
+          "latency_ms": {
+            "p50": 100.101,
+            "p90": 126.326,
+            "p99": 141.975,
+            "mean": 108.468,
+            "std": 19.721,
+            "min": 98.186,
+            "max": 143.714,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 1.39,
+            "p90": 1.525,
+            "p99": 1.606,
+            "mean": 1.421,
+            "std": 0.109,
+            "min": 1.353,
+            "max": 1.615,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 719.19,
+            "p90": 719.19,
+            "p99": 719.19,
+            "mean": 719.19,
+            "std": 0.0,
+            "min": 719.19,
+            "max": 719.19,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "style_detection",
+          "step_index": 1,
+          "step_label": "2. Style Profile Detection & Diagnostics",
+          "latency_ms": {
+            "p50": 0.171,
+            "p90": 0.31,
+            "p99": 0.389,
+            "mean": 0.214,
+            "std": 0.103,
+            "min": 0.154,
+            "max": 0.398,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.004,
+            "p90": 0.005,
+            "p99": 0.006,
+            "mean": 0.005,
+            "std": 0.001,
+            "min": 0.004,
+            "max": 0.006,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 719.19,
+            "p90": 719.19,
+            "p99": 719.19,
+            "mean": 719.19,
+            "std": 0.0,
+            "min": 719.19,
+            "max": 719.19,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "extracting",
+          "step_index": 2,
+          "step_label": "3. Citation & Bibliography Extraction",
+          "latency_ms": {
+            "p50": 88.896,
+            "p90": 146.514,
+            "p99": 180.991,
+            "mean": 107.592,
+            "std": 43.179,
+            "min": 87.47,
+            "max": 184.822,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.729,
+            "p90": 0.839,
+            "p99": 0.882,
+            "mean": 0.768,
+            "std": 0.069,
+            "min": 0.728,
+            "max": 0.887,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 719.19,
+            "p90": 719.19,
+            "p99": 719.19,
+            "mean": 719.19,
+            "std": 0.0,
+            "min": 719.19,
+            "max": 719.19,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "linking",
+          "step_index": 3,
+          "step_label": "4. Bidirectional In-Text <-> Reference Linking",
+          "latency_ms": {
+            "p50": 21.602,
+            "p90": 29.211,
+            "p99": 33.704,
+            "mean": 24.018,
+            "std": 5.697,
+            "min": 21.242,
+            "max": 34.203,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.059,
+            "p90": 0.12,
+            "p99": 0.157,
+            "mean": 0.079,
+            "std": 0.046,
+            "min": 0.059,
+            "max": 0.162,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 719.19,
+            "p90": 719.19,
+            "p99": 719.19,
+            "mean": 719.19,
+            "std": 0.0,
+            "min": 719.19,
+            "max": 719.19,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "retrieving",
+          "step_index": 4,
+          "step_label": "5. Multi-Source Tiered Scholarly Retrieval",
+          "latency_ms": {
+            "p50": 18.744,
+            "p90": 19.92,
+            "p99": 20.344,
+            "mean": 19.061,
+            "std": 0.811,
+            "min": 18.302,
+            "max": 20.391,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.062,
+            "p90": 0.065,
+            "p99": 0.065,
+            "mean": 0.062,
+            "std": 0.002,
+            "min": 0.06,
+            "max": 0.065,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 719.19,
+            "p90": 719.19,
+            "p99": 719.19,
+            "mean": 719.19,
+            "std": 0.0,
+            "min": 719.19,
+            "max": 719.19,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "comparing",
+          "step_index": 5,
+          "step_label": "6. Lexical & Neural Semantic Evidence Alignment",
+          "latency_ms": {
+            "p50": 195.279,
+            "p90": 210.768,
+            "p99": 215.515,
+            "mean": 198.715,
+            "std": 11.112,
+            "min": 188.674,
+            "max": 216.042,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.161,
+            "p90": 0.163,
+            "p99": 0.164,
+            "mean": 0.162,
+            "std": 0.001,
+            "min": 0.161,
+            "max": 0.164,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 719.19,
+            "p90": 719.19,
+            "p99": 719.19,
+            "mean": 719.19,
+            "std": 0.0,
+            "min": 719.19,
+            "max": 719.19,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "checking",
+          "step_index": 6,
+          "step_label": "7. Neuro-Symbolic Rules & Platt Calibration",
+          "latency_ms": {
+            "p50": 80.552,
+            "p90": 86.04,
+            "p99": 86.913,
+            "mean": 81.781,
+            "std": 3.889,
+            "min": 77.824,
+            "max": 87.01,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.047,
+            "p90": 0.047,
+            "p99": 0.047,
+            "mean": 0.047,
+            "std": 0.0,
+            "min": 0.047,
+            "max": 0.047,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 719.19,
+            "p90": 719.19,
+            "p99": 719.19,
+            "mean": 719.19,
+            "std": 0.0,
+            "min": 719.19,
+            "max": 719.19,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "scoring",
+          "step_index": 7,
+          "step_label": "8. CIS Calculation & Report Generation",
+          "latency_ms": {
+            "p50": 0.61,
+            "p90": 0.663,
+            "p99": 0.679,
+            "mean": 0.615,
+            "std": 0.045,
+            "min": 0.567,
+            "max": 0.681,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.005,
+            "p90": 0.005,
+            "p99": 0.005,
+            "mean": 0.005,
+            "std": 0.0,
+            "min": 0.005,
+            "max": 0.005,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 719.19,
+            "p90": 719.19,
+            "p99": 719.19,
+            "mean": 719.19,
+            "std": 0.0,
+            "min": 719.19,
+            "max": 719.19,
+            "samples": 5
+          }
+        }
+      ],
+      "total_latency_ms": {
+        "p50": 504.193,
+        "p90": 618.681,
+        "p99": 679.343,
+        "mean": 540.465,
+        "std": 81.836,
+        "min": 495.396,
+        "max": 686.083,
+        "samples": 5
+      },
+      "peak_rss_mb": 719.19,
+      "peak_heap_alloc_mb": 1.6146
+    },
+    {
+      "tier_id": "bachelor_thesis_50p",
+      "label_vi": "Khóa luận tốt nghiệp (~50 trang)",
+      "label_en": "Undergraduate Thesis (~50 pp.)",
+      "pdf_path": "20-theses/109.pdf",
+      "num_pages": 50,
+      "in_text_citations": 108,
+      "references": 32,
+      "iterations": 5,
+      "steps": [
+        {
+          "step_key": "parsing",
+          "step_index": 0,
+          "step_label": "1. Document Parsing & Section Segmentation",
+          "latency_ms": {
+            "p50": 351.571,
+            "p90": 357.391,
+            "p99": 360.392,
+            "mean": 352.96,
+            "std": 4.459,
+            "min": 349.821,
+            "max": 360.726,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 4.348,
+            "p90": 4.38,
+            "p99": 4.384,
+            "mean": 4.357,
+            "std": 0.021,
+            "min": 4.34,
+            "max": 4.385,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 746.94,
+            "p90": 748.198,
+            "p99": 748.389,
+            "mean": 747.156,
+            "std": 0.978,
+            "min": 746.02,
+            "max": 748.41,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "style_detection",
+          "step_index": 1,
+          "step_label": "2. Style Profile Detection & Diagnostics",
+          "latency_ms": {
+            "p50": 0.764,
+            "p90": 0.787,
+            "p99": 0.798,
+            "mean": 0.761,
+            "std": 0.027,
+            "min": 0.727,
+            "max": 0.799,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.006,
+            "p90": 0.006,
+            "p99": 0.006,
+            "mean": 0.006,
+            "std": 0.0,
+            "min": 0.006,
+            "max": 0.006,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 746.94,
+            "p90": 748.198,
+            "p99": 748.389,
+            "mean": 747.156,
+            "std": 0.978,
+            "min": 746.02,
+            "max": 748.41,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "extracting",
+          "step_index": 2,
+          "step_label": "3. Citation & Bibliography Extraction",
+          "latency_ms": {
+            "p50": 371.11,
+            "p90": 374.941,
+            "p99": 376.206,
+            "mean": 372.275,
+            "std": 2.469,
+            "min": 370.266,
+            "max": 376.347,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 2.534,
+            "p90": 2.548,
+            "p99": 2.556,
+            "mean": 2.535,
+            "std": 0.013,
+            "min": 2.526,
+            "max": 2.557,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 746.94,
+            "p90": 748.198,
+            "p99": 748.389,
+            "mean": 747.156,
+            "std": 0.978,
+            "min": 746.02,
+            "max": 748.41,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "linking",
+          "step_index": 3,
+          "step_label": "4. Bidirectional In-Text <-> Reference Linking",
+          "latency_ms": {
+            "p50": 74.6,
+            "p90": 75.602,
+            "p99": 75.85,
+            "mean": 74.782,
+            "std": 0.81,
+            "min": 73.702,
+            "max": 75.878,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.243,
+            "p90": 0.253,
+            "p99": 0.259,
+            "mean": 0.239,
+            "std": 0.015,
+            "min": 0.225,
+            "max": 0.26,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 746.94,
+            "p90": 748.198,
+            "p99": 748.389,
+            "mean": 747.16,
+            "std": 0.975,
+            "min": 746.02,
+            "max": 748.41,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "retrieving",
+          "step_index": 4,
+          "step_label": "5. Multi-Source Tiered Scholarly Retrieval",
+          "latency_ms": {
+            "p50": 26.496,
+            "p90": 27.464,
+            "p99": 28.041,
+            "mean": 26.568,
+            "std": 0.947,
+            "min": 25.525,
+            "max": 28.105,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.069,
+            "p90": 0.072,
+            "p99": 0.073,
+            "mean": 0.059,
+            "std": 0.024,
+            "min": 0.017,
+            "max": 0.073,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 747.0,
+            "p90": 748.258,
+            "p99": 748.449,
+            "mean": 747.22,
+            "std": 0.975,
+            "min": 746.08,
+            "max": 748.47,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "comparing",
+          "step_index": 5,
+          "step_label": "6. Lexical & Neural Semantic Evidence Alignment",
+          "latency_ms": {
+            "p50": 467.371,
+            "p90": 495.92,
+            "p99": 512.112,
+            "mean": 472.758,
+            "std": 23.829,
+            "min": 453.318,
+            "max": 513.911,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.222,
+            "p90": 0.222,
+            "p99": 0.223,
+            "mean": 0.222,
+            "std": 0.001,
+            "min": 0.22,
+            "max": 0.223,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 747.06,
+            "p90": 748.326,
+            "p99": 748.51,
+            "mean": 747.282,
+            "std": 0.98,
+            "min": 746.14,
+            "max": 748.53,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "checking",
+          "step_index": 6,
+          "step_label": "7. Neuro-Symbolic Rules & Platt Calibration",
+          "latency_ms": {
+            "p50": 69.731,
+            "p90": 72.762,
+            "p99": 72.867,
+            "mean": 69.756,
+            "std": 3.082,
+            "min": 65.644,
+            "max": 72.879,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.138,
+            "p90": 0.138,
+            "p99": 0.138,
+            "mean": 0.138,
+            "std": 0.0,
+            "min": 0.138,
+            "max": 0.138,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 747.06,
+            "p90": 748.326,
+            "p99": 748.51,
+            "mean": 747.282,
+            "std": 0.98,
+            "min": 746.14,
+            "max": 748.53,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "scoring",
+          "step_index": 7,
+          "step_label": "8. CIS Calculation & Report Generation",
+          "latency_ms": {
+            "p50": 0.888,
+            "p90": 0.939,
+            "p99": 0.946,
+            "mean": 0.881,
+            "std": 0.063,
+            "min": 0.787,
+            "max": 0.947,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.005,
+            "p90": 0.005,
+            "p99": 0.005,
+            "mean": 0.005,
+            "std": 0.0,
+            "min": 0.005,
+            "max": 0.005,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 747.06,
+            "p90": 748.326,
+            "p99": 748.51,
+            "mean": 747.282,
+            "std": 0.98,
+            "min": 746.14,
+            "max": 748.53,
+            "samples": 5
+          }
+        }
+      ],
+      "total_latency_ms": {
+        "p50": 1367.109,
+        "p90": 1397.231,
+        "p99": 1410.773,
+        "mean": 1370.741,
+        "std": 25.787,
+        "min": 1345.87,
+        "max": 1412.278,
+        "samples": 5
+      },
+      "peak_rss_mb": 748.53,
+      "peak_heap_alloc_mb": 4.3848
+    },
+    {
+      "tier_id": "dissertation_100p",
+      "label_vi": "Luận văn / Đồ án quy mô lớn (100+ trang)",
+      "label_en": "Large Thesis / Dissertation (100+ pp.)",
+      "pdf_path": "VN_UNI_PDF_BATCH2/088_ou_hcm_KLTN_IEEE_FULL_PAPER_VN.pdf",
+      "num_pages": 156,
+      "in_text_citations": 101,
+      "references": 87,
+      "iterations": 5,
+      "steps": [
+        {
+          "step_key": "parsing",
+          "step_index": 0,
+          "step_label": "1. Document Parsing & Section Segmentation",
+          "latency_ms": {
+            "p50": 602.937,
+            "p90": 609.054,
+            "p99": 611.177,
+            "mean": 603.533,
+            "std": 5.247,
+            "min": 598.269,
+            "max": 611.413,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 11.072,
+            "p90": 11.099,
+            "p99": 11.106,
+            "mean": 11.077,
+            "std": 0.02,
+            "min": 11.056,
+            "max": 11.107,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 938.0,
+            "p90": 945.672,
+            "p99": 946.291,
+            "mean": 939.302,
+            "std": 6.119,
+            "min": 931.73,
+            "max": 946.36,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "style_detection",
+          "step_index": 1,
+          "step_label": "2. Style Profile Detection & Diagnostics",
+          "latency_ms": {
+            "p50": 0.676,
+            "p90": 0.694,
+            "p99": 0.705,
+            "mean": 0.67,
+            "std": 0.033,
+            "min": 0.615,
+            "max": 0.706,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.006,
+            "p90": 0.006,
+            "p99": 0.006,
+            "mean": 0.006,
+            "std": 0.0,
+            "min": 0.006,
+            "max": 0.006,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 938.0,
+            "p90": 945.672,
+            "p99": 946.291,
+            "mean": 939.302,
+            "std": 6.119,
+            "min": 931.73,
+            "max": 946.36,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "extracting",
+          "step_index": 2,
+          "step_label": "3. Citation & Bibliography Extraction",
+          "latency_ms": {
+            "p50": 679.839,
+            "p90": 687.331,
+            "p99": 691.148,
+            "mean": 681.409,
+            "std": 5.935,
+            "min": 676.406,
+            "max": 691.572,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 5.673,
+            "p90": 5.7,
+            "p99": 5.711,
+            "mean": 5.68,
+            "std": 0.019,
+            "min": 5.666,
+            "max": 5.712,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 938.0,
+            "p90": 945.672,
+            "p99": 946.291,
+            "mean": 939.302,
+            "std": 6.119,
+            "min": 931.73,
+            "max": 946.36,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "linking",
+          "step_index": 3,
+          "step_label": "4. Bidirectional In-Text <-> Reference Linking",
+          "latency_ms": {
+            "p50": 252.024,
+            "p90": 255.876,
+            "p99": 257.156,
+            "mean": 252.352,
+            "std": 3.36,
+            "min": 248.794,
+            "max": 257.298,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.245,
+            "p90": 0.245,
+            "p99": 0.245,
+            "mean": 0.23,
+            "std": 0.034,
+            "min": 0.169,
+            "max": 0.245,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 938.0,
+            "p90": 945.672,
+            "p99": 946.291,
+            "mean": 939.302,
+            "std": 6.119,
+            "min": 931.73,
+            "max": 946.36,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "retrieving",
+          "step_index": 4,
+          "step_label": "5. Multi-Source Tiered Scholarly Retrieval",
+          "latency_ms": {
+            "p50": 67.503,
+            "p90": 68.89,
+            "p99": 69.507,
+            "mean": 67.701,
+            "std": 1.151,
+            "min": 66.657,
+            "max": 69.576,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.141,
+            "p90": 0.146,
+            "p99": 0.148,
+            "mean": 0.142,
+            "std": 0.004,
+            "min": 0.14,
+            "max": 0.148,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 938.06,
+            "p90": 945.708,
+            "p99": 946.349,
+            "mean": 939.326,
+            "std": 6.133,
+            "min": 931.73,
+            "max": 946.42,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "comparing",
+          "step_index": 5,
+          "step_label": "6. Lexical & Neural Semantic Evidence Alignment",
+          "latency_ms": {
+            "p50": 2236.484,
+            "p90": 2247.234,
+            "p99": 2252.884,
+            "mean": 2239.535,
+            "std": 7.906,
+            "min": 2234.796,
+            "max": 2253.512,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 1.161,
+            "p90": 1.161,
+            "p99": 1.161,
+            "mean": 1.161,
+            "std": 0.0,
+            "min": 1.16,
+            "max": 1.161,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 938.11,
+            "p90": 945.744,
+            "p99": 946.406,
+            "mean": 939.352,
+            "std": 6.141,
+            "min": 931.75,
+            "max": 946.48,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "checking",
+          "step_index": 6,
+          "step_label": "7. Neuro-Symbolic Rules & Platt Calibration",
+          "latency_ms": {
+            "p50": 278.716,
+            "p90": 282.029,
+            "p99": 282.798,
+            "mean": 279.085,
+            "std": 2.752,
+            "min": 276.453,
+            "max": 282.884,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.205,
+            "p90": 0.205,
+            "p99": 0.205,
+            "mean": 0.205,
+            "std": 0.0,
+            "min": 0.204,
+            "max": 0.205,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 938.11,
+            "p90": 945.744,
+            "p99": 946.406,
+            "mean": 939.352,
+            "std": 6.141,
+            "min": 931.75,
+            "max": 946.48,
+            "samples": 5
+          }
+        },
+        {
+          "step_key": "scoring",
+          "step_index": 7,
+          "step_label": "8. CIS Calculation & Report Generation",
+          "latency_ms": {
+            "p50": 1.242,
+            "p90": 1.341,
+            "p99": 1.355,
+            "mean": 1.279,
+            "std": 0.055,
+            "min": 1.237,
+            "max": 1.357,
+            "samples": 5
+          },
+          "peak_alloc_mb": {
+            "p50": 0.006,
+            "p90": 0.006,
+            "p99": 0.006,
+            "mean": 0.006,
+            "std": 0.0,
+            "min": 0.005,
+            "max": 0.006,
+            "samples": 5
+          },
+          "rss_mb": {
+            "p50": 938.11,
+            "p90": 945.744,
+            "p99": 946.406,
+            "mean": 939.352,
+            "std": 6.141,
+            "min": 931.75,
+            "max": 946.48,
+            "samples": 5
+          }
+        }
+      ],
+      "total_latency_ms": {
+        "p50": 4123.029,
+        "p90": 4133.27,
+        "p99": 4134.9,
+        "mean": 4125.564,
+        "std": 7.212,
+        "min": 4116.886,
+        "max": 4135.081,
+        "samples": 5
+      },
+      "peak_rss_mb": 946.48,
+      "peak_heap_alloc_mb": 11.1066
+    }
+  ],
+  "deadline_stress_benchmarks": [
+    {
+      "concurrency": 20,
+      "max_concurrent_workers": 3,
+      "citations_per_submission": 15,
+      "total_submissions": 20,
+      "completed_submissions": 20,
+      "failed_submissions": 0,
+      "success_rate_pct": 100.0,
+      "peak_active_workers": 3,
+      "peak_queue_depth": 17,
+      "fifo_order_preserved": true,
+      "sqlite_locked_errors": 0,
+      "http_429_simulated": 60,
+      "http_429_recovered": 60,
+      "unhandled_http_502_429_errors": 0,
+      "queue_wait_ms": {
+        "p50": 348.206,
+        "p90": 550.335,
+        "p99": 595.415,
+        "mean": 315.851,
+        "std": 199.604,
+        "min": 0.003,
+        "max": 600.387,
+        "samples": 20
+      },
+      "processing_ms": {
+        "p50": 80.616,
+        "p90": 129.792,
+        "p99": 163.515,
+        "mean": 94.166,
+        "std": 27.333,
+        "min": 73.472,
+        "max": 165.125,
+        "samples": 20
+      },
+      "end_to_end_ms": {
+        "p50": 423.506,
+        "p90": 632.204,
+        "p99": 679.369,
+        "mean": 410.017,
+        "std": 183.501,
+        "min": 90.252,
+        "max": 684.561,
+        "samples": 20
+      },
+      "wall_clock_total_ms": 696.05,
+      "throughput_essays_per_sec": 28.73,
+      "throughput_citations_per_sec": 431.0
+    },
+    {
+      "concurrency": 50,
+      "max_concurrent_workers": 3,
+      "citations_per_submission": 15,
+      "total_submissions": 50,
+      "completed_submissions": 50,
+      "failed_submissions": 0,
+      "success_rate_pct": 100.0,
+      "peak_active_workers": 3,
+      "peak_queue_depth": 47,
+      "fifo_order_preserved": true,
+      "sqlite_locked_errors": 0,
+      "http_429_simulated": 150,
+      "http_429_recovered": 150,
+      "unhandled_http_502_429_errors": 0,
+      "queue_wait_ms": {
+        "p50": 2874.127,
+        "p90": 3399.634,
+        "p99": 3517.671,
+        "mean": 2633.909,
+        "std": 922.118,
+        "min": 0.002,
+        "max": 3530.664,
+        "samples": 50
+      },
+      "processing_ms": {
+        "p50": 74.547,
+        "p90": 263.406,
+        "p99": 2042.776,
+        "mean": 201.32,
+        "std": 438.695,
+        "min": 37.094,
+        "max": 2094.396,
+        "samples": 50
+      },
+      "end_to_end_ms": {
+        "p50": 2942.629,
+        "p90": 3479.457,
+        "p99": 3600.11,
+        "mean": 2835.229,
+        "std": 669.974,
+        "min": 110.332,
+        "max": 3613.185,
+        "samples": 50
+      },
+      "wall_clock_total_ms": 3645.69,
+      "throughput_essays_per_sec": 13.71,
+      "throughput_citations_per_sec": 205.72
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tracemalloc
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -17,8 +18,11 @@ from integrity_checker.config import get_settings
 from integrity_checker.evaluation.performance_benchmark import (
     ControlledDeterministicOrchestrator,
     DocumentScaleTierSpec,
+    FullPerformanceBenchmarkReport,
     PipelineStepProfiler,
     compute_percentiles,
+    format_benchmark_latex_tables,
+    format_benchmark_markdown,
     resolve_or_synthesize_tier_pdf,
     run_deadline_burst_benchmark,
     run_document_scale_benchmark,
@@ -27,6 +31,7 @@ from integrity_checker.extraction.document_parser import DocumentParser
 from integrity_checker.models.citation import Citation, CitationType
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.pipeline.integrity_pipeline import IntegrityPipeline
+from scripts.benchmark_pipeline_performance import main as benchmark_cli_main
 
 
 def test_deadline_queue_manager_alias_and_singleton() -> None:
@@ -348,6 +353,79 @@ def test_deadline_burst_benchmark_restores_original_database_url_after_completio
         seed=99,
     )
     assert get_settings().database.url == original_url
+
+
+def test_format_benchmark_markdown_and_latex_tables_contain_all_steps_and_labels(
+    tmp_path: Path,
+) -> None:
+    tiers = (
+        DocumentScaleTierSpec(
+            tier_id="short_10p",
+            label_vi="Bài báo ngắn (10 trang)",
+            label_en="Short Paper (10 pp.)",
+            target_pages=10,
+            target_refs=5,
+            candidate_paths=("nonexistent/short.pdf",),
+        ),
+    )
+    scale_res = run_document_scale_benchmark(
+        tiers=tiers,
+        iterations=1,
+        warmup_runs=0,
+        use_real_sbert=False,
+        fallback_dir=tmp_path,
+    )
+    stress_res = run_deadline_burst_benchmark(
+        concurrency_levels=(20,),
+        max_concurrent_workers=3,
+        citations_per_submission=4,
+        simulated_api_latency_ms=(0.5, 1.0),
+        db_dir=tmp_path,
+    )
+    report = FullPerformanceBenchmarkReport(
+        generated_at="2026-11-10T14:00:00Z",
+        environment={"python": "3.11", "platform": "macOS"},
+        scale_benchmarks=scale_res,
+        deadline_stress_benchmarks=stress_res,
+    )
+
+    md = format_benchmark_markdown(report)
+    assert "P50" in md and "P90" in md and "P99" in md
+    assert "DeadlineQueueManager" in md
+    for key in STEP_KEYS:
+        assert key in md
+
+    latex = format_benchmark_latex_tables(report)
+    assert r"\begin{longtable}" in latex
+    assert r"\label{tab:nfr-step-latency}" in latex
+    assert r"\label{tab:nfr-deadline-stress}" in latex
+    assert r"$P_{50}$" in latex and r"$P_{90}$" in latex and r"$P_{99}$" in latex
+
+
+def test_cli_benchmark_script_quick_mode_writes_json_md_and_tex_artifacts(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "bench_out"
+    rc = benchmark_cli_main(
+        [
+            "--quick",
+            "--output-dir",
+            str(out_dir),
+        ]
+    )
+    assert rc == 0
+    json_file = out_dir / "pipeline_performance_benchmark.json"
+    md_file = out_dir / "pipeline_performance_benchmark.md"
+    tex_file = out_dir / "chapter5_nfr_tables.tex"
+
+    assert json_file.is_file()
+    assert md_file.is_file()
+    assert tex_file.is_file()
+
+    payload = json.loads(json_file.read_text(encoding="utf-8"))
+    assert len(payload["scale_benchmarks"]) == 3
+    assert len(payload["deadline_stress_benchmarks"]) == 2
+
 
 
 

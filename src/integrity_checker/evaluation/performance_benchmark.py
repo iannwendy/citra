@@ -237,7 +237,6 @@ class PipelineStepProfiler:
                     current_mem_base, _ = tracemalloc.get_traced_memory()
                 step_rss_mb[step_index] = _get_process_rss_mb()
 
-        t_run_start = time.perf_counter()
         if orig_doc_parse is not None:
             pipeline.document_parser.parse = _wrapped_doc_parse  # type: ignore[method-assign]
         try:
@@ -734,15 +733,33 @@ def run_document_scale_benchmark(
             rate_limit_429_every_n=6,
         )
         dp = DocumentParser()
+        if not use_real_sbert:
+            dp.config.extraction.grobid.enabled = False
         pipeline = IntegrityPipeline(
             document_parser=dp,
             orchestrator=orch,
             use_report_cache=False,
         )
         if not use_real_sbert and hasattr(pipeline, "checker"):
-            fc = getattr(pipeline.checker, "feature_calculator", None)
-            if fc is not None and hasattr(fc, "enable_content_alignment"):
-                fc.enable_content_alignment = False
+            from integrity_checker.logic.neuro_symbolic_checker import NeuroSymbolicChecker
+            from integrity_checker.matching.features import FeatureCalculator
+
+            class _FastDeterministicSemanticStub:
+                def similarity(self, text_a: str | None, text_b: str | None) -> float:
+                    if not text_a or not text_b:
+                        return 0.0
+                    return 0.92 if text_a[:20].lower() == text_b[:20].lower() else 0.75
+
+                def batch_encode_texts(self, texts: Sequence[str]) -> None:
+                    return None
+
+            pipeline.checker = NeuroSymbolicChecker(
+                feature_calculator=FeatureCalculator(
+                    semantic=_FastDeterministicSemanticStub(),  # type: ignore[arg-type]
+                    enable_content_alignment=False,
+                ),
+                enable_content_alignment=False,
+            )
 
         for w in range(num_warmup):
             _ = profiler.profile_run(
@@ -958,7 +975,7 @@ async def _run_single_deadline_burst_async(
                 session.close()
 
         async def _student_job(order_idx: int, essay_id: int) -> None:
-            nonlocal active_now, peak_active, peak_waiting, failed_submissions
+            nonlocal active_now, peak_active, peak_waiting, failed_submissions, sqlite_locked_errors
             t_submit = time.perf_counter()
             try:
                 async with queue_mgr.acquire(essay_id, tracker=tracker) as admitted:
@@ -1107,3 +1124,190 @@ def run_deadline_burst_benchmark(
         )
         results.append(res)
     return results
+
+
+@dataclass
+class FullPerformanceBenchmarkReport:
+    """Complete NFR and Deadline Load Benchmark report container."""
+
+    generated_at: str
+    environment: dict[str, Any]
+    scale_benchmarks: list[DocumentScaleBenchmarkResult]
+    deadline_stress_benchmarks: list[DeadlineBurstStressResult]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "generated_at": self.generated_at,
+            "environment": dict(self.environment),
+            "scale_benchmarks": [b.to_dict() for b in self.scale_benchmarks],
+            "deadline_stress_benchmarks": [d.to_dict() for d in self.deadline_stress_benchmarks],
+        }
+
+
+def format_benchmark_markdown(report: FullPerformanceBenchmarkReport) -> str:
+    """Format the full benchmark report as a Markdown document for Chapter 5 review."""
+    lines: list[str] = [
+        "# Báo Cáo Kiểm Thử Hiệu Năng Phi Chức Năng & Chịu Tải (`CITRA` Chapter 5 NFR Benchmark)",
+        "",
+        f"- **Thời điểm chạy:** `{report.generated_at}`",
+        f"- **Môi trường:** `{report.environment}`",
+        "",
+        "---",
+        "",
+        "## 1. Phân Vị Độ Trễ P50 / P90 / P99 ($P_{50}, P_{90}, P_{99}$) & Mức Tiêu Thụ RAM Theo 8 Bước Xử Lý",
+        "",
+    ]
+
+    for tier in report.scale_benchmarks:
+        lines.extend(
+            [
+                f"### {tier.label_vi} — `{tier.pdf_path}` ({tier.num_pages} trang, {tier.in_text_citations} trích dẫn trong bài, {tier.references} tài liệu tham khảo, $N={tier.iterations}$ lần chạy)",
+                "",
+                "| Bước (`step_key`) | Mô tả công đoạn | P50 ($P_{50}$, ms) | P90 ($P_{90}$, ms) | P99 ($P_{99}$, ms) | Mean ± Std (ms) | Peak Heap $\\Delta$ (MB) | Process RSS (MB) |",
+                "| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for st in tier.steps:
+            lat = st.latency_ms
+            heap = st.peak_alloc_mb
+            rss = st.rss_mb
+            lines.append(
+                f"| `{st.step_key}` | {st.step_label} | {lat.p50:.2f} | {lat.p90:.2f} | {lat.p99:.2f} | "
+                f"{lat.mean:.2f} ± {lat.std:.2f} | {heap.p90:.3f} | {rss.p90:.1f} |"
+            )
+        tot = tier.total_latency_ms
+        lines.extend(
+            [
+                f"| **Tổng (`total`)** | **Toàn bộ luồng 8 bước** | **{tot.p50:.2f}** | **{tot.p90:.2f}** | **{tot.p99:.2f}** | "
+                f"**{tot.mean:.2f} ± {tot.std:.2f}** | **{tier.peak_heap_alloc_mb:.3f}** | **{tier.peak_rss_mb:.1f}** |",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "---",
+            "",
+            "## 2. Kiểm Thử Chịu Tải `DeadlineQueueManager` & SQLite Khi 20–50 Sinh Viên Nộp Bài Đồng Thời",
+            "",
+            "| Số SV đồng thời ($N$) | Worker tối đa | Tỷ lệ hoàn thành | Peak Active / Queue | FIFO chuẩn | Queue Wait $P_{50}/P_{90}/P_{99}$ (ms) | Processing $P_{50}/P_{90}/P_{99}$ (ms) | Throughput (bài/s · trích dẫn/s) | Lỗi `SQLite locked` | Lỗi `HTTP 502/429` |",
+            "| :---: | :---: | :---: | :---: | :---: | ---: | ---: | ---: | :---: | :---: |",
+        ]
+    )
+    for ds in report.deadline_stress_benchmarks:
+        qw = ds.queue_wait_ms
+        pr = ds.processing_ms
+        lines.append(
+            f"| **{ds.concurrency}** | {ds.max_concurrent_workers} | **{ds.completed_submissions}/{ds.total_submissions} ({ds.success_rate_pct:.1f}%)** | "
+            f"{ds.peak_active_workers} / {ds.peak_queue_depth} | `{'PASS' if ds.fifo_order_preserved else 'FAIL'}` | "
+            f"{qw.p50:.1f} / {qw.p90:.1f} / {qw.p99:.1f} | {pr.p50:.1f} / {pr.p90:.1f} / {pr.p99:.1f} | "
+            f"**{ds.throughput_essays_per_sec:.2f}** bài/s ({ds.throughput_citations_per_sec:.1f} cit/s) | "
+            f"**{ds.sqlite_locked_errors}** | **{ds.unhandled_http_502_429_errors}** (rescued {ds.http_429_recovered}/{ds.http_429_simulated} 429s) |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _latex_escape(text: str) -> str:
+    return (
+        text.replace("\\", r"\textbackslash{}")
+        .replace("_", r"\_")
+        .replace("%", r"\%")
+        .replace("&", r"\&")
+        .replace("#", r"\#")
+        .replace("<->", r"$\leftrightarrow$")
+    )
+
+
+def format_benchmark_latex_tables(report: FullPerformanceBenchmarkReport) -> str:
+    """Format publication-ready LaTeX longtables for Chapter 5 (TDTU-MidtermReport/chapter5_rewritten.tex)."""
+    out: list[str] = [
+        "% Auto-generated by scripts/benchmark_pipeline_performance.py",
+        r"\subsection{Non-Functional Latency, Memory Scaling, and Deadline Load Benchmarks}",
+        r"\label{sec:nfr-benchmarks}",
+        "",
+        r"{\setlength{\tabcolsep}{3.5pt}",
+        r"\begin{longtable}{|L{0.18}|L{0.26}|C{0.11}|C{0.11}|C{0.11}|C{0.11}|C{0.12}|}",
+        r"\caption{Per-step latency percentiles ($P_{50}, P_{90}, P_{99}$) and RAM footprint across the 8-step verification pipeline by manuscript scale}\label{tab:nfr-step-latency}\\",
+        r"\hline",
+        r"\textbf{Scale Tier} & \textbf{Pipeline Step} & \textbf{$P_{50}$ (ms)} & \textbf{$P_{90}$ (ms)} & \textbf{$P_{99}$ (ms)} & \textbf{Heap $\Delta$ (MB)} & \textbf{RSS (MB)} \\",
+        r"\hline",
+        r"\endfirsthead",
+        r"\multicolumn{7}{l}{\small\itshape Table \thetable\ (continued from previous page)}\\",
+        r"\hline",
+        r"\textbf{Scale Tier} & \textbf{Pipeline Step} & \textbf{$P_{50}$ (ms)} & \textbf{$P_{90}$ (ms)} & \textbf{$P_{99}$ (ms)} & \textbf{Heap $\Delta$ (MB)} & \textbf{RSS (MB)} \\",
+        r"\hline",
+        r"\endhead",
+        r"\hline",
+        r"\multicolumn{7}{r}{\small\itshape Continued on next page}\\",
+        r"\endfoot",
+        r"\hline",
+        r"\endlastfoot",
+    ]
+
+    for tier in report.scale_benchmarks:
+        tier_header = (
+            f"{_latex_escape(tier.label_en)} ({tier.num_pages}\\,pp., {tier.references}\\,refs)"
+        )
+        for idx, st in enumerate(tier.steps):
+            col1 = tier_header if idx == 0 else ""
+            step_str = f"\\texttt{{{_latex_escape(st.step_key)}}}"
+            lat = st.latency_ms
+            out.append(
+                f"{col1} & {step_str} & {lat.p50:.1f} & {lat.p90:.1f} & {lat.p99:.1f} & "
+                f"{st.peak_alloc_mb.p90:.2f} & {st.rss_mb.p90:.1f} \\\\"
+            )
+        tot = tier.total_latency_ms
+        out.extend(
+            [
+                r"\hline",
+                f"\\textbf{{Total ({tier.num_pages}\\,pp.)}} & \\textbf{{All 8 steps}} & "
+                f"\\textbf{{{tot.p50:.1f}}} & \\textbf{{{tot.p90:.1f}}} & \\textbf{{{tot.p99:.1f}}} & "
+                f"\\textbf{{{tier.peak_heap_alloc_mb:.2f}}} & \\textbf{{{tier.peak_rss_mb:.1f}}} \\\\",
+                r"\hline",
+            ]
+        )
+
+    out.extend(
+        [
+            r"\end{longtable}",
+            r"}",
+            "",
+            r"{\setlength{\tabcolsep}{3.5pt}",
+            r"\begin{longtable}{|C{0.11}|C{0.11}|C{0.13}|C{0.18}|C{0.18}|C{0.14}|C{0.15}|}",
+            r"\caption{Concurrent deadline upload stress test on \texttt{DeadlineQueueManager} and file-backed SQLite}\label{tab:nfr-deadline-stress}\\",
+            r"\hline",
+            r"\textbf{Students ($N$)} & \textbf{Active / Queue} & \textbf{Success Rate} & \textbf{Queue Wait $P_{50}/P_{90}/P_{99}$ (ms)} & \textbf{Processing $P_{50}/P_{90}/P_{99}$ (ms)} & \textbf{Throughput (essays/s)} & \textbf{SQLite Lock / HTTP 502,429} \\",
+            r"\hline",
+            r"\endfirsthead",
+            r"\hline",
+            r"\endhead",
+            r"\hline",
+            r"\endlastfoot",
+        ]
+    )
+
+    for ds in report.deadline_stress_benchmarks:
+        qw = ds.queue_wait_ms
+        pr = ds.processing_ms
+        out.extend(
+            [
+                f"{ds.concurrency} & {ds.peak_active_workers} / {ds.peak_queue_depth} & "
+                f"\\textbf{{{ds.success_rate_pct:.1f}\\%}} ({ds.completed_submissions}/{ds.total_submissions}) & "
+                f"{qw.p50:.1f} / {qw.p90:.1f} / {qw.p99:.1f} & "
+                f"{pr.p50:.1f} / {pr.p90:.1f} / {pr.p99:.1f} & "
+                f"{ds.throughput_essays_per_sec:.2f} ({ds.throughput_citations_per_sec:.1f}\\,cit/s) & "
+                f"\\textbf{{{ds.sqlite_locked_errors} / {ds.unhandled_http_502_429_errors}}} \\\\",
+                r"\hline",
+            ]
+        )
+
+    out.extend(
+        [
+            r"\end{longtable}",
+            r"}",
+            "",
+        ]
+    )
+    return "\n".join(out)
+
