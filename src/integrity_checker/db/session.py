@@ -5,13 +5,20 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from sqlalchemy import create_engine, event, inspect
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool, StaticPool
 
 from integrity_checker.config import get_settings, is_main_app_db_url, is_test_runtime
-from integrity_checker.db.models import ApiKey, Base, PromoCode, User  # noqa: F401
+from integrity_checker.db.migrations import run_migrations
+from integrity_checker.db.models import (  # noqa: F401
+    ApiKey,
+    Base,
+    PromoCode,
+    SchemaMigrationRecord,
+    User,
+)
 
 _engine: Engine | None = None
 _engine_url: str | None = None
@@ -82,7 +89,10 @@ def get_session() -> Session:
 
 
 def _run_inline_migrations(engine: Engine) -> None:
-    """Apply incremental ALTER TABLE migrations not covered by create_all.
+    """Apply incremental schema migrations not covered by create_all.
+
+    Delegates to the versioned, SHA-256 checksum-verified migration runner in
+    ``integrity_checker.db.migrations.run_migrations`` (revisions ``0001``–``0009``).
 
     History:
         2026-09-30 (v1.8) — citations table gained mapping_status,
@@ -99,264 +109,7 @@ def _run_inline_migrations(engine: Engine) -> None:
             surrounding PDF text of a citation, so the Document Inspector can
             render the sentence a citation appears in.
     """
-    with engine.begin() as conn:
-        inspector = inspect(conn)
-
-        def _col_names(table_name: str) -> set[str]:
-            try:
-                return {col["name"] for col in inspector.get_columns(table_name)}
-            except Exception:
-                return set()
-
-        # --- citations ---
-        cit_cols = _col_names("citations")
-        if "mapping_status" not in cit_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE citations ADD COLUMN mapping_status VARCHAR"
-            )
-        if "mapping_confidence" not in cit_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE citations ADD COLUMN mapping_confidence FLOAT DEFAULT 0"
-            )
-        if "citation_link_json" not in cit_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE citations ADD COLUMN citation_link_json TEXT"
-            )
-        if "context" not in cit_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE citations ADD COLUMN context TEXT"
-            )
-
-        # --- verdicts (v1.16 citation context) ---
-        verdict_cols = _col_names("verdicts")
-        if "context" not in verdict_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE verdicts ADD COLUMN context TEXT"
-            )
-
-        # --- essays (class_id assignment) ---
-        essay_cols = _col_names("essays")
-        if "class_id" not in essay_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE essays ADD COLUMN class_id INTEGER REFERENCES classes(id)"
-            )
-
-        # --- classes (v2.3 — student self-enrollment join_code) ---
-        class_cols = _col_names("classes")
-        if class_cols and "join_code" not in class_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE classes ADD COLUMN join_code VARCHAR(20)"
-            )
-            conn.exec_driver_sql(
-                "CREATE UNIQUE INDEX IF NOT EXISTS idx_classes_join_code ON classes(join_code) WHERE join_code IS NOT NULL"
-            )
-        if class_cols:
-            rows = conn.exec_driver_sql(
-                "SELECT id FROM classes WHERE join_code IS NULL OR join_code = ''"
-            ).fetchall()
-            for (cid,) in rows:
-                code = f"CITRA-{1000 + int(cid):04d}"
-                conn.exec_driver_sql(
-                    "UPDATE classes SET join_code = ? WHERE id = ?",
-                    (code, cid),
-                )
-
-        # --- users (v1.10 account management) ---
-        user_cols = _col_names("users")
-        if "email" not in user_cols:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN email VARCHAR(255)")
-            # Unique index (separate from column unique=True so existing DBs migrate)
-            conn.exec_driver_sql(
-                "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL"
-            )
-        if "full_name" not in user_cols:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN full_name VARCHAR(120)")
-        if "avatar_path" not in user_cols:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN avatar_path VARCHAR(500)")
-        if "is_active" not in user_cols:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
-        if "last_login_at" not in user_cols:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN last_login_at DATETIME")
-
-        # --- users (v1.15 — teacher support) ---
-        if "institution" not in user_cols:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN institution VARCHAR(255)")
-        if "can_override_verdicts" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN can_override_verdicts INTEGER DEFAULT 0"
-            )
-        # --- users (v1.17 — email verification) ---
-        if "email_verified" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1"
-            )
-
-        # --- users (v2.3 — Google OAuth2 account linking) ---
-        if "google_id" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN google_id VARCHAR(255)"
-            )
-            conn.exec_driver_sql(
-                "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL"
-            )
-        if "auth_provider" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN auth_provider VARCHAR(30) DEFAULT 'local'"
-            )
-        if "username_customized" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN username_customized INTEGER DEFAULT 1"
-            )
-            conn.exec_driver_sql(
-                "UPDATE users SET username_customized = 0 WHERE auth_provider = 'google'"
-            )
-        if "google_onboarded" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN google_onboarded INTEGER DEFAULT 1"
-            )
-            conn.exec_driver_sql(
-                "UPDATE users SET google_onboarded = 0, username_customized = 0, auth_provider = 'google' WHERE google_id IS NOT NULL"
-            )
-
-        # --- users (v2.2 — Premium Subscription & Quota fields) ---
-        if "plan_tier" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN plan_tier VARCHAR(20) DEFAULT 'basic'"
-            )
-            conn.exec_driver_sql(
-                "UPDATE users SET plan_tier = 'ultra' WHERE role = 'admin'"
-            )
-            conn.exec_driver_sql(
-                "UPDATE users SET plan_tier = 'pro' WHERE role = 'teacher'"
-            )
-        if "billing_cycle" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN billing_cycle VARCHAR(20)"
-            )
-        if "subscription_status" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN subscription_status VARCHAR(30) DEFAULT 'active'"
-            )
-        if "stripe_customer_id" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN stripe_customer_id VARCHAR(120)"
-            )
-        if "stripe_subscription_id" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN stripe_subscription_id VARCHAR(120)"
-            )
-        if "current_period_start" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN current_period_start DATETIME"
-            )
-        if "current_period_end" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN current_period_end DATETIME"
-            )
-        if "cancel_at_period_end" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN cancel_at_period_end INTEGER DEFAULT 0"
-            )
-        if "monthly_uploads_used" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN monthly_uploads_used INTEGER DEFAULT 0"
-            )
-        if "quota_reset_at" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN quota_reset_at DATETIME"
-            )
-
-        # --- users (v2.4 — Personal data protection consent proof) ---
-        if "privacy_consented_at" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN privacy_consented_at DATETIME"
-            )
-        if "privacy_policy_version" not in user_cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE users ADD COLUMN privacy_policy_version VARCHAR(20)"
-            )
-
-        # --- billing_transactions (v2.4 — Promo Code & Multi-Payment Method fields) ---
-        bt_cols = _col_names("billing_transactions")
-        if bt_cols:
-            if "subtotal_usd" not in bt_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE billing_transactions ADD COLUMN subtotal_usd FLOAT DEFAULT 0"
-                )
-                conn.exec_driver_sql(
-                    "UPDATE billing_transactions SET subtotal_usd = amount_usd WHERE subtotal_usd IS NULL OR subtotal_usd = 0"
-                )
-            if "discount_usd" not in bt_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE billing_transactions ADD COLUMN discount_usd FLOAT DEFAULT 0"
-                )
-            if "promo_code" not in bt_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE billing_transactions ADD COLUMN promo_code VARCHAR(10)"
-                )
-            if "payment_method" not in bt_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE billing_transactions ADD COLUMN payment_method VARCHAR(30) DEFAULT 'card'"
-                )
-            if "billing_country" not in bt_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE billing_transactions ADD COLUMN billing_country VARCHAR(10) DEFAULT 'VN'"
-                )
-            if "billing_zip" not in bt_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE billing_transactions ADD COLUMN billing_zip VARCHAR(20)"
-                )
-            if "amount_vnd" not in bt_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE billing_transactions ADD COLUMN amount_vnd INTEGER"
-                )
-            if "vnp_txn_ref" not in bt_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE billing_transactions ADD COLUMN vnp_txn_ref VARCHAR(120)"
-                )
-                conn.exec_driver_sql(
-                    "CREATE INDEX IF NOT EXISTS idx_billing_transactions_vnp_txn_ref ON billing_transactions(vnp_txn_ref)"
-                )
-            if "vnp_transaction_no" not in bt_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE billing_transactions ADD COLUMN vnp_transaction_no VARCHAR(64)"
-                )
-            if "vnp_bank_code" not in bt_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE billing_transactions ADD COLUMN vnp_bank_code VARCHAR(32)"
-                )
-            if "vnp_card_type" not in bt_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE billing_transactions ADD COLUMN vnp_card_type VARCHAR(32)"
-                )
-            if "vnp_response_code" not in bt_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE billing_transactions ADD COLUMN vnp_response_code VARCHAR(10)"
-                )
-
-        # --- Clean up any historical orphan rows ---
-        conn.exec_driver_sql(
-            "DELETE FROM citations WHERE essay_id NOT IN (SELECT id FROM essays)"
-        )
-        conn.exec_driver_sql(
-            "DELETE FROM verdicts WHERE essay_id NOT IN (SELECT id FROM essays)"
-        )
-
-        # --- Strategic Composite B-Tree Indexes for existing databases ---
-        for idx_sql in (
-            "CREATE INDEX IF NOT EXISTS idx_users_role_username ON users(role, username)",
-            "CREATE INDEX IF NOT EXISTS idx_essays_user_uploaded ON essays(user_id, uploaded_at)",
-            "CREATE INDEX IF NOT EXISTS idx_essays_class_uploaded ON essays(class_id, uploaded_at)",
-            "CREATE INDEX IF NOT EXISTS idx_essays_user_filename ON essays(user_id, filename)",
-            "CREATE INDEX IF NOT EXISTS idx_essays_uploaded_at ON essays(uploaded_at)",
-            "CREATE INDEX IF NOT EXISTS idx_citations_essay_type ON citations(essay_id, citation_type)",
-            "CREATE INDEX IF NOT EXISTS idx_verdicts_essay_override_label ON verdicts(essay_id, is_overridden, label)",
-            "CREATE INDEX IF NOT EXISTS idx_verdicts_label ON verdicts(label)",
-            "CREATE INDEX IF NOT EXISTS idx_audit_logs_user_logged ON audit_logs(user, logged_at)",
-            "CREATE INDEX IF NOT EXISTS idx_audit_logs_logged_at ON audit_logs(logged_at)",
-            "CREATE INDEX IF NOT EXISTS idx_promo_redemptions_promo_user ON promo_redemptions(promo_code_id, user_id)",
-        ):
-            conn.exec_driver_sql(idx_sql)
+    run_migrations(engine)
 
 
 def _seed_default_users(engine: Engine) -> None:

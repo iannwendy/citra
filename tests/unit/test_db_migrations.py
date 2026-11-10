@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import OperationalError
 
+import integrity_checker.db as db_pkg
 from integrity_checker.db.migrations import (
     LATEST_SCHEMA_VERSION,
     MIGRATIONS,
@@ -24,6 +25,7 @@ from integrity_checker.db.migrations import (
     main as migrations_cli_main,
 )
 from integrity_checker.db.models import Base, SchemaMigrationRecord
+from integrity_checker.db.session import _run_inline_migrations, init_db
 
 
 def test_schema_migration_record_in_metadata() -> None:
@@ -248,3 +250,32 @@ def test_migrations_cli_status_verify_history_upgrade_downgrade(
     assert migrations_cli_main(["history"]) == 0
     assert migrations_cli_main(["downgrade", "--to", "0008", "--no-backup"]) == 0
     assert migrations_cli_main(["upgrade", "--to", "0009"]) == 0
+
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE schema_migrations SET checksum = 'bad' WHERE version = '0009'")
+        )
+    assert migrations_cli_main(["verify"]) == 1
+    assert "checksum_verified=False" in capsys.readouterr().out
+
+
+def test_session_inline_migrations_delegates_to_versioned_runner(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'session_delegate.db'}")
+    Base.metadata.create_all(bind=engine)
+    _run_inline_migrations(engine)
+    assert callable(init_db)
+
+    status = get_migration_status(engine)
+    assert status.is_up_to_date is True
+    assert status.current_version == "0009"
+
+    for symbol in (
+        "SchemaMigrationRecord",
+        "run_migrations",
+        "downgrade_migrations",
+        "get_migration_status",
+        "verify_migrations",
+    ):
+        assert symbol in db_pkg.__all__
+        assert hasattr(db_pkg, symbol)
+

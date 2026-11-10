@@ -838,7 +838,7 @@ def _verify_ledger_rows(rows: Sequence[tuple[str, str, str]]) -> bool:
 def _invalidate_engine_inspectors(engine: Engine) -> None:
     """Clear reflection caches on any live SQLAlchemy Inspector bound to engine."""
     for obj in gc.get_objects():
-        if isinstance(obj, Inspector) and getattr(obj, "bind", None) is engine:
+        if issubclass(type(obj), Inspector) and getattr(obj, "bind", None) is engine:
             obj.clear_cache()
 
 
@@ -1064,7 +1064,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "verify":
-        verified = verify_migrations(engine)
+        try:
+            verified = verify_migrations(engine)
+        except MigrationIntegrityError:
+            verified = False
         print(f"checksum_verified={verified}")
         return 0 if verified else 1
 
