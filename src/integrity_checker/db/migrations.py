@@ -919,6 +919,7 @@ def run_migrations(engine: Engine, target_version: str | None = None) -> list[st
                     name=step.name,
                     checksum=step.checksum,
                     execution_ms=elapsed_ms,
+                    # Store naive UTC datetime to match SQLite DATETIME column representation
                     applied_at=datetime.now(UTC).replace(tzinfo=None),
                 )
             )
@@ -967,11 +968,17 @@ def downgrade_migrations(
         _ensure_core_tables_exist(conn)
         rows = _read_ledger_rows(conn)
         _verify_ledger_rows(rows)
+        tx_applied_set = {r[0] for r in rows}
+        tx_steps_to_revert = [
+            step
+            for step in reversed(MIGRATIONS)
+            if step.version in tx_applied_set and step.version > target_version
+        ]
 
         mc = MigrationContext.configure(conn)
         op = Operations(mc)
 
-        for step in steps_to_revert:
+        for step in tx_steps_to_revert:
             step.downgrade(conn, op)
             conn.execute(
                 text("DELETE FROM schema_migrations WHERE version = :version"),
