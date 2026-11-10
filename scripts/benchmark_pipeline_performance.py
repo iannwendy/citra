@@ -34,8 +34,10 @@ from integrity_checker.evaluation.performance_benchmark import (  # noqa: E402
     FullPerformanceBenchmarkReport,
     format_benchmark_latex_tables,
     format_benchmark_markdown,
+    run_cold_vs_warm_cache_benchmark,
     run_deadline_burst_benchmark,
     run_document_scale_benchmark,
+    run_http_multipart_burst_benchmark,
 )
 
 QUICK_SCALE_TIERS: tuple[DocumentScaleTierSpec, ...] = (
@@ -154,6 +156,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         seed=int(args.seed),
     )
 
+    cold_vs_warm = run_cold_vs_warm_cache_benchmark(
+        tier=tiers[0],
+        use_live_wan=not args.quick,
+        max_live_wan_queries=8,
+        simulated_wan_latency_ms=(35.0, 55.0),
+        use_real_sbert=use_real_sbert,
+        fallback_dir=out_dir / "_synthetic_pdfs" if args.quick else None,
+        seed=int(args.seed),
+    )
+
+    http_multipart_results = run_http_multipart_burst_benchmark(
+        concurrency_levels=tuple(int(c) for c in args.concurrency),
+        max_concurrent_workers=int(args.max_workers),
+        use_real_sbert=False,
+        simulated_api_latency_ms=api_latency,
+        seed=int(args.seed),
+    )
+
     report = FullPerformanceBenchmarkReport(
         generated_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         environment={
@@ -167,6 +187,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         },
         scale_benchmarks=scale_results,
         deadline_stress_benchmarks=stress_results,
+        cold_vs_warm_cache=cold_vs_warm,
+        http_multipart_stress_benchmarks=http_multipart_results,
     )
 
     json_path = out_dir / "pipeline_performance_benchmark.json"

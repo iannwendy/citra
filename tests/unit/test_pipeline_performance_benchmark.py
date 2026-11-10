@@ -16,16 +16,20 @@ from integrity_checker.api.progress import (
 )
 from integrity_checker.config import get_settings
 from integrity_checker.evaluation.performance_benchmark import (
+    ColdVsWarmCacheBenchmarkResult,
     ControlledDeterministicOrchestrator,
     DocumentScaleTierSpec,
     FullPerformanceBenchmarkReport,
+    HttpMultipartBurstResult,
     PipelineStepProfiler,
     compute_percentiles,
     format_benchmark_latex_tables,
     format_benchmark_markdown,
     resolve_or_synthesize_tier_pdf,
+    run_cold_vs_warm_cache_benchmark,
     run_deadline_burst_benchmark,
     run_document_scale_benchmark,
+    run_http_multipart_burst_benchmark,
 )
 from integrity_checker.extraction.document_parser import DocumentParser
 from integrity_checker.models.citation import Citation, CitationType
@@ -425,6 +429,64 @@ def test_cli_benchmark_script_quick_mode_writes_json_md_and_tex_artifacts(
     payload = json.loads(json_file.read_text(encoding="utf-8"))
     assert len(payload["scale_benchmarks"]) == 3
     assert len(payload["deadline_stress_benchmarks"]) == 2
+    assert payload.get("cold_vs_warm_cache") is not None
+    assert len(payload.get("http_multipart_stress_benchmarks", [])) == 2
+
+
+def test_run_cold_vs_warm_cache_benchmark_computes_speedup_and_handles_wan_or_fallback(
+    tmp_path: Path,
+) -> None:
+    tier = DocumentScaleTierSpec(
+        tier_id="short_10p",
+        label_vi="Bài báo ngắn (~10 trang)",
+        label_en="Short Research Article (~10 pp.)",
+        target_pages=8,
+        target_refs=6,
+        candidate_paths=("nonexistent/short.pdf",),
+    )
+    res: ColdVsWarmCacheBenchmarkResult = run_cold_vs_warm_cache_benchmark(
+        tier=tier,
+        use_live_wan=False,
+        simulated_wan_latency_ms=(35.0, 55.0),
+        use_real_sbert=False,
+        fallback_dir=tmp_path,
+        seed=42,
+    )
+    assert res.tier_id == "short_10p"
+    assert res.num_pages >= 8
+    assert res.num_references >= 4
+    assert res.cold_retrieving_ms > res.warm_retrieving_ms
+    assert res.cold_total_ms > res.warm_total_ms
+    assert res.retrieval_speedup_x > 1.2
+    assert res.end_to_end_speedup_x > 1.05
+    assert res.wan_queries_executed > 0
+
+
+def test_run_http_multipart_burst_benchmark_20_and_50_students_via_fastapi_routes(
+    tmp_path: Path,
+) -> None:
+    results: list[HttpMultipartBurstResult] = run_http_multipart_burst_benchmark(
+        concurrency_levels=(20, 50),
+        max_concurrent_workers=3,
+        use_real_sbert=False,
+        simulated_api_latency_ms=(0.5, 1.5),
+        db_dir=tmp_path,
+        seed=42,
+    )
+    assert len(results) == 2
+    for res, expected_n in ((results[0], 20), (results[1], 50)):
+        assert res.concurrency == expected_n
+        assert res.total_http_uploads == expected_n
+        assert res.http_200_uploads == expected_n
+        assert res.completed_background_essays == expected_n
+        assert res.http_5xx_or_429_errors == 0
+        assert res.sqlite_locked_errors == 0
+        assert res.verdicts_persisted_in_db >= expected_n
+        assert res.http_upload_handler_ms.p50 > 0.0
+        assert res.http_status_poll_ms.p50 > 0.0
+        assert res.http_e2e_completion_ms.p50 >= res.http_upload_handler_ms.p50
+        assert res.throughput_http_uploads_per_sec > 0.0
+
 
 
 

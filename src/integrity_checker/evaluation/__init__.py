@@ -4,11 +4,13 @@ from integrity_checker.evaluation.baselines import BaselineRunner
 from integrity_checker.evaluation.metrics import MetricsCalculator
 from integrity_checker.evaluation.performance_benchmark import (
     DEFAULT_DOCUMENT_SCALE_TIERS,
+    ColdVsWarmCacheBenchmarkResult,
     ControlledDeterministicOrchestrator,
     DeadlineBurstStressResult,
     DocumentScaleBenchmarkResult,
     DocumentScaleTierSpec,
     FullPerformanceBenchmarkReport,
+    HttpMultipartBurstResult,
     PercentileStats,
     PipelineStepProfiler,
     SinglePipelineRunProfile,
@@ -18,8 +20,10 @@ from integrity_checker.evaluation.performance_benchmark import (
     format_benchmark_latex_tables,
     format_benchmark_markdown,
     resolve_or_synthesize_tier_pdf,
+    run_cold_vs_warm_cache_benchmark,
     run_deadline_burst_benchmark,
     run_document_scale_benchmark,
+    run_http_multipart_burst_benchmark,
 )
 from integrity_checker.evaluation.report import EvaluationReport
 
@@ -28,11 +32,13 @@ __all__ = [
     "BaselineRunner",
     "EvaluationReport",
     "DEFAULT_DOCUMENT_SCALE_TIERS",
+    "ColdVsWarmCacheBenchmarkResult",
     "ControlledDeterministicOrchestrator",
     "DeadlineBurstStressResult",
     "DocumentScaleBenchmarkResult",
     "DocumentScaleTierSpec",
     "FullPerformanceBenchmarkReport",
+    "HttpMultipartBurstResult",
     "PercentileStats",
     "PipelineStepProfiler",
     "SinglePipelineRunProfile",
@@ -42,6 +48,8 @@ __all__ = [
     "format_benchmark_latex_tables",
     "format_benchmark_markdown",
     "resolve_or_synthesize_tier_pdf",
+    "run_cold_vs_warm_cache_benchmark",
     "run_deadline_burst_benchmark",
     "run_document_scale_benchmark",
+    "run_http_multipart_burst_benchmark",
 ]

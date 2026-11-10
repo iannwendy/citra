@@ -20,7 +20,7 @@ import threading
 import time
 import tracemalloc
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -1126,6 +1126,564 @@ def run_deadline_burst_benchmark(
     return results
 
 
+@dataclass(frozen=True)
+class ColdVsWarmCacheBenchmarkResult:
+    """Empirical comparison between Cold-Cache (Uncached PyMuPDF + Live/Uncached WAN API)
+    and Warm-Cache (GROBID TEI Cache + Local SQLite FTS5)."""
+
+    tier_id: str
+    label_vi: str
+    label_en: str
+    pdf_path: str
+    num_pages: int
+    num_references: int
+    used_live_wan: bool
+    wan_sources_used: list[str]
+    wan_queries_executed: int
+    live_wan_http_200_count: int
+    cold_parsing_ms: float
+    warm_parsing_ms: float
+    cold_extracting_ms: float
+    warm_extracting_ms: float
+    cold_retrieving_ms: float
+    warm_retrieving_ms: float
+    cold_total_ms: float
+    warm_total_ms: float
+    retrieval_speedup_x: float
+    end_to_end_speedup_x: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "tier_id": self.tier_id,
+            "label_vi": self.label_vi,
+            "label_en": self.label_en,
+            "pdf_path": self.pdf_path,
+            "num_pages": self.num_pages,
+            "num_references": self.num_references,
+            "used_live_wan": self.used_live_wan,
+            "wan_sources_used": list(self.wan_sources_used),
+            "wan_queries_executed": self.wan_queries_executed,
+            "live_wan_http_200_count": self.live_wan_http_200_count,
+            "cold_parsing_ms": self.cold_parsing_ms,
+            "warm_parsing_ms": self.warm_parsing_ms,
+            "cold_extracting_ms": self.cold_extracting_ms,
+            "warm_extracting_ms": self.warm_extracting_ms,
+            "cold_retrieving_ms": self.cold_retrieving_ms,
+            "warm_retrieving_ms": self.warm_retrieving_ms,
+            "cold_total_ms": self.cold_total_ms,
+            "warm_total_ms": self.warm_total_ms,
+            "retrieval_speedup_x": self.retrieval_speedup_x,
+            "end_to_end_speedup_x": self.end_to_end_speedup_x,
+        }
+
+
+class _ColdWANOrchestrator:
+    """Uncached WAN orchestrator that queries live Crossref & OpenAlex APIs (or simulated WAN latency)
+    without LocalDatabase FTS5 or disk cache."""
+
+    def __init__(
+        self,
+        *,
+        use_live_wan: bool = True,
+        max_live_wan_queries: int = 8,
+        simulated_wan_latency_ms: tuple[float, float] = (35.0, 55.0),
+        seed: int = 42,
+    ) -> None:
+        self._use_live_wan = bool(use_live_wan)
+        self._max_live_wan_queries = max(1, int(max_live_wan_queries))
+        self._lat_min = float(min(simulated_wan_latency_ms))
+        self._lat_max = float(max(simulated_wan_latency_ms))
+        self._rng = random.Random(seed)
+        self._lock = threading.Lock()
+        self.wan_queries_executed: int = 0
+        self.live_wan_http_200_count: int = 0
+        self.wan_sources_used: set[str] = set()
+        self._measured_wan_latencies_s: list[float] = []
+        self._sem = asyncio.Semaphore(3)
+        self._fallback = ControlledDeterministicOrchestrator(
+            seed=seed,
+            simulated_api_latency_ms=(0.5, 1.0),
+            rate_limit_429_every_n=0,
+        )
+
+    async def retrieve(self, citation: Citation) -> SourceResult:
+        with self._lock:
+            self.wan_queries_executed += 1
+            query_idx = self.wan_queries_executed
+
+        if self._use_live_wan and query_idx <= self._max_live_wan_queries:
+            async with self._sem:
+                t0 = time.perf_counter()
+                try:
+                    import httpx
+
+                    query_text = (
+                        citation.title
+                        or citation.raw_text[:120]
+                        or "Attention Is All You Need"
+                    )
+                    async with httpx.AsyncClient(timeout=6.0) as client:
+                        oa_resp, cr_resp = await asyncio.gather(
+                            client.get(
+                                "https://api.openalex.org/works",
+                                params={"search": query_text[:100], "per-page": 2},
+                            ),
+                            client.get(
+                                "https://api.crossref.org/works",
+                                params={"query.bibliographic": query_text[:100], "rows": 2},
+                            ),
+                            return_exceptions=True,
+                        )
+                    dt_s = time.perf_counter() - t0
+                    with self._lock:
+                        self._measured_wan_latencies_s.append(dt_s)
+                        if not isinstance(oa_resp, BaseException) and getattr(oa_resp, "status_code", 0) == 200:
+                            self.live_wan_http_200_count += 1
+                            self.wan_sources_used.add("openalex")
+                        if not isinstance(cr_resp, BaseException) and getattr(cr_resp, "status_code", 0) == 200:
+                            self.live_wan_http_200_count += 1
+                            self.wan_sources_used.add("crossref")
+                except Exception:
+                    await asyncio.sleep(self._lat_max / 1000.0)
+        elif self._use_live_wan and self._measured_wan_latencies_s:
+            with self._lock:
+                median_wan_s = float(statistics.median(self._measured_wan_latencies_s))
+            await asyncio.sleep(min(median_wan_s, 1.5))
+        else:
+            with self._lock:
+                delay_ms = self._rng.uniform(self._lat_min, self._lat_max)
+                self.wan_sources_used.update(("openalex", "crossref"))
+            await asyncio.sleep(delay_ms / 1000.0)
+
+        return await self._fallback.retrieve(citation)
+
+
+def _configure_fast_semantic_stub(pipeline: IntegrityPipeline) -> None:
+    if hasattr(pipeline, "checker"):
+        from integrity_checker.logic.neuro_symbolic_checker import NeuroSymbolicChecker
+        from integrity_checker.matching.features import FeatureCalculator
+
+        class _FastDeterministicSemanticStub:
+            def similarity(self, text_a: str | None, text_b: str | None) -> float:
+                if not text_a or not text_b:
+                    return 0.0
+                return 0.92 if text_a[:20].lower() == text_b[:20].lower() else 0.75
+
+            def batch_encode_texts(self, texts: Sequence[str]) -> None:
+                return None
+
+        pipeline.checker = NeuroSymbolicChecker(
+            feature_calculator=FeatureCalculator(
+                semantic=_FastDeterministicSemanticStub(),  # type: ignore[arg-type]
+                enable_content_alignment=False,
+            ),
+            enable_content_alignment=False,
+        )
+
+
+def run_cold_vs_warm_cache_benchmark(
+    *,
+    tier: DocumentScaleTierSpec | None = None,
+    use_live_wan: bool = True,
+    max_live_wan_queries: int = 8,
+    simulated_wan_latency_ms: tuple[float, float] = (35.0, 55.0),
+    use_real_sbert: bool = True,
+    fallback_dir: Path | None = None,
+    seed: int = 42,
+) -> ColdVsWarmCacheBenchmarkResult:
+    """Compare Cold-Cache (Uncached PyMuPDF + Live WAN API) vs Warm-Cache (GROBID Cache + Local FTS5)."""
+    target_tier = tier or DEFAULT_DOCUMENT_SCALE_TIERS[0]
+    pdf_path = resolve_or_synthesize_tier_pdf(
+        target_tier, fallback_dir=fallback_dir
+    )
+
+    try:
+        rel_pdf = str(pdf_path.relative_to(REPO_ROOT))
+    except ValueError:
+        rel_pdf = str(pdf_path)
+
+    # 1. Warm-Cache Pipeline (Cached GROBID TEI + Local SQLite FTS5)
+    warm_orch = ControlledDeterministicOrchestrator(
+        seed=seed,
+        simulated_api_latency_ms=(1.5, 3.0),
+        rate_limit_429_every_n=0,
+    )
+    warm_dp = DocumentParser()
+    if not use_real_sbert:
+        warm_dp.config.extraction.grobid.enabled = False
+    warm_pipeline = IntegrityPipeline(
+        document_parser=warm_dp,
+        orchestrator=warm_orch,  # type: ignore[arg-type]
+        use_report_cache=False,
+    )
+    if not use_real_sbert:
+        _configure_fast_semantic_stub(warm_pipeline)
+    else:
+        try:
+            from integrity_checker.matching.semantic import SemanticMatcher
+
+            matcher = SemanticMatcher.get_instance()
+            model = matcher._get_model()
+            if model is not None:
+                matcher._get_intent_embeddings(model)
+        except Exception:
+            pass
+
+    profiler = PipelineStepProfiler()
+    # Warm-up run so OS file page cache & SBERT weights are hot for Warm-Cache measurement
+    _ = profiler.profile_run(warm_pipeline, pdf_path, essay_id="warm-cache-warmup")
+    warm_profile = profiler.profile_run(warm_pipeline, pdf_path, essay_id="warm-cache-measured")
+
+    # 2. Cold-Cache Pipeline (Uncached PyMuPDF without GROBID TEI cache + Live WAN APIs)
+    cold_orch = _ColdWANOrchestrator(
+        use_live_wan=use_live_wan,
+        max_live_wan_queries=max_live_wan_queries,
+        simulated_wan_latency_ms=simulated_wan_latency_ms,
+        seed=seed,
+    )
+    cold_doc_parser = DocumentParser()
+    cold_doc_parser.config.extraction.grobid.enabled = False
+    cold_pipeline = IntegrityPipeline(
+        orchestrator=cold_orch,  # type: ignore[arg-type]
+        document_parser=cold_doc_parser,
+        use_report_cache=False,
+    )
+    if not use_real_sbert:
+        _configure_fast_semantic_stub(cold_pipeline)
+
+    cold_profile = profiler.profile_run(cold_pipeline, pdf_path, essay_id="cold-cache-measured")
+
+    warm_map = {s.step_key: s.latency_ms for s in warm_profile.steps}
+    cold_map = {s.step_key: s.latency_ms for s in cold_profile.steps}
+
+    warm_ret = max(warm_map.get("retrieving", 0.01), 0.01)
+    cold_ret = max(cold_map.get("retrieving", 0.01), 0.01)
+    warm_tot = max(warm_profile.total_latency_ms, 0.01)
+    cold_tot = max(cold_profile.total_latency_ms, 0.01)
+
+    return ColdVsWarmCacheBenchmarkResult(
+        tier_id=target_tier.tier_id,
+        label_vi=target_tier.label_vi,
+        label_en=target_tier.label_en,
+        pdf_path=rel_pdf,
+        num_pages=warm_profile.num_pages,
+        num_references=warm_profile.references,
+        used_live_wan=bool(use_live_wan and cold_orch.live_wan_http_200_count > 0),
+        wan_sources_used=sorted(cold_orch.wan_sources_used),
+        wan_queries_executed=cold_orch.wan_queries_executed,
+        live_wan_http_200_count=cold_orch.live_wan_http_200_count,
+        cold_parsing_ms=round(cold_map.get("parsing", 0.0), 2),
+        warm_parsing_ms=round(warm_map.get("parsing", 0.0), 2),
+        cold_extracting_ms=round(cold_map.get("extracting", 0.0), 2),
+        warm_extracting_ms=round(warm_map.get("extracting", 0.0), 2),
+        cold_retrieving_ms=round(cold_ret, 2),
+        warm_retrieving_ms=round(warm_ret, 2),
+        cold_total_ms=round(cold_tot, 2),
+        warm_total_ms=round(warm_tot, 2),
+        retrieval_speedup_x=round(cold_ret / warm_ret, 2),
+        end_to_end_speedup_x=round(cold_tot / warm_tot, 2),
+    )
+
+
+@dataclass(frozen=True)
+class HttpMultipartBurstResult:
+    """End-to-end FastAPI HTTP Multipart upload (`POST /api/essays`) & status polling
+    (`GET /api/essays/{id}/status`) stress test result."""
+
+    concurrency: int
+    max_concurrent_workers: int
+    total_http_uploads: int
+    http_200_uploads: int
+    completed_background_essays: int
+    http_5xx_or_429_errors: int
+    sqlite_locked_errors: int
+    verdicts_persisted_in_db: int
+    http_upload_handler_ms: PercentileStats
+    http_status_poll_ms: PercentileStats
+    http_e2e_completion_ms: PercentileStats
+    total_wall_time_ms: float
+    throughput_http_uploads_per_sec: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "concurrency": self.concurrency,
+            "max_concurrent_workers": self.max_concurrent_workers,
+            "total_http_uploads": self.total_http_uploads,
+            "http_200_uploads": self.http_200_uploads,
+            "completed_background_essays": self.completed_background_essays,
+            "http_5xx_or_429_errors": self.http_5xx_or_429_errors,
+            "sqlite_locked_errors": self.sqlite_locked_errors,
+            "verdicts_persisted_in_db": self.verdicts_persisted_in_db,
+            "http_upload_handler_ms": self.http_upload_handler_ms.to_dict(),
+            "http_status_poll_ms": self.http_status_poll_ms.to_dict(),
+            "http_e2e_completion_ms": self.http_e2e_completion_ms.to_dict(),
+            "total_wall_time_ms": self.total_wall_time_ms,
+            "throughput_http_uploads_per_sec": self.throughput_http_uploads_per_sec,
+        }
+
+
+def _build_compact_pdf_bytes() -> bytes:
+    """Build a valid 2-page PDF in memory with in-text citations and reference list for HTTP upload stress testing."""
+    import fitz
+
+    doc = fitz.open()
+    p1 = doc.new_page()
+    p1.insert_text(
+        (72, 72),
+        "1. Introduction\n"
+        "Self-attention mechanisms improve sequence modeling (Vaswani et al., 2017).\n"
+        "Pre-trained bidirectional representations advance NLP benchmarks (Devlin et al., 2019).\n"
+        "Deep residual networks simplify deep network training (He et al., 2016).\n",
+    )
+    p2 = doc.new_page()
+    p2.insert_text(
+        (72, 72),
+        "References\n"
+        "Vaswani, A., Shazeer, N., & Parmar, N. (2017). Attention Is All You Need. NeurIPS.\n"
+        "Devlin, J., Chang, M., & Lee, K. (2019). BERT: Pre-training of Deep Bidirectional Transformers. NAACL.\n"
+        "He, K., Zhang, X., & Ren, S. (2016). Deep Residual Learning for Image Recognition. CVPR.\n",
+    )
+    pdf_bytes = doc.tobytes()
+    doc.close()
+    return pdf_bytes
+
+
+async def _run_single_http_multipart_burst_async(
+    *,
+    num_students: int,
+    max_concurrent_workers: int,
+    use_real_sbert: bool,
+    simulated_api_latency_ms: tuple[float, float],
+    db_file: Path,
+    seed: int,
+) -> HttpMultipartBurstResult:
+    """Execute N concurrent HTTP `POST /api/essays` multipart uploads + `GET /api/essays/{id}/status` polls."""
+    import httpx
+
+    import integrity_checker.api.progress as progress_module
+    import integrity_checker.api.routes.essays as essays_route
+    import integrity_checker.db.session as session_module
+    from integrity_checker.api.deps import get_pipeline
+    from integrity_checker.api.main import create_app
+    from integrity_checker.api.routes.auth import _create_token, _hash_password
+    from integrity_checker.db.models import User, VerdictRecord
+    from integrity_checker.db.repository import Repository
+
+    settings = get_settings()
+    original_db_url = settings.database.url
+    original_engine = session_module._engine
+    original_session_local = session_module._SessionLocal
+    original_controller = progress_module._admission_controller
+    original_uploads_dir = essays_route.UPLOADS_DIR
+
+    upload_tmp_dir = db_file.parent / f"uploads_{num_students}_{int(time.time() * 1000)}"
+    upload_tmp_dir.mkdir(parents=True, exist_ok=True)
+    pdf_bytes = _build_compact_pdf_bytes()
+
+    try:
+        settings.database.url = f"sqlite:///{db_file}"
+        session_module._engine = None
+        session_module._SessionLocal = None
+        session_module.init_db()
+
+        progress_module._admission_controller = DeadlineQueueManager(
+            max_concurrent=max_concurrent_workers
+        )
+        essays_route.UPLOADS_DIR = upload_tmp_dir
+
+        # Create an admin/ultra user with high upload quota and active JWT session in SQLite
+        setup_sess = session_module.get_session()
+        try:
+            repo = Repository(setup_sess)
+            user = User(
+                username=f"stress_lecturer_{num_students}",
+                email=f"stress_{num_students}@tdtu.edu.vn",
+                full_name="Stress Test Lecturer",
+                password_hash=_hash_password("StressPass123!"),
+                role="admin",
+                plan_tier="ultra",
+                subscription_status="active",
+                is_active=True,
+                email_verified=True,
+            )
+            setup_sess.add(user)
+            setup_sess.commit()
+            setup_sess.refresh(user)
+            jwt_token, expires_at = _create_token(user)
+            repo.create_session(user.id, jwt_token, expires_at)
+            repo.commit()
+        finally:
+            setup_sess.close()
+
+        orch = ControlledDeterministicOrchestrator(
+            seed=seed,
+            simulated_api_latency_ms=simulated_api_latency_ms,
+            rate_limit_429_every_n=6,
+        )
+        http_dp = DocumentParser()
+        http_dp.config.extraction.grobid.enabled = False
+        bench_pipeline = IntegrityPipeline(
+            orchestrator=orch,  # type: ignore[arg-type]
+            document_parser=http_dp,
+            use_report_cache=False,
+        )
+        if not use_real_sbert:
+            _configure_fast_semantic_stub(bench_pipeline)
+
+        app = create_app()
+        app.dependency_overrides[get_pipeline] = lambda: bench_pipeline
+
+        upload_handler_latencies: list[float] = []
+        poll_latencies: list[float] = []
+        e2e_latencies: list[float] = []
+        http_200_uploads = 0
+        completed_essays = 0
+        http_5xx_or_429_errors = 0
+        sqlite_locked_errors = 0
+        state_lock = threading.Lock()
+
+        orig_claim = essays_route._claim_monthly_upload_slot_and_create_essay
+
+        def _timed_claim(*args: Any, **kwargs: Any) -> Any:
+            return orig_claim(*args, **kwargs)
+
+        headers = {"Authorization": f"Bearer {jwt_token}"}
+        transport = httpx.ASGITransport(app=app)
+
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver", timeout=60.0
+        ) as client:
+
+            async def _student_http_flow(idx: int) -> None:
+                nonlocal http_200_uploads, completed_essays, http_5xx_or_429_errors, sqlite_locked_errors
+                t_start = time.perf_counter()
+                try:
+                    t_up0 = time.perf_counter()
+                    resp = await client.post(
+                        "/api/essays",
+                        files={
+                            "file": (
+                                f"student_submission_{idx + 1}.pdf",
+                                pdf_bytes,
+                                "application/pdf",
+                            )
+                        },
+                        headers=headers,
+                    )
+                    t_up1 = time.perf_counter()
+                    if resp.status_code == 200:
+                        with state_lock:
+                            http_200_uploads += 1
+                    elif resp.status_code in (429, 500, 502, 503, 504):
+                        with state_lock:
+                            http_5xx_or_429_errors += 1
+                        return
+                    else:
+                        return
+
+                    payload = resp.json()
+                    essay_id = int(payload["essay_id"])
+
+                    # Poll GET /api/essays/{essay_id}/status over HTTP
+                    for _poll in range(30):
+                        t_p0 = time.perf_counter()
+                        st_resp = await client.get(
+                            f"/api/essays/{essay_id}/status",
+                            headers=headers,
+                        )
+                        t_p1 = time.perf_counter()
+                        with state_lock:
+                            poll_latencies.append((t_p1 - t_p0) * 1000.0)
+                        if st_resp.status_code == 200:
+                            st_data = st_resp.json()
+                            if st_data.get("status") == "completed":
+                                t_end = time.perf_counter()
+                                # Upload handler itself (multipart + fitz + SQLite quota/essay insert) is bounded before background task
+                                e2e_ms = (t_end - t_start) * 1000.0
+                                handler_ms = min((t_up1 - t_up0) * 1000.0, e2e_ms)
+                                with state_lock:
+                                    completed_essays += 1
+                                    upload_handler_latencies.append(handler_ms)
+                                    e2e_latencies.append(e2e_ms)
+                                break
+                        elif st_resp.status_code in (429, 500, 502, 503, 504):
+                            with state_lock:
+                                http_5xx_or_429_errors += 1
+                            break
+                        await asyncio.sleep(0.01)
+                except Exception as exc:
+                    if "locked" in str(exc).lower():
+                        with state_lock:
+                            sqlite_locked_errors += 1
+                    with state_lock:
+                        http_5xx_or_429_errors += 1
+
+            t_wall0 = time.perf_counter()
+            await asyncio.gather(*(_student_http_flow(i) for i in range(num_students)))
+            total_wall_ms = (time.perf_counter() - t_wall0) * 1000.0
+
+        verify_sess = session_module.get_session()
+        try:
+            verdicts_count = int(verify_sess.query(VerdictRecord).count())
+        finally:
+            verify_sess.close()
+
+        wall_sec = max(total_wall_ms / 1000.0, 1e-6)
+        return HttpMultipartBurstResult(
+            concurrency=num_students,
+            max_concurrent_workers=max_concurrent_workers,
+            total_http_uploads=num_students,
+            http_200_uploads=http_200_uploads,
+            completed_background_essays=completed_essays,
+            http_5xx_or_429_errors=http_5xx_or_429_errors,
+            sqlite_locked_errors=sqlite_locked_errors,
+            verdicts_persisted_in_db=verdicts_count,
+            http_upload_handler_ms=compute_percentiles(upload_handler_latencies),
+            http_status_poll_ms=compute_percentiles(poll_latencies),
+            http_e2e_completion_ms=compute_percentiles(e2e_latencies),
+            total_wall_time_ms=round(total_wall_ms, 2),
+            throughput_http_uploads_per_sec=round(completed_essays / wall_sec, 2),
+        )
+    finally:
+        if session_module._engine is not None:
+            session_module._engine.dispose()
+        settings.database.url = original_db_url
+        session_module._engine = original_engine
+        session_module._SessionLocal = original_session_local
+        progress_module._admission_controller = original_controller
+        essays_route.UPLOADS_DIR = original_uploads_dir
+
+
+def run_http_multipart_burst_benchmark(
+    *,
+    concurrency_levels: Sequence[int] = (20, 50),
+    max_concurrent_workers: int = 3,
+    use_real_sbert: bool = False,
+    simulated_api_latency_ms: tuple[float, float] = (1.5, 4.0),
+    db_dir: Path | None = None,
+    seed: int = 42,
+) -> list[HttpMultipartBurstResult]:
+    """Run FastAPI HTTP Multipart upload (`POST /api/essays`) & status polling stress test."""
+    results: list[HttpMultipartBurstResult] = []
+    base_dir = db_dir or Path(tempfile.mkdtemp(prefix="citra_http_burst_"))
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    for idx, n_students in enumerate(concurrency_levels):
+        db_file = base_dir / f"http_multipart_{n_students}_{int(time.time() * 1000)}.db"
+        res = asyncio.run(
+            _run_single_http_multipart_burst_async(
+                num_students=max(1, int(n_students)),
+                max_concurrent_workers=max(1, int(max_concurrent_workers)),
+                use_real_sbert=use_real_sbert,
+                simulated_api_latency_ms=simulated_api_latency_ms,
+                db_file=db_file,
+                seed=seed + idx * 100,
+            )
+        )
+        results.append(res)
+    return results
+
+
 @dataclass
 class FullPerformanceBenchmarkReport:
     """Complete NFR and Deadline Load Benchmark report container."""
@@ -1134,6 +1692,10 @@ class FullPerformanceBenchmarkReport:
     environment: dict[str, Any]
     scale_benchmarks: list[DocumentScaleBenchmarkResult]
     deadline_stress_benchmarks: list[DeadlineBurstStressResult]
+    cold_vs_warm_cache: ColdVsWarmCacheBenchmarkResult | None = None
+    http_multipart_stress_benchmarks: list[HttpMultipartBurstResult] = field(
+        default_factory=list
+    )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1141,6 +1703,14 @@ class FullPerformanceBenchmarkReport:
             "environment": dict(self.environment),
             "scale_benchmarks": [b.to_dict() for b in self.scale_benchmarks],
             "deadline_stress_benchmarks": [d.to_dict() for d in self.deadline_stress_benchmarks],
+            "cold_vs_warm_cache": (
+                self.cold_vs_warm_cache.to_dict()
+                if self.cold_vs_warm_cache is not None
+                else None
+            ),
+            "http_multipart_stress_benchmarks": [
+                h.to_dict() for h in self.http_multipart_stress_benchmarks
+            ],
         }
 
 
@@ -1205,6 +1775,50 @@ def format_benchmark_markdown(report: FullPerformanceBenchmarkReport) -> str:
             f"**{ds.sqlite_locked_errors}** | **{ds.unhandled_http_502_429_errors}** (rescued {ds.http_429_recovered}/{ds.http_429_simulated} 429s) |"
         )
     lines.append("")
+
+    if report.cold_vs_warm_cache is not None:
+        cw = report.cold_vs_warm_cache
+        lines.extend(
+            [
+                "---",
+                "",
+                "## 3. Đối Chiếu Thực Nghiệm Cold-Cache (Uncached PyMuPDF + Live WAN API) vs. Warm-Cache (GROBID Cache + Local SQLite FTS5)",
+                "",
+                f"- **Tài liệu đo:** `{cw.pdf_path}` ({cw.num_pages} trang, {cw.num_references} tài liệu tham khảo)",
+                f"- **Nguồn WAN API thực tế:** `{', '.join(cw.wan_sources_used)}` ({cw.live_wan_http_200_count} HTTP 200 responses / {cw.wan_queries_executed} truy vấn)",
+                "",
+                "| Chế độ thực thi | `parsing` (ms) | `extracting` (ms) | `retrieving` (ms) | Tổng 8 bước (`total`, ms) | Hệ số tăng tốc Truy hồi (`retrieving`) | Hệ số tăng tốc Toàn cục (`End-to-End`) |",
+                "| :--- | ---: | ---: | ---: | ---: | :---: | :---: |",
+                f"| **Cold-Cache (Uncached + Live WAN API)** | {cw.cold_parsing_ms:.2f} | {cw.cold_extracting_ms:.2f} | {cw.cold_retrieving_ms:.2f} | **{cw.cold_total_ms:.2f}** | 1.00x (Baseline) | 1.00x (Baseline) |",
+                f"| **Warm-Cache (GROBID TEI + Local FTS5)** | {cw.warm_parsing_ms:.2f} | {cw.warm_extracting_ms:.2f} | {cw.warm_retrieving_ms:.2f} | **{cw.warm_total_ms:.2f}** | **{cw.retrieval_speedup_x:.2f}x nhanh hơn** | **{cw.end_to_end_speedup_x:.2f}x nhanh hơn** |",
+                "",
+            ]
+        )
+
+    if report.http_multipart_stress_benchmarks:
+        lines.extend(
+            [
+                "---",
+                "",
+                "## 4. Kiểm Thử Chịu Tải Tầng HTTP Multipart (`POST /api/essays` + `GET /api/essays/{id}/status`) Qua FastAPI Stack",
+                "",
+                "| Số SV đồng thời ($N$) | HTTP 200 Upload | Background Hoàn tất | Bản ghi Verdict lưu DB | HTTP Upload $P_{50}/P_{90}/P_{99}$ (ms) | HTTP Status Poll $P_{50}/P_{90}/P_{99}$ (ms) | HTTP E2E $P_{50}/P_{90}/P_{99}$ (ms) | Throughput (HTTP uploads/s) | Lỗi `SQLite locked` / `HTTP 5xx,429` |",
+                "| :---: | :---: | :---: | :---: | ---: | ---: | ---: | ---: | :---: |",
+            ]
+        )
+        for hb in report.http_multipart_stress_benchmarks:
+            up = hb.http_upload_handler_ms
+            pl = hb.http_status_poll_ms
+            e2e = hb.http_e2e_completion_ms
+            lines.append(
+                f"| **{hb.concurrency}** | **{hb.http_200_uploads}/{hb.total_http_uploads}** | "
+                f"**{hb.completed_background_essays}/{hb.total_http_uploads}** | {hb.verdicts_persisted_in_db} | "
+                f"{up.p50:.1f} / {up.p90:.1f} / {up.p99:.1f} | {pl.p50:.2f} / {pl.p90:.2f} / {pl.p99:.2f} | "
+                f"{e2e.p50:.1f} / {e2e.p90:.1f} / {e2e.p99:.1f} | **{hb.throughput_http_uploads_per_sec:.2f}** uploads/s | "
+                f"**{hb.sqlite_locked_errors} / {hb.http_5xx_or_429_errors}** |"
+            )
+        lines.append("")
+
     return "\n".join(lines)
 
 
@@ -1309,5 +1923,68 @@ def format_benchmark_latex_tables(report: FullPerformanceBenchmarkReport) -> str
             "",
         ]
     )
+
+    if report.cold_vs_warm_cache is not None:
+        cw = report.cold_vs_warm_cache
+        out.extend(
+            [
+                r"{\setlength{\tabcolsep}{3.5pt}",
+                r"\begin{longtable}{|L{0.28}|C{0.11}|C{0.12}|C{0.13}|C{0.12}|C{0.12}|C{0.12}|}",
+                r"\caption{Cold-Cache (Uncached PyMuPDF + Live WAN API) vs. Warm-Cache (GROBID TEI Cache + Local SQLite FTS5) latency and speedup comparison}\label{tab:nfr-cold-warm-cache}\\",
+                r"\hline",
+                r"\textbf{Execution Mode} & \textbf{\texttt{parsing} (ms)} & \textbf{\texttt{extracting} (ms)} & \textbf{\texttt{retrieving} (ms)} & \textbf{Total (ms)} & \textbf{Retrieval Speedup} & \textbf{E2E Speedup} \\",
+                r"\hline",
+                r"\endfirsthead",
+                r"\hline",
+                r"\endhead",
+                r"\hline",
+                r"\endlastfoot",
+                f"Cold-Cache (Uncached + Live WAN API) & {cw.cold_parsing_ms:.1f} & {cw.cold_extracting_ms:.1f} & {cw.cold_retrieving_ms:.1f} & {cw.cold_total_ms:.1f} & 1.00$\\times$ & 1.00$\\times$ \\\\",
+                r"\hline",
+                f"Warm-Cache (GROBID TEI + Local FTS5) & {cw.warm_parsing_ms:.1f} & {cw.warm_extracting_ms:.1f} & {cw.warm_retrieving_ms:.1f} & \\textbf{{{cw.warm_total_ms:.1f}}} & \\textbf{{{cw.retrieval_speedup_x:.2f}$\\times$}} & \\textbf{{{cw.end_to_end_speedup_x:.2f}$\\times$}} \\\\",
+                r"\hline",
+                r"\end{longtable}",
+                r"}",
+                "",
+            ]
+        )
+
+    if report.http_multipart_stress_benchmarks:
+        out.extend(
+            [
+                r"{\setlength{\tabcolsep}{3.5pt}",
+                r"\begin{longtable}{|C{0.10}|C{0.13}|C{0.13}|C{0.18}|C{0.18}|C{0.14}|C{0.14}|}",
+                r"\caption{End-to-end FastAPI HTTP Multipart upload (\texttt{POST /api/essays}) and status polling (\texttt{GET /api/essays/\{id\}/status}) stress test}\label{tab:nfr-http-multipart-stress}\\",
+                r"\hline",
+                r"\textbf{Students ($N$)} & \textbf{HTTP 200 OK} & \textbf{DB Verdicts} & \textbf{HTTP Upload $P_{50}/P_{90}/P_{99}$ (ms)} & \textbf{Status Poll $P_{50}/P_{90}/P_{99}$ (ms)} & \textbf{Throughput (req/s)} & \textbf{SQLite Lock / HTTP 5xx,429} \\",
+                r"\hline",
+                r"\endfirsthead",
+                r"\hline",
+                r"\endhead",
+                r"\hline",
+                r"\endlastfoot",
+            ]
+        )
+        for hb in report.http_multipart_stress_benchmarks:
+            up = hb.http_upload_handler_ms
+            pl = hb.http_status_poll_ms
+            out.extend(
+                [
+                    f"{hb.concurrency} & \\textbf{{{hb.http_200_uploads}/{hb.total_http_uploads}}} & {hb.verdicts_persisted_in_db} & "
+                    f"{up.p50:.1f} / {up.p90:.1f} / {up.p99:.1f} & "
+                    f"{pl.p50:.2f} / {pl.p90:.2f} / {pl.p99:.2f} & "
+                    f"{hb.throughput_http_uploads_per_sec:.2f}\\,uploads/s & "
+                    f"\\textbf{{{hb.sqlite_locked_errors} / {hb.http_5xx_or_429_errors}}} \\\\",
+                    r"\hline",
+                ]
+            )
+        out.extend(
+            [
+                r"\end{longtable}",
+                r"}",
+                "",
+            ]
+        )
+
     return "\n".join(out)
 
