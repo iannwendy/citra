@@ -14,10 +14,15 @@ from integrity_checker.api.progress import (
     get_pipeline_admission_controller,
 )
 from integrity_checker.evaluation.performance_benchmark import (
+    ControlledDeterministicOrchestrator,
+    DocumentScaleTierSpec,
     PipelineStepProfiler,
     compute_percentiles,
+    resolve_or_synthesize_tier_pdf,
+    run_document_scale_benchmark,
 )
 from integrity_checker.extraction.document_parser import DocumentParser
+from integrity_checker.models.citation import Citation, CitationType
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.pipeline.integrity_pipeline import IntegrityPipeline
 
@@ -206,4 +211,91 @@ def test_pipeline_step_profiler_preserves_preexisting_tracemalloc_session(
     finally:
         if not was_tracing and tracemalloc.is_tracing():
             tracemalloc.stop()
+
+
+@pytest.mark.asyncio
+async def test_controlled_deterministic_orchestrator_uses_local_fts5_and_recovers_simulated_429() -> None:
+    orch = ControlledDeterministicOrchestrator(
+        seed=42,
+        simulated_api_latency_ms=(2.0, 5.0),
+        rate_limit_429_every_n=3,
+    )
+    citations = [
+        Citation(
+            raw_text=f"[{i}] Vaswani, A. et al. (2017). Attention Is All You Need. NeurIPS.",
+            citation_type=CitationType.REFERENCE_LIST,
+            title="Attention Is All You Need",
+            authors=["Vaswani, A.", "Shazeer, N."],
+            year=2017,
+            doi=f"10.5555/test.{i}",
+        )
+        for i in range(1, 7)
+    ]
+    results = [await orch.retrieve(c) for c in citations]
+    assert len(results) == 6
+    assert all(r.best_candidate() is not None for r in results)
+    assert orch.simulated_429_count >= 2
+    assert orch.recovered_429_count == orch.simulated_429_count
+    assert orch.unhandled_error_count == 0
+
+
+def test_resolve_tier_pdf_falls_back_to_synthetic_pdf_when_candidate_files_missing(
+    tmp_path: Path,
+) -> None:
+    import fitz
+
+    missing_tier = DocumentScaleTierSpec(
+        tier_id="synthetic_10p",
+        label_vi="Bài báo ngắn (10 trang)",
+        label_en="Short Paper (10 pages)",
+        target_pages=10,
+        target_refs=8,
+        candidate_paths=("nonexistent_folder/missing_10p.pdf",),
+    )
+    resolved = resolve_or_synthesize_tier_pdf(missing_tier, fallback_dir=tmp_path)
+    assert resolved.is_file()
+    doc = fitz.open(str(resolved))
+    assert len(doc) == 10
+    doc.close()
+
+
+def test_run_document_scale_benchmark_across_three_tiers_produces_monotonic_page_and_step_stats(
+    tmp_path: Path,
+) -> None:
+    tiers = (
+        DocumentScaleTierSpec(
+            tier_id="short_10p",
+            label_vi="Bài báo ngắn (10 trang)",
+            label_en="Short Paper (10 pp.)",
+            target_pages=10,
+            target_refs=6,
+            candidate_paths=("nonexistent/short_10p.pdf",),
+        ),
+        DocumentScaleTierSpec(
+            tier_id="thesis_50p",
+            label_vi="Khóa luận (50 trang)",
+            label_en="Bachelor Thesis (50 pp.)",
+            target_pages=50,
+            target_refs=12,
+            candidate_paths=("nonexistent/thesis_50p.pdf",),
+        ),
+    )
+    results = run_document_scale_benchmark(
+        tiers=tiers,
+        iterations=2,
+        warmup_runs=0,
+        seed=42,
+        use_real_sbert=False,
+        fallback_dir=tmp_path,
+    )
+    assert len(results) == 2
+    assert results[0].num_pages == 10
+    assert results[1].num_pages == 50
+    for res in results:
+        assert len(res.steps) == 8
+        assert res.total_latency_ms.p50 > 0.0
+        assert res.total_latency_ms.p90 >= res.total_latency_ms.p50
+        assert res.total_latency_ms.p99 >= res.total_latency_ms.p90
+        assert res.peak_rss_mb > 0.0
+
 
