@@ -418,6 +418,20 @@ class PromoRedemption(Base):
     promo: Mapped[PromoCode] = relationship(back_populates="redemptions")
 
 
+class SchemaMigrationRecord(Base):
+    """Persistent ledger of applied database schema migrations."""
+
+    __tablename__ = "schema_migrations"
+
+    version: Mapped[str] = mapped_column(String(32), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    execution_ms: Mapped[float] = mapped_column(Float, default=0.0)
+    applied_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC)
+    )
+
+
 # ---------------------------------------------------------------------------
 # Strategic Composite B-Tree Indexes (Performance Optimization)
 # ---------------------------------------------------------------------------
