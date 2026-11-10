@@ -10,6 +10,7 @@ import re
 import sqlite3
 import time
 from collections.abc import Callable, Sequence
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -761,7 +762,10 @@ def create_sqlite_backup(
     os.close(fd)
     os.chmod(backup_path, 0o600)
 
-    with sqlite3.connect(str(db_path)) as src_conn, sqlite3.connect(str(backup_path)) as dst_conn:
+    with (
+        closing(sqlite3.connect(str(db_path))) as src_conn,
+        closing(sqlite3.connect(str(backup_path))) as dst_conn,
+    ):
         src_conn.backup(dst_conn)
     os.chmod(backup_path, 0o600)
     return backup_path
@@ -796,8 +800,8 @@ def restore_sqlite_backup(
 
     engine.dispose()
     with (
-        sqlite3.connect(str(resolved_backup)) as src_conn,
-        sqlite3.connect(str(db_path.resolve())) as dst_conn,
+        closing(sqlite3.connect(str(resolved_backup))) as src_conn,
+        closing(sqlite3.connect(str(db_path.resolve()))) as dst_conn,
     ):
         src_conn.backup(dst_conn)
     _invalidate_engine_inspectors(engine)

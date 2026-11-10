@@ -10,6 +10,7 @@ import integrity_checker.db as db_pkg
 from integrity_checker.db.migrations import (
     LATEST_SCHEMA_VERSION,
     MIGRATIONS,
+    MigrationError,
     MigrationIntegrityError,
     MigrationStep,
     create_sqlite_backup,
@@ -69,27 +70,33 @@ def test_migration_step_deterministic_sha256_checksum() -> None:
 
 def test_run_migrations_on_uninitialized_db_raises_no_such_table(tmp_path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'empty.db'}")
-    with pytest.raises(OperationalError, match="no such table"):
-        run_migrations(engine)
+    try:
+        with pytest.raises(OperationalError, match="no such table"):
+            run_migrations(engine)
+    finally:
+        engine.dispose()
 
 
 def test_fresh_db_create_all_then_run_migrations_is_idempotent(tmp_path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'fresh.db'}")
-    Base.metadata.create_all(bind=engine)
-    applied_first = run_migrations(engine)
-    assert applied_first == [m.version for m in MIGRATIONS]
-    assert LATEST_SCHEMA_VERSION == "0009"
+    try:
+        Base.metadata.create_all(bind=engine)
+        applied_first = run_migrations(engine)
+        assert applied_first == [m.version for m in MIGRATIONS]
+        assert LATEST_SCHEMA_VERSION == "0009"
 
-    status = get_migration_status(engine)
-    assert status.is_up_to_date is True
-    assert status.current_version == "0009"
-    assert status.pending_versions == ()
-    assert status.checksum_verified is True
-    assert verify_migrations(engine) is True
+        status = get_migration_status(engine)
+        assert status.is_up_to_date is True
+        assert status.current_version == "0009"
+        assert status.pending_versions == ()
+        assert status.checksum_verified is True
+        assert verify_migrations(engine) is True
 
-    # Second run is a fast no-op
-    applied_second = run_migrations(engine)
-    assert applied_second == []
+        # Second run is a fast no-op
+        applied_second = run_migrations(engine)
+        assert applied_second == []
+    finally:
+        engine.dispose()
 
 
 def test_legacy_database_upgrades_to_latest_and_backfills_data(tmp_path) -> None:
@@ -148,48 +155,55 @@ def test_legacy_database_upgrades_to_latest_and_backfills_data(tmp_path) -> None
     assert join_code == "CITRA-1001"
     assert subtotal == pytest.approx(19.99)
     assert orphan_count == 0
+    engine.dispose()
 
 
 def test_tampered_checksum_raises_migration_integrity_error(tmp_path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'tamper.db'}")
-    Base.metadata.create_all(bind=engine)
-    run_migrations(engine)
-
-    with engine.begin() as conn:
-        conn.execute(
-            text("UPDATE schema_migrations SET checksum = '0000badchecksum' WHERE version = '0003'")
-        )
-
-    with pytest.raises(MigrationIntegrityError, match="0003"):
-        verify_migrations(engine)
-
-    with pytest.raises(MigrationIntegrityError, match="0003"):
+    try:
+        Base.metadata.create_all(bind=engine)
         run_migrations(engine)
+
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE schema_migrations SET checksum = '0000badchecksum' WHERE version = '0003'")
+            )
+
+        with pytest.raises(MigrationIntegrityError, match="0003"):
+            verify_migrations(engine)
+
+        with pytest.raises(MigrationIntegrityError, match="0003"):
+            run_migrations(engine)
+    finally:
+        engine.dispose()
 
 
 def test_downgrade_and_reupgrade_roundtrip_on_sqlite(tmp_path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'rollback.db'}")
-    Base.metadata.create_all(bind=engine)
-    run_migrations(engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+        run_migrations(engine)
 
-    reverted = downgrade_migrations(engine, "0006", create_backup=True, backup_dir=tmp_path)
-    assert reverted == ["0009", "0008", "0007"]
+        reverted = downgrade_migrations(engine, "0006", create_backup=True, backup_dir=tmp_path)
+        assert reverted == ["0009", "0008", "0007"]
 
-    status = get_migration_status(engine)
-    assert status.current_version == "0006"
-    assert status.pending_versions == ("0007", "0008", "0009")
+        status = get_migration_status(engine)
+        assert status.current_version == "0006"
+        assert status.pending_versions == ("0007", "0008", "0009")
 
-    inspector = inspect(engine)
-    user_cols = {c["name"] for c in inspector.get_columns("users")}
-    assert "privacy_consented_at" not in user_cols
-    assert "google_id" not in user_cols
-    assert "plan_tier" in user_cols
+        inspector = inspect(engine)
+        user_cols = {c["name"] for c in inspector.get_columns("users")}
+        assert "privacy_consented_at" not in user_cols
+        assert "google_id" not in user_cols
+        assert "plan_tier" in user_cols
 
-    # Re-apply pending migrations back to 0009
-    reapplied = run_migrations(engine)
-    assert reapplied == ["0007", "0008", "0009"]
-    user_cols_after = {c["name"] for c in inspector.get_columns("users")}
-    assert {"privacy_consented_at", "google_id", "plan_tier"}.issubset(user_cols_after)
+        # Re-apply pending migrations back to 0009
+        reapplied = run_migrations(engine)
+        assert reapplied == ["0007", "0008", "0009"]
+        user_cols_after = {c["name"] for c in inspector.get_columns("users")}
+        assert {"privacy_consented_at", "google_id", "plan_tier"}.issubset(user_cols_after)
+    finally:
+        engine.dispose()
 
 
 def test_backup_security_rejects_traversal_and_enforces_0600_mode(tmp_path) -> None:
@@ -231,6 +245,7 @@ def test_backup_security_rejects_traversal_and_enforces_0600_mode(tmp_path) -> N
             restore_sqlite_backup(engine, outside_file, allowed_dir=tmp_path)
     finally:
         outside_file.unlink(missing_ok=True)
+    engine.dispose()
 
 
 def test_migrations_cli_status_verify_history_upgrade_downgrade(
@@ -238,25 +253,28 @@ def test_migrations_cli_status_verify_history_upgrade_downgrade(
 ) -> None:
     db_file = tmp_path / "cli.db"
     engine = create_engine(f"sqlite:///{db_file}")
-    Base.metadata.create_all(bind=engine)
-    monkeypatch.setattr("integrity_checker.db.session.get_engine", lambda: engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+        monkeypatch.setattr("integrity_checker.db.session.get_engine", lambda: engine)
 
-    assert migrations_cli_main(["upgrade"]) == 0
-    assert migrations_cli_main(["status"]) == 0
-    out = capsys.readouterr().out
-    assert "0009" in out and "up_to_date=True" in out
+        assert migrations_cli_main(["upgrade"]) == 0
+        assert migrations_cli_main(["status"]) == 0
+        out = capsys.readouterr().out
+        assert "0009" in out and "up_to_date=True" in out
 
-    assert migrations_cli_main(["verify"]) == 0
-    assert migrations_cli_main(["history"]) == 0
-    assert migrations_cli_main(["downgrade", "--to", "0008", "--no-backup"]) == 0
-    assert migrations_cli_main(["upgrade", "--to", "0009"]) == 0
+        assert migrations_cli_main(["verify"]) == 0
+        assert migrations_cli_main(["history"]) == 0
+        assert migrations_cli_main(["downgrade", "--to", "0008", "--no-backup"]) == 0
+        assert migrations_cli_main(["upgrade", "--to", "0009"]) == 0
 
-    with engine.begin() as conn:
-        conn.execute(
-            text("UPDATE schema_migrations SET checksum = 'bad' WHERE version = '0009'")
-        )
-    assert migrations_cli_main(["verify"]) == 1
-    assert "checksum_verified=False" in capsys.readouterr().out
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE schema_migrations SET checksum = 'bad' WHERE version = '0009'")
+            )
+        assert migrations_cli_main(["verify"]) == 1
+        assert "checksum_verified=False" in capsys.readouterr().out
+    finally:
+        engine.dispose()
 
 
 def test_session_inline_migrations_delegates_to_versioned_runner(tmp_path) -> None:
@@ -278,4 +296,90 @@ def test_session_inline_migrations_delegates_to_versioned_runner(tmp_path) -> No
     ):
         assert symbol in db_pkg.__all__
         assert hasattr(db_pkg, symbol)
+    engine.dispose()
+
+
+def test_full_chain_0009_to_0000_downgrade_and_stepped_reupgrade(tmp_path) -> None:
+    """Verify rolling back ALL 9 migrations (0009 -> 0000) and stepped re-upgrade (0000 -> 0004 -> 0009)."""
+    engine = create_engine(f"sqlite:///{tmp_path / 'full_chain.db'}")
+    try:
+        Base.metadata.create_all(bind=engine)
+        run_migrations(engine)
+
+        # No-op downgrade when already at 0009
+        assert downgrade_migrations(engine, "0009", create_backup=False) == []
+
+        # Roll back all the way to 0000
+        reverted = downgrade_migrations(engine, "0000", create_backup=False)
+        assert reverted == [m.version for m in reversed(MIGRATIONS)]
+
+        status_zero = get_migration_status(engine)
+        assert status_zero.current_version is None
+        assert status_zero.is_up_to_date is False
+        assert len(status_zero.pending_versions) == 9
+
+        # Stepped upgrade to 0004 first, then to 0009
+        applied_partial = run_migrations(engine, target_version="0004")
+        assert applied_partial == ["0001", "0002", "0003", "0004"]
+        assert get_migration_status(engine).current_version == "0004"
+
+        applied_rest = run_migrations(engine)
+        assert applied_rest == ["0005", "0006", "0007", "0008", "0009"]
+        assert get_migration_status(engine).is_up_to_date is True
+    finally:
+        engine.dispose()
+
+
+def test_edge_cases_and_security_guards_full_coverage(tmp_path) -> None:
+    """Exercise all defensive error branches: unknown target_version, unknown ledger revision,
+    symlink rejection, missing backup file, and in-memory SQLite backup/restore handling."""
+    mem_engine = create_engine("sqlite:///:memory:")
+    try:
+        Base.metadata.create_all(bind=mem_engine)
+        assert create_sqlite_backup(mem_engine, label="mem") is None
+        with pytest.raises(MigrationError, match="file-backed SQLite"):
+            restore_sqlite_backup(mem_engine, tmp_path / "nonexistent.bak")
+
+        with pytest.raises(MigrationError, match="Unknown target migration version"):
+            run_migrations(mem_engine, target_version="9999")
+
+        with pytest.raises(MigrationError, match="Unknown target migration version"):
+            downgrade_migrations(mem_engine, "9999", create_backup=False)
+    finally:
+        mem_engine.dispose()
+
+    db_file = tmp_path / "edge.db"
+    engine = create_engine(f"sqlite:///{db_file}")
+    try:
+        Base.metadata.create_all(bind=engine)
+        run_migrations(engine)
+
+        # Missing backup file inside allowed_dir
+        with pytest.raises(ValueError, match="Backup file does not exist"):
+            restore_sqlite_backup(engine, tmp_path / "missing.sqlite3", allowed_dir=tmp_path)
+
+        # Symlink inside allowed_dir pointing to a valid backup must be rejected
+        bak_path = create_sqlite_backup(engine, label="real_bak", backup_dir=tmp_path)
+        assert bak_path is not None
+        symlink_path = tmp_path / "symlink_bak.sqlite3"
+        symlink_path.symlink_to(bak_path)
+        with pytest.raises(ValueError, match="symbolic link"):
+            restore_sqlite_backup(engine, symlink_path, allowed_dir=tmp_path)
+
+        # Inject unknown revision into schema_migrations -> MigrationIntegrityError & status.checksum_verified=False
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO schema_migrations (version, name, checksum, execution_ms, applied_at) "
+                    "VALUES ('9999', 'unknown_future_step', 'deadbeef', 0.1, CURRENT_TIMESTAMP)"
+                )
+            )
+        status = get_migration_status(engine)
+        assert status.checksum_verified is False
+        assert status.is_up_to_date is False
+        with pytest.raises(MigrationIntegrityError, match="Unknown migration revision"):
+            verify_migrations(engine)
+    finally:
+        engine.dispose()
+
 
