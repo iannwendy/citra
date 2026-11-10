@@ -438,6 +438,9 @@ class PipelineAdmissionController:
             self._release_slot()
 
 
+# Canonical thesis/NFR alias for PipelineAdmissionController
+DeadlineQueueManager = PipelineAdmissionController
+
 # Module-level singletons — backend is single-process for MVP
 _tracker = ProgressTracker()
 _admission_controller = PipelineAdmissionController()
@@ -448,4 +451,8 @@ def get_tracker() -> ProgressTracker:
 
 
 def get_pipeline_admission_controller() -> PipelineAdmissionController:
+    return _admission_controller
+
+
+def get_deadline_queue_manager() -> PipelineAdmissionController:
     return _admission_controller

@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import logging
 import re
+import time
+import tracemalloc
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -183,6 +185,13 @@ class DocumentParser:
         if bib_ris_ext is not None:
             return self._parse_bib_or_ris_document(pdf_path, bib_ris_ext)
         is_docx = self._is_docx_file(pdf_path)
+
+        t_parse_start = time.perf_counter()
+        if tracemalloc.is_tracing():
+            tracemalloc.reset_peak()
+            mem_parse_base, _ = tracemalloc.get_traced_memory()
+        else:
+            mem_parse_base = 0
 
         # 1. Native DOCX or PyMuPDF (with PdfPlumberParser fallback)
         mupdf_failed = False
@@ -356,6 +365,10 @@ class DocumentParser:
             grobid_status = "disabled"
 
         # 3. Merge
+        doc_meta_pre = dict(text_doc.metadata or {})
+        doc_meta_pre["_t_parse_start"] = t_parse_start
+        doc_meta_pre["_mem_parse_base"] = mem_parse_base
+        text_doc.metadata = doc_meta_pre
         parsed = self._merge(text_doc, grobid_out)
         parsed.parser_warnings = warnings
         parsed.parser_used = parser_used
@@ -375,8 +388,23 @@ class DocumentParser:
 
     def _parse_bib_or_ris_document(self, file_path: str, ext: str) -> ParsedDocument:
         """Parse a .bib or .ris file into a structured ParsedDocument."""
+        t0 = time.perf_counter()
+        if tracemalloc.is_tracing():
+            tracemalloc.reset_peak()
+            mem_base, _ = tracemalloc.get_traced_memory()
+        else:
+            mem_base = 0
         p = Path(file_path)
         raw_text = p.read_text(encoding="utf-8", errors="replace") if p.is_file() else ""
+        t_after_read = time.perf_counter()
+        parsing_peak_mb = 0.0
+        if tracemalloc.is_tracing():
+            _, peak_parse = tracemalloc.get_traced_memory()
+            parsing_peak_mb = max(0.0, (peak_parse - mem_base) / (1024.0 * 1024.0))
+            tracemalloc.reset_peak()
+            mem_ext_base, _ = tracemalloc.get_traced_memory()
+        else:
+            mem_ext_base = 0
         all_citations = parse_bib_or_ris_content(raw_text, ext)
         body_citations = [
             c
@@ -386,6 +414,11 @@ class DocumentParser:
         references = [
             c for c in all_citations if c.citation_type == CitationType.REFERENCE_LIST
         ]
+        t_after_extract = time.perf_counter()
+        extracting_peak_mb = 0.0
+        if tracemalloc.is_tracing():
+            _, peak_ext = tracemalloc.get_traced_memory()
+            extracting_peak_mb = max(0.0, (peak_ext - mem_ext_base) / (1024.0 * 1024.0))
         body_text = "\n".join(c.raw_text for c in body_citations)
         bib_text = "References\n" + "\n".join(c.raw_text for c in references)
         page_text = f"{body_text}\n\n{bib_text}".strip() or raw_text
@@ -395,7 +428,16 @@ class DocumentParser:
             file_path=file_path,
             num_pages=1,
             pages=[Page(page_num=1, text=page_text, has_text_layer=True)],
-            metadata={"is_scanned_pdf": False, "file_format": ext.lstrip(".")},
+            metadata={
+                "is_scanned_pdf": False,
+                "file_format": ext.lstrip("."),
+                "_step_telemetry": {
+                    "parsing_ms": max(0.001, (t_after_read - t0) * 1000.0),
+                    "extracting_ms": max(0.001, (t_after_extract - t_after_read) * 1000.0),
+                    "parsing_peak_mb": float(parsing_peak_mb),
+                    "extracting_peak_mb": float(extracting_peak_mb),
+                },
+            },
             parser_used=parser_name,
         )
         sections = [
@@ -498,8 +540,21 @@ class DocumentParser:
         References: ưu tiên GROBID bibliography → fallback regex.
         """
         # 3.1 Sections từ text_doc
+        raw_meta = dict(text_doc.metadata or {})
+        t_parse_start = float(raw_meta.pop("_t_parse_start", time.perf_counter()))
+        mem_parse_base = int(raw_meta.pop("_mem_parse_base", 0))
         sections = self._section_segmenter.segment(text_doc)
+        t_parse_end = time.perf_counter()
+        parsing_peak_mb = 0.0
+        if tracemalloc.is_tracing():
+            _, peak_parse = tracemalloc.get_traced_memory()
+            parsing_peak_mb = max(0.0, (peak_parse - mem_parse_base) / (1024.0 * 1024.0))
+            tracemalloc.reset_peak()
+            mem_ext_base, _ = tracemalloc.get_traced_memory()
+        else:
+            mem_ext_base = 0
 
+        t_extract_start = time.perf_counter()
         # 3.2 Body citations (regex trên body sections)
         body_citations = self._extract_body_citations(sections, text_doc)
 
@@ -549,6 +604,19 @@ class DocumentParser:
 
         # 3.4 Appendix citations (chỉ track, không analyse)
         appendix_citations = self._extract_appendix_citations(sections, text_doc)
+        t_extract_end = time.perf_counter()
+        extracting_peak_mb = 0.0
+        if tracemalloc.is_tracing():
+            _, peak_ext = tracemalloc.get_traced_memory()
+            extracting_peak_mb = max(0.0, (peak_ext - mem_ext_base) / (1024.0 * 1024.0))
+
+        raw_meta["_step_telemetry"] = {
+            "parsing_ms": max(0.001, (t_parse_end - t_parse_start) * 1000.0),
+            "extracting_ms": max(0.001, (t_extract_end - t_extract_start) * 1000.0),
+            "parsing_peak_mb": float(parsing_peak_mb),
+            "extracting_peak_mb": float(extracting_peak_mb),
+        }
+        text_doc.metadata = raw_meta
 
         return ParsedDocument(
             document=text_doc,
