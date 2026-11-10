@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import stat
+
 import pytest
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import OperationalError
@@ -9,12 +11,17 @@ from integrity_checker.db.migrations import (
     MIGRATIONS,
     MigrationIntegrityError,
     MigrationStep,
+    create_sqlite_backup,
     downgrade_migrations,
     get_migration_status,
+    restore_sqlite_backup,
     run_migrations,
     validate_revision_id,
     validate_sql_identifier,
     verify_migrations,
+)
+from integrity_checker.db.migrations import (
+    main as migrations_cli_main,
 )
 from integrity_checker.db.models import Base, SchemaMigrationRecord
 
@@ -181,3 +188,63 @@ def test_downgrade_and_reupgrade_roundtrip_on_sqlite(tmp_path) -> None:
     assert reapplied == ["0007", "0008", "0009"]
     user_cols_after = {c["name"] for c in inspector.get_columns("users")}
     assert {"privacy_consented_at", "google_id", "plan_tier"}.issubset(user_cols_after)
+
+
+def test_backup_security_rejects_traversal_and_enforces_0600_mode(tmp_path) -> None:
+    db_file = tmp_path / "app.db"
+    engine = create_engine(f"sqlite:///{db_file}")
+    Base.metadata.create_all(bind=engine)
+    run_migrations(engine)
+
+    for bad_label in ("../evil", "a..b", "a/b", "a\\b", "bad;label", ""):
+        with pytest.raises(ValueError, match="Invalid backup label"):
+            create_sqlite_backup(engine, label=bad_label, backup_dir=tmp_path)
+
+    bak_path = create_sqlite_backup(engine, label="pre_rollback_0006", backup_dir=tmp_path)
+    assert bak_path is not None and bak_path.exists()
+    mode = stat.S_IMODE(bak_path.stat().st_mode)
+    assert mode == 0o600
+
+    # Mutate DB, then restore from backup and verify state recovered
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM schema_migrations WHERE version = '0009'"))
+    restore_sqlite_backup(engine, bak_path, allowed_dir=tmp_path)
+    with engine.connect() as conn:
+        v9 = conn.execute(
+            text("SELECT version FROM schema_migrations WHERE version = '0009'")
+        ).scalar_one_or_none()
+    assert v9 == "0009"
+
+    # Reject restore of non-SQLite file inside allowed_dir
+    corrupt_file = tmp_path / "corrupt.bak"
+    corrupt_file.write_bytes(b"not a valid sqlite header")
+    with pytest.raises(ValueError, match="Invalid SQLite backup file header"):
+        restore_sqlite_backup(engine, corrupt_file, allowed_dir=tmp_path)
+
+    # Reject restore from outside allowed_dir
+    outside_file = tmp_path.parent / "outside.bak"
+    outside_file.write_bytes(b"not a valid backup")
+    try:
+        with pytest.raises(ValueError, match="outside allowed backup directory"):
+            restore_sqlite_backup(engine, outside_file, allowed_dir=tmp_path)
+    finally:
+        outside_file.unlink(missing_ok=True)
+
+
+def test_migrations_cli_status_verify_history_upgrade_downgrade(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    db_file = tmp_path / "cli.db"
+    engine = create_engine(f"sqlite:///{db_file}")
+    Base.metadata.create_all(bind=engine)
+    monkeypatch.setattr("integrity_checker.db.session.get_engine", lambda: engine)
+
+    assert migrations_cli_main(["upgrade"]) == 0
+    assert migrations_cli_main(["status"]) == 0
+    out = capsys.readouterr().out
+    assert "0009" in out and "up_to_date=True" in out
+
+    assert migrations_cli_main(["verify"]) == 0
+    assert migrations_cli_main(["history"]) == 0
+    assert migrations_cli_main(["downgrade", "--to", "0008", "--no-backup"]) == 0
+    assert migrations_cli_main(["upgrade", "--to", "0009"]) == 0

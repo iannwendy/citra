@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import argparse
 import gc
 import hashlib
+import os
 import re
 import sqlite3
 import time
@@ -24,6 +26,8 @@ from integrity_checker.db.models import SchemaMigrationRecord
 
 _SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _REVISION_ID_RE = re.compile(r"^[0-9]{4}$")
+_BACKUP_LABEL_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+_SQLITE_HEADER_MAGIC = b"SQLite format 3\x00"
 
 _CORE_BASE_TABLES: tuple[str, ...] = ("citations", "users", "essays", "verdicts")
 
@@ -285,14 +289,18 @@ def _upgrade_0006(conn: Connection, op: Operations) -> None:
         sa.Column("plan_tier", sa.String(20), nullable=True, server_default=sa.text("'basic'")),
     )
     if added_plan_tier:
-        conn.exec_driver_sql("UPDATE users SET plan_tier = 'ultra' WHERE role = 'admin'")
-        conn.exec_driver_sql("UPDATE users SET plan_tier = 'pro' WHERE role = 'teacher'")
+        conn.execute(text("UPDATE users SET plan_tier = 'ultra' WHERE role = 'admin'"))
+        conn.execute(text("UPDATE users SET plan_tier = 'pro' WHERE role = 'teacher'"))
     else:
-        conn.exec_driver_sql(
-            "UPDATE users SET plan_tier = 'ultra' WHERE role = 'admin' AND (plan_tier IS NULL OR plan_tier = 'basic')"
+        conn.execute(
+            text(
+                "UPDATE users SET plan_tier = 'ultra' WHERE role = 'admin' AND (plan_tier IS NULL OR plan_tier = 'basic')"
+            )
         )
-        conn.exec_driver_sql(
-            "UPDATE users SET plan_tier = 'pro' WHERE role = 'teacher' AND (plan_tier IS NULL OR plan_tier = 'basic')"
+        conn.execute(
+            text(
+                "UPDATE users SET plan_tier = 'pro' WHERE role = 'teacher' AND (plan_tier IS NULL OR plan_tier = 'basic')"
+            )
         )
 
     _add_column_if_missing(
@@ -404,8 +412,8 @@ def _upgrade_0007(conn: Connection, op: Operations) -> None:
         ),
     )
     if added_customized:
-        conn.exec_driver_sql(
-            "UPDATE users SET username_customized = 0 WHERE auth_provider = 'google'"
+        conn.execute(
+            text("UPDATE users SET username_customized = 0 WHERE auth_provider = 'google'")
         )
     added_onboarded = _add_column_if_missing(
         conn,
@@ -414,8 +422,10 @@ def _upgrade_0007(conn: Connection, op: Operations) -> None:
         sa.Column("google_onboarded", sa.Integer(), nullable=True, server_default=sa.text("1")),
     )
     if added_onboarded:
-        conn.exec_driver_sql(
-            "UPDATE users SET google_onboarded = 0, username_customized = 0, auth_provider = 'google' WHERE google_id IS NOT NULL"
+        conn.execute(
+            text(
+                "UPDATE users SET google_onboarded = 0, username_customized = 0, auth_provider = 'google' WHERE google_id IS NOT NULL"
+            )
         )
 
 
@@ -452,8 +462,10 @@ def _upgrade_0008(conn: Connection, op: Operations) -> None:
             "billing_transactions",
             sa.Column("subtotal_usd", sa.Float(), nullable=True, server_default=sa.text("0")),
         )
-        conn.exec_driver_sql(
-            "UPDATE billing_transactions SET subtotal_usd = amount_usd WHERE subtotal_usd IS NULL OR subtotal_usd = 0"
+        conn.execute(
+            text(
+                "UPDATE billing_transactions SET subtotal_usd = amount_usd WHERE subtotal_usd IS NULL OR subtotal_usd = 0"
+            )
         )
         _add_column_if_missing(
             conn,
@@ -613,11 +625,11 @@ _COMPOSITE_INDEXES_0009: tuple[tuple[str, str], ...] = (
 
 
 def _upgrade_0009(conn: Connection, _op: Operations) -> None:
-    conn.exec_driver_sql(
-        "DELETE FROM citations WHERE essay_id NOT IN (SELECT id FROM essays)"
+    conn.execute(
+        text("DELETE FROM citations WHERE essay_id NOT IN (SELECT id FROM essays)")
     )
-    conn.exec_driver_sql(
-        "DELETE FROM verdicts WHERE essay_id NOT IN (SELECT id FROM essays)"
+    conn.execute(
+        text("DELETE FROM verdicts WHERE essay_id NOT IN (SELECT id FROM essays)")
     )
     for _idx_name, idx_sql in _COMPOSITE_INDEXES_0009:
         conn.exec_driver_sql(idx_sql)
@@ -703,31 +715,92 @@ LATEST_SCHEMA_VERSION: str = MIGRATIONS[-1].version
 # ---------------------------------------------------------------------------
 
 
-def create_sqlite_backup(
-    engine: Engine,
-    *,
-    label: str = "manual",
-    backup_dir: Path | None = None,
-) -> Path | None:
-    """Create an online SQLite backup snapshot before destructive schema changes."""
+def validate_backup_label(label: str) -> str:
+    """Validate that a backup filename label is safe from path traversal and injection."""
+    if (
+        not isinstance(label, str)
+        or not _BACKUP_LABEL_RE.fullmatch(label)
+        or ".." in label
+        or "/" in label
+        or "\\" in label
+    ):
+        raise ValueError(f"Invalid backup label: {label!r}")
+    return label
+
+
+def _resolve_sqlite_db_path(engine: Engine) -> Path | None:
     if not str(engine.url).startswith("sqlite"):
         return None
     db_path_str = engine.url.database
     if not db_path_str or db_path_str == ":memory:" or ":memory:" in db_path_str:
         return None
-    db_path = Path(db_path_str)
-    if not db_path.exists():
+    return Path(db_path_str)
+
+
+def create_sqlite_backup(
+    engine: Engine,
+    label: str = "manual",
+    backup_dir: Path | None = None,
+) -> Path | None:
+    """Create an online 0600-mode SQLite backup snapshot before destructive schema changes."""
+    safe_label = validate_backup_label(label)
+    db_path = _resolve_sqlite_db_path(engine)
+    if db_path is None or not db_path.exists():
         return None
 
-    target_dir = Path(backup_dir) if backup_dir is not None else (db_path.parent / "backups")
+    target_dir = (
+        Path(backup_dir) if backup_dir is not None else (db_path.parent / "backups")
+    ).resolve()
     target_dir.mkdir(parents=True, exist_ok=True)
-    safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "_", label).strip("_") or "backup"
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    backup_path = target_dir / f"{db_path.stem}.{safe_label}.{timestamp}.sqlite3"
+    backup_path = (target_dir / f"{db_path.stem}.{safe_label}.{timestamp}.sqlite3").resolve()
+    if not backup_path.is_relative_to(target_dir) or backup_path.parent != target_dir:
+        raise ValueError(f"Backup path escapes target directory: {backup_path}")
+
+    fd = os.open(str(backup_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.close(fd)
+    os.chmod(backup_path, 0o600)
 
     with sqlite3.connect(str(db_path)) as src_conn, sqlite3.connect(str(backup_path)) as dst_conn:
         src_conn.backup(dst_conn)
+    os.chmod(backup_path, 0o600)
     return backup_path
+
+
+def restore_sqlite_backup(
+    engine: Engine,
+    backup_path: Path,
+    allowed_dir: Path | None = None,
+) -> None:
+    """Atomically restore a verified SQLite backup snapshot into the active database."""
+    db_path = _resolve_sqlite_db_path(engine)
+    if db_path is None:
+        raise MigrationError(
+            "SQLite backup restore is only supported for file-backed SQLite databases"
+        )
+
+    raw_backup_path = Path(backup_path)
+    allowed_base = (Path(allowed_dir) if allowed_dir is not None else db_path.parent).resolve()
+    resolved_backup = raw_backup_path.resolve()
+    if not resolved_backup.is_relative_to(allowed_base):
+        raise ValueError("Backup path is outside allowed backup directory")
+    if raw_backup_path.is_symlink():
+        raise ValueError("Backup path must not be a symbolic link")
+    if not resolved_backup.exists() or not resolved_backup.is_file():
+        raise ValueError(f"Backup file does not exist: {resolved_backup}")
+
+    with resolved_backup.open("rb") as fh:
+        header = fh.read(len(_SQLITE_HEADER_MAGIC))
+    if header != _SQLITE_HEADER_MAGIC:
+        raise ValueError("Invalid SQLite backup file header")
+
+    engine.dispose()
+    with (
+        sqlite3.connect(str(resolved_backup)) as src_conn,
+        sqlite3.connect(str(db_path.resolve())) as dst_conn,
+    ):
+        src_conn.backup(dst_conn)
+    _invalidate_engine_inspectors(engine)
 
 
 def _ensure_core_tables_exist(conn: Connection) -> None:
@@ -868,10 +941,10 @@ def downgrade_migrations(
     if target_version != "0000" and target_version not in _MIGRATION_MAP:
         raise MigrationError(f"Unknown target migration version: {target_version!r}")
 
-    verify_migrations(engine)
-
     with engine.connect() as conn:
+        _ensure_core_tables_exist(conn)
         rows = _read_ledger_rows(conn)
+        _verify_ledger_rows(rows)
         applied_set = {r[0] for r in rows}
 
     steps_to_revert = [
@@ -909,3 +982,104 @@ def downgrade_migrations(
     if reverted:
         _invalidate_engine_inspectors(engine)
     return reverted
+
+
+# ---------------------------------------------------------------------------
+# Hardened CLI Entrypoint
+# ---------------------------------------------------------------------------
+
+
+def _build_cli_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="python -m integrity_checker.db.migrations",
+        description="CITRA database schema migration & verification CLI",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    subparsers.add_parser("status", help="Show current database schema migration status")
+
+    upgrade_parser = subparsers.add_parser(
+        "upgrade", help="Apply pending schema migrations up to target revision"
+    )
+    upgrade_parser.add_argument(
+        "--to",
+        dest="to_version",
+        default=None,
+        help="Target 4-digit revision ID (defaults to latest)",
+    )
+
+    downgrade_parser = subparsers.add_parser(
+        "downgrade", help="Roll back applied schema migrations down to target revision"
+    )
+    downgrade_parser.add_argument(
+        "--to",
+        dest="to_version",
+        required=True,
+        help="Target 4-digit revision ID (or 0000 for base schema)",
+    )
+    downgrade_parser.add_argument(
+        "--no-backup",
+        action="store_true",
+        help="Skip creating an automatic 0600 SQLite backup before rollback",
+    )
+
+    subparsers.add_parser("verify", help="Verify applied migration SHA-256 checksums")
+    subparsers.add_parser("history", help="List all registered schema migration steps")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Execute the CITRA database migration CLI and return a POSIX exit code."""
+    parser = _build_cli_parser()
+    args = parser.parse_args(list(argv) if argv is not None else None)
+
+    from integrity_checker.db.session import get_engine
+
+    engine = get_engine()
+
+    if args.command == "status":
+        status = get_migration_status(engine)
+        pending_str = ",".join(status.pending_versions) if status.pending_versions else "none"
+        print(
+            f"current_version={status.current_version} "
+            f"latest_version={status.latest_version} "
+            f"up_to_date={status.is_up_to_date} "
+            f"checksum_verified={status.checksum_verified} "
+            f"pending={pending_str}"
+        )
+        return 0
+
+    if args.command == "upgrade":
+        applied = run_migrations(engine, target_version=args.to_version)
+        print(f"applied={','.join(applied) if applied else 'none'}")
+        return 0
+
+    if args.command == "downgrade":
+        reverted = downgrade_migrations(
+            engine,
+            args.to_version,
+            create_backup=not args.no_backup,
+        )
+        print(f"reverted={','.join(reverted) if reverted else 'none'}")
+        return 0
+
+    if args.command == "verify":
+        verified = verify_migrations(engine)
+        print(f"checksum_verified={verified}")
+        return 0 if verified else 1
+
+    if args.command == "history":
+        status = get_migration_status(engine)
+        applied_set = set(status.applied_versions)
+        for step in MIGRATIONS:
+            state = "applied" if step.version in applied_set else "pending"
+            print(
+                f"{step.version} [{state}] {step.name} ({step.checksum[:12]}) - {step.description}"
+            )
+        return 0
+
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
