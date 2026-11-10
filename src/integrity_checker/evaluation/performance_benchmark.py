@@ -24,11 +24,19 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from integrity_checker.api.progress import STEP_KEYS
+from integrity_checker.api.progress import (
+    STEP_KEYS,
+    DeadlineQueueManager,
+    ProgressTracker,
+)
+from integrity_checker.config import get_settings
 from integrity_checker.database.local_db import DEFAULT_DB_PATH, LocalDatabase
 from integrity_checker.database.models import Paper
+from integrity_checker.db.models import Base, CitationRecord, VerdictRecord
+from integrity_checker.db.repository import Repository
+from integrity_checker.db.session import _run_inline_migrations, get_engine, get_session
 from integrity_checker.extraction.document_parser import DocumentParser
-from integrity_checker.models.citation import Citation
+from integrity_checker.models.citation import Citation, CitationType
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.pipeline.integrity_pipeline import IntegrityPipeline
 from integrity_checker.retrieval.rate_limiter import RateLimiter
@@ -791,4 +799,311 @@ def run_document_scale_benchmark(
             )
         )
 
+    return results
+
+
+@dataclass
+class DeadlineBurstStressResult:
+    """Empirical metrics for a concurrent N-student deadline submission burst."""
+
+    concurrency: int
+    max_concurrent_workers: int
+    citations_per_submission: int
+    total_submissions: int
+    completed_submissions: int
+    failed_submissions: int
+    success_rate_pct: float
+    peak_active_workers: int
+    peak_queue_depth: int
+    fifo_order_preserved: bool
+    sqlite_locked_errors: int
+    http_429_simulated: int
+    http_429_recovered: int
+    unhandled_http_502_429_errors: int
+    queue_wait_ms: PercentileStats
+    processing_ms: PercentileStats
+    end_to_end_ms: PercentileStats
+    wall_clock_total_ms: float
+    throughput_essays_per_sec: float
+    throughput_citations_per_sec: float
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "concurrency": self.concurrency,
+            "max_concurrent_workers": self.max_concurrent_workers,
+            "citations_per_submission": self.citations_per_submission,
+            "total_submissions": self.total_submissions,
+            "completed_submissions": self.completed_submissions,
+            "failed_submissions": self.failed_submissions,
+            "success_rate_pct": self.success_rate_pct,
+            "peak_active_workers": self.peak_active_workers,
+            "peak_queue_depth": self.peak_queue_depth,
+            "fifo_order_preserved": self.fifo_order_preserved,
+            "sqlite_locked_errors": self.sqlite_locked_errors,
+            "http_429_simulated": self.http_429_simulated,
+            "http_429_recovered": self.http_429_recovered,
+            "unhandled_http_502_429_errors": self.unhandled_http_502_429_errors,
+            "queue_wait_ms": self.queue_wait_ms.to_dict(),
+            "processing_ms": self.processing_ms.to_dict(),
+            "end_to_end_ms": self.end_to_end_ms.to_dict(),
+            "wall_clock_total_ms": self.wall_clock_total_ms,
+            "throughput_essays_per_sec": self.throughput_essays_per_sec,
+            "throughput_citations_per_sec": self.throughput_citations_per_sec,
+        }
+
+
+async def _run_single_deadline_burst_async(
+    *,
+    num_students: int,
+    max_concurrent_workers: int,
+    citations_per_submission: int,
+    simulated_api_latency_ms: tuple[float, float],
+    db_file: Path,
+    seed: int,
+) -> DeadlineBurstStressResult:
+    settings = get_settings()
+    original_url = settings.database.url
+    settings.database.url = f"sqlite:///{db_file}"
+
+    try:
+        engine = get_engine()
+        Base.metadata.create_all(bind=engine)
+        _run_inline_migrations(engine)
+
+        essay_ids: list[int] = []
+        setup_session = get_session()
+        try:
+            repo = Repository(setup_session)
+            teacher = repo.create_user(f"teacher_stress_{num_students}", "hash", "teacher")
+            cls_rec = repo.create_class(
+                f"KTPM Capstone Cohort ({num_students})",
+                teacher.id,
+                "Deadline stress test cohort",
+            )
+            for idx in range(1, num_students + 1):
+                stu = repo.create_user(f"student_{num_students}_{idx}", "hash", "user")
+                repo.add_student_to_class(cls_rec.id, stu.id)
+                essay = repo.create_essay_with_user(
+                    filename=f"thesis_student_{idx:02d}.pdf",
+                    num_pages=50,
+                    user_id=stu.id,
+                    class_id=cls_rec.id,
+                )
+                essay_ids.append(int(essay.id))
+            repo.commit()
+        finally:
+            setup_session.close()
+
+        queue_mgr = DeadlineQueueManager(max_concurrent=max_concurrent_workers)
+        tracker = ProgressTracker()
+        orch = ControlledDeterministicOrchestrator(
+            seed=seed,
+            simulated_api_latency_ms=simulated_api_latency_ms,
+            rate_limit_429_every_n=5,
+        )
+
+        for eid in essay_ids:
+            tracker.init(eid)
+
+        state_lock = threading.Lock()
+        active_now = 0
+        peak_active = 0
+        peak_waiting = 0
+        sqlite_locked_errors = 0
+        failed_submissions = 0
+        admitted_order: list[int] = []
+        queue_waits: list[float] = []
+        proc_times: list[float] = []
+        e2e_times: list[float] = []
+
+        first_wave_gate = asyncio.Event()
+        first_wave_ready = asyncio.Event()
+        expected_first_wave = min(num_students, max_concurrent_workers)
+
+        def _persist_verdicts_to_sqlite(essay_id: int, cit_count: int) -> None:
+            nonlocal sqlite_locked_errors
+            session = get_session()
+            try:
+                for c_idx in range(1, cit_count + 1):
+                    session.add(
+                        CitationRecord(
+                            essay_id=essay_id,
+                            raw_text=f"[{c_idx}] Canonical Reference {c_idx}",
+                            citation_type="reference_list",
+                            title=f"Reference Title {c_idx}",
+                            year="2023",
+                            mapping_status="matched",
+                            mapping_confidence=0.98,
+                        )
+                    )
+                    session.add(
+                        VerdictRecord(
+                            essay_id=essay_id,
+                            citation_raw=f"[{c_idx}] Canonical Reference {c_idx}",
+                            label="verified",
+                            confidence=0.96,
+                            reasoning="Verified via FTS5 & Neuro-Symbolic rules.",
+                            mapping_status="matched",
+                            mapping_confidence=0.98,
+                        )
+                    )
+                session.commit()
+            except Exception as exc:
+                session.rollback()
+                if "locked" in str(exc).lower():
+                    with state_lock:
+                        sqlite_locked_errors += 1
+                raise
+            finally:
+                session.close()
+
+        async def _student_job(order_idx: int, essay_id: int) -> None:
+            nonlocal active_now, peak_active, peak_waiting, failed_submissions
+            t_submit = time.perf_counter()
+            try:
+                async with queue_mgr.acquire(essay_id, tracker=tracker) as admitted:
+                    if not admitted:
+                        with state_lock:
+                            failed_submissions += 1
+                        return
+
+                    t_admitted = time.perf_counter()
+                    with state_lock:
+                        active_now += 1
+                        peak_active = max(peak_active, active_now)
+                        peak_waiting = max(peak_waiting, queue_mgr.waiting_count)
+                        admitted_order.append(order_idx)
+                        queue_waits.append((t_admitted - t_submit) * 1000.0)
+                        if len(admitted_order) >= expected_first_wave:
+                            first_wave_ready.set()
+
+                    if order_idx < expected_first_wave:
+                        await first_wave_gate.wait()
+
+                    try:
+                        # Progress through key steps and persist snapshots to SQLite
+                        for s_idx in (0, 3, 4, 6, 7):
+                            tracker.update(
+                                essay_id,
+                                status="processing",
+                                step=STEP_KEYS[s_idx],
+                                step_index=s_idx,
+                                message=f"Processing {STEP_KEYS[s_idx]}...",
+                            )
+
+                        # Execute bounded concurrent citation retrievals
+                        cits = [
+                            Citation(
+                                raw_text=f"[{c_i}] Vaswani et al. (2017). Attention Is All You Need.",
+                                citation_type=CitationType.REFERENCE_LIST,
+                                title=_CANONICAL_SYNTHETIC_PAPERS[
+                                    (c_i - 1) % len(_CANONICAL_SYNTHETIC_PAPERS)
+                                ][0],
+                                year=2017,
+                            )
+                            for c_i in range(1, citations_per_submission + 1)
+                        ]
+                        await asyncio.gather(*(orch.retrieve(c) for c in cits))
+
+                        # Persist citations and verdicts to file-backed SQLite
+                        await asyncio.to_thread(
+                            _persist_verdicts_to_sqlite,
+                            essay_id,
+                            citations_per_submission,
+                        )
+
+                        t_done = time.perf_counter()
+                        with state_lock:
+                            proc_times.append((t_done - t_admitted) * 1000.0)
+                            e2e_times.append((t_done - t_submit) * 1000.0)
+                    finally:
+                        with state_lock:
+                            active_now -= 1
+
+                tracker.complete(essay_id)
+            except Exception as exc:
+                if "locked" in str(exc).lower():
+                    with state_lock:
+                        sqlite_locked_errors += 1
+                with state_lock:
+                    failed_submissions += 1
+                tracker.fail(essay_id, str(exc))
+
+        t_burst_start = time.perf_counter()
+        tasks: list[asyncio.Task[None]] = []
+        for order_idx, eid in enumerate(essay_ids):
+            tasks.append(asyncio.create_task(_student_job(order_idx, eid)))
+            await asyncio.sleep(0)
+
+        await first_wave_ready.wait()
+        await asyncio.sleep(0.005)
+        with state_lock:
+            peak_waiting = max(peak_waiting, queue_mgr.waiting_count)
+        first_wave_gate.set()
+
+        await asyncio.gather(*tasks)
+        t_burst_end = time.perf_counter()
+
+        wall_clock_ms = max(1.0, (t_burst_end - t_burst_start) * 1000.0)
+        completed = num_students - failed_submissions
+        total_citations = completed * citations_per_submission
+        fifo_ok = admitted_order == list(range(num_students))
+
+        return DeadlineBurstStressResult(
+            concurrency=num_students,
+            max_concurrent_workers=max_concurrent_workers,
+            citations_per_submission=citations_per_submission,
+            total_submissions=num_students,
+            completed_submissions=completed,
+            failed_submissions=failed_submissions,
+            success_rate_pct=round((completed / max(1, num_students)) * 100.0, 2),
+            peak_active_workers=peak_active,
+            peak_queue_depth=peak_waiting,
+            fifo_order_preserved=fifo_ok,
+            sqlite_locked_errors=sqlite_locked_errors,
+            http_429_simulated=orch.simulated_429_count,
+            http_429_recovered=orch.recovered_429_count,
+            unhandled_http_502_429_errors=orch.unhandled_error_count,
+            queue_wait_ms=compute_percentiles(queue_waits),
+            processing_ms=compute_percentiles(proc_times),
+            end_to_end_ms=compute_percentiles(e2e_times),
+            wall_clock_total_ms=round(wall_clock_ms, 2),
+            throughput_essays_per_sec=round(completed / (wall_clock_ms / 1000.0), 2),
+            throughput_citations_per_sec=round(total_citations / (wall_clock_ms / 1000.0), 2),
+        )
+    finally:
+        settings.database.url = original_url
+        try:
+            get_engine()
+        except Exception:
+            pass
+
+
+def run_deadline_burst_benchmark(
+    *,
+    concurrency_levels: Sequence[int] = (20, 50),
+    max_concurrent_workers: int = 3,
+    citations_per_submission: int = 12,
+    simulated_api_latency_ms: tuple[float, float] = (3.0, 8.0),
+    db_dir: Path | None = None,
+    seed: int = 42,
+) -> list[DeadlineBurstStressResult]:
+    """Run the DeadlineQueueManager + file-backed SQLite burst benchmark across concurrency levels."""
+    results: list[DeadlineBurstStressResult] = []
+    base_dir = db_dir or Path(tempfile.mkdtemp(prefix="citra_deadline_stress_"))
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    for idx, n_students in enumerate(concurrency_levels):
+        db_file = base_dir / f"deadline_burst_{n_students}_{int(time.time() * 1000)}.db"
+        res = asyncio.run(
+            _run_single_deadline_burst_async(
+                num_students=max(1, int(n_students)),
+                max_concurrent_workers=max(1, int(max_concurrent_workers)),
+                citations_per_submission=max(1, int(citations_per_submission)),
+                simulated_api_latency_ms=simulated_api_latency_ms,
+                db_file=db_file,
+                seed=seed + idx * 100,
+            )
+        )
+        results.append(res)
     return results

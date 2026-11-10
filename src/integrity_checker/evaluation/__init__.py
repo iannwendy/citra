@@ -5,6 +5,7 @@ from integrity_checker.evaluation.metrics import MetricsCalculator
 from integrity_checker.evaluation.performance_benchmark import (
     DEFAULT_DOCUMENT_SCALE_TIERS,
     ControlledDeterministicOrchestrator,
+    DeadlineBurstStressResult,
     DocumentScaleBenchmarkResult,
     DocumentScaleTierSpec,
     PercentileStats,
@@ -14,6 +15,7 @@ from integrity_checker.evaluation.performance_benchmark import (
     StepBenchmarkMetrics,
     compute_percentiles,
     resolve_or_synthesize_tier_pdf,
+    run_deadline_burst_benchmark,
     run_document_scale_benchmark,
 )
 from integrity_checker.evaluation.report import EvaluationReport
@@ -24,6 +26,7 @@ __all__ = [
     "EvaluationReport",
     "DEFAULT_DOCUMENT_SCALE_TIERS",
     "ControlledDeterministicOrchestrator",
+    "DeadlineBurstStressResult",
     "DocumentScaleBenchmarkResult",
     "DocumentScaleTierSpec",
     "PercentileStats",
@@ -33,5 +36,6 @@ __all__ = [
     "StepBenchmarkMetrics",
     "compute_percentiles",
     "resolve_or_synthesize_tier_pdf",
+    "run_deadline_burst_benchmark",
     "run_document_scale_benchmark",
 ]

@@ -13,12 +13,14 @@ from integrity_checker.api.progress import (
     get_deadline_queue_manager,
     get_pipeline_admission_controller,
 )
+from integrity_checker.config import get_settings
 from integrity_checker.evaluation.performance_benchmark import (
     ControlledDeterministicOrchestrator,
     DocumentScaleTierSpec,
     PipelineStepProfiler,
     compute_percentiles,
     resolve_or_synthesize_tier_pdf,
+    run_deadline_burst_benchmark,
     run_document_scale_benchmark,
 )
 from integrity_checker.extraction.document_parser import DocumentParser
@@ -297,5 +299,55 @@ def test_run_document_scale_benchmark_across_three_tiers_produces_monotonic_page
         assert res.total_latency_ms.p90 >= res.total_latency_ms.p50
         assert res.total_latency_ms.p99 >= res.total_latency_ms.p90
         assert res.peak_rss_mb > 0.0
+
+
+def test_deadline_burst_benchmark_20_and_50_students_zero_sqlite_locks_and_zero_502_429(
+    tmp_path: Path,
+) -> None:
+    results = run_deadline_burst_benchmark(
+        concurrency_levels=(20, 50),
+        max_concurrent_workers=3,
+        citations_per_submission=6,
+        simulated_api_latency_ms=(1.0, 2.5),
+        db_dir=tmp_path,
+        seed=42,
+    )
+    assert len(results) == 2
+
+    res_20, res_50 = results[0], results[1]
+    for res, expected_n in ((res_20, 20), (res_50, 50)):
+        assert res.concurrency == expected_n
+        assert res.total_submissions == expected_n
+        assert res.completed_submissions == expected_n
+        assert res.failed_submissions == 0
+        assert res.success_rate_pct == 100.0
+        assert res.peak_active_workers == 3
+        assert res.peak_queue_depth == expected_n - 3
+        assert res.fifo_order_preserved is True
+        assert res.sqlite_locked_errors == 0
+        assert res.http_429_simulated > 0
+        assert res.http_429_recovered == res.http_429_simulated
+        assert res.unhandled_http_502_429_errors == 0
+        assert res.throughput_essays_per_sec > 0.0
+        assert res.throughput_citations_per_sec > 0.0
+        assert res.queue_wait_ms.p50 <= res.queue_wait_ms.p90 <= res.queue_wait_ms.p99
+
+
+def test_deadline_burst_benchmark_restores_original_database_url_after_completion(
+    tmp_path: Path,
+) -> None:
+    settings = get_settings()
+    original_url = settings.database.url
+
+    _ = run_deadline_burst_benchmark(
+        concurrency_levels=(5,),
+        max_concurrent_workers=2,
+        citations_per_submission=4,
+        simulated_api_latency_ms=(0.5, 1.0),
+        db_dir=tmp_path,
+        seed=99,
+    )
+    assert get_settings().database.url == original_url
+
 
 
