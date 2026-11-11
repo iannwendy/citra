@@ -21,6 +21,11 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { isDocxFilename } from '@/lib/fileKind';
 import { useModalA11y } from '@/hooks/useModalA11y';
+import {
+  IconSwap,
+  TextMorph,
+  useSlidingPill,
+} from '@/components/ui/transitions';
 
 interface BibliographyRemediationModalProps {
   open: boolean;
@@ -48,6 +53,8 @@ export function BibliographyRemediationModal({
   onClose,
 }: BibliographyRemediationModalProps) {
   const [selectedStyle, setSelectedStyle] = useState<StyleOption>('apa');
+  const { containerRef: stylePillRef, pillStyle: stylePill } =
+    useSlidingPill<HTMLDivElement>(selectedStyle);
   const [data, setData] = useState<RemediatedBibliographyResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,7 +171,7 @@ export function BibliographyRemediationModal({
     >
       <div
         {...dialogProps}
-        className="w-full max-w-5xl max-h-[90dvh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden outline-none"
+        className="t-modal is-open w-full max-w-5xl max-h-[90dvh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header */}
@@ -202,24 +209,47 @@ export function BibliographyRemediationModal({
           </button>
         </div>
 
-        {/* Toolbar: Style Selector + Bulk Export Actions */}
+        {/* Toolbar: Style Selector (#16 Sliding Tabs) + Bulk Export Actions */}
         <div className="px-6 py-3.5 bg-slate-50 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Target citation style">
-            {STYLE_LABELS.map((st) => (
-              <button
-                key={st.id}
-                type="button"
-                data-testid={`remediate-style-${st.id}`}
-                onClick={() => setSelectedStyle(st.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
-                  selectedStyle === st.id
-                    ? 'bg-indigo-600 text-white shadow-2xs'
-                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-indigo-400'
-                }`}
-              >
-                {st.label}
-              </button>
-            ))}
+          <div
+            ref={stylePillRef}
+            className="relative flex flex-wrap items-center gap-1.5"
+            role="group"
+            aria-label="Target citation style"
+          >
+            {stylePill.ready && (
+              <span
+                aria-hidden="true"
+                style={{
+                  width: `${stylePill.width}px`,
+                  height: `${stylePill.height}px`,
+                  transform: `translate3d(${stylePill.left}px, ${stylePill.top}px, 0)`,
+                  transition: stylePill.animate ? undefined : 'none',
+                }}
+                className="t-tabs-pill rounded-lg !bg-indigo-600 shadow-2xs"
+              />
+            )}
+            {STYLE_LABELS.map((st) => {
+              const isActive = selectedStyle === st.id;
+              return (
+                <button
+                  key={st.id}
+                  type="button"
+                  data-testid={`remediate-style-${st.id}`}
+                  data-pill-active={isActive ? 'true' : 'false'}
+                  onClick={() => setSelectedStyle(st.id)}
+                  className={`t-tab px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
+                    isActive
+                      ? stylePill.ready
+                        ? 'text-white'
+                        : 'bg-indigo-600 text-white shadow-2xs'
+                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-indigo-400'
+                  }`}
+                >
+                  {st.label}
+                </button>
+              );
+            })}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -269,17 +299,22 @@ export function BibliographyRemediationModal({
                   onClick={() => handleCopy(data.combined_text, 'all')}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-400 transition-colors"
                 >
-                  {copiedKey === 'all' ? (
-                    <>
-                      <Check className="h-3.5 w-3.5 text-emerald-500" />
-                      <span>{lang === 'vi' ? 'Đã sao chép!' : 'Copied All!'}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-                      <span>{lang === 'vi' ? 'Sao chép toàn bộ' : 'Copy All'}</span>
-                    </>
-                  )}
+                  <IconSwap
+                    active={copiedKey === 'all'}
+                    iconA={<Copy className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />}
+                    iconB={<Check className="h-3.5 w-3.5 text-emerald-500" />}
+                  />
+                  <TextMorph
+                    text={
+                      copiedKey === 'all'
+                        ? lang === 'vi'
+                          ? 'Đã sao chép!'
+                          : 'Copied All!'
+                        : lang === 'vi'
+                          ? 'Sao chép toàn bộ'
+                          : 'Copy All'
+                    }
+                  />
                 </button>
 
                 <button
@@ -448,17 +483,22 @@ export function BibliographyRemediationModal({
                       onClick={() => handleCopy(entry.remediated_text, entry.verdict_id)}
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-mono text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     >
-                      {copiedKey === entry.verdict_id ? (
-                        <>
-                          <Check className="h-3.5 w-3.5 text-emerald-500" />
-                          <span>{lang === 'vi' ? 'Đã chép' : 'Copied'}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-3.5 w-3.5" />
-                          <span>{lang === 'vi' ? 'Sao chép' : 'Copy'}</span>
-                        </>
-                      )}
+                      <IconSwap
+                        active={copiedKey === entry.verdict_id}
+                        iconA={<Copy className="h-3.5 w-3.5" />}
+                        iconB={<Check className="h-3.5 w-3.5 text-emerald-500" />}
+                      />
+                      <TextMorph
+                        text={
+                          copiedKey === entry.verdict_id
+                            ? lang === 'vi'
+                              ? 'Đã chép'
+                              : 'Copied'
+                            : lang === 'vi'
+                              ? 'Sao chép'
+                              : 'Copy'
+                        }
+                      />
                     </button>
                   </div>
 

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Quote, Clock, Download, ShieldCheck, Lock, Sparkles, Loader2, Share2, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Quote, Clock, Download, ShieldCheck, Lock, Sparkles, Loader2, Share2, ExternalLink, Check } from 'lucide-react';
 import { api, type EssayShareLinkResponse } from '@/api/client';
+import { IconSwap, TextMorph } from '@/components/ui/transitions';
 import { useRole } from '@/hooks/useRole';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
@@ -284,9 +285,13 @@ export function EssayHeader({
               {busy === 'share' ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Share2 className="h-3.5 w-3.5" />
+                <IconSwap
+                  active={Boolean(shareInfo)}
+                  iconA={<Share2 className="h-3.5 w-3.5" />}
+                  iconB={<Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />}
+                />
               )}
-              {t('essay.share.buttonLabel')}
+              <TextMorph text={t('essay.share.buttonLabel')} />
             </Button>
           </div>
           {shareInfo && (

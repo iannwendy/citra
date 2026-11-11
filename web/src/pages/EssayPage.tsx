@@ -40,6 +40,14 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import {
+  AccordionExpand,
+  SymmetricChevron,
+  SoftTextSwap,
+  SubtleNumber,
+  StreamingText,
+  DonutChart,
+} from '@/components/ui/transitions';
 
 /* ============================================================
    Helper Types & Functions for the Real Citation Debugger IDE
@@ -1983,17 +1991,21 @@ export function EssayPage() {
               <button
                 type="button"
                 data-testid="revision-diff-details-btn"
+                aria-expanded={revisionExpanded}
                 onClick={() => setRevisionExpanded((v) => !v)}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-mono font-semibold bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 transition-colors"
               >
                 <Sparkles className="h-3.5 w-3.5" />
-                {revisionExpanded
-                  ? lang === 'vi'
-                    ? 'Thu gọn Chi tiết Tiến bộ'
-                    : 'Hide Revision Diff'
-                  : lang === 'vi'
-                    ? 'Xem Chi tiết Thay đổi (v1 → v2)'
-                    : 'View Detailed Changes (v1 → v2)'}
+                <span>
+                  {revisionExpanded
+                    ? lang === 'vi'
+                      ? 'Thu gọn Chi tiết Tiến bộ'
+                      : 'Hide Revision Diff'
+                    : lang === 'vi'
+                      ? 'Xem Chi tiết Thay đổi (v1 → v2)'
+                      : 'View Detailed Changes (v1 → v2)'}
+                </span>
+                <SymmetricChevron open={revisionExpanded} size={14} />
               </button>
               <Link
                 to={`/verification/report/${activeRevisionDiff.previous_essay_id}`}
@@ -2005,7 +2017,7 @@ export function EssayPage() {
             </div>
           </div>
 
-          {revisionExpanded && (
+          <AccordionExpand open={revisionExpanded}>
             <div
               data-testid="revision-diff-details-panel"
               className="mt-4 pt-4 border-t border-indigo-200/70 dark:border-indigo-800/60 space-y-3"
@@ -2065,19 +2077,31 @@ export function EssayPage() {
                 </p>
               )}
             </div>
-          )}
+          </AccordionExpand>
         </div>
       )}
 
-      {/* Quick Diagnostic Sub-Pages Navigation */}
+      {/* Quick Diagnostic Sub-Pages Navigation + #35 DonutChart + #36 SubtleNumber */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <EssayActionBar essayId={id ?? ''} />
-        <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
-          Citation Integrity Score (CIS):{' '}
-          <strong className="text-indigo-600 dark:text-indigo-400">
-            {report.cis.score.toFixed(1)}%
-          </strong>{' '}
-          · {report.verdicts.length} citations
+        <div className="inline-flex items-center gap-2.5 text-xs font-mono text-slate-500 dark:text-slate-400">
+          <DonutChart
+            size={28}
+            thickness={4}
+            segments={[
+              { value: counts.verified, color: '#10b981', label: 'Verified' },
+              { value: counts.metadata_error, color: '#f59e0b', label: 'Metadata' },
+              { value: counts.suspected_hallucination, color: '#ef4444', label: 'Hallucination' },
+              { value: counts.unresolved, color: '#94a3b8', label: 'Other' },
+            ]}
+          />
+          <span>
+            Citation Integrity Score (CIS):{' '}
+            <strong className="text-indigo-600 dark:text-indigo-400">
+              <SubtleNumber value={report.cis.score.toFixed(1)} suffix="%" />
+            </strong>{' '}
+            · {report.verdicts.length} citations
+          </span>
         </div>
       </div>
 
@@ -2462,7 +2486,7 @@ export function EssayPage() {
                               : 'text-slate-900 dark:text-white'
                           }`}
                         >
-                          {activeItem.citedMeta.title}
+                          <SoftTextSwap text={activeItem.citedMeta.title} />
                         </h3>
                       </div>
 
@@ -2514,7 +2538,7 @@ export function EssayPage() {
                               ? 'Kết luận suy diễn:'
                               : 'Neuro-Symbolic Reasoning:'}
                           </span>
-                          {activeItem.explanationText}
+                          <StreamingText text={activeItem.explanationText} />
                           {Array.isArray(activeItem.verdict.features?.bridged_concepts) &&
                             activeItem.verdict.features.bridged_concepts.length > 0 && (
                               <div
@@ -2676,7 +2700,7 @@ export function EssayPage() {
                                         <ExternalLink className="h-3 w-3 shrink-0" />
                                       </a>
                                     ) : (
-                                      activeItem.citedMeta[key]
+                                      <SoftTextSwap text={activeItem.citedMeta[key]} />
                                     )}
                                   </td>
                                   <td className="py-0.5 sm:py-2.5 lg:py-0.5 xl:py-2.5 px-0 sm:px-3 lg:px-0 xl:px-3 font-mono text-slate-600 dark:text-slate-300 align-top break-words [overflow-wrap:anywhere] sm:table-cell lg:block xl:table-cell">
@@ -2712,7 +2736,7 @@ export function EssayPage() {
                                           <ExternalLink className="h-3 w-3 shrink-0" />
                                         </a>
                                       ) : (
-                                        activeItem.retrievedMeta[key]
+                                        <SoftTextSwap text={activeItem.retrievedMeta[key]} />
                                       )
                                     ) : key === 'url' && activeItem.linkBadge ? (
                                       <span
