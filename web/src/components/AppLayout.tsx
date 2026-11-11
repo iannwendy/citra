@@ -273,9 +273,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         className={`
           fixed lg:static inset-y-0 left-0 z-50
           w-72 max-w-[85vw] h-screen supports-[height:100dvh]:h-dvh shrink-0 overflow-hidden bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800/80
-          transform transition-transform duration-300 ease-out
+          transform transition-transform ease-[var(--panel-ease)]
           lg:transform-none
-          ${mobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}
+          ${mobileOpen ? 'translate-x-0 shadow-2xl duration-[var(--panel-open-dur)]' : '-translate-x-full lg:translate-x-0 duration-[var(--panel-close-dur)]'}
         `}
       >
         {/* Mobile close button */}
@@ -359,8 +359,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           {showSingleBadge && (
                             <span
                               data-testid="sidebar-single-progress-badge"
+                              data-open="true"
                               aria-hidden="true"
-                              className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/70 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-700/70 shrink-0"
+                              className="t-badge ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/70 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-700/70 shrink-0"
                             >
                               <Loader2 className="h-2.5 w-2.5 animate-spin" />
                               <span>
@@ -375,8 +376,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           {showBatchBadge && (
                             <span
                               data-testid="sidebar-batch-progress-badge"
+                              data-open="true"
                               aria-hidden="true"
-                              className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/70 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-700/70 shrink-0"
+                              className="t-badge ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/70 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-700/70 shrink-0"
                             >
                               <Loader2 className="h-2.5 w-2.5 animate-spin" />
                               <span>

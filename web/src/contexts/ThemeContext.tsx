@@ -212,7 +212,28 @@ export function ThemeToggle({
       title={`Theme: ${themeLabels[theme]}`}
       aria-label={`Current theme: ${themeLabels[theme]}. Click to change.`}
     >
-      {themeIcons[theme]}
+      <span className="inline-grid place-items-center">
+        {(['light', 'dark', 'system'] as const).map((mode) => {
+          const isCurrent = theme === mode;
+          return (
+            <span
+              key={mode}
+              aria-hidden={!isCurrent}
+              style={{
+                gridArea: '1 / 1',
+                opacity: isCurrent ? 1 : 0,
+                filter: isCurrent ? 'blur(0px)' : 'blur(var(--icon-swap-blur, 2px))',
+                transform: isCurrent ? 'scale(1)' : 'scale(var(--icon-swap-start-scale, 0.25))',
+                transition:
+                  'opacity var(--icon-swap-dur, 250ms) var(--icon-swap-ease, ease-in-out), filter var(--icon-swap-dur, 250ms) var(--icon-swap-ease, ease-in-out), transform var(--icon-swap-dur, 250ms) var(--icon-swap-ease, ease-in-out)',
+              }}
+              className="inline-flex items-center justify-center"
+            >
+              {themeIcons[mode]}
+            </span>
+          );
+        })}
+      </span>
       {showLabel && (
         <span className={`${labelSizes[size]} font-medium`}>
           {translatedLabels[theme]}

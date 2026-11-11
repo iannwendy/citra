@@ -1225,20 +1225,23 @@ export function NotificationCenterButton({
         }`}
       >
         {notificationsEnabled ? (
-          <Bell className="w-4 h-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+          <Bell className="w-4 h-4 shrink-0 text-indigo-600 dark:text-indigo-400 transition-transform duration-[var(--icon-swap-dur)] ease-[var(--icon-swap-ease)]" />
         ) : (
-          <BellOff className="w-4 h-4 shrink-0 text-slate-400" />
+          <BellOff className="w-4 h-4 shrink-0 text-slate-400 transition-transform duration-[var(--icon-swap-dur)] ease-[var(--icon-swap-ease)]" />
         )}
 
-        {/* Live Status / Unread Badge */}
+        {/* Live Status / Unread Badge (#03 Notification badge) */}
         {unreadCount > 0 ? (
-          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-indigo-600 dark:bg-emerald-500 text-white dark:text-slate-950 text-[10px] font-mono font-bold flex items-center justify-center shadow-xs animate-icon-pop">
+          <span
+            data-open="true"
+            className="t-badge t-badge-dot absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-indigo-600 dark:bg-emerald-500 text-white dark:text-slate-950 text-[10px] font-mono font-bold flex items-center justify-center shadow-xs"
+          >
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         ) : (
           <span
             aria-hidden="true"
-            className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 ${
+            className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 transition-colors duration-[var(--duration-fast)] ${
               notificationsEnabled ? 'bg-emerald-500' : 'bg-slate-400'
             }`}
           />
