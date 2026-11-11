@@ -1,0 +1,1225 @@
+/* ==========================================================================
+   transitions.dev — Universal Motion Token Scale & 36 Production CSS Recipes
+   Integrated into CITRA (SourceLogic v2.0 + Solva Warm Editorial)
+   120fps Compositor-Safe · Open/Close Asymmetry · Reduced-Motion Safe
+   ========================================================================== */
+
+:root {
+  /* ── 1. Shared 5-Dimension Motion Token Scale (transitions-polish) ── */
+  /* Durations */
+  --duration-stagger: 40ms;      /* per-item stagger offset */
+  --duration-micro: 80ms;        /* tooltip/path delay, shake segment, large stagger */
+  --duration-quick: 150ms;       /* modal/dropdown close, text swap, tooltip appear */
+  --duration-fast: 250ms;        /* icon swap, dropdown/modal open, tabs sliding, page slide */
+  --duration-medium: 350ms;      /* panel close, toast close */
+  --duration-moderate: 350ms;    /* alias for medium */
+  --duration-slow: 400ms;        /* panel open, skeleton content reveal, input clear */
+  --duration-norm: 400ms;        /* alias for slow */
+  --duration-very-slow: 500ms;   /* emphasis moments, badge appear, text reveal, success check */
+
+  /* Easings */
+  --ease-smooth-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: ease-in-out;
+  --ease-out: ease-out;
+  --ease-linear: linear;
+  --ease-bounce: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --ease-bounce-strong: cubic-bezier(0.34, 3.85, 0.64, 1);
+  --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Distances */
+  --distance-micro: 4px;
+  --distance-small: 6px;
+  --distance-base: 8px;
+  --distance-medium: 12px;
+  --distance-large: 30px;
+
+  /* Scales */
+  --scale-large: 0.96;
+  --scale-medium: 0.97;
+  --scale-small: 0.98;
+  --scale-tiny: 0.99;
+
+  /* Blur */
+  --blur-small: 2px;
+  --blur-medium: 3px;
+  --blur-large: 8px;
+
+  /* ── 2. Per-Recipe Tunable Tokens (from _root.css) ── */
+  /* #01 Card resize */
+  --resize-dur: 300ms;
+  --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #02 Number pop-in */
+  --digit-dur: 600ms;
+  --digit-exit-dur: 155ms;
+  --digit-enter-delay: 50ms;
+  --digit-stagger: 40ms;
+  --digit-distance: 0.52em;
+  --digit-exit-distance: 0.52em;
+  --digit-blur: max(0.067em, 0.171em - 2.1px);
+  --digit-lift: 0.125em;
+  --digit-start-scale: 0.7;
+  --digit-peak: 1.03;
+
+  /* #03 Notification badge */
+  --badge-slide-dur: 260ms;
+  --badge-pop-dur: 500ms;
+  --badge-pop-close-dur: 180ms;
+  --badge-fade-dur: 400ms;
+  --badge-fade-close-dur: 180ms;
+  --badge-blur: 2px;
+  --badge-offset-x: -8.2px;
+  --badge-offset-y: 12.4px;
+  --badge-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --badge-pop-ease: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --badge-close-ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* #04 Text states swap */
+  --text-swap-dur: 150ms;
+  --text-swap-translate-y: 4px;
+  --text-swap-blur: 2px;
+  --text-swap-ease: ease-in-out;
+
+  /* #05 Menu dropdown */
+  --dropdown-open-dur: 250ms;
+  --dropdown-close-dur: 150ms;
+  --dropdown-pre-scale: 0.97;
+  --dropdown-closing-scale: 0.99;
+  --dropdown-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #06 Modal open / close */
+  --modal-open-dur: 250ms;
+  --modal-close-dur: 150ms;
+  --modal-scale: 0.96;
+  --modal-scale-close: 0.96;
+  --modal-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #07 Panel reveal */
+  --panel-open-dur: 400ms;
+  --panel-close-dur: 350ms;
+  --panel-translate-y: 24px;
+  --panel-blur: 2px;
+  --panel-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #08 Page side-by-side */
+  --page-slide-dur: 250ms;
+  --page-fade-dur: 250ms;
+  --page-slide-distance: 8px;
+  --page-blur: 3px;
+  --page-stagger: 0ms;
+  --page-exit-enabled: 1;
+  --page-slide-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --page-fade-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #09 Icon swap */
+  --icon-swap-dur: 250ms;
+  --icon-swap-blur: 2px;
+  --icon-swap-start-scale: 0.25;
+  --icon-swap-ease: ease-in-out;
+
+  /* #10 Success check */
+  --check-opacity-dur: 500ms;
+  --check-rotate-dur: 500ms;
+  --check-rotate-from: 80deg;
+  --check-bob-dur: 500ms;
+  --check-y-amount: 14px;
+  --check-blur-dur: 500ms;
+  --check-blur-from: 6px;
+  --check-path-dur: 500ms;
+  --check-path-delay: 80ms;
+  --check-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-opacity: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-rotate: cubic-bezier(0.22, 1, 0.36, 1);
+  --check-ease-bob: cubic-bezier(0.34, 1.35, 0.64, 1);
+  --check-ease-path: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #11 Avatar group hover */
+  --avatar-lift: -4px;
+  --avatar-dur: 320ms;
+  --avatar-scale: 1.05;
+  --avatar-falloff: 0.45;
+  --avatar-ease-in: cubic-bezier(0.22, 1, 0.36, 1);
+  --avatar-ease-out: cubic-bezier(0.34, 3.85, 0.64, 1);
+
+  /* #12 Error state shake */
+  --shake-distance: 6px;
+  --shake-overshoot: 4px;
+  --shake-dur-a: 80ms;
+  --shake-dur-b: 60ms;
+  --shake-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --revert-hold: 3000ms;
+  --revert-dur: 280ms;
+
+  /* #13 Input clear with dissolve */
+  --clear-dur: 400ms;
+  --clear-out-dur: 250ms;
+  --clear-in-dur: 250ms;
+  --clear-out-fly: 10px;
+  --clear-in-fly: 10px;
+  --clear-out-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --clear-in-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --clear-blur: 2px;
+
+  /* #14 Skeleton loader and reveal */
+  --pulse-dur: 1000ms;
+  --pulse-count: infinite;
+  --pulse-min: 0.5;
+  --reveal-dur: 400ms;
+  --reveal-blur: 2px;
+  --reveal-ease: ease-in-out;
+
+  /* #15 Shimmer text */
+  --shimmer-dur: 2000ms;
+  --shimmer-base: #64748b;
+  --shimmer-highlight: #0f172a;
+  --shimmer-band: 400%;
+  --shimmer-ease: linear;
+
+  /* #16 Tabs sliding */
+  --tabs-dur: 250ms;
+  --tabs-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --tabs-text-muted: rgba(28, 26, 21, 0.68);
+  --tabs-text-active: #1c1a15;
+  --tabs-bar-bg: #f1efe9;
+  --tabs-pill-bg: #ffffff;
+
+  /* #17 Tooltip open/close */
+  --tt-in-dur: 150ms;
+  --tt-out-dur: 50ms;
+  --tt-scale: 0.98;
+  --tt-delay: 80ms;
+  --tt-in-ease: ease-out;
+  --tt-out-ease: ease-out;
+  --tt-move-dur: 160ms;
+  --tt-move-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --tt-bg: #0f172a;
+  --tt-fg: #f8fafc;
+
+  /* #18 Texts reveal */
+  --stagger-dur: 500ms;
+  --stagger-distance: 12px;
+  --stagger-stagger: 40ms;
+  --stagger-blur: 3px;
+  --stagger-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #19 Card hover tilt */
+  --tilt-perspective: 1000px;
+  --tilt-return: 800ms;
+  --tilt-return-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --tilt-follow: 350ms;
+  --tilt-follow-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --tilt-glare-opacity: 0.24;
+  --tilt-glare-fade: 300ms;
+  --tilt-glare-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #21 Accordion expand (asymmetric open 300ms / close 220ms) */
+  --acc-expand: 300ms;
+  --acc-collapse: 220ms;
+  --acc-chevron: 250ms;
+  --acc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #22 Toast open / close */
+  --toast-open: 350ms;
+  --toast-close: 250ms;
+  --toast-distance: 16px;
+  --toast-blur: 2px;
+  --toast-scale: 0.97;
+  --toast-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #24 Learn more hover */
+  --learn-shift: 2.5px;
+  --learn-spread: 8deg;
+  --learn-in: 200ms;
+  --learn-out: 320ms;
+  --learn-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #25 Checkbox check */
+  --check-box: 150ms;
+  --check-draw: 320ms;
+  --check-delay: 40ms;
+  --check-uncheck: 150ms;
+  --check-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #27 Toggle */
+  --toggle-dur: 350ms;
+  --toggle-travel: 20px;
+  --toggle-ease: cubic-bezier(0.34, 1.35, 0.64, 1);
+
+  /* #28 Thinking states */
+  --think-hold: 2000ms;
+  --think-swap: 150ms;
+  --think-gap: 50ms;
+  --think-distance: 6px;
+  --think-blur: 2px;
+  --think-shimmer: 2000ms;
+  --think-base: #475569;
+  --think-highlight: #10b981;
+  --think-ease: ease-in-out;
+
+  /* #29 Reasoning stream */
+  --reason-hold: 840ms;
+  --reason-step: 400ms;
+  --reason-lines: 2;
+  --reason-fade: 24px;
+  --reason-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #30 Streaming text */
+  --stream-gap: 32ms;
+  --stream-fade: 300ms;
+  --stream-blur: 1.5px;
+  --stream-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #31 Matrix dot loader */
+  --matrix-cycle: 1100ms;
+  --matrix-base: rgba(100, 116, 139, 0.28);
+  --matrix-active: #10b981;
+  --matrix-ease: ease-in-out;
+
+  /* #32 Banner stacking */
+  --stack-open: 350ms;
+  --stack-close: 250ms;
+  --stack-rise: 40px;
+  --stack-blur: 2px;
+  --stack-scale: 0.97;
+  --stack-peek: 10px;
+  --stack-spread-gap: 8px;
+  --stack-depth-scale: 0.04;
+  --stack-depth-fade: 0.25;
+  --stack-depth1-blur: 1px;
+  --stack-depth2-blur: 2px;
+  --stack-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #33 Text morph */
+  --text-morph-dur: 180ms;
+  --text-morph-resize-dur: 240ms;
+  --text-morph-blur: 2px;
+  --text-morph-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #34 Text swap soft */
+  --text-soft-dur: 200ms;
+  --text-soft-blur: 2px;
+  --text-soft-ease: ease-in-out;
+  --text-soft-resize-dur: 240ms;
+  --text-soft-resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* #35 Donut chart */
+  --chart-morph-dur: 400ms;
+  --chart-morph-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --chart-gap: 3px;
+  --chart-corner: 2px;
+
+  /* #36 Number subtle change */
+  --subtle-dur: 420ms;
+  --subtle-distance: 0.14em;
+  --subtle-blur: 0.042em;
+  --subtle-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dark {
+  --shimmer-base: #94a3b8;
+  --shimmer-highlight: #f8fafc;
+  --tabs-text-muted: rgba(242, 239, 233, 0.68);
+  --tabs-text-active: #f2efe9;
+  --tabs-bar-bg: rgba(30, 41, 59, 0.75);
+  --tabs-pill-bg: #1e293b;
+  --tt-bg: #f8fafc;
+  --tt-fg: #0f172a;
+  --think-base: #94a3b8;
+  --think-highlight: #34d399;
+  --matrix-base: rgba(148, 163, 184, 0.25);
+  --matrix-active: #34d399;
+}
+
+/* ==========================================================================
+   #01 Card resize (.t-card)
+   ========================================================================== */
+.t-card-resize {
+  overflow: hidden;
+  transition: height var(--resize-dur) var(--resize-ease);
+  will-change: height;
+}
+
+/* ==========================================================================
+   #02 Number pop-in (.t-digit-group)
+   ========================================================================== */
+.t-digit-group {
+  display: inline-flex;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+}
+.t-digit-slot {
+  position: relative;
+  display: inline-block;
+}
+.t-digit-old {
+  position: absolute;
+  inset: 0;
+  text-align: center;
+  pointer-events: none;
+}
+.t-digit {
+  display: inline-block;
+  will-change: transform, opacity, filter;
+}
+.t-digit-group.is-animating .t-digit {
+  animation: t-digit-in var(--digit-dur) linear both;
+  animation-delay: calc(var(--digit-stagger) * var(--digit-i, 0) + var(--digit-enter-delay));
+}
+.t-digit-group.is-animating .t-digit-old {
+  animation: t-digit-out var(--digit-exit-dur) linear both;
+  animation-delay: calc(var(--digit-stagger) * var(--digit-i, 0));
+}
+.t-digit-group.is-animating [data-stagger="1"] { --digit-i: 1; }
+.t-digit-group.is-animating [data-stagger="2"] { --digit-i: 2; }
+.t-digit-group.is-animating .t-digit[data-same] { animation: none; }
+
+@keyframes t-digit-in {
+  0% { transform: translateY(calc(var(--digit-distance) * 1 + var(--digit-lift) * 0)) scale(var(--digit-start-scale)); opacity: 0; filter: blur(calc(var(--digit-blur) * 1)); }
+  10% { transform: translateY(calc(var(--digit-distance) * 0.755 + var(--digit-lift) * 0.648)) scale(var(--digit-start-scale)); opacity: 0.245; filter: blur(calc(var(--digit-blur) * 1)); }
+  20% { transform: translateY(calc(var(--digit-distance) * 0.206 + var(--digit-lift) * 0.792)) scale(calc(1 + (var(--digit-start-scale) - 1) * 0.792)); opacity: 0.794; filter: blur(calc(var(--digit-blur) * 0.9)); }
+  30% { transform: translateY(calc(var(--digit-distance) * 0 + var(--digit-lift) * 0.033)) scale(calc(1 + (var(--digit-start-scale) - 1) * 0.033)); opacity: 1; filter: blur(calc(var(--digit-blur) * 0.6)); }
+  40% { transform: translateY(calc(var(--digit-distance) * 0 + var(--digit-lift) * -0.272)) scale(calc(1 + (var(--digit-peak) - 1) * 0.997)); opacity: 1; filter: blur(calc(var(--digit-blur) * 0.3)); }
+  50% { transform: translateY(calc(var(--digit-distance) * 0 + var(--digit-lift) * -0.146)) scale(calc(1 + (var(--digit-peak) - 1) * 0.535)); opacity: 1; filter: blur(0); }
+  70% { transform: translateY(calc(var(--digit-distance) * 0 + var(--digit-lift) * 0.051)) scale(calc(1 + (var(--digit-peak) - 1) * -0.187)); opacity: 1; filter: blur(0); }
+  100% { transform: translateY(0) scale(1); opacity: 1; filter: blur(0); }
+}
+@keyframes t-digit-out {
+  0% { transform: translateY(0) scale(1); opacity: 1; filter: blur(0); }
+  50% { transform: translateY(calc(var(--digit-exit-distance) * -0.5)) scale(calc(1 + (var(--digit-start-scale) - 1) * 0.5)); opacity: 0.833; filter: blur(calc(var(--digit-blur) * 0.5)); }
+  100% { transform: translateY(calc(var(--digit-exit-distance) * -1)) scale(var(--digit-start-scale)); opacity: 0; filter: blur(calc(var(--digit-blur) * 1)); }
+}
+
+/* ==========================================================================
+   #03 Notification badge (.t-badge)
+   ========================================================================== */
+@keyframes t-badge-slide-in {
+  from { transform: translate(var(--badge-offset-x), var(--badge-offset-y)); }
+  to   { transform: translate(0, 0); }
+}
+.t-badge {
+  pointer-events: none;
+  will-change: transform;
+}
+.t-badge[data-open="true"] {
+  animation: t-badge-slide-in var(--badge-slide-dur) var(--badge-slide-ease);
+}
+.t-badge-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center;
+  transform: scale(1);
+  opacity: 1;
+  filter: blur(0);
+  transition:
+    transform var(--badge-pop-dur)  var(--badge-pop-ease),
+    opacity   var(--badge-fade-dur) var(--badge-pop-ease),
+    filter    var(--badge-pop-dur)  var(--badge-pop-ease);
+  will-change: transform, opacity, filter;
+}
+.t-badge[data-open="false"] .t-badge-dot {
+  transform: scale(0);
+  opacity: 0;
+  filter: blur(var(--badge-blur));
+  transition:
+    transform var(--badge-pop-close-dur)  var(--badge-close-ease),
+    opacity   var(--badge-fade-close-dur) var(--badge-close-ease),
+    filter    var(--badge-pop-close-dur)  var(--badge-close-ease);
+}
+
+/* ==========================================================================
+   #04 Text states swap (.t-text-swap)
+   ========================================================================== */
+.t-text-swap {
+  display: inline-block;
+  transform: translateY(0);
+  filter: blur(0);
+  opacity: 1;
+  transition:
+    transform var(--text-swap-dur) var(--text-swap-ease),
+    filter    var(--text-swap-dur) var(--text-swap-ease),
+    opacity   var(--text-swap-dur) var(--text-swap-ease);
+  will-change: transform, filter, opacity;
+}
+.t-text-swap.is-exit {
+  transform: translateY(calc(var(--text-swap-translate-y) * -1));
+  filter: blur(var(--text-swap-blur));
+  opacity: 0;
+}
+.t-text-swap.is-enter-start {
+  transform: translateY(var(--text-swap-translate-y));
+  filter: blur(var(--text-swap-blur));
+  opacity: 0;
+  transition: none;
+}
+
+/* ==========================================================================
+   #05 Menu dropdown (.t-dropdown)
+   ========================================================================== */
+.t-dropdown {
+  transform-origin: top left;
+  transform: scale(var(--dropdown-pre-scale));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--dropdown-open-dur) var(--dropdown-ease),
+    opacity   var(--dropdown-open-dur) var(--dropdown-ease);
+  will-change: transform, opacity;
+}
+.t-dropdown[data-origin="top-right"]     { transform-origin: top right; }
+.t-dropdown[data-origin="top-center"]    { transform-origin: top center; }
+.t-dropdown[data-origin="bottom-left"]   { transform-origin: bottom left; }
+.t-dropdown[data-origin="bottom-center"] { transform-origin: bottom center; }
+.t-dropdown[data-origin="bottom-right"]  { transform-origin: bottom right; }
+.t-dropdown.is-open {
+  transform: scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+.t-dropdown.is-closing {
+  transform: scale(var(--dropdown-closing-scale));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--dropdown-close-dur) var(--dropdown-ease),
+    opacity   var(--dropdown-close-dur) var(--dropdown-ease);
+}
+
+/* ==========================================================================
+   #06 Modal open / close (.t-modal)
+   ========================================================================== */
+.t-modal {
+  transform-origin: center;
+  transform: scale(var(--modal-scale));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--modal-open-dur) var(--modal-ease),
+    opacity   var(--modal-open-dur) var(--modal-ease);
+  will-change: transform, opacity;
+}
+.t-modal.is-open {
+  transform: scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+.t-modal.is-closing {
+  transform: scale(var(--modal-scale-close));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--modal-close-dur) var(--modal-ease),
+    opacity   var(--modal-close-dur) var(--modal-ease);
+}
+
+/* ==========================================================================
+   #07 Panel reveal (.t-panel-slide)
+   ========================================================================== */
+.t-panel-slide {
+  transform: translateY(var(--panel-translate-y));
+  opacity: 0;
+  filter: blur(var(--panel-blur));
+  pointer-events: none;
+  transition:
+    transform var(--panel-close-dur) var(--panel-ease),
+    opacity   var(--panel-close-dur) var(--panel-ease),
+    filter    var(--panel-close-dur) var(--panel-ease);
+  will-change: transform, opacity, filter;
+}
+.t-panel-slide[data-open="true"] {
+  transform: translateY(0);
+  opacity: 1;
+  filter: blur(0);
+  pointer-events: auto;
+  transition:
+    transform var(--panel-open-dur) var(--panel-ease),
+    opacity   var(--panel-open-dur) var(--panel-ease),
+    filter    var(--panel-open-dur) var(--panel-ease);
+}
+
+/* ==========================================================================
+   #09 Icon swap (.t-icon-swap)
+   ========================================================================== */
+.t-icon-swap {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+.t-icon-swap .t-icon {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity   var(--icon-swap-dur) var(--icon-swap-ease),
+    filter    var(--icon-swap-dur) var(--icon-swap-ease),
+    transform var(--icon-swap-dur) var(--icon-swap-ease);
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="a"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="b"] {
+  opacity: 1;
+  filter: blur(0);
+  transform: scale(1);
+}
+.t-icon-swap[data-state="a"] .t-icon[data-icon="b"],
+.t-icon-swap[data-state="b"] .t-icon[data-icon="a"] {
+  opacity: 0;
+  filter: blur(var(--icon-swap-blur));
+  transform: scale(var(--icon-swap-start-scale));
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   #10 Success check (.t-success-check)
+   ========================================================================== */
+.t-success-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center;
+  opacity: 0;
+  will-change: transform, opacity, filter;
+}
+.t-success-check svg {
+  display: block;
+  overflow: visible;
+}
+.t-success-check svg path {
+  stroke-dasharray: var(--check-len, 24);
+  stroke-dashoffset: var(--check-len, 24);
+}
+.t-success-check[data-state="in"] {
+  animation:
+    t-check-fade   var(--check-opacity-dur) var(--check-ease-opacity) forwards,
+    t-check-rotate var(--check-rotate-dur)  var(--check-ease-rotate)  forwards,
+    t-check-blur   var(--check-blur-dur)    var(--check-ease-out)     forwards,
+    t-check-bob    var(--check-bob-dur)     var(--check-ease-bob)     forwards;
+}
+.t-success-check[data-state="in"] svg path {
+  animation: t-check-draw var(--check-path-dur) var(--check-ease-path) var(--check-path-delay, 0ms) forwards;
+}
+@keyframes t-check-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes t-check-rotate {
+  from { transform: rotate(var(--check-rotate-from)); }
+  to   { transform: rotate(0deg); }
+}
+@keyframes t-check-blur {
+  from { filter: blur(var(--check-blur-from)); }
+  to   { filter: blur(0); }
+}
+@keyframes t-check-bob {
+  from { translate: 0 var(--check-y-amount); }
+  to   { translate: 0 0; }
+}
+@keyframes t-check-draw { to { stroke-dashoffset: 0; } }
+
+/* ==========================================================================
+   #11 Avatar group hover (.t-avatar)
+   ========================================================================== */
+.t-avatar {
+  transform-origin: center;
+  transform:
+    translateY(var(--shift, 0px))
+    scale(var(--scale-active, 1));
+  transition: transform var(--avatar-dur) var(--avatar-ease-in);
+  will-change: transform;
+}
+
+/* ==========================================================================
+   #12 Error state shake (.t-input, .t-input-wrap, .t-error-msg)
+   ========================================================================== */
+.t-input {
+  transition: border-color 150ms ease-out;
+  will-change: transform;
+}
+.t-input.is-error {
+  border-color: #ef4444 !important;
+  transition: border-color var(--revert-dur, 280ms) ease-out;
+}
+.t-error-msg {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity    var(--revert-dur, 280ms) ease-out,
+    visibility 0s linear var(--revert-dur, 280ms);
+}
+.t-input-wrap.is-error .t-error-msg {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity    var(--revert-dur, 280ms) ease-out,
+    visibility 0s linear 0s;
+}
+.t-input.is-shaking {
+  animation: t-input-shake calc(var(--shake-dur-a) * 2 + var(--shake-dur-b) * 2) linear;
+}
+@keyframes t-input-shake {
+  0%      { transform: translateX(0);                                 animation-timing-function: var(--shake-ease); }
+  28.57%  { transform: translateX(var(--shake-distance));             animation-timing-function: var(--shake-ease); }
+  57.14%  { transform: translateX(calc(var(--shake-distance) * -1)); animation-timing-function: var(--shake-ease); }
+  78.57%  { transform: translateX(var(--shake-overshoot));            animation-timing-function: var(--shake-ease); }
+  100%    { transform: translateX(0); }
+}
+
+/* ==========================================================================
+   #13 Input clear with dissolve (.t-clear-input)
+   ========================================================================== */
+.t-clear-input {
+  transition:
+    transform var(--clear-out-dur) var(--clear-out-ease),
+    opacity   var(--clear-out-dur) var(--clear-out-ease),
+    filter    var(--clear-out-dur) var(--clear-out-ease);
+}
+.t-clear-input.is-clearing {
+  transform: translateX(var(--clear-out-fly));
+  opacity: 0;
+  filter: blur(var(--clear-blur));
+}
+
+/* ==========================================================================
+   #14 Skeleton loader and reveal (.t-skel)
+   ========================================================================== */
+.t-skel-reveal {
+  animation: t-skel-content-in var(--reveal-dur) var(--reveal-ease) both;
+}
+@keyframes t-skel-content-in {
+  from {
+    opacity: 0;
+    filter: blur(var(--reveal-blur));
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+/* ==========================================================================
+   #15 Shimmer text (.t-shimmer)
+   ========================================================================== */
+.t-shimmer {
+  position: relative;
+  display: inline-block;
+  color: var(--shimmer-base);
+}
+.t-shimmer::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 40%,
+    var(--shimmer-highlight) 50%,
+    transparent 60%,
+    transparent 100%
+  );
+  background-size: var(--shimmer-band) 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: t-think-shimmer var(--shimmer-dur) var(--shimmer-ease) infinite;
+}
+
+/* ==========================================================================
+   #16 Tabs sliding (.t-tabs, .t-tabs-pill, .t-tab)
+   ========================================================================== */
+.t-tabs {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.t-tab {
+  position: relative;
+  z-index: 1;
+  transition: color var(--tabs-dur) var(--tabs-ease);
+}
+.t-tabs-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 0;
+  width: 0;
+  background: var(--tabs-pill-bg);
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform var(--tabs-dur) var(--tabs-ease),
+    width     var(--tabs-dur) var(--tabs-ease),
+    height    var(--tabs-dur) var(--tabs-ease);
+  will-change: transform, width;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   #17 Tooltip open/close (.t-tt)
+   ========================================================================== */
+.t-tt-bubble {
+  opacity: 0;
+  transform: translateX(-50%) scale(var(--tt-scale));
+  transform-origin: 50% 100%;
+  pointer-events: none;
+  transition:
+    opacity   var(--tt-out-dur) var(--tt-out-ease) 0ms,
+    transform var(--tt-out-dur) var(--tt-out-ease) 0ms;
+}
+.group:hover > .t-tt-bubble,
+.group:focus-within > .t-tt-bubble,
+.t-tt-bubble[data-show="true"] {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+  transition:
+    opacity   var(--tt-in-dur) var(--tt-in-ease) var(--tt-delay),
+    transform var(--tt-in-dur) var(--tt-in-ease) var(--tt-delay);
+}
+
+/* ==========================================================================
+   #18 Texts reveal (.t-stagger)
+   ========================================================================== */
+.t-stagger-item {
+  animation: t-stagger-in var(--stagger-dur) var(--stagger-ease) both;
+  animation-delay: calc(var(--stagger-i, 0) * var(--stagger-stagger));
+}
+@keyframes t-stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--stagger-distance));
+    filter: blur(var(--stagger-blur));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+/* ==========================================================================
+   #19 Card hover tilt (.t-tilt, .t-tilt-card, .t-tilt-glare)
+   ========================================================================== */
+.t-tilt {
+  position: relative;
+}
+.t-tilt-card {
+  position: relative;
+  transform:
+    perspective(var(--tilt-perspective))
+    rotateX(var(--tilt-rx, 0deg))
+    rotateY(var(--tilt-ry, 0deg));
+  transform-style: preserve-3d;
+  transition: transform var(--tilt-return) var(--tilt-return-ease);
+  will-change: transform;
+}
+.t-tilt-card.is-tilting {
+  transition: transform var(--tilt-follow) var(--tilt-follow-ease);
+}
+.t-tilt-glare {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(circle 120px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
+      rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.05) 55%, rgba(255, 255, 255, 0) 85%),
+    radial-gradient(circle 260px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
+      rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0) 82%);
+  transition: opacity var(--tilt-glare-fade) var(--tilt-glare-ease);
+}
+.t-tilt.is-hover .t-tilt-glare {
+  opacity: var(--tilt-glare-opacity);
+}
+
+/* ==========================================================================
+   #21 Accordion expand (.t-acc, .t-acc-panel, .t-acc-chevron)
+   ========================================================================== */
+.t-acc-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--acc-collapse) var(--acc-ease);
+}
+.t-acc[data-open="true"] > .t-acc-panel,
+.t-acc-panel[data-open="true"] {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--acc-expand) var(--acc-ease);
+}
+.t-acc-panel-inner {
+  overflow: hidden;
+  min-height: 0;
+  opacity: 0;
+  filter: blur(2px);
+  transition:
+    opacity var(--acc-collapse) var(--acc-ease),
+    filter  var(--acc-collapse) var(--acc-ease);
+}
+.t-acc[data-open="true"] > .t-acc-panel > .t-acc-panel-inner,
+.t-acc-panel[data-open="true"] > .t-acc-panel-inner {
+  opacity: 1;
+  filter: blur(0);
+  transition:
+    opacity var(--acc-expand) var(--acc-ease),
+    filter  var(--acc-expand) var(--acc-ease);
+}
+.t-acc-chevron {
+  display: inline-flex;
+  transform: scaleY(1);
+  transform-origin: center;
+  transition: transform var(--acc-chevron) var(--acc-ease);
+}
+.t-acc-chevron path {
+  vector-effect: non-scaling-stroke;
+}
+.t-acc[data-open="true"] .t-acc-chevron,
+.t-acc-chevron[data-open="true"] {
+  transform: scaleY(-1);
+}
+
+/* ==========================================================================
+   #24 Learn more hover (.t-learn)
+   ========================================================================== */
+.t-learn-chevron {
+  display: inline-flex;
+  align-items: center;
+  transform: translateX(0);
+  transition: transform var(--learn-out) var(--learn-ease);
+}
+.t-learn-arm {
+  transform-box: view-box;
+  transform-origin: 10px 8px;
+  vector-effect: non-scaling-stroke;
+  transition: transform var(--learn-out) var(--learn-ease);
+}
+.t-learn:hover .t-learn-chevron {
+  transform: translateX(var(--learn-shift));
+  transition-duration: var(--learn-in);
+}
+.t-learn:hover .t-learn-arm {
+  transition-duration: var(--learn-in);
+}
+.t-learn:hover .t-learn-arm-top {
+  transform: rotate(var(--learn-spread));
+}
+.t-learn:hover .t-learn-arm-bot {
+  transform: rotate(calc(var(--learn-spread) * -1));
+}
+
+/* ==========================================================================
+   #25 Checkbox check (.t-check)
+   ========================================================================== */
+.t-check {
+  transition:
+    background-color var(--check-box) var(--check-ease),
+    border-color     var(--check-box) var(--check-ease),
+    box-shadow       var(--check-box) var(--check-ease);
+}
+.t-check svg path {
+  stroke-dasharray: var(--check-len, 15);
+  stroke-dashoffset: var(--check-len, 15);
+  transition: stroke-dashoffset var(--check-uncheck) var(--check-ease);
+}
+.t-check[aria-checked="true"] svg path {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset var(--check-draw) var(--check-ease) var(--check-delay);
+}
+
+/* ==========================================================================
+   #27 Toggle (.t-toggle-thumb)
+   ========================================================================== */
+.t-toggle-thumb {
+  transition: transform var(--toggle-dur) var(--toggle-ease);
+  will-change: transform;
+}
+
+/* ==========================================================================
+   #28 Thinking states (.t-think)
+   ========================================================================== */
+.t-think {
+  position: relative;
+  display: inline-block;
+}
+.t-think-text {
+  position: relative;
+  display: inline-block;
+  color: var(--think-base);
+  transform: translateY(0);
+  filter: blur(0);
+  opacity: 1;
+  transition:
+    transform var(--think-swap) var(--think-ease),
+    filter    var(--think-swap) var(--think-ease),
+    opacity   var(--think-swap) var(--think-ease);
+  will-change: transform, filter, opacity;
+}
+.t-think-text::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 38%,
+    var(--think-highlight) 50%,
+    transparent 62%,
+    transparent 100%
+  );
+  background-size: 400% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: t-think-shimmer var(--think-shimmer) linear infinite;
+}
+@keyframes t-think-shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: 0% 0; }
+}
+.t-think-text.is-exit {
+  transform: translateY(calc(var(--think-distance) * -1));
+  filter: blur(var(--think-blur));
+  opacity: 0;
+}
+.t-think-text.is-enter-start {
+  transition: none;
+  transform: translateY(var(--think-distance));
+  filter: blur(var(--think-blur));
+  opacity: 0;
+}
+
+/* ==========================================================================
+   #30 Streaming text (.t-stream-w)
+   ========================================================================== */
+.t-stream-w {
+  opacity: 0;
+  filter: blur(var(--stream-blur));
+  transition:
+    opacity var(--stream-fade) var(--stream-ease),
+    filter  var(--stream-fade) var(--stream-ease);
+}
+.t-stream-w.is-in {
+  opacity: 1;
+  filter: blur(0);
+}
+
+/* ==========================================================================
+   #31 Matrix dot loader (.t-matrix)
+   ========================================================================== */
+.t-matrix {
+  display: inline-grid;
+  grid-template-columns: repeat(4, 2.5px);
+  grid-auto-rows: 2.5px;
+  gap: 2px;
+  vertical-align: middle;
+}
+.t-matrix i {
+  display: block;
+  border-radius: 0.5px;
+  background: var(--matrix-base);
+  animation: t-matrix-pulse var(--matrix-cycle) var(--matrix-ease) infinite;
+  animation-delay: calc(var(--d, 0) * 1ms);
+}
+.t-matrix i.is-gap {
+  visibility: hidden;
+  animation: none;
+}
+@keyframes t-matrix-pulse {
+  0%, 45%, 100% { background-color: var(--matrix-base); }
+  15%           { background-color: var(--matrix-active); }
+}
+
+/* ==========================================================================
+   #33 Text morph (.t-morph, .t-morph-swap)
+   ========================================================================== */
+.t-morph {
+  white-space: nowrap;
+}
+.t-morph-swap {
+  display: inline-grid;
+  vertical-align: bottom;
+  justify-items: start;
+  transition: width var(--text-morph-resize-dur) var(--text-morph-ease);
+}
+.t-morph-swap > span {
+  grid-area: 1 / 1;
+  white-space: pre;
+  transition:
+    opacity var(--text-morph-dur) var(--text-morph-ease),
+    filter  var(--text-morph-dur) var(--text-morph-ease);
+}
+.t-morph-new {
+  opacity: 0;
+  filter: blur(var(--text-morph-blur));
+}
+.t-morph-swap.is-morphing .t-morph-old {
+  opacity: 0;
+  filter: blur(var(--text-morph-blur));
+}
+.t-morph-swap.is-morphing .t-morph-new {
+  opacity: 1;
+  filter: blur(0);
+}
+
+/* ==========================================================================
+   #34 Text swap soft (.t-text-soft)
+   ========================================================================== */
+.t-text-soft {
+  display: inline-grid;
+  justify-items: var(--text-soft-align, start);
+  transition: width var(--text-soft-resize-dur) var(--text-soft-resize-ease);
+}
+.t-text-soft > span {
+  grid-area: 1 / 1;
+  transition:
+    filter  var(--text-soft-dur) var(--text-soft-ease),
+    opacity var(--text-soft-dur) var(--text-soft-ease);
+}
+.t-text-soft-new {
+  opacity: 0;
+  filter: blur(var(--text-soft-blur));
+}
+.t-text-soft.is-swapping .t-text-soft-old {
+  opacity: 0;
+  filter: blur(var(--text-soft-blur));
+}
+.t-text-soft.is-swapping .t-text-soft-new {
+  opacity: 1;
+  filter: blur(0);
+}
+
+/* ==========================================================================
+   #35 Donut chart (.t-donut)
+   ========================================================================== */
+.t-donut {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.t-donut svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.t-donut-seg {
+  stroke-linejoin: round;
+  transition: opacity 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.t-donut-seg.is-dim {
+  opacity: 0.22;
+}
+.t-donut-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   #36 Number subtle change (.t-subtle-number)
+   ========================================================================== */
+.t-subtle-number {
+  display: inline-flex;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+}
+.t-subtle-slot {
+  position: relative;
+  display: inline-block;
+}
+.t-subtle-new {
+  display: inline-block;
+}
+.t-subtle-old {
+  position: absolute;
+  inset: 0;
+  text-align: center;
+  pointer-events: none;
+}
+.t-subtle-number.is-animating .t-subtle-new {
+  animation: t-subtle-in var(--subtle-dur) var(--subtle-ease) both;
+}
+.t-subtle-number.is-animating .t-subtle-old {
+  animation: t-subtle-out var(--subtle-dur) var(--subtle-ease) both;
+}
+@keyframes t-subtle-in {
+  from {
+    transform: translateY(calc(var(--subtle-distance) * var(--subtle-dir, 1)));
+    opacity: 0;
+    filter: blur(var(--subtle-blur));
+  }
+}
+@keyframes t-subtle-out {
+  to {
+    transform: translateY(calc(var(--subtle-distance) * var(--subtle-dir, 1) * -1));
+    opacity: 0;
+    filter: blur(var(--subtle-blur));
+  }
+}
+
+/* ==========================================================================
+   Accessibility Guard: prefers-reduced-motion: reduce
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .t-card-resize,
+  .t-digit-group .t-digit,
+  .t-badge,
+  .t-badge-dot,
+  .t-text-swap,
+  .t-dropdown,
+  .t-modal,
+  .t-panel-slide,
+  .t-icon-swap .t-icon,
+  .t-success-check,
+  .t-success-check svg path,
+  .t-avatar,
+  .t-input,
+  .t-clear-input,
+  .t-skel-reveal,
+  .t-shimmer::before,
+  .t-tabs-pill,
+  .t-tab,
+  .t-tt-bubble,
+  .t-stagger-item,
+  .t-tilt-card,
+  .t-acc-panel,
+  .t-acc-panel-inner,
+  .t-acc-chevron,
+  .t-learn-chevron,
+  .t-learn-arm,
+  .t-check,
+  .t-check svg path,
+  .t-toggle-thumb,
+  .t-think-text,
+  .t-think-text::before,
+  .t-stream-w,
+  .t-matrix i,
+  .t-morph-swap,
+  .t-morph-swap > span,
+  .t-text-soft,
+  .t-text-soft > span,
+  .t-donut-seg,
+  .t-subtle-number .t-subtle-new {
+    animation: none !important;
+    transition: none !important;
+  }
+  .t-digit-group .t-digit-old,
+  .t-subtle-number .t-subtle-old {
+    display: none !important;
+  }
+  .t-success-check {
+    opacity: 1 !important;
+  }
+  .t-success-check svg path {
+    stroke-dashoffset: 0 !important;
+  }
+  .t-stream-w {
+    opacity: 1 !important;
+    filter: none !important;
+  }
+}

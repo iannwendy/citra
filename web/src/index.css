@@ -1,3 +1,5 @@
+@import './styles/transitions-dev.css';
+
 /* Self-hosted Sentient (Fontshare Editorial Serif — Full 134/134 Vietnamese Glyph Coverage) — Immune to CSP & zero external latency */
 @font-face {
   font-family: 'Sentient';
@@ -115,10 +117,10 @@
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05);
     --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.05), 0 8px 10px -6px rgb(0 0 0 / 0.05);
 
-    /* Animation */
-    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    /* Animation — Bridged to transitions.dev Motion Token Scale */
+    --transition-fast: var(--duration-quick) var(--ease-smooth-out);
+    --transition-base: var(--duration-fast) var(--ease-smooth-out);
+    --transition-slow: var(--duration-slow) var(--ease-smooth-out);
   }
 
   .dark {
