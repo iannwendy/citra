@@ -29,6 +29,12 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+  ThinkingStateText,
+  SubtleNumber,
+  MatrixDotLoader,
+  SuccessCheck,
+} from '@/components/ui/transitions';
 
 /* ============================================================
    ProcessingPage — Real-time pipeline progress (Scholarly Precision v2.0)
@@ -513,7 +519,7 @@ export function ProcessingPage() {
               variant="secondary"
               className="font-mono text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
             >
-              {effectiveProgress}%
+              <SubtleNumber value={effectiveProgress} suffix="%" />
             </Badge>
           </div>
         </div>
@@ -524,7 +530,7 @@ export function ProcessingPage() {
             <Progress value={effectiveProgress} className="h-2.5" />
             {status && !visualDone && !isFailed && (
               <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-2">
-                &gt; {status.message}
+                &gt; <ThinkingStateText text={status.message} />
               </p>
             )}
           </div>
@@ -559,9 +565,12 @@ export function ProcessingPage() {
                     }`}
                   >
                     {s === 'completed' ? (
-                      <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                      <SuccessCheck
+                        size={16}
+                        className="text-emerald-600 dark:text-emerald-400"
+                      />
                     ) : s === 'active' ? (
-                      <Loader2 className="h-4 w-4 text-white animate-spin" />
+                      <MatrixDotLoader variant="scan" className="text-white" />
                     ) : (
                       <Circle className="h-3.5 w-3.5 text-slate-400 dark:text-slate-600" />
                     )}
@@ -673,7 +682,7 @@ function StatCard({
             : 'text-slate-900 dark:text-slate-100'
         }`}
       >
-        {value}
+        <SubtleNumber value={value} />
       </p>
       <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">{label}</p>
     </Card>
