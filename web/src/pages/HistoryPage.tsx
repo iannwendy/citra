@@ -184,7 +184,7 @@ export function HistoryPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('dashboard.searchPlaceholder')}
               aria-label="Search documents"
-              className="h-9 pl-9 pr-8 text-xs rounded-xl bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
+              className="t-clear-input h-9 pl-9 pr-8 text-xs rounded-xl bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
             />
             {searchQuery && (
               <button
@@ -245,7 +245,7 @@ export function HistoryPage() {
             )}
           </div>
         ) : (
-          <div className="p-4 sm:p-5 space-y-3">
+          <div className="t-skel-reveal p-4 sm:p-5 space-y-3">
             {filteredItems.map((essay, idx) => (
               <Link
                 key={essay.id}

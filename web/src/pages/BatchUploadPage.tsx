@@ -36,6 +36,12 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { isUnlimitedValue } from '@/lib/quotaDisplay';
+import {
+  NumberPopIn,
+  MatrixDotLoader,
+  SuccessCheck,
+  AvatarGroupHover,
+} from '@/components/ui/transitions';
 
 export { BATCH_CONCURRENCY, batchTiming };
 
@@ -59,9 +65,9 @@ function getStatusIcon(status: BatchFileStatus) {
       return <Clock className="h-4 w-4 text-slate-400" />;
     case 'uploading':
     case 'processing':
-      return <Loader2 className="h-4 w-4 text-indigo-500 animate-spin" />;
+      return <MatrixDotLoader variant="scan" className="text-indigo-500" />;
     case 'completed':
-      return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
+      return <SuccessCheck size={16} className="text-emerald-500" />;
     case 'failed':
       return <AlertCircle className="h-4 w-4 text-red-500" />;
   }
@@ -460,7 +466,7 @@ export function BatchUploadPage() {
               </span>
             </div>
             <p className={`text-2xl font-bold font-mono tabular-nums ${m.tone}`}>
-              {m.value}
+              <NumberPopIn value={m.value} />
             </p>
           </Card>
         ))}
@@ -559,7 +565,7 @@ export function BatchUploadPage() {
               className="hidden"
             />
 
-            <div className="flex items-center justify-center gap-2.5 mb-3.5">
+            <AvatarGroupHover className="flex items-center justify-center gap-2.5 mb-3.5">
               <FileFormatIcon format="pdf" size="md" />
               <FileFormatIcon format="docx" size="md" />
               <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shadow-2xs">
@@ -567,7 +573,7 @@ export function BatchUploadPage() {
               </div>
               <FileFormatIcon format="bib" size="md" />
               <FileFormatIcon format="ris" size="md" />
-            </div>
+            </AvatarGroupHover>
             <p className="font-display text-lg font-bold text-slate-900 dark:text-white mb-1">
               {t('batchUpload.dropPdfs')}
             </p>

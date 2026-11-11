@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { NumberPopIn } from '@/components/ui/transitions';
 
 type Color = 'indigo' | 'green' | 'amber' | 'violet' | 'rose' | 'slate';
 
@@ -67,7 +68,7 @@ export function StatCard({
             {label}
           </p>
           <p className="mt-1 text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-white">
-            {value}
+            <NumberPopIn value={value} />
           </p>
           {hint && (
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">

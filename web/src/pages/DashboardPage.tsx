@@ -41,6 +41,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { NumberPopIn } from '@/components/ui/transitions';
 import {
   Table,
   TableBody,
@@ -240,7 +241,7 @@ export function DashboardPage() {
                 )}
               </div>
               <p className={`text-2xl sm:text-3xl font-bold font-mono tabular-nums tracking-tight ${card.color}`}>
-                {card.value}
+                <NumberPopIn value={card.value} />
               </p>
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 mt-1">
                 {card.label}
@@ -297,7 +298,7 @@ export function DashboardPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('dashboard.searchPlaceholder')}
               aria-label="Search documents"
-              className="h-9 pl-9 pr-8 text-xs rounded-xl bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
+              className="t-clear-input h-9 pl-9 pr-8 text-xs rounded-xl bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
             />
             {searchQuery && (
               <button
@@ -360,7 +361,7 @@ export function DashboardPage() {
             )}
           </div>
         ) : (
-          <Table className="block sm:table">
+          <Table className="t-skel-reveal block sm:table">
             <TableHeader className="hidden sm:table-header-group">
               <TableRow className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200/80 dark:border-slate-800">
                 <TableHead className="font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-5">

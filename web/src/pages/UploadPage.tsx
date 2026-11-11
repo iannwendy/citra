@@ -28,6 +28,13 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  CardResize,
+  SuccessCheck,
+  AvatarGroupHover,
+  TextStatesSwap,
+  useErrorShake,
+} from '@/components/ui/transitions';
 
 /* ============================================================
    SourceLogic — Upload Page Component (Scholarly Precision v2.0)
@@ -62,6 +69,12 @@ export function UploadPage() {
   const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [joiningClass, setJoiningClass] = useState(false);
+  const {
+    isError: joinCodeError,
+    isShaking: joinCodeShaking,
+    triggerError: triggerJoinCodeError,
+    clearError: clearJoinCodeError,
+  } = useErrorShake();
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState<{
     title?: string;
@@ -96,12 +109,14 @@ export function UploadPage() {
       );
       setSelectedClassId(joined.id);
       setJoinCodeInput('');
+      clearJoinCodeError();
       toast.success(
         lang === 'vi'
           ? `Đã tham gia lớp học "${joined.name}" thành công!`
           : `Successfully enrolled in "${joined.name}"!`
       );
     } catch (e) {
+      triggerJoinCodeError();
       toast.error(
         e instanceof Error
           ? e.message
@@ -557,10 +572,15 @@ export function UploadPage() {
                       type="text"
                       data-testid="join-class-code-input"
                       value={joinCodeInput}
-                      onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
+                      onChange={(e) => {
+                        setJoinCodeInput(e.target.value.toUpperCase());
+                        if (joinCodeError) clearJoinCodeError();
+                      }}
                       placeholder="CITRA-XXXX"
                       maxLength={16}
-                      className="h-9 w-full sm:w-32 pl-8 pr-2.5 rounded-xl text-xs font-mono uppercase bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className={`t-input h-9 w-full sm:w-32 pl-8 pr-2.5 rounded-xl text-xs font-mono uppercase bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                        joinCodeError ? 'is-error' : ''
+                      } ${joinCodeShaking ? 'is-shaking' : ''}`}
                     />
                   </div>
                   <Button
@@ -608,6 +628,7 @@ export function UploadPage() {
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
 
+            <CardResize>
             {file ? (
               /* File selected state */
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 max-w-xl w-full mx-auto bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800/80 shadow-xs overflow-hidden">
@@ -622,7 +643,7 @@ export function UploadPage() {
                         {file.name}
                       </p>
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
-                        <CheckCircle2 className="h-3 w-3" /> READY
+                        <SuccessCheck size={12} strokeWidth={2.5} /> READY
                       </span>
                     </div>
                     <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5 truncate">
@@ -653,7 +674,7 @@ export function UploadPage() {
             ) : (
               /* Dropzone default state */
               <div className="max-w-md mx-auto">
-                <div className="flex items-center justify-center gap-2.5 mb-4">
+                <AvatarGroupHover className="flex items-center justify-center gap-2.5 mb-4">
                   <FileFormatIcon format="pdf" size="md" />
                   <FileFormatIcon format="docx" size="md" />
                   <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shadow-xs">
@@ -661,7 +682,7 @@ export function UploadPage() {
                   </div>
                   <FileFormatIcon format="bib" size="md" />
                   <FileFormatIcon format="ris" size="md" />
-                </div>
+                </AvatarGroupHover>
                 <p className="font-display text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-1.5">
                   {t('upload.dropDocument')}
                 </p>
@@ -673,6 +694,7 @@ export function UploadPage() {
                 </span>
               </div>
             )}
+            </CardResize>
           </div>
 
           {/* Error message */}
@@ -718,11 +740,11 @@ export function UploadPage() {
               {effectiveUploading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>{t('upload.uploading')}</span>
+                  <TextStatesSwap text={t('upload.uploading')} />
                 </>
               ) : (
                 <>
-                  <span>{t('upload.startVerification')}</span>
+                  <TextStatesSwap text={t('upload.startVerification')} />
                   <ArrowRight className="h-4 w-4" />
                 </>
               )}

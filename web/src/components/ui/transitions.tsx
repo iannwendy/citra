@@ -85,14 +85,7 @@ export function NumberPopIn({
   const str = String(value);
   const prevRef = useRef<string>(str);
   const groupRef = useRef<HTMLSpanElement>(null);
-  const [slots, setSlots] = useState<
-    Array<{ ch: string; oldCh?: string; same: boolean; stagger?: number }>
-  >(() =>
-    Array.from(str).map((ch) => ({
-      ch,
-      same: true,
-    })),
-  );
+  const [oldStr, setOldStr] = useState<string | null>(null);
   const [animating, setAnimating] = useState(false);
 
   useEffect(() => {
@@ -101,42 +94,27 @@ export function NumberPopIn({
     prevRef.current = str;
 
     if (prefersReducedMotion()) {
-      setSlots(Array.from(str).map((ch) => ({ ch, same: true })));
+      setOldStr(null);
       setAnimating(false);
       return;
     }
 
-    let sameCount = 0;
-    while (
-      sameCount < prev.length &&
-      sameCount < str.length &&
-      prev[sameCount] === str[sameCount]
-    ) {
-      sameCount++;
-    }
-
-    const nextSlots = Array.from(str).map((ch, i) => {
-      if (i < sameCount || !/\d/.test(ch)) {
-        return { ch, same: true };
-      }
-      const fromEnd = str.length - 1 - i;
-      const stagger = fromEnd === 1 ? 1 : fromEnd === 0 ? 2 : undefined;
-      const oldIdx = prev.length - (str.length - i);
-      const oldCandidate = oldIdx >= 0 ? prev[oldIdx] : undefined;
-      const oldCh =
-        oldCandidate && /\d/.test(oldCandidate) ? oldCandidate : undefined;
-      return { ch, oldCh, same: false, stagger };
-    });
-
+    setOldStr(prev);
     setAnimating(false);
-    setSlots(nextSlots);
     const raf = requestAnimationFrame(() => {
       if (groupRef.current) {
         void groupRef.current.offsetHeight;
       }
       setAnimating(true);
     });
-    return () => cancelAnimationFrame(raf);
+    const timer = setTimeout(() => {
+      setOldStr(null);
+      setAnimating(false);
+    }, 360);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
   }, [str]);
 
   return (
@@ -146,33 +124,21 @@ export function NumberPopIn({
       data-testid={testId}
       className={cn('t-digit-group', animating && 'is-animating', className)}
     >
-      {slots.map((slot, idx) =>
-        slot.same ? (
-          <span key={idx} className="t-digit" data-same="">
-            {slot.ch}
+      <span className="t-digit-slot">
+        {oldStr !== null && (
+          <span className="t-digit-old" aria-hidden="true">
+            {oldStr}
           </span>
-        ) : (
-          <span
-            key={idx}
-            className="t-digit-slot"
-            data-stagger={slot.stagger ? String(slot.stagger) : undefined}
-          >
-            {slot.oldCh && (
-              <span className="t-digit-old" aria-hidden="true">
-                {slot.oldCh}
-              </span>
-            )}
-            <span className="t-digit">{slot.ch}</span>
-          </span>
-        ),
-      )}
+        )}
+        <span className="t-digit">{str}</span>
+      </span>
     </span>
   );
 }
 
 /* ==========================================================================
    #36 Number subtle change (<SubtleNumber>)
-   Quiet per-digit cross-fade for frequently polled telemetry numbers
+   Quiet cross-fade for frequently polled telemetry numbers
    ========================================================================== */
 export function SubtleNumber({
   value,
@@ -192,9 +158,7 @@ export function SubtleNumber({
   const containerRef = useRef<HTMLSpanElement>(null);
   const [dir, setDir] = useState<1 | -1>(1);
   const [animating, setAnimating] = useState(false);
-  const [chars, setChars] = useState<
-    Array<{ ch: string; oldCh?: string; changed: boolean }>
-  >(() => Array.from(str).map((ch) => ({ ch, changed: false })));
+  const [oldStr, setOldStr] = useState<string | null>(null);
 
   useEffect(() => {
     const prevStr = prevStrRef.current;
@@ -206,32 +170,27 @@ export function SubtleNumber({
     setDir(nextDir);
 
     if (prefersReducedMotion()) {
-      setChars(Array.from(str).map((ch) => ({ ch, changed: false })));
+      setOldStr(null);
       setAnimating(false);
       return;
     }
 
-    const sameLength = prevStr.length === str.length;
-    const nextChars = Array.from(str).map((ch, i) => {
-      if (sameLength && prevStr[i] === ch) {
-        return { ch, changed: false };
-      }
-      return {
-        ch,
-        oldCh: sameLength ? prevStr[i] : undefined,
-        changed: true,
-      };
-    });
-
+    setOldStr(prevStr);
     setAnimating(false);
-    setChars(nextChars);
     const raf = requestAnimationFrame(() => {
       if (containerRef.current) {
         void containerRef.current.offsetHeight;
       }
       setAnimating(true);
     });
-    return () => cancelAnimationFrame(raf);
+    const timer = setTimeout(() => {
+      setOldStr(null);
+      setAnimating(false);
+    }, 240);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
   }, [str, numVal]);
 
   return (
@@ -241,20 +200,14 @@ export function SubtleNumber({
       style={{ '--subtle-dir': dir } as React.CSSProperties}
       className={cn('t-subtle-number', animating && 'is-animating', className)}
     >
-      {chars.map((item, i) =>
-        !item.changed ? (
-          <React.Fragment key={i}>{item.ch}</React.Fragment>
-        ) : (
-          <span key={i} className="t-subtle-slot">
-            {item.oldCh !== undefined && (
-              <span className="t-subtle-old" aria-hidden="true">
-                {item.oldCh}
-              </span>
-            )}
-            <span className="t-subtle-new">{item.ch}</span>
+      <span className="t-subtle-slot">
+        {oldStr !== null && (
+          <span className="t-subtle-old" aria-hidden="true">
+            {oldStr}
           </span>
-        ),
-      )}
+        )}
+        <span className="t-subtle-new">{str}</span>
+      </span>
     </span>
   );
 }
