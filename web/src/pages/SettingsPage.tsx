@@ -46,6 +46,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { IconSwap, TextMorph, useErrorShake } from '@/components/ui/transitions';
 import { APP_BUILD_DATE, APP_VERSION } from '@/version';
 
 // ============================================================
@@ -85,6 +86,7 @@ export function SettingsPage(): JSX.Element {
   const [deleteConfirmUsername, setDeleteConfirmUsername] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const { isShaking: isDeleteShaking, triggerError: triggerDeleteShake } = useErrorShake();
 
   const userHasPassword = user?.has_password !== false;
   const deleteDialog = useModalA11y<HTMLDivElement>(
@@ -100,6 +102,7 @@ export function SettingsPage(): JSX.Element {
 
     if (userHasPassword) {
       if (!deletePassword) {
+        triggerDeleteShake();
         setDeleteError(
           i18n.language?.startsWith('vi')
             ? 'Vui lòng nhập mật khẩu hiện tại để xác nhận.'
@@ -109,6 +112,7 @@ export function SettingsPage(): JSX.Element {
       }
     } else {
       if (deleteConfirmUsername.trim() !== user.username) {
+        triggerDeleteShake();
         setDeleteError(
           i18n.language?.startsWith('vi')
             ? `Vui lòng nhập chính xác tên đăng nhập "${user.username}".`
@@ -129,6 +133,7 @@ export function SettingsPage(): JSX.Element {
       await logout();
       navigate('/');
     } catch (err) {
+      triggerDeleteShake();
       setDeleteError(
         err instanceof Error
           ? err.message
@@ -858,14 +863,14 @@ export function SettingsPage(): JSX.Element {
                       variant="outline"
                       data-testid="copy-raw-api-key-btn"
                       onClick={handleCopyRawKey}
-                      className="h-7 px-2.5 text-xs font-mono border-emerald-300 dark:border-emerald-700"
+                      className="h-7 px-2.5 text-xs font-mono border-emerald-300 dark:border-emerald-700 inline-flex items-center gap-1"
                     >
-                      {copiedRawKey ? (
-                        <Check className="h-3.5 w-3.5 mr-1 text-emerald-600" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5 mr-1" />
-                      )}
-                      {copiedRawKey ? 'Copied!' : 'Copy'}
+                      <IconSwap
+                        active={copiedRawKey}
+                        iconA={<Copy className="h-3.5 w-3.5" />}
+                        iconB={<Check className="h-3.5 w-3.5 text-emerald-600" />}
+                      />
+                      <TextMorph text={copiedRawKey ? 'Copied!' : 'Copy'} />
                     </Button>
                   </div>
                   <code
@@ -1052,7 +1057,7 @@ export function SettingsPage(): JSX.Element {
         >
           <div
             {...deleteDialog.dialogProps}
-            className="w-full max-w-md rounded-2xl border border-red-200 dark:border-red-900/60 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden outline-none animate-[scaleIn_220ms_cubic-bezier(0.22,1,0.36,1)]"
+            className="t-modal is-open w-full max-w-md rounded-2xl border border-red-200 dark:border-red-900/60 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden outline-none"
           >
             <div className="h-1.5 w-full bg-gradient-to-r from-red-600 via-red-500 to-amber-500" />
             <form onSubmit={handleDeleteMyAccount} className="p-6 space-y-4">
@@ -1092,7 +1097,7 @@ export function SettingsPage(): JSX.Element {
                     placeholder={t('privacyCompliance.deleteModalPasswordPlaceholder')}
                     data-testid="delete-account-password-input"
                     autoComplete="current-password"
-                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className={`t-input ${deleteError ? 'is-error' : ''} ${isDeleteShaking ? 'is-shaking' : ''} w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500`}
                   />
                 </div>
               ) : (
@@ -1109,7 +1114,7 @@ export function SettingsPage(): JSX.Element {
                     onChange={(e) => setDeleteConfirmUsername(e.target.value)}
                     placeholder={t('privacyCompliance.deleteModalUsernamePlaceholder')}
                     data-testid="delete-account-username-input"
-                    className="w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className={`t-input ${deleteError ? 'is-error' : ''} ${isDeleteShaking ? 'is-shaking' : ''} w-full h-10 px-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-red-500`}
                   />
                 </div>
               )}

@@ -10,6 +10,7 @@ import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { CardResize, IconSwap, TextMorph } from '@/components/ui/transitions';
 import {
   Sparkles,
   Shuffle,
@@ -902,115 +903,122 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
         )}
 
         {/* Instant Verification Results Panel */}
-        {instantResult && (
-          <div
-            data-testid="sandbox-instant-results"
-            className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
-                <Badge className="bg-indigo-600 text-white">
-                  ⚡ {instantResult.elapsed_seconds}s
-                </Badge>
-                <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold">
-                  ✓ {lang === 'vi' ? 'Hợp lệ' : 'Verified'}: {instantResult.summary.verified}
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-semibold">
-                  ⚠ {lang === 'vi' ? 'Sai lệch Metadata' : 'Metadata Error'}: {instantResult.summary.metadata_error}
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 font-semibold">
-                  🚨 {lang === 'vi' ? 'Nghi bịa đặt' : 'Hallucination'}: {instantResult.summary.suspected_hallucination}
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950 text-violet-700 dark:text-violet-300 font-semibold">
-                  🔗 {lang === 'vi' ? 'Lỗi liên kết Layer-1 In-text ↔ Ref' : 'Layer-1 In-text ↔ Ref Issues'}: {instantResult.summary.layer1_linking_issues}
-                </span>
+        <CardResize>
+          {instantResult && (
+            <div
+              data-testid="sandbox-instant-results"
+              className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                  <Badge className="bg-indigo-600 text-white">
+                    ⚡ {instantResult.elapsed_seconds}s
+                  </Badge>
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold">
+                    ✓ {lang === 'vi' ? 'Hợp lệ' : 'Verified'}: {instantResult.summary.verified}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-semibold">
+                    ⚠ {lang === 'vi' ? 'Sai lệch Metadata' : 'Metadata Error'}: {instantResult.summary.metadata_error}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 font-semibold">
+                    🚨 {lang === 'vi' ? 'Nghi bịa đặt' : 'Hallucination'}: {instantResult.summary.suspected_hallucination}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950 text-violet-700 dark:text-violet-300 font-semibold">
+                    🔗 {lang === 'vi' ? 'Lỗi liên kết Layer-1 In-text ↔ Ref' : 'Layer-1 In-text ↔ Ref Issues'}: {instantResult.summary.layer1_linking_issues}
+                  </span>
+                </div>
+
+                {instantResult.remediation?.combined_bibtex && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(
+                        instantResult.remediation?.combined_bibtex || '',
+                      );
+                      setCopiedBibtex(true);
+                      setTimeout(() => setCopiedBibtex(false), 2000);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-50"
+                  >
+                    <IconSwap
+                      active={copiedBibtex}
+                      iconA={<Copy className="h-3.5 w-3.5 text-indigo-600" />}
+                      iconB={<Check className="h-3.5 w-3.5 text-emerald-600" />}
+                    />
+                    <TextMorph
+                      text={
+                        copiedBibtex
+                          ? lang === 'vi'
+                            ? 'Đã sao chép BibTeX!'
+                            : 'Copied BibTeX!'
+                          : lang === 'vi'
+                            ? 'Sao chép BibTeX chuẩn hóa'
+                            : 'Copy Standardized BibTeX'
+                      }
+                    />
+                  </button>
+                )}
               </div>
 
-              {instantResult.remediation?.combined_bibtex && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(
-                      instantResult.remediation?.combined_bibtex || '',
-                    );
-                    setCopiedBibtex(true);
-                    setTimeout(() => setCopiedBibtex(false), 2000);
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-50"
-                >
-                  {copiedBibtex ? (
-                    <>
-                      <Check className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>{lang === 'vi' ? 'Đã sao chép BibTeX!' : 'Copied BibTeX!'}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-3.5 w-3.5 text-indigo-600" />
-                      <span>{lang === 'vi' ? 'Sao chép BibTeX chuẩn hóa' : 'Copy Standardized BibTeX'}</span>
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 gap-2 max-h-80 overflow-y-auto pr-1">
-              {instantResult.results.map((r) => {
-                const isVer = r.label === 'verified';
-                const isHalluc = r.label === 'suspected_hallucination';
-                const hasL1Issue = r.mapping_status !== 'matched';
-                return (
-                  <div
-                    key={r.index}
-                    className={`p-3 rounded-xl border text-xs space-y-1 ${
-                      isHalluc
-                        ? 'bg-red-50/70 dark:bg-red-950/30 border-red-200 dark:border-red-800'
-                        : !isVer || hasL1Issue
-                          ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
-                          : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2 font-mono font-bold">
-                        <span>#{r.index}</span>
-                        {isVer ? (
-                          <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
-                            <CheckCircle2 className="h-3.5 w-3.5" /> VERIFIED
+              <div className="grid grid-cols-1 gap-2 max-h-80 overflow-y-auto pr-1">
+                {instantResult.results.map((r) => {
+                  const isVer = r.label === 'verified';
+                  const isHalluc = r.label === 'suspected_hallucination';
+                  const hasL1Issue = r.mapping_status !== 'matched';
+                  return (
+                    <div
+                      key={r.index}
+                      className={`p-3 rounded-xl border text-xs space-y-1 ${
+                        isHalluc
+                          ? 'bg-red-50/70 dark:bg-red-950/30 border-red-200 dark:border-red-800'
+                          : !isVer || hasL1Issue
+                            ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
+                            : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2 font-mono font-bold">
+                          <span>#{r.index}</span>
+                          {isVer ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+                              <CheckCircle2 className="h-3.5 w-3.5" /> VERIFIED
+                            </span>
+                          ) : isHalluc ? (
+                            <span className="inline-flex items-center gap-1 text-red-700 dark:text-red-300">
+                              <XCircle className="h-3.5 w-3.5" /> SUSPECTED HALLUCINATION
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+                              <AlertTriangle className="h-3.5 w-3.5" /> {r.label.toUpperCase()}
+                            </span>
+                          )}
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] ${
+                              hasL1Issue
+                                ? 'bg-violet-600 text-white'
+                                : 'bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                            }`}
+                          >
+                            Layer 1: {r.mapping_status.toUpperCase()}
                           </span>
-                        ) : isHalluc ? (
-                          <span className="inline-flex items-center gap-1 text-red-700 dark:text-red-300">
-                            <XCircle className="h-3.5 w-3.5" /> SUSPECTED HALLUCINATION
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
-                            <AlertTriangle className="h-3.5 w-3.5" /> {r.label.toUpperCase()}
-                          </span>
-                        )}
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] ${
-                            hasL1Issue
-                              ? 'bg-violet-600 text-white'
-                              : 'bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                          }`}
-                        >
-                          Layer 1: {r.mapping_status.toUpperCase()}
+                        </div>
+                        <span className="font-mono text-[11px] text-slate-500">
+                          {lang === 'vi' ? 'Luật' : 'Rules'}: {(r.triggered_rules || []).join(', ') || 'R01'}
                         </span>
                       </div>
-                      <span className="font-mono text-[11px] text-slate-500">
-                        {lang === 'vi' ? 'Luật' : 'Rules'}: {(r.triggered_rules || []).join(', ') || 'R01'}
-                      </span>
+                      <p className="font-mono text-[11px] text-slate-800 dark:text-slate-200 break-words [overflow-wrap:anywhere]">
+                        {r.citation_raw}
+                      </p>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 break-words [overflow-wrap:anywhere]">
+                        {r.reasoning} {r.mapping_note ? ` • ${r.mapping_note}` : ''}
+                      </p>
                     </div>
-                    <p className="font-mono text-[11px] text-slate-800 dark:text-slate-200 break-words [overflow-wrap:anywhere]">
-                      {r.citation_raw}
-                    </p>
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400 break-words [overflow-wrap:anywhere]">
-                      {r.reasoning} {r.mapping_note ? ` • ${r.mapping_note}` : ''}
-                    </p>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </CardResize>
       </div>
     </Card>
   );

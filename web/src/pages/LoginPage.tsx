@@ -31,6 +31,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { IconSwap, useErrorShake } from '@/components/ui/transitions';
 
 export function LoginPage() {
   const { t, i18n } = useTranslation();
@@ -49,6 +50,7 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [copiedDemo, setCopiedDemo] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const { isShaking, triggerError: triggerShake } = useErrorShake();
 
   useEffect(() => {
     const raf = window.requestAnimationFrame(() => setMounted(true));
@@ -87,6 +89,7 @@ export function LoginPage() {
       await login(username, password);
       navigate('/dashboard');
     } catch (err) {
+      triggerShake();
       const msg = err instanceof Error ? err.message : t('auth.loginError');
       if (msg.includes('ACCOUNT_NOT_ACTIVATED')) {
         setNeedsActivation(true);
@@ -277,7 +280,7 @@ export function LoginPage() {
                         : 'var(--solva-border)',
                     color: 'var(--solva-ink)',
                   }}
-                  className="h-11 pl-10 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20"
+                  className={`t-input ${error ? 'is-error' : ''} ${isShaking ? 'is-shaking' : ''} h-11 pl-10 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20`}
                   placeholder={t('auth.usernamePlaceholder')}
                 />
               </div>
@@ -346,7 +349,7 @@ export function LoginPage() {
                         : 'var(--solva-border)',
                     color: 'var(--solva-ink)',
                   }}
-                  className="h-11 pl-10 pr-11 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20"
+                  className={`t-input ${error ? 'is-error' : ''} ${isShaking ? 'is-shaking' : ''} h-11 pl-10 pr-11 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20`}
                   placeholder={t('auth.passwordPlaceholder')}
                 />
                 {/* IMPORTANT: First <button> with <svg> in DOM for E2E test compatibility */}
@@ -357,11 +360,11 @@ export function LoginPage() {
                   style={{ color: 'var(--solva-muted)' }}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-[8px] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] transition-colors cursor-pointer"
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
+                  <IconSwap
+                    active={showPassword}
+                    iconA={<Eye className="h-4 w-4" />}
+                    iconB={<EyeOff className="h-4 w-4" />}
+                  />
                 </button>
               </div>
             </div>

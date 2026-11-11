@@ -139,6 +139,7 @@ test.describe('Authentication', () => {
     await page.getByLabel(/email address/i).fill(email);
     await page.getByLabel(/^password$/i).fill(initialPass);
     await page.getByLabel(/confirm password/i).fill(initialPass);
+    await page.getByTestId('register-privacy-consent-checkbox').dispatchEvent('click');
     await page.getByRole('button', { name: /create account/i }).click();
 
     // 3. Should display "Check your email inbox" view

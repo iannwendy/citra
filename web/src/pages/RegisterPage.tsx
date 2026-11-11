@@ -35,6 +35,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { IconSwap } from '@/components/ui/transitions';
 
 export function RegisterPage() {
   const { t, i18n } = useTranslation();
@@ -448,11 +449,11 @@ export function RegisterPage() {
                         }
                         className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
                       >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
+                        <IconSwap
+                          active={showPassword}
+                          iconA={<Eye className="h-4 w-4" />}
+                          iconB={<EyeOff className="h-4 w-4" />}
+                        />
                       </button>
                     </div>
                   </div>
