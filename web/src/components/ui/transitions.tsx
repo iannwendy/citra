@@ -988,8 +988,21 @@ function ringSectorPath(
 ): string {
   const Ro = ro - cr;
   const Ri = ri + cr;
-  const h = gap / 2 + cr;
   if (Ro <= Ri) return '';
+
+  const pt = (r: number, a: number) =>
+    `${(cx + r * Math.sin(a)).toFixed(2)} ${(cy - r * Math.cos(a)).toFixed(2)}`;
+
+  // Full-circle single segment (100%): draw a complete 360° closed ring with zero gap
+  if (a1 - a0 >= Math.PI * 2 - 0.01) {
+    const mid = a0 + Math.PI;
+    return (
+      `M${pt(Ro, a0)}A${Ro} ${Ro} 0 1 1 ${pt(Ro, mid)}A${Ro} ${Ro} 0 1 1 ${pt(Ro, a0)}Z` +
+      `M${pt(Ri, a0)}A${Ri} ${Ri} 0 1 0 ${pt(Ri, mid)}A${Ri} ${Ri} 0 1 0 ${pt(Ri, a0)}Z`
+    );
+  }
+
+  const h = gap / 2 + cr;
   const dO = Math.asin(Math.min(1, h / Ro));
   const dI = Math.asin(Math.min(1, h / Ri));
   const o0 = a0 + dO;
@@ -998,19 +1011,6 @@ function ringSectorPath(
   const i1 = a1 - dI;
   if (i1 - i0 <= 0.001 || o1 - o0 <= 0.001) return '';
 
-  // Full-circle single segment fallback when span is nearly 2*PI
-  if (o1 - o0 >= Math.PI * 2 - 0.01) {
-    const mid = o0 + Math.PI;
-    const pt = (r: number, a: number) =>
-      `${(cx + r * Math.sin(a)).toFixed(2)} ${(cy - r * Math.cos(a)).toFixed(2)}`;
-    return (
-      `M${pt(Ro, o0)}A${Ro} ${Ro} 0 1 1 ${pt(Ro, mid)}A${Ro} ${Ro} 0 1 1 ${pt(Ro, o1 - 0.001)}` +
-      `L${pt(Ri, i1 - 0.001)}A${Ri} ${Ri} 0 1 0 ${pt(Ri, mid)}A${Ri} ${Ri} 0 1 0 ${pt(Ri, i0)}Z`
-    );
-  }
-
-  const pt = (r: number, a: number) =>
-    `${(cx + r * Math.sin(a)).toFixed(2)} ${(cy - r * Math.cos(a)).toFixed(2)}`;
   const lo = o1 - o0 > Math.PI ? 1 : 0;
   const li = i1 - i0 > Math.PI ? 1 : 0;
   return (
@@ -1037,8 +1037,8 @@ export function DonutChart({
   const ro = Math.min(cx, cy) - 2;
   const ri = ro - thickness;
   const nonZeroCount = segments.filter((s) => s.value > 0).length;
-  const gap = nonZeroCount > 1 ? 2.5 : 0;
-  const cr = 1.75;
+  const gap = nonZeroCount > 1 ? Math.min(2.5, size * 0.05) : 0;
+  const cr = Math.min(1.75, thickness * 0.25);
 
   const total = segments.reduce((acc, s) => acc + Math.max(0, s.value), 0) || 1;
   let cursor = 0;

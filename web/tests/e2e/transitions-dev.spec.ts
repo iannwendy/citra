@@ -138,6 +138,9 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
     await page.goto('/verification/report/1');
     await waitForAuth(page);
     await expect(page.locator('.t-donut').first()).toBeVisible({ timeout: 10000 });
+    // Verify 100% DonutChart segment renders a complete 360-degree closed ring (two closed Z sub-paths, zero radial gap)
+    const donutSegPath = await page.locator('.t-donut path.t-donut-seg').first().getAttribute('d');
+    expect(donutSegPath).toMatch(/^M.*A.*A.*ZM.*A.*A.*Z$/);
     await expect(page.locator('.t-subtle-number').first()).toBeVisible();
     await expect(page.locator('.t-text-soft').first()).toBeVisible();
     await expect(page.locator('.t-stream').first()).toBeVisible();
