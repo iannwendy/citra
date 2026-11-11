@@ -38,6 +38,13 @@ import {
   Eye,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  IconSwap,
+  SymmetricChevron,
+  LearnMoreChevron,
+  UIGenerationReveal,
+  useSlidingPill,
+} from '@/components/ui/transitions';
 import { SolvaFilmSection } from '@/components/landing/CitraFilm';
 import { ThemeToggle } from '@/contexts/ThemeContext';
 import {
@@ -600,15 +607,11 @@ function SolvaHeader({
               className="inline-flex items-center gap-[5px] h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity cursor-pointer"
             >
               <span>{lang === 'vi' ? 'Nền tảng' : 'Platform'}</span>
-              <ChevronDown
-                className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                  dropdownOpen ? 'rotate-180' : ''
-                }`}
-              />
+              <SymmetricChevron open={dropdownOpen} size={14} />
             </button>
 
             {dropdownOpen && (
-              <div className="absolute left-0 top-[44px] pt-1 z-50 animate-debugger-switch">
+              <div className="absolute left-0 top-[44px] pt-1 z-50 t-dropdown is-open">
                 <div
                   style={{
                     backgroundColor: 'var(--solva-bg)',
@@ -734,7 +737,7 @@ function SolvaHeader({
                 : 'Try CITRA Free'}
           </SolvaButton>
 
-          {/* Mobile Hamburger Button (Solva 2-bar minimalist style) */}
+          {/* Mobile Hamburger Button (Solva 2-bar minimalist style + #09 IconSwap) */}
           <button
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
@@ -746,7 +749,11 @@ function SolvaHeader({
             }}
             className="lg:hidden inline-flex items-center justify-center w-[40px] h-[40px] rounded-[8px] cursor-pointer"
           >
-            {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            <IconSwap
+              active={mobileMenuOpen}
+              iconA={<Menu className="w-4 h-4" />}
+              iconB={<X className="w-4 h-4" />}
+            />
           </button>
         </div>
       </div>
@@ -969,7 +976,7 @@ function SolvaHeroSection({
                   backgroundColor: 'var(--solva-surface)',
                   borderColor: 'var(--solva-border)',
                 }}
-                className="group block w-full rounded-[12px] border p-3 sm:p-3.5 transition-all duration-200 hover:border-[#1C1A15]/40 dark:hover:border-[#FBFAF6]/30"
+                className="t-learn group block w-full rounded-[12px] border p-3 sm:p-3.5 transition-all duration-200 hover:border-[#1C1A15]/40 dark:hover:border-[#FBFAF6]/30"
               >
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <span
@@ -988,7 +995,7 @@ function SolvaHeroSection({
                     className="font-mono text-[10px] inline-flex items-center gap-1 shrink-0 group-hover:underline"
                   >
                     <span>{lang === 'vi' ? 'Xem báo cáo' : 'Full report'}</span>
-                    <ArrowRight className="w-3 h-3 transition-transform duration-200 group-hover:translate-x-0.5" />
+                    <LearnMoreChevron size={12} />
                   </span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[#E7E3D9] dark:border-[#332F26]">
@@ -1062,11 +1069,27 @@ function SolvaHeroSection({
               className="w-full min-h-[420px] sm:min-h-[490px] lg:h-[521px] p-4 sm:p-8 lg:p-0"
             >
               <div className="lg:absolute lg:top-[52px] lg:left-[52px] lg:right-[-24px]">
-                <HeroVerificationMockup
-                  lang={lang}
-                  activeStep={activeStep}
-                  onSelectStep={setActiveStep}
-                />
+                <UIGenerationReveal
+                  steps={
+                    lang === 'vi'
+                      ? [
+                          'AGENT.GEN // PHÂN TÍCH AST',
+                          'AGENT.GEN // CÂN CHỈNH S-BERT',
+                          'INSPECTOR SẴN SÀNG · 120FPS',
+                        ]
+                      : [
+                          'AGENT.GEN // TRACING AST',
+                          'AGENT.GEN // CALIBRATING S-BERT',
+                          'INSPECTOR READY · 120FPS',
+                        ]
+                  }
+                >
+                  <HeroVerificationMockup
+                    lang={lang}
+                    activeStep={activeStep}
+                    onSelectStep={setActiveStep}
+                  />
+                </UIGenerationReveal>
               </div>
             </SolvaPainterlyFrame>
           </SolvaScrollReveal>
@@ -1121,6 +1144,7 @@ function SolvaHeroSection({
    ============================================================ */
 function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
   const [activeView, setActiveView] = useState<'ablation' | 'classes' | 'calibration'>('ablation');
+  const { containerRef: benchTabsRef, pillStyle: benchPill } = useSlidingPill<HTMLDivElement>(activeView);
   const { containerRef: benchRef, replaySeed: benchSeed } = useFloralCardAnimation(5600);
   const sep = lang === 'vi' ? '.' : ',';
 
@@ -1502,17 +1526,31 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
             style={{ backgroundColor: 'var(--solva-surface)' }}
             className="w-full rounded-[16px] p-[8px] sm:p-[12px] space-y-3"
           >
-            {/* Top Bar: 3 Scientific Audit Views + Dataset Split Summary */}
+            {/* Top Bar: 3 Scientific Audit Views + Dataset Split Summary (#16 Sliding Tabs) */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 px-1 sm:px-2 pt-1">
               <div
+                ref={benchTabsRef}
                 role="tablist"
                 aria-label={
                   lang === 'vi'
                     ? 'Các bảng kết quả thực nghiệm 120K bài báo'
                     : '120K-paper benchmark evaluation views'
                 }
-                className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 w-full lg:w-auto"
+                className="relative grid grid-cols-1 sm:grid-cols-3 gap-1.5 w-full lg:w-auto"
               >
+                {benchPill.ready && (
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      backgroundColor: 'var(--solva-bg)',
+                      width: `${benchPill.width}px`,
+                      height: `${benchPill.height}px`,
+                      transform: `translate3d(${benchPill.left}px, ${benchPill.top}px, 0)`,
+                      transition: benchPill.animate ? undefined : 'none',
+                    }}
+                    className="t-tabs-pill rounded-[10px] shadow-2xs"
+                  />
+                )}
                 {[
                   {
                     id: 'ablation' as const,
@@ -1543,12 +1581,13 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                       type="button"
                       role="tab"
                       aria-selected={isActive}
+                      data-pill-active={isActive ? 'true' : 'false'}
                       onClick={() => setActiveView(tab.id)}
                       style={{
-                        backgroundColor: isActive ? 'var(--solva-bg)' : 'transparent',
+                        backgroundColor: !benchPill.ready && isActive ? 'var(--solva-bg)' : 'transparent',
                         color: isActive ? 'var(--solva-ink)' : 'var(--solva-muted)',
                       }}
-                      className="h-[40px] px-3.5 rounded-[10px] font-mono text-[12px] font-medium flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer"
+                      className="t-tab h-[40px] px-3.5 rounded-[10px] font-mono text-[12px] font-medium flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <span>{tab.label}</span>
                     </button>

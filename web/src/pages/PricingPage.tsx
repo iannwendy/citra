@@ -38,6 +38,11 @@ import { useRole } from '@/hooks/useRole';
 import { getQuotaView } from '@/lib/quotaDisplay';
 import { ThemeToggle } from '@/contexts/ThemeContext';
 import {
+  CardHoverTilt,
+  SoftTextSwap,
+  useSlidingPill,
+} from '@/components/ui/transitions';
+import {
   type Lang,
   SolvaScrollReveal,
   SolvaEyebrow,
@@ -331,6 +336,8 @@ export function PricingPage() {
 
   const proPrice = billingCycle === 'annual' ? 16 : 20;
   const ultraPrice = billingCycle === 'annual' ? 160 : 200;
+  const { containerRef: billingToggleRef, pillStyle: billingPill } =
+    useSlidingPill<HTMLDivElement>(billingCycle);
 
   return (
     <div
@@ -452,26 +459,43 @@ export function PricingPage() {
                 </SolvaScrollReveal>
               )}
 
-              {/* Billing Cycle Toggle (Segmented Solva Track + Squircle Indicator) */}
+              {/* Billing Cycle Toggle (Segmented Solva Track + #16 Sliding Pill Indicator) */}
               <SolvaScrollReveal delayMs={130} yOffset={18}>
                 <div className="pt-2 flex flex-col items-center gap-2.5">
                   <div
+                    ref={billingToggleRef}
                     style={{
                       backgroundColor: 'var(--solva-surface)',
                       borderColor: 'var(--solva-border)',
                     }}
-                    className="inline-flex items-center p-[5px] rounded-[12px] border gap-1"
+                    className="relative inline-flex items-center p-[5px] rounded-[12px] border gap-1"
                     role="group"
                     aria-label="Billing cycle selector"
                   >
+                    {billingPill.ready && (
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          backgroundColor: 'var(--solva-btn-bg)',
+                          width: `${billingPill.width}px`,
+                          height: `${billingPill.height}px`,
+                          transform: `translate3d(${billingPill.left}px, ${billingPill.top}px, 0)`,
+                          transition: billingPill.animate ? undefined : 'none',
+                        }}
+                        className="t-tabs-pill rounded-[8px]"
+                      />
+                    )}
                     <button
                       type="button"
                       data-testid="billing-toggle-monthly"
+                      data-pill-active={billingCycle === 'monthly' ? 'true' : 'false'}
                       onClick={() => setBillingCycle('monthly')}
                       style={
                         billingCycle === 'monthly'
                           ? {
-                              backgroundColor: 'var(--solva-btn-bg)',
+                              backgroundColor: billingPill.ready
+                                ? 'transparent'
+                                : 'var(--solva-btn-bg)',
                               color: 'var(--solva-btn-fg)',
                             }
                           : {
@@ -479,7 +503,7 @@ export function PricingPage() {
                               color: 'var(--solva-muted)',
                             }
                       }
-                      className="px-4 sm:px-5 py-2 rounded-[8px] font-solva-sans text-[13px] sm:text-[14px] font-medium transition-all duration-200 cursor-pointer"
+                      className="t-tab px-4 sm:px-5 py-2 rounded-[8px] font-solva-sans text-[13px] sm:text-[14px] font-medium cursor-pointer"
                     >
                       {lang === 'vi' ? 'Thanh toán theo Tháng' : 'Monthly Billing'}
                     </button>
@@ -487,11 +511,14 @@ export function PricingPage() {
                     <button
                       type="button"
                       data-testid="billing-toggle-annual"
+                      data-pill-active={billingCycle === 'annual' ? 'true' : 'false'}
                       onClick={() => setBillingCycle('annual')}
                       style={
                         billingCycle === 'annual'
                           ? {
-                              backgroundColor: 'var(--solva-btn-bg)',
+                              backgroundColor: billingPill.ready
+                                ? 'transparent'
+                                : 'var(--solva-btn-bg)',
                               color: 'var(--solva-btn-fg)',
                             }
                           : {
@@ -499,7 +526,7 @@ export function PricingPage() {
                               color: 'var(--solva-muted)',
                             }
                       }
-                      className="px-4 sm:px-5 py-2 rounded-[8px] font-solva-sans text-[13px] sm:text-[14px] font-medium transition-all duration-200 flex items-center gap-2 cursor-pointer"
+                      className="t-tab px-4 sm:px-5 py-2 rounded-[8px] font-solva-sans text-[13px] sm:text-[14px] font-medium flex items-center gap-2 cursor-pointer"
                     >
                       <span>{lang === 'vi' ? 'Thanh toán theo Năm' : 'Annual Billing'}</span>
                       <span className="px-2 py-0.5 rounded-[6px] bg-emerald-600 text-white text-[11px] font-mono font-semibold leading-none">
@@ -509,13 +536,18 @@ export function PricingPage() {
                   </div>
 
                   <p className="font-solva-sans text-[13px] text-emerald-700 dark:text-emerald-400 font-medium">
-                    {billingCycle === 'annual'
-                      ? lang === 'vi'
-                        ? '✨ Đang áp dụng ưu đãi trả theo năm: Tặng tương đương > 2 tháng sử dụng miễn phí!'
-                        : '✨ Annual discount active: Equivalent to over 2 months free!'
-                      : lang === 'vi'
-                        ? '💡 Mẹo: Chuyển sang gói theo Năm để tiết kiệm ngay $48/năm (Pro) hoặc $480/năm (Ultra).'
-                        : '💡 Tip: Switch to Annual billing to save $48/year on Pro or $480/year on Ultra.'}
+                    <SoftTextSwap
+                      align="center"
+                      text={
+                        billingCycle === 'annual'
+                          ? lang === 'vi'
+                            ? '✨ Đang áp dụng ưu đãi trả theo năm: Tặng tương đương > 2 tháng sử dụng miễn phí!'
+                            : '✨ Annual discount active: Equivalent to over 2 months free!'
+                          : lang === 'vi'
+                            ? '💡 Mẹo: Chuyển sang gói theo Năm để tiết kiệm ngay $48/năm (Pro) hoặc $480/năm (Ultra).'
+                            : '💡 Tip: Switch to Annual billing to save $48/year on Pro or $480/year on Ultra.'
+                      }
+                    />
                   </p>
                 </div>
               </SolvaScrollReveal>
@@ -726,8 +758,9 @@ export function PricingPage() {
                 </div>
               </SolvaScrollReveal>
 
-              {/* 2. PRO TIER (CENTER HIGHLIGHTED — RADIAL WATERCOLOR FLORAL BACKDROP) */}
+              {/* 2. PRO TIER (CENTER HIGHLIGHTED — RADIAL WATERCOLOR FLORAL BACKDROP + #19 CardHoverTilt) */}
               <SolvaScrollReveal delayMs={95} yOffset={36} className="h-full">
+                <CardHoverTilt maxTilt={3.5} className="h-full" cardClassName="h-full rounded-[16px]">
                 <div
                   style={{
                     backgroundColor: 'var(--solva-surface)',
@@ -965,6 +998,7 @@ export function PricingPage() {
                     </SolvaPlanActionButton>
                   </div>
                 </div>
+                </CardHoverTilt>
               </SolvaScrollReveal>
 
               {/* 3. ULTRA TIER */}

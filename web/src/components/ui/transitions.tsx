@@ -1178,3 +1178,177 @@ export function useErrorShake(revertHoldMs = 3000) {
 
   return { isError, isShaking, triggerError, clearError };
 }
+
+/* ==========================================================================
+   #16 Sliding pill hook (useSlidingPill)
+   Measures the active item inside a container and returns 120fps transform/size
+   ========================================================================== */
+export function useSlidingPill<T extends HTMLElement = HTMLDivElement>(
+  activeKey: string | number,
+) {
+  const containerRef = useRef<T>(null);
+  const [pillStyle, setPillStyle] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    ready: boolean;
+    animate: boolean;
+  }>({
+    left: 0,
+    top: 0,
+    width: 0,
+    height: 0,
+    ready: false,
+    animate: false,
+  });
+  const initializedRef = useRef(false);
+
+  const measure = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const activeEl = container.querySelector<HTMLElement>(
+      '[data-pill-active="true"], [aria-selected="true"]',
+    );
+    if (!activeEl) return;
+    const width = activeEl.offsetWidth;
+    const height = activeEl.offsetHeight;
+    if (width === 0 || height === 0) return;
+    const left = activeEl.offsetLeft;
+    const top = activeEl.offsetTop;
+
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      setPillStyle({
+        left,
+        top,
+        width,
+        height,
+        ready: true,
+        animate: false,
+      });
+      requestAnimationFrame(() => {
+        setPillStyle((prev) => ({ ...prev, animate: true }));
+      });
+    } else {
+      setPillStyle({
+        left,
+        top,
+        width,
+        height,
+        ready: true,
+        animate: true,
+      });
+    }
+  }, []);
+
+  useIsomorphicLayoutEffect(() => {
+    measure();
+  }, [activeKey, measure]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [measure]);
+
+  return { containerRef, pillStyle };
+}
+
+/* ==========================================================================
+   transitions-ui-generation (<UIGenerationReveal>)
+   Dotted wireframe + laser scanline + agent step tag overlay on mount/view
+   ========================================================================== */
+export function UIGenerationReveal({
+  children,
+  steps = [
+    'AGENT.GEN // TRACING AST',
+    'AGENT.GEN // CALIBRATING S-BERT',
+    'INSPECTOR READY · 120FPS',
+  ],
+  durationMs = 1350,
+  replayKey,
+  className,
+}: {
+  children: React.ReactNode;
+  steps?: string[];
+  durationMs?: number;
+  replayKey?: string | number;
+  className?: string;
+}) {
+  const [phase, setPhase] = useState<'active' | 'done'>('active');
+  const [stepIdx, setStepIdx] = useState(0);
+
+  useEffect(() => {
+    if (prefersReducedMotion()) {
+      setPhase('done');
+      return;
+    }
+    setPhase('active');
+    setStepIdx(0);
+
+    const stepInterval = Math.max(
+      220,
+      Math.floor(durationMs / Math.max(1, steps.length)),
+    );
+    const t1 = setTimeout(() => {
+      if (steps.length > 1) setStepIdx(1);
+    }, stepInterval);
+    const t2 = setTimeout(() => {
+      if (steps.length > 2) setStepIdx(steps.length - 1);
+    }, stepInterval * 2);
+    const tDone = setTimeout(() => {
+      setPhase('done');
+    }, durationMs);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(tDone);
+    };
+  }, [replayKey, durationMs, steps.length]);
+
+  return (
+    <div className={cn('t-gen-wrap', className)} data-t-generate="skeleton">
+      {children}
+      <div
+        className="t-gen"
+        data-phase={phase}
+        aria-hidden="true"
+      >
+        <svg className="t-gen-svg" preserveAspectRatio="none">
+          <rect
+            className="t-gen-wire"
+            x="2"
+            y="2"
+            width="calc(100% - 4px)"
+            height="calc(100% - 4px)"
+            rx="12"
+            ry="12"
+          />
+          <line
+            className="t-gen-wire"
+            x1="12"
+            y1="44"
+            x2="calc(100% - 12px)"
+            y2="44"
+          />
+        </svg>
+        <div key={String(replayKey ?? 'init')} className="t-gen-scanline" />
+        <span className="t-gen-handle" style={{ top: 4, left: 4 }} />
+        <span className="t-gen-handle" style={{ top: 4, right: 4 }} />
+        <span className="t-gen-handle" style={{ bottom: 4, left: 4 }} />
+        <span className="t-gen-handle" style={{ bottom: 4, right: 4 }} />
+        {steps.length > 0 && (
+          <div className="t-gen-tag">
+            <span className="t-gen-tag-dot" />
+            <span>{steps[Math.min(stepIdx, steps.length - 1)]}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
