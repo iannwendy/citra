@@ -108,7 +108,7 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
     await expect(passwordInput).toHaveClass(/is-error/);
   });
 
-  test('4. Dashboard, Upload & Citation Debugger IDE: NumberPopIn (#02), CardResize (#01), DonutChart (#35), SubtleNumber (#36), SoftTextSwap (#34), StreamingText (#30)', async ({
+  test('4. Dashboard, Upload, Settings & Citation Debugger IDE: NumberPopIn (#02), CardResize (#01), DonutChart (#35), SubtleNumber (#36), SoftTextSwap (#34), StreamingText (#30), Modal (#06) & ErrorShake (#12)', async ({
     page,
   }) => {
     setupAuthenticatedPage(page);
@@ -141,6 +141,18 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
     await expect(page.locator('.t-subtle-number').first()).toBeVisible();
     await expect(page.locator('.t-text-soft').first()).toBeVisible();
     await expect(page.locator('.t-stream').first()).toBeVisible();
+
+    // Navigate to SettingsPage and verify Delete Account modal (.t-modal.is-open) + Error Shake (.t-input.is-error)
+    await page.goto('/settings');
+    await waitForAuth(page);
+    const deleteBtn = page.getByTestId('settings-delete-account-btn');
+    await expect(deleteBtn).toBeVisible();
+    await deleteBtn.click();
+    const deleteModal = page.getByTestId('delete-account-modal');
+    await expect(deleteModal.locator('.t-modal.is-open')).toBeVisible();
+    await page.getByTestId('delete-account-confirm-btn').click();
+    const deletePwdInput = page.getByTestId('delete-account-password-input');
+    await expect(deletePwdInput).toHaveClass(/is-error/);
   });
 
   test('5. Accessibility: prefers-reduced-motion: reduce disables motion durations across transitions.dev classes', async ({
@@ -160,7 +172,14 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
     await page.setViewportSize(IPHONE_14_PRO_MAX);
 
     // A) Public routes on iPhone 14 Pro Max (430x932)
-    for (const publicRoute of ['/', '/pricing', '/login']) {
+    for (const publicRoute of [
+      '/',
+      '/pricing',
+      '/login',
+      '/register',
+      '/forgot-password',
+      '/privacy',
+    ]) {
       await page.goto(publicRoute);
       await page.waitForTimeout(250);
       const overflow = await page.evaluate(() => {
@@ -189,13 +208,15 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
       '/dashboard',
       '/upload',
       '/batch-upload',
+      '/sandbox',
       '/history',
       '/verification/report/1',
+      '/profile',
       '/settings',
     ]) {
       await page.goto(authRoute);
       await waitForAuth(page);
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(250);
 
       const overflow = await page.evaluate(() => {
         return {
@@ -208,5 +229,18 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
         `Authenticated route ${authRoute} should not overflow 430px on iPhone 14 Pro Max`,
       ).toBeLessThanOrEqual(430);
     }
+
+    // Verify AppLayout mobile slide-over drawer (#07 Panel Reveal tokens) on iPhone 14 Pro Max (430x932)
+    await page.goto('/dashboard');
+    await waitForAuth(page);
+    const openNavBtn = page.getByRole('button', { name: 'Open navigation menu' });
+    await expect(openNavBtn).toBeVisible();
+    await openNavBtn.click();
+    const mobileAside = page.locator('aside').first();
+    await expect(mobileAside).toHaveClass(/translate-x-0/);
+    const closeNavBtn = page.getByRole('button', { name: 'Close navigation menu' });
+    await expect(closeNavBtn).toBeVisible();
+    await closeNavBtn.click();
+    await expect(mobileAside).toHaveClass(/-translate-x-full/);
   });
 });
