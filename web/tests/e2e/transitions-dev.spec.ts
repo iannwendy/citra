@@ -23,8 +23,8 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
         easeBounce: style.getPropertyValue('--ease-bounce').trim(),
       };
     });
-    expect(tokens.durationQuick).toBe('150ms');
-    expect(tokens.durationFast).toBe('250ms');
+    expect(['150ms', '.15s', '0.15s']).toContain(tokens.durationQuick);
+    expect(['250ms', '.25s', '0.25s']).toContain(tokens.durationFast);
     expect(tokens.easeSmoothOut).toContain('cubic-bezier');
     expect(tokens.easeBounce).toContain('cubic-bezier');
 
