@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 export function PageSkeleton() {
   return (
     <div
-      className="space-y-6 animate-fade-in"
+      className="space-y-6 t-skel-reveal"
       role="status"
       aria-live="polite"
       aria-label="Loading page"

@@ -34,9 +34,9 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
       <span
         data-state={checked ? 'checked' : 'unchecked'}
         className={cn(
-          'pointer-events-none block h-4 w-4 rounded-full bg-white dark:bg-slate-950 ring-0',
+          't-toggle-thumb pointer-events-none block h-4 w-4 rounded-full bg-white dark:bg-slate-950 ring-0',
           'shadow-[0_1px_3px_rgba(0,0,0,0.22),0_1px_1px_rgba(0,0,0,0.12)]',
-          'transform-gpu transition-transform duration-250 ease-[cubic-bezier(0.34,1.56,0.64,1)]',
+          'transform-gpu',
           'group-active:scale-x-110',
           checked ? 'translate-x-5' : 'translate-x-0.5'
         )}

@@ -15,7 +15,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      'fixed inset-0 z-50 bg-black/50 backdrop-blur-sm data-[state=open]:animate-fade-in',
+      'fixed inset-0 z-50 bg-black/50 backdrop-blur-sm transition-opacity duration-[var(--modal-close-dur)] ease-[var(--modal-ease)] data-[state=open]:duration-[var(--modal-open-dur)] data-[state=open]:animate-fade-in',
       className
     )}
     {...props}
@@ -34,7 +34,7 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 grid w-[calc(100vw-2rem)] sm:w-full max-w-lg max-h-[90dvh] overflow-y-auto translate-x-[-50%] translate-y-[-50%] gap-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 sm:p-6 shadow-xl duration-200 data-[state=open]:animate-scale-in',
+        'fixed left-[50%] top-[50%] z-50 grid w-[calc(100vw-2rem)] sm:w-full max-w-lg max-h-[90dvh] overflow-y-auto translate-x-[-50%] translate-y-[-50%] gap-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 sm:p-6 shadow-xl transition-[transform,opacity] duration-[var(--modal-close-dur)] ease-[var(--modal-ease)] data-[state=open]:duration-[var(--modal-open-dur)] data-[state=open]:animate-scale-in',
         className
       )}
       {...props}

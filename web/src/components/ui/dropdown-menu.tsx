@@ -39,7 +39,7 @@ const DropdownMenuSubContent = React.forwardRef<
   <DropdownMenuPrimitive.SubContent
     ref={ref}
     className={cn(
-      'z-50 min-w-[8rem] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1 text-slate-900 dark:text-slate-100 shadow-lg',
+      'z-50 min-w-[8rem] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1 text-slate-900 dark:text-slate-100 shadow-lg origin-[var(--radix-dropdown-menu-content-transform-origin,top_left)] transition-[transform,opacity] duration-[var(--dropdown-close-dur)] ease-[var(--dropdown-ease)] data-[state=open]:duration-[var(--dropdown-open-dur)] data-[state=open]:animate-scale-in',
       className
     )}
     {...props}
@@ -57,7 +57,7 @@ const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-50 min-w-[10rem] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1.5 text-slate-900 dark:text-slate-100 shadow-lg animate-fade-in',
+        'z-50 min-w-[10rem] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1.5 text-slate-900 dark:text-slate-100 shadow-lg origin-[var(--radix-dropdown-menu-content-transform-origin,top_right)] transition-[transform,opacity] duration-[var(--dropdown-close-dur)] ease-[var(--dropdown-ease)] data-[state=open]:duration-[var(--dropdown-open-dur)] data-[state=open]:animate-scale-in',
         className
       )}
       {...props}
