@@ -26,12 +26,12 @@ interface VerdictBadgeProps {
 }
 
 // SourceLogic Design System color palette from UX/UI concept
-const VERIFIED_COLOR = 'hsl(160 84% 39%)';     // #10B981 - Green
-const LIKELY_VERIFIED_COLOR = 'hsl(142 71% 45%)'; // #22c55e - Light Green
-const METADATA_ERROR_COLOR = 'hsl(38 92% 50%)';  // #f59e0b - Amber
-const SOURCE_MISMATCH_COLOR = 'hsl(24 96% 54%)'; // #f97316 - Orange
-const HALLUCINATED_COLOR = 'hsl(0 72% 51%)';    // #ef4444 - Red
-const UNVERIFIABLE_COLOR = 'hsl(215 16% 47%)';    // #94a3b8 - Slate
+const _VERIFIED_COLOR = 'hsl(160 84% 39%)';     // #10B981 - Green
+const _LIKELY_VERIFIED_COLOR = 'hsl(142 71% 45%)'; // #22c55e - Light Green
+const _METADATA_ERROR_COLOR = 'hsl(38 92% 50%)';  // #f59e0b - Amber
+const _SOURCE_MISMATCH_COLOR = 'hsl(24 96% 54%)'; // #f97316 - Orange
+const _HALLUCINATED_COLOR = 'hsl(0 72% 51%)';    // #ef4444 - Red
+const _UNVERIFIABLE_COLOR = 'hsl(215 16% 47%)';    // #94a3b8 - Slate
 
 // Verdict configuration based on UX/UI Concept Section 11: Verification Status Taxonomy
 const verdictConfig: Record<string, {

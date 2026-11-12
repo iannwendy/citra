@@ -6,7 +6,9 @@ import path from 'node:path';
 import i18n from '@/i18n';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { SolvaTwoToneHeading } from '@/components/landing/SolvaPrimitives';
+import { AuthSplitShell } from '@/components/AuthSplitShell';
 import { LandingPage } from '@/pages/LandingPage';
+import { APP_VERSION } from '@/version';
 
 describe('Landing Page Vietnamese Typography & Sentient Font Integrity', () => {
   it('applies Vietnamese-tuned line-height and letter-spacing on SolvaTwoToneHeading when rendering Vietnamese text', () => {
@@ -85,5 +87,36 @@ describe('Landing Page Vietnamese Typography & Sentient Font Integrity', () => {
     expect(heroH1?.className).toContain('leading-[1.15]');
     expect(heroH1?.className).toContain('tracking-[-0.03em]');
     expect(screen.getAllByText(/Kiểm chứng/i).length).toBeGreaterThan(0);
+  });
+
+  it('separates primary and secondary clauses with a single space in SolvaTwoToneHeading textContent', () => {
+    const { container } = render(
+      <SolvaTwoToneHeading
+        as="h1"
+        size="h1"
+        primary="Academic integrity."
+        secondary="Simple, predictable pricing."
+      />
+    );
+    expect(container.textContent).toBe('Academic integrity. Simple, predictable pricing.');
+  });
+
+  it('preserves real word spaces in AuthSplitShell hero heading textContent and renders APP_VERSION', async () => {
+    await i18n.changeLanguage('vi');
+    const { container } = render(
+      <ThemeProvider>
+        <MemoryRouter>
+          <AuthSplitShell>
+            <div>Form slot</div>
+          </AuthSplitShell>
+        </MemoryRouter>
+      </ThemeProvider>
+    );
+
+    const heroH2 = container.querySelector('h2.font-solva-serif');
+    expect(heroH2).not.toBeNull();
+    expect(heroH2?.textContent).toBe('Xác minh mọi trích dẫn. Truy vết mọi nguồn tài liệu.');
+    expect(container.textContent).toContain(`SourceLogic v${APP_VERSION}`);
+    expect(container.textContent).not.toContain('SourceLogic v2.3');
   });
 });

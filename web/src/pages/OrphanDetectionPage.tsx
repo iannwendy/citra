@@ -111,9 +111,11 @@ function getOrphanStats(
 function OrphanCitationCard({
   citation,
   index,
+  isVi,
 }: {
   citation: OrphanCitation;
   index: number;
+  isVi: boolean;
 }) {
   return (
     <Card className="rounded-xl border-red-200/90 dark:border-red-900/70 p-4 bg-red-50/40 dark:bg-red-950/25 hover:bg-red-50/80 dark:hover:bg-red-950/45 transition-colors shadow-2xs">
@@ -131,7 +133,7 @@ function OrphanCitationCard({
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-medium"
             >
               <Link2Off className="h-3 w-3" />
-              No Reference
+              {isVi ? 'Thiếu tham khảo' : 'No Reference'}
             </Badge>
           </div>
           <p className="text-sm font-serif text-slate-800 dark:text-slate-200 line-clamp-2 leading-relaxed break-words [overflow-wrap:anywhere]">
@@ -153,9 +155,11 @@ function OrphanCitationCard({
 function UncitedReferenceCard({
   reference,
   index,
+  isVi,
 }: {
   reference: UncitedReference;
   index: number;
+  isVi: boolean;
 }) {
   return (
     <Card className="rounded-xl border-amber-200/90 dark:border-amber-900/70 p-4 bg-amber-50/40 dark:bg-amber-950/25 hover:bg-amber-50/80 dark:hover:bg-amber-950/45 transition-colors shadow-2xs">
@@ -173,7 +177,7 @@ function UncitedReferenceCard({
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-medium"
             >
               <Link2Off className="h-3 w-3" />
-              Uncited
+              {isVi ? 'Chưa trích dẫn' : 'Uncited'}
             </Badge>
           </div>
           <p className="text-sm font-serif text-slate-800 dark:text-slate-200 line-clamp-2 leading-relaxed break-words [overflow-wrap:anywhere]">
@@ -264,10 +268,14 @@ export function OrphanDetectionPage() {
 
   const errorMessage =
     essayId === null
-      ? 'Invalid essay ID'
+      ? isVi
+        ? 'Mã báo cáo không hợp lệ'
+        : 'Invalid essay ID'
       : error
       ? error instanceof Error
         ? error.message
+        : isVi
+        ? 'Không thể tải dữ liệu'
         : 'Failed'
       : null;
 
@@ -280,13 +288,15 @@ export function OrphanDetectionPage() {
     return (
       <Alert variant="destructive" className="card p-6 rounded-2xl">
         <AlertCircle className="h-5 w-5" />
-        <AlertTitle className="font-medium">Error: {errorMessage}</AlertTitle>
+        <AlertTitle className="font-medium">
+          {isVi ? 'Lỗi' : 'Error'}: {errorMessage}
+        </AlertTitle>
         <AlertDescription>
           <Link
             to="/history"
             className="text-indigo-600 dark:text-indigo-400 hover:underline mt-2 inline-block"
           >
-            ← Back to Reports
+            {isVi ? '← Quay lại danh sách báo cáo' : '← Back to Reports'}
           </Link>
         </AlertDescription>
       </Alert>
@@ -298,7 +308,7 @@ export function OrphanDetectionPage() {
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-8 w-8 text-indigo-600 dark:text-indigo-400 animate-spin" />
         <span className="ml-3 text-slate-600 dark:text-slate-400 font-mono text-sm">
-          Loading citation data...
+          {isVi ? 'Đang tải dữ liệu trích dẫn...' : 'Loading citation data...'}
         </span>
       </div>
     );
@@ -323,7 +333,11 @@ export function OrphanDetectionPage() {
         <EssayActionBar essayId={id ?? ''} />
         <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
           <GitCompare className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-          <span>Citation Consistency · {stats.total} entries analyzed</span>
+          <span>
+            {isVi
+              ? `Nhất quán Trích dẫn · ${stats.total} mục đã phân tích`
+              : `Citation Consistency · ${stats.total} entries analyzed`}
+          </span>
         </div>
       </div>
 
@@ -438,6 +452,7 @@ export function OrphanDetectionPage() {
                             mapping_status: citation.mapping_status,
                           }}
                           index={index}
+                          isVi={Boolean(isVi)}
                         />
                       ))}
                     </div>
@@ -464,6 +479,7 @@ export function OrphanDetectionPage() {
                           key={reference.reference_id}
                           reference={reference}
                           index={index}
+                          isVi={Boolean(isVi)}
                         />
                       ))}
                     </div>
@@ -493,6 +509,7 @@ export function OrphanDetectionPage() {
                             mapping_status: citation.mapping_status,
                           }}
                           index={index}
+                          isVi={Boolean(isVi)}
                         />
                       ))}
                     </div>

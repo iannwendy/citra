@@ -211,13 +211,17 @@ export function EssayHeader({
           <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300 mt-2.5 flex-wrap">
             <span className="inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
               <FileFormatIcon filename={filename} size="xs" />
-              {numPages} {t('history.pages')}
+              {numPages}{' '}
+              {lang !== 'vi' && numPages === 1 ? 'page' : t('history.pages')}
             </span>
             <span className="inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
               <Quote className="h-3.5 w-3.5 text-emerald-500" />
-              {numCitations} {t('essay.citationsTab').toLowerCase()}
+              {numCitations}{' '}
+              {lang !== 'vi' && numCitations === 1
+                ? 'citation'
+                : t('essay.citationsTab').toLowerCase()}
             </span>
-            {styleName && (
+            {styleName && styleName.trim().toUpperCase() !== 'UNKNOWN' && (
               <Badge variant="secondary" className="font-mono text-xs">
                 {styleName}
               </Badge>

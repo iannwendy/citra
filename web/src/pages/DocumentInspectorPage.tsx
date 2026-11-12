@@ -39,7 +39,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
    Interactive Citation Debugger IDE — Inline Context Stream
    ============================================================ */
 
-const UNDERLINE_COLORS = {
+const _UNDERLINE_COLORS = {
   verified: 'border-emerald-500 dark:border-emerald-400',
   metadata_error: 'border-amber-500 dark:border-amber-400',
   suspected_hallucination: 'border-red-500 dark:border-red-400',

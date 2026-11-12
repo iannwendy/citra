@@ -271,7 +271,10 @@ export function HistoryPage() {
                       <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs font-mono text-slate-500 dark:text-slate-400 mt-1.5">
                         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-300">
                           <FileFormatIcon filename={essay.filename} size="xs" />
-                          {essay.num_pages} {t('history.pages')}
+                          {essay.num_pages}{' '}
+                          {lang !== 'vi' && essay.num_pages === 1
+                            ? 'page'
+                            : t('history.pages')}
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5 text-slate-400" />
@@ -286,15 +289,35 @@ export function HistoryPage() {
                         </span>
                         <span>ID #{essay.id}</span>
                         <span className="text-slate-300 dark:text-slate-700">·</span>
-                        {getDocumentFormat(essay.filename) === 'docx' ? (
-                          <span className="text-[#2563EB] dark:text-[#60A5FA] font-medium">
-                            WORD DOCX · OPENXML
-                          </span>
-                        ) : (
-                          <span className="text-emerald-600 dark:text-emerald-400">
-                            GROBID TEI
-                          </span>
-                        )}
+                        {(() => {
+                          const fmt = getDocumentFormat(essay.filename);
+                          if (fmt === 'docx') {
+                            return (
+                              <span className="text-[#2563EB] dark:text-[#60A5FA] font-medium">
+                                WORD DOCX · OPENXML
+                              </span>
+                            );
+                          }
+                          if (fmt === 'bib') {
+                            return (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                BIBTEX · .BIB
+                              </span>
+                            );
+                          }
+                          if (fmt === 'ris') {
+                            return (
+                              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                                RIS · BIBLIOGRAPHY
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="text-emerald-600 dark:text-emerald-400">
+                              GROBID TEI
+                            </span>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>

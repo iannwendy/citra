@@ -2053,6 +2053,8 @@ async def verify_sandbox_citations_instant(
 
     t0 = time.monotonic()
     style = str(payload.get("style") or "apa").strip().lower()
+    lang_code = str(payload.get("lang") or "vi").strip().lower()
+    is_en = lang_code.startswith("en")
     items = payload.get("items")
     raw_references_text = str(payload.get("references_text") or "").strip()
     claim_context = str(payload.get("claim_context") or "").strip()
@@ -2088,16 +2090,32 @@ async def verify_sandbox_citations_instant(
 
             if not inc_in_refs and cite_in_text:
                 l1_status = "missing_reference"
-                l1_note = "Có trích dẫn trong bài (In-text) nhưng thiếu mục tương ứng trong References."
+                l1_note = (
+                    "Cited in manuscript body (In-text) but missing corresponding entry in References."
+                    if is_en
+                    else "Có trích dẫn trong bài (In-text) nhưng thiếu mục tương ứng trong References."
+                )
             elif inc_in_refs and not cite_in_text:
                 l1_status = "uncited_reference"
-                l1_note = "Nằm trong mục References cuối bài nhưng không được trích dẫn trong nội dung bài viết."
+                l1_note = (
+                    "Listed in References section but never cited in manuscript body."
+                    if is_en
+                    else "Nằm trong mục References cuối bài nhưng không được trích dẫn trong nội dung bài viết."
+                )
             elif override_yr and override_yr != str(it.get("year") or "").strip():
                 l1_status = "in_text_mismatch"
-                l1_note = f"Lệch năm xuất bản giữa In-text ({override_yr}) và Reference ({it.get('year')})."
+                l1_note = (
+                    f"Publication year mismatch between In-text ({override_yr}) and Reference ({it.get('year')})."
+                    if is_en
+                    else f"Lệch năm xuất bản giữa In-text ({override_yr}) và Reference ({it.get('year')})."
+                )
             else:
                 l1_status = "matched"
-                l1_note = "Khớp hai chiều hoàn hảo giữa In-text citation và Reference entry."
+                l1_note = (
+                    "Exact bidirectional match between In-text citation and Reference entry."
+                    if is_en
+                    else "Khớp hai chiều hoàn hảo giữa In-text citation và Reference entry."
+                )
 
             cit = Citation(
                 raw_text=ref_line,
@@ -2145,9 +2163,25 @@ async def verify_sandbox_citations_instant(
         for c in parsed_citations:
             if claim_context:
                 c.context = claim_context
-            layer1_statuses.append({"status": "matched", "note": "Kiểm tra trực tiếp danh mục tham khảo."})
+            layer1_statuses.append(
+                {
+                    "status": "matched",
+                    "note": (
+                        "Direct bibliography verification."
+                        if is_en
+                        else "Kiểm tra trực tiếp danh mục tham khảo."
+                    ),
+                }
+            )
     else:
-        raise HTTPException(status_code=400, detail="Vui lòng nhập hoặc chọn ít nhất 1 trích dẫn để kiểm tra.")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Please enter or select at least 1 citation to verify."
+                if is_en
+                else "Vui lòng nhập hoặc chọn ít nhất 1 trích dẫn để kiểm tra."
+            ),
+        )
 
     parsed_citations = parsed_citations[:20]
     sem = asyncio.Semaphore(8)

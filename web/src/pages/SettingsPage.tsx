@@ -870,7 +870,17 @@ export function SettingsPage(): JSX.Element {
                         iconA={<Copy className="h-3.5 w-3.5" />}
                         iconB={<Check className="h-3.5 w-3.5 text-emerald-600" />}
                       />
-                      <TextMorph text={copiedRawKey ? 'Copied!' : 'Copy'} />
+                      <TextMorph
+                        text={
+                          copiedRawKey
+                            ? i18n.language?.startsWith('vi')
+                              ? 'Đã chép!'
+                              : 'Copied!'
+                            : i18n.language?.startsWith('vi')
+                              ? 'Sao chép'
+                              : 'Copy'
+                        }
+                      />
                     </Button>
                   </div>
                   <code
@@ -904,8 +914,12 @@ export function SettingsPage(): JSX.Element {
                         </div>
                         <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
                           {k.last_used_at
-                            ? `Last used: ${new Date(k.last_used_at).toLocaleDateString()}`
-                            : 'Never used'}
+                            ? i18n.language?.startsWith('vi')
+                              ? `Dùng lần cuối: ${new Date(k.last_used_at).toLocaleDateString('vi-VN')}`
+                              : `Last used: ${new Date(k.last_used_at).toLocaleDateString()}`
+                            : i18n.language?.startsWith('vi')
+                              ? 'Chưa từng dùng'
+                              : 'Never used'}
                         </p>
                       </div>
                       <Button

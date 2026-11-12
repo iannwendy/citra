@@ -167,6 +167,87 @@ def test_system_health_returns_aggregates(clean_db):
     assert "total_hits" in cache_stats
     assert "avg_hit_count" in cache_stats
 
+    # Service telemetry and parser mode
+    assert "services" in data
+    assert data["services"]["database"] == "ok"
+    assert data["services"]["cache"] == "ok"
+    assert data["services"]["parser"] == "ok"
+    assert data["parser_mode"] in ("grobid", "regex")
+    assert isinstance(data["grobid_available"], bool)
+
+
+def test_public_health_grobid_message_matches_container_state(monkeypatch, clean_db):
+    """Regression (BUG-02): /api/health must not claim container is running when container_running is False."""
+    from types import SimpleNamespace
+
+    from integrity_checker.api.routes import health as health_mod
+    from integrity_checker.extraction import GROBID_STATUS
+
+    state = {"running": False}
+    fake_manager = SimpleNamespace(
+        check_health=lambda: GROBID_STATUS.UNHEALTHY,
+        is_container_running=lambda: state["running"],
+        get_stats=lambda: {},
+        stats=SimpleNamespace(container_id=None),
+    )
+    monkeypatch.setattr(health_mod, "get_grobid_manager", lambda: fake_manager)
+
+    # Case 1: Container is NOT running -> container_running=False, message must NOT say "container running"
+    client = TestClient(app)
+    resp = client.get("/api/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["grobid"]["container_running"] is False
+    assert "container running" not in body["grobid"]["message"].lower()
+    assert "not running" in body["grobid"]["message"].lower()
+
+    # Case 2: Container IS running, yet HTTP health check failed -> hung container
+    state["running"] = True
+    resp_hung = client.get("/api/health")
+    assert resp_hung.status_code == 200
+    body_hung = resp_hung.json()
+    assert body_hung["grobid"]["container_running"] is True
+    assert body_hung["grobid"]["message"] == "GROBID container running but API not responding"
+
+    # And /api/system/health marks grobid service degraded when container is hung
+    token = get_admin_token()
+    sys_resp = client.get("/api/system/health", headers=auth_header(token))
+    assert sys_resp.status_code == 200
+    assert sys_resp.json()["services"].get("grobid") == "degraded"
+
+
+def test_sandbox_verify_respects_language_for_layer1_notes(clean_db):
+    """Regression (BUG-10): /api/essays/sandbox/verify returns English Layer 1 notes when lang='en'."""
+    token = get_user_token()
+    client = TestClient(app)
+
+    en_resp = client.post(
+        "/api/essays/sandbox/verify",
+        headers=auth_header(token),
+        json={
+            "style": "apa",
+            "lang": "en",
+            "references_text": "Vaswani, A., Shazeer, N. (2017). Attention Is All You Need. NeurIPS.",
+        },
+    )
+    assert en_resp.status_code == 200, en_resp.text
+    en_note = en_resp.json()["results"][0]["mapping_note"]
+    assert "Kiểm tra trực tiếp" not in en_note
+    assert "Direct bibliography verification" in en_note
+
+    vi_resp = client.post(
+        "/api/essays/sandbox/verify",
+        headers=auth_header(token),
+        json={
+            "style": "apa",
+            "lang": "vi",
+            "references_text": "Vaswani, A., Shazeer, N. (2017). Attention Is All You Need. NeurIPS.",
+        },
+    )
+    assert vi_resp.status_code == 200, vi_resp.text
+    vi_note = vi_resp.json()["results"][0]["mapping_note"]
+    assert "Kiểm tra trực tiếp danh mục tham khảo" in vi_note
+
 
 # ---------------------------------------------------------------------------
 # Fixture

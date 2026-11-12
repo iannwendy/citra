@@ -83,7 +83,7 @@ describe('useEssayPolling', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1100);
     });
-    const callsBefore = mockGetEssayStatus.mock.calls.length;
+    expect(mockGetEssayStatus.mock.calls.length).toBeGreaterThan(0);
 
     // Change essayId — old effect should abort
     mockGetEssay.mockReset();

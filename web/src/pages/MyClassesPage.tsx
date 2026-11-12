@@ -61,7 +61,13 @@ export function MyClassesPage() {
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/70 dark:border-emerald-800/70 text-[11px] font-mono text-emerald-700 dark:text-emerald-300">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                {dashboard ? `${dashboard.total_classes} ACTIVE COHORTS` : 'SYNCING...'}
+                {dashboard
+                  ? lang === 'vi'
+                    ? `${dashboard.total_classes} LỚP ĐANG HOẠT ĐỘNG`
+                    : `${dashboard.total_classes} ACTIVE COHORTS`
+                  : lang === 'vi'
+                    ? 'ĐANG ĐỒNG BỘ...'
+                    : 'SYNCING...'}
               </span>
             </div>
 
@@ -187,7 +193,9 @@ export function MyClassesPage() {
             </span>
           </div>
           <span className="text-[11px] font-mono text-slate-400">
-            {dashboard?.classes.length ?? 0} cohorts
+            {lang === 'vi'
+              ? `${dashboard?.classes.length ?? 0} lớp học`
+              : `${dashboard?.classes.length ?? 0} cohorts`}
           </span>
         </div>
 

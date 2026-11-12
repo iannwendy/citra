@@ -27,6 +27,23 @@ type HealthLevel = 'healthy' | 'degraded' | 'down';
 
 const HEALTHY_WORDS = new Set(['ok', 'healthy', 'up', 'alive', 'ready', 'pass']);
 
+const CACHE_STAT_LABELS: Record<string, { en: string; vi: string }> = {
+  total: { en: 'Total Cached Entries', vi: 'Tổng mục lưu đệm' },
+  total_hits: { en: 'Total Cache Hits', vi: 'Tổng lượt trúng đệm' },
+  avg_hit_count: { en: 'Avg Hits / Entry', vi: 'Trung bình trúng / mục' },
+  local_papers_count: { en: 'Local Corpus Papers', vi: 'Bài báo kho cục bộ' },
+  local_queries_count: { en: 'Local Corpus Queries', vi: 'Truy vấn kho cục bộ' },
+  local_hit_rate_percent: { en: 'Local Hit Rate (%)', vi: 'Tỷ lệ trúng cục bộ (%)' },
+};
+
+function formatCacheStatLabel(key: string, lang: 'en' | 'vi'): string {
+  const mapped = CACHE_STAT_LABELS[key];
+  if (mapped) return mapped[lang];
+  return key
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
 function normalizeLevel(raw: unknown): HealthLevel {
   const value = String(raw ?? '').trim().toLowerCase();
   if (HEALTHY_WORDS.has(value)) return 'healthy';
@@ -318,7 +335,9 @@ export function SystemHealthPage() {
             </span>
           </div>
           <span className="text-[11px] font-mono text-slate-400">
-            {data.totals.verdicts} total records
+            {lang === 'vi'
+              ? `${data.totals.verdicts} bản ghi tổng cộng`
+              : `${data.totals.verdicts} total records`}
           </span>
         </div>
 
@@ -378,7 +397,9 @@ export function SystemHealthPage() {
                 key={key}
                 className="p-3 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800"
               >
-                <dt className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{key}</dt>
+                <dt className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  {formatCacheStatLabel(key, lang)}
+                </dt>
                 <dd className="text-lg font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100">
                   {String(value)}
                 </dd>

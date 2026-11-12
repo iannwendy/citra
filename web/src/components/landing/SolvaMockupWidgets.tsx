@@ -2137,7 +2137,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
           · GROBID TEI
         </span>
         <a
-          href="#interactive-demo"
+          href="/#interactive-demo"
           style={{ color: 'var(--solva-ink)' }}
           className="inline-flex items-center gap-1 font-medium hover:underline"
         >

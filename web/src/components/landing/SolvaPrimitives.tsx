@@ -414,9 +414,12 @@ export function SolvaTwoToneHeading({
         {renderAnimatedWords(primaryWords, 0)}
       </span>
       {secondary && (
-        <span className="block" style={{ color: 'var(--solva-muted)' }}>
-          {renderAnimatedWords(secondaryWords, primaryWords.length)}
-        </span>
+        <>
+          {' '}
+          <span className="block" style={{ color: 'var(--solva-muted)' }}>
+            {renderAnimatedWords(secondaryWords, primaryWords.length)}
+          </span>
+        </>
       )}
     </Tag>
   );

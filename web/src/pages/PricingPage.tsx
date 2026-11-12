@@ -338,6 +338,17 @@ export function PricingPage() {
   const ultraPrice = billingCycle === 'annual' ? 160 : 200;
   const { containerRef: billingToggleRef, pillStyle: billingPill } =
     useSlidingPill<HTMLDivElement>(billingCycle);
+  const PricingMainTag = user ? 'div' : 'main';
+  const isCurrentUltra = Boolean(
+    user &&
+      planTier === 'ultra' &&
+      (!user.billing_cycle || user.billing_cycle === billingCycle),
+  );
+  const isCurrentPro = Boolean(
+    user &&
+      planTier === 'pro' &&
+      (!user.billing_cycle || user.billing_cycle === billingCycle),
+  );
 
   return (
     <div
@@ -354,7 +365,7 @@ export function PricingPage() {
         />
       )}
 
-      <main id="pricing-main-content">
+      <PricingMainTag id="pricing-main-content">
         {/* ============================================================
             SECTION 1: HERO & INTERACTIVE BILLING CYCLE SELECTOR + 3 TIERS
             ============================================================ */}
@@ -962,11 +973,8 @@ export function PricingPage() {
                       disabled={
                         adminLocked ||
                         loadingTier !== null ||
-                        Boolean(
-                          user &&
-                            planTier === 'pro' &&
-                            user.billing_cycle === billingCycle,
-                        )
+                        isCurrentPro ||
+                        Boolean(user && planTier === 'ultra')
                       }
                       onClick={() => handleSelectPlan('pro')}
                       testId="select-pro-btn"
@@ -981,19 +989,21 @@ export function PricingPage() {
                           ? lang === 'vi'
                             ? 'Đã bao gồm trong quyền Quản trị'
                             : 'Included with Admin access'
-                          : user &&
-                        planTier === 'pro' &&
-                        user.billing_cycle === billingCycle
-                          ? lang === 'vi'
-                            ? 'Đang sử dụng gói Pro này'
-                            : 'Current Active Pro Plan'
-                          : lang === 'vi'
-                            ? `Nâng cấp lên Pro · $${
-                                billingCycle === 'annual' ? '192/năm' : '20/tháng'
-                              }`
-                            : `Upgrade to Pro · $${
-                                billingCycle === 'annual' ? '192/yr' : '20/mo'
-                              }`}
+                          : user && planTier === 'ultra'
+                            ? lang === 'vi'
+                              ? 'Đã bao gồm trong gói Ultra'
+                              : 'Included in Ultra Plan'
+                            : isCurrentPro
+                              ? lang === 'vi'
+                                ? 'Đang sử dụng gói Pro này'
+                                : 'Current Active Pro Plan'
+                              : lang === 'vi'
+                                ? `Nâng cấp lên Pro · $${
+                                    billingCycle === 'annual' ? '192/năm' : '20/tháng'
+                                  }`
+                                : `Upgrade to Pro · $${
+                                    billingCycle === 'annual' ? '192/yr' : '20/mo'
+                                  }`}
                       </span>
                     </SolvaPlanActionButton>
                   </div>
@@ -1172,11 +1182,7 @@ export function PricingPage() {
                       disabled={
                         adminLocked ||
                         loadingTier !== null ||
-                        Boolean(
-                          user &&
-                            planTier === 'ultra' &&
-                            user.billing_cycle === billingCycle,
-                        )
+                        isCurrentUltra
                       }
                       onClick={() => handleSelectPlan('ultra')}
                       testId="select-ultra-btn"
@@ -1191,19 +1197,17 @@ export function PricingPage() {
                           ? lang === 'vi'
                             ? 'Gói hiện tại · Ultra (Quản trị viên)'
                             : 'Current Plan · Ultra (Admin)'
-                          : user &&
-                        planTier === 'ultra' &&
-                        user.billing_cycle === billingCycle
-                          ? lang === 'vi'
-                            ? 'Đang sử dụng gói Ultra'
-                            : 'Current Active Ultra Plan'
-                          : lang === 'vi'
-                            ? `Nâng cấp lên Ultra · $${
-                                billingCycle === 'annual' ? '1,920/năm' : '200/tháng'
-                              }`
-                            : `Upgrade to Ultra · $${
-                                billingCycle === 'annual' ? '1,920/yr' : '200/mo'
-                              }`}
+                          : isCurrentUltra
+                            ? lang === 'vi'
+                              ? 'Đang sử dụng gói Ultra'
+                              : 'Current Active Ultra Plan'
+                            : lang === 'vi'
+                              ? `Nâng cấp lên Ultra · $${
+                                  billingCycle === 'annual' ? '1,920/năm' : '200/tháng'
+                                }`
+                              : `Upgrade to Ultra · $${
+                                  billingCycle === 'annual' ? '1,920/yr' : '200/mo'
+                                }`}
                       </span>
                     </SolvaPlanActionButton>
                   </div>
@@ -1643,7 +1647,7 @@ export function PricingPage() {
             <PricingSolvaFooter lang={lang} />
           </>
         )}
-      </main>
+      </PricingMainTag>
     </div>
   );
 }

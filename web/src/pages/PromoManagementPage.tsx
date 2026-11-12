@@ -22,6 +22,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useRole } from '@/hooks/useRole';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { useToast } from '@/contexts/ToastContext';
 import {
   api,
@@ -98,6 +99,13 @@ export function PromoManagementPage() {
   // Delete confirmation state
   const [deletingPromo, setDeletingPromo] = useState<PromoCodeItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const formDialog = useModalA11y(modalOpen, () => setModalOpen(false), {
+    disableEscape: submitting,
+  });
+  const deleteDialog = useModalA11y(Boolean(deletingPromo), () => setDeletingPromo(null), {
+    disableEscape: deleting,
+  });
 
   useEffect(() => {
     if (!isAdmin) {
@@ -888,16 +896,22 @@ export function PromoManagementPage() {
         createPortal(
           <div
             data-testid="promo-form-modal"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget && !submitting) setModalOpen(false);
+            }}
             className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 backdrop-blur-xs p-4 overflow-y-auto"
           >
-            <div className="w-full max-w-lg max-h-[90dvh] overflow-y-auto overflow-x-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl my-auto">
+            <div
+              {...formDialog.dialogProps}
+              className="w-full max-w-lg max-h-[90dvh] overflow-y-auto overflow-x-hidden rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl my-auto outline-none"
+            >
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center">
                   <Tag className="h-4 w-4" />
                 </div>
                 <div>
-                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  <h2 id={formDialog.titleId} className="text-base font-bold text-slate-900 dark:text-slate-100">
                     {editingPromo
                       ? lang === 'vi'
                         ? `Chỉnh sửa mã ${editingPromo.code}`
@@ -1238,10 +1252,16 @@ export function PromoManagementPage() {
         createPortal(
           <div
             data-testid="promo-delete-modal"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget && !deleting) setDeletingPromo(null);
+            }}
             className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 backdrop-blur-xs p-4"
           >
-            <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 space-y-4">
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+            <div
+              {...deleteDialog.dialogProps}
+              className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 space-y-4 outline-none"
+            >
+              <h3 id={deleteDialog.titleId} className="text-base font-bold text-slate-900 dark:text-slate-100">
                 {lang === 'vi'
                   ? `Xóa mã giảm giá ${deletingPromo.code}?`
                   : `Delete promo code ${deletingPromo.code}?`}

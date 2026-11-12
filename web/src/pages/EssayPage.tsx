@@ -23,7 +23,6 @@ import { useRole } from '@/hooks/useRole';
 import {
   Loader2,
   AlertCircle,
-  FileText,
   Scale,
   Check,
   AlertTriangle,
@@ -1704,6 +1703,27 @@ export function EssayPage() {
     });
   }
 
+  const localizeFieldBadgeLabel = (rawLabel?: string, fallbackEn = ''): string => {
+    const label = rawLabel || fallbackEn;
+    if (lang !== 'vi') return label;
+    const simMatch = label.match(/^(\d+)%\s*Sim$/i);
+    if (simMatch) return `Tương đồng ${simMatch[1]}%`;
+    const mapVi: Record<string, string> = {
+      '100% Match': 'Khớp 100%',
+      Partial: 'Khớp một phần',
+      Diff: 'Sai lệch',
+      Checked: 'Đã kiểm tra',
+      Indexed: 'Đã lập chỉ mục',
+      Retrieved: 'Đã truy xuất',
+      'Wayback Archived': 'Lưu trữ Wayback',
+      'Fake Domain': 'Tên miền giả',
+      'Broken Link': 'Liên kết hỏng',
+      'Verified Link': 'Liên kết hợp lệ',
+      'Resolved URL': 'Đã phân giải URL',
+    };
+    return mapVi[label] ?? label;
+  };
+
   const renderFieldStatusBadge = (fieldInfo: {
     status: FieldStatus;
     label?: string;
@@ -1712,25 +1732,28 @@ export function EssayPage() {
       case 'match':
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-            <Check className="h-3 w-3" /> {fieldInfo.label || '100% Match'}
+            <Check className="h-3 w-3" />{' '}
+            {localizeFieldBadgeLabel(fieldInfo.label, '100% Match')}
           </span>
         );
       case 'partial':
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-            <AlertTriangle className="h-3 w-3" /> {fieldInfo.label || 'Partial'}
+            <AlertTriangle className="h-3 w-3" />{' '}
+            {localizeFieldBadgeLabel(fieldInfo.label, 'Partial')}
           </span>
         );
       case 'mismatch':
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-200 dark:border-red-800">
-            <XCircle className="h-3 w-3" /> {fieldInfo.label || 'Diff'}
+            <XCircle className="h-3 w-3" />{' '}
+            {localizeFieldBadgeLabel(fieldInfo.label, 'Diff')}
           </span>
         );
       case 'missing':
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-            — Missing
+            {lang === 'vi' ? '— Khuyết thông tin' : '— Missing'}
           </span>
         );
     }
@@ -2096,11 +2119,18 @@ export function EssayPage() {
             ]}
           />
           <span>
-            Citation Integrity Score (CIS):{' '}
+            {lang === 'vi'
+              ? 'Chỉ số Toàn vẹn Trích dẫn (CIS):'
+              : 'Citation Integrity Score (CIS):'}{' '}
             <strong className="text-indigo-600 dark:text-indigo-400">
               <SubtleNumber value={report.cis.score.toFixed(1)} suffix="%" />
             </strong>{' '}
-            · {report.verdicts.length} citations
+            · {report.verdicts.length}{' '}
+            {lang === 'vi'
+              ? 'trích dẫn'
+              : report.verdicts.length === 1
+                ? 'citation'
+                : 'citations'}
           </span>
         </div>
       </div>
@@ -2126,7 +2156,19 @@ export function EssayPage() {
                   {report.filename}
                 </span>
                 <span className="hidden 2xl:inline text-slate-400 shrink-0">
-                  ({report.num_pages} pages · {report.verdicts.length} citations)
+                  ({report.num_pages}{' '}
+                  {lang === 'vi'
+                    ? 'trang'
+                    : report.num_pages === 1
+                      ? 'page'
+                      : 'pages'}{' '}
+                  · {report.verdicts.length}{' '}
+                  {lang === 'vi'
+                    ? 'trích dẫn'
+                    : report.verdicts.length === 1
+                      ? 'citation'
+                      : 'citations'}
+                  )
                 </span>
               </div>
             </div>
@@ -2213,13 +2255,21 @@ export function EssayPage() {
                 variant="outline"
                 className="font-mono text-[11px] bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
               >
-                Style: {report.style_profile?.style || 'Academic'}
+                {lang === 'vi' ? 'Chuẩn:' : 'Style:'}{' '}
+                {report.style_profile?.style &&
+                report.style_profile.style.trim().toUpperCase() !== 'UNKNOWN'
+                  ? report.style_profile.style
+                  : lang === 'vi'
+                    ? 'Học thuật'
+                    : 'Academic'}
               </Badge>
               <div
                 className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/90 border border-indigo-200/80 dark:border-indigo-800 text-xs font-mono"
-                title="Verified Citations"
+                title={lang === 'vi' ? 'Trích dẫn hợp lệ' : 'Verified Citations'}
               >
-                <span className="text-slate-500 dark:text-slate-400">VERIFIED:</span>
+                <span className="text-slate-500 dark:text-slate-400">
+                  {lang === 'vi' ? 'HỢP LỆ:' : 'VERIFIED:'}
+                </span>
                 <span className="font-bold text-indigo-700 dark:text-indigo-300">
                   {counts.verified} / {counts.all}
                 </span>
@@ -2274,15 +2324,39 @@ export function EssayPage() {
                     <div className="flex flex-wrap gap-1.5">
                       {(
                         [
-                          ['all', `All (${counts.all})`],
-                          ['verified', `✓ Verified (${counts.verified})`],
-                          ['metadata_error', `⚠ Metadata (${counts.metadata_error})`],
+                          [
+                            'all',
+                            lang === 'vi'
+                              ? `Tất cả (${counts.all})`
+                              : `All (${counts.all})`,
+                          ],
+                          [
+                            'verified',
+                            lang === 'vi'
+                              ? `✓ Hợp lệ (${counts.verified})`
+                              : `✓ Verified (${counts.verified})`,
+                          ],
+                          [
+                            'metadata_error',
+                            lang === 'vi'
+                              ? `⚠ Lỗi Metadata (${counts.metadata_error})`
+                              : `⚠ Metadata (${counts.metadata_error})`,
+                          ],
                           [
                             'suspected_hallucination',
-                            `✕ Hallucination (${counts.suspected_hallucination})`,
+                            lang === 'vi'
+                              ? `✕ Bịa đặt (${counts.suspected_hallucination})`
+                              : `✕ Hallucination (${counts.suspected_hallucination})`,
                           ],
                           ...(counts.unresolved > 0
-                            ? [['unresolved', `— Other (${counts.unresolved})`]]
+                            ? [
+                                [
+                                  'unresolved',
+                                  lang === 'vi'
+                                    ? `— Khác (${counts.unresolved})`
+                                    : `— Other (${counts.unresolved})`,
+                                ] as const,
+                              ]
                             : []),
                         ] as const
                       ).map(([key, labelText]) => (
@@ -2390,7 +2464,7 @@ export function EssayPage() {
                             </div>
                             {canViewDeepTrace && (
                               <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                                Conf:{' '}
+                                {lang === 'vi' ? 'Độ tin cậy:' : 'Conf:'}{' '}
                                 <strong className="text-slate-800 dark:text-slate-200">
                                   {cit.confidencePct}%
                                 </strong>
@@ -2414,11 +2488,11 @@ export function EssayPage() {
                               : undefined
                           }
                         >
-                          {!canViewDeepTrace
-                            ? lang === 'vi'
-                              ? `NGỮ CẢNH TRONG BÀI (${activeItem.pageLabel})`
-                              : `IN-TEXT CONTEXT (${activeItem.pageLabel})`
-                            : `MANUSCRIPT CONTEXT (${activeItem.pageLabel})`}
+                          {lang === 'vi'
+                            ? `NGỮ CẢNH TRONG BÀI (${activeItem.pageLabel})`
+                            : !canViewDeepTrace
+                              ? `IN-TEXT CONTEXT (${activeItem.pageLabel})`
+                              : `MANUSCRIPT CONTEXT (${activeItem.pageLabel})`}
                         </span>
                         {canViewDeepTrace && <span>GROBID TEI-XML</span>}
                       </div>
@@ -2451,15 +2525,15 @@ export function EssayPage() {
                         <div className="flex items-center gap-2 mb-1">
                           {selectedCitationId !== null ? (
                             <h4 className="font-mono text-xs text-slate-400">
-                              Citation Detail
+                              {lang === 'vi' ? 'Chi tiết Trích dẫn' : 'Citation Detail'}
                             </h4>
                           ) : (
                             <span className="font-mono text-xs text-slate-400">
-                              {!canViewDeepTrace
-                                ? lang === 'vi'
-                                  ? 'CHI TIẾT TRÍCH DẪN'
-                                  : 'CITATION DETAILS'
-                                : 'INSPECTING REFERENCE'}
+                              {lang === 'vi'
+                                ? 'SOI CHIẾU TÀI LIỆU THAM KHẢO'
+                                : !canViewDeepTrace
+                                  ? 'CITATION DETAILS'
+                                  : 'INSPECTING REFERENCE'}
                             </span>
                           )}
                           <span
@@ -2656,19 +2730,29 @@ export function EssayPage() {
                           <table className="w-full block sm:table sm:table-fixed lg:block xl:table xl:table-fixed text-left border-collapse">
                             <thead className="hidden sm:table-header-group lg:hidden xl:table-header-group">
                               <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[11px] font-mono uppercase text-slate-500 dark:text-slate-400">
-                                <th className="py-2.5 px-3 w-[84px]">Field</th>
-                                <th className="py-2.5 px-3">Cited in Manuscript</th>
-                                <th className="py-2.5 px-3">Canonical Retrieved</th>
-                                <th className="py-2.5 px-3 w-[124px] text-right">Status</th>
+                                <th className="py-2.5 px-3 w-[92px]">
+                                  {lang === 'vi' ? 'Trường' : 'Field'}
+                                </th>
+                                <th className="py-2.5 px-3">
+                                  {lang === 'vi' ? 'Trích dẫn trong bài' : 'Cited in Manuscript'}
+                                </th>
+                                <th className="py-2.5 px-3">
+                                  {lang === 'vi'
+                                    ? 'Bản ghi chuẩn truy xuất'
+                                    : 'Canonical Retrieved'}
+                                </th>
+                                <th className="py-2.5 px-3 w-[132px] text-right">
+                                  {lang === 'vi' ? 'Trạng thái' : 'Status'}
+                                </th>
                               </tr>
                             </thead>
                             <tbody className="block sm:table-row-group lg:block xl:table-row-group divide-y divide-slate-200/70 dark:divide-slate-800 text-xs">
                               {(
                                 [
-                                  ['Title', 'title'],
-                                  ['Authors', 'authors'],
-                                  ['Year', 'year'],
-                                  ['Venue', 'venue'],
+                                  [lang === 'vi' ? 'Tiêu đề' : 'Title', 'title'],
+                                  [lang === 'vi' ? 'Tác giả' : 'Authors', 'authors'],
+                                  [lang === 'vi' ? 'Năm XB' : 'Year', 'year'],
+                                  [lang === 'vi' ? 'Nơi công bố' : 'Venue', 'venue'],
                                   ['DOI', 'doi'],
                                   ['URL / Link', 'url'],
                                 ] as const
@@ -2685,7 +2769,7 @@ export function EssayPage() {
                                   </td>
                                   <td className="py-0.5 sm:py-2.5 lg:py-0.5 xl:py-2.5 px-0 sm:px-3 lg:px-0 xl:px-3 text-slate-800 dark:text-slate-200 font-medium align-top break-words [overflow-wrap:anywhere] sm:table-cell lg:block xl:table-cell">
                                     <span className="sm:hidden lg:block xl:hidden block text-[10px] font-mono uppercase text-slate-400 mb-0.5">
-                                      Cited in Manuscript
+                                      {lang === 'vi' ? 'Trích dẫn trong bài' : 'Cited in Manuscript'}
                                     </span>
                                     {key === 'url' &&
                                     activeItem.citedMeta.url !== '—' &&
@@ -2705,7 +2789,9 @@ export function EssayPage() {
                                   </td>
                                   <td className="py-0.5 sm:py-2.5 lg:py-0.5 xl:py-2.5 px-0 sm:px-3 lg:px-0 xl:px-3 font-mono text-slate-600 dark:text-slate-300 align-top break-words [overflow-wrap:anywhere] sm:table-cell lg:block xl:table-cell">
                                     <span className="sm:hidden lg:block xl:hidden block text-[10px] font-mono uppercase text-slate-400 mb-0.5">
-                                      Canonical Retrieved
+                                      {lang === 'vi'
+                                        ? 'Bản ghi chuẩn truy xuất'
+                                        : 'Canonical Retrieved'}
                                     </span>
                                     {activeItem.retrievedMeta ? (
                                       key === 'doi' &&
@@ -2751,7 +2837,9 @@ export function EssayPage() {
                                       </span>
                                     ) : (
                                       <span className="text-red-500 dark:text-red-400 italic">
-                                        No canonical record found
+                                        {lang === 'vi'
+                                          ? 'Không tìm thấy bản ghi chuẩn'
+                                          : 'No canonical record found'}
                                       </span>
                                     )}
                                   </td>

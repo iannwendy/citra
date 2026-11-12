@@ -136,7 +136,10 @@ function makeWrapper(options: WrapperOptions = {}) {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider defaultTheme="light">
           <ToastProvider>
-            <MemoryRouter initialEntries={[initialRoute]}>
+            <MemoryRouter
+              initialEntries={[initialRoute]}
+              future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+            >
               <AuthContext.Provider
                 value={{
                   user,

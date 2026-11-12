@@ -1,7 +1,8 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { Fragment, useState, useEffect, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ThemeToggle } from '@/contexts/ThemeContext';
+import { APP_VERSION } from '@/version';
 import {
   LOCAL_PAPERS_LABEL,
   SCHOLARLY_APIS_LABEL,
@@ -269,7 +270,7 @@ export function AuthSplitShell({
               }}
               className="ml-1 px-2 py-0.5 rounded-[5px] border font-mono text-[10px] font-medium"
             >
-              SourceLogic v2.3
+              SourceLogic v{APP_VERSION}
             </span>
           </Link>
 
@@ -311,45 +312,55 @@ export function AuthSplitShell({
               </span>
             </div>
 
-            <h2 className="font-solva-serif font-light text-[32px] xl:text-[40px] leading-[1.06] tracking-[-0.05em]">
+            <h2
+              className={`font-solva-serif font-light text-[32px] xl:text-[40px] ${
+                lang === 'vi'
+                  ? 'leading-[1.15] tracking-[-0.03em]'
+                  : 'leading-[1.06] tracking-[-0.05em]'
+              }`}
+            >
               <span className="block" style={{ color: 'var(--solva-ink)' }}>
                 {primaryHeroWords.map((word, idx) => (
-                  <span
-                    key={`p-${idx}`}
-                    className="inline-block mr-[0.26em]"
-                    style={{
-                      opacity: mounted ? 1 : 0.001,
-                      transform: mounted
-                        ? 'translate3d(0, 0, 0)'
-                        : 'translate3d(0, 22px, 0)',
-                      filter: mounted ? 'none' : 'blur(4px)',
-                      transition:
-                        'opacity 620ms cubic-bezier(0.22, 1, 0.36, 1), transform 620ms cubic-bezier(0.22, 1, 0.36, 1), filter 620ms cubic-bezier(0.22, 1, 0.36, 1)',
-                      transitionDelay: `${40 + idx * 45}ms`,
-                    }}
-                  >
-                    {word}
-                  </span>
+                  <Fragment key={`p-${idx}`}>
+                    <span
+                      className="inline-block"
+                      style={{
+                        opacity: mounted ? 1 : 0.001,
+                        transform: mounted
+                          ? 'translate3d(0, 0, 0)'
+                          : 'translate3d(0, 22px, 0)',
+                        filter: mounted ? 'none' : 'blur(4px)',
+                        transition:
+                          'opacity 620ms cubic-bezier(0.22, 1, 0.36, 1), transform 620ms cubic-bezier(0.22, 1, 0.36, 1), filter 620ms cubic-bezier(0.22, 1, 0.36, 1)',
+                        transitionDelay: `${40 + idx * 45}ms`,
+                      }}
+                    >
+                      {word.normalize('NFC')}
+                    </span>
+                    {idx < primaryHeroWords.length - 1 ? ' ' : ''}
+                  </Fragment>
                 ))}
-              </span>
+              </span>{' '}
               <span className="block" style={{ color: 'var(--solva-muted)' }}>
                 {secondaryHeroWords.map((word, idx) => (
-                  <span
-                    key={`s-${idx}`}
-                    className="inline-block mr-[0.26em]"
-                    style={{
-                      opacity: mounted ? 1 : 0.001,
-                      transform: mounted
-                        ? 'translate3d(0, 0, 0)'
-                        : 'translate3d(0, 22px, 0)',
-                      filter: mounted ? 'none' : 'blur(4px)',
-                      transition:
-                        'opacity 620ms cubic-bezier(0.22, 1, 0.36, 1), transform 620ms cubic-bezier(0.22, 1, 0.36, 1), filter 620ms cubic-bezier(0.22, 1, 0.36, 1)',
-                      transitionDelay: `${40 + (primaryHeroWords.length + idx) * 45}ms`,
-                    }}
-                  >
-                    {word}
-                  </span>
+                  <Fragment key={`s-${idx}`}>
+                    <span
+                      className="inline-block"
+                      style={{
+                        opacity: mounted ? 1 : 0.001,
+                        transform: mounted
+                          ? 'translate3d(0, 0, 0)'
+                          : 'translate3d(0, 22px, 0)',
+                        filter: mounted ? 'none' : 'blur(4px)',
+                        transition:
+                          'opacity 620ms cubic-bezier(0.22, 1, 0.36, 1), transform 620ms cubic-bezier(0.22, 1, 0.36, 1), filter 620ms cubic-bezier(0.22, 1, 0.36, 1)',
+                        transitionDelay: `${40 + (primaryHeroWords.length + idx) * 45}ms`,
+                      }}
+                    >
+                      {word.normalize('NFC')}
+                    </span>
+                    {idx < secondaryHeroWords.length - 1 ? ' ' : ''}
+                  </Fragment>
                 ))}
               </span>
             </h2>

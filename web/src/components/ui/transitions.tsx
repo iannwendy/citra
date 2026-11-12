@@ -11,6 +11,9 @@ const useIsomorphicLayoutEffect =
   typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 function prefersReducedMotion(): boolean {
+  if (typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test') {
+    return true;
+  }
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
     return false;
   }

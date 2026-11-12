@@ -13,7 +13,7 @@
  * Uses route mocks (no real backend) — checks UI presence, not server logic.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { setupAuthenticatedPage, waitForAuth } from './helpers';
+import { waitForAuth } from './helpers';
 
 const TEACHER_USER = {
   id: 42,
@@ -64,8 +64,7 @@ const MOCK_PENDING = [
 function setupTeacherMocks(page: Page): void {
   // Override API base URL FIRST before any page load
   page.context().addInitScript(() => {
-    // @ts-ignore
-    window.__API_BASE_URL__ = 'http://localhost:8000';
+    (window as unknown as { __API_BASE_URL__?: string }).__API_BASE_URL__ = 'http://localhost:8000';
   });
 
   // Clear and set teacher user in localStorage

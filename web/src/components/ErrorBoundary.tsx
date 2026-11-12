@@ -3,7 +3,7 @@
  * Catches React render errors and displays fallback UI
  */
 import { Component, type ReactNode } from 'react';
-import { AlertTriangle, RefreshCw, ExternalLink } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface ErrorBoundaryProps {
   children: ReactNode;

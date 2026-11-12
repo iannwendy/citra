@@ -18,7 +18,6 @@ import {
   AlertTriangle,
   XCircle,
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { isDocxFilename } from '@/lib/fileKind';
 import { useModalA11y } from '@/hooks/useModalA11y';
 import {

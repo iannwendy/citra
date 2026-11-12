@@ -22,6 +22,15 @@ export function getScholarlySourceUrl(name: string): string | undefined {
   if (key.includes('orcid')) return 'https://orcid.org';
   if (key.includes('unpaywall') || key.includes('open access')) return 'https://unpaywall.org';
   if (key.includes('datacite')) return 'https://datacite.org';
+  if (key.includes('retraction')) return 'https://retractionwatch.com';
+  if (key.includes('wayback') || key.includes('archive')) return 'https://web.archive.org';
+  if (key.includes('ietf') || key.includes('rfc')) return 'https://www.rfc-editor.org';
+  if (key.includes('vn legal') || key.includes('vbpl')) return 'https://vbpl.vn';
+  if (key.includes('wikidata')) return 'https://www.wikidata.org';
+  if (key.includes('openaire')) return 'https://www.openaire.eu';
+  if (key.includes('hugging')) return 'https://huggingface.co';
+  if (key.includes('openlibrary')) return 'https://openlibrary.org';
+  if (key.includes('acl')) return 'https://aclanthology.org';
   if (key.includes('grobid') || key.includes('tei')) return 'https://grobid.readthedocs.io';
   if (key.includes('sqlite') || key.includes('fts5')) return 'https://www.sqlite.org/fts5.html';
   return undefined;

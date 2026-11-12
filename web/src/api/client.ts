@@ -1117,6 +1117,8 @@ export interface SystemHealth {
   cache_stats: Record<string, unknown>;
   /** Optional per-service status map (e.g. grobid: "ok" | "degraded" | "down"). */
   services?: Record<string, string | { status?: string; detail?: string }>;
+  parser_mode?: string;
+  grobid_available?: boolean;
 }
 
 export interface AuditLogEntry {
@@ -1537,6 +1539,7 @@ export const api = {
     items?: SandboxAclPaperItem[];
     references_text?: string;
     claim_context?: string;
+    lang?: 'vi' | 'en';
   }) =>
     request<SandboxInstantVerifyResponse>('/essays/sandbox/verify', {
       method: 'POST',

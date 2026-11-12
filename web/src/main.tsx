@@ -57,7 +57,7 @@ globalWithRoot.__citraReactRoot.render(
                   void router.navigate(path);
                 }}
               >
-                <RouterProvider router={router} />
+                <RouterProvider router={router} future={{ v7_startTransition: true }} />
               </VerificationProgressProvider>
             </AuthProvider>
           </ToastProvider>

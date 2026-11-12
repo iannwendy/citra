@@ -44,7 +44,7 @@ export function useScrollAnimation<T extends HTMLElement = HTMLDivElement>(
 // Hook for staggered animation delays
 export function useStaggeredAnimation<T extends HTMLElement = HTMLDivElement>(
   itemCount: number,
-  options: UseScrollAnimationOptions = {}
+  _options: UseScrollAnimationOptions = {}
 ) {
   const containerRef = useRef<T>(null);
   const [visibleItems, setVisibleItems] = useState<Set<number>>(new Set());

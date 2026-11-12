@@ -8,6 +8,10 @@ import { EssayPage, findVerdictByCitationParam } from './EssayPage';
 import { PendingReviewsPage } from './PendingReviewsPage';
 import { AuditLogPage, AUDIT_PAGE_SIZE } from './AuditLogPage';
 import { SystemHealthPage, summarizeHealth } from './SystemHealthPage';
+import { UploadPage } from './UploadPage';
+import { HistoryPage } from './HistoryPage';
+import { DashboardPage } from './DashboardPage';
+import { EssayHeader } from './essay/EssayHeader';
 
 function LocationProbe() {
   const loc = useLocation();
@@ -206,5 +210,142 @@ describe('SystemHealthPage', () => {
     fireEvent.click(await screen.findByTestId('confirmation-confirm-btn'));
     await waitFor(() => expect(clear).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByText('Cache cleared')).toBeDefined());
+  });
+
+  it('renders human-readable bilingual cache_stats labels and localized verdict record count in VI', async () => {
+    await i18n.changeLanguage('vi');
+    vi.spyOn(api, 'getSystemHealth').mockResolvedValue(
+      health({
+        cache_stats: {
+          total: 120,
+          total_hits: 350,
+          avg_hit_count: 2.92,
+          local_papers_count: 128000,
+          local_queries_count: 45,
+          local_hit_rate_percent: 87.5,
+        },
+      }),
+    );
+    renderWithProviders(<SystemHealthPage />);
+    const statsPanel = await screen.findByTestId('cache-stats');
+    expect(statsPanel.textContent).toContain('Tổng lượt trúng đệm');
+    expect(statsPanel.textContent).toContain('Trung bình trúng / mục');
+    expect(statsPanel.textContent).toContain('Bài báo kho cục bộ');
+    expect(statsPanel.textContent).not.toContain('total_hits');
+    expect(statsPanel.textContent).not.toContain('avg_hit_count');
+    expect(statsPanel.textContent).not.toContain('local_papers_count');
+    expect(screen.getByText('10 bản ghi tổng cộng')).toBeDefined();
+  });
+});
+
+describe('Multi-format & Telemetry Accuracy (BUG-03 & BUG-09)', () => {
+  beforeEach(async () => {
+    vi.restoreAllMocks();
+    await i18n.changeLanguage('en');
+  });
+
+  it('UploadPage shows KB size, accurate BIBTEX parser badge, regex fallback status, and VI plan badge', async () => {
+    await i18n.changeLanguage('vi');
+    vi.spyOn(api, 'listEnrolledClasses').mockResolvedValue([]);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: 'healthy',
+          grobid: { status: 'unhealthy', available: false, container_running: false },
+          parser_mode: 'regex',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const { container } = renderWithProviders(<UploadPage />, {
+      user: makeUser('teacher', 'pro'),
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('upload-parser-status').textContent).toContain(
+        'BỘ PHÂN TÍCH REGEX SẴN SÀNG',
+      );
+    });
+    expect(screen.getByTestId('upload-quota-banner').textContent).toContain('GÓI PRO');
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const smallBib = new File(['@article{vaswani2017, title={Attention}}'.repeat(30)], 'sample.bib', {
+      type: 'application/x-bibtex',
+    });
+    fireEvent.change(input, { target: { files: [smallBib] } });
+
+    await waitFor(() => {
+      expect(screen.getByText('sample.bib')).toBeDefined();
+    });
+    expect(container.textContent).toContain('KB');
+    expect(container.textContent).not.toContain('0.00 MB');
+    expect(container.textContent).toContain('BIBTEX PARSER');
+    expect(container.textContent).not.toContain('GROBID / XML');
+  });
+
+  it('HistoryPage and DashboardPage label .bib and .ris accurately instead of GROBID TEI, and singularize 1 page', async () => {
+    const multiFormatEssays = [
+      {
+        id: 101,
+        filename: 'references.bib',
+        num_pages: 1,
+        uploaded_at: '2026-11-11T00:00:00Z',
+        user_id: 1,
+        cis_score: 95,
+        num_citations: 4,
+        num_verdicts: 4,
+        num_verified: 4,
+      },
+      {
+        id: 102,
+        filename: 'library.ris',
+        num_pages: 2,
+        uploaded_at: '2026-11-11T00:00:00Z',
+        user_id: 1,
+        cis_score: 88,
+        num_citations: 6,
+        num_verdicts: 6,
+        num_verified: 5,
+      },
+    ];
+    vi.spyOn(api, 'listEssays').mockResolvedValue(multiFormatEssays);
+    vi.spyOn(api, 'getEssayStats').mockRejectedValue(new Error('API 404'));
+
+    const { container: historyContainer, unmount } = renderWithProviders(<HistoryPage />, {
+      user: makeUser('teacher', 'pro'),
+    });
+    await waitFor(() => expect(screen.getByText('references.bib')).toBeDefined());
+    expect(historyContainer.textContent).toContain('BIBTEX · .BIB');
+    expect(historyContainer.textContent).toContain('RIS · BIBLIOGRAPHY');
+    expect(historyContainer.textContent).not.toContain('GROBID TEI');
+    expect(historyContainer.textContent).toContain('1 page');
+    expect(historyContainer.textContent).not.toContain('1 pages');
+    unmount();
+
+    const { container: dashContainer } = renderWithProviders(<DashboardPage />, {
+      user: makeUser('teacher', 'pro'),
+    });
+    await waitFor(() => expect(screen.getByText('references.bib')).toBeDefined());
+    expect(dashContainer.textContent).toContain('BIBTEX · .BIB');
+    expect(dashContainer.textContent).toContain('RIS · BIBLIOGRAPHY');
+  });
+
+  it('EssayHeader omits raw UNKNOWN style badge and singularizes 1 page and 1 citation', () => {
+    const { container } = renderWithProviders(
+      <EssayHeader
+        essayId={55}
+        filename="sample.bib"
+        numPages={1}
+        numCitations={1}
+        styleName="UNKNOWN"
+      />,
+      { user: makeUser('user', 'pro') },
+    );
+    expect(container.textContent).not.toContain('UNKNOWN');
+    expect(container.textContent).toContain('1 page');
+    expect(container.textContent).not.toContain('1 pages');
+    expect(container.textContent).toContain('1 citation');
+    expect(container.textContent).not.toContain('1 citations');
   });
 });

@@ -111,7 +111,11 @@ export function CitationGraphView({
   function toggleStatus(s: CitationMappingStatus) {
     setStatusFilters((prev) => {
       const next = new Set(prev);
-      next.has(s) ? next.delete(s) : next.add(s);
+      if (next.has(s)) {
+        next.delete(s);
+      } else {
+        next.add(s);
+      }
       return next;
     });
   }
@@ -119,7 +123,11 @@ export function CitationGraphView({
   function toggleLabel(l: ValidationLabel) {
     setLabelFilters((prev) => {
       const next = new Set(prev);
-      next.has(l) ? next.delete(l) : next.add(l);
+      if (next.has(l)) {
+        next.delete(l);
+      } else {
+        next.add(l);
+      }
       return next;
     });
   }

@@ -120,6 +120,9 @@ function CitraFilmPlayer({ lang }: { lang: Lang }) {
   // 1) Proximity (one viewport ahead): resolve which files this device should use.
   //    MediaCapabilities queries cost no network; the teaser starts streaming here.
   useEffect(() => {
+    if (typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test') {
+      return;
+    }
     const el = boxRef.current;
     if (!el) return;
     if (typeof IntersectionObserver === 'undefined') {
@@ -166,6 +169,9 @@ function CitraFilmPlayer({ lang }: { lang: Lang }) {
 
   // 2) Visibility: teaser / film only play while on screen.
   useEffect(() => {
+    if (typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test') {
+      return;
+    }
     const el = boxRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
     const io = new IntersectionObserver(

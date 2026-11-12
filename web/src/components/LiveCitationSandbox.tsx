@@ -328,8 +328,8 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
     try {
       const payload =
         mode === 'acl_studio' && items.length > 0
-          ? { style, items }
-          : { style, references_text: rawRefsText };
+          ? { style, items, lang }
+          : { style, references_text: rawRefsText, lang };
       const res = await api.verifySandboxCitationsInstant(payload);
       setInstantResult(res);
     } catch (e) {
@@ -961,7 +961,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
               </div>
 
               <div className="grid grid-cols-1 gap-2 max-h-80 overflow-y-auto pr-1">
-                {instantResult.results.map((r) => {
+                {(instantResult.results ?? []).map((r) => {
                   const isVer = r.label === 'verified';
                   const isHalluc = r.label === 'suspected_hallucination';
                   const hasL1Issue = r.mapping_status !== 'matched';

@@ -39,25 +39,27 @@ def _probe_grobid_health_sync() -> GrobidHealthStatus:
         manager = get_grobid_manager()
         status = manager.check_health()
 
-        # Determine available status
+        # Determine available and container_running status first so message is truthful
         available = status == GROBID_STATUS.AVAILABLE
+        container_running = available or (
+            status in (GROBID_STATUS.UNHEALTHY, GROBID_STATUS.STARTING)
+            and bool(manager.is_container_running())
+        )
 
         # Get message
         if status == GROBID_STATUS.AVAILABLE:
             message = "GROBID is running and healthy"
         elif status == GROBID_STATUS.UNHEALTHY:
-            message = "GROBID container running but API not responding"
+            if container_running:
+                message = "GROBID container running but API not responding"
+            else:
+                message = "GROBID container is not running (using built-in regex parser fallback)"
         elif status == GROBID_STATUS.STOPPED:
             message = "GROBID container is stopped"
         elif status == GROBID_STATUS.STARTING:
             message = "GROBID container is starting"
         else:
             message = "GROBID status unknown"
-
-        container_running = available or (
-            status in (GROBID_STATUS.UNHEALTHY, GROBID_STATUS.STARTING)
-            and manager.is_container_running()
-        )
 
         return GrobidHealthStatus(
             available=available,

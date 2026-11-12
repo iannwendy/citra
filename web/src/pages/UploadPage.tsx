@@ -49,6 +49,33 @@ const ACCEPTED_MIME = {
   'application/x-research-info-systems': ['.ris'],
 };
 
+function formatUploadFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function formatUploadMimeAndParser(
+  filename: string,
+  includeParserTag: boolean,
+  parserMode: 'grobid' | 'regex',
+): string {
+  const lower = filename.trim().toLowerCase();
+  if (lower.endsWith('.docx')) {
+    return `application/vnd.openxmlformats (.docx)${includeParserTag ? ' · OPENXML' : ''}`;
+  }
+  if (lower.endsWith('.bib')) {
+    return `application/x-bibtex (.bib)${includeParserTag ? ' · BIBTEX PARSER' : ''}`;
+  }
+  if (lower.endsWith('.ris')) {
+    return `application/x-research-info-systems (.ris)${includeParserTag ? ' · RIS PARSER' : ''}`;
+  }
+  const pdfParser = parserMode === 'grobid' ? 'GROBID / PYMUPDF' : 'PYMUPDF / REGEX';
+  return `application/pdf${includeParserTag ? ` · ${pdfParser}` : ''}`;
+}
+
 export function UploadPage() {
   const { t, i18n } = useTranslation();
   const { refreshUser } = useAuth();
@@ -67,6 +94,7 @@ export function UploadPage() {
   const [error, setError] = useState<string | null>(null);
   const [enrolledClasses, setEnrolledClasses] = useState<Class[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
+  const [parserMode, setParserMode] = useState<'grobid' | 'regex'>('grobid');
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [joiningClass, setJoiningClass] = useState(false);
   const {
@@ -97,6 +125,38 @@ export function UploadPage() {
       .then((list) => setEnrolledClasses(list))
       .catch(() => setEnrolledClasses([]));
   }, []);
+
+  useEffect(() => {
+    if (isUser) return;
+    const controller = new AbortController();
+    fetch('/api/health', { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then(
+        (
+          payload: {
+            grobid?: { available?: boolean };
+            parser_mode?: string;
+          } | null,
+        ) => {
+          if (!payload) return;
+          if (
+            payload.grobid?.available === true ||
+            payload.parser_mode === 'grobid'
+          ) {
+            setParserMode('grobid');
+          } else if (
+            payload.grobid?.available === false ||
+            payload.parser_mode === 'regex'
+          ) {
+            setParserMode('regex');
+          }
+        },
+      )
+      .catch(() => {
+        // Keep safe default when /api/health is unavailable or unmocked
+      });
+    return () => controller.abort();
+  }, [isUser]);
 
   const handleJoinClass = async () => {
     const code = joinCodeInput.trim().toUpperCase();
@@ -391,9 +451,16 @@ export function UploadPage() {
                   ? 'KIỂM CHỨNG ĐƠN TÀI LIỆU · LAYER 1–2'
                   : 'SINGLE MANUSCRIPT VERIFICATION · LAYER 1–2'}
               </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[11px] font-mono text-slate-600 dark:text-slate-300">
+              <span
+                data-testid="upload-parser-status"
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[11px] font-mono text-slate-600 dark:text-slate-300"
+              >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                GROBID v0.9.1 ONLINE
+                {parserMode === 'grobid'
+                  ? 'GROBID TEI-XML ONLINE'
+                  : lang === 'vi'
+                    ? 'BỘ PHÂN TÍCH REGEX SẴN SÀNG'
+                    : 'REGEX PARSER READY'}
               </span>
             </div>
           )}
@@ -448,7 +515,9 @@ export function UploadPage() {
                   : 'bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono uppercase'
             }
           >
-            {planTier.toUpperCase()} PLAN
+            {lang === 'vi'
+              ? `GÓI ${planTier.toUpperCase()}`
+              : `${planTier.toUpperCase()} PLAN`}
           </Badge>
           <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
             {lang === 'vi'
@@ -647,15 +716,8 @@ export function UploadPage() {
                       </span>
                     </div>
                     <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                      {(file.size / 1024 / 1024).toFixed(2)} MB ·{' '}
-                      {file.name.toLowerCase().endsWith('.docx')
-                        ? 'application/vnd.openxmlformats (.docx)'
-                        : file.name.toLowerCase().endsWith('.bib')
-                          ? 'application/x-bibtex (.bib)'
-                          : file.name.toLowerCase().endsWith('.ris')
-                            ? 'application/x-research-info-systems (.ris)'
-                            : 'application/pdf'}{' '}
-                      {!isUser ? ' · GROBID / XML' : ''}
+                      {formatUploadFileSize(file.size)} ·{' '}
+                      {formatUploadMimeAndParser(file.name, !isUser, parserMode)}
                     </p>
                   </div>
                 </div>

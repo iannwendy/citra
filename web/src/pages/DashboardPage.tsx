@@ -108,7 +108,7 @@ export function DashboardPage() {
       idx: '01',
       label: t('dashboard.totalDocuments'),
       value: stats.total_documents,
-      sub: lang === 'vi' ? 'Bản thảo PDF đã phân tích' : 'Analyzed PDF manuscripts',
+      sub: lang === 'vi' ? 'Tài liệu học thuật đã phân tích' : 'Analyzed academic documents',
       icon: FileText,
       color: 'text-indigo-600 dark:text-indigo-400',
       iconBox:
@@ -120,7 +120,7 @@ export function DashboardPage() {
       idx: '02',
       label: t('dashboard.totalCitations'),
       value: stats.total_citations,
-      sub: lang === 'vi' ? 'Trích dẫn bóc tách qua GROBID' : 'GROBID TEI-XML extractions',
+      sub: lang === 'vi' ? 'Trích dẫn bóc tách đa định dạng' : 'Multi-format citation extractions',
       icon: Scale,
       color: 'text-emerald-600 dark:text-emerald-400',
       iconBox:
@@ -401,15 +401,35 @@ export function DashboardPage() {
                               ID #{essay.id}
                             </span>
                             <span className="text-slate-300 dark:text-slate-700">·</span>
-                            {getDocumentFormat(essay.filename) === 'docx' ? (
-                              <span className="text-[11px] font-mono font-medium text-[#2563EB] dark:text-[#60A5FA]">
-                                WORD DOCX · OPENXML
-                              </span>
-                            ) : (
-                              <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
-                                GROBID TEI
-                              </span>
-                            )}
+                            {(() => {
+                              const fmt = getDocumentFormat(essay.filename);
+                              if (fmt === 'docx') {
+                                return (
+                                  <span className="text-[11px] font-mono font-medium text-[#2563EB] dark:text-[#60A5FA]">
+                                    WORD DOCX · OPENXML
+                                  </span>
+                                );
+                              }
+                              if (fmt === 'bib') {
+                                return (
+                                  <span className="text-[11px] font-mono font-medium text-emerald-600 dark:text-emerald-400">
+                                    BIBTEX · .BIB
+                                  </span>
+                                );
+                              }
+                              if (fmt === 'ris') {
+                                return (
+                                  <span className="text-[11px] font-mono font-medium text-amber-600 dark:text-amber-400">
+                                    RIS · BIBLIOGRAPHY
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
+                                  GROBID TEI
+                                </span>
+                              );
+                            })()}
                           </div>
                         )}
                       </div>

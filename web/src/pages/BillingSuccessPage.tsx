@@ -8,6 +8,8 @@ import {
   Settings,
   CreditCard,
   ShieldCheck,
+  AlertTriangle,
+  ArrowLeft,
 } from 'lucide-react';
 import { api, type BillingTransactionItem, type SubscriptionSummary } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -34,6 +36,10 @@ export function BillingSuccessPage() {
   const sessionId = searchParams.get('session_id') || '';
 
   const [loading, setLoading] = useState(true);
+  const [verificationState, setVerificationState] = useState<
+    'verifying' | 'verified' | 'missing' | 'error'
+  >('verifying');
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const [subscription, setSubscription] = useState<SubscriptionSummary | null>(null);
   const [transaction, setTransaction] = useState<BillingTransactionItem | null>(null);
 
@@ -54,34 +60,52 @@ export function BillingSuccessPage() {
             vnp_params: vnpParams,
             session_id: sessionId || null,
           });
-          if (active) {
-            setSubscription(vnpRes.subscription);
-            setTransaction(vnpRes.transaction);
+          if (!vnpRes.is_success || vnpRes.status !== 'succeeded') {
+            throw new Error(
+              (lang === 'vi' ? vnpRes.message_vi : vnpRes.message_en) ||
+                vnpRes.message ||
+                (lang === 'vi'
+                  ? 'Giao dịch VNPay không thành công hoặc chữ ký không hợp lệ.'
+                  : 'VNPay transaction did not succeed or signature verification failed.'),
+            );
           }
+          if (active) {
+            setSubscription(vnpRes.subscription ?? null);
+            setTransaction(vnpRes.transaction ?? null);
+            setVerificationState('verified');
+          }
+          await refreshUser();
         } else if (sessionId) {
           const res = await api.verifyCheckoutSession({ session_id: sessionId });
+          if (res.status !== 'succeeded') {
+            throw new Error(
+              res.message ||
+                (lang === 'vi'
+                  ? 'Phiên thanh toán chưa hoàn tất xác thực.'
+                  : 'Checkout session has not been verified as paid.'),
+            );
+          }
           if (active) {
             setSubscription(res.subscription);
             setTransaction(res.transaction);
+            setVerificationState('verified');
           }
+          await refreshUser();
         } else {
-          const subRes = await api.getMySubscription();
           if (active) {
-            setSubscription(subRes.subscription);
-            setTransaction(subRes.transactions[0] ?? null);
+            setVerificationState('missing');
           }
         }
-        await refreshUser();
-      } catch {
-        // Fallback to loading current subscription
-        try {
-          const subRes = await api.getMySubscription();
-          if (active) {
-            setSubscription(subRes.subscription);
-            setTransaction(subRes.transactions[0] ?? null);
-          }
-        } catch {
-          // ignore
+      } catch (err) {
+        if (active) {
+          setErrorMessage(
+            err instanceof Error
+              ? err.message
+              : lang === 'vi'
+                ? 'Không thể xác thực phiên thanh toán.'
+                : 'Unable to verify payment session.',
+          );
+          setVerificationState('error');
         }
       } finally {
         if (active) setLoading(false);
@@ -114,6 +138,57 @@ export function BillingSuccessPage() {
               : 'Confirming payment and unlocking Premium quotas...'}
           </p>
         </div>
+      </div>
+    );
+  }
+
+  if (verificationState === 'missing' || verificationState === 'error') {
+    const isMissing = verificationState === 'missing';
+    return (
+      <div
+        className="max-w-xl mx-auto py-8 sm:py-12 px-4"
+        data-testid={isMissing ? 'billing-verification-missing' : 'billing-verification-error'}
+      >
+        <Card className="rounded-3xl border border-amber-300/80 dark:border-amber-800/70 bg-white dark:bg-slate-900 p-6 sm:p-9 shadow-xl text-center space-y-5">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+            <AlertTriangle className="h-8 w-8" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="font-display text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
+              {isMissing
+                ? lang === 'vi'
+                  ? 'Không tìm thấy phiên thanh toán cần xác nhận'
+                  : 'No Active Checkout Session to Verify'
+                : lang === 'vi'
+                  ? 'Xác thực thanh toán không thành công'
+                  : 'Payment Verification Failed'}
+            </h1>
+            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+              {isMissing
+                ? lang === 'vi'
+                  ? 'Trang biên lai này chỉ hiển thị sau khi hoàn tất thanh toán qua cổng Stripe hoặc VNPay. Bạn có thể chọn gói nâng cấp tại Bảng giá hoặc xem lịch sử hóa đơn trong Cài đặt.'
+                  : 'This receipt page requires a valid Stripe or VNPay return session. Choose a plan on the Pricing page or view existing invoices in Settings.'
+                : errorMessage}
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
+            <Button
+              asChild
+              className="w-full sm:w-auto rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white h-10 px-5 font-semibold"
+            >
+              <Link to="/pricing">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                {lang === 'vi' ? 'Quay lại Bảng giá' : 'Back to Pricing'}
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="w-full sm:w-auto rounded-xl h-10 px-5">
+              <Link to="/settings">
+                <Settings className="h-4 w-4 mr-2" />
+                {lang === 'vi' ? 'Xem gói hiện tại' : 'Subscription Settings'}
+              </Link>
+            </Button>
+          </div>
+        </Card>
       </div>
     );
   }

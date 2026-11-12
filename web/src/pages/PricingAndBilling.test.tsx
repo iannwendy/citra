@@ -1431,4 +1431,139 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     );
     expect(basicFeatureItem.getAttribute('style')).toContain('var(--solva-muted)');
   });
+
+  it('BillingSuccessPage blocks unverified access when session_id / vnp_SecureHash are missing (BUG-01)', async () => {
+    const getSubSpy = vi.spyOn(api, 'getMySubscription');
+    renderWithAuth(
+      <Routes>
+        <Route path="/billing/success" element={<BillingSuccessPage />} />
+      </Routes>,
+      {
+        user: createMockUser({ plan_tier: 'basic' }),
+        initialEntries: ['/billing/success'],
+      },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('billing-verification-missing')).toBeDefined();
+    });
+    expect(screen.queryByTestId('billing-success-page')).toBeNull();
+    expect(getSubSpy).not.toHaveBeenCalled();
+  });
+
+  it('BillingSuccessPage surfaces payment verification errors instead of silently rendering success (BUG-01)', async () => {
+    vi.spyOn(api, 'verifyCheckoutSession').mockRejectedValue(
+      new Error('Invalid or expired checkout session'),
+    );
+    renderWithAuth(
+      <Routes>
+        <Route path="/billing/success" element={<BillingSuccessPage />} />
+      </Routes>,
+      {
+        user: createMockUser({ plan_tier: 'basic' }),
+        initialEntries: ['/billing/success?session_id=cs_forged_999'],
+      },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('billing-verification-error')).toBeDefined();
+    });
+    expect(screen.getByTestId('billing-verification-error').textContent).toContain(
+      'Invalid or expired checkout session',
+    );
+    expect(screen.queryByTestId('billing-success-page')).toBeNull();
+  });
+
+  it('PromoManagementPage form and delete modals expose role="dialog", aria-modal="true", and close on Escape (BUG-05)', async () => {
+    vi.spyOn(api, 'listAdminPromoCodes').mockResolvedValue({
+      stats: { total_codes: 1, active_codes: 1, total_redemptions: 0, total_discount_usd: 0 },
+      promos: [
+        {
+          id: 1,
+          code: 'CITRA2',
+          description: 'Launch 20% off',
+          discount_type: 'percent',
+          discount_value: 20,
+          max_discount_usd: 100,
+          min_amount_usd: 0,
+          applicable_tiers: 'all',
+          applicable_cycles: 'all',
+          max_uses: 100,
+          used_count: 0,
+          max_uses_per_user: 1,
+          expires_at: null,
+          is_active: true,
+          is_expired: false,
+          is_exhausted: false,
+          effective_status: 'active',
+          created_by: 1,
+          created_at: '2026-11-01T00:00:00Z',
+          updated_at: '2026-11-01T00:00:00Z',
+        },
+      ],
+    });
+
+    renderWithAuth(<PromoManagementPage />, {
+      user: createMockUser({ role: 'admin', plan_tier: 'ultra' }),
+      initialEntries: ['/admin/promos'],
+    });
+
+    await waitFor(() => expect(screen.getByTestId('promo-row-CITRA2')).toBeDefined());
+
+    fireEvent.click(screen.getByTestId('create-promo-btn'));
+    const formModal = screen.getByTestId('promo-form-modal');
+    expect(formModal.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('promo-form-modal')).toBeNull());
+
+    fireEvent.click(screen.getByTestId('promo-delete-CITRA2'));
+    const deleteModal = screen.getByTestId('promo-delete-modal');
+    expect(deleteModal.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('promo-delete-modal')).toBeNull());
+  });
+
+  it('PricingPage avoids nested <main><main> inside AppLayout and keeps <main> when public (BUG-06)', () => {
+    const { container: authContainer, unmount } = renderWithAuth(
+      <AppLayout>
+        <PricingPage />
+      </AppLayout>,
+      { user: createMockUser({ plan_tier: 'basic' }), initialEntries: ['/pricing'] },
+    );
+    expect(authContainer.querySelectorAll('main main').length).toBe(0);
+    expect(authContainer.querySelectorAll('main').length).toBe(1);
+    unmount();
+
+    const { container: pubContainer } = renderWithAuth(<PricingPage />, {
+      user: null,
+      initialEntries: ['/pricing'],
+    });
+    expect(pubContainer.querySelector('main#pricing-main-content')).not.toBeNull();
+  });
+
+  it('PricingPage ensures every scholarly link has valid href, live trace links to /#interactive-demo, and Ultra users cannot accidentally downgrade to Pro (BUG-07)', () => {
+    const { container } = renderWithAuth(<PricingPage />, {
+      user: createMockUser({ plan_tier: 'ultra', billing_cycle: null }),
+      initialEntries: ['/pricing'],
+    });
+
+    const anchorsWithoutHref = Array.from(container.querySelectorAll('a')).filter(
+      (a) => !a.getAttribute('href'),
+    );
+    expect(anchorsWithoutHref.length).toBe(0);
+
+    const brokenLocalDemoAnchors = Array.from(container.querySelectorAll('a')).filter(
+      (a) => a.getAttribute('href') === '#interactive-demo',
+    );
+    expect(brokenLocalDemoAnchors.length).toBe(0);
+
+    const proBtn = screen.getByTestId('select-pro-btn') as HTMLButtonElement;
+    const ultraBtn = screen.getByTestId('select-ultra-btn') as HTMLButtonElement;
+    expect(proBtn.disabled).toBe(true);
+    expect(proBtn.textContent).toMatch(/Included in Ultra|Đã bao gồm trong gói Ultra/i);
+    expect(ultraBtn.disabled).toBe(true);
+    expect(ultraBtn.textContent).toMatch(/Current Active Ultra Plan|Đang sử dụng gói Ultra/i);
+  });
 });
