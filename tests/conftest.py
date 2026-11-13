@@ -27,13 +27,17 @@ get_settings.cache_clear()
 @pytest.fixture(autouse=True)
 def set_test_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """Set test-env defaults and isolate DB/avatar paths from production data/."""
+    from integrity_checker.retrieval.circuit_breaker import reset_circuit_breaker_registry
+
     monkeypatch.setenv("APP_ENV", "test")
     monkeypatch.setenv("APP_DEBUG", "false")
     monkeypatch.setenv("APP_LOG_LEVEL", "WARNING")
     monkeypatch.setenv("DATABASE_URL", TEST_DB_URL)
     monkeypatch.setenv("AVATARS_DIR", str(tmp_path / "avatars"))
     get_settings.cache_clear()
+    reset_circuit_breaker_registry()
     yield
+    reset_circuit_breaker_registry()
     get_settings.cache_clear()
 
 

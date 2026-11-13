@@ -34,6 +34,10 @@ from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.retrieval.arxiv_client import ArxivClient
 from integrity_checker.retrieval.base import BaseScholarClient
+from integrity_checker.retrieval.circuit_breaker import (
+    CircuitBreakerRegistry,
+    get_circuit_breaker_registry,
+)
 from integrity_checker.retrieval.crossref_client import CrossrefClient
 from integrity_checker.retrieval.datacite_client import DataCiteClient
 from integrity_checker.retrieval.dblp_client import DBLPClient
@@ -42,7 +46,9 @@ from integrity_checker.retrieval.doi_ra_client import DoiRaClient
 from integrity_checker.retrieval.europepmc_client import EuropePMCClient
 from integrity_checker.retrieval.http_pool import (
     get_shared_http_client,
+    get_task_http_status,
     reset_rate_limit_callback,
+    reset_task_http_status,
     set_rate_limit_callback,
 )
 from integrity_checker.retrieval.huggingface_client import HuggingFaceClient
@@ -1082,6 +1088,7 @@ class RetrievalOrchestrator:
         use_local_db: bool | None = None,
         link_validator: object | None = None,
         enable_link_validation: bool | None = None,
+        circuit_breakers: CircuitBreakerRegistry | None = None,
     ) -> None:
         settings_global = get_settings()
         settings = settings_global.retrieval
@@ -1164,6 +1171,9 @@ class RetrievalOrchestrator:
         # Google Scholar fallback rate limiter (lazy init: Serper primary / SerpApi secondary)
         self._serpapi_limiter: RateLimiter | None = None
         self._serpapi_limiter_mode: str | None = None
+        self._circuit_breakers: CircuitBreakerRegistry = (
+            circuit_breakers if circuit_breakers is not None else get_circuit_breaker_registry()
+        )
 
         # Cross-loop Singleflight coalescer & verified clean-miss TTL cache
         self._singleflight_enabled: bool = bool(
@@ -1877,6 +1887,7 @@ class RetrievalOrchestrator:
             "503",
             "504",
             "backoff",
+            "circuit_open",
             "unavailable",
             "quota",
             "credits",
@@ -2119,7 +2130,10 @@ class RetrievalOrchestrator:
             and not is_known_fabricated_doi_prefix
             and not self._six_core_only_explicit_mode
             and any(
-                any(m in (err or "").lower() for m in ("429", "rate limit", "backoff"))
+                any(
+                    m in (err or "").lower()
+                    for m in ("429", "rate limit", "backoff", "circuit_open")
+                )
                 for err in failed.values()
             )
         ):
@@ -2274,6 +2288,7 @@ class RetrievalOrchestrator:
                         "503",
                         "504",
                         "backoff",
+                        "circuit_open",
                     )
                 )
                 for err in failed.values()
@@ -3057,12 +3072,103 @@ class RetrievalOrchestrator:
         norm = normalize_doi(doi)
         return bool(norm and norm.startswith("10.48550/arxiv"))
 
+    @staticmethod
+    def _classify_lookup_infra_failure(
+        cand: SourceCandidate,
+        *,
+        http_status: int | None,
+        http_transport_err: str | None,
+        notified_429: bool,
+    ) -> str | None:
+        """Return an infra-failure reason string, or None for clean hits / clean scholarly misses."""
+        if cand.found:
+            return None
+        if notified_429 or http_status == 429:
+            return cand.error or "HTTP 429 rate limited"
+        if http_status is not None and http_status >= 500:
+            return f"HTTP {http_status}: {cand.error or 'server error'}"
+        if http_transport_err:
+            te_l = http_transport_err.lower()
+            if "timeout" in te_l or "timed out" in te_l:
+                return f"timeout ({http_transport_err})"
+            if "httpstatuserror" in te_l:
+                return f"HTTP 5xx ({http_transport_err})"
+            return http_transport_err
+
+        raw_err = (cand.error or "").strip()
+        if not raw_err:
+            return None
+
+        err_no_quotes = re.sub(r"'[^']*'", "''", raw_err).lower()
+        clean_miss_markers = (
+            "no results",
+            "no title match",
+            "does not exist",
+            "no matching",
+            "empty bibliographic query",
+            "no title for search",
+            "no title or searchable",
+            "matched different author",
+        )
+        if any(m in err_no_quotes for m in clean_miss_markers):
+            return None
+        if http_status in (200, 404):
+            return None
+        if "404" in err_no_quotes or (
+            "not found" in err_no_quotes
+            and not any(
+                h in err_no_quotes for h in ("host not found", "server not found", "dns")
+            )
+        ):
+            return None
+
+        if "timeout" in err_no_quotes or "timed out" in err_no_quotes:
+            return raw_err
+        if any(
+            m in err_no_quotes
+            for m in ("429", "rate limit", "rate-limit", "too many requests", "backoff")
+        ):
+            return raw_err
+        if re.search(
+            r"\b(?:http[\s/_-]*)?50[0-9]\b|\b5xx\b|service unavailable|bad gateway|"
+            r"gateway timeout|internal server error",
+            err_no_quotes,
+        ):
+            return raw_err
+        if any(
+            m in err_no_quotes
+            for m in (
+                "connect",
+                "network",
+                "request failed",
+                "retry exhausted",
+                "no response",
+                "unreachable",
+                "reset by peer",
+                "server disconnected",
+                "protocol error",
+            )
+        ):
+            return raw_err
+        return None
+
     async def _lookup_with_ratelimit(
         self,
         client: BaseScholarClient,
         citation: Citation,
     ) -> SourceCandidate:
-        """Apply adaptive AIMD rate limit + instant HTTP 429 callback then call API."""
+        """Apply circuit breaker + adaptive AIMD rate limit + HTTP 429 callback then call API."""
+        allowed, rem = self._circuit_breakers.allow_request(client.name)
+        if not allowed:
+            logger.debug(
+                f"Skipping {client.name} lookup while circuit breaker is open ({rem:.1f}s remaining)"
+            )
+            return SourceCandidate(
+                source_name=client.name,
+                found=False,
+                error=f"circuit_open ({rem:.0f}s remaining)",
+            )
+
         limiter = self._rate_limiters.get(client.name)
         if limiter:
             fast_fail = (
@@ -3073,6 +3179,11 @@ class RetrievalOrchestrator:
             if fast_fail:
                 logger.debug(
                     f"Skipping {client.name} lookup while rate-limit backoff is active"
+                )
+                self._circuit_breakers.record_infra_failure(
+                    client.name,
+                    "HTTP 429 rate-limit backoff active",
+                    0.0,
                 )
                 return SourceCandidate(
                     source_name=client.name,
@@ -3092,12 +3203,31 @@ class RetrievalOrchestrator:
                 else:
                     limiter.report_rate_limited()
 
+        reset_task_http_status(client.name)
+        started_at = time.perf_counter()
         cb_token = set_rate_limit_callback(_on_http_429) if limiter else None
         try:
             cand = await client.lookup(citation)
+        except asyncio.CancelledError:
+            self._circuit_breakers.release_probe(client.name)
+            raise
+        except Exception as exc:
+            latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
+            if isinstance(exc, AssertionError):
+                self._circuit_breakers.release_probe(client.name)
+            else:
+                self._circuit_breakers.record_infra_failure(
+                    client.name,
+                    f"{exc.__class__.__name__}: {exc}",
+                    latency_ms,
+                )
+            raise
         finally:
             if cb_token is not None:
                 reset_rate_limit_callback(cb_token)
+
+        latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
+        http_status, _http_ra, http_transport_err = get_task_http_status(client.name)
 
         if limiter:
             err_lower = (cand.error or "").lower()
@@ -3114,6 +3244,21 @@ class RetrievalOrchestrator:
             elif not notified_429:
                 limiter.report_success()
 
+        infra_reason = self._classify_lookup_infra_failure(
+            cand,
+            http_status=http_status,
+            http_transport_err=http_transport_err,
+            notified_429=notified_429,
+        )
+        if infra_reason is not None:
+            self._circuit_breakers.record_infra_failure(
+                client.name,
+                infra_reason,
+                latency_ms,
+            )
+        else:
+            self._circuit_breakers.record_success(client.name, latency_ms)
+
         return cand
 
     async def _lookup_with_cache_and_ratelimit(
@@ -3129,7 +3274,11 @@ class RetrievalOrchestrator:
                 return self._candidate_from_cache(client.name, cached)
 
         candidate = await self._lookup_with_ratelimit(client, citation)
-        if self.cache is not None and cache_key:
+        if (
+            self.cache is not None
+            and cache_key
+            and not (candidate.error and "circuit_open" in candidate.error.lower())
+        ):
             self.cache.set(cache_key, self._candidate_to_cache(candidate))
         return candidate
 

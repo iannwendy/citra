@@ -10,6 +10,7 @@ from integrity_checker.api.deps import get_db, require_admin
 from integrity_checker.api.routes.health import _get_grobid_health
 from integrity_checker.db.models import EssayRecord, User, VerdictRecord
 from integrity_checker.db.repository import Repository
+from integrity_checker.retrieval.circuit_breaker import get_circuit_breaker_registry
 
 router = APIRouter()
 
@@ -67,4 +68,5 @@ def get_system_health(
         },
         "verdict_label_counts": label_counts,
         "cache_stats": cache_stats,
+        "upstream_sources": get_circuit_breaker_registry().snapshot_all(),
     }
