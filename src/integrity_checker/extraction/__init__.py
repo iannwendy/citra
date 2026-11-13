@@ -14,6 +14,10 @@ Bao gồm:
 
 from integrity_checker.extraction.base import BasePDFParser, Document
 from integrity_checker.extraction.citation_extractor import CitationExtractor
+from integrity_checker.extraction.composite_splitter import (
+    expand_composite_reference,
+    expand_composite_references,
+)
 from integrity_checker.extraction.document_parser import DocumentParser, ParsedDocument
 from integrity_checker.extraction.docx_parser import DocxParser
 from integrity_checker.extraction.grobid_adapter import (
@@ -70,6 +74,8 @@ __all__ = [
     "CitationPattern",
     "get_all_patterns",
     "CitationExtractor",
+    "expand_composite_reference",
+    "expand_composite_references",
     "ReferenceListParser",
     "DocumentSection",
     "SectionSegmenter",

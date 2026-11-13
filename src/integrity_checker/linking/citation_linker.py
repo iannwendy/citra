@@ -88,10 +88,16 @@ _INSTITUTIONAL_AUTHOR_RE = re.compile(
     r"|\b(?:of|for|Association|Organization|Institute|Initiative|Project|Advisors|Clinics|Contributors|Developers)\b",
     re.IGNORECASE,
 )
-# Regex cho in-text IEEE numeric: [N] or [N, M] or [N-M] or [N, Tr. 124]
+# Regex cho in-text IEEE/ACS numeric: [N], [14b], [14a, 14c], [14a–c], [N-M], [N, Tr. 124]
 _IEEE_NUM_RE = re.compile(
-    r"\[(\d+(?:\s*[-–—−,]\s*\d+)*)(?:\s*[,;:]\s*(?:tr\.?|trang|pp?\.?)\s*\d+(?:\s*[,–\-—−]\s*\d+)*)?\]",
-    re.IGNORECASE,
+    r"\[\s*([1-9]\d{0,3}(?:[a-z](?:\s*[-–—−]\s*[a-z])?(?:\s*,\s*[a-z])*)?"
+    r"(?:\s*[-–—−,]\s*[1-9]\d{0,3}(?:[a-z](?:\s*[-–—−]\s*[a-z])?(?:\s*,\s*[a-z])*)?)*)"
+    r"(?:\s*[,;:]\s*(?:[Tt]r\.?|[Tt]rang|[Pp]p?\.?)\s*\d+(?:\s*[,–\-—−]\s*\d+)*)?\s*\]"
+)
+# Regex cho parenthetical composite sub-reference callouts: (14b), (14a, 14c), (14a–c)
+_PAREN_COMPOSITE_NUM_RE = re.compile(
+    r"\(\s*([1-9]\d{0,3}[a-z](?:\s*[-–—−]\s*(?:[1-9]\d{0,3})?[a-z])?"
+    r"(?:\s*,\s*(?:[1-9]\d{0,3}[a-z]?|[a-z])(?:\s*[-–—−]\s*(?:[1-9]\d{0,3})?[a-z])?)*)\s*\)"
 )
 # Regex cho year extraction từ bib entry
 _BIB_YEAR_RE = re.compile(r"\((?:19|20)\d{2}[a-z]?\)|(?:19|20)\d{2}[a-z]?")
@@ -174,7 +180,8 @@ class CitationLinker:
 
         # Index bib citations by different keys
         bib_by_doi = self._index_by_doi(bib_citations)
-        bib_by_index = self._index_by_numeric(bib_citations)
+        bib_by_index = self._index_by_numeric_multi(bib_citations)
+        bib_by_composite_label = self._index_by_composite_label(bib_citations)
         bib_by_author_year = self._index_by_author_year(bib_citations)
         bib_by_author_year_suffix = self._index_by_author_year_suffix(bib_citations)
 
@@ -224,9 +231,14 @@ class CitationLinker:
                 # to several references at once ("[9, 10]" cites both 9 and 10), so
                 # this returns a list.
                 links = self._try_match(
-                    cit, occ_id, bib_by_doi, bib_by_index,
-                    bib_by_author_year, bib_by_author_year_suffix,
-                    bib_citations
+                    cit,
+                    occ_id,
+                    bib_by_doi,
+                    bib_by_index,
+                    bib_by_composite_label,
+                    bib_by_author_year,
+                    bib_by_author_year_suffix,
+                    bib_citations,
                 )
 
             if links:
@@ -378,7 +390,8 @@ class CitationLinker:
         cit: Citation,
         occ_id: str,
         bib_by_doi: dict[str, Citation],
-        bib_by_index: dict[int, Citation],
+        bib_by_index: dict[int, list[Citation]],
+        bib_by_composite_label: dict[str, Citation],
         bib_by_author_year: dict[tuple[str, str], list[Citation]],
         bib_by_author_year_suffix: dict[tuple[str, str, str], list[Citation]],
         bib_citations: list[Citation],
@@ -391,7 +404,8 @@ class CitationLinker:
 
         Returns a LIST of links: ``None`` when nothing matched, otherwise one
         link per reference the occurrence cites (a single numeric occurrence
-        such as ``[9, 10]`` cites two).
+        such as ``[9, 10]`` cites two, and a parent composite callout ``[14]``
+        fans out to ``14a, 14b, ...``).
 
         NOTE: No blocking — same reference entry can match multiple in-text
         occurrences. This is valid: the same source may be cited multiple times.
@@ -415,24 +429,56 @@ class CitationLinker:
                 )
             )
 
+        raw_stripped = (cit.raw_text or "").strip()
+        is_paren_composite = bool(
+            bib_by_composite_label and _PAREN_COMPOSITE_NUM_RE.fullmatch(raw_stripped)
+        )
+        pre_targets = self._extract_numeric_targets(
+            cit.raw_text or "",
+            allow_parenthetical=(cit.citation_type == CitationType.NUMERIC or is_paren_composite),
+        )
+        has_explicit_sub_target = any(sub is not None for _, sub in pre_targets)
+
         # 0. TEI_LINK (GROBID adapter v1.10) — highest priority
         # GROBID provides authoritative xml:id links between in-text and bib
-        # e.g. in-text cites "b0" and bib has id="b0" → direct match
-        if hasattr(cit, 'grobid_ref_id') and cit.grobid_ref_id:
+        # e.g. in-text cites "b0" and bib has id="b0" → direct match.
+        # When "b13" was expanded into composite sub-references (14a, 14b, ...):
+        #   - specific sub-callout "[14b]" delegates to Stage 2 composite label lookup;
+        #   - parent callout "[14]" fans out to all sub-references sharing "b13".
+        if hasattr(cit, "grobid_ref_id") and cit.grobid_ref_id and not has_explicit_sub_target:
             cit_grobid_id = str(cit.grobid_ref_id).strip().lstrip("#")
             cit_yr_m = re.search(r"\b((?:19|20)\d{2})\b", str(cit.year or cit.raw_text or ""))
             cit_yr_int = int(cit_yr_m.group(1)) if cit_yr_m else None
-            # Build bib index by grobid_ref_id
+            matching_tei_bibs: list[Citation] = []
+            year_mismatch = False
             for bib in bib_citations:
-                bib_grobid_id = getattr(bib, 'grobid_ref_id', None)
+                bib_grobid_id = getattr(bib, "grobid_ref_id", None)
                 if bib_grobid_id and str(bib_grobid_id).strip().lstrip("#") == cit_grobid_id:
                     bib_yr_m = re.search(r"\b((?:19|20)\d{2})\b", str(bib.year or ""))
                     bib_yr_int = int(bib_yr_m.group(1)) if bib_yr_m else None
                     if cit_yr_int and bib_yr_int and abs(cit_yr_int - bib_yr_int) > 9:
+                        year_mismatch = True
                         break
-                    return _bib_link(
-                        bib, 0.98, MappingMethod.TEI_LINK  # type: ignore
-                    )
+                    matching_tei_bibs.append(bib)
+            if not year_mismatch and matching_tei_bibs:
+                composite_tei = [
+                    b for b in matching_tei_bibs if getattr(b, "sub_index", None) is not None
+                ]
+                if len(composite_tei) >= 2:
+                    return [
+                        CitationLink(
+                            occurrence_id=occ_id,
+                            reference_id=b.reference_id
+                            or f"ref-{self._find_bib_index(b, bib_citations):04d}",
+                            status=CitationMappingStatus.MATCHED,
+                            confidence=0.98,
+                            method=MappingMethod.TEI_LINK,  # type: ignore[arg-type]
+                        )
+                        for b in composite_tei
+                    ]
+                return _bib_link(
+                    matching_tei_bibs[0], 0.98, MappingMethod.TEI_LINK  # type: ignore[arg-type]
+                )
 
         # 1. DOI exact
         doi = self._extract_doi(cit.raw_text)
@@ -441,39 +487,69 @@ class CitationLinker:
                 bib_by_doi[doi], self.doi_confidence, MappingMethod.DOI_EXACT
             )
 
-        # 2. NUMERIC_INDEX (IEEE)
-        #
-        # A single occurrence may cite SEVERAL references at once — "[9, 10]",
-        # "[3, 25]", "[26-28]".  Every resolvable index gets its OWN link: the
-        # report must show the occurrence linked to all of them, and the
-        # "cited in text" count of each reference must include this occurrence.
-        # Returning inside the loop (the previous behaviour) dropped every
-        # index after the first.
-        if cit.citation_type == CitationType.NUMERIC or (
-            cit.citation_type == CitationType.IN_TEXT
-            and (
-                getattr(cit, "style", None) and getattr(cit.style, "value", "") == "ieee"
-                or _IEEE_NUM_RE.fullmatch((cit.raw_text or "").strip())
-                or re.search(r"\[\s*\d+\s*\]\s*[-–—−]\s*\[\s*\d+\s*\]", cit.raw_text or "")
+        # 2. NUMERIC_INDEX (IEEE / ACS / RSC / APS, including composite 14a/14b/14c)
+        if (
+            cit.citation_type == CitationType.NUMERIC
+            or is_paren_composite
+            or (
+                cit.citation_type == CitationType.IN_TEXT
+                and (
+                    (getattr(cit, "style", None) and getattr(cit.style, "value", "") == "ieee")
+                    or _IEEE_NUM_RE.fullmatch(raw_stripped)
+                    or re.search(
+                        r"\[\s*\d+[a-z]?\s*\]\s*[-–—−]\s*\[\s*\d+[a-z]?\s*\]",
+                        cit.raw_text or "",
+                    )
+                )
             )
         ):
             links: list[CitationLink] = []
-            for idx in self._extract_numeric_indices(cit.raw_text):
-                bib_ref = bib_by_index.get(idx)
-                if bib_ref is None:
-                    continue
-                bib_idx = self._find_bib_index(bib_ref, bib_citations)
-                links.append(
-                    CitationLink(
-                        occurrence_id=occ_id,
-                        reference_id=bib_ref.reference_id or f"ref-{bib_idx:04d}",
-                        status=CitationMappingStatus.MATCHED,
-                        confidence=self.numeric_confidence,
-                        method=MappingMethod.NUMERIC_INDEX,
-                    )
-                )
+            seen_ref_ids: set[str] = set()
+            for num_idx, sub_lbl in pre_targets:
+                if sub_lbl is not None:
+                    comp_key = f"{num_idx}{sub_lbl.lower()}"
+                    bib_ref = bib_by_composite_label.get(comp_key)
+                    if bib_ref is None:
+                        continue
+                    bib_idx = self._find_bib_index(bib_ref, bib_citations)
+                    ref_id = bib_ref.reference_id or f"ref-{bib_idx:04d}"
+                    if ref_id not in seen_ref_ids:
+                        seen_ref_ids.add(ref_id)
+                        links.append(
+                            CitationLink(
+                                occurrence_id=occ_id,
+                                reference_id=ref_id,
+                                status=CitationMappingStatus.MATCHED,
+                                confidence=self.numeric_confidence,
+                                method=MappingMethod.NUMERIC_INDEX,
+                            )
+                        )
+                else:
+                    bibs_at_idx = bib_by_index.get(num_idx) or []
+                    if not bibs_at_idx:
+                        continue
+                    comp_bibs = [
+                        b for b in bibs_at_idx if getattr(b, "sub_index", None) is not None
+                    ]
+                    target_bibs = comp_bibs if comp_bibs else [bibs_at_idx[0]]
+                    for bib_ref in target_bibs:
+                        bib_idx = self._find_bib_index(bib_ref, bib_citations)
+                        ref_id = bib_ref.reference_id or f"ref-{bib_idx:04d}"
+                        if ref_id not in seen_ref_ids:
+                            seen_ref_ids.add(ref_id)
+                            links.append(
+                                CitationLink(
+                                    occurrence_id=occ_id,
+                                    reference_id=ref_id,
+                                    status=CitationMappingStatus.MATCHED,
+                                    confidence=self.numeric_confidence,
+                                    method=MappingMethod.NUMERIC_INDEX,
+                                )
+                            )
             if links:
                 return links
+            if has_explicit_sub_target:
+                return None
 
         # 3. AUTHOR_YEAR (APA-like)
         # A single parenthetical citation often contains several independent
@@ -1082,6 +1158,23 @@ class CitationLinker:
                 out[bib.numeric_index] = bib
         return out
 
+    def _index_by_numeric_multi(self, bibs: list[Citation]) -> dict[int, list[Citation]]:
+        out: dict[int, list[Citation]] = {}
+        for bib in bibs:
+            if bib.numeric_index is not None:
+                out.setdefault(bib.numeric_index, []).append(bib)
+        return out
+
+    def _index_by_composite_label(self, bibs: list[Citation]) -> dict[str, Citation]:
+        out: dict[str, Citation] = {}
+        for bib in bibs:
+            comp_lbl = (getattr(bib, "composite_label", None) or "").strip().lower()
+            if not comp_lbl and bib.numeric_index is not None and getattr(bib, "sub_index", None):
+                comp_lbl = f"{bib.numeric_index}{str(bib.sub_index).strip().lower()}"
+            if comp_lbl and comp_lbl not in out:
+                out[comp_lbl] = bib
+        return out
+
     def _resolve_bib_year_and_suffix(self, bib: Citation) -> tuple[str, str]:
         """Extract canonical 4-digit/n.d. year and lowercase year_suffix ('a'-'z') from a bib Citation."""
         raw_yr = str(bib.year or "n.d.").strip()
@@ -1335,39 +1428,115 @@ class CitationLinker:
             return doi_match.group(0).rstrip(".,;:").lower()
         return None
 
-    def _extract_numeric_indices(self, text: str) -> list[int]:
-        """Trích numeric indices từ [N], [N, M], [N-M], [N]-[M], hoặc superscript ^N, ^N-M."""
+    def _extract_numeric_targets(
+        self,
+        text: str,
+        *,
+        allow_parenthetical: bool = False,
+    ) -> list[tuple[int, str | None]]:
+        """Extract ``(numeric_index, sub_index)`` targets from bracketed, superscript, or parenthetical callouts."""
+        if not text:
+            return []
+
         bracket_range_m = re.search(
-            r"\[\s*(\d+)\s*\]\s*[-–—−]\s*\[\s*(\d+)\s*\]", text
+            r"\[\s*(\d+)([a-z]?)\s*\]\s*[-–—−]\s*\[\s*(\d+)([a-z]?)\s*\]",
+            text,
         )
         if bracket_range_m:
-            start, end = int(bracket_range_m.group(1)), int(bracket_range_m.group(2))
-            if start <= end and (end - start) <= 50:
-                return list(range(start, end + 1))
-            return [start, end]
+            n1, s1 = int(bracket_range_m.group(1)), bracket_range_m.group(2).lower()
+            n2, s2 = int(bracket_range_m.group(3)), bracket_range_m.group(4).lower()
+            if s1 and s2 and n1 == n2 and ord(s1) <= ord(s2) and (ord(s2) - ord(s1)) <= 25:
+                return [(n1, chr(c)) for c in range(ord(s1), ord(s2) + 1)]
+            if not s1 and not s2:
+                if n1 <= n2 and (n2 - n1) <= 50:
+                    return [(n, None) for n in range(n1, n2 + 1)]
+                return [(n1, None), (n2, None)]
+            return [(n1, s1 or None), (n2, s2 or None)]
+
         m = _IEEE_NUM_RE.search(text)
         raw_spec = m.group(1) if m else None
         if raw_spec is None:
-            sup_m = re.search(r"\^(\d+(?:\s*[-–—−,]\s*\d+)*)", text)
+            sup_m = re.search(
+                r"\^(\d+[a-z]?(?:\s*[-–—−,]\s*(?:\d+[a-z]?|[a-z]))*)",
+                text,
+            )
             if sup_m:
                 raw_spec = sup_m.group(1)
+        if raw_spec is None and allow_parenthetical:
+            paren_comp_m = _PAREN_COMPOSITE_NUM_RE.search(text)
+            if paren_comp_m:
+                raw_spec = paren_comp_m.group(1)
+            else:
+                paren_int_m = re.fullmatch(
+                    r"\(\s*(\d+(?:\s*[-–—−,]\s*\d+)*)\s*\)",
+                    text.strip(),
+                )
+                if paren_int_m:
+                    raw_spec = paren_int_m.group(1)
+                elif re.fullmatch(r"\d+[a-z]?", text.strip()):
+                    raw_spec = text.strip()
+
         if not raw_spec:
             return []
-        indices: list[int] = []
-        for token in re.split(r"\s*,\s*", raw_spec.strip()):
-            range_m = re.match(r"^(\d+)\s*[-–—−]\s*(\d+)$", token.strip())
-            if range_m:
-                start, end = int(range_m.group(1)), int(range_m.group(2))
-                if start <= end and (end - start) <= 50:
-                    indices.extend(range(start, end + 1))
+
+        targets: list[tuple[int, str | None]] = []
+        last_num: int | None = None
+        for raw_tok in re.split(r"\s*,\s*", raw_spec.strip()):
+            tok = raw_tok.strip()
+            if not tok:
+                continue
+
+            sub_rng_m = re.match(r"^(\d+)([a-z])\s*[-–—−]\s*(?:(\d+))?([a-z])$", tok)
+            if sub_rng_m:
+                n1 = int(sub_rng_m.group(1))
+                n2 = int(sub_rng_m.group(3)) if sub_rng_m.group(3) else n1
+                s1, s2 = sub_rng_m.group(2).lower(), sub_rng_m.group(4).lower()
+                last_num = n2
+                if n1 == n2 and ord(s1) <= ord(s2) and (ord(s2) - ord(s1)) <= 25:
+                    for ch_ord in range(ord(s1), ord(s2) + 1):
+                        targets.append((n1, chr(ch_ord)))
                 else:
-                    indices.extend([start, end])
-            else:
-                try:
-                    indices.append(int(token.strip()))
-                except ValueError:
-                    pass
-        return indices
+                    targets.append((n1, s1))
+                    targets.append((n2, s2))
+                continue
+
+            bare_rng_m = re.match(r"^([a-z])\s*[-–—−]\s*([a-z])$", tok)
+            if bare_rng_m and last_num is not None:
+                s1, s2 = bare_rng_m.group(1).lower(), bare_rng_m.group(2).lower()
+                if ord(s1) <= ord(s2) and (ord(s2) - ord(s1)) <= 25:
+                    for ch_ord in range(ord(s1), ord(s2) + 1):
+                        targets.append((last_num, chr(ch_ord)))
+                continue
+
+            int_rng_m = re.match(r"^(\d+)\s*[-–—−]\s*(\d+)$", tok)
+            if int_rng_m:
+                start, end = int(int_rng_m.group(1)), int(int_rng_m.group(2))
+                last_num = end
+                if start <= end and (end - start) <= 50:
+                    for num in range(start, end + 1):
+                        targets.append((num, None))
+                else:
+                    targets.append((start, None))
+                    targets.append((end, None))
+                continue
+
+            single_m = re.match(r"^(\d+)([a-z]?)$", tok)
+            if single_m:
+                num = int(single_m.group(1))
+                sub = single_m.group(2).lower() or None
+                last_num = num
+                targets.append((num, sub))
+                continue
+
+            bare_sub_m = re.match(r"^([a-z])$", tok)
+            if bare_sub_m and last_num is not None:
+                targets.append((last_num, bare_sub_m.group(1).lower()))
+
+        return targets
+
+    def _extract_numeric_indices(self, text: str) -> list[int]:
+        """Trích numeric indices từ [N], [N, M], [N-M], [N]-[M], hoặc superscript ^N, ^N-M."""
+        return [num for num, _ in self._extract_numeric_targets(text)]
 
     def _clean_intext_author(self, raw_author: str) -> str:
         """Strip et al. / caption prefixes / bracketed acronyms / 2nd+ authors."""

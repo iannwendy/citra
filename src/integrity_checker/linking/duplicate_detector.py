@@ -362,6 +362,10 @@ class DuplicateDetector:
         arx_b = self._extract_arxiv_id(f"{b.raw_text or ''} {b.doi or ''}")
         if arx_a and arx_b and arx_a != arx_b:
             return True
+        comp_a = (getattr(a, "composite_label", None) or "").strip().lower()
+        comp_b = (getattr(b, "composite_label", None) or "").strip().lower()
+        if (comp_a or comp_b) and comp_a != comp_b:
+            return True
         suf_a, suf_b = self._year_suffix(a), self._year_suffix(b)
         if suf_a != suf_b and (suf_a or suf_b):
             # "2020a" vs "2020b" (or "2020a" vs plain "2020"): the author

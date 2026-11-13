@@ -438,7 +438,23 @@ class ReferenceListParser:
         for fmt in get_all_formats():
             self.format_parsers[fmt.name] = fmt
 
-    def parse_reference_section(self, doc: Document) -> list[Citation]:
+    def parse_single_entry(
+        self,
+        entry: str,
+        *,
+        order_index: int = 1,
+        page_num: int = 1,
+    ) -> Citation | None:
+        """Parse a single reference-list entry string into a ``Citation``."""
+        if not entry or not entry.strip():
+            return None
+        return self._parse_entry(entry, order_index=order_index, page_num=page_num)
+
+    def parse_reference_section(
+        self,
+        doc: Document | str,
+        page_num: int = 1,
+    ) -> list[Citation]:
         """Trích và parse các entry ở reference section.
 
         Returns:
@@ -450,23 +466,33 @@ class ReferenceListParser:
             (false positive khi 's' cuối + '\n' + 'v' đầu). Thay vào đó chỉ
             áp dụng normalize nhẹ (Unicode NFC + ligature).
         """
-        ref_range = self.extractor.find_reference_section(doc)
-        if ref_range is None:
-            return []
-        start, end = ref_range
-        page_texts: list[str] = []
-        for p in doc.pages:
-            if not (start <= p.page_num <= end) or not p.text:
-                continue
-            p_text = p.text
-            if p.page_num == start:
-                p_lines = p_text.splitlines()
-                for ln_i, ln_s in enumerate(p_lines):
-                    if _BIB_HEADER_LINE_RE.match(ln_s.strip()):
-                        p_text = "\n".join(p_lines[ln_i:])
-                        break
-            page_texts.append(p_text)
-        raw_text = "\n".join(page_texts)
+        from integrity_checker.extraction.composite_splitter import (
+            expand_composite_reference,
+            expand_composite_references,
+        )
+
+        if isinstance(doc, str):
+            raw_text = doc
+            start = page_num
+        else:
+            ref_range = self.extractor.find_reference_section(doc)
+            if ref_range is None:
+                return []
+            start, end = ref_range
+            page_texts: list[str] = []
+            for p in doc.pages:
+                if not (start <= p.page_num <= end) or not p.text:
+                    continue
+                p_text = p.text
+                if p.page_num == start:
+                    p_lines = p_text.splitlines()
+                    for ln_i, ln_s in enumerate(p_lines):
+                        if _BIB_HEADER_LINE_RE.match(ln_s.strip()):
+                            p_text = "\n".join(p_lines[ln_i:])
+                            break
+                page_texts.append(p_text)
+            raw_text = "\n".join(page_texts)
+
         # Light normalize — KHÔNG qua _fix_broken_lines
         pp = self.extractor.preprocessor
         section_text = pp._normalize_unicode(pp._fix_ligatures(raw_text))
@@ -494,7 +520,20 @@ class ReferenceListParser:
                     logger.debug(f"Skipping parsed fake entry: {citation.raw_text[:50]}...")
                     continue
                 citations.append(citation)
-        return citations
+            else:
+                comp_probe = Citation(
+                    raw_text=entry.strip(),
+                    citation_type=CitationType.REFERENCE_LIST,
+                    order_index=idx,
+                    page_num=start,
+                )
+                comp_pieces = expand_composite_reference(comp_probe, ref_parser=self)
+                if len(comp_pieces) > 1:
+                    for piece in comp_pieces:
+                        if not _is_fake_entry(piece.raw_text):
+                            citations.append(piece)
+
+        return expand_composite_references(citations, ref_parser=self)
 
     def _parse_entry_with_dash_inheritance(
         self,
@@ -1412,6 +1451,7 @@ class ReferenceListParser:
                     url_chunks
                     and (
                         re.match(r"^(?:and|or|&|và|,)\s+(?:https?://|www\.)\S+\s*$", chunk, re.IGNORECASE)
+                        or re.match(r"^;?\s*(?:and\s+)?(?:\(\s*[b-z]\s*\)|[b-z]\))\s+\S", chunk)
                         or (
                             not re.search(r"\b(?:18|19|20)\d{2}\b", chunk)
                             and re.match(r"^[^.]{1,35}\.\s*url\s*:\s*(?:https?://|www\.)\S+", chunk, re.IGNORECASE)
@@ -1423,7 +1463,12 @@ class ReferenceListParser:
                     url_chunks.append(chunk)
                 start = end
             last_chunk = flat[start:].strip()
-            if len(last_chunk) > 20 or is_vn_legal_reference(last_chunk):
+            if (
+                url_chunks
+                and re.match(r"^;?\s*(?:and\s+)?(?:\(\s*[b-z]\s*\)|[b-z]\))\s+\S", last_chunk)
+            ):
+                url_chunks[-1] = f"{url_chunks[-1]} {last_chunk}"
+            elif len(last_chunk) > 20 or is_vn_legal_reference(last_chunk):
                 url_chunks.append(last_chunk)
         elif "\n" in text:
             # When there are no URLs/DOIs at all, preserve line-break boundaries first
@@ -1935,6 +1980,10 @@ class ReferenceListParser:
         all_formats = get_all_formats()
         is_ama_specific = bool(
             re.match(r"^\s*\d+\.\s+", entry)
+            and not re.search(
+                r"\b(?:18|19|20)\d{2}\s*,\s*\d+\s*(?:\([^)]+\)\s*)?,\s*[A-Za-z]?\d+",
+                entry,
+            )
             and (
                 re.search(r"\bdoi:\s*10\.\d{4,9}/", entry, re.IGNORECASE)
                 or re.search(r"[^.:]+:\s*[^;]+;\s*(?:19|20)\d{2}\b", entry)

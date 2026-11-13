@@ -87,6 +87,8 @@ class Citation:
     year_suffix: str | None = None
     order_index: int = 0
     numeric_index: int | None = None
+    sub_index: str | None = None
+    composite_label: str | None = None
 
     page_num: int = 0
     paragraph_num: int = 0

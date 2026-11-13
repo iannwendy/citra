@@ -593,6 +593,14 @@ class DocumentParser:
             body_citations = self._extract_alpha_bracket_citations(
                 sections, text_doc, body_citations, references
             )
+            comp_guided = self._extract_body_citations_for_composite_refs(
+                sections,
+                references,
+                source_doc=text_doc,
+                existing_body=body_citations,
+            )
+            if comp_guided:
+                body_citations.extend(comp_guided)
 
         # 3.3d GROBID TEI targets → regex body citations (Stage 1 TEI_LINK in
         # CitationLinker). No-op when GROBID output is unavailable.
@@ -693,6 +701,86 @@ class DocumentParser:
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Pre-header body citation extraction failed: %s", exc)
         return citations
+
+    def _extract_body_citations_for_composite_refs(
+        self,
+        sections: list[DocumentSection],
+        references: list[Citation],
+        *,
+        source_doc: Document | None = None,
+        existing_body: list[Citation] | None = None,
+    ) -> list[Citation]:
+        """Extract parenthetical composite sub-reference callouts like ``(14b)``, ``(14a, 14c)``, ``(14a–c)``
+        when the bibliography contains composite sub-references."""
+        composite_nums = {
+            r.numeric_index
+            for r in (references or [])
+            if getattr(r, "sub_index", None) and r.numeric_index is not None
+        }
+        if not composite_nums:
+            return []
+
+        all_bib_nums = {
+            r.numeric_index for r in (references or []) if r.numeric_index is not None
+        }
+        paren_comp_re = re.compile(
+            r"(?<![A-Za-z0-9_])\(\s*"
+            r"([1-9]\d{0,2}[a-z](?:\s*[-–—−]\s*(?:[1-9]\d{0,2})?[a-z])?"
+            r"(?:\s*,\s*(?:[1-9]\d{0,2}[a-z]?|[a-z])(?:\s*[-–—−]\s*(?:[1-9]\d{0,2})?[a-z])?)*)"
+            r"\s*\)"
+        )
+        non_cit_prefix_re = re.compile(
+            r"\b(?:Figure|Fig\.?|Table|Tab\.?|Scheme|Chart|Compound|Compd\.?|Structure|"
+            r"Product|Intermediate|Isomer|Ligand|Catalyst|Complex|Monomer|Polymer|"
+            r"Equation|Eq\.?|Section|Sec\.?|Part|Step|Entry|Pathway|Route|"
+            r"Hình|Bảng|Sơ\s+đồ|Hợp\s+chất|Công\s+thức)\s*$",
+            flags=re.IGNORECASE,
+        )
+
+        existing_raw_by_page = {
+            (c.page_num, re.sub(r"\s+", " ", (c.raw_text or "").strip()))
+            for c in (existing_body or [])
+        }
+        by_page = {p.page_num: p for p in (source_doc.pages if source_doc else [])}
+        extracted: list[Citation] = []
+
+        for section in sections:
+            if section.section_type != SectionType.BODY:
+                continue
+            page_chunks: list[tuple[int, str]] = []
+            if by_page:
+                for pnum in sorted(by_page):
+                    if section.start_page <= pnum <= section.end_page and by_page[pnum].text:
+                        page_chunks.append((pnum, by_page[pnum].text))
+            if not page_chunks and section.text:
+                page_chunks.append((section.start_page, section.text))
+
+            for pnum, txt in page_chunks:
+                for m in paren_comp_re.finditer(txt):
+                    raw_hit = re.sub(r"\s+", " ", m.group(0).strip())
+                    if (pnum, raw_hit) in existing_raw_by_page:
+                        continue
+                    prefix = re.sub(r"\s+", " ", txt[max(0, m.start() - 35) : m.start()])
+                    if non_cit_prefix_re.search(prefix):
+                        continue
+                    nums_in_hit = [int(n) for n in re.findall(r"\d+", m.group(1))]
+                    if not nums_in_hit:
+                        continue
+                    if not any(n in composite_nums for n in nums_in_hit):
+                        continue
+                    if not all(n in all_bib_nums for n in nums_in_hit):
+                        continue
+                    extracted.append(
+                        Citation(
+                            raw_text=raw_hit,
+                            citation_type=CitationType.NUMERIC,
+                            style=CitationStyle.ACS,
+                            page_num=pnum,
+                            matched_pattern="acs_parenthesized_composite",
+                            confidence=0.9,
+                        )
+                    )
+        return extracted
 
     def _extract_mla_reference_guided_citations(
         self,
@@ -1982,6 +2070,13 @@ class DocumentParser:
             for idx, ref in enumerate(grobid_refs, start=1):
                 ref.order_index = idx
                 ref.numeric_index = idx
+            from integrity_checker.extraction.composite_splitter import (
+                expand_composite_references,
+            )
+
+            grobid_refs = expand_composite_references(
+                grobid_refs, ref_parser=self._reference_parser
+            )
 
         # Lấy references từ regex (secondary/supplemental)
         regex_refs = self._extract_references_from_sections(sections)
@@ -2093,16 +2188,50 @@ class DocumentParser:
                             citation.source = "regex"
                             citation.source_confidence = citation.confidence
                             all_citations.append(citation)
+                        else:
+                            from integrity_checker.extraction.composite_splitter import (
+                                expand_composite_reference,
+                            )
+
+                            comp_probe = Citation(
+                                raw_text=entry.strip(),
+                                citation_type=CitationType.REFERENCE_LIST,
+                                order_index=idx,
+                                page_num=section.start_page,
+                                source="regex",
+                            )
+                            comp_pieces = expand_composite_reference(
+                                comp_probe, ref_parser=self._reference_parser
+                            )
+                            if len(comp_pieces) > 1:
+                                for piece in comp_pieces:
+                                    piece.source = "regex"
+                                    piece.source_confidence = piece.confidence
+                                    all_citations.append(piece)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Reference parser failed: %s", exc)
         if all_citations:
             # If the bibliography is predominantly numbered (1..N) and inline splitting
             # produced an entry with numeric_index=None (e.g. two entries glued without
             # a newline in PDF extraction), assign sequential 1..N numeric_index values.
+            has_pre_expanded_composite = any(
+                getattr(c, "sub_index", None) is not None for c in all_citations
+            )
             num_count = sum(1 for c in all_citations if c.numeric_index is not None)
-            if num_count >= max(3, int(len(all_citations) * 0.6)) and num_count < len(all_citations):
+            if (
+                not has_pre_expanded_composite
+                and num_count >= max(3, int(len(all_citations) * 0.6))
+                and num_count < len(all_citations)
+            ):
                 for idx, c in enumerate(all_citations, start=1):
                     c.numeric_index = idx
+            from integrity_checker.extraction.composite_splitter import (
+                expand_composite_references,
+            )
+
+            all_citations = expand_composite_references(
+                all_citations, ref_parser=self._reference_parser
+            )
             logger.info(f"Extracted {len(all_citations)} references from regex")
         return all_citations
 
@@ -2331,6 +2460,10 @@ class DocumentParser:
                     g is not target
                     and g.numeric_index == donor.numeric_index
                     and (
+                        getattr(donor, "sub_index", None) is None
+                        or getattr(g, "sub_index", None) == getattr(donor, "sub_index", None)
+                    )
+                    and (
                         getattr(g, "_num_idx_confirmed", False)
                         or bool(re.match(r"^\s*\[\s*\d+\s*\]", g.raw_text or ""))
                     )
@@ -2544,6 +2677,12 @@ class DocumentParser:
             ):
                 target.numeric_index = donor.numeric_index
                 target._num_idx_confirmed = True  # type: ignore[attr-defined]
+                if getattr(donor, "sub_index", None) and not getattr(target, "sub_index", None):
+                    target.sub_index = donor.sub_index
+                if getattr(donor, "composite_label", None) and not getattr(
+                    target, "composite_label", None
+                ):
+                    target.composite_label = donor.composite_label
             if (
                 donor.style
                 and donor.style.value != "unknown"
@@ -2753,7 +2892,14 @@ class DocumentParser:
                 and kb not in ka
             )
 
+        def _sub_index_conflicts(a: Citation, b: Citation) -> bool:
+            sa = getattr(a, "sub_index", None)
+            sb = getattr(b, "sub_index", None)
+            return bool(sa and sb and sa != sb)
+
         def _would_clobber_numbered_slot(c_ref: Citation, g_ref: Citation) -> bool:
+            if _sub_index_conflicts(c_ref, g_ref):
+                return True
             if (
                 c_ref.numeric_index is None
                 or g_ref.numeric_index is None
@@ -2900,6 +3046,7 @@ class DocumentParser:
             if (
                 c.numeric_index is not None
                 and c.numeric_index in grobid_by_num
+                and not _sub_index_conflicts(c, grobid_by_num[c.numeric_index])
                 and (
                     abs(len(grobid_refs) - len(regex_refs)) <= 2
                     or bool(re.match(r"^\s*\[\s*\d+\s*\]", grobid_by_num[c.numeric_index].raw_text or ""))
@@ -3079,9 +3226,12 @@ class DocumentParser:
         if (
             merged
             and all(c.numeric_index is not None for c in merged)
-            and len({c.numeric_index for c in merged}) == len(merged)
+            and len({(c.numeric_index, getattr(c, "sub_index", None) or "") for c in merged})
+            == len(merged)
         ):
-            merged.sort(key=lambda c: c.numeric_index or 0)
+            merged.sort(
+                key=lambda c: (c.numeric_index or 0, getattr(c, "sub_index", None) or "")
+            )
             for idx_ord, c in enumerate(merged, start=1):
                 c.order_index = idx_ord
 

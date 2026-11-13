@@ -304,11 +304,13 @@ def citation_key(citation: Citation) -> str:
             sfx = m_sfx.group(1).lower()
     year_with_sfx = f"{year or ''}{sfx}"
     url_norm = (citation.url or "").strip().rstrip("/.,;").lower()
+    comp_lbl = (getattr(citation, "composite_label", None) or "").strip().lower()
+    comp_suffix = f"|comp:{comp_lbl}" if comp_lbl else ""
     if title:
         key = f"title:{title}|author:{','.join(authors[:3])}|year:{year_with_sfx}"
         if url_norm and (sfx or len(title.split()) <= 2):
             key = f"{key}|url:{url_norm}"
-        return key
+        return f"{key}{comp_suffix}"
     if url_norm:
-        return f"url:{url_norm}|year:{year_with_sfx}"
-    return f"raw:{normalize_text(citation.raw_text)}"
+        return f"url:{url_norm}|year:{year_with_sfx}{comp_suffix}"
+    return f"raw:{normalize_text(citation.raw_text)}{comp_suffix}"

@@ -40,20 +40,20 @@ from integrity_checker.models.citation import Citation, CitationStyle, CitationT
 
 # --- In-text ACS patterns ---
 
-# Superscript numbers: ^1, ^2 (math-safe)
+# Superscript numbers: ^1, ^2, ^14b (math-safe)
 _ACS_SUPERSCRIPT = CompiledPattern.create(
     name="acs_superscript",
-    pattern=r"(?:(?<=^)|(?<=[A-Za-zÀ-ÿ]{2})|(?<=[A-Za-zÀ-ÿ]{2}[.,;:\])]))\^(\d{1,3}(?:\s*[,–-]\s*\d{1,3})*)",
+    pattern=r"(?:(?<=^)|(?<=[A-Za-zÀ-ÿ]{2})|(?<=[A-Za-zÀ-ÿ]{2}[.,;:\])]))\^(\d{1,3}[a-z]?(?:\s*[,–-]\s*(?:\d{1,3}[a-z]?|[a-z]))*)",
     pattern_type=PatternType.IN_TEXT,
-    description="ACS superscript: ^1 | ^2",
+    description="ACS superscript: ^1 | ^2 | ^14b",
 )
 
-# Superscript with author: Smith^1
+# Superscript with author: Smith^1, Smith^14b
 _ACS_AUTHOR_SUPERSCRIPT = CompiledPattern.create(
     name="acs_author_superscript",
-    pattern=r"([A-Z][a-zA-ZÀ-žÀ-ž]+)\^(\d{1,3}(?:\s*[,–-]\s*\d{1,3})*)",
+    pattern=r"([A-Z][a-zA-ZÀ-žÀ-ž]+)\^(\d{1,3}[a-z]?(?:\s*[,–-]\s*(?:\d{1,3}[a-z]?|[a-z]))*)",
     pattern_type=PatternType.IN_TEXT,
-    description="ACS author-superscript: Smith^1",
+    description="ACS author-superscript: Smith^1 | Smith^14b",
 )
 
 # Parenthesized numbers: (1), (2) — kept only as reference marker, NOT in in_text_patterns
@@ -70,7 +70,10 @@ _ACS_PARENTHESIZED = CompiledPattern.create(
 
 # --- Reference list ACS patterns ---
 
-_ACS_PREFIX = r"^(?:(?:\(\s*(?P<index>\d+)\s*\)|(?P<num>\d+)\.|\[\s*(?P<b_idx>\d+)\s*\])\s*)?"
+_ACS_PREFIX = (
+    r"^(?:(?:\(\s*(?P<index>\d+)\s*\)|(?P<num>\d+)\.|\[\s*(?P<b_idx>\d+)\s*\])\s*"
+    r"|(?!\s*(?:\(\s*\d+\s*\)|\d+\.\s|\[\s*\d+\s*\])))"
+)
 
 # ACS article:
 # (1) Authors. Title. Journal Abbrev. Year, Volume (Issue), Pages.
@@ -101,11 +104,11 @@ _ACS_REFERENCE_JOURNAL_ABBREV = CompiledPattern.create(
         _ACS_PREFIX
         + r"(?P<authors>.+?)\.\s+(?!(?:[A-ZÀ-Ý]\.(?!\s+[A-Z][a-z]+\.)|;|and\b|et\s+al\.))"
         + r"(?:(?P<title>[^.]{5,}?)\.\s+)?"
-        + r"(?P<venue>[A-Z][^;0-9]+?)\.\s*"
+        + r"(?P<venue>[A-Z][^;0-9]+?)(?:\.\s*|\s+)"
         + r"(?P<year>(?:19|20)\d{2})(?!\s*;)"
         + r"(?:,\s*(?P<volume>\d+))"
         + r"(?:\s*\((?P<issue>[^)]+)\))?"
-        + r"(?:,\s*(?:pp?\.\s*)?(?P<pages>[\d–-]+))?"
+        + r"(?:,\s*(?:pp?\.\s*)?(?P<pages>[A-Za-z]?[\d–-]+))?"
         + r"\.?\s*(?P<rest>.*)$"
     ),
     pattern_type=PatternType.REFERENCE_ENTRY,

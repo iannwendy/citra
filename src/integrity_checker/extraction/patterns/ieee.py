@@ -33,12 +33,18 @@ from integrity_checker.models.citation import Citation, CitationStyle, CitationT
 
 # --- In-text IEEE patterns ---
 
-# IEEE numeric: [1], [1,2], [1-5], [1]-[3], [1, 2, 3], [7, Tr. 124], [6, Tr. 113–115] (1-based positive integers only; excludes [0, 1] intervals)
+# IEEE numeric: [1], [14b], [14a, 14c], [14a–c], [1,2], [1-5], [1]-[3], [1, 2, 3], [7, Tr. 124], [6, Tr. 113–115] (1-based positive integers only; excludes [0, 1] intervals)
 _IEEE_NUMERIC = CompiledPattern.create(
     name="ieee_numeric",
-    pattern=r"\[([1-9]\d{0,2}(?:[,\s\-–—−]+[1-9]\d{0,2})*(?:\s*[,;:]\s*(?:[Tt]r\.?|[Tt]rang|[Pp]p?\.?)\s*\d+(?:\s*[,–\-—−]\s*\d+)*)?)\](?:\s*[-–—−]\s*\[\s*[1-9]\d{0,2}\s*\])?",
+    pattern=(
+        r"\[("
+        r"[1-9]\d{0,2}(?:[a-z](?:\s*[-–—−]\s*[a-z])?(?:\s*,\s*[a-z])*)?"
+        r"(?:[,\s\-–—−]+[1-9]\d{0,2}(?:[a-z](?:\s*[-–—−]\s*[a-z])?(?:\s*,\s*[a-z])*)?)*"
+        r"(?:\s*[,;:]\s*(?:[Tt]r\.?|[Tt]rang|[Pp]p?\.?)\s*\d+(?:\s*[,–\-—−]\s*\d+)*)?"
+        r")\](?:\s*[-–—−]\s*\[\s*[1-9]\d{0,2}[a-z]?\s*\])?"
+    ),
     pattern_type=PatternType.IN_TEXT,
-    description="IEEE numeric in-text: [1] | [1,2] | [1-5] | [1]-[3] | [1, 2, 3] | [7, Tr. 124]",
+    description="IEEE numeric in-text: [1] | [14b] | [14a, 14c] | [14a–c] | [1-5] | [1]-[3] | [7, Tr. 124]",
 )
 
 # --- Reference list IEEE patterns ---

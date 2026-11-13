@@ -416,6 +416,19 @@ class CitationExtractor:
             return m
         return None
 
+    def extract_from_text(
+        self, text: str, page_num: int = 1, *, stop_at_bibliography: bool = False
+    ) -> list[Citation]:
+        """Extract in-text citations directly from a raw string."""
+        from integrity_checker.extraction.base import Page
+
+        doc = Document(
+            file_path="",
+            num_pages=max(1, page_num),
+            pages=[Page(page_num=page_num, text=text or "")],
+        )
+        return self.extract_from_document(doc, stop_at_bibliography=stop_at_bibliography)
+
     def extract_from_document(
         self, doc: Document, *, stop_at_bibliography: bool = True
     ) -> list[Citation]:
@@ -573,12 +586,15 @@ class CitationExtractor:
                         raw,
                         flags=re.IGNORECASE,
                     )
-                    bracket_nums = [int(n) for n in re.findall(r"\d+", raw_without_page)]
+                    bracket_tokens = re.findall(r"(\d+)([a-z]?)", raw_without_page)
+                    bracket_nums = [int(n) for n, _ in bracket_tokens]
+                    bracket_pairs = [(int(n), sub) for n, sub in bracket_tokens]
                     if bracket_nums:
-                        # Reject duplicate numbers inside the same bracket ([1, 1], [10, 255, 255]), large buffer/pixel sizes (>= 300),
-                        # or non-ascending multi-number vectors containing values >= 50 (e.g. token IDs [101, 205, 89])
+                        # Reject duplicate tokens inside the same bracket ([1, 1], [10, 255, 255]), large buffer/pixel sizes (>= 300),
+                        # or non-ascending multi-number vectors containing values >= 50 (e.g. token IDs [101, 205, 89]).
+                        # Distinct composite sub-labels like [14a, 14c] have distinct (14, 'a') vs (14, 'c') pairs.
                         if (
-                            len(bracket_nums) != len(set(bracket_nums))
+                            len(bracket_pairs) != len(set(bracket_pairs))
                             or any(n >= 300 for n in bracket_nums)
                             or (
                                 len(bracket_nums) >= 2

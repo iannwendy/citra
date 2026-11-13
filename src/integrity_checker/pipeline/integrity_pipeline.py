@@ -150,7 +150,7 @@ logger = get_logger(__name__)
 
 # Bump whenever extraction/linking output shape changes so previously cached
 # (and possibly wrong) reports are recomputed instead of served from disk.
-_REPORT_CACHE_VERSION = "report-v18"
+_REPORT_CACHE_VERSION = "report-v19"
 
 # NEW v1.7: Only retrieve + verify REFERENCE_LIST citations (and DOI/URL inline
 # with enough metadata). In-text citations are verified via linking only.
@@ -1666,13 +1666,14 @@ class IntegrityPipeline:
         Deduplication: normalize DOI/URL để "10.48550/arXiv.1706.03762" và
         "https://doi.org/10.48550/arXiv.1706.03762" được nhận diện là cùng 1 ref.
         """
-        seen: set[tuple[str, str]] = set()
+        seen: set[tuple[str, str, str]] = set()
         merged: list[Citation] = []
         for source_list in (references, body, appendix):
             for c in source_list:
                 # Dùng normalized identifier thay vì raw_text để dedupe
                 normalized = IntegrityPipeline._normalize_identifier(c.raw_text)
-                key = (c.style.value, normalized)
+                comp_label = (getattr(c, "composite_label", None) or "").strip().lower()
+                key = (c.style.value, normalized, comp_label)
                 if key not in seen:
                     seen.add(key)
                     merged.append(c)
@@ -2131,6 +2132,8 @@ def _serialize_citation(citation: Citation) -> dict[str, Any]:
         "year_suffix": citation.year_suffix,
         "order_index": citation.order_index,
         "numeric_index": citation.numeric_index,
+        "sub_index": getattr(citation, "sub_index", None),
+        "composite_label": getattr(citation, "composite_label", None),
         "page_num": citation.page_num,
         "paragraph_num": citation.paragraph_num,
         "matched_pattern": citation.matched_pattern,
@@ -2185,6 +2188,8 @@ def _deserialize_citation(data: dict[str, Any]) -> Citation:
         year_suffix=data.get("year_suffix"),
         order_index=int(data.get("order_index", 0)),
         numeric_index=data.get("numeric_index"),
+        sub_index=data.get("sub_index"),
+        composite_label=data.get("composite_label"),
         page_num=int(data.get("page_num", 0)),
         paragraph_num=int(data.get("paragraph_num", 0)),
         matched_pattern=data.get("matched_pattern"),
@@ -2641,7 +2646,8 @@ def main() -> None:
 
         # FIX v1.11: Show citation index if available
         cit = v.citation
-        index_str = f"[{cit.numeric_index}] " if cit.numeric_index is not None else ""
+        label_val = getattr(cit, "composite_label", None) or cit.numeric_index
+        index_str = f"[{label_val}] " if label_val is not None else ""
         raw_display = v.citation.raw_text[:80 - len(index_str)]
 
         print(
