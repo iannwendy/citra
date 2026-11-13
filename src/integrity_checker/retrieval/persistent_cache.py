@@ -35,35 +35,71 @@ URL_CHECK_TTL_SECONDS = 604_800  # 7 days
 CLEAN_MISS_TTL_SECONDS = 86_400  # 24 hours
 
 _YEAR_RE = re.compile(r"\b(1[89]\d{2}|20\d{2})\b")
+_TRANSIENT_STATUS_RE = re.compile(r"\b429\b|\b(?:http[\s/_-]*)?5\d{2}\b|\b5xx\b", re.IGNORECASE)
+_TRAILING_FOR_QUERY_RE = re.compile(
+    r"\bfor\s+(?:query\s+|doi\s+|id\s+)?'.*'$",
+    re.IGNORECASE | re.DOTALL,
+)
 
 _CLEAN_MISS_MARKERS = (
     "no results",
     "no title match",
     "does not exist",
-    "not found",
     "no matching",
 )
 
+_DNS_NOT_FOUND_MARKERS = (
+    "host not found",
+    "server not found",
+    "dns",
+)
+
 _TRANSIENT_FAILURE_MARKERS = (
-    "429",
     "rate limit",
+    "rate-limit",
+    "too many requests",
     "timeout",
     "timed out",
     "connect",
-    "500",
-    "502",
-    "503",
-    "504",
-    "5xx",
     "backoff",
     "skipped",
     "circuit_open",
     "unavailable",
+    "bad gateway",
+    "gateway timeout",
+    "internal server error",
     "quota",
     "credits",
     "request failed",
+    "retry exhausted",
+    "no response",
+    "unreachable",
+    "reset by peer",
+    "server disconnected",
+    "protocol error",
+    "host not found",
+    "server not found",
     "network",
 )
+
+
+def _strip_quoted_query(err: str | None) -> str:
+    """Strip single-quoted citation titles/queries before matching status or error markers."""
+    raw = (err or "").strip()
+    if not raw:
+        return ""
+    stripped = _TRAILING_FOR_QUERY_RE.sub("for ''", raw)
+    return re.sub(r"'[^']*'", "''", stripped).lower()
+
+
+def _is_clean_miss_error(err_no_quotes: str) -> bool:
+    if any(cm in err_no_quotes for cm in _CLEAN_MISS_MARKERS):
+        return True
+    if "not found" in err_no_quotes and not any(
+        h in err_no_quotes for h in _DNS_NOT_FOUND_MARKERS
+    ):
+        return True
+    return False
 
 
 def _is_memory_db_url(url: str) -> bool:
@@ -133,6 +169,32 @@ def build_verification_cache_key(citation: Citation) -> str:
     m_year = _YEAR_RE.search(raw_year)
     norm_year = m_year.group(1) if m_year else raw_year
     payload = f"{norm_title}|{first_author}|{norm_year}".encode()
+    digest = hashlib.sha256(payload).hexdigest()
+    return f"meta:{digest}"
+
+
+def build_metadata_bound_cache_key(citation: Citation) -> str:
+    """Build a metadata-bound key incorporating both bibliographic fields and identifiers.
+
+    Used to isolate titled ``url:`` citations (e.g. shared proceedings URLs) and
+    0-candidate / chimeric identifier results from poisoning bare ``doi:``/``arxiv:``/``url:`` keys.
+    """
+    norm_doi = _canonical_doi(citation.doi) or ""
+    raw_arxiv = ArxivClient.extract_arxiv_id(citation)
+    norm_arxiv = (normalize_arxiv_id(raw_arxiv) if raw_arxiv else None) or ""
+    clean_url = _clean_url_for_key(citation.url) or ""
+
+    if not norm_doi and not norm_arxiv and not clean_url:
+        return build_verification_cache_key(citation)
+
+    norm_title = normalize_text(citation.title or citation.raw_text or "")
+    first_author = author_key(citation.authors[0]) if citation.authors else ""
+    raw_year = str(citation.year or "").strip()
+    m_year = _YEAR_RE.search(raw_year)
+    norm_year = m_year.group(1) if m_year else raw_year
+    payload = (
+        f"{norm_title}|{first_author}|{norm_year}|{norm_doi}|{norm_arxiv}|{clean_url}".encode()
+    )
     digest = hashlib.sha256(payload).hexdigest()
     return f"meta:{digest}"
 
@@ -269,8 +331,12 @@ class PersistentVerificationCache:
         if result.url_status in {"timeout", "error"}:
             return True
         for err in (result.sources_failed or {}).values():
-            err_l = (err or "").lower()
-            if any(marker in err_l for marker in _TRANSIENT_FAILURE_MARKERS):
+            err_no_quotes = _strip_quoted_query(err)
+            if not err_no_quotes:
+                continue
+            if _TRANSIENT_STATUS_RE.search(err_no_quotes):
+                return True
+            if any(marker in err_no_quotes for marker in _TRANSIENT_FAILURE_MARKERS):
                 return True
         return False
 
@@ -301,8 +367,8 @@ class PersistentVerificationCache:
         ):
             clean_count = 0
             for err in result.sources_failed.values():
-                err_l = (err or "").lower()
-                if any(cm in err_l for cm in _CLEAN_MISS_MARKERS):
+                err_no_quotes = _strip_quoted_query(err)
+                if _is_clean_miss_error(err_no_quotes):
                     clean_count += 1
                 else:
                     return None

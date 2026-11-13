@@ -236,6 +236,9 @@ class ArxivClient(BaseScholarClient):
                     break
                 continue
 
+            self._reset_http_telemetry()
+            self._last_status_code = 200
+
             for cand in self._parse_atom_entries(xml_text):
                 if not cand.title:
                     continue

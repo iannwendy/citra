@@ -169,6 +169,9 @@ class CrossrefClient(BaseScholarClient):
                     break
                 continue
 
+            self._reset_http_telemetry()
+            self._last_status_code = 200
+
             items = (data.get("message") or {}).get("items") or []
             for item in items:
                 cand = self._message_to_candidate(item)

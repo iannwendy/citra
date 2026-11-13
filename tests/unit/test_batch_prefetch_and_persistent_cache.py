@@ -151,8 +151,8 @@ async def test_openalex_lookup_dois_batch_chunks_65_dois_and_reconstructs_abstra
     second_filter = recorded_calls[1][1]["filter"].removeprefix("doi:").split("|")
     assert len(first_filter) == 40
     assert len(second_filter) == 25
-    assert recorded_calls[0][1]["per_page"] == 50
-    assert recorded_calls[1][1]["per_page"] == 50
+    assert recorded_calls[0][1]["per_page"] >= 100
+    assert recorded_calls[1][1]["per_page"] >= 100
     assert all(p.startswith("https://doi.org/10.1038/") for p in first_filter)
 
     assert len(batch_map) == 65
@@ -819,3 +819,577 @@ async def test_pipeline_step5_wires_wave0_prefetch_and_preserves_mock_orchestrat
     report_b = await pipeline_b.run_async(pdf_path)
     assert legacy_mock_orch.retrieve.await_count >= 1
     assert len(report_b.verdicts) >= 1
+
+
+@pytest.mark.asyncio
+async def test_round1_no_cross_essay_poisoning_and_wave0_title_guard(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Finding 1: Chimeric arXiv/URL citations never poison valid citations, typo IDs don't short-circuit Wave-0, and authorless DOIs stay pristine."""
+    db_file = tmp_path / "round1_isolation.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
+    get_settings.cache_clear()
+    init_db()
+
+    bert_title = "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"
+
+    def _make_stub_clients() -> dict[str, object]:
+        def _build(name: str) -> object:
+            c = SimpleNamespace(name=name)
+
+            async def _lookup(cit: Citation) -> SourceCandidate:
+                t_low = (cit.title or "").lower()
+                if "bert: pre-training" in t_low:
+                    return SourceCandidate(
+                        source_name=name,
+                        found=True,
+                        doi="10.48550/arxiv.1810.04805",
+                        title=bert_title,
+                        authors=["Jacob Devlin", "Ming-Wei Chang"],
+                        year="2019",
+                        venue="NAACL",
+                        external_ids={"arxiv": "1810.04805"},
+                        confidence=0.98,
+                    )
+                if "attention is all you need" in t_low:
+                    return SourceCandidate(
+                        source_name=name,
+                        found=True,
+                        doi="10.5555/3295222.3295349",
+                        title="Attention Is All You Need",
+                        authors=["Ashish Vaswani", "Noam Shazeer"],
+                        year="2017",
+                        venue="NeurIPS",
+                        confidence=0.98,
+                    )
+                if "paper alpha on diffusion" in t_low:
+                    return SourceCandidate(
+                        source_name=name,
+                        found=True,
+                        title="Paper Alpha on Diffusion Models",
+                        authors=["Alice Alpha"],
+                        year="2023",
+                        venue="ICML",
+                        confidence=0.95,
+                    )
+                if "paper beta on reinforcement" in t_low:
+                    return SourceCandidate(
+                        source_name=name,
+                        found=True,
+                        title="Paper Beta on Reinforcement Learning",
+                        authors=["Bob Beta"],
+                        year="2023",
+                        venue="ICML",
+                        confidence=0.95,
+                    )
+                if "highly accurate protein structure" in t_low:
+                    return SourceCandidate(
+                        source_name=name,
+                        found=True,
+                        doi="10.1038/s41586-021-03819-2",
+                        title="Highly accurate protein structure prediction with AlphaFold",
+                        authors=["John Jumper", "Demis Hassabis"],
+                        year="2021",
+                        venue="Nature",
+                        confidence=0.99,
+                    )
+                return SourceCandidate(source_name=name, found=False, error=f"{name}: no results for '{cit.title}'")
+
+            c.lookup = AsyncMock(side_effect=_lookup)
+            return c
+
+        return {
+            n: _build(n)
+            for n in ("crossref", "openalex", "dblp", "arxiv", "openlibrary", "europepmc")
+        }
+
+    # --- 1A. Reverse-order chimeric arXiv negative-miss poisoning check ---
+    essay_a_chimeric_arxiv = Citation(
+        raw_text="Fake, X. (2024). Quantum Hallucinated Teleportation Engine. arXiv:1810.04805",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["X. Fake"],
+        year="2024",
+        title="Quantum Hallucinated Teleportation Engine",
+    )
+    essay_b_real_bert = Citation(
+        raw_text=f"Devlin, J., & Chang, M. (2019). {bert_title}. arXiv:1810.04805",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Jacob Devlin", "Ming-Wei Chang"],
+        year="2019",
+        title=bert_title,
+    )
+
+    orch_a = RetrievalOrchestrator(
+        **_make_stub_clients(),
+        use_local_db=False,
+        enable_link_validation=False,
+    )
+    res_a = await orch_a.retrieve(essay_a_chimeric_arxiv)
+    assert len(res_a.candidates) == 0
+
+    orch_b = RetrievalOrchestrator(
+        **_make_stub_clients(),
+        use_local_db=False,
+        enable_link_validation=False,
+    )
+    res_b = await orch_b.retrieve(essay_b_real_bert)
+    assert len(res_b.candidates) >= 1, "Essay A's chimeric arXiv miss poisoned Essay B's real BERT citation!"
+    assert res_b.best_candidate() is not None
+    assert "BERT" in (res_b.best_candidate().title or "")
+
+    # --- 1B. Shared proceedings URL & chimeric scholarly URL check ---
+    shared_proc_url = "https://proceedings.mlr.press/v202/"
+    cit_alpha = Citation(
+        raw_text=f"Alpha, A. (2023). Paper Alpha on Diffusion Models. ICML. {shared_proc_url}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Alice Alpha"],
+        year="2023",
+        title="Paper Alpha on Diffusion Models",
+        venue="ICML",
+        url=shared_proc_url,
+    )
+    cit_beta = Citation(
+        raw_text=f"Beta, B. (2023). Paper Beta on Reinforcement Learning. ICML. {shared_proc_url}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Bob Beta"],
+        year="2023",
+        title="Paper Beta on Reinforcement Learning",
+        venue="ICML",
+        url=shared_proc_url,
+    )
+    r_alpha = await orch_a.retrieve(cit_alpha)
+    r_beta = await orch_b.retrieve(cit_beta)
+    assert r_alpha.best_candidate() is not None
+    assert r_beta.best_candidate() is not None
+    assert "Alpha" in (r_alpha.best_candidate().title or "")
+    assert "Beta" in (r_beta.best_candidate().title or "")
+
+    nature_url = "https://www.nature.com/articles/s41586-021-03819-2"
+    fake_link_validator = SimpleNamespace(
+        validate_with_archive=AsyncMock(return_value=("alive", 200, None))
+    )
+    orch_url_a = RetrievalOrchestrator(
+        **_make_stub_clients(),
+        use_local_db=False,
+        enable_link_validation=True,
+        link_validator=fake_link_validator,
+    )
+    orch_url_a._validate_citation_url_with_archive = AsyncMock(return_value=("alive", 200, None))  # type: ignore[method-assign]
+    chimeric_nature = Citation(
+        raw_text=f"Imaginary, Z. (2024). Fabricated Hallucination Title. Nature. {nature_url}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Z. Imaginary"],
+        year="2024",
+        title="Fabricated Hallucination Title",
+        venue="Nature",
+        url=nature_url,
+    )
+    r_chim_url = await orch_url_a.retrieve(chimeric_nature)
+    assert len(r_chim_url.candidates) == 0
+
+    orch_url_b = RetrievalOrchestrator(
+        **_make_stub_clients(),
+        use_local_db=False,
+        enable_link_validation=True,
+        link_validator=fake_link_validator,
+    )
+    orch_url_b._validate_citation_url_with_archive = AsyncMock(return_value=("alive", 200, None))  # type: ignore[method-assign]
+    real_alphafold = Citation(
+        raw_text=f"Jumper, J., & Hassabis, D. (2021). Highly accurate protein structure prediction with AlphaFold. Nature. {nature_url}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["John Jumper", "Demis Hassabis"],
+        year="2021",
+        title="Highly accurate protein structure prediction with AlphaFold",
+        venue="Nature",
+        url=nature_url,
+    )
+    r_real_url = await orch_url_b.retrieve(real_alphafold)
+    assert len(r_real_url.candidates) >= 1, "Chimeric URL check poisoned real scholarly URL citation!"
+    assert "AlphaFold" in (r_real_url.best_candidate().title or "")
+
+    # --- 1C. Wave-0 typo identifier must NOT short-circuit mismatched title ---
+    stubs_c = _make_stub_clients()
+    stubs_c["openalex"].lookup_dois_batch = AsyncMock(
+        return_value={
+            "10.48550/arxiv.1409.0473": SourceCandidate(
+                source_name="openalex",
+                found=True,
+                doi="10.48550/arxiv.1409.0473",
+                title="Neural Machine Translation by Jointly Learning to Align and Translate",
+                authors=["Dzmitry Bahdanau", "Kyunghyun Cho", "Yoshua Bengio"],
+                year="2015",
+                confidence=1.0,
+            )
+        }
+    )
+    stubs_c["arxiv"].lookup_arxiv_batch = AsyncMock(
+        return_value={
+            "1409.0473": SourceCandidate(
+                source_name="arxiv",
+                found=True,
+                doi="10.48550/arxiv.1409.0473",
+                title="Neural Machine Translation by Jointly Learning to Align and Translate",
+                authors=["Dzmitry Bahdanau", "Kyunghyun Cho", "Yoshua Bengio"],
+                year="2015",
+                external_ids={"arxiv": "1409.0473"},
+                confidence=0.98,
+            )
+        }
+    )
+    orch_c = RetrievalOrchestrator(
+        **stubs_c,
+        use_local_db=False,
+        enable_link_validation=False,
+    )
+    vaswani_typo_arxiv = Citation(
+        raw_text="Vaswani, A., & Shazeer, N. (2017). Attention Is All You Need. NeurIPS. arXiv:1409.0473",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Ashish Vaswani", "Noam Shazeer"],
+        year="2017",
+        title="Attention Is All You Need",
+        venue="NeurIPS",
+    )
+    wave0_res = await orch_c.prefetch_identifiers([vaswani_typo_arxiv])
+    assert id(vaswani_typo_arxiv) not in wave0_res, "Wave-0 must not short-circuit when batch title disagrees with cited title!"
+    fallback_res = await orch_c.retrieve(vaswani_typo_arxiv)
+    assert fallback_res.best_candidate() is not None
+    assert fallback_res.best_candidate().title == "Attention Is All You Need"
+
+    # --- 1D. Authorless DOI candidate must not bake Essay A's citation.authors[0] into shared doi: cache ---
+    stubs_d = _make_stub_clients()
+    std_doi = "10.1109/ieeestd.2022.9999"
+    stubs_d["openalex"].lookup_dois_batch = AsyncMock(
+        return_value={
+            std_doi: SourceCandidate(
+                source_name="openalex",
+                found=True,
+                doi=std_doi,
+                title="IEEE Standard for Information Technology Wireless LAN",
+                authors=[],
+                year="2022",
+                venue="",
+                confidence=1.0,
+            )
+        }
+    )
+    stubs_d["crossref"].lookup_dois_batch = AsyncMock(
+        return_value={
+            std_doi: SourceCandidate(
+                source_name="crossref",
+                found=True,
+                doi=std_doi,
+                title="IEEE Standard for Information Technology Wireless LAN",
+                authors=[],
+                year="2022",
+                venue="",
+                confidence=1.0,
+            )
+        }
+    )
+    orch_d1 = RetrievalOrchestrator(
+        **stubs_d,
+        use_local_db=False,
+        enable_link_validation=False,
+    )
+    cit_std_a = Citation(
+        raw_text=f"Alice InjectedAuthor (2022). IEEE Standard for Information Technology Wireless LAN. https://doi.org/{std_doi}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Alice InjectedAuthor"],
+        year="2022",
+        title="IEEE Standard for Information Technology Wireless LAN",
+        doi=std_doi,
+    )
+    pref_d1 = await orch_d1.prefetch_identifiers([cit_std_a])
+    assert id(cit_std_a) in pref_d1
+
+    orch_d2 = RetrievalOrchestrator(
+        **_make_stub_clients(),
+        use_local_db=False,
+        enable_link_validation=False,
+    )
+    cit_std_b = Citation(
+        raw_text=f"IEEE Working Group (2022). IEEE Standard for Information Technology Wireless LAN. https://doi.org/{std_doi}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["IEEE Working Group"],
+        year="2022",
+        title="IEEE Standard for Information Technology Wireless LAN",
+        doi=std_doi,
+    )
+    res_d2 = await orch_d2.retrieve(cit_std_b)
+    assert res_d2.best_candidate() is not None
+    assert "Alice InjectedAuthor" not in (res_d2.best_candidate().authors or [])
+
+
+def test_round1_transient_no_response_rejected_and_quoted_title_keywords_cached(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Finding 2: 'no response' is rejected as transient, while titles containing 'Network'/'Connected'/'500' are cached."""
+    db_file = tmp_path / "round1_transient.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
+    get_settings.cache_clear()
+    init_db()
+
+    cache = PersistentVerificationCache()
+
+    # 2A. 'no response' (from 5xx/timeout in OpenAlex/Crossref) MUST be treated as transient failure
+    degraded_partial = SourceResult(
+        citation_raw="Test",
+        candidates=[
+            SourceCandidate(
+                source_name="crossref",
+                found=True,
+                doi="10.1038/s41586-022-1111",
+                title="Valid Paper Title",
+                authors=["Jane Doe"],
+                year="2022",
+                confidence=1.0,
+            )
+        ],
+        sources_queried=["crossref", "openalex"],
+        sources_succeeded=["crossref"],
+        sources_failed={"openalex": "OpenAlex: no response for 'Valid Paper Title'"},
+    )
+    assert cache.has_transient_failure(degraded_partial) is True
+    assert cache.resolve_ttl_seconds(degraded_partial) is None
+    assert cache.set("doi:10.1038/s41586-022-1111", degraded_partial) is False
+
+    degraded_no_resp_miss = SourceResult(
+        citation_raw="Not Found Study",
+        candidates=[],
+        sources_queried=["crossref", "openalex", "dblp"],
+        sources_succeeded=[],
+        sources_failed={
+            "crossref": "Crossref: no response for query 'Not Found Analysis'",
+            "openalex": "OpenAlex: no response for 'Not Found Analysis'",
+            "dblp": "DBLP: no response for 'Not Found Analysis'",
+        },
+    )
+    assert cache.has_transient_failure(degraded_no_resp_miss) is True
+    assert cache.resolve_ttl_seconds(degraded_no_resp_miss) is None
+
+    dns_miss = SourceResult(
+        citation_raw="DNS Failure Study",
+        candidates=[],
+        sources_queried=["crossref", "openalex", "dblp"],
+        sources_succeeded=[],
+        sources_failed={
+            "crossref": "Crossref: host not found",
+            "openalex": "OpenAlex: no results for 'DNS Failure Study'",
+            "dblp": "DBLP: no results for 'DNS Failure Study'",
+        },
+    )
+    assert cache.has_transient_failure(dns_miss) is True
+    assert cache.resolve_ttl_seconds(dns_miss) is None
+
+    # 2B. Quoted paper titles containing 'Network', 'Connected', '500', 'Timeout', 'Quota', or apostrophes MUST cache cleanly!
+    tricky_titles = [
+        "Graph Attention Network for Node Classification",
+        "Fully Connected Neural Architectures at Scale",
+        "500 Years of Timeout and Quota Credits in Unavailable Skipped Systems",
+        "Grover's Algorithm in Quantum Network Routing",
+    ]
+    for idx, tricky in enumerate(tricky_titles):
+        clean_miss = SourceResult(
+            citation_raw=tricky,
+            candidates=[],
+            sources_queried=["crossref", "openalex", "dblp"],
+            sources_succeeded=[],
+            sources_failed={
+                "crossref": f"Crossref: no results for '{tricky}'",
+                "openalex": f"OpenAlex: no results for '{tricky}'",
+                "dblp": f"DBLP: no title match (0.21) for '{tricky}'",
+            },
+        )
+        assert cache.has_transient_failure(clean_miss) is False, f"False positive transient on title: {tricky}"
+        assert cache.resolve_ttl_seconds(clean_miss) == CLEAN_MISS_TTL_SECONDS
+        key = f"meta:tricky-{idx}"
+        assert cache.set(key, clean_miss) is True
+        assert cache.get(key) is not None
+
+
+@pytest.mark.asyncio
+async def test_round1_batch_recovered_429_records_success_and_arxiv_timeout_records_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Finding 3: Recovered 429->200 batch retry records success; ArxivClient._last_timed_out records timeout failure."""
+    # 3A. Crossref batch sees initial 429 (Retry-After: 0) then recovers to 200 on retry
+    calls = {"n": 0}
+    target_doi = "10.1145/3442188.3445901"
+
+    class RecoveringHttpClient:
+        async def get(self, url: str, **_kw: object) -> httpx.Response:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return httpx.Response(
+                    429,
+                    headers={"Retry-After": "0"},
+                    request=httpx.Request("GET", url),
+                )
+            return httpx.Response(
+                200,
+                json={"status": "ok", "message": {"items": [_make_crossref_item(target_doi, 1)]}},
+                request=httpx.Request("GET", url),
+            )
+
+    monkeypatch.setattr(
+        "integrity_checker.retrieval.crossref_client.get_shared_http_client",
+        lambda **_kw: RecoveringHttpClient(),
+    )
+
+    cr_client = CrossrefClient(contact_email="test@example.com", max_retries=2)
+    oa_client = OpenAlexClient(contact_email="test@example.com")
+    oa_cand = oa_client._work_to_candidate(_make_openalex_work(target_doi, 1))
+    oa_cand.found = True
+    oa_cand.confidence = 1.0
+    oa_client.lookup_dois_batch = AsyncMock(return_value={target_doi: oa_cand})
+
+    ax_client = ArxivClient(contact_email="test@example.com")
+
+    async def fake_arxiv_timeout(_ids: list[str]) -> dict[str, SourceCandidate]:
+        ax_client._last_timed_out = True
+        return {}
+
+    ax_client.lookup_arxiv_batch = AsyncMock(side_effect=fake_arxiv_timeout)
+
+    cb = CircuitBreakerRegistry(failure_threshold=4, recovery_timeout_seconds=60.0)
+    orch = RetrievalOrchestrator(
+        crossref=cr_client,
+        openalex=oa_client,
+        arxiv=ax_client,
+        use_local_db=False,
+        enable_link_validation=False,
+        circuit_breakers=cb,
+    )
+
+    doi_cit = Citation(
+        raw_text=f"Researcher 1, A. (2022). Deep Neural Architecture Study Part 1. JMLR. https://doi.org/{target_doi}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Alice Researcher 1", "Bob Coauthor"],
+        year="2022",
+        title="Deep Neural Architecture Study Part 1",
+        doi=target_doi,
+    )
+    arxiv_cit = Citation(
+        raw_text="Vaswani, A. (2023). Scalable Transformer Preprint Number 0. arXiv:2301.10000",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Vaswani 0"],
+        year="2023",
+        title="Scalable Transformer Preprint Number 0",
+    )
+
+    resolved = await orch.prefetch_identifiers([doi_cit, arxiv_cit])
+    assert id(doi_cit) in resolved
+    snap = cb.snapshot_all()
+    assert snap["crossref"]["success_count"] == 1
+    assert snap["crossref"]["consecutive_failures"] == 0
+    assert snap["arxiv"]["consecutive_failures"] == 1
+    assert snap["arxiv"]["timeout_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_round1_openalex_batch_maps_published_arxiv_locations_and_prefers_abstract_on_duplicates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Finding 4: Published arXiv works map back to 10.48550/arxiv.{id} via locations/ids, and duplicates keep abstracts."""
+    dup_doi = "10.1038/s41586-022-7777"
+    bert_pub_doi = "10.18653/v1/n19-1423"
+
+    bert_work = {
+        "id": "https://openalex.org/W2963403868",
+        "doi": f"https://doi.org/{bert_pub_doi}",
+        "display_name": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+        "publication_year": 2019,
+        "authorships": [{"author": {"display_name": "Jacob Devlin"}}],
+        "primary_location": {
+            "source": {"display_name": "NAACL"},
+            "landing_page_url": f"https://doi.org/{bert_pub_doi}",
+        },
+        "locations": [
+            {
+                "landing_page_url": f"https://doi.org/{bert_pub_doi}",
+                "pdf_url": None,
+            },
+            {
+                "landing_page_url": "https://arxiv.org/abs/1810.04805v2",
+                "pdf_url": "https://arxiv.org/pdf/1810.04805",
+            },
+        ],
+        "abstract_inverted_index": {
+            "We": [0],
+            "introduce": [1],
+            "a": [2],
+            "new": [3],
+            "language": [4],
+            "representation": [5],
+            "model": [6],
+            "called": [7],
+            "BERT.": [8],
+        },
+    }
+
+    dup_with_abstract = _make_openalex_work(dup_doi, 77)
+    dup_without_abstract = _make_openalex_work(dup_doi, 77)
+    dup_without_abstract["abstract_inverted_index"] = None
+
+    class FakeHttpClient:
+        async def get(self, url: str, **_kw: object) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={"results": [bert_work, dup_with_abstract, dup_without_abstract]},
+                request=httpx.Request("GET", url),
+            )
+
+    monkeypatch.setattr(
+        "integrity_checker.retrieval.openalex_client.get_shared_http_client",
+        lambda **_kw: FakeHttpClient(),
+    )
+
+    oa_client = OpenAlexClient(contact_email="test@example.com")
+    batch_map = await oa_client.lookup_dois_batch(["10.48550/arxiv.1810.04805", dup_doi])
+
+    assert "10.48550/arxiv.1810.04805" in batch_map
+    assert batch_map["10.48550/arxiv.1810.04805"].title.startswith("BERT:")
+    assert "language representation model" in (batch_map["10.48550/arxiv.1810.04805"].abstract or "")
+
+    assert dup_doi in batch_map
+    assert batch_map[dup_doi].abstract == "We present batch study-77 results."
+
+    # Also verify Wave-0 prefetch_identifiers achieves consensus >= 2 when OpenAlex returns
+    # the published NAACL DOI (10.18653/v1/n19-1423) and ArxivClient returns 10.48550/arxiv.1810.04805
+    ax_client = ArxivClient(contact_email="test@example.com")
+    ax_client.lookup_arxiv_batch = AsyncMock(
+        return_value={
+            "1810.04805": SourceCandidate(
+                source_name="arxiv",
+                found=True,
+                doi="10.48550/arxiv.1810.04805",
+                title="BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+                authors=["Jacob Devlin", "Ming-Wei Chang"],
+                year="2019",
+                external_ids={"arxiv": "1810.04805"},
+                confidence=0.98,
+            )
+        }
+    )
+    cr_client = CrossrefClient(contact_email="test@example.com")
+    cr_client.lookup_dois_batch = AsyncMock(return_value={})
+    orch = RetrievalOrchestrator(
+        openalex=oa_client,
+        crossref=cr_client,
+        arxiv=ax_client,
+        use_local_db=False,
+        enable_link_validation=False,
+    )
+    bert_arxiv_cit = Citation(
+        raw_text="Devlin, J., & Chang, M. (2019). BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding. arXiv:1810.04805",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Jacob Devlin", "Ming-Wei Chang"],
+        year="2019",
+        title="BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+    )
+    wave0 = await orch.prefetch_identifiers([bert_arxiv_cit])
+    assert id(bert_arxiv_cit) in wave0
+    assert wave0[id(bert_arxiv_cit)].consensus_count() >= 2
+

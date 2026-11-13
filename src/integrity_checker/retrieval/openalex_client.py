@@ -7,6 +7,7 @@ Docs: https://docs.openalex.org/
 from __future__ import annotations
 
 import asyncio
+import copy
 import os
 import random
 import re
@@ -30,6 +31,7 @@ from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     author_match_score,
     is_book_review_mismatch,
+    normalize_arxiv_id,
     normalize_doi,
     title_similarity,
     title_tokens,
@@ -135,11 +137,111 @@ class OpenAlexClient(BaseScholarClient):
         cand.confidence = 1.0
         return cand
 
+    @staticmethod
+    def _extract_work_identifiers(work: dict[str, Any]) -> tuple[set[str], set[str]]:
+        """Extract all normalized DOIs and arXiv IDs across OpenAlex ``ids`` and ``locations``."""
+        found_dois: set[str] = set()
+        found_arxiv: set[str] = set()
+
+        arxiv_re = re.compile(
+            r"(?:10\.48550/arxiv\.|arxiv\.org/(?:abs|pdf)/|\barxiv\s*[:/]\s*)"
+            r"(\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[a-z]{2})?/\d{7}(?:v\d+)?)",
+            re.IGNORECASE,
+        )
+
+        def _scan_text_for_arxiv(val: Any) -> None:
+            if not isinstance(val, str) or not val:
+                return
+            for m in arxiv_re.finditer(val):
+                aid = normalize_arxiv_id(m.group(1))
+                if aid:
+                    found_arxiv.add(aid)
+
+        def _scan_doi_val(val: Any) -> None:
+            if not isinstance(val, str) or not val:
+                return
+            _scan_text_for_arxiv(val)
+            cleaned = re.sub(r"^\s*doi\s*:\s*", "", val, flags=re.IGNORECASE)
+            nd = normalize_doi(cleaned)
+            if nd:
+                found_dois.add(nd)
+
+        _scan_doi_val(work.get("doi"))
+        ids = work.get("ids")
+        if isinstance(ids, dict):
+            _scan_doi_val(ids.get("doi"))
+            raw_ax = ids.get("arxiv")
+            if isinstance(raw_ax, str) and raw_ax:
+                _scan_text_for_arxiv(raw_ax)
+                bare_ax = normalize_arxiv_id(raw_ax)
+                if bare_ax and re.match(
+                    r"^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?/\d{7})$", bare_ax
+                ):
+                    found_arxiv.add(bare_ax)
+
+        loc_items: list[Any] = [
+            work.get("primary_location"),
+            work.get("best_oa_location"),
+            *(work.get("locations") or []),
+        ]
+        for loc in loc_items:
+            if not isinstance(loc, dict):
+                continue
+            _scan_doi_val(loc.get("doi"))
+            _scan_text_for_arxiv(loc.get("landing_page_url"))
+            _scan_text_for_arxiv(loc.get("pdf_url"))
+            _scan_text_for_arxiv(loc.get("id"))
+            loc_landing = loc.get("landing_page_url")
+            if isinstance(loc_landing, str) and "doi.org/" in loc_landing.lower():
+                _scan_doi_val(loc_landing)
+
+        return found_dois, found_arxiv
+
+    @staticmethod
+    def _prefer_richer_candidate(
+        existing: SourceCandidate | None,
+        incoming: SourceCandidate,
+    ) -> SourceCandidate:
+        """Keep the richer candidate (non-empty abstract and authors) when OpenAlex returns duplicates."""
+        if existing is None:
+            return incoming
+
+        def _richness(c: SourceCandidate) -> tuple[int, int, int, float]:
+            has_abs = 1 if (c.abstract and c.abstract.strip()) else 0
+            has_auth = 1 if c.authors else 0
+            abs_len = len((c.abstract or "").strip())
+            return (has_abs, has_auth, abs_len, float(c.score or 0.0))
+
+        if _richness(incoming) > _richness(existing):
+            primary = copy.deepcopy(incoming)
+            secondary = existing
+        else:
+            primary = copy.deepcopy(existing)
+            secondary = incoming
+
+        if not primary.abstract and secondary.abstract:
+            primary.abstract = secondary.abstract
+        if not primary.authors and secondary.authors:
+            primary.authors = list(secondary.authors)
+        if not primary.venue and secondary.venue:
+            primary.venue = secondary.venue
+        if secondary.external_ids:
+            merged_ext = dict(secondary.external_ids)
+            merged_ext.update(primary.external_ids or {})
+            if (
+                str((secondary.external_ids or {}).get("is_retracted", "")).lower() == "true"
+                or str((primary.external_ids or {}).get("is_retracted", "")).lower() == "true"
+            ):
+                merged_ext["is_retracted"] = "true"
+            primary.external_ids = merged_ext
+        return primary
+
     async def lookup_dois_batch(self, dois: list[str]) -> dict[str, SourceCandidate]:
-        """Batch-resolve DOIs via ``GET /works?filter=doi:https://doi.org/{d1}|...&per_page=50``.
+        """Batch-resolve DOIs via ``GET /works?filter=doi:https://doi.org/{d1}|...&per_page=200``.
 
         Chunks up to 40 DOIs per HTTP GET to stay safely under query-string URL limits,
-        mapping normalized DOIs back to ``SourceCandidate`` records with reconstructed abstracts.
+        mapping normalized DOIs (including published arXiv ``locations``/``ids``) back to
+        ``SourceCandidate`` records while preferring duplicate works that retain abstracts/authors.
         """
         self._reset_http_telemetry()
         self._last_status_code = None
@@ -163,7 +265,7 @@ class OpenAlexClient(BaseScholarClient):
             doi_filter = "|".join(f"https://doi.org/{d}" for d in chunk)
             data = await self._fetch_json_with_retry(
                 "/works",
-                params={"filter": f"doi:{doi_filter}", "per_page": 50},
+                params={"filter": f"doi:{doi_filter}", "per_page": 200},
             )
             if not data:
                 if (
@@ -174,9 +276,15 @@ class OpenAlexClient(BaseScholarClient):
                     break
                 continue
 
+            self._reset_http_telemetry()
+            self._last_status_code = 200
+
             for work in data.get("results") or []:
+                if not isinstance(work, dict):
+                    continue
                 cand = self._work_to_candidate(work)
-                raw_cand_doi = cand.doi or ((work.get("ids") or {}).get("doi") if isinstance(work, dict) else None)
+                work_dois, work_arxiv_ids = self._extract_work_identifiers(work)
+                raw_cand_doi = cand.doi or ((work.get("ids") or {}).get("doi"))
                 cleaned_cand_doi = re.sub(
                     r"^\s*doi\s*:\s*",
                     "",
@@ -184,13 +292,37 @@ class OpenAlexClient(BaseScholarClient):
                     flags=re.IGNORECASE,
                 )
                 norm_cand_doi = normalize_doi(cleaned_cand_doi)
+                if not norm_cand_doi and work_dois:
+                    norm_cand_doi = next(iter(work_dois))
+                if not norm_cand_doi and work_arxiv_ids:
+                    norm_cand_doi = f"10.48550/arxiv.{next(iter(work_arxiv_ids))}"
                 if not norm_cand_doi or (not cand.title and not cand.doi):
                     continue
+
                 cand.doi = norm_cand_doi
                 cand.found = True
                 cand.confidence = 1.0
                 cand.score = float(work.get("relevance_score", 0) or 1.0)
-                out[norm_cand_doi] = cand
+                if work_arxiv_ids:
+                    cand.external_ids = dict(cand.external_ids or {})
+                    cand.external_ids.setdefault("arxiv", sorted(work_arxiv_ids)[0])
+
+                target_keys: set[str] = {norm_cand_doi}
+                for alt_doi in work_dois:
+                    if alt_doi in seen:
+                        target_keys.add(alt_doi)
+                for aid in work_arxiv_ids:
+                    synth_arxiv_doi = f"10.48550/arxiv.{aid}"
+                    if synth_arxiv_doi in seen:
+                        target_keys.add(synth_arxiv_doi)
+
+                for key in target_keys:
+                    key_cand = copy.deepcopy(cand)
+                    if key.startswith("10.48550/arxiv."):
+                        aid_for_key = key.removeprefix("10.48550/arxiv.")
+                        key_cand.external_ids = dict(key_cand.external_ids or {})
+                        key_cand.external_ids["arxiv"] = aid_for_key
+                    out[key] = self._prefer_richer_candidate(out.get(key), key_cand)
 
         return out
 

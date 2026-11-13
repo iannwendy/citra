@@ -68,8 +68,12 @@ from integrity_checker.retrieval.openaire_hal_client import OpenAIREHalClient
 from integrity_checker.retrieval.openalex_client import OpenAlexClient
 from integrity_checker.retrieval.openlibrary_client import OpenLibraryClient
 from integrity_checker.retrieval.persistent_cache import (
+    CLEAN_MISS_TTL_SECONDS,
     POSITIVE_MATCH_TTL_SECONDS,
     PersistentVerificationCache,
+    _is_clean_miss_error,
+    _strip_quoted_query,
+    build_metadata_bound_cache_key,
     build_verification_cache_key,
 )
 from integrity_checker.retrieval.rate_limiter import RateLimiter
@@ -1881,7 +1885,7 @@ class RetrievalOrchestrator:
     @staticmethod
     def _is_cacheable_clean_miss(citation: Citation, result: SourceResult) -> bool:
         """Return True ONLY when >= 3 scholarly APIs returned clean HTTP 200 misses
-        with ZERO 429/5xx/timeout/backoff/quota errors and no citation URL.
+        with ZERO 429/5xx/timeout/backoff/quota/no-response errors and no citation URL.
         """
         if result.candidates or result.sources_succeeded:
             return False
@@ -1890,41 +1894,15 @@ class RetrievalOrchestrator:
         if len(result.sources_queried) < 3 or not result.sources_failed:
             return False
 
-        clean_markers = (
-            "no results",
-            "no title match",
-            "does not exist",
-            "not found",
-            "no matching",
+        probe = SourceResult(
+            citation_raw=result.citation_raw,
+            candidates=[],
+            sources_queried=list(result.sources_queried),
+            sources_succeeded=[],
+            sources_failed=dict(result.sources_failed),
+            api_exhausted=False,
         )
-        transient_markers = (
-            "429",
-            "rate limit",
-            "timeout",
-            "timed out",
-            "connect",
-            "500",
-            "502",
-            "503",
-            "504",
-            "backoff",
-            "circuit_open",
-            "unavailable",
-            "quota",
-            "credits",
-            "request failed",
-            "network",
-        )
-        clean_count = 0
-        for err in result.sources_failed.values():
-            err_l = (err or "").lower()
-            if any(tm in err_l for tm in transient_markers):
-                return False
-            if any(cm in err_l for cm in clean_markers):
-                clean_count += 1
-            else:
-                return False
-        return clean_count >= 3
+        return PersistentVerificationCache.resolve_ttl_seconds(probe) == CLEAN_MISS_TTL_SECONDS
 
     async def _execute_batch_with_ratelimit(
         self,
@@ -1995,25 +1973,47 @@ class RetrievalOrchestrator:
 
             latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
             http_status, _http_ra, http_transport_err = get_task_http_status(source_name)
+            client_status = getattr(client, "_last_status_code", None)
+            final_status = (
+                http_status
+                if http_status is not None
+                else (client_status if isinstance(client_status, int) else None)
+            )
+            client_timed_out = bool(getattr(client, "_last_timed_out", False))
+            client_transport = getattr(client, "_last_transport_error", None)
+            effective_transport = http_transport_err or (
+                str(client_transport) if client_transport else None
+            )
+            recovered_ok = bool(
+                final_status is not None
+                and 200 <= final_status < 400
+                and not client_timed_out
+            )
 
             if limiter:
-                if notified_429 or http_status == 429:
+                if final_status == 429:
                     if not notified_429:
                         retry_after_val = getattr(client, "_last_retry_after", None)
                         if isinstance(retry_after_val, (int, float)):
                             limiter.report_rate_limited(float(retry_after_val))
                         else:
                             limiter.report_rate_limited()
-                else:
+                elif not notified_429 or recovered_ok:
                     limiter.report_success()
 
             infra_reason: str | None = None
-            if notified_429 or http_status == 429:
+            if final_status == 429:
                 infra_reason = "HTTP 429 rate limited"
-            elif http_status is not None and http_status >= 500:
-                infra_reason = f"HTTP {http_status}"
-            elif http_transport_err:
-                infra_reason = http_transport_err
+            elif final_status is not None and final_status >= 500:
+                infra_reason = f"HTTP {final_status}"
+            elif client_timed_out:
+                infra_reason = f"timeout ({effective_transport or 'client timed out'})"
+            elif effective_transport and not recovered_ok:
+                te_l = effective_transport.lower()
+                if "timeout" in te_l or "timed out" in te_l:
+                    infra_reason = f"timeout ({effective_transport})"
+                else:
+                    infra_reason = effective_transport
 
             if infra_reason is not None:
                 self._circuit_breakers.record_infra_failure(source_name, infra_reason, latency_ms)
@@ -2024,6 +2024,226 @@ class RetrievalOrchestrator:
         finally:
             if not outcome_recorded:
                 self._circuit_breakers.release_probe(source_name)
+
+    @staticmethod
+    def _candidates_match_citation_title(
+        citation: Citation,
+        candidates: list[SourceCandidate],
+    ) -> bool:
+        """Require title_similarity >= 0.70 when ``citation.title`` is present."""
+        cit_title = (citation.title or "").strip()
+        if not cit_title:
+            return True
+        cit_stripped = OpenLibraryClient.strip_edition_suffix(cit_title)
+        best_sim = 0.0
+        for cand in candidates or []:
+            if not cand.found or not (cand.title and cand.title.strip()):
+                continue
+            cand_stripped = OpenLibraryClient.strip_edition_suffix(cand.title)
+            sim = max(
+                title_similarity(cit_title, cand.title),
+                title_similarity(cit_stripped, cand_stripped),
+            )
+            if sim > best_sim:
+                best_sim = sim
+        return best_sim >= 0.70
+
+    @staticmethod
+    def _candidates_confirm_identifier(
+        primary_key: str,
+        candidates: list[SourceCandidate],
+    ) -> bool:
+        """Return True only when a found candidate actually carries the shared DOI/arXiv key."""
+        if primary_key.startswith("doi:"):
+            target_doi = primary_key.removeprefix("doi:")
+            target_arxiv = (
+                normalize_arxiv_id(target_doi.removeprefix("10.48550/arxiv."))
+                if target_doi.startswith("10.48550/arxiv.")
+                else None
+            )
+            for c in candidates or []:
+                if not c.found:
+                    continue
+                if c.doi and normalize_doi(c.doi) == target_doi:
+                    return True
+                c_ax = normalize_arxiv_id(
+                    (c.external_ids or {}).get("arxiv")
+                    or (c.external_ids or {}).get("ArXiv")
+                )
+                if target_arxiv and c_ax == target_arxiv:
+                    return True
+            return False
+        if primary_key.startswith("arxiv:"):
+            target_arxiv = primary_key.removeprefix("arxiv:")
+            synth_doi = f"10.48550/arxiv.{target_arxiv}"
+            for c in candidates or []:
+                if not c.found:
+                    continue
+                c_ax = normalize_arxiv_id(
+                    (c.external_ids or {}).get("arxiv")
+                    or (c.external_ids or {}).get("ArXiv")
+                )
+                if c_ax == target_arxiv:
+                    return True
+                if c.doi and normalize_doi(c.doi) == synth_doi:
+                    return True
+            return False
+        return True
+
+    @staticmethod
+    def _cache_read_plan(citation: Citation) -> list[tuple[str, bool]]:
+        """Return ordered ``(cache_key, is_shared_id_key)`` lookup candidates for a citation."""
+        primary_key = build_verification_cache_key(citation)
+        meta_key = build_metadata_bound_cache_key(citation)
+        has_title = bool(citation.title and citation.title.strip())
+
+        if primary_key.startswith("url:") and has_title:
+            return [(meta_key, False)]
+        if primary_key.startswith(("doi:", "arxiv:")):
+            plan: list[tuple[str, bool]] = [(primary_key, True)]
+            if has_title and meta_key != primary_key:
+                plan.append((meta_key, False))
+            return plan
+        return [(primary_key, primary_key.startswith("url:"))]
+
+    def _materialize_cached_result_for_citation(
+        self,
+        citation: Citation,
+        cached: SourceResult,
+        *,
+        is_shared_id_key: bool,
+    ) -> SourceResult | None:
+        """Validate a cached ``SourceResult`` against ``citation`` and re-run quality filtering."""
+        has_title = bool(citation.title and citation.title.strip())
+        has_positive = any(c.found for c in (cached.candidates or []))
+        if is_shared_id_key:
+            if has_positive:
+                if not self._candidates_match_citation_title(citation, cached.candidates):
+                    return None
+            elif has_title:
+                return None
+
+        cloned = copy.deepcopy(cached)
+        cloned.citation_raw = citation.raw_text
+        if not has_positive:
+            return cloned
+
+        deduped = self._dedupe_candidates(cloned.candidates, citation=citation)
+        quality_cands, quality_succeeded = self._filter_quality_candidates(
+            deduped,
+            list(cloned.sources_succeeded or []),
+            citation,
+        )
+        if not quality_cands:
+            return None
+        if is_shared_id_key and not self._candidates_match_citation_title(citation, quality_cands):
+            return None
+
+        is_retracted = bool(cloned.is_retracted) or any(
+            c.found
+            and c.external_ids
+            and str(c.external_ids.get("is_retracted", "")).lower() == "true"
+            for c in quality_cands
+        )
+        return SourceResult(
+            citation_raw=citation.raw_text,
+            candidates=quality_cands,
+            sources_queried=list(cloned.sources_queried or []),
+            sources_succeeded=quality_succeeded,
+            sources_failed=dict(cloned.sources_failed or {}),
+            api_exhausted=bool(cloned.api_exhausted),
+            url_status=None if is_shared_id_key else cloned.url_status,
+            url_status_code=None if is_shared_id_key else cloned.url_status_code,
+            archive_url=None if is_shared_id_key else cloned.archive_url,
+            is_retracted=is_retracted,
+        )
+
+    def _persist_verification_result(self, citation: Citation, result: SourceResult) -> None:
+        """Persist ``result`` using shared identifier keys ONLY for title-verified pristine hits."""
+        if self._persistent_cache is None:
+            return
+        if result.sources_succeeded and set(result.sources_succeeded).issubset(
+            {"local_db", "known_papers"}
+        ):
+            return
+
+        ttl = self._persistent_cache.resolve_ttl_seconds(result)
+        if ttl is None:
+            return
+
+        primary_key = build_verification_cache_key(citation)
+        meta_key = build_metadata_bound_cache_key(citation)
+        has_title = bool(citation.title and citation.title.strip())
+        has_positive = any(c.found for c in (result.candidates or []))
+
+        pristine_cands = getattr(result, "_pristine_candidates", None)
+        pristine_succ = getattr(result, "_pristine_succeeded", None)
+
+        def _build_pristine(*, clear_url_status: bool) -> SourceResult:
+            raw_cands = (
+                [copy.deepcopy(c) for c in pristine_cands]
+                if (has_positive and pristine_cands)
+                else [copy.deepcopy(c) for c in (result.candidates or [])]
+            )
+            raw_succ = (
+                list(pristine_succ)
+                if (has_positive and pristine_succ)
+                else list(result.sources_succeeded or [])
+            )
+            p_retracted = bool(result.is_retracted) or any(
+                c.found
+                and c.external_ids
+                and str(c.external_ids.get("is_retracted", "")).lower() == "true"
+                for c in raw_cands
+            )
+            return SourceResult(
+                citation_raw=result.citation_raw,
+                candidates=raw_cands,
+                sources_queried=list(result.sources_queried or []),
+                sources_succeeded=raw_succ,
+                sources_failed=dict(result.sources_failed or {}),
+                api_exhausted=bool(result.api_exhausted),
+                url_status=None if clear_url_status else result.url_status,
+                url_status_code=None if clear_url_status else result.url_status_code,
+                archive_url=None if clear_url_status else result.archive_url,
+                is_retracted=p_retracted,
+            )
+
+        if primary_key.startswith(("doi:", "arxiv:")):
+            if (
+                has_positive
+                and self._candidates_match_citation_title(citation, result.candidates)
+                and self._candidates_confirm_identifier(primary_key, result.candidates)
+            ):
+                self._persistent_cache.set(
+                    primary_key,
+                    _build_pristine(clear_url_status=True),
+                    ttl,
+                )
+            elif has_title:
+                self._persistent_cache.set(
+                    meta_key,
+                    _build_pristine(clear_url_status=False),
+                    ttl,
+                )
+            else:
+                self._persistent_cache.set(
+                    primary_key,
+                    _build_pristine(clear_url_status=False),
+                    ttl,
+                )
+        elif primary_key.startswith("url:") and has_title:
+            self._persistent_cache.set(
+                meta_key,
+                _build_pristine(clear_url_status=False),
+                ttl,
+            )
+        else:
+            self._persistent_cache.set(
+                primary_key,
+                _build_pristine(clear_url_status=False),
+                ttl,
+            )
 
     def _get_wave0_memory_hit(self, key: str) -> SourceResult | None:
         item = self._wave0_memory_cache.get(key)
@@ -2045,6 +2265,52 @@ class RetrievalOrchestrator:
         while len(self._wave0_memory_cache) > 512:
             self._wave0_memory_cache.popitem(last=False)
 
+    async def _resolve_from_verification_caches(
+        self,
+        citation: Citation,
+    ) -> SourceResult | None:
+        """Read from SQLite ``PersistentVerificationCache`` or Wave-0 memory cache safely."""
+        for candidate_key, is_shared_id_key in self._cache_read_plan(citation):
+            if self._persistent_cache is not None:
+                p_hit = self._persistent_cache.get(candidate_key)
+                if p_hit is not None:
+                    mat = self._materialize_cached_result_for_citation(
+                        citation,
+                        p_hit,
+                        is_shared_id_key=is_shared_id_key,
+                    )
+                    if mat is not None:
+                        if (
+                            citation.url
+                            and self.enable_link_validation
+                            and mat.url_status is None
+                        ):
+                            u_st, u_code, u_arch = await self._validate_citation_url_with_archive(
+                                citation
+                            )
+                            mat.url_status = u_st
+                            mat.url_status_code = u_code
+                            mat.archive_url = u_arch
+                        return mat
+
+            mem_hit = self._get_wave0_memory_hit(candidate_key)
+            if mem_hit is not None:
+                mat = self._materialize_cached_result_for_citation(
+                    citation,
+                    mem_hit,
+                    is_shared_id_key=is_shared_id_key,
+                )
+                if mat is not None:
+                    if citation.url and self.enable_link_validation and mat.url_status is None:
+                        u_st, u_code, u_arch = await self._validate_citation_url_with_archive(
+                            citation
+                        )
+                        mat.url_status = u_st
+                        mat.url_status_code = u_code
+                        mat.archive_url = u_arch
+                    return mat
+        return None
+
     async def prefetch_identifiers(
         self,
         citations: list[Citation],
@@ -2058,41 +2324,99 @@ class RetrievalOrchestrator:
             return {}
 
         resolved_by_id: dict[int, SourceResult] = {}
-        key_by_id: dict[int, str] = {}
+        plans_by_id: dict[int, list[tuple[str, bool]]] = {}
         pending: list[Citation] = []
 
         for cit in citations:
             if cit is None:
                 continue
-            ckey = build_verification_cache_key(cit)
-            key_by_id[id(cit)] = ckey
+            plans_by_id[id(cit)] = self._cache_read_plan(cit)
             pending.append(cit)
 
         if pending and self._persistent_cache is not None:
-            db_hits = self._persistent_cache.get_many([key_by_id[id(c)] for c in pending])
-            still_pending: list[Citation] = []
+            first_keys = [plans_by_id[id(c)][0][0] for c in pending]
+            db_hits = self._persistent_cache.get_many(first_keys)
+
+            need_second_pass: list[Citation] = []
             for cit in pending:
-                hit = db_hits.get(key_by_id[id(cit)])
-                if hit is not None:
-                    cloned = copy.deepcopy(hit)
-                    cloned.citation_raw = cit.raw_text
-                    if cit.url and self.enable_link_validation and cloned.url_status is None:
+                first_key, is_shared = plans_by_id[id(cit)][0]
+                hit = db_hits.get(first_key)
+                mat = (
+                    self._materialize_cached_result_for_citation(
+                        cit,
+                        hit,
+                        is_shared_id_key=is_shared,
+                    )
+                    if hit is not None
+                    else None
+                )
+                if mat is not None:
+                    if cit.url and self.enable_link_validation and mat.url_status is None:
                         u_st, u_code, u_arch = await self._validate_citation_url_with_archive(cit)
-                        cloned.url_status = u_st
-                        cloned.url_status_code = u_code
-                        cloned.archive_url = u_arch
-                    resolved_by_id[id(cit)] = cloned
+                        mat.url_status = u_st
+                        mat.url_status_code = u_code
+                        mat.archive_url = u_arch
+                    resolved_by_id[id(cit)] = mat
                 else:
+                    need_second_pass.append(cit)
+
+            fallback_cits = [c for c in need_second_pass if len(plans_by_id[id(c)]) > 1]
+            if fallback_cits:
+                second_hits = self._persistent_cache.get_many(
+                    [plans_by_id[id(c)][1][0] for c in fallback_cits]
+                )
+                still_pending: list[Citation] = []
+                for cit in need_second_pass:
+                    plan = plans_by_id[id(cit)]
+                    if len(plan) > 1:
+                        sec_key, sec_shared = plan[1]
+                        sec_hit = second_hits.get(sec_key)
+                        mat = (
+                            self._materialize_cached_result_for_citation(
+                                cit,
+                                sec_hit,
+                                is_shared_id_key=sec_shared,
+                            )
+                            if sec_hit is not None
+                            else None
+                        )
+                        if mat is not None:
+                            if cit.url and self.enable_link_validation and mat.url_status is None:
+                                u_st, u_code, u_arch = (
+                                    await self._validate_citation_url_with_archive(cit)
+                                )
+                                mat.url_status = u_st
+                                mat.url_status_code = u_code
+                                mat.archive_url = u_arch
+                            resolved_by_id[id(cit)] = mat
+                            continue
                     still_pending.append(cit)
-            pending = still_pending
+                pending = still_pending
+            else:
+                pending = need_second_pass
 
         if pending and self._wave0_memory_cache:
             after_mem: list[Citation] = []
             for cit in pending:
-                mem_hit = self._get_wave0_memory_hit(key_by_id[id(cit)])
-                if mem_hit is not None:
-                    mem_hit.citation_raw = cit.raw_text
-                    resolved_by_id[id(cit)] = mem_hit
+                matched_mem: SourceResult | None = None
+                for m_key, m_shared in plans_by_id[id(cit)]:
+                    mem_hit = self._get_wave0_memory_hit(m_key)
+                    if mem_hit is not None:
+                        mat = self._materialize_cached_result_for_citation(
+                            cit,
+                            mem_hit,
+                            is_shared_id_key=m_shared,
+                        )
+                        if mat is not None:
+                            matched_mem = mat
+                            break
+                if matched_mem is not None:
+                    if cit.url and self.enable_link_validation and matched_mem.url_status is None:
+                        u_st, u_code, u_arch = await self._validate_citation_url_with_archive(cit)
+                        matched_mem.url_status = u_st
+                        matched_mem.url_status_code = u_code
+                        matched_mem.archive_url = u_arch
+                    resolved_by_id[id(cit)] = matched_mem
                 else:
                     after_mem.append(cit)
             pending = after_mem
@@ -2143,7 +2467,7 @@ class RetrievalOrchestrator:
                     if cr_enabled and norm_doi not in cr_seen:
                         cr_seen.add(norm_doi)
                         cr_dois.append(norm_doi)
-            elif norm_arxiv and oa_enabled:
+            if norm_arxiv and oa_enabled:
                 synth_doi = f"10.48550/arxiv.{norm_arxiv}"
                 if synth_doi not in oa_seen:
                     oa_seen.add(synth_doi)
@@ -2199,11 +2523,17 @@ class RetrievalOrchestrator:
             succeeded: list[str] = []
             failed: dict[str, str] = {}
 
-            oa_lookup_doi = norm_doi or (f"10.48550/arxiv.{norm_arxiv}" if norm_arxiv else None)
-            if oa_lookup_doi and oa_lookup_doi in oa_seen:
+            synth_oa_doi = f"10.48550/arxiv.{norm_arxiv}" if norm_arxiv else None
+            oa_lookup_keys = [
+                k for k in dict.fromkeys([norm_doi, synth_oa_doi]) if k and k in oa_seen
+            ]
+            if oa_lookup_keys:
                 queried.append(self.openalex.name)
-                oa_cand = oa_map.get(oa_lookup_doi)
-                if oa_cand is not None and oa_cand.found:
+                oa_cand = next(
+                    (oa_map[k] for k in oa_lookup_keys if k in oa_map and oa_map[k].found),
+                    None,
+                )
+                if oa_cand is not None:
                     cands.append(copy.deepcopy(oa_cand))
                     succeeded.append(self.openalex.name)
                 else:
@@ -2230,11 +2560,18 @@ class RetrievalOrchestrator:
             if not cands:
                 continue
 
-            deduped = self._dedupe_candidates(cands, citation=cit)
+            pristine_cands = [copy.deepcopy(c) for c in cands if c.found]
+            pristine_succeeded = list(succeeded)
+
+            deduped = self._dedupe_candidates(copy.deepcopy(pristine_cands), citation=cit)
             quality_candidates, quality_succeeded = self._filter_quality_candidates(
-                deduped, succeeded, cit
+                deduped, list(pristine_succeeded), cit
             )
             if not quality_candidates:
+                continue
+
+            # Guard against short-circuiting real papers that have a typo/swapped DOI or arXiv ID
+            if not self._candidates_match_citation_title(cit, quality_candidates):
                 continue
 
             is_retracted = any(
@@ -2263,14 +2600,35 @@ class RetrievalOrchestrator:
             if self._local_db is not None:
                 self._sync_to_local_db(quality_candidates, quality_succeeded, citation=cit)
 
-            ckey = key_by_id[id(cit)]
+            primary_key = build_verification_cache_key(cit)
+            pristine_retracted = any(
+                c.found
+                and c.external_ids
+                and str(c.external_ids.get("is_retracted", "")).lower() == "true"
+                for c in pristine_cands
+            )
+            pristine_result = SourceResult(
+                citation_raw=cit.raw_text,
+                candidates=pristine_cands,
+                sources_queried=list(queried),
+                sources_succeeded=pristine_succeeded,
+                sources_failed=dict(failed),
+                is_retracted=pristine_retracted,
+            )
+            if self._candidates_confirm_identifier(primary_key, quality_candidates):
+                cache_key = primary_key
+            else:
+                cache_key = build_metadata_bound_cache_key(cit)
+
             stored_in_db = False
             if self._persistent_cache is not None:
                 stored_in_db = self._persistent_cache.set(
-                    ckey, result, POSITIVE_MATCH_TTL_SECONDS
+                    cache_key, pristine_result, POSITIVE_MATCH_TTL_SECONDS
                 )
-            if not stored_in_db:
-                self._put_wave0_memory_hit(ckey, result)
+            if not stored_in_db and not PersistentVerificationCache.has_transient_failure(
+                pristine_result
+            ):
+                self._put_wave0_memory_hit(cache_key, pristine_result)
             resolved_by_id[id(cit)] = result
 
         return resolved_by_id
@@ -2288,29 +2646,13 @@ class RetrievalOrchestrator:
         if self.cache is not None:
             return await self._retrieve_uncached(citation, allow_serpapi=allow_serpapi)
 
-        p_key = build_verification_cache_key(citation)
-        if self._persistent_cache is not None:
-            p_hit = self._persistent_cache.get(p_key)
-            if p_hit is not None:
-                p_hit.citation_raw = citation.raw_text
-                if citation.url and self.enable_link_validation and p_hit.url_status is None:
-                    u_st, u_code, u_arch = await self._validate_citation_url_with_archive(citation)
-                    p_hit.url_status = u_st
-                    p_hit.url_status_code = u_code
-                    p_hit.archive_url = u_arch
-                return p_hit
-
-        mem_hit = self._get_wave0_memory_hit(p_key)
-        if mem_hit is not None:
-            mem_hit.citation_raw = citation.raw_text
-            return mem_hit
+        cached_hit = await self._resolve_from_verification_caches(citation)
+        if cached_hit is not None:
+            return cached_hit
 
         if not self._singleflight_enabled:
             uncached_res = await self._retrieve_uncached(citation, allow_serpapi=allow_serpapi)
-            if self._persistent_cache is not None:
-                ttl = self._persistent_cache.resolve_ttl_seconds(uncached_res)
-                if ttl is not None:
-                    self._persistent_cache.set(p_key, uncached_res, ttl)
+            self._persist_verification_result(citation, uncached_res)
             return uncached_res
 
         effective_allow_serpapi = (
@@ -2347,10 +2689,7 @@ class RetrievalOrchestrator:
         else:
             if self._is_cacheable_clean_miss(citation, result):
                 self._negative_cache.set(sf_key, result)
-            if self._persistent_cache is not None:
-                ttl = self._persistent_cache.resolve_ttl_seconds(result)
-                if ttl is not None:
-                    self._persistent_cache.set(p_key, result, ttl)
+            self._persist_verification_result(citation, result)
 
         return result
 
@@ -2635,7 +2974,10 @@ class RetrievalOrchestrator:
                 extra_clients=tier2_clients if tier1_sufficient else [],
             )
 
-        deduped = self._dedupe_candidates(valid, citation=citation)
+        pristine_found = [copy.deepcopy(c) for c in valid if c.found]
+        pristine_succeeded = list(succeeded)
+
+        deduped = self._dedupe_candidates([copy.deepcopy(c) for c in valid], citation=citation)
         deduped, succeeded = self._filter_quality_candidates(deduped, succeeded, citation)
 
         # ===== 4. SerpApi Fallback + Smart Quota Guard =====
@@ -2742,6 +3084,8 @@ class RetrievalOrchestrator:
                 sources_queried.append("serpapi")
                 if serpapi_candidate.found:
                     succeeded.append("serpapi")
+                    pristine_succeeded.append("serpapi")
+                    pristine_found.append(copy.deepcopy(serpapi_candidate))
                     deduped.append(serpapi_candidate)
                 elif serpapi_candidate.error:
                     failed["serpapi"] = serpapi_candidate.error
@@ -2779,15 +3123,7 @@ class RetrievalOrchestrator:
         if not any_found and len(failed) >= min_failures_for_unresolved:
             # Distinguish hard API/network failures from clean HTTP 200 "no results" responses
             has_clean_search_response = any(
-                any(
-                    marker in (err or "").lower()
-                    for marker in (
-                        "no results for",
-                        "no title match",
-                        "does not exist",
-                        "not found (404)",
-                    )
-                )
+                _is_clean_miss_error(_strip_quoted_query(err))
                 for err in failed.values()
             )
             logger.warning(
@@ -2847,7 +3183,7 @@ class RetrievalOrchestrator:
             and str(c.external_ids.get("is_retracted", "")).lower() == "true"
             for c in quality_candidates
         )
-        return SourceResult(
+        final_res = SourceResult(
             citation_raw=citation.raw_text,
             candidates=quality_candidates,
             sources_queried=sources_queried,
@@ -2858,6 +3194,9 @@ class RetrievalOrchestrator:
             archive_url=archive_url,
             is_retracted=is_retracted,
         )
+        final_res._pristine_candidates = pristine_found  # type: ignore[attr-defined]
+        final_res._pristine_succeeded = pristine_succeeded  # type: ignore[attr-defined]
+        return final_res
 
     def _resolve_known_abstract(self, citation: Citation, paper_abstract: str | None) -> str | None:
         if paper_abstract and paper_abstract.strip():
@@ -2892,12 +3231,25 @@ class RetrievalOrchestrator:
                     if doi_title_sim < 0.70:
                         paper = None
             if paper:
+                resolved_authors = (
+                    paper.authors
+                    if paper.authors
+                    else [
+                        paper.venue.strip()
+                        if paper.venue and paper.venue.strip()
+                        else (
+                            str(citation.authors[0]).strip()
+                            if citation.authors and str(citation.authors[0]).strip()
+                            else "Institutional Standard"
+                        )
+                    ]
+                )
                 cand = SourceCandidate(
                     source_name="local_db",
                     found=True,
                     doi=paper.doi,
                     title=paper.title,
-                    authors=paper.authors,
+                    authors=resolved_authors,
                     year=str(paper.year) if paper.year else None,
                     venue=paper.venue,
                     url=paper.external_ids.get("url") if paper.external_ids else None,
@@ -3420,16 +3772,17 @@ class RetrievalOrchestrator:
                     "wikidata_opencitations",
                     "doi_ra",
                 }:
-                    fallback_author = (
-                        cand.venue.strip()
-                        if cand.venue and cand.venue.strip()
-                        else (
-                            str(citation.authors[0]).strip()
-                            if citation.authors and str(citation.authors[0]).strip()
-                            else "Institutional Standard"
-                        )
-                    )
+                    used_cit_author = False
+                    if cand.venue and cand.venue.strip():
+                        fallback_author = cand.venue.strip()
+                    elif citation.authors and str(citation.authors[0]).strip():
+                        fallback_author = str(citation.authors[0]).strip()
+                        used_cit_author = True
+                    else:
+                        fallback_author = "Institutional Standard"
                     cand.authors = [fallback_author]
+                    if used_cit_author:
+                        cand._author_injected_from_citation = True  # type: ignore[attr-defined]
                 else:
                     logger.debug(
                         f"Filtering out candidate with no authors (title='{cand.title}')"
@@ -3849,7 +4202,11 @@ class RetrievalOrchestrator:
                 doi=cand.doi,
                 arxiv_id=arxiv_id,
                 title=cand.title or "",
-                authors=cand.authors or [],
+                authors=(
+                    []
+                    if getattr(cand, "_author_injected_from_citation", False)
+                    else (cand.authors or [])
+                ),
                 year=int(cand.year[:4]) if cand.year and cand.year[:4].isdigit() else None,
                 venue=cand.venue,
                 abstract=cand.abstract,
@@ -3875,6 +4232,7 @@ class RetrievalOrchestrator:
         """
         bucket: dict[str, SourceCandidate] = {}
         title_to_key: dict[str, str] = {}
+        arxiv_to_key: dict[str, str] = {}
         sources_by_key: dict[str, set[str]] = {}
 
         cit_year_int: int | None = None
@@ -3888,6 +4246,19 @@ class RetrievalOrchestrator:
             norm = "".join(ch for ch in clean.lower() if ch.isalnum())
             return f"title:{norm[:120]}" if len(norm) >= 6 else None
 
+        def _cand_arxiv(cand: SourceCandidate) -> str | None:
+            ext = cand.external_ids or {}
+            raw_ax = ext.get("arxiv") or ext.get("ArXiv")
+            if raw_ax:
+                aid = normalize_arxiv_id(raw_ax)
+                if aid:
+                    return aid
+            if cand.doi:
+                nd = normalize_doi(cand.doi)
+                if nd and nd.startswith("10.48550/arxiv."):
+                    return normalize_arxiv_id(nd.removeprefix("10.48550/arxiv."))
+            return None
+
         def _year_matches(y_str: str | None) -> bool:
             if cit_year_int is None or not y_str or not str(y_str)[:4].isdigit():
                 return False
@@ -3900,19 +4271,27 @@ class RetrievalOrchestrator:
                 continue
 
             t_fp = _title_fp(c.title)
-            # Link DOI-based candidate and title-only candidate (e.g. OpenLibrary vs OpenAlex)
+            c_ax = _cand_arxiv(c)
+            # Link DOI-based, arXiv-based, and title-only candidates across sources
             canonical_key = fp
-            if fp not in bucket and t_fp and t_fp in title_to_key:
-                canonical_key = title_to_key[t_fp]
-            elif fp in bucket:
+            if fp in bucket:
                 canonical_key = fp
+            elif c_ax and c_ax in arxiv_to_key:
+                canonical_key = arxiv_to_key[c_ax]
+            elif t_fp and t_fp in title_to_key:
+                canonical_key = title_to_key[t_fp]
 
             if t_fp and t_fp not in title_to_key:
                 title_to_key[t_fp] = canonical_key
+            if c_ax and c_ax not in arxiv_to_key:
+                arxiv_to_key[c_ax] = canonical_key
 
             sources_by_key.setdefault(canonical_key, set())
             if c.source_name:
                 sources_by_key[canonical_key].add(c.source_name)
+            for prior_src in getattr(c, "_agreed_sources", None) or []:
+                if prior_src:
+                    sources_by_key[canonical_key].add(str(prior_src))
 
             if canonical_key in bucket:
                 existing = bucket[canonical_key]
