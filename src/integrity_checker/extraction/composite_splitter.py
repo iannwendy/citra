@@ -355,6 +355,14 @@ def expand_composite_reference(
                 seg_text=seg_text,
             )
         else:
+            if (
+                parsed.title
+                and parsed.venue
+                and parsed.title.strip().rstrip(".,;").lower()
+                == parsed.venue.strip().rstrip(".,;").lower()
+            ):
+                parsed.title = None
+                parsed.title_normalized = None
             parsed.raw_text = display_raw
             parsed.citation_type = CitationType.REFERENCE_LIST
             parsed.numeric_index = numeric_index

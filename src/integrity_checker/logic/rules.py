@@ -57,54 +57,106 @@ _RESERVED_FAKE_TLDS: tuple[str, ...] = (
     ".fake",
 )
 
-_ISO4_VENUE_ABBREV_STEMS: frozenset[str] = frozenset(
+_VENUE_STOP_TOKENS: frozenset[str] = frozenset(
     {
-        "acct", "accts", "acta", "advan", "allg", "anal", "angew", "annu", "anorg",
-        "appl", "arch", "aust", "biochem", "biol", "biomacromol", "biophys",
-        "biotechnol", "bull", "catal", "chem", "chemsuschem", "chemcatchem",
-        "chemmedchem", "chemphyschem", "chempluschem", "chim", "clin", "colloid",
-        "commun", "comp", "comput", "coord", "cryst", "crystengcomm", "curr",
-        "dalton", "disc", "discuss", "dokl", "ecol", "educ", "electroanal",
-        "electrochem", "eng", "environ", "eur", "exp", "faraday", "febs", "food",
-        "funct", "gaz", "gazz", "geochem", "geophys", "helv", "heterocycl",
-        "ieee", "ind", "inorg", "inst", "int", "intl", "isrl", "izv", "japn",
-        "jpn", "kinet", "kristallogr", "langmuir", "lett", "macromol", "magn",
-        "mater", "math", "mech", "med", "metall", "methods", "microbiol",
-        "mineral", "mol", "monatsh", "nano", "nanotechnol", "nat", "natl",
-        "naturforsch", "neurosci", "nucl", "nucleic", "opt", "org", "organomet",
-        "pathol", "pharm", "pharmacol", "phil", "philos", "photobiol", "photochem",
-        "phys", "physiol", "plant", "polym", "prep", "proc", "prog", "prot",
-        "protein", "psychol", "publ", "pure", "quart", "radiat", "radioanal",
-        "react", "recl", "rend", "rep", "res", "rev", "rheol", "roy", "russ",
-        "sci", "sect", "semicond", "sep", "ser", "soc", "solid", "spectrochim",
-        "spectrosc", "stat", "struct", "suppl", "surf", "sust", "symp", "synlett",
-        "synth", "syst", "tech", "technol", "tetrahedron", "theor", "therm",
-        "thermochim", "toxicol", "trans", "trends", "ultrason", "univ", "usp",
-        "vac", "virol", "zool",
+        "of", "the", "and", "in", "for", "on", "to", "a", "an",
+        "de", "la", "le", "du", "des", "et", "fur", "für", "und", "der", "&",
     }
 )
 
-_VENUE_STOP_TOKENS: frozenset[str] = frozenset(
-    {"of", "the", "and", "in", "for", "on", "to", "a", "an", "de", "la", "le", "du", "des", "fur", "für", "und", "der"}
+_REPO_DOI_VENUE_PREFIXES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("10.5281/zenodo", ("zenodo",)),
+    ("10.48550/arxiv", ("arxiv",)),
+    ("10.6084/", ("figshare",)),
+    ("10.17632/", ("mendeley",)),
+    ("10.5061/dryad", ("dryad",)),
+    ("10.7910/dvn", ("dataverse",)),
 )
+
+
+def _is_unquoted_title_clause_before_dot(left_full: str, right: str | None = None) -> bool:
+    """Structural ISO-4 vs unquoted sentence/title detector before ``. `` (allowlist-free)."""
+    if right is not None:
+        right_clean = right.strip().rstrip(",").strip()
+        if not right_clean or not re.match(r"^[A-Z]", right_clean):
+            return False
+        if re.fullmatch(r"[A-Za-z]{1,6}\.", right_clean):
+            return False
+
+    parts = re.split(r"(?<=\.)\s+", (left_full or "").strip())
+    clause = parts[-1].strip() if parts else ""
+    tokens = [
+        t.strip(",:()\"'\u201c\u201d[]")
+        for t in clause.split()
+        if t.strip(",:()\"'\u201c\u201d[]")
+    ]
+    if len(tokens) < 2:
+        return False
+    last_stem = re.sub(r"[^A-Za-zÀ-ÿ]", "", tokens[-1].rstrip("."))
+    if len(last_stem) < 4:
+        return False
+
+    non_conn = [t for t in tokens if t.rstrip(".").lower() not in _VENUE_STOP_TOKENS]
+    if len(non_conn) < 2:
+        return False
+    if any(t[0].islower() for t in non_conn if t[0].isalpha()):
+        return True
+
+    if (
+        parts[:-1]
+        and all(
+            all(
+                w.endswith(".")
+                or bool(re.fullmatch(r"[A-Z0-9]{1,8}", w))
+                or w.lower() in _VENUE_STOP_TOKENS
+                for w in p.split()
+            )
+            for p in parts[:-1]
+        )
+        and len(tokens) == 2
+        and len(last_stem) <= 5
+    ):
+        return False
+
+    prior_tokens = [t for t in tokens[:-1] if t.rstrip(".").lower() not in _VENUE_STOP_TOKENS]
+    unabbrev_prior = [
+        t
+        for t in prior_tokens
+        if not t.endswith(".") and not re.fullmatch(r"[A-Z0-9]{2,8}", t)
+    ]
+    return len(unabbrev_prior) >= 1
 
 
 def _has_sentence_period_in_venue(venue: str | None) -> bool:
-    """Return True if ``venue`` appears to contain an unquoted sentence/title before a period."""
+    """Return True if ``venue`` structurally contains an unquoted sentence/title before ``. ``."""
     v = (venue or "").strip()
     if not v or ". " not in v:
         return False
-    _non_title_abbrevs = _ISO4_VENUE_ABBREV_STEMS | {
-        "dr", "mr", "ms", "prof", "st", "jr", "sr", "ed", "eds",
-        "vol", "no", "pp", "fig", "eq", "ch", "pt", "vs", "cf", "al",
-    }
     for m_dot in re.finditer(r"\.\s+(?=[A-Z])", v):
-        left = v[: m_dot.start()].strip()
-        w_m = re.search(r"([A-Za-zÀ-ÿ'\u2019\-]+)$", left)
-        w = (w_m.group(1) if w_m else "").lower()
-        if len(w) >= 4 and w not in _non_title_abbrevs:
+        left_with_dot = v[: m_dot.start() + 1].strip()
+        right = v[m_dot.end() :].strip()
+        if _is_unquoted_title_clause_before_dot(left_with_dot, right):
             return True
     return False
+
+
+def _raw_has_unparsed_title_before_venue(
+    citation_raw: str | None,
+    citation_venue: str | None,
+) -> bool:
+    """Return True if ``citation_raw`` has an unparsed ``. ``-delimited title right before ``venue``."""
+    raw = (citation_raw or "").strip()
+    ven = (citation_venue or "").strip().rstrip(".,;")
+    if not raw or not ven:
+        return False
+    idx = raw.lower().find(ven.lower())
+    if idx <= 0:
+        return False
+    prefix = raw[:idx].strip()
+    if not prefix.endswith("."):
+        return False
+    tail = re.split(r"(?:[,;]|\b[A-ZÀ-Ý]\.)\s+", prefix)[-1].strip()
+    return _is_unquoted_title_clause_before_dot(tail, citation_venue)
 
 
 def _iso4_token_matches_word(abbr_tok: str, full_word: str) -> bool:
@@ -134,12 +186,23 @@ def _iso4_tokens_align(abbr_toks: list[str], full_toks: list[str]) -> bool:
         return False
     pos = 0
     matched = 0
+    unmatched_abbr: list[str] = []
     for tok in abbr_toks:
-        while pos < len(full_toks) and not _iso4_token_matches_word(tok, full_toks[pos]):
-            pos += 1
-        if pos < len(full_toks):
+        scan = pos
+        while scan < len(full_toks) and not _iso4_token_matches_word(tok, full_toks[scan]):
+            scan += 1
+        if scan < len(full_toks):
             matched += 1
-            pos += 1
+            pos = scan + 1
+        else:
+            unmatched_abbr.append(tok)
+    if (
+        matched == len(full_toks)
+        and len(full_toks) >= 2
+        and unmatched_abbr
+        and all(t in {"u", "s", "usa", "uk", "int", "intl", "ed", "engl"} for t in unmatched_abbr)
+    ):
+        return True
     min_req = len(abbr_toks) - 1 if len(abbr_toks) >= 4 else len(abbr_toks)
     if matched < max(1, min_req):
         return False
@@ -150,13 +213,20 @@ def _venues_compatible_for_titleless_ref(
     citation_venue: str | None,
     cand_venue: str | None,
     venue_sim: float = 0.0,
+    doi: str | None = None,
 ) -> bool:
     """Return True when ``citation_venue`` and ``cand_venue`` match or ISO-4 align."""
-    if not cand_venue or not cand_venue.strip():
-        return True
     if not citation_venue or not citation_venue.strip():
         return False
     if _has_sentence_period_in_venue(citation_venue):
+        return False
+    doi_norm = (doi or "").strip().lower()
+    cit_ven_lower = citation_venue.strip().lower()
+    if doi_norm:
+        for prefix, allowed_hosts in _REPO_DOI_VENUE_PREFIXES:
+            if doi_norm.startswith(prefix) and not any(h in cit_ven_lower for h in allowed_hosts):
+                return False
+    if not cand_venue or not cand_venue.strip():
         return False
     if venue_sim >= 0.45 or VenueNormalizer().similarity(citation_venue, cand_venue) >= 0.45:
         return True
@@ -1483,12 +1553,14 @@ class SymbolicRules:
         is_titleless_journal_ref = (
             bool(_norm_cit_venue)
             and not _has_sentence_period_in_venue(citation_venue)
+            and not _raw_has_unparsed_title_before_venue(citation_raw, citation_venue)
             and (not _norm_cit_title or _norm_cit_title == _norm_cit_venue)
         )
         titleless_venue_ok = _venues_compatible_for_titleless_ref(
             citation_venue,
             best.venue if best else None,
             float(getattr(features, "venue_sim", 0.0) or 0.0),
+            doi=(best.doi if best and best.doi else citation_doi),
         )
 
         # --- Rule 1: DOI + title + author strong match → VERIFIED ---
@@ -1948,13 +2020,7 @@ class SymbolicRules:
             is_titleless_journal_ref
             and bool(citation_authors)
             and author_sim >= 0.34
-            and (
-                titleless_venue_ok
-                or (
-                    author_sim >= 0.50
-                    and (year_dist is None or year_dist < 2 or year_dist >= 900)
-                )
-            )
+            and titleless_venue_ok
         )
 
         if (

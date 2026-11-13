@@ -772,9 +772,23 @@ class DocumentParser:
             r"Parts?|Steps?|Entries|Entry|Pathways?|Routes?|Cycles?|States?|Modes?|Models?|"
             r"Hình|Bảng|Sơ\s+đồ|Hợp\s+chất|Chất|Dẫn\s+xuất|Công\s+thức|Phương\s+trình)"
         )
+        _bracket_non_cit_head = (
+            r"(?:Figures?|Figs?\.?|Tables?|Tabs?\.?|Schemes?|Schs?\.?|Charts?|"
+            r"Compounds?|Compds?\.?|Structures?|Isomers?|Enantiomers?|Diastereomers?|"
+            r"Conformers?|Tautomers?|Equations?|Eqs?\.?|Formulas?|Sections?|Secs?\.?|"
+            r"Chapters?|Chaps?\.?|Parts?|Steps?|Entries|Entry|Algorithms?|Algs?\.?|"
+            r"Theorems?|Lemmas?|Appendix|"
+            r"Hình|Bảng|Sơ\s+đồ|Hợp\s+chất|Công\s+thức|Phương\s+trình)"
+        )
         non_cit_prefix_re = re.compile(
             rf"\b{_non_cit_head}\s+"
-            rf"(?:\(\s*[1-9]\d{{0,2}}[a-z][^()]*\)\s*"
+            rf"(?:(?:\(\s*[1-9]\d{{0,2}}[a-z][^()]*\)|\[\s*[1-9]\d{{0,2}}[a-z][^\[\]]*\])\s*"
+            rf"(?:,\s*(?:and\s+|or\s+)?|\s+(?:and|or|&|to|vs\.?)\s+|[-–—]\s*))*$",
+            flags=re.IGNORECASE,
+        )
+        bracket_non_cit_prefix_re = re.compile(
+            rf"\b{_bracket_non_cit_head}\s+"
+            rf"(?:(?:\(\s*[1-9]\d{{0,2}}[a-z][^()]*\)|\[\s*[1-9]\d{{0,2}}[a-z][^\[\]]*\])\s*"
             rf"(?:,\s*(?:and\s+|or\s+)?|\s+(?:and|or|&|to|vs\.?)\s+|[-–—]\s*))*$",
             flags=re.IGNORECASE,
         )
@@ -787,15 +801,21 @@ class DocumentParser:
         extracted: list[Citation] = []
 
         for section in sections:
-            if section.section_type != SectionType.BODY:
-                continue
             page_chunks: list[tuple[int, str]] = []
-            if by_page:
-                for pnum in sorted(by_page):
-                    if section.start_page <= pnum <= section.end_page and by_page[pnum].text:
-                        page_chunks.append((pnum, by_page[pnum].text))
-            if not page_chunks and section.text:
-                page_chunks.append((section.start_page, section.text))
+            if section.section_type == SectionType.BODY:
+                if by_page:
+                    for pnum in sorted(by_page):
+                        if section.start_page <= pnum <= section.end_page and by_page[pnum].text:
+                            page_chunks.append((pnum, by_page[pnum].text))
+                if not page_chunks and section.text:
+                    page_chunks.append((section.start_page, section.text))
+            elif section.section_type == SectionType.BIBLIOGRAPHY:
+                pre_body = (section.metadata or {}).get("pre_header_body_text")
+                pre_pnum = (section.metadata or {}).get("pre_header_page_num") or section.start_page
+                if pre_body:
+                    page_chunks.append((pre_pnum, pre_body))
+            else:
+                continue
 
             for pnum, txt in page_chunks:
                 for m in paren_comp_re.finditer(txt):
@@ -848,6 +868,26 @@ class DocumentParser:
                         continue
                     raw_hit = re.sub(r"\s+", " ", m.group(0).strip())
                     if (pnum, raw_hit) in existing_raw_by_page:
+                        continue
+                    line_start = txt.rfind("\n", 0, m.start()) + 1
+                    line_end = txt.find("\n", m.end())
+                    if line_end == -1:
+                        line_end = len(txt)
+                    line_before = txt[line_start : m.start()]
+                    line_after = txt[m.end() : line_end]
+                    if (
+                        not line_after.strip()
+                        and re.search(r"[=≈≡≤≥→↔⇌]", line_before)
+                        and not re.search(r"[A-Za-z]{3,}(?:\s+[A-Za-z]{3,}){2,}\s*$", line_before)
+                    ):
+                        continue
+                    para_floor = max(0, txt.rfind("\n\n", 0, m.start()))
+                    prefix = re.sub(
+                        r"\s+",
+                        " ",
+                        txt[max(para_floor, m.start() - 100) : m.start()],
+                    )
+                    if bracket_non_cit_prefix_re.search(prefix):
                         continue
                     if _has_disallowed_unit_token(m.group(1)):
                         continue

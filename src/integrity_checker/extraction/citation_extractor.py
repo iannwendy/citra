@@ -591,15 +591,16 @@ class CitationExtractor:
                     bracket_nums = [int(n) for n, _ in bracket_tokens]
                     bracket_pairs = [(int(n), sub) for n, sub in bracket_tokens]
                     if bracket_nums:
-                        # Reject standalone dimension / orbital brackets like [2d], [3d], [4d], [4f], [5f]
-                        # unless part of a multi-item/range bracket like [2a, 2d] or [2a–d], or accompanied
-                        # by sibling composite callouts ([1a]/[1b]/[1c], [4a]/[4b]/[4c]) in the same text.
+                        # Reject standalone unit / dimension / orbital brackets like [24h], [10m], [30s],
+                        # [5g], [2d], [3d], [4f] unless part of a multi-item/range bracket like [14a–g] or
+                        # [2a, 2d], or accompanied by sibling composite callouts ([Na]/[Nb]/[Nc]) in text.
                         if (
                             len(bracket_pairs) == 1
                             and bracket_pairs[0][1]
                             and not re.search(r"[-–—−,]", raw_without_page)
                             and (
-                                (bracket_pairs[0][1] == "d" and 1 <= bracket_pairs[0][0] <= 6)
+                                bracket_pairs[0][1] in "ghijklmnopqrstuvwxyz"
+                                or (bracket_pairs[0][1] == "d" and 1 <= bracket_pairs[0][0] <= 6)
                                 or (bracket_pairs[0][1] == "f" and bracket_pairs[0][0] in {4, 5})
                             )
                             and not re.search(rf"\[\s*{bracket_pairs[0][0]}[abc]\b", search_text)
@@ -660,6 +661,35 @@ class CitationExtractor:
                         )
                     ):
                         continue
+                    if any(sub for _, sub in bracket_pairs):
+                        if (
+                            not line_suffix_b.strip()
+                            and re.search(r"[=≈≡≤≥→↔⇌]", line_prefix_b)
+                            and not re.search(
+                                r"[A-Za-z]{3,}(?:\s+[A-Za-z]{3,}){2,}\s*$",
+                                line_prefix_b,
+                            )
+                        ):
+                            continue
+                        para_floor_b = max(0, search_text.rfind("\n\n", 0, raw_start))
+                        comp_prefix_b = re.sub(
+                            r"\s+",
+                            " ",
+                            search_text[max(para_floor_b, raw_start - 100) : raw_start],
+                        )
+                        if re.search(
+                            r"\b(?:Figures?|Figs?\.?|Tables?|Tabs?\.?|Schemes?|Schs?\.?|Charts?|"
+                            r"Compounds?|Compds?\.?|Structures?|Isomers?|Enantiomers?|Diastereomers?|"
+                            r"Conformers?|Tautomers?|Equations?|Eqs?\.?|Formulas?|Sections?|Secs?\.?|"
+                            r"Chapters?|Chaps?\.?|Parts?|Steps?|Entries|Entry|Algorithms?|Algs?\.?|"
+                            r"Theorems?|Lemmas?|Appendix|"
+                            r"Hình|Bảng|Sơ\s+đồ|Hợp\s+chất|Công\s+thức|Phương\s+trình)\s+"
+                            r"(?:(?:\(\s*[1-9]\d{0,2}[a-z][^()]*\)|\[\s*[1-9]\d{0,2}[a-z][^\[\]]*\])\s*"
+                            r"(?:,\s*(?:and\s+|or\s+)?|\s+(?:and|or|&|to|vs\.?)\s+|[-–—]\s*))*$",
+                            comp_prefix_b,
+                            re.IGNORECASE,
+                        ):
+                            continue
                     # Reject math/code vector assignments, dict hyperparameter grids (straight or curly quotes), function array args, and Vietnamese math intervals/tensor shapes
                     if (
                         (

@@ -1386,3 +1386,379 @@ class TestFixRound2Regressions:
         assert any(m.numeric_index == 5 and m.sub_index is None for m in merged)
         merged_14 = [m for m in merged if m.numeric_index == 14]
         assert [m.composite_label for m in merged_14] == ["14a", "14b"]
+
+
+class TestFixRound3Regressions:
+    """Regression suite covering all 5 structural fixes from Task 7 Fix Round 3."""
+
+    def test_structural_iso4_journals_and_comma_venues_not_split_into_bogus_titles(
+        self,
+    ) -> None:
+        parser = ReferenceListParser()
+        checker = NeuroSymbolicChecker(enable_content_alignment=False)
+
+        iso4_and_comma_cases = [
+            (
+                "14. (a) Y. Zhang and X. Liu, Org. Biomol. Chem., 2020, 18, 1234–1240, "
+                "DOI: 10.1039/D0OB00111A; "
+                "(b) L. Wang, ACS Cent. Sci., 2021, 7, 550–558, DOI: 10.1021/acscentsci.1c00222.",
+                [
+                    ("Org. Biomol. Chem.", "Organic & Biomolecular Chemistry", "10.1039/D0OB00111A", ["Y. Zhang", "X. Liu"], 2020),
+                    ("ACS Cent. Sci.", "ACS Central Science", "10.1021/acscentsci.1c00222", ["L. Wang"], 2021),
+                ],
+            ),
+            (
+                "15. (a) Y. Zhang and X. Liu, ACS Sustain. Chem. Eng., 2020, 8, 1000–1010, "
+                "DOI: 10.1021/acssuschemeng.0c00111; "
+                "(b) L. Wang, Proc. Natl. Acad. Sci. U. S. A., 2021, 118, e2100111118, "
+                "DOI: 10.1073/pnas.2100111118.",
+                [
+                    ("ACS Sustain. Chem. Eng.", "ACS Sustainable Chemistry & Engineering", "10.1021/acssuschemeng.0c00111", ["Y. Zhang", "X. Liu"], 2020),
+                    ("Proc. Natl. Acad. Sci. U. S. A.", "Proceedings of the National Academy of Sciences", "10.1073/pnas.2100111118", ["L. Wang"], 2021),
+                ],
+            ),
+            (
+                "16. (a) Y. Zhang and X. Liu, Bioorg. Med. Chem. Lett., 2020, 30, 127001, "
+                "DOI: 10.1016/j.bmcl.2020.127001; "
+                "(b) L. Wang, Chin. J. Chem., 2021, 39, 550–556, DOI: 10.1002/cjoc.202000555.",
+                [
+                    ("Bioorg. Med. Chem. Lett.", "Bioorganic & Medicinal Chemistry Letters", "10.1016/j.bmcl.2020.127001", ["Y. Zhang", "X. Liu"], 2020),
+                    ("Chin. J. Chem.", "Chinese Journal of Chemistry", "10.1002/cjoc.202000555", ["L. Wang"], 2021),
+                ],
+            ),
+            (
+                "17. (a) Y. Zhang and X. Liu, Angewandte Chemie, International Edition, 2020, 59, 1234–1240, "
+                "DOI: 10.1002/anie.202000111; "
+                "(b) L. Wang, Journal of the Chemical Society, Dalton Transactions, 1998, 5, 550–556, "
+                "DOI: 10.1039/A800111A.",
+                [
+                    ("Angewandte Chemie, International Edition", "Angewandte Chemie International Edition", "10.1002/anie.202000111", ["Y. Zhang", "X. Liu"], 2020),
+                    ("Journal of the Chemical Society, Dalton Transactions", "Journal of the Chemical Society, Dalton Transactions", "10.1039/A800111A", ["L. Wang"], 1998),
+                ],
+            ),
+        ]
+
+        for raw_entry, expected_subs in iso4_and_comma_cases:
+            refs = parser.parse_reference_section(raw_entry, page_num=5)
+            assert len(refs) == 2
+            for ref, (exp_venue, full_venue, doi, cand_authors, cand_year) in zip(refs, expected_subs, strict=True):
+                assert ref.title is None, f"Unexpected bogus title={ref.title!r} for {exp_venue!r}"
+                assert ref.venue == exp_venue
+                cand = SourceCandidate(
+                    source_name="crossref",
+                    found=True,
+                    title="Total Synthesis and Mechanistic Investigation of Chiral Catalysts",
+                    authors=cand_authors,
+                    year=str(cand_year),
+                    venue=full_venue,
+                    doi=doi,
+                    confidence=0.95,
+                    score=1.0,
+                )
+                sr = SourceResult(
+                    citation_raw=ref.raw_text,
+                    candidates=[cand],
+                    sources_queried=["crossref"],
+                    sources_succeeded=["crossref"],
+                )
+                verdict = checker.check(ref, sr)
+                assert verdict.label == ValidationLabel.VERIFIED, (
+                    f"Expected VERIFIED for {exp_venue}, got {verdict.label} ({verdict.triggered_rules})"
+                )
+
+        # Meanwhile, unquoted sentences before . Journal MUST still split cleanly into title + venue
+        titled_raw = (
+            "18. (a) Y. Zhang and X. Liu, Quantum Gravity Hallucination. Chem. Sci., 2020, 11, 1234–1240; "
+            "(b) L. Wang, Synthesis of Aryl Halides. Org. Biomol. Chem., 2021, 19, 550–556."
+        )
+        titled_refs = parser.parse_reference_section(titled_raw, page_num=5)
+        assert len(titled_refs) == 2
+        assert titled_refs[0].title == "Quantum Gravity Hallucination"
+        assert titled_refs[0].venue == "Chem. Sci."
+        assert titled_refs[1].title == "Synthesis of Aryl Halides"
+        assert titled_refs[1].venue == "Org. Biomol. Chem."
+
+    def test_structural_j_journal_disambiguation_and_surname_first_titleless_acs(
+        self,
+    ) -> None:
+        parser = ReferenceListParser()
+        checker = NeuroSymbolicChecker(enable_content_alignment=False)
+
+        raw_bib = (
+            "14. (a) Zhang, Y.; Liu, X. J. Organomet. Chem. 2020, 910, 121123. DOI: 10.1016/j.jorganchem.2020.121123; "
+            "(b) Wang, L. J. Comput. Chem. 2021, 42, 550–558. DOI: 10.1002/jcc.26475.\n"
+            "15. (a) Smith, J. A.; Doe, B. J. Agric. Food Chem. 2020, 68, 1000–1008. DOI: 10.1021/acs.jafc.0c00111; "
+            "(b) Chen, M. J. Colloid Interface Sci. 2021, 585, 200–209. DOI: 10.1016/j.jcis.2020.11.001.\n"
+            "16. (a) Zhang, Y.; Liu, X. Angew. Chem. Int. Ed. 2020, 59, 1234–1240. DOI: 10.1002/anie.202000111; "
+            "(b) Zhang, Y.; Liu, X. Org. Biomol. Chem. 2020, 18, 1234–1240. DOI: 10.1039/D0OB00111A.\n"
+            "17. van Leeuwen, P. W. N. M. Chem. Rev. 2011, 111, 2077–2118. DOI: 10.1021/cr1002497.\n"
+            "18. Doe, A. J. Synthesis of Aryl Halides. J. Organomet. Chem. 2020, 910, 121999."
+        )
+        refs = parser.parse_reference_section(raw_bib, page_num=6)
+        assert len(refs) == 8
+
+        expected_titleless = [
+            (refs[0], ["zhang", "liu"], "J. Organomet. Chem.", "Journal of Organometallic Chemistry", "10.1016/j.jorganchem.2020.121123", ["Y. Zhang", "X. Liu"], 2020),
+            (refs[1], ["wang"], "J. Comput. Chem.", "Journal of Computational Chemistry", "10.1002/jcc.26475", ["L. Wang"], 2021),
+            (refs[2], ["smith", "doe"], "J. Agric. Food Chem.", "Journal of Agricultural and Food Chemistry", "10.1021/acs.jafc.0c00111", ["J. A. Smith", "B. Doe"], 2020),
+            (refs[3], ["chen"], "J. Colloid Interface Sci.", "Journal of Colloid and Interface Science", "10.1016/j.jcis.2020.11.001", ["M. Chen"], 2021),
+            (refs[4], ["zhang", "liu"], "Angew. Chem. Int. Ed.", "Angewandte Chemie International Edition", "10.1002/anie.202000111", ["Y. Zhang", "X. Liu"], 2020),
+            (refs[5], ["zhang", "liu"], "Org. Biomol. Chem.", "Organic & Biomolecular Chemistry", "10.1039/D0OB00111A", ["Y. Zhang", "X. Liu"], 2020),
+            (refs[6], ["van leeuwen"], "Chem. Rev.", "Chemical Reviews", "10.1021/cr1002497", ["P. W. N. M. van Leeuwen"], 2011),
+        ]
+        for ref, exp_last, exp_venue, full_venue, doi, cand_authors, cand_year in expected_titleless:
+            assert [a.last_name for a in ref.authors] == exp_last
+            assert (ref.venue or "").rstrip(".") == exp_venue.rstrip(".")
+            if ref.sub_index is not None:
+                assert ref.title is None
+            cand = SourceCandidate(
+                source_name="crossref",
+                found=True,
+                title="Ligand Effects in Transition-Metal Homogeneous Catalysis",
+                authors=cand_authors,
+                year=str(cand_year),
+                venue=full_venue,
+                doi=doi,
+                confidence=0.95,
+                score=1.0,
+            )
+            sr = SourceResult(
+                citation_raw=ref.raw_text,
+                candidates=[cand],
+                sources_queried=["crossref"],
+                sources_succeeded=["crossref"],
+            )
+            verdict = checker.check(ref, sr)
+            assert verdict.label == ValidationLabel.VERIFIED
+
+        # Entry 18: Author final initial J. followed by unquoted article title before J. Organomet. Chem.
+        assert [a.last_name for a in refs[7].authors] == ["doe"]
+        assert refs[7].title == "Synthesis of Aryl Halides"
+        assert (refs[7].venue or "").rstrip(".") == "J. Organomet. Chem"
+
+        # Lone surname-first (a) entry with Angew. Chem. Int. Ed. keeps title=None and full venue
+        lone_angew = parser.parse_single_entry(
+            "14. (a) Zhang, Y.; Liu, X. Angew. Chem. Int. Ed. 2020, 59, 1234–1240. DOI: 10.1002/anie.202000111",
+            order_index=14,
+            page_num=6,
+        )
+        assert lone_angew is not None
+        assert lone_angew.title is None
+        assert (lone_angew.venue or "").rstrip(".") == "Angew. Chem. Int. Ed"
+
+    def test_lone_sub_marker_prefix_cross_domain_cvpr_doi_and_empty_venue_zenodo_doi(
+        self,
+    ) -> None:
+        parser = ReferenceListParser()
+        checker = NeuroSymbolicChecker(enable_content_alignment=False)
+
+        # (a) Lone (a) prefix with bogus unquoted title before . Journal (both RSC and surname-first ACS)
+        for lone_raw in (
+            "14. (a) Y. Zhang and X. Liu, Quantum Gravity Hallucination. Chem. Sci., 2020, 11, 1234–1240, DOI: 10.1039/D0SC00111A",
+            "14. (a) Zhang, Y.; Liu, X. Quantum Gravity Hallucination. Chem. Sci. 2020, 11, 1234–1240, DOI: 10.1039/D0SC00111A",
+        ):
+            lone_ref = parser.parse_single_entry(lone_raw, order_index=14, page_num=5)
+            assert lone_ref is not None
+            assert lone_ref.title == "Quantum Gravity Hallucination"
+            assert (lone_ref.venue or "").rstrip(".") == "Chem. Sci"
+            real_chem_cand = SourceCandidate(
+                source_name="crossref",
+                found=True,
+                title="Visible-Light Photoredox Cross-Coupling of Aryl Chlorides",
+                authors=["Y. Zhang", "X. Liu"],
+                year="2020",
+                venue="Chemical Science",
+                doi="10.1039/D0SC00111A",
+                confidence=0.95,
+                score=1.0,
+            )
+            sr_lone = SourceResult(
+                citation_raw=lone_ref.raw_text,
+                candidates=[real_chem_cand],
+                sources_queried=["crossref"],
+                sources_succeeded=["crossref"],
+            )
+            v_lone = checker.check(lone_ref, sr_lone)
+            assert v_lone.label == ValidationLabel.SUSPECTED_HALLUCINATION
+            assert "R-CHIMERIC-DOI-MISMATCH" in v_lone.triggered_rules
+
+        # Defense-in-depth in rules.py: even if a fallback Citation had title == venue with unparsed sentence in raw_text
+        fallback_cit = Citation(
+            raw_text="14. (a) Y. Zhang and X. Liu, Quantum Gravity Hallucination. Chem. Sci., 2020",
+            citation_type=CitationType.REFERENCE_LIST,
+            style=CitationStyle.ACS,
+            authors=["Y. Zhang", "X. Liu"],
+            year="2020",
+            title="Chem. Sci.",
+            venue="Chem. Sci.",
+            doi="10.1039/D0SC00111A",
+        )
+        v_fb = checker.check(
+            fallback_cit,
+            SourceResult(
+                citation_raw=fallback_cit.raw_text,
+                candidates=[real_chem_cand],
+                sources_queried=["crossref"],
+                sources_succeeded=["crossref"],
+            ),
+        )
+        assert v_fb.label == ValidationLabel.SUSPECTED_HALLUCINATION
+        assert "R-CHIMERIC-DOI-MISMATCH" in v_fb.triggered_rules
+
+        # (b) Cross-domain CVPR DOI spliced onto Chem. Sci. with same-name common authors + same year
+        cvpr_raw = (
+            "14. (a) Y. Zhang and X. Liu, Chem. Sci., 2020, 11, 1234–1240, "
+            "DOI: 10.1109/CVPR42600.2020.00123"
+        )
+        cvpr_ref = parser.parse_single_entry(cvpr_raw, order_index=14, page_num=5)
+        assert cvpr_ref is not None
+        cvpr_cand = SourceCandidate(
+            source_name="crossref",
+            found=True,
+            title="Deep Feature Calibration for Object Detection",
+            authors=["Y. Zhang", "X. Liu"],
+            year="2020",
+            venue="2020 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)",
+            doi="10.1109/CVPR42600.2020.00123",
+            confidence=0.95,
+            score=1.0,
+        )
+        sr_cvpr = SourceResult(
+            citation_raw=cvpr_ref.raw_text,
+            candidates=[cvpr_cand],
+            sources_queried=["crossref"],
+            sources_succeeded=["crossref"],
+        )
+        v_cvpr = checker.check(cvpr_ref, sr_cvpr)
+        assert v_cvpr.label == ValidationLabel.SUSPECTED_HALLUCINATION
+        assert "R-CHIMERIC-DOI-MISMATCH" in v_cvpr.triggered_rules
+
+        # (c) Zenodo DOI with empty cand.venue spliced onto Chem. Sci.
+        zenodo_raw = (
+            "14. (a) Y. Zhang and X. Liu, Chem. Sci., 2020, 11, 1234–1240, "
+            "DOI: 10.5281/zenodo.3900123"
+        )
+        zenodo_ref = parser.parse_single_entry(zenodo_raw, order_index=14, page_num=5)
+        assert zenodo_ref is not None
+        zenodo_cand = SourceCandidate(
+            source_name="crossref",
+            found=True,
+            title="PyTorch ImageNet Checkpoint Weights v1.0",
+            authors=["Y. Zhang", "X. Liu"],
+            year="2020",
+            venue=None,
+            doi="10.5281/zenodo.3900123",
+            confidence=0.95,
+            score=1.0,
+        )
+        sr_zenodo = SourceResult(
+            citation_raw=zenodo_ref.raw_text,
+            candidates=[zenodo_cand],
+            sources_queried=["crossref"],
+            sources_succeeded=["crossref"],
+        )
+        v_zenodo = checker.check(zenodo_ref, sr_zenodo)
+        assert v_zenodo.label == ValidationLabel.SUSPECTED_HALLUCINATION
+        assert "R-CHIMERIC-DOI-MISMATCH" in v_zenodo.triggered_rules
+
+    def test_ieee_numeric_a_to_z_siblings_and_bibliography_pre_header_body_rescue(
+        self, tmp_path
+    ) -> None:
+        extractor = CitationExtractor(preserve_occurrences=True)
+        sibling_hits = extractor.extract_from_text(
+            "Prior studies [14a], [14b], [14c], and [14g] were extended [14a–g].",
+            page_num=1,
+        )
+        assert [c.raw_text for c in sibling_hits] == [
+            "[14a]",
+            "[14b]",
+            "[14c]",
+            "[14g]",
+            "[14a–g]",
+        ]
+
+        # Standalone units/dimensions without sibling [Na]/[Nb]/[Nc] remain blocked
+        unit_hits = extractor.extract_from_text(
+            "Stirred for [24h] at [10m] scale with [5g] catalyst in [3d] space for [30s].",
+            page_num=1,
+        )
+        assert unit_hits == []
+
+        # 1-page note where body sits above References (SectionType.BIBLIOGRAPHY pre_header_body_text)
+        dummy_pdf = tmp_path / "one_page_note.pdf"
+        dummy_pdf.write_bytes(b"%PDF-1.4 dummy")
+        one_page_doc = Document(
+            file_path=str(dummy_pdf),
+            num_pages=1,
+            parser_used="mupdf",
+            pages=[
+                Page(
+                    page_num=1,
+                    text=(
+                        "Catalytic cross-coupling was demonstrated in seminal reports (14b) "
+                        "and extended to [1d] and [14g] under mild photoredox conditions.\n"
+                        "References\n"
+                        "[1] (a) Alpha, A. Org. Lett. 2018, 20, 10–12; "
+                        "(b) Beta, B. Org. Lett. 2019, 21, 20–22; "
+                        "(c) Gamma, C. Org. Lett. 2020, 22, 30–32; "
+                        "(d) Delta, D. Org. Lett. 2021, 23, 40–42.\n"
+                        "[14] (a) Zhang, Y. Chem. Sci. 2020, 11, 100–105; "
+                        "(b) Wang, L. Chem. Sci. 2021, 12, 200–205."
+                    ),
+                    has_text_layer=True,
+                )
+            ],
+            metadata={},
+        )
+        mock_mupdf = MagicMock()
+        mock_mupdf.parse.return_value = one_page_doc
+        dp = DocumentParser(mupdf_parser=mock_mupdf)
+        dp._load_grobid_tei = MagicMock(return_value=None)  # type: ignore[method-assign]
+        parsed = dp.parse(str(dummy_pdf), use_service_manager=False)
+        body_raws = [c.raw_text for c in parsed.body_citations]
+        assert "(14b)" in body_raws
+        assert "[1d]" in body_raws
+        assert "[14g]" in body_raws
+
+    def test_bracket_non_citation_labels_and_equations_rejected(self, tmp_path) -> None:
+        false_pos_text = (
+            "Compound [1d] gave 95% yield, Compounds [1a] and [1b] decomposed, "
+            "whereas Figure [1a] and Scheme [1b] show the spectra:\n"
+            "k_obs = k_1 [A]   [1a]"
+        )
+        extractor = CitationExtractor(preserve_occurrences=True)
+        assert extractor.extract_from_text(false_pos_text, page_num=1) == []
+
+        dummy_pdf = tmp_path / "chem_brackets.pdf"
+        dummy_pdf.write_bytes(b"%PDF-1.4 dummy")
+        doc = Document(
+            file_path=str(dummy_pdf),
+            num_pages=2,
+            parser_used="mupdf",
+            pages=[
+                Page(
+                    page_num=1,
+                    text=false_pos_text + "\n\nPrior reports [1a] and [1d] confirmed the mechanism.",
+                    has_text_layer=True,
+                ),
+                Page(
+                    page_num=2,
+                    text=(
+                        "References\n"
+                        "[1] (a) Alpha, A. J. Am. Chem. Soc. 2018, 140, 10–15; "
+                        "(b) Beta, B. J. Am. Chem. Soc. 2019, 141, 20–25; "
+                        "(c) Gamma, C. J. Am. Chem. Soc. 2020, 142, 30–35; "
+                        "(d) Delta, D. J. Am. Chem. Soc. 2021, 143, 40–45."
+                    ),
+                    has_text_layer=True,
+                ),
+            ],
+            metadata={},
+        )
+        mock_mupdf = MagicMock()
+        mock_mupdf.parse.return_value = doc
+        dp = DocumentParser(mupdf_parser=mock_mupdf)
+        dp._load_grobid_tei = MagicMock(return_value=None)  # type: ignore[method-assign]
+        parsed = dp.parse(str(dummy_pdf), use_service_manager=False)
+        assert [c.raw_text for c in parsed.body_citations] == ["[1a]", "[1d]"]
+

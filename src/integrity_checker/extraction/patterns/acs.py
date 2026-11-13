@@ -76,13 +76,23 @@ _ACS_PARENTHESIZED = CompiledPattern.create(
 
 # --- Reference list ACS patterns ---
 
+_ACS_SUB_PREFIX = r"(?:(?:\(\s*[a-z]\s*\)|[a-z]\))\s+)?"
 _ACS_PREFIX = (
     r"^(?:(?:\(\s*(?P<index>\d+)\s*\)|(?P<num>\d+)\.|\[\s*(?P<b_idx>\d+)\s*\])\s*"
-    r"|(?!\s*(?:\(\s*\d+\s*\)|\d+\.\s|\[\s*\d+\s*\])))"
+    + _ACS_SUB_PREFIX
+    + r"|(?!\s*(?:\(\s*\d+\s*\)|\d+\.\s|\[\s*\d+\s*\]))"
+    + _ACS_SUB_PREFIX
+    + r")"
+)
+
+_JZ_STARTS_JOURNAL_LOOKAHEAD = (
+    r"\s+(?:[A-Z][a-z]+|of\b|f[uü]r\b|de\b|la\b)"
+    r"(?!(?:(?!(?:18|19|20)\d{2}\b)[^;])*?\b[A-Za-zÀ-ÿ'\u2019\-]{2,}\s+[A-Za-zÀ-ÿ'\u2019\-]{4,}\.\s+[A-Z])"
+    r"(?!(?:(?!(?:18|19|20)\d{2}\b)[^;])*?\s+(?!(?:of|the|and|in|on|for|to|a|an|de|la|le|du|des|et|f[uü]r|und|der)\b)[a-zà-ÿ]{3,}\b)"
 )
 
 _ACS_AUTHOR_STOP_GUARD = (
-    r"(?!(?:[JZ]\.(?!\s+(?:Am|Org|Inorg|Phys|Chem|Mater|Biol|Biochem|Med|Mol|Catal|Polym|Anal|Appl|Electrochem|Photochem|Nat|Anorg|Naturforsch)\.)"
+    r"(?!(?:[JZ]\.(?!" + _JZ_STARTS_JOURNAL_LOOKAHEAD + r")"
     r"|[A-IK-YÀ-Ý]\."
     r"|(?:(?:van|de|den|der|von|del|da|di|le|la|du|al|el)\s+)?[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+(?:\s*[,;]|\s+(?:and|&|et\s+al)\b)"
     r"|;|and\b|&|et\s+al\.))"
@@ -100,31 +110,39 @@ _RSC_AUTHORS_GROUP = (
     rf"(?:,?\s+et\s+al\.?)?)"
 )
 
-_JOURNAL_ABBREV_STEMS: frozenset[str] = frozenset(
+_TITLE_CONNECTORS: frozenset[str] = frozenset(
     {
-        "acct", "accts", "acta", "advan", "allg", "anal", "angew", "annu", "anorg",
-        "appl", "arch", "aust", "biochem", "biol", "biomacromol", "biophys",
-        "biotechnol", "bull", "catal", "chem", "chemsuschem", "chemcatchem",
-        "chemmedchem", "chemphyschem", "chempluschem", "chim", "clin", "colloid",
-        "commun", "comp", "comput", "coord", "cryst", "crystengcomm", "curr",
-        "dalton", "disc", "discuss", "dokl", "ecol", "educ", "electroanal",
-        "electrochem", "eng", "environ", "eur", "exp", "faraday", "febs", "food",
-        "funct", "gaz", "gazz", "geochem", "geophys", "helv", "heterocycl",
-        "ieee", "ind", "inorg", "inst", "int", "intl", "isrl", "izv", "japn",
-        "jpn", "kinet", "kristallogr", "langmuir", "lett", "macromol", "magn",
-        "mater", "math", "mech", "med", "metall", "methods", "microbiol",
-        "mineral", "mol", "monatsh", "nano", "nanotechnol", "nat", "natl",
-        "naturforsch", "neurosci", "nucl", "nucleic", "opt", "org", "organomet",
-        "pathol", "pharm", "pharmacol", "phil", "philos", "photobiol", "photochem",
-        "phys", "physiol", "plant", "polym", "prep", "proc", "prog", "prot",
-        "protein", "psychol", "publ", "pure", "quart", "radiat", "radioanal",
-        "react", "recl", "rend", "rep", "res", "rev", "rheol", "roy", "russ",
-        "sci", "sect", "semicond", "sep", "ser", "soc", "solid", "spectrochim",
-        "spectrosc", "stat", "struct", "suppl", "surf", "sust", "symp", "synlett",
-        "synth", "syst", "tech", "technol", "tetrahedron", "theor", "therm",
-        "thermochim", "toxicol", "trans", "trends", "ultrason", "univ", "usp",
-        "vac", "virol", "zool",
+        "of", "the", "and", "in", "on", "for", "to", "a", "an",
+        "de", "la", "le", "du", "des", "et", "fur", "für", "und", "der", "&",
     }
+)
+
+_COMMA_VENUE_SUBTITLE_RE = re.compile(
+    r"^(?:"
+    r"International\s+Edition(?:\s+in\s+English)?|"
+    r"Int\.\s*Ed\.(?:\s*Engl\.)?|"
+    r"(?:Dalton|Perkin|Faraday)\s+Trans(?:actions|\.)?(?:\s+[I12]+)?|"
+    r"Chem(?:ical|\.)\s+Commun(?:ications|\.)?|"
+    r"(?:Part|Series|Ser\.|Section|Sect\.)\s+[A-Z0-9]+(?:\b|:)"
+    r")$",
+    flags=re.IGNORECASE,
+)
+
+_COMMA_JOURNAL_HEAD_RE = re.compile(
+    r"^(?:"
+    r"Angewandte\s+Chemie\b|"
+    r"Journal\s+(?:of|f[uü]r|de)\b|"
+    r"Proceedings\s+of\b|"
+    r"Transactions\s+of\b|"
+    r"Bulletin\s+(?:of|de|des)\b|"
+    r"Annals\s+of\b|"
+    r"Annales\s+de\b|"
+    r"Comptes\s+Rendus\b|"
+    r"Acta\s+[A-Z][a-z]+|"
+    r"Zeitschrift\s+f[uü]r\b|"
+    r"Philosophical\s+Transactions\b"
+    r")",
+    flags=re.IGNORECASE,
 )
 
 # RSC / Wiley / Angewandte initials-first comma-delimited journal article:
@@ -491,16 +509,32 @@ class ACSFormat:
 
     @staticmethod
     def _has_incomplete_author_segment(authors_str: str) -> bool:
-        """Return True when ``authors_str`` stopped prematurely on a bare initial."""
+        """Return True when ``authors_str`` stopped prematurely on a bare initial or swallowed a title/venue."""
         cleaned = (authors_str or "").strip()
         if not cleaned or not re.search(r"[A-Za-zÀ-ÿ]{2,}", cleaned):
             return True
+        if re.match(r"^(?:\(\s*[a-z]\s*\)|[a-z]\))\s+", cleaned):
+            return True
         _init_only_re = r"(?:[A-ZÀ-Ý]\.?-[A-ZÀ-Ý]\.?\s*|[A-ZÀ-Ý]\.?\s*)+"
+        _surname_init_swallowed_re = re.compile(
+            r"^(?:(?:van|de|den|der|von|del|da|di|le|la|du|al|el)\s+)?"
+            r"[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+\s*,\s*"
+            r"(?:[A-ZÀ-Ý]\.?-[A-ZÀ-Ý]\.\s*|[A-ZÀ-Ý]\.\s*)+"
+            r"(?!Jr\.?\b|Sr\.?\b|II\b|III\b|IV\b)[A-Za-zÀ-ÿ]{2,}"
+        )
         for seg in re.split(r"\s*(?:;|\band\b|&)\s*", cleaned):
             seg_s = seg.strip()
             if not seg_s:
                 continue
             if re.fullmatch(_init_only_re, seg_s):
+                return True
+            if _surname_init_swallowed_re.match(seg_s):
+                return True
+        for cseg in [s.strip() for s in cleaned.split(",") if s.strip()]:
+            if re.match(r"^(?:and\b|&|et\s+al\.?|Jr\.?|Sr\.?|II|III|IV)", cseg, re.IGNORECASE):
+                continue
+            c_words = [w for w in cseg.split() if w.lower() not in _TITLE_CONNECTORS]
+            if len(c_words) >= 3 and not re.search(r"[A-ZÀ-Ý]\.|;", cseg):
                 return True
         if re.match(rf"^{_RSC_INIT_TOKEN}[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+", cleaned):
             for cseg in [s.strip() for s in cleaned.split(",") if s.strip()]:
@@ -553,7 +587,69 @@ class ACSFormat:
         return parsed
 
     @staticmethod
-    def _split_rsc_title_and_venue(mid_raw: str) -> tuple[str | None, str | None]:
+    def _is_unquoted_title_split(left_full: str, right: str | None = None) -> bool:
+        """Structural ISO-4 vs unquoted sentence/article title detector (allowlist-free).
+
+        In any ISO-4 abbreviated journal (``Org. Biomol. Chem.``, ``ACS Cent. Sci.``,
+        ``ACS Sustain. Chem. Eng.``, ``Proc. Natl. Acad. Sci. U. S. A.``,
+        ``Bioorg. Med. Chem. Lett.``, ``Chin. J. Chem.``), every non-connector word
+        before a ``. `` either ends with ``.`` or is an all-caps acronym. An unquoted
+        article title before ``. Journal`` has >= 2 words in the clause before ``.``
+        where at least one prior non-connector word neither ends with ``.`` nor is an
+        all-caps acronym, or contains lowercase non-connector content words.
+        """
+        if right is not None:
+            right_clean = right.strip().rstrip(",").strip()
+            if not right_clean or not re.match(r"^[A-Z]", right_clean):
+                return False
+            if re.fullmatch(r"[A-Za-z]{1,6}\.", right_clean):
+                return False
+
+        parts = re.split(r"(?<=\.)\s+", (left_full or "").strip())
+        clause = parts[-1].strip() if parts else ""
+        tokens = [
+            t.strip(",:()\"'\u201c\u201d[]")
+            for t in clause.split()
+            if t.strip(",:()\"'\u201c\u201d[]")
+        ]
+        if len(tokens) < 2:
+            return False
+        last_stem = re.sub(r"[^A-Za-zÀ-ÿ]", "", tokens[-1].rstrip("."))
+        if len(last_stem) < 4:
+            return False
+
+        non_conn = [t for t in tokens if t.rstrip(".").lower() not in _TITLE_CONNECTORS]
+        if len(non_conn) < 2:
+            return False
+        if any(t[0].islower() for t in non_conn if t[0].isalpha()):
+            return True
+
+        if (
+            parts[:-1]
+            and all(
+                all(
+                    w.endswith(".")
+                    or bool(re.fullmatch(r"[A-Z0-9]{1,8}", w))
+                    or w.lower() in _TITLE_CONNECTORS
+                    for w in p.split()
+                )
+                for p in parts[:-1]
+            )
+            and len(tokens) == 2
+            and len(last_stem) <= 5
+        ):
+            return False
+
+        prior_tokens = [t for t in tokens[:-1] if t.rstrip(".").lower() not in _TITLE_CONNECTORS]
+        unabbrev_prior = [
+            t
+            for t in prior_tokens
+            if not t.endswith(".") and not re.fullmatch(r"[A-Z0-9]{2,8}", t)
+        ]
+        return len(unabbrev_prior) >= 1
+
+    @classmethod
+    def _split_rsc_title_and_venue(cls, mid_raw: str) -> tuple[str | None, str | None]:
         """Split RSC/Wiley/APS ``mid`` field into ``(title, venue)`` without swallowing titles."""
         mid = (mid_raw or "").strip().rstrip(",").strip()
         if not mid or len(mid) < 2:
@@ -572,31 +668,31 @@ class ACSFormat:
             return qt, qv
 
         # 2. Period-separated unquoted title: "Quantum Gravity Hallucination. Chem. Sci."
-        _non_title_end_abbrevs = _JOURNAL_ABBREV_STEMS | {
-            "dr", "mr", "ms", "prof", "st", "jr", "sr", "ed", "eds",
-            "vol", "no", "pp", "fig", "eq", "ch", "pt", "vs", "cf", "al",
-        }
         for m_dot in reversed(list(re.finditer(r"\.\s+", mid))):
             left = mid[: m_dot.start()].strip()
+            left_with_dot = mid[: m_dot.start() + 1].strip()
             right = mid[m_dot.end() :].strip().rstrip(",").strip()
             if not left or not right or not re.match(r"^[A-Z]", right):
                 continue
-            last_w_m = re.search(r"([A-Za-zÀ-ÿ'\u2019\-]+)$", left)
-            last_w = (last_w_m.group(1) if last_w_m else "").lower()
-            if len(last_w) >= 4 and last_w not in _non_title_end_abbrevs:
+            if cls._is_unquoted_title_split(left_with_dot, right):
                 if re.search(r"\bvol\.\s*$", right, re.I) or len(right) > 85:
                     return None, None
                 return left.rstrip(",."), right
 
         # 3. Unquoted comma-delimited RSC title: "Nickel-Catalyzed Cross-Coupling..., Chem. Sci."
-        # Preserve legitimate comma-containing RSC journals like "Angew. Chem., Int. Ed."
-        # or "J. Chem. Soc., Chem. Commun." (whose prefix before comma ends with ".").
+        # Preserve legitimate comma-containing journals such as "Angew. Chem., Int. Ed.",
+        # "Angewandte Chemie, International Edition", and
+        # "Journal of the Chemical Society, Dalton Transactions".
         comma_parts = [p.strip() for p in re.split(r",\s+", mid) if p.strip()]
         if len(comma_parts) >= 2:
             for idx in range(len(comma_parts) - 1, 0, -1):
                 cand_title = ", ".join(comma_parts[:idx]).strip()
                 cand_venue = ", ".join(comma_parts[idx:]).strip().rstrip(",").strip()
                 if cand_title.endswith(".") or len(cand_title) < 8:
+                    continue
+                if _COMMA_VENUE_SUBTITLE_RE.match(cand_venue) or _COMMA_JOURNAL_HEAD_RE.match(
+                    cand_title
+                ):
                     continue
                 unabbrev_words = re.findall(r"\b[A-Za-zÀ-ÿ'\u2019\-]{3,}\b(?!\.)", cand_title)
                 if (
@@ -695,6 +791,10 @@ class ACSFormat:
         authors_str = match.group('authors')
         if not authors_str or self._has_incomplete_author_segment(authors_str):
             return None
+        venue = match.group('venue').strip()
+        raw_title = (match.groupdict().get('title') or '').strip()
+        if raw_title and not self._is_unquoted_title_split(f"{raw_title}.", venue):
+            return None
         parsed_authors = self._parse_authors(authors_str)
         if not parsed_authors:
             return None
@@ -713,15 +813,12 @@ class ACSFormat:
             citation.numeric_index = int(index)
 
         # Extract venue
-        venue = match.group('venue').strip()
         citation.venue = venue
 
         # Extract title (optional in ACS journal citations)
-        raw_title = match.groupdict().get('title')
-        if raw_title and raw_title.strip():
-            title = raw_title.strip()
-            citation.title = title
-            citation.title_normalized = self._normalize_title(title)
+        if raw_title:
+            citation.title = raw_title
+            citation.title_normalized = self._normalize_title(raw_title)
         elif venue:
             citation.title = venue
             citation.title_normalized = self._normalize_title(venue)
@@ -757,6 +854,11 @@ class ACSFormat:
         authors_str = match.group('authors')
         if not authors_str or self._has_incomplete_author_segment(authors_str):
             return None
+        venue = match.group('venue').strip()
+        raw_title = (match.groupdict().get('title') or '').strip()
+        if raw_title and not self._is_unquoted_title_split(f"{raw_title}.", venue):
+            venue = f"{raw_title}. {venue}"
+            raw_title = ""
         parsed_authors = self._parse_authors(authors_str)
         if not parsed_authors:
             return None
@@ -775,16 +877,13 @@ class ACSFormat:
             citation.numeric_index = int(index)
 
         # Extract venue
-        venue = match.group('venue').strip()
         citation.venue = venue
 
         # Extract title (optional in ACS journal citations)
-        raw_title = match.groupdict().get('title')
-        if raw_title and raw_title.strip():
-            title = raw_title.strip()
-            citation.title = title
-            citation.title_normalized = self._normalize_title(title)
-        elif venue:
+        if raw_title:
+            citation.title = raw_title
+            citation.title_normalized = self._normalize_title(raw_title)
+        elif venue and match.groupdict().get('index'):
             citation.title = venue
             citation.title_normalized = self._normalize_title(venue)
 
@@ -840,19 +939,29 @@ class ACSFormat:
         if index:
             citation.numeric_index = int(index)
 
-        # Extract venue
+        # Extract venue and optional title without splitting ISO-4 journal stems
         venue = match.group('venue').strip()
+        raw_title = (match.groupdict().get('title') or '').strip()
+        if raw_title and not self._is_unquoted_title_split(f"{raw_title}.", venue):
+            venue = f"{raw_title}. {venue}"
+            raw_title = ""
         citation.venue = venue
 
-        # Extract title (optional in ACS journal citations)
-        raw_title = match.groupdict().get('title')
-        if raw_title and raw_title.strip():
-            title = raw_title.strip()
-            citation.title = title
-            citation.title_normalized = self._normalize_title(title)
-        elif venue:
+        has_sub_prefix = bool(
+            re.match(
+                r"^\s*(?:(?:\(\s*\d+\s*\)|\d+\.|\[\s*\d+\s*\])\s*)?(?:\(\s*[a-z]\s*\)|[a-z]\))\s+",
+                text,
+            )
+        )
+        if raw_title:
+            citation.title = raw_title
+            citation.title_normalized = self._normalize_title(raw_title)
+        elif venue and match.groupdict().get('index') and not has_sub_prefix:
             citation.title = venue
             citation.title_normalized = self._normalize_title(venue)
+        else:
+            citation.title = None
+            citation.title_normalized = None
 
         # Extract year
         year_str = match.group('year')
