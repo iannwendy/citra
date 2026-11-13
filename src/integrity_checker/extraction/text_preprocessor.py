@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from integrity_checker.extraction.vn_encoding import VietnameseLegacyTranscoder
+
 
 class TextPreprocessor:
     """Chuẩn hóa text trước khi regex match.
@@ -68,6 +70,9 @@ class TextPreprocessor:
     _LATEX_ACCENT_RE = re.compile(r"([\u00b4\u00a8\u02c6\u02dc\u02c7\u02d8\u02d9\u02dd])\s*([A-Za-z])")
 
     def _normalize_unicode(self, text: str) -> str:
+        # Decode legacy Vietnamese encodings (TCVN3 / VNI-Windows) before LaTeX spacing
+        # accents so TCVN3 bytes such as '¨' (ă in "V¨n") and '´' are never misread.
+        text, _ = VietnameseLegacyTranscoder.normalize_legacy_vietnamese(text)
         # Convert LaTeX Type1 spacing accents preceding a letter (e.g. "Kir´aly", "K¨uhn")
         text = self._LATEX_ACCENT_RE.sub(
             lambda m: m.group(2) + self._LATEX_SPACING_ACCENTS[m.group(1)], text

@@ -45,11 +45,23 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Minimal runtime deps
+# Minimal runtime deps + lightweight Tesseract language data (~5.6 MB) for PyMuPDF native OCR
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         libsqlite3-0 \
+        tesseract-ocr-eng \
+        tesseract-ocr-vie \
+    && for d in /usr/share/tesseract-ocr/5/tessdata /usr/share/tesseract-ocr/4.00/tessdata /usr/share/tesseract-ocr/*/tessdata; do \
+         if [ -f "$d/eng.traineddata" ] && [ "$d" != "/usr/share/tesseract-ocr/tessdata" ]; then \
+           ln -sfn "$d" /usr/share/tesseract-ocr/tessdata; \
+           break; \
+         fi; \
+       done \
+    && test -f /usr/share/tesseract-ocr/tessdata/eng.traineddata \
+    && test -f /usr/share/tesseract-ocr/tessdata/vie.traineddata \
     && rm -rf /var/lib/apt/lists/*
+
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/tessdata
 
 # Tạo non-root user cho security
 RUN groupadd --gid 1000 appgroup && \

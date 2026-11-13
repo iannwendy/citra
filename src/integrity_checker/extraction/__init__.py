@@ -57,6 +57,7 @@ from integrity_checker.extraction.style_detector import (
     StyleProfile,
 )
 from integrity_checker.extraction.text_preprocessor import TextPreprocessor
+from integrity_checker.extraction.vn_encoding import VietnameseLegacyTranscoder
 
 __all__ = [
     "BasePDFParser",
@@ -65,6 +66,7 @@ __all__ = [
     "MuPdfParser",
     "PdfPlumberParser",
     "TextPreprocessor",
+    "VietnameseLegacyTranscoder",
     "CitationPattern",
     "get_all_patterns",
     "CitationExtractor",
