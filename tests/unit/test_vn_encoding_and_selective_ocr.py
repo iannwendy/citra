@@ -11,7 +11,10 @@ import pytest
 from integrity_checker.extraction.base import Page
 from integrity_checker.extraction.mupdf_parser import MuPdfParser
 from integrity_checker.extraction.text_preprocessor import TextPreprocessor
-from integrity_checker.extraction.vn_encoding import VietnameseLegacyTranscoder
+from integrity_checker.extraction.vn_encoding import (
+    VietnameseLegacyTranscoder,
+    is_valid_vietnamese_syllable,
+)
 
 
 def _make_raster_pdf(path: Path, num_pages: int, *, coverage_ratio: float = 0.65) -> None:
@@ -405,3 +408,146 @@ def test_dockerfile_runtime_installs_tesseract_eng_and_vie() -> None:
     assert "tesseract-ocr-vie" in runtime_section
     assert "--no-install-recommends" in runtime_section
     assert "TESSDATA_PREFIX" in runtime_section
+
+
+class TestFixRound1Regressions:
+    def test_mupdf_end_to_end_tcvn3_soft_hyphen_0xad_demoted_to_ascii_hyphen(
+        self, tmp_path: Path
+    ) -> None:
+        """Finding 1: MuPDF stext converts TCVN3 0xAD ('ư') into ASCII '-' (0x2D)."""
+        pdf_path = tmp_path / "tcvn3_u_horn_0xad.pdf"
+        doc = fitz.open()
+        page = doc.new_page(width=595, height=842)
+        # Raw TCVN3 bytes using 0xAD ('\xad') for untoned 'ư' and 'ươ':
+        raw_tcvn3_pdf_text = (
+            "CH\xad\u00a5NG 1: TR\xad\u00eaNG H\xadNG T\xad LI\u00d6U\n"
+            "[1] Tr\xad\u00acng V\u00a8n H\xadng (2018), Ph\xad\u00acng ph\u00b8p l\xad\u00eeng t\u00f6 "
+            "trong tr\xad\u00eang t\xad\u00acng t\u00b8c \u00ae\xad\u00eec nghi\u00aan c\u00f8u t\u00f5 t\xad li\u00d6u.\n"
+            "- M\u00ab h\u00d7nh t\u00e8i \xadu v\u00b5 \xad\u00edc l\xad\u00eeng c\u00f1a Jean-Paul (2018-2020) "
+            "ch\xada l\xadu tr\u00aan UTF-8 (t\xad/c\u00abng, p-n)."
+        )
+        page.insert_text((40, 72), raw_tcvn3_pdf_text, fontsize=10)
+        doc.save(str(pdf_path))
+        doc.close()
+
+        parsed = MuPdfParser().parse(pdf_path)
+        assert parsed.metadata["legacy_encoding_detected"] == "tcvn3"
+        lines = [ln.strip() for ln in parsed.pages[0].text.strip().splitlines()]
+        assert lines[0] == "CHƯƠNG 1: TRƯỜNG HƯNG TƯ LIỆU"
+        assert lines[1] == (
+            "[1] Trương Văn Hưng (2018), Phương pháp lượng tử "
+            "trong trường tương tác được nghiên cứu từ tư liệu."
+        )
+        assert lines[2] == (
+            "- Mô hình tối ưu và ước lượng của Jean-Paul (2018-2020) "
+            "chưa lưu trên UTF-8 (tư/công, p-n)."
+        )
+
+        # Also verify Lévi-Strauss on a TCVN3 line preserves its hyphen & foreign accent
+        levi_line = "Theo L\u00e9vi-Strauss (1962), ph-\u00acng ph\u00b8p c\u00cau tr\u00f3c ®-\u00eec ¸p dông."
+        dec_levi, det_levi = VietnameseLegacyTranscoder.normalize_legacy_vietnamese(levi_line)
+        assert det_levi == "tcvn3"
+        assert "phương pháp cấu trúc được áp dụng." in dec_levi
+        assert "L" in dec_levi and "-Strauss" in dec_levi
+
+    def test_short_french_lines_immune_under_font_hint_and_consecutive_bib_entries(self) -> None:
+        """Finding 2: passes_hinted & prev_line_enc must never corrupt short French lines."""
+        for fr_line in ("Tôt le matin à Paris", "Tôt ou tard", "Côté mer"):
+            assert VietnameseLegacyTranscoder.normalize_legacy_vietnamese(
+                fr_line, font_hint=".VnTime"
+            ) == (fr_line, None)
+
+        for fr_vni in ("Là où tu es né", "Là tu vas", "Où tu vas"):
+            assert VietnameseLegacyTranscoder.normalize_legacy_vietnamese(
+                fr_vni, font_hint="VNI-Times"
+            ) == (fr_vni, None)
+
+        consecutive_tcvn = (
+            "[1] NguyÔn V¨n A (2020), Gi¸o tr×nh C¬ së d÷ liÖu, NXB Gi¸o dôc.\n"
+            "[2] Tôt le matin à Paris\n"
+            "3.Tôt ou tard\n"
+            "- Là où tu es né"
+        )
+        for hint in (None, ".VnTime"):
+            dec_tcvn, det_tcvn = VietnameseLegacyTranscoder.normalize_legacy_vietnamese(
+                consecutive_tcvn, font_hint=hint
+            )
+            assert det_tcvn == "tcvn3"
+            assert dec_tcvn.splitlines() == [
+                "[1] Nguyễn Văn A (2020), Giáo trình Cơ sở dữ liệu, NXB Giáo dục.",
+                "[2] Tôt le matin à Paris",
+                "3.Tôt ou tard",
+                "- Là où tu es né",
+            ]
+
+        consecutive_vni = (
+            "[1] Traàn Vaên B (2021), Heä thoáng ñieàu khieån töï ñoäng.\n"
+            "[2] Là où tu es né\n"
+            "2. Là tu vas"
+        )
+        for hint in (None, "VNI-Times"):
+            dec_vni, det_vni = VietnameseLegacyTranscoder.normalize_legacy_vietnamese(
+                consecutive_vni, font_hint=hint
+            )
+            assert det_vni == "vni_windows"
+            assert dec_vni.splitlines() == [
+                "[1] Trần Văn B (2021), Hệ thống điều khiển tự động.",
+                "[2] Là où tu es né",
+                "2. Là tu vas",
+            ]
+
+    def test_capslock_tcvn3_lower_base_and_vntimeh_all_caps_font(self) -> None:
+        """Finding 3: CapsLock TCVN3 0xA8..0xAE uppercasing + .Vn*H display fonts."""
+        caps_block = "®¹I HäC B¸CH KHOA\nLêI C¶M ¬N\nNGUYÔN V¨N A\nCH-¬NG 1: GIíI THIÖU"
+        decoded_caps, det_caps = VietnameseLegacyTranscoder.normalize_legacy_vietnamese(
+            caps_block, font_hint=".VnTime"
+        )
+        assert det_caps == "tcvn3"
+        assert decoded_caps == "ĐẠI HỌC BÁCH KHOA\nLỜI CẢM ƠN\nNGUYỄN VĂN A\nCHƯƠNG 1: GIỚI THIỆU"
+
+        decoded_h, det_h = VietnameseLegacyTranscoder.normalize_legacy_vietnamese(
+            "ch-¬ng 1: tæng quan tµi liÖu", font_hint=".VnTimeH"
+        )
+        assert det_h == "tcvn3"
+        assert decoded_h == "CHƯƠNG 1: TỔNG QUAN TÀI LIỆU"
+
+        decoded_sub_h, det_sub_h = VietnameseLegacyTranscoder.normalize_legacy_vietnamese(
+            "lêi c¶m ¬n", font_hint="BCDEFA+.VnArialH,Bold"
+        )
+        assert det_sub_h == "tcvn3"
+        assert decoded_sub_h == "LỜI CẢM ƠN"
+
+        # Mixed .VnTimeH heading + .VnTime body on one PDF page must return non-H .VnTime hint
+        class _DummyPage:
+            def __init__(self, fonts):
+                self._fonts = fonts
+
+            def get_fonts(self):
+                return self._fonts
+
+        only_h_page = _DummyPage([(1, "ttf", "TrueType", "ABCDEF+.VnTimeH", "F1", "WinAnsi")])
+        mixed_h_page = _DummyPage(
+            [
+                (1, "ttf", "TrueType", "ABCDEF+.VnTimeH", "F1", "WinAnsi"),
+                (2, "ttf", "TrueType", "BCDEFA+.VnTime", "F2", "WinAnsi"),
+            ]
+        )
+        assert MuPdfParser._extract_page_font_hint(only_h_page) == "ABCDEF+.VnTimeH"
+        assert MuPdfParser._extract_page_font_hint(mixed_h_page) == "BCDEFA+.VnTime"
+
+    def test_gi_coalesced_ie_codas_gieng_giec_valid_and_decoded(self) -> None:
+        """Finding 4: gi + iêng / iêc -> giếng, giềng, giêng, giếc."""
+        for word in ("giếng", "giềng", "giêng", "giếc"):
+            assert is_valid_vietnamese_syllable(word) == (True, True)
+
+        assert VietnameseLegacyTranscoder.normalize_legacy_vietnamese(
+            "giÕng khoan", font_hint=".VnTime"
+        ) == ("giếng khoan", "tcvn3")
+        assert VietnameseLegacyTranscoder.normalize_legacy_vietnamese(
+            "c¸ giÕc ®ång vµ th¸ng giªng l¸ng giÒng"
+        ) == ("cá giếc đồng và tháng giêng láng giềng", "tcvn3")
+
+        assert VietnameseLegacyTranscoder.normalize_legacy_vietnamese(
+            "gieáng khoan", font_hint="VNI-Times"
+        ) == ("giếng khoan", "vni_windows")
+

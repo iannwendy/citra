@@ -139,6 +139,11 @@ _TCVN3_FULL_MAP: dict[str, str] = {
     **_TCVN3_TONED_VOWELS,
 }
 _TCVN3_TONED_SET = frozenset(_TCVN3_TONED_VOWELS.keys())
+_TCVN3_CASE_FLEX_MAP: dict[str, str] = {
+    **_TCVN3_LOWER_BASE,
+    **_TCVN3_TONED_VOWELS,
+}
+_TCVN3_CASE_FLEX_SET = frozenset(_TCVN3_CASE_FLEX_MAP.keys())
 
 # ============================================================================
 # 2. Authoritative VNI-Windows (VNI-Times / VNI-Helve) Mapping Table
@@ -338,15 +343,24 @@ def is_valid_vietnamese_syllable(word: str) -> tuple[bool, bool]:
     """Return `(is_valid_vn_syllable, has_vn_diacritic)` for a single word token."""
     if not word or len(word) > 9:
         return False, False
-    w = unicodedata.normalize("NFC", word).lower()
+    norm_word = unicodedata.normalize("NFC", word)
+    # Reject anomalous mid-word uppercase mixed with lowercase (e.g. TCVN3 mojibake "giÕng", "vÒ", "cÊp")
+    if any(ch.isupper() for ch in norm_word[1:]) and any(ch.islower() for ch in norm_word):
+        return False, False
+    w = norm_word.lower()
 
     # Strip valid Vietnamese onset
+    is_gi_onset = False
     rest = w
     if w.startswith("gi"):
         # Handle "gì", "gìn", "giữ", "giáo": if nothing or a consonant follows "gi",
         # "i" serves as the vowel nucleus of onset "g" (e.g. "gìn" -> onset "g", rest "ìn").
         after_gi = w[2:]
-        rest = w[1:] if (not after_gi or after_gi[0] not in _VN_VOWEL_DECOMP) else after_gi
+        if not after_gi or after_gi[0] not in _VN_VOWEL_DECOMP:
+            rest = w[1:]
+        else:
+            is_gi_onset = True
+            rest = after_gi
     elif w.startswith("qu"):
         after_qu = w[2:]
         if after_qu and after_qu[0] in _VN_VOWEL_DECOMP:
@@ -385,7 +399,12 @@ def is_valid_vietnamese_syllable(word: str) -> tuple[bool, bool]:
             syllable_tone = t_id
 
     base_nucleus = "".join(base_chars)
-    allowed_codas = _NUCLEUS_ALLOWED_CODAS.get(base_nucleus)
+    if is_gi_onset and base_nucleus == "ê":
+        # Vietnamese orthography coalesces "gi" + "iê" + coda into "giê" + coda
+        # (e.g. "giếng", "giềng", "giêng", "giếc")
+        allowed_codas = _NUCLEUS_ALLOWED_CODAS["ê"] | _NUCLEUS_ALLOWED_CODAS["iê"]
+    else:
+        allowed_codas = _NUCLEUS_ALLOWED_CODAS.get(base_nucleus)
     if allowed_codas is None or coda not in allowed_codas:
         return False, False
 
@@ -427,27 +446,78 @@ def _score_tokens(tokens: list[str]) -> tuple[int, int, float]:
     return valid_cnt, accented_cnt, valid_cnt / len(tokens)
 
 
-def _decode_tcvn3_line(line: str) -> str:
+_OUTER_WORD_PUNCT_LEAD_RE = re.compile(r"^[,.;:!?()\[\]{}\"'`~@#$%^&*+=<>|\\/\u2000-\u206f]+")
+_OUTER_WORD_PUNCT_TRAIL_RE = re.compile(r"[,.;:!?()\[\]{}\"'`~@#$%^&*+=<>|\\/\u2000-\u206f]+$")
+_NON_HYPHEN_DELIM_RE = re.compile(r"([\s,.;:!?()\[\]{}\"'`~@#$%^&*+=<>|\\/\u2000-\u206f]+)")
+_TCVN3_ONSET_PAT = r"(?:(?i:ngh|ch|gh|gi|kh|ng|nh|ph|th|tr|[bcdghklmnrstvx])|\u00ae|\u00a7)"
+_DEMOTED_UO_RE = re.compile(
+    rf"^({_TCVN3_ONSET_PAT}?)-([\u00ac\u00ea-\u00ee\u00a5](?i:ng|i|u|c|m|n|p|t)?)$"
+)
+_DEMOTED_U_ONSET_RE = re.compile(rf"^({_TCVN3_ONSET_PAT})-((?i:ng|a|i|u|m|n)?)$")
+_DEMOTED_U_INITIAL_RE = re.compile(r"^-((?i:ng|a|i|u|m|n))$")
+_NEW_LIST_ENTRY_RE = re.compile(r"^\s*(?:\[\d+[a-zA-Z]?\]|\d+[.)](?:\s|$|\D)|[-•*–—+]\s)")
+_VNI_SELF_MAPPED_LATIN1 = frozenset({"\u00ec", "\u00cc", "\u00ed", "\u00cd"})
+
+
+def _strip_outer_non_hyphen_punct(chunk: str) -> tuple[str, str, str]:
+    lead_m = _OUTER_WORD_PUNCT_LEAD_RE.match(chunk)
+    lead = lead_m.group(0) if lead_m else ""
+    rem = chunk[len(lead) :]
+    trail_m = _OUTER_WORD_PUNCT_TRAIL_RE.search(rem)
+    trail = trail_m.group(0) if trail_m else ""
+    core = rem[: len(rem) - len(trail)] if trail else rem
+    return lead, core, trail
+
+
+def _restore_tcvn3_u_horn_hyphens(line: str) -> str:
+    """Restore MuPDF-demoted '-' (0x2D from TCVN3 0xAD soft-hyphen) back to '\\u00ad' ('ư')."""
+    if "-" not in line or not any(ch in _TCVN3_FULL_MAP for ch in line):
+        return line
+
+    parts = _NON_HYPHEN_DELIM_RE.split(line)
+    for i in range(0, len(parts), 2):
+        core = parts[i]
+        if not core or "\x00" in core or "-" not in core or core == "-":
+            continue
+        new_core = _DEMOTED_UO_RE.sub(lambda m: f"{m.group(1)}\u00ad{m.group(2)}", core)
+        if new_core == core:
+            new_core = _DEMOTED_U_ONSET_RE.sub(
+                lambda m: f"{m.group(1)}\u00ad{m.group(2)}", core
+            )
+        if new_core == core:
+            new_core = _DEMOTED_U_INITIAL_RE.sub(lambda m: f"\u00ad{m.group(1)}", core)
+        if new_core != core:
+            parts[i] = new_core
+    return "".join(parts)
+
+
+def _decode_tcvn3_line(line: str, *, force_upper: bool = False) -> str:
     """Decode a single line from TCVN3, applying context-aware capitalization for all-caps words."""
-    # Check whether the entire line lacks any lowercase non-TCVN3-toned letters
-    non_toned_alpha = [
+    line = _restore_tcvn3_u_horn_hyphens(line)
+
+    if force_upper:
+        parts_force = re.split(r"(\s+)", line)
+        for i, chunk in enumerate(parts_force):
+            if not chunk or chunk.isspace() or "\x00" in chunk:
+                continue
+            parts_force[i] = "".join(_TCVN3_FULL_MAP.get(ch, ch) for ch in chunk).upper()
+        return "".join(parts_force)
+
+    # Check whether the entire line lacks any lowercase non-TCVN3-flex letters
+    fixed_alpha = [
         ch
         for ch in line
-        if ch not in _TCVN3_TONED_SET and (ch.isalpha() or ch in _TCVN3_FULL_MAP)
+        if ch not in _TCVN3_CASE_FLEX_SET and (ch.isalpha() or ch in _TCVN3_UPPER_BASE)
     ]
-    upper_non_toned = sum(
-        1 for ch in non_toned_alpha if ch.isupper() or ch in _TCVN3_UPPER_BASE
-    )
-    lower_non_toned = sum(
-        1 for ch in non_toned_alpha if ch.islower() or ch in _TCVN3_LOWER_BASE
-    )
-    whole_line_all_caps = upper_non_toned >= 2 and lower_non_toned == 0
+    upper_fixed = sum(1 for ch in fixed_alpha if ch.isupper() or ch in _TCVN3_UPPER_BASE)
+    lower_fixed = sum(1 for ch in fixed_alpha if ch.islower())
+    whole_line_all_caps = upper_fixed >= 2 and lower_fixed == 0
 
     # Split preserving delimiters so word-level and neighbor-level casing can be resolved cleanly
     parts = re.split(r"(\s+)", line)
     word_indices = [i for i, p in enumerate(parts) if p and not p.isspace()]
 
-    # First pass: classify each non-space chunk's non-toned casing
+    # First pass: classify each non-space chunk's fixed-letter casing
     chunk_is_all_caps: dict[int, bool] = {}
     chunk_has_lower: dict[int, bool] = {}
     for wi in word_indices:
@@ -456,18 +526,22 @@ def _decode_tcvn3_line(line: str) -> str:
             chunk_is_all_caps[wi] = False
             chunk_has_lower[wi] = False
             continue
-        w_up = sum(
-            1
-            for ch in raw_w
-            if ch not in _TCVN3_TONED_SET and (ch.isupper() or ch in _TCVN3_UPPER_BASE)
+        flex_pos = [k for k, ch in enumerate(raw_w) if ch in _TCVN3_CASE_FLEX_SET]
+        up_pos = [
+            k
+            for k, ch in enumerate(raw_w)
+            if ch not in _TCVN3_CASE_FLEX_SET and (ch.isupper() or ch in _TCVN3_UPPER_BASE)
+        ]
+        has_lo = any(ch not in _TCVN3_CASE_FLEX_SET and ch.islower() for ch in raw_w)
+        chunk_has_lower[wi] = has_lo
+        chunk_is_all_caps[wi] = (
+            not has_lo
+            and "." not in raw_w
+            and (
+                len(up_pos) >= 2
+                or (len(up_pos) == 1 and bool(flex_pos) and up_pos[0] > flex_pos[0])
+            )
         )
-        w_lo = sum(
-            1
-            for ch in raw_w
-            if ch not in _TCVN3_TONED_SET and (ch.islower() or ch in _TCVN3_LOWER_BASE)
-        )
-        chunk_has_lower[wi] = w_lo > 0
-        chunk_is_all_caps[wi] = w_up >= 2 and w_lo == 0 and "." not in raw_w
 
     out_parts = list(parts)
     for pos_idx, wi in enumerate(word_indices):
@@ -475,24 +549,23 @@ def _decode_tcvn3_line(line: str) -> str:
         if "\x00" in raw_w:
             continue
 
-        # Determine if TCVN3 toned vowels in this word should be uppercased
-        should_upper_toned = False
+        # Determine if TCVN3 case-flexible chars (0xA8..0xAE + 0xB5..0xFE) should be uppercased
+        should_upper = False
         if whole_line_all_caps:
-            should_upper_toned = True
+            should_upper = True
         elif not chunk_has_lower[wi]:
-            # Check positions of uppercase letters relative to TCVN3 toned vowels
-            toned_positions = [k for k, ch in enumerate(raw_w) if ch in _TCVN3_TONED_SET]
+            flex_positions = [k for k, ch in enumerate(raw_w) if ch in _TCVN3_CASE_FLEX_SET]
             upper_positions = [
                 k
                 for k, ch in enumerate(raw_w)
-                if ch not in _TCVN3_TONED_SET and (ch.isupper() or ch in _TCVN3_UPPER_BASE)
+                if ch not in _TCVN3_CASE_FLEX_SET and (ch.isupper() or ch in _TCVN3_UPPER_BASE)
             ]
-            if toned_positions:
-                first_toned = toned_positions[0]
-                if len(upper_positions) >= 2 or any(k > first_toned for k in upper_positions):
-                    should_upper_toned = True
+            if flex_positions:
+                first_flex = flex_positions[0]
+                if len(upper_positions) >= 2 or any(k > first_flex for k in upper_positions):
+                    should_upper = True
                 elif len(upper_positions) in (0, 1):
-                    # Short open-syllable CV or pure-vowel word (e.g. "Hµ" or "ý" in "ý NGHÜA")
+                    # Short open-syllable CV or pure-vowel word (e.g. "Hµ", "T-", "ý" in "ý NGHÜA")
                     prev_wi = word_indices[pos_idx - 1] if pos_idx > 0 else None
                     next_wi = (
                         word_indices[pos_idx + 1] if pos_idx + 1 < len(word_indices) else None
@@ -504,13 +577,13 @@ def _decode_tcvn3_line(line: str) -> str:
                         next_wi is not None and chunk_has_lower[next_wi]
                     )
                     if adj_caps and not adj_lower:
-                        should_upper_toned = True
+                        should_upper = True
 
         decoded_chars: list[str] = []
         for ch in raw_w:
-            if ch in _TCVN3_TONED_VOWELS:
-                mapped = _TCVN3_TONED_VOWELS[ch]
-                decoded_chars.append(mapped.upper() if should_upper_toned else mapped)
+            if ch in _TCVN3_CASE_FLEX_MAP:
+                mapped = _TCVN3_CASE_FLEX_MAP[ch]
+                decoded_chars.append(mapped.upper() if should_upper else mapped)
             elif ch in _TCVN3_FULL_MAP:
                 decoded_chars.append(_TCVN3_FULL_MAP[ch])
             else:
@@ -568,19 +641,67 @@ def _unmask_protected_spans(line: str, spans: list[str]) -> str:
     return line
 
 
-def _parse_font_hint(font_hint: str | None) -> str | None:
+_TCVN3_H_HINT_RE = re.compile(r"(?:^|[+\s,;])\.?vn[a-z0-9_]*h(?:$|[-_,\s;])", re.IGNORECASE)
+_TCVN3_ANY_HINT_RE = re.compile(
+    r"(?:^|[+\s,;])(?:\.vn[a-z]|vn[a-z0-9_]*h(?:$|[-_,\s;]))", re.IGNORECASE
+)
+
+
+def _parse_font_hint(font_hint: str | None) -> tuple[str | None, bool]:
+    """Return `(encoding_hint, force_tcvn3_upper)`."""
     if not font_hint:
-        return None
+        return None, False
     low = font_hint.strip().lower()
+    if low in {"tcvn3_upper", "tcvn3-upper"}:
+        return "tcvn3", True
     if low in {"tcvn3", "abc", "vn3"}:
-        return "tcvn3"
+        return "tcvn3", False
     if low in {"vni_windows", "vni-windows", "vni"}:
-        return "vni_windows"
-    if re.search(r"(?:^|[+\s,;])\.vn[a-z]", low):
-        return "tcvn3"
+        return "vni_windows", False
+    if _TCVN3_H_HINT_RE.search(low):
+        return "tcvn3", True
+    if _TCVN3_ANY_HINT_RE.search(low):
+        return "tcvn3", False
     if re.search(r"(?:^|[+\s,;])vni-[a-z]", low):
-        return "vni_windows"
-    return None
+        return "vni_windows", False
+    return None, False
+
+
+def _validate_hinted_line_chunks(before_line: str, after_line: str, enc: str) -> bool:
+    """Reject hinted/continuation decodes if untouched tokens retain raw Latin-1 accents
+    or if any modified chunk failed to decode into valid Vietnamese syllable(s)."""
+    b_chunks = [c for c in re.split(r"\s+", before_line.strip()) if c]
+    a_chunks = [c for c in re.split(r"\s+", after_line.strip()) if c]
+    if len(b_chunks) != len(a_chunks):
+        return False
+
+    for b_raw, a_raw in zip(b_chunks, a_chunks, strict=True):
+        if "\x00" in b_raw or "\x00" in a_raw:
+            continue
+        _, b_core, _ = _strip_outer_non_hyphen_punct(b_raw)
+        _, a_core, _ = _strip_outer_non_hyphen_punct(a_raw)
+        if not b_core and not a_core:
+            continue
+        if b_core.lower() == a_core.lower() and b_core == a_core:
+            # Untouched chunk: reject if raw non-Vietnamese Latin-1 accents survived!
+            if enc == "tcvn3":
+                if any(0xA1 <= ord(ch) <= 0xFF and ch != "\u00fd" for ch in b_core):
+                    return False
+            else:
+                if any(
+                    0xC0 <= ord(ch) <= 0xFF and ch not in _VNI_SELF_MAPPED_LATIN1
+                    for ch in b_core
+                ):
+                    return False
+        else:
+            # Modified chunk (or case-shifted under .Vn*H): every eval token in `a_core`
+            # must be a valid Vietnamese syllable!
+            sub_tokens = _extract_eval_tokens(a_core)
+            if not sub_tokens:
+                continue
+            if any(not is_valid_vietnamese_syllable(sub)[0] for sub in sub_tokens):
+                return False
+    return True
 
 
 class VietnameseLegacyTranscoder:
@@ -605,7 +726,7 @@ class VietnameseLegacyTranscoder:
         if text.isascii():
             return text, None
 
-        hinted_enc = _parse_font_hint(font_hint)
+        hinted_enc, force_tcvn3_upper = _parse_font_hint(font_hint)
         parts = text.splitlines(keepends=True)
         out_lines: list[str] = []
         detected_counts: dict[str, int] = {"tcvn3": 0, "vni_windows": 0}
@@ -630,6 +751,10 @@ class VietnameseLegacyTranscoder:
                 prev_line_enc = None
                 out_lines.append(raw_piece)
                 continue
+
+            # Reset paragraph-continuation encoding at numbered/bracketed/bulleted list entries
+            if _NEW_LIST_ENTRY_RE.match(line):
+                prev_line_enc = None
 
             if line.isascii():
                 out_lines.append(raw_piece)
@@ -656,7 +781,10 @@ class VietnameseLegacyTranscoder:
 
             for enc in candidate_order:
                 decoded_masked = (
-                    _decode_tcvn3_line(masked_line)
+                    _decode_tcvn3_line(
+                        masked_line,
+                        force_upper=(force_tcvn3_upper and hinted_enc == "tcvn3"),
+                    )
                     if enc == "tcvn3"
                     else _decode_vni_line(masked_line)
                 )
@@ -674,22 +802,17 @@ class VietnameseLegacyTranscoder:
                 # Primary strict phonotactic gate (no font hint needed)
                 passes_strict = gained_accented >= 3 and ratio_delta >= 0.45
 
-                # Relaxed gate ONLY when explicit font_hint or same-paragraph widow continuation
-                # matches `enc`, AND zero modified tokens became invalid non-VN words!
+                # Tightened hinted/widow gate when gained_accented is 1..2
                 passes_hinted = False
                 if not passes_strict and (hinted_enc == enc or prev_line_enc == enc):
+                    min_after_ratio = 1.0 if len(after_tokens) <= 3 else 0.85
                     if (
                         gained_accented >= 1
                         and after_valid > before_valid
-                        and after_ratio >= 0.50
-                        and len(before_tokens) == len(after_tokens)
+                        and after_ratio >= min_after_ratio
+                        and _validate_hinted_line_chunks(masked_line, decoded_masked, enc)
                     ):
-                        corrupted_any = any(
-                            b_tok != a_tok and not is_valid_vietnamese_syllable(a_tok)[0]
-                            for b_tok, a_tok in zip(before_tokens, after_tokens, strict=True)
-                        )
-                        if not corrupted_any:
-                            passes_hinted = True
+                        passes_hinted = True
 
                 if passes_strict or passes_hinted:
                     cand_score = (gained_accented, ratio_delta)

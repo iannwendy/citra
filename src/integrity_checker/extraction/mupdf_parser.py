@@ -34,7 +34,12 @@ class MuPdfParser(BasePDFParser):
         "/opt/homebrew/share/tessdata",
         "/usr/local/share/tessdata",
     )
-    _TCVN3_FONT_RE = re.compile(r"(?:^|[+\s,;])\.vn[a-z]", re.IGNORECASE)
+    _TCVN3_H_FONT_RE = re.compile(
+        r"(?:^|[+\s,;])\.?vn[a-z0-9_]*h(?:$|[-_,\s;])", re.IGNORECASE
+    )
+    _TCVN3_FONT_RE = re.compile(
+        r"(?:^|[+\s,;])(?:\.vn[a-z]|vn[a-z0-9_]*h(?:$|[-_,\s;]))", re.IGNORECASE
+    )
     _VNI_FONT_RE = re.compile(r"(?:^|[+\s,;])vni-[a-z]", re.IGNORECASE)
 
     @classmethod
@@ -69,28 +74,40 @@ class MuPdfParser(BasePDFParser):
 
     @classmethod
     def _extract_page_font_hint(cls, page) -> str | None:
-        """Inspect PDF font names on `page` for `.Vn*` (TCVN3) or `VNI-*` hints."""
+        """Inspect PDF font names on `page` for `.Vn*` / `.Vn*H` (TCVN3) or `VNI-*` hints."""
         try:
             fonts = page.get_fonts() or []
         except Exception:  # noqa: BLE001
             return None
-        saw_tcvn3 = False
+        saw_tcvn3_h = False
+        saw_tcvn3_normal = False
         saw_vni = False
-        first_tcvn3: str | None = None
+        first_tcvn3_h: str | None = None
+        first_tcvn3_normal: str | None = None
         first_vni: str | None = None
         for entry in fonts:
+            matched_entry = False
             for idx in (3, 4):
+                if matched_entry:
+                    break
                 if len(entry) > idx and isinstance(entry[idx], str) and entry[idx]:
                     fname = entry[idx]
-                    if cls._TCVN3_FONT_RE.search(fname):
-                        saw_tcvn3 = True
-                        first_tcvn3 = first_tcvn3 or fname
+                    if cls._TCVN3_H_FONT_RE.search(fname):
+                        saw_tcvn3_h = True
+                        first_tcvn3_h = first_tcvn3_h or fname
+                        matched_entry = True
+                    elif cls._TCVN3_FONT_RE.search(fname):
+                        saw_tcvn3_normal = True
+                        first_tcvn3_normal = first_tcvn3_normal or fname
+                        matched_entry = True
                     elif cls._VNI_FONT_RE.search(fname):
                         saw_vni = True
                         first_vni = first_vni or fname
-        if saw_tcvn3 and not saw_vni:
-            return first_tcvn3
-        if saw_vni and not saw_tcvn3:
+                        matched_entry = True
+        if (saw_tcvn3_h or saw_tcvn3_normal) and not saw_vni:
+            # Only emit all-caps .Vn*H hint page-wide when every .Vn* font on the page is .Vn*H
+            return first_tcvn3_normal if saw_tcvn3_normal else first_tcvn3_h
+        if saw_vni and not (saw_tcvn3_h or saw_tcvn3_normal):
             return first_vni
         return None
 
