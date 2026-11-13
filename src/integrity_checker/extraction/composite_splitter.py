@@ -56,8 +56,8 @@ _LEAD_IN_FIRST_MARKER_RE = re.compile(
 # Author-initial or multi-sentence patterns that disqualify a lead-in string
 _LEAD_IN_AUTHOR_OR_SENTENCE_RE = re.compile(
     r"(?:"
-    r"\b[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+,\s*(?:[A-ZÀ-Ý]\.)+"
-    r"|(?:^|[,;]\s*|\band\s+)(?:[A-ZÀ-Ý]\.\s*)+[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]{2,}"
+    r"\b[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+,\s*(?:[A-ZÀ-Ý]\.?-[A-ZÀ-Ý]\.\s*|[A-ZÀ-Ý]\.\s*)+"
+    r"|(?:^|[,;]\s*|\band\s+)(?:[A-ZÀ-Ý]\.?-[A-ZÀ-Ý]\.\s*|[A-ZÀ-Ý]\.\s*)+[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]{2,}"
     r"|[A-Za-z]{3,}\.\s+[A-ZÀ-Ý]"
     r")"
 )
@@ -83,9 +83,11 @@ _URL_ARXIV_SIGNAL_RE = re.compile(
 )
 _VOL_PAGE_SIGNAL_RE = re.compile(
     r"(?:"
-    r"\b\d{1,4}\s*(?:\([^)]{1,15}\)\s*)?,\s*(?:pp?\.\s*)?[A-Za-z]?\d{1,6}\s*[-–—]\s*[A-Za-z]?\d{1,6}\b"
-    r"|\b\d{1,4}\s*,\s*[A-Za-z]?\d{2,6}\s*\(\s*(?:18|19|20)\d{2}[a-z]?\s*\)"
-    r"|\b(?:18|19|20)\d{2}\s*;\s*\d{1,4}(?:\([^)]{1,15}\))?\s*:\s*\d{1,6}"
+    r"\b\d{1,4}\s*(?:\([^)]{1,15}\)\s*)?,\s*(?:pp?\.\s*)?[A-Za-z]?\d{1,12}\s*[-–—]\s*[A-Za-z]?\d{1,12}\b"
+    r"|\b(?:18|19|20)\d{2}[a-z]?\s*,\s*[A-Za-z]?\d{1,4}(?:\s*\([^)]{1,15}\))?\s*,\s*(?:pp?\.\s*)?[A-Za-z]?\d{1,12}\b"
+    r"|\b\d{1,4}\s*(?:\([^)]{1,15}\)\s*)?,\s*[eEdD]\d{4,12}\b"
+    r"|\b\d{1,4}\s*,\s*[A-Za-z]?\d{2,12}\s*\(\s*(?:18|19|20)\d{2}[a-z]?\s*\)"
+    r"|\b(?:18|19|20)\d{2}\s*;\s*\d{1,4}(?:\([^)]{1,15}\))?\s*:\s*[A-Za-z]?\d{1,12}"
     r"|\bvol\.?\s*\d{1,4}\b"
     r"|\bpp?\.\s*\d{1,6}(?:\s*[-–—]\s*\d{1,6})?\b"
     r")",
@@ -93,8 +95,8 @@ _VOL_PAGE_SIGNAL_RE = re.compile(
 )
 _AUTHOR_OR_PUBLISHER_SIGNAL_RE = re.compile(
     r"(?:"
-    r"\b[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+,\s*(?:[A-ZÀ-Ý]\.\s*)+"
-    r"|\b(?:[A-ZÀ-Ý]\.\s*)+[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]{2,}"
+    r"\b(?:(?:van|de|den|der|von|del|da|di|le|la|du|al|el)\s+)?[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+,\s*(?:[A-ZÀ-Ý]\.?-[A-ZÀ-Ý]\.\s*|[A-ZÀ-Ý]\.\s*)+"
+    r"|\b(?:[A-ZÀ-Ý]\.?-[A-ZÀ-Ý]\.\s*|[A-ZÀ-Ý]\.\s*)+(?:(?:van|de|den|der|von|del|da|di|le|la|du|al|el)\s+)?[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]{1,}"
     r"|\bet\s+al\."
     r"|\b[A-ZÀ-Ý][^:;()]{2,60}:\s*[A-ZÀ-Ý][^,;:()]{2,40},\s*(?:18|19|20)\d{2}\b"
     r"|\(\s*[A-ZÀ-Ý][^()]{2,60},\s*(?:18|19|20)\d{2}[a-z]?\s*\)"
@@ -104,7 +106,7 @@ _YEAR_IN_BIB_TAIL_RE = re.compile(
     r"(?:[,;.(]\s*|\b\s+)(?:18|19|20)\d{2}[a-z]?\)?\.?\s*$"
 )
 _PRECEDING_END_TOKEN_RE = re.compile(
-    r"(?:\b10\.\d{4,9}/\S+|https?://\S+|\)\s*|\b\d{2,6}[A-Za-z]?)\s*$",
+    r"(?:\b10\.\d{4,9}/\S+|https?://\S+|\)\s*|\b[A-Za-z]?\d{2,12}[A-Za-z]?)\s*$",
     flags=re.IGNORECASE,
 )
 _IBID_SIGNAL_RE = re.compile(r"\b(?:ibid\.?|idem|loc\.\s*cit\.?)\b", flags=re.IGNORECASE)

@@ -723,12 +723,40 @@ class DocumentParser:
         all_bib_nums = {
             r.numeric_index for r in (references or []) if r.numeric_index is not None
         }
+        comp_labels_in_bib = {
+            str(r.composite_label).lower()
+            for r in (references or [])
+            if getattr(r, "composite_label", None)
+        }
         paren_comp_re = re.compile(
             r"(?<![A-Za-z0-9_])\(\s*"
             r"([1-9]\d{0,2}[a-z](?:\s*[-–—−]\s*(?:[1-9]\d{0,2})?[a-z])?"
             r"(?:\s*,\s*(?:[1-9]\d{0,2}[a-z]?|[a-z])(?:\s*[-–—−]\s*(?:[1-9]\d{0,2})?[a-z])?)*)"
             r"\s*\)"
         )
+        bracket_comp_re = re.compile(
+            r"(?<![A-Za-z0-9_])\[\s*"
+            r"([1-9]\d{0,2}[a-z]?(?:\s*[-–—−]\s*(?:[1-9]\d{0,2})?[a-z]?)?"
+            r"(?:\s*,\s*(?:[1-9]\d{0,2}[a-z]?|[a-z])(?:\s*[-–—−]\s*(?:[1-9]\d{0,2})?[a-z]?)?)*)"
+            r"\s*\]"
+        )
+
+        def _has_disallowed_unit_token(spec: str) -> bool:
+            pairs = re.findall(r"(\d+)([a-z])", spec)
+            if not pairs:
+                return True
+            for n_str, sub_ch in pairs:
+                n_val = int(n_str)
+                lbl = f"{n_val}{sub_ch}"
+                if lbl in comp_labels_in_bib:
+                    continue
+                if n_val not in composite_nums:
+                    return True
+                if sub_ch in {"h", "m", "s", "v", "w", "k", "l"} or (
+                    sub_ch == "g" and n_val <= 6
+                ):
+                    return True
+            return False
         _non_cit_head = (
             r"(?:Figures?|Figs?\.?|Tables?|Tabs?\.?|Schemes?|Schs?\.?|Charts?|"
             r"Compounds?|Compds?\.?|Structures?|Products?|Intermediates?|"
@@ -795,6 +823,8 @@ class DocumentParser:
                     )
                     if non_cit_prefix_re.search(prefix):
                         continue
+                    if _has_disallowed_unit_token(m.group(1)):
+                        continue
                     nums_in_hit = [int(n) for n in re.findall(r"\d+", m.group(1))]
                     if not nums_in_hit:
                         continue
@@ -810,6 +840,32 @@ class DocumentParser:
                             page_num=pnum,
                             matched_pattern="acs_parenthesized_composite",
                             confidence=0.9,
+                        )
+                    )
+
+                for m in bracket_comp_re.finditer(txt):
+                    if not re.search(r"[a-z]", m.group(1)):
+                        continue
+                    raw_hit = re.sub(r"\s+", " ", m.group(0).strip())
+                    if (pnum, raw_hit) in existing_raw_by_page:
+                        continue
+                    if _has_disallowed_unit_token(m.group(1)):
+                        continue
+                    nums_in_hit = [int(n) for n in re.findall(r"\d+", m.group(1))]
+                    if not nums_in_hit:
+                        continue
+                    if not any(n in composite_nums for n in nums_in_hit):
+                        continue
+                    if not all(n in all_bib_nums for n in nums_in_hit):
+                        continue
+                    extracted.append(
+                        Citation(
+                            raw_text=raw_hit,
+                            citation_type=CitationType.NUMERIC,
+                            style=CitationStyle.IEEE,
+                            page_num=pnum,
+                            matched_pattern="ieee_numeric_composite",
+                            confidence=0.92,
                         )
                     )
         return extracted
@@ -2909,7 +2965,7 @@ class DocumentParser:
                     matched_comp_num: int | None = None
                     if g.numeric_index in regex_comp_by_num:
                         matched_comp_num = g.numeric_index
-                    else:
+                    elif g.numeric_index is None:
                         for c_num, c_subs in regex_comp_by_num.items():
                             if any(
                                 (
@@ -2979,6 +3035,8 @@ class DocumentParser:
         def _sub_index_conflicts(a: Citation, b: Citation) -> bool:
             sa = getattr(a, "sub_index", None)
             sb = getattr(b, "sub_index", None)
+            if bool(sa) != bool(sb):
+                return True
             return bool(sa and sb and sa != sb)
 
         def _would_clobber_numbered_slot(c_ref: Citation, g_ref: Citation) -> bool:
@@ -2991,7 +3049,8 @@ class DocumentParser:
             ):
                 return False
             has_explicit_marker = bool(
-                re.match(r"^\s*(?:\[\s*\d+\s*\]|\(\s*\d+\s*\)|\d+\.\s)", c_ref.raw_text or "")
+                getattr(c_ref, "sub_index", None) is not None
+                or re.match(r"^\s*(?:\[\s*\d+\s*\]|\(\s*\d+\s*\)|\d+\.\s)", c_ref.raw_text or "")
             )
             if not has_explicit_marker:
                 return False
@@ -3361,7 +3420,8 @@ class DocumentParser:
             elif hasattr(first, "full_name") and first.full_name:
                 first_author = first.full_name.split(",")[0].strip().lower()
 
-        return (title_norm, year, first_author)
+        comp_label = (getattr(c, "composite_label", None) or "").strip().lower()
+        return (title_norm, year, first_author, comp_label)
 
     def _extract_appendix_citations(
         self,

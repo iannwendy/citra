@@ -1441,8 +1441,14 @@ class ReferenceListParser:
 
         # Step 3: Split at every URL/DOI terminator.
         _sub_tail_re = re.compile(r"^[;,.]?\s*(?:and\s+)?(?:\(\s*[b-z]\s*\)|[b-z]\))\s+\S")
+        _next_entry_head = (
+            r"(?:[A-ZÀ-Ý]|\(\s*a\s*\)|a\)\s|"
+            r"(?:van|de|den|der|von|del|da|di|le|la|du|al|el)(?:\s+|-)|d')"
+        )
         _outer_num_entry_split_re = re.compile(
-            r"(?<=[.;)])\s+(?=(?:\[\s*\d{1,4}\s*\]\s+\S|\(\s*\d{1,4}\s*\)\s+[A-ZÀ-Ý]|\d{1,4}\.\s+(?:[A-ZÀ-Ý]|\(\s*a\s*\)|a\)\s)))"
+            r"(?<!(?i:vol\.))(?<!(?i:\bno\.))(?<!(?i:\bp\.))(?<!(?i:\bpp\.))(?<!(?i:\beq\.))(?<!(?i:fig\.))"
+            r"(?<=[.;)\d])\s+"
+            rf"(?=(?:\[\s*\d{{1,4}}\s*\]\s+\S|\(\s*\d{{1,4}}\s*\)\s+{_next_entry_head}|\d{{1,4}}\.\s+{_next_entry_head}))"
         )
         matches = list(_URL_BOUNDARY_RE.finditer(flat))
         url_chunks: list[str] = []

@@ -889,3 +889,500 @@ class TestFixRound1Regressions:
         merged_14 = [m for m in merged if m.numeric_index == 14]
         assert [m.composite_label for m in merged_14] == ["14a", "14b"]
         assert all(m.grobid_ref_id == "b13" for m in merged_14)
+
+
+class TestFixRound2Regressions:
+    """Regression suite covering all 7 items from Task 7 Fix Round 2."""
+
+    def test_rsc_hyphenated_initials_three_authors_unquoted_title_and_wiley_eid(
+        self,
+    ) -> None:
+        parser = ReferenceListParser()
+
+        # 1) Hyphenated initials with periods (J.-Q. Yu)
+        hyphen_raw = (
+            "14. (a) J.-Q. Yu and D. W. C. MacMillan, J. Am. Chem. Soc., 2020, 142, 1234–1240, "
+            "DOI: 10.1021/jacs.0c00111; "
+            "(b) L. Wang, Chem. Commun., 2021, 57, 550–554."
+        )
+        hyphen_refs = parser.parse_reference_section(hyphen_raw, page_num=5)
+        assert len(hyphen_refs) == 2
+        h14a, h14b = hyphen_refs
+        assert h14a.composite_label == "14a"
+        assert [a.last_name for a in h14a.authors] == ["yu", "macmillan"]
+        assert h14a.venue == "J. Am. Chem. Soc."
+        assert h14a.year == "2020"
+        assert h14a.title is None
+        assert h14b.composite_label == "14b"
+        assert [a.last_name for a in h14b.authors] == ["wang"]
+
+        # 2) 3+ RSC authors without Oxford comma & all-comma-separated
+        three_auth_raw = (
+            "15. (a) Y. Zhang, X. Liu and M. Chen, Chem. Sci., 2020, 11, 1234–1240; "
+            "(b) J.-Q. Yu, X. Liu, M. Chen, Org. Lett., 2021, 23, 100–104."
+        )
+        three_refs = parser.parse_reference_section(three_auth_raw, page_num=5)
+        assert len(three_refs) == 2
+        assert [a.last_name for a in three_refs[0].authors] == ["zhang", "liu", "chen"]
+        assert [a.last_name for a in three_refs[1].authors] == ["yu", "liu", "chen"]
+
+        # 3) Unquoted comma-delimited RSC title vs comma-containing RSC venue (Angew. Chem., Int. Ed.)
+        unquoted_title_raw = (
+            "16. (a) Y. Zhang and X. Liu, Nickel-Catalyzed Cross-Coupling of Aryl Halides, "
+            "Chem. Sci., 2020, 11, 1234–1240, DOI: 10.1039/D0SC00111A; "
+            "(b) L. Wang, Angew. Chem., Int. Ed., 2021, 60, 550–554."
+        )
+        unquoted_refs = parser.parse_reference_section(unquoted_title_raw, page_num=5)
+        assert len(unquoted_refs) == 2
+        assert unquoted_refs[0].title == "Nickel-Catalyzed Cross-Coupling of Aryl Halides"
+        assert unquoted_refs[0].venue == "Chem. Sci."
+        assert unquoted_refs[1].title is None
+        assert unquoted_refs[1].venue == "Angew. Chem., Int. Ed."
+
+        # 4) Wiley/Angewandte electronic article IDs without page hyphens (e202201234)
+        wiley_eid_raw = (
+            "[14] a) Y. Zhang, X. Liu, Angew. Chem. Int. Ed. 2022, 61, e202201234; "
+            "b) L. Wang, Chem. Eur. J. 2021, 27, 550–554."
+        )
+        wiley_refs = parser.parse_reference_section(wiley_eid_raw, page_num=5)
+        assert len(wiley_refs) == 2
+        assert wiley_refs[0].composite_label == "14a"
+        assert [a.last_name for a in wiley_refs[0].authors] == ["zhang", "liu"]
+        assert wiley_refs[0].venue == "Angew. Chem. Int. Ed."
+        assert wiley_refs[0].year == "2022"
+        assert wiley_refs[0].volume == "61"
+        assert wiley_refs[0].pages == "e202201234"
+        assert wiley_refs[1].composite_label == "14b"
+        assert wiley_refs[1].pages == "550–554"
+
+    def test_superscript_multi_item_composite_callouts_not_truncated_and_linked(self) -> None:
+        extractor = CitationExtractor(preserve_occurrences=True)
+        body = "Catalysis was reported^1,2,14c and extended^1–3,14b by Zhang^1,2,14c."
+        extracted = extractor.extract_from_text(body, page_num=1)
+        raws = [c.raw_text for c in extracted]
+        assert "^1,2,14c" in raws
+        assert "^1–3,14b" in raws
+        assert "Zhang^1,2,14c" in raws
+        assert "^1" not in raws
+
+        bibs = [
+            Citation(
+                raw_text=f"{idx}. Ref {idx}. J. Am. Chem. Soc. 2020, 142, {idx}0–{idx}5.",
+                citation_type=CitationType.REFERENCE_LIST,
+                style=CitationStyle.ACS,
+                numeric_index=idx,
+                order_index=idx,
+                reference_id=f"ref-{idx}",
+            )
+            for idx in (1, 2, 3)
+        ] + [
+            Citation(
+                raw_text=f"({sub}) Zhang, Y. Chem. Sci. 2020, 11, 10{i}–10{i + 2}.",
+                citation_type=CitationType.REFERENCE_LIST,
+                style=CitationStyle.ACS,
+                authors=["Zhang, Y."],
+                year="2020",
+                numeric_index=14,
+                sub_index=sub,
+                composite_label=f"14{sub}",
+                order_index=3 + i,
+                reference_id=f"ref-14{sub}",
+            )
+            for i, sub in enumerate(["a", "b", "c"], start=1)
+        ]
+
+        for idx_o, occ in enumerate(extracted, start=1):
+            occ.reference_id = f"occ-{idx_o:04d}"
+
+        res = CitationLinker().link(extracted, bibs)
+        occ_by_raw: dict[str, list[str]] = {}
+        for occ in extracted:
+            occ_links = [lk for lk in res.links if lk.occurrence_id == occ.reference_id]
+            assert all(lk.status == CitationMappingStatus.MATCHED for lk in occ_links)
+            occ_by_raw.setdefault(occ.raw_text, []).extend(
+                lk.reference_id for lk in occ_links if lk.reference_id
+            )
+
+        assert occ_by_raw["^1,2,14c"] == ["ref-1", "ref-2", "ref-14c"]
+        assert occ_by_raw["^1–3,14b"] == ["ref-1", "ref-2", "ref-3", "ref-14b"]
+        assert occ_by_raw["Zhang^1,2,14c"] == ["ref-1", "ref-2", "ref-14c"]
+
+    def test_split_by_year_boundary_paren_composite_periodless_pages_and_surname_particles(
+        self,
+    ) -> None:
+        parser = ReferenceListParser()
+
+        # Layout A: Parenthesized ACS numbering followed by (a)
+        raw_paren = (
+            "(14) (a) Zhang, Y. J. Am. Chem. Soc. 2020, 142, 1234–1240. DOI: 10.1021/jacs.0c00111; "
+            "(b) Wang, L. Org. Lett. 2021, 23, 550–554. "
+            "(15) (a) Baker, S. Chem. Rev. 2022, 122, 100–110. DOI: 10.1021/acs.chemrev.2c00222; "
+            "(b) Clark, R. Chem. Sci. 2022, 13, 200–210."
+        )
+        refs_paren = parser.parse_reference_section(raw_paren, page_num=7)
+        assert [r.composite_label for r in refs_paren] == ["14a", "14b", "15a", "15b"]
+
+        # Layout B: Period-less (b) page ranges before next entry
+        raw_periodless = (
+            "14. (a) Zhang, Y. J. Am. Chem. Soc. 2020, 142, 1234–1240. DOI: 10.1021/jacs.0c00111; "
+            "(b) Wang, L. Org. Lett. 2021, 23, 550–554 "
+            "22. Baker, S. J. Am. Chem. Soc. 2022, 144, 100–110. DOI: 10.1021/jacs.2c00222."
+        )
+        refs_periodless = parser.parse_reference_section(raw_periodless, page_num=7)
+        assert len(refs_periodless) == 3
+        assert refs_periodless[0].composite_label == "14a"
+        assert refs_periodless[1].composite_label == "14b"
+        assert "Baker" not in refs_periodless[1].raw_text
+        assert refs_periodless[2].numeric_index == 22
+
+        # Layout C: Lowercase surname particles (22. van Leeuwen, P. W. N. M. ...)
+        raw_particle = (
+            "14. (a) Zhang, Y. J. Am. Chem. Soc. 2020, 142, 1234–1240. DOI: 10.1021/jacs.0c00111; "
+            "(b) Wang, L. Org. Lett. 2021, 23, 550–554. "
+            "22. van Leeuwen, P. W. N. M. Chem. Rev. 2011, 111, 2077–2118. DOI: 10.1021/cr1002497."
+        )
+        refs_particle = parser.parse_reference_section(raw_particle, page_num=7)
+        assert len(refs_particle) == 3
+        assert refs_particle[1].composite_label == "14b"
+        assert "van Leeuwen" not in refs_particle[1].raw_text
+        assert refs_particle[2].numeric_index == 22
+        assert refs_particle[2].authors[0].last_name == "van leeuwen"
+        assert refs_particle[2].venue.rstrip(".") == "Chem. Rev"
+
+    def test_titleless_chemistry_ref_never_rubber_stamped_by_known_papers(self) -> None:
+        parser = ReferenceListParser()
+        raw = (
+            "14. (a) C. He, Chem. Sci., 2016, 7, 1234–1240, DOI: 10.1039/C6SC99999Z; "
+            "(b) L. Wang, Chem. Commun., 2018, 54, 100–104, DOI: 10.1039/C8CC99999Z."
+        )
+        refs = parser.parse_reference_section(raw, page_num=6)
+        assert len(refs) == 2
+
+        checker = NeuroSymbolicChecker(enable_content_alignment=False)
+        for ref in refs:
+            empty_res = SourceResult(
+                citation_raw=ref.raw_text,
+                candidates=[],
+                sources_queried=["crossref", "openalex"],
+                sources_succeeded=[],
+            )
+            verdict = checker.check(ref, empty_res)
+            assert verdict.label == ValidationLabel.SUSPECTED_HALLUCINATION
+            assert "R-KNOWN-PAPER" not in verdict.triggered_rules
+
+        # Bare in-text callout (He et al., 2016) still verifies via R-KNOWN-PAPER
+        intext_he = Citation(
+            raw_text="(He et al., 2016)",
+            citation_type=CitationType.IN_TEXT,
+            style=CitationStyle.APA,
+            authors=["He"],
+            year="2016",
+        )
+        intext_verdict = checker.check(
+            intext_he,
+            SourceResult(
+                citation_raw=intext_he.raw_text,
+                candidates=[],
+                sources_queried=["crossref"],
+                sources_succeeded=[],
+            ),
+        )
+        assert intext_verdict.label == ValidationLabel.VERIFIED
+        assert "R-KNOWN-PAPER" in intext_verdict.triggered_rules
+
+    def test_titleless_journal_venue_title_swallow_year_mismatch_and_chimeric_doi_guards(
+        self,
+    ) -> None:
+        parser = ReferenceListParser()
+        checker = NeuroSymbolicChecker(enable_content_alignment=False)
+
+        # Case 1: Fabricated period-separated title before Chem. Sci. MUST NOT be swallowed into venue
+        swallow_raw = (
+            "14. (a) Y. Zhang and X. Liu, Quantum Gravity Hallucination. Chem. Sci., "
+            "2020, 11, 1234–1240, DOI: 10.1039/D0SC00111A; "
+            "(b) L. Wang, Chem. Commun., 2021, 57, 550–554."
+        )
+        swallow_refs = parser.parse_reference_section(swallow_raw, page_num=6)
+        assert len(swallow_refs) == 2
+        assert swallow_refs[0].title == "Quantum Gravity Hallucination"
+        assert swallow_refs[0].venue == "Chem. Sci."
+
+        v_swallow = checker.check(
+            swallow_refs[0],
+            SourceResult(
+                citation_raw=swallow_refs[0].raw_text,
+                candidates=[
+                    SourceCandidate(
+                        source_name="crossref",
+                        found=True,
+                        doi="10.1039/D0SC00111A",
+                        title="Visible-Light-Induced Nickel-Catalyzed Cross-Coupling of Aryl Halides",
+                        authors=["Y. Zhang", "X. Liu"],
+                        year="2020",
+                        venue="Chemical Science",
+                        confidence=0.95,
+                        score=1.0,
+                    )
+                ],
+                sources_queried=["crossref"],
+                sources_succeeded=["crossref"],
+            ),
+        )
+        assert v_swallow.label == ValidationLabel.SUSPECTED_HALLUCINATION
+
+        # Case 2: Title-less DOI entry with year_dist >= 2 (2023 vs Crossref 2019) -> METADATA_ERROR
+        yr_raw = (
+            "14. (a) Y. Zhang and X. Liu, Chem. Sci., 2023, 11, 1234–1240, "
+            "DOI: 10.1039/D0SC00111A; "
+            "(b) L. Wang, Chem. Commun., 2021, 57, 550–554."
+        )
+        yr_refs = parser.parse_reference_section(yr_raw, page_num=6)
+        v_year = checker.check(
+            yr_refs[0],
+            SourceResult(
+                citation_raw=yr_refs[0].raw_text,
+                candidates=[
+                    SourceCandidate(
+                        source_name="crossref",
+                        found=True,
+                        doi="10.1039/D0SC00111A",
+                        title="Visible-Light-Induced Nickel-Catalyzed Cross-Coupling of Aryl Halides",
+                        authors=["Y. Zhang", "X. Liu"],
+                        year="2019",
+                        venue="Chemical Science",
+                        confidence=0.95,
+                        score=1.0,
+                    )
+                ],
+                sources_queried=["crossref"],
+                sources_succeeded=["crossref"],
+            ),
+        )
+        assert v_year.label == ValidationLabel.METADATA_ERROR
+        assert "year" in v_year.mismatched_fields
+
+        # Case 3: Cross-domain spliced DOI sharing only 1 of 5 authors (Chem. Sci. vs IEEE TPAMI)
+        chimeric_raw = (
+            "14. (a) Y. Zhang, K. Lee and M. Park, Chem. Sci., 2023, 11, 1234–1240, "
+            "DOI: 10.1109/TPAMI.2018.123456; "
+            "(b) L. Wang, Chem. Commun., 2021, 57, 550–554."
+        )
+        chimeric_refs = parser.parse_reference_section(chimeric_raw, page_num=6)
+        v_chimeric = checker.check(
+            chimeric_refs[0],
+            SourceResult(
+                citation_raw=chimeric_refs[0].raw_text,
+                candidates=[
+                    SourceCandidate(
+                        source_name="crossref",
+                        found=True,
+                        doi="10.1109/TPAMI.2018.123456",
+                        title="Mask R-CNN",
+                        authors=["Y. Zhang", "H. He", "R. Girshick"],
+                        year="2018",
+                        venue="IEEE Transactions on Pattern Analysis and Machine Intelligence",
+                        confidence=0.95,
+                        score=1.0,
+                    )
+                ],
+                sources_queried=["crossref"],
+                sources_succeeded=["crossref"],
+            ),
+        )
+        assert v_chimeric.label == ValidationLabel.SUSPECTED_HALLUCINATION
+        assert "R-CHIMERIC-DOI-MISMATCH" in v_chimeric.triggered_rules
+
+    def test_bracketed_1d_4f_and_14g_preserved_for_composite_bibliographies(
+        self, tmp_path
+    ) -> None:
+        bib_raw = (
+            "[1] (a) Smith, J. J. Am. Chem. Soc. 2020, 142, 10–15; "
+            "(b) Jones, A. Org. Lett. 2020, 22, 20–25; "
+            "(c) Lee, K. Chem. Sci. 2021, 12, 30–35; "
+            "(d) Chen, M. Chem. Commun. 2021, 57, 40–45."
+        )
+        bibs_1 = ReferenceListParser().parse_reference_section(bib_raw, page_num=3)
+        assert [b.composite_label for b in bibs_1] == ["1a", "1b", "1c", "1d"]
+        for b in bibs_1:
+            b.reference_id = f"ref-{b.composite_label}"
+
+        # Standalone CitationExtractor + CitationLinker
+        body_1 = "Catalysts [1a], [1b], [1c], and [1d] were screened."
+        in_text_1 = CitationExtractor(preserve_occurrences=True).extract_from_text(
+            body_1, page_num=1
+        )
+        link_res_1 = CitationLinker().link(in_text_1, bibs_1)
+        assert link_res_1.unmatched_reference_ids == []
+        assert len(link_res_1.links) == 4
+        assert all(lk.status == CitationMappingStatus.MATCHED for lk in link_res_1.links)
+
+        # DocumentParser rescue when [1d], [4f], [14g] appear without sibling [1a]/[4a] in body,
+        # while still ignoring SI units [24h] and [5g]
+        dummy_pdf = tmp_path / "composite_brackets.pdf"
+        dummy_pdf.write_bytes(b"%PDF-1.4 dummy")
+        doc = Document(
+            file_path=str(dummy_pdf),
+            num_pages=2,
+            parser_used="mupdf",
+            pages=[
+                Page(
+                    page_num=1,
+                    text=(
+                        "Introduction\n"
+                        "Protocol [1d] and ligand [4f] outperformed [14g] after [24h] using [5g] silica."
+                    ),
+                ),
+                Page(
+                    page_num=2,
+                    text=(
+                        "References\n"
+                        "[1] (a) Smith, J. J. Am. Chem. Soc. 2020, 142, 10–15; "
+                        "(b) Jones, A. Org. Lett. 2020, 22, 20–25; "
+                        "(c) Lee, K. Chem. Sci. 2021, 12, 30–35; "
+                        "(d) Chen, M. Chem. Commun. 2021, 57, 40–45.\n"
+                        "[4] (a) Adams, R. Org. Lett. 2019, 21, 1–5; "
+                        "(b) Baker, S. Org. Lett. 2019, 21, 6–10; "
+                        "(c) Clark, T. Org. Lett. 2019, 21, 11–15; "
+                        "(d) Davis, U. Org. Lett. 2019, 121, 16–20; "
+                        "(e) Evans, V. Org. Lett. 2019, 21, 21–25; "
+                        "(f) Frank, W. Org. Lett. 2019, 21, 26–30.\n"
+                        "[5] Green, X. Chem. Rev. 2020, 120, 100–120.\n"
+                        "[14] (a) White, Y. Chem. Sci. 2021, 12, 200–205; "
+                        "(b) Black, Z. Chem. Sci. 2021, 12, 210–215.\n"
+                        "[24] Young, P. J. Org. Chem. 2020, 85, 300–310."
+                    ),
+                ),
+            ],
+            metadata={},
+        )
+        mock_mupdf = MagicMock()
+        mock_mupdf.parse.return_value = doc
+        dp = DocumentParser(mupdf_parser=mock_mupdf)
+        dp._load_grobid_tei = MagicMock(return_value=None)  # type: ignore[method-assign]
+        parsed_doc = dp.parse(str(dummy_pdf), use_service_manager=False)
+        body_raws = [c.raw_text for c in parsed_doc.body_citations]
+        assert "[1d]" in body_raws
+        assert "[4f]" in body_raws
+        assert "[14g]" in body_raws
+        assert "[24h]" not in body_raws
+        assert "[5g]" not in body_raws
+
+        for idx_b, bc in enumerate(parsed_doc.body_citations, start=1):
+            bc.reference_id = f"occ-{idx_b:04d}"
+        doc_links = CitationLinker().link(parsed_doc.body_citations, parsed_doc.references)
+        status_by_raw = {
+            occ.raw_text: [
+                lk.status for lk in doc_links.links if lk.occurrence_id == occ.reference_id
+            ]
+            for occ in parsed_doc.body_citations
+        }
+        assert status_by_raw["[1d]"] == [CitationMappingStatus.MATCHED]
+        assert status_by_raw["[4f]"] == [CitationMappingStatus.MATCHED]
+        assert status_by_raw["[14g]"] == [CitationMappingStatus.MISSING_REFERENCE]
+
+    def test_hybrid_merge_preserves_titleless_14b_alongside_earlier_same_author_year_entry(
+        self,
+    ) -> None:
+        dp = DocumentParser()
+
+        grobid_refs = [
+            Citation(
+                raw_text=f"{i}. Author{i}, A. Paper {i}. J. Org. Chem. 2019, 84, {i}0–{i}5.",
+                citation_type=CitationType.REFERENCE_LIST,
+                style=CitationStyle.ACS,
+                authors=[f"Author{i}, A."],
+                title=f"Paper {i}",
+                venue="J. Org. Chem.",
+                year="2019",
+                numeric_index=i,
+                order_index=i,
+                source="grobid",
+                grobid_ref_id=f"b{i - 1}",
+            )
+            for i in range(1, 5)
+        ]
+        # Entry 5: Title-less Smith, J. (2020) in GROBID
+        grobid_refs.append(
+            Citation(
+                raw_text="5. Smith, J. J. Am. Chem. Soc. 2020, 142, 100–105.",
+                citation_type=CitationType.REFERENCE_LIST,
+                style=CitationStyle.ACS,
+                authors=["Smith, J."],
+                title=None,
+                venue="J. Am. Chem. Soc.",
+                year="2020",
+                numeric_index=5,
+                order_index=5,
+                source="grobid",
+                grobid_ref_id="b4",
+            )
+        )
+        # Entry 14: Unexpanded composite in GROBID
+        grobid_refs.append(
+            Citation(
+                raw_text="14. (a) Jones, A. Org. Lett. 2021, 23, 10–15; (b) Smith, J. Chem. Sci. 2020, 11, 200–205.",
+                citation_type=CitationType.REFERENCE_LIST,
+                style=CitationStyle.ACS,
+                authors=["Jones, A."],
+                title=None,
+                venue="Org. Lett.",
+                year="2021",
+                numeric_index=14,
+                order_index=6,
+                source="grobid",
+                grobid_ref_id="b13",
+            )
+        )
+
+        regex_refs = [
+            Citation(
+                raw_text=g.raw_text,
+                citation_type=CitationType.REFERENCE_LIST,
+                style=CitationStyle.ACS,
+                authors=list(g.authors),
+                title=g.title,
+                venue=g.venue,
+                year=g.year,
+                numeric_index=g.numeric_index,
+                order_index=g.order_index,
+                source="regex",
+            )
+            for g in grobid_refs[:5]
+        ]
+        regex_refs.extend(
+            [
+                Citation(
+                    raw_text="(a) Jones, A. Org. Lett. 2021, 23, 10–15.",
+                    citation_type=CitationType.REFERENCE_LIST,
+                    style=CitationStyle.ACS,
+                    authors=["Jones, A."],
+                    title=None,
+                    venue="Org. Lett.",
+                    year="2021",
+                    numeric_index=14,
+                    sub_index="a",
+                    composite_label="14a",
+                    order_index=6,
+                    source="regex",
+                ),
+                Citation(
+                    raw_text="(b) Smith, J. Chem. Sci. 2020, 11, 200–205.",
+                    citation_type=CitationType.REFERENCE_LIST,
+                    style=CitationStyle.ACS,
+                    authors=["Smith, J."],
+                    title=None,
+                    venue="Chem. Sci.",
+                    year="2020",
+                    numeric_index=14,
+                    sub_index="b",
+                    composite_label="14b",
+                    order_index=7,
+                    source="regex",
+                ),
+            ]
+        )
+
+        merged = dp._merge_reference_lists(grobid_refs, regex_refs)
+        assert any(m.numeric_index == 5 and m.sub_index is None for m in merged)
+        merged_14 = [m for m in merged if m.numeric_index == 14]
+        assert [m.composite_label for m in merged_14] == ["14a", "14b"]

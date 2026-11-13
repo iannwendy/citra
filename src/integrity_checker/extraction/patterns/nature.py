@@ -43,7 +43,7 @@ from integrity_checker.models.citation import Citation, CitationStyle, CitationT
 # Superscript numbers: ^1, ^2 (math-safe: must follow word/punctuation, not digit/single var)
 _NATURE_SUPERSCRIPT = CompiledPattern.create(
     name="nature_superscript",
-    pattern=r"(?:(?<=^)|(?<=[A-Za-zÀ-ÿ]{2})|(?<=[A-Za-zÀ-ÿ]{2}[.,;:\])]))\^(\d{1,3}(?:\s*[,–-]\s*\d{1,3})*)(?![0-9A-Za-z]|\s*[,–-]\s*(?:\d{1,3}[a-z]|[a-z]\b))",
+    pattern=r"(?:(?<=^)|(?<=[A-Za-zÀ-ÿ]{2})|(?<=[A-Za-zÀ-ÿ]{2}[.,;:\])]))\^(?!(?:\d{1,3}\s*[,–-]\s*\^*)*\d{1,3}[a-z](?![A-Za-z0-9]))(\d{1,3}(?:\s*[,–-]\s*\d{1,3})*)(?![0-9A-Za-z]|\s*[,–-]\s*(?:\d{1,3}[a-z]|[a-z]\b))",
     pattern_type=PatternType.IN_TEXT,
     description="Nature superscript: ^1 | ^2",
 )
@@ -59,7 +59,7 @@ _NATURE_BRACKETED = CompiledPattern.create(
 # Comma-separated superscripts: ^1,^2,^3
 _NATURE_SUPERSCRIPT_COMMA = CompiledPattern.create(
     name="nature_superscript_comma",
-    pattern=r"(?:(?<=^)|(?<=[A-Za-zÀ-ÿ]{2})|(?<=[A-Za-zÀ-ÿ]{2}[.,;:\])]))\^(\d+(?:,\s*\^*\d+)+)(?![0-9A-Za-z]|\s*[,–-]\s*(?:\d{1,3}[a-z]|[a-z]\b))",
+    pattern=r"(?:(?<=^)|(?<=[A-Za-zÀ-ÿ]{2})|(?<=[A-Za-zÀ-ÿ]{2}[.,;:\])]))\^(?!(?:\d{1,3}\s*[,–-]\s*\^*)*\d{1,3}[a-z](?![A-Za-z0-9]))(\d+(?:,\s*\^*\d+)+)(?![0-9A-Za-z]|\s*[,–-]\s*(?:\d{1,3}[a-z]|[a-z]\b))",
     pattern_type=PatternType.IN_TEXT,
     description="Nature superscript comma: ^1,^2 | ^1, ^2",
 )

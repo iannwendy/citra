@@ -592,7 +592,8 @@ class CitationExtractor:
                     bracket_pairs = [(int(n), sub) for n, sub in bracket_tokens]
                     if bracket_nums:
                         # Reject standalone dimension / orbital brackets like [2d], [3d], [4d], [4f], [5f]
-                        # unless part of a multi-item/range bracket like [2a, 2d] or [2a–d].
+                        # unless part of a multi-item/range bracket like [2a, 2d] or [2a–d], or accompanied
+                        # by sibling composite callouts ([1a]/[1b]/[1c], [4a]/[4b]/[4c]) in the same text.
                         if (
                             len(bracket_pairs) == 1
                             and bracket_pairs[0][1]
@@ -601,6 +602,7 @@ class CitationExtractor:
                                 (bracket_pairs[0][1] == "d" and 1 <= bracket_pairs[0][0] <= 6)
                                 or (bracket_pairs[0][1] == "f" and bracket_pairs[0][0] in {4, 5})
                             )
+                            and not re.search(rf"\[\s*{bracket_pairs[0][0]}[abc]\b", search_text)
                         ):
                             continue
                         # Reject duplicate tokens inside the same bracket ([1, 1], [10, 255, 255]), large buffer/pixel sizes (>= 300),

@@ -20,7 +20,7 @@ from integrity_checker.logic.rules import SymbolicRules, _is_fake_url
 from integrity_checker.logic.vn_legal_verifier import verify_vn_legal_citation
 from integrity_checker.matching.author_matcher import author_match_score
 from integrity_checker.matching.features import FeatureCalculator
-from integrity_checker.models.citation import Citation
+from integrity_checker.models.citation import Citation, CitationType
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.models.validation import CitationVerdict, MatchFeatures, ValidationLabel
 from integrity_checker.retrieval.normalization import title_similarity
@@ -525,8 +525,20 @@ class NeuroSymbolicChecker:
         # FIX v1.5: Now checks title similarity to detect METADATA_ERROR
         has_fake_url, _ = _is_fake_url(citation.url)
         has_fabricated_doi = self.rules._is_fabricated_doi(citation.doi)
+        _norm_cit_t = (citation.title or "").strip().rstrip(".,;").lower()
+        _norm_cit_v = (citation.venue or "").strip().rstrip(".,;").lower()
+        _is_titleless_ref_entry = (
+            citation.citation_type == CitationType.REFERENCE_LIST
+            and (not _norm_cit_t or (bool(_norm_cit_v) and _norm_cit_t == _norm_cit_v))
+        )
         is_known, paper_info = RetrievalOrchestrator.is_known_paper(citation)
-        if is_known and paper_info and not has_fake_url and not has_fabricated_doi:
+        if (
+            is_known
+            and paper_info
+            and not has_fake_url
+            and not has_fabricated_doi
+            and not _is_titleless_ref_entry
+        ):
             known_year = paper_info.get("year") or (
                 str(citation.year)[:4] if citation.year else None
             )
@@ -576,14 +588,8 @@ class NeuroSymbolicChecker:
             # (e.g., another paper by the same first author in the same year, like Kaiser & Bengio 2016).
             citation_title = citation.title
             known_title = paper_info.get("title", "")
-            _is_titleless_journal = bool(
-                citation_title
-                and citation.venue
-                and citation_title.strip().rstrip(".,;").lower()
-                == citation.venue.strip().rstrip(".,;").lower()
-            )
 
-            if citation_title and not _is_titleless_journal and known_title:
+            if citation_title and known_title:
                 # Calculate title similarity using FuzzyMatcher
                 title_sim = self.rules.fuzzy.token_set_ratio(
                     citation_title.lower(), known_title.lower()
@@ -748,8 +754,8 @@ class NeuroSymbolicChecker:
                         ),
                         enhanced_source,
                     )
-            else:
-                # Citation has no title (in-text citation) → VERIFIED via known paper
+            elif citation.citation_type != CitationType.REFERENCE_LIST and not citation.doi:
+                # Citation has no title (bare in-text callout) → VERIFIED via known paper
                 enhanced_source = SourceResult(
                     citation_raw=source.citation_raw,
                     candidates=[known_candidate] + other_cands,

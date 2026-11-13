@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
 from integrity_checker.matching.fuzzy import FuzzyMatcher
+from integrity_checker.matching.venue_normalizer import VenueNormalizer
 from integrity_checker.models.source import SourceResult
 from integrity_checker.models.validation import MatchFeatures, ValidationLabel
 
@@ -55,6 +56,122 @@ _RESERVED_FAKE_TLDS: tuple[str, ...] = (
     ".localhost",
     ".fake",
 )
+
+_ISO4_VENUE_ABBREV_STEMS: frozenset[str] = frozenset(
+    {
+        "acct", "accts", "acta", "advan", "allg", "anal", "angew", "annu", "anorg",
+        "appl", "arch", "aust", "biochem", "biol", "biomacromol", "biophys",
+        "biotechnol", "bull", "catal", "chem", "chemsuschem", "chemcatchem",
+        "chemmedchem", "chemphyschem", "chempluschem", "chim", "clin", "colloid",
+        "commun", "comp", "comput", "coord", "cryst", "crystengcomm", "curr",
+        "dalton", "disc", "discuss", "dokl", "ecol", "educ", "electroanal",
+        "electrochem", "eng", "environ", "eur", "exp", "faraday", "febs", "food",
+        "funct", "gaz", "gazz", "geochem", "geophys", "helv", "heterocycl",
+        "ieee", "ind", "inorg", "inst", "int", "intl", "isrl", "izv", "japn",
+        "jpn", "kinet", "kristallogr", "langmuir", "lett", "macromol", "magn",
+        "mater", "math", "mech", "med", "metall", "methods", "microbiol",
+        "mineral", "mol", "monatsh", "nano", "nanotechnol", "nat", "natl",
+        "naturforsch", "neurosci", "nucl", "nucleic", "opt", "org", "organomet",
+        "pathol", "pharm", "pharmacol", "phil", "philos", "photobiol", "photochem",
+        "phys", "physiol", "plant", "polym", "prep", "proc", "prog", "prot",
+        "protein", "psychol", "publ", "pure", "quart", "radiat", "radioanal",
+        "react", "recl", "rend", "rep", "res", "rev", "rheol", "roy", "russ",
+        "sci", "sect", "semicond", "sep", "ser", "soc", "solid", "spectrochim",
+        "spectrosc", "stat", "struct", "suppl", "surf", "sust", "symp", "synlett",
+        "synth", "syst", "tech", "technol", "tetrahedron", "theor", "therm",
+        "thermochim", "toxicol", "trans", "trends", "ultrason", "univ", "usp",
+        "vac", "virol", "zool",
+    }
+)
+
+_VENUE_STOP_TOKENS: frozenset[str] = frozenset(
+    {"of", "the", "and", "in", "for", "on", "to", "a", "an", "de", "la", "le", "du", "des", "fur", "für", "und", "der"}
+)
+
+
+def _has_sentence_period_in_venue(venue: str | None) -> bool:
+    """Return True if ``venue`` appears to contain an unquoted sentence/title before a period."""
+    v = (venue or "").strip()
+    if not v or ". " not in v:
+        return False
+    _non_title_abbrevs = _ISO4_VENUE_ABBREV_STEMS | {
+        "dr", "mr", "ms", "prof", "st", "jr", "sr", "ed", "eds",
+        "vol", "no", "pp", "fig", "eq", "ch", "pt", "vs", "cf", "al",
+    }
+    for m_dot in re.finditer(r"\.\s+(?=[A-Z])", v):
+        left = v[: m_dot.start()].strip()
+        w_m = re.search(r"([A-Za-zÀ-ÿ'\u2019\-]+)$", left)
+        w = (w_m.group(1) if w_m else "").lower()
+        if len(w) >= 4 and w not in _non_title_abbrevs:
+            return True
+    return False
+
+
+def _iso4_token_matches_word(abbr_tok: str, full_word: str) -> bool:
+    if abbr_tok == full_word:
+        return True
+    if len(abbr_tok) == 1:
+        return bool(
+            (abbr_tok == "j" and full_word.startswith("journal"))
+            or (abbr_tok == "z" and full_word.startswith("zeitschrift"))
+            or (abbr_tok == "c" and full_word.startswith(("comptes", "chemical", "chemistry")))
+            or (abbr_tok == "r" and full_word.startswith(("rendus", "review", "royal")))
+            or (abbr_tok == "b" and full_word.startswith(("bulletin", "part")))
+        )
+    if full_word.startswith(abbr_tok):
+        return True
+    return bool(
+        (abbr_tok == "natl" and full_word.startswith("national"))
+        or (abbr_tok == "intl" and full_word.startswith("international"))
+        or (abbr_tok == "angew" and full_word.startswith("angewandte"))
+        or (abbr_tok == "accts" and full_word.startswith("accounts"))
+        or (abbr_tok == "trans" and full_word.startswith("transactions"))
+    )
+
+
+def _iso4_tokens_align(abbr_toks: list[str], full_toks: list[str]) -> bool:
+    if not abbr_toks or not full_toks or not any(len(t) >= 3 for t in abbr_toks):
+        return False
+    pos = 0
+    matched = 0
+    for tok in abbr_toks:
+        while pos < len(full_toks) and not _iso4_token_matches_word(tok, full_toks[pos]):
+            pos += 1
+        if pos < len(full_toks):
+            matched += 1
+            pos += 1
+    min_req = len(abbr_toks) - 1 if len(abbr_toks) >= 4 else len(abbr_toks)
+    if matched < max(1, min_req):
+        return False
+    return (matched / max(len(abbr_toks), len(full_toks))) >= 0.50
+
+
+def _venues_compatible_for_titleless_ref(
+    citation_venue: str | None,
+    cand_venue: str | None,
+    venue_sim: float = 0.0,
+) -> bool:
+    """Return True when ``citation_venue`` and ``cand_venue`` match or ISO-4 align."""
+    if not cand_venue or not cand_venue.strip():
+        return True
+    if not citation_venue or not citation_venue.strip():
+        return False
+    if _has_sentence_period_in_venue(citation_venue):
+        return False
+    if venue_sim >= 0.45 or VenueNormalizer().similarity(citation_venue, cand_venue) >= 0.45:
+        return True
+
+    def _toks(s: str) -> list[str]:
+        out: list[str] = []
+        for raw_t in re.split(r"[\s/&–—\-(),:;]+", s.lower()):
+            t = raw_t.strip(".")
+            if t and t not in _VENUE_STOP_TOKENS:
+                out.append(t)
+        return out
+
+    toks_c = _toks(citation_venue)
+    toks_b = _toks(cand_venue)
+    return _iso4_tokens_align(toks_c, toks_b) or _iso4_tokens_align(toks_b, toks_c)
 
 
 def _is_fake_url(url: str | None) -> tuple[bool, str]:
@@ -1363,8 +1480,15 @@ class SymbolicRules:
 
         _norm_cit_title = (citation_title or "").strip().rstrip(".,;").lower()
         _norm_cit_venue = (citation_venue or "").strip().rstrip(".,;").lower()
-        is_titleless_journal_ref = bool(_norm_cit_venue) and (
-            not _norm_cit_title or _norm_cit_title == _norm_cit_venue
+        is_titleless_journal_ref = (
+            bool(_norm_cit_venue)
+            and not _has_sentence_period_in_venue(citation_venue)
+            and (not _norm_cit_title or _norm_cit_title == _norm_cit_venue)
+        )
+        titleless_venue_ok = _venues_compatible_for_titleless_ref(
+            citation_venue,
+            best.venue if best else None,
+            float(getattr(features, "venue_sim", 0.0) or 0.0),
         )
 
         # --- Rule 1: DOI + title + author strong match → VERIFIED ---
@@ -1391,7 +1515,10 @@ class SymbolicRules:
                 or (
                     is_titleless_journal_ref
                     and bool(citation_authors)
-                    and author_sim >= self.author_jaccard_verified
+                    and author_sim >= max(self.author_jaccard_verified, 0.50)
+                    and titleless_venue_ok
+                    and year_dist is not None
+                    and year_dist <= max(self.year_tolerance, 1)
                 )
             )
             and (year_dist <= max(self.year_tolerance, 1) or year_dist >= 900)
@@ -1817,12 +1944,25 @@ class SymbolicRules:
             if len(_cand_tokens) >= 3 and len(_cand_tokens & _raw_tokens) == 0:
                 _chimeric_zero_content_overlap = True
 
+        _titleless_exempt_from_chimeric = bool(
+            is_titleless_journal_ref
+            and bool(citation_authors)
+            and author_sim >= 0.34
+            and (
+                titleless_venue_ok
+                or (
+                    author_sim >= 0.50
+                    and (year_dist is None or year_dist < 2 or year_dist >= 900)
+                )
+            )
+        )
+
         if (
             doi_match
             and _has_live_source(source, verified_sources)
             and not is_cross_lingual_title
             and not (not citation_authors and author_sim == 0.0 and title_sim >= 0.85)
-            and not (is_titleless_journal_ref and bool(citation_authors) and author_sim >= 0.20)
+            and not _titleless_exempt_from_chimeric
             and (
                 (title_sim < 0.35 and author_sim < 0.20)
                 or (features.title_sim_fuzzy < 0.25 and features.title_sim_semantic < 0.45)
@@ -1847,6 +1987,35 @@ class SymbolicRules:
                 mismatched_fields=mismatched,
                 style_penalty=style_penalty,
             )
+
+        # --- Rule 2c: Title-less chemistry/physics journal DOI match with metadata mismatch → METADATA_ERROR ---
+        if (
+            doi_match
+            and _has_live_source(source, verified_sources)
+            and is_titleless_journal_ref
+            and bool(citation_authors)
+        ):
+            if year_dist is not None and 2 <= year_dist < 900:
+                mismatched.append("year")
+                triggered_rules.append("R-YEAR-MISMATCH")
+            if author_sim < 0.50:
+                mismatched.append("author")
+            if not titleless_venue_ok:
+                mismatched.append("venue")
+            if mismatched:
+                triggered_rules.append("R-DOI-METADATA-MISMATCH")
+                return RuleOutcome(
+                    label=ValidationLabel.METADATA_ERROR,
+                    confidence=max(0.0, 0.72 - style_penalty),
+                    reasoning=(
+                        f"Exact DOI match on title-less journal citation with mismatched metadata "
+                        f"({', '.join(mismatched)}); author overlap={author_sim:.2f}, "
+                        f"year_distance={year_dist}."
+                    ),
+                    triggered_rules=triggered_rules,
+                    mismatched_fields=mismatched,
+                    style_penalty=style_penalty,
+                )
 
         # --- Rule 3: ≥2 sources in consensus ---
         if consensus >= self.consensus_verified and title_sim >= self.title_sim_verified:

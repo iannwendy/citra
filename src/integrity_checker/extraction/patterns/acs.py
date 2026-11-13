@@ -31,7 +31,7 @@ import re
 
 from integrity_checker.extraction.patterns.base import CompiledPattern, PatternType
 from integrity_checker.extraction.patterns.registry import register_format
-from integrity_checker.matching.author_parser import parse_authors
+from integrity_checker.matching.author_parser import Author, normalize_author, parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
 # =============================================================================
@@ -82,14 +82,15 @@ _ACS_PREFIX = (
 )
 
 _ACS_AUTHOR_STOP_GUARD = (
-    r"(?!(?:[A-ZÀ-Ý]\.(?!\s+[A-Z][a-z]+\.)"
-    r"|[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+(?:\s*[,;]|\s+(?:and|&|et\s+al)\b)"
+    r"(?!(?:[JZ]\.(?!\s+(?:Am|Org|Inorg|Phys|Chem|Mater|Biol|Biochem|Med|Mol|Catal|Polym|Anal|Appl|Electrochem|Photochem|Nat|Anorg|Naturforsch)\.)"
+    r"|[A-IK-YÀ-Ý]\."
+    r"|(?:(?:van|de|den|der|von|del|da|di|le|la|du|al|el)\s+)?[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+(?:\s*[,;]|\s+(?:and|&|et\s+al)\b)"
     r"|;|and\b|&|et\s+al\.))"
 )
 
-_RSC_INIT_TOKEN = r"(?:[A-ZÀ-Ý](?:-[A-ZÀ-Ý])?\.\s*)+"
+_RSC_INIT_TOKEN = r"(?:[A-ZÀ-Ý]\.?-[A-ZÀ-Ý]\.\s*|[A-ZÀ-Ý]\.\s*)+"
 _RSC_SURNAME_TOKEN = (
-    r"(?:(?:de|van|von|del|da|di|le|la|du|al|el|St\.|Mc|Mac)\s+)?"
+    r"(?:(?:de|van|den|der|von|del|da|di|le|la|du|al|el)(?:\s+|-)|d'|St\.\s+|Mc\s+|Mac\s+)?"
     r"[A-ZÀ-Ý][A-Za-zÀ-ÿ'\u2019\-]+(?!\.)"
 )
 _RSC_SINGLE_AUTHOR = rf"{_RSC_INIT_TOKEN}{_RSC_SURNAME_TOKEN}"
@@ -99,25 +100,51 @@ _RSC_AUTHORS_GROUP = (
     rf"(?:,?\s+et\s+al\.?)?)"
 )
 
+_JOURNAL_ABBREV_STEMS: frozenset[str] = frozenset(
+    {
+        "acct", "accts", "acta", "advan", "allg", "anal", "angew", "annu", "anorg",
+        "appl", "arch", "aust", "biochem", "biol", "biomacromol", "biophys",
+        "biotechnol", "bull", "catal", "chem", "chemsuschem", "chemcatchem",
+        "chemmedchem", "chemphyschem", "chempluschem", "chim", "clin", "colloid",
+        "commun", "comp", "comput", "coord", "cryst", "crystengcomm", "curr",
+        "dalton", "disc", "discuss", "dokl", "ecol", "educ", "electroanal",
+        "electrochem", "eng", "environ", "eur", "exp", "faraday", "febs", "food",
+        "funct", "gaz", "gazz", "geochem", "geophys", "helv", "heterocycl",
+        "ieee", "ind", "inorg", "inst", "int", "intl", "isrl", "izv", "japn",
+        "jpn", "kinet", "kristallogr", "langmuir", "lett", "macromol", "magn",
+        "mater", "math", "mech", "med", "metall", "methods", "microbiol",
+        "mineral", "mol", "monatsh", "nano", "nanotechnol", "nat", "natl",
+        "naturforsch", "neurosci", "nucl", "nucleic", "opt", "org", "organomet",
+        "pathol", "pharm", "pharmacol", "phil", "philos", "photobiol", "photochem",
+        "phys", "physiol", "plant", "polym", "prep", "proc", "prog", "prot",
+        "protein", "psychol", "publ", "pure", "quart", "radiat", "radioanal",
+        "react", "recl", "rend", "rep", "res", "rev", "rheol", "roy", "russ",
+        "sci", "sect", "semicond", "sep", "ser", "soc", "solid", "spectrochim",
+        "spectrosc", "stat", "struct", "suppl", "surf", "sust", "symp", "synlett",
+        "synth", "syst", "tech", "technol", "tetrahedron", "theor", "therm",
+        "thermochim", "toxicol", "trans", "trends", "ultrason", "univ", "usp",
+        "vac", "virol", "zool",
+    }
+)
+
 # RSC / Wiley / Angewandte initials-first comma-delimited journal article:
 # 14. Y. Zhang and X. Liu, Chem. Sci., 2020, 11, 1234–1240, DOI: 10.1039/D0SC00111A.
-# [14] Y. Zhang, X. Liu, Angew. Chem. Int. Ed. 2020, 59, 1234–1240.
+# [14] Y. Zhang, X. Liu, Angew. Chem. Int. Ed. 2020, 59, e202201234.
 _ACS_REFERENCE_RSC_WILEY = CompiledPattern.create(
     name="acs_reference_rsc_wiley",
     pattern=(
         _ACS_PREFIX
         + _RSC_AUTHORS_GROUP
         + r",\s+"
-        + r"(?:[\"\u201c](?P<title>[^\"\u201d]{5,})[\"\u201d],?\s+)?"
-        + r"(?P<venue>[A-Z][A-Za-z0-9.\s&–\-]{1,80}?)(?:,\s*|\s+)"
+        + r"(?P<mid>[A-Z\"\u201c'\u2018][^;]{1,260}?)(?:,\s*|\s+)"
         + r"(?P<year>(?:18|19|20)\d{2})\s*,\s*"
         + r"(?P<volume>[A-Za-z]?\d+)"
         + r"(?:\s*\((?P<issue>[^)]+)\))?"
-        + r"(?:\s*,\s*(?:pp?\.\s*)?(?P<pages>[A-Za-z]?\d+(?:\s*[-–—]\s*[A-Za-z]?\d+)?))?"
+        + r"(?:\s*,\s*(?:pp?\.\s*)?(?P<pages>[A-Za-z]?\d{1,12}(?:\s*[-–—]\s*[A-Za-z]?\d{1,12})?))?"
         + r"\.?\s*(?P<rest>.*)$"
     ),
     pattern_type=PatternType.REFERENCE_ENTRY,
-    description="RSC/Wiley journal: N. I. Surname, Journal, Year, Vol, Pages.",
+    description="RSC/Wiley journal: N. I. Surname, [Title,] Journal, Year, Vol, Pages.",
 )
 
 # APS / AIP initials-first compact physics article:
@@ -128,16 +155,15 @@ _ACS_REFERENCE_APS_COMPACT = CompiledPattern.create(
         _ACS_PREFIX
         + _RSC_AUTHORS_GROUP
         + r",\s+"
-        + r"(?:[\"\u201c](?P<title>[^\"\u201d]{5,})[\"\u201d],?\s+)?"
-        + r"(?P<venue>[A-Z][A-Za-z0-9.\s&–\-]{1,80}?)(?:,\s*|\s+)"
+        + r"(?P<mid>[A-Z\"\u201c'\u2018][^;]{1,260}?)(?:,\s*|\s+)"
         + r"(?P<volume>\d+)"
         + r"(?:\s*\((?P<issue>[^)]+)\))?\s*,\s*"
-        + r"(?:pp?\.\s*)?(?P<pages>[A-Za-z]?\d+(?:\s*[-–—]\s*[A-Za-z]?\d+)?)\s*"
+        + r"(?:pp?\.\s*)?(?P<pages>[A-Za-z]?\d{1,12}(?:\s*[-–—]\s*[A-Za-z]?\d{1,12})?)\s*"
         + r"\(\s*(?P<year>(?:18|19|20)\d{2}[a-z]?)\s*\)"
         + r"\.?\s*(?P<rest>.*)$"
     ),
     pattern_type=PatternType.REFERENCE_ENTRY,
-    description="APS compact journal: [N] I. Surname, Journal Vol, Pages (Year).",
+    description="APS compact journal: [N] I. Surname, [Title,] Journal Vol, Pages (Year).",
 )
 
 # ACS article:
@@ -469,21 +495,126 @@ class ACSFormat:
         cleaned = (authors_str or "").strip()
         if not cleaned or not re.search(r"[A-Za-zÀ-ÿ]{2,}", cleaned):
             return True
+        _init_only_re = r"(?:[A-ZÀ-Ý]\.?-[A-ZÀ-Ý]\.?\s*|[A-ZÀ-Ý]\.?\s*)+"
         for seg in re.split(r"\s*(?:;|\band\b|&)\s*", cleaned):
             seg_s = seg.strip()
             if not seg_s:
                 continue
-            if re.fullmatch(r"(?:[A-ZÀ-Ý](?:-[A-ZÀ-Ý])?\.?\s*)+", seg_s):
+            if re.fullmatch(_init_only_re, seg_s):
                 return True
-        if re.match(r"^(?:[A-ZÀ-Ý](?:-[A-ZÀ-Ý])?\.\s*)+[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+", cleaned):
+        if re.match(rf"^{_RSC_INIT_TOKEN}[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+", cleaned):
             for cseg in [s.strip() for s in cleaned.split(",") if s.strip()]:
                 if re.match(r"^et\s+al\.?$", cseg, re.IGNORECASE):
                     continue
-                if re.fullmatch(r"(?:[A-ZÀ-Ý](?:-[A-ZÀ-Ý])?\.?\s*)+", cseg):
+                if re.fullmatch(_init_only_re, cseg):
                     return True
                 if not re.search(r"[A-ZÀ-Ý]\.", cseg):
                     return True
         return False
+
+    @staticmethod
+    def _parse_rsc_authors(authors_str: str) -> list[Author]:
+        """Parse RSC / Wiley / APS initials-first author list without Oxford-comma ambiguity."""
+        cleaned = re.sub(r",?\s+et\s+al\.?\s*$", "", (authors_str or "").strip(), flags=re.I)
+        if not cleaned:
+            return []
+        segments = [
+            s.strip()
+            for s in re.split(
+                r"\s*(?:[,;]\s*(?:(?:and|&)\s+)?|\s+(?:and|&)\s+)\s*",
+                cleaned,
+            )
+            if s.strip()
+        ]
+        if not segments:
+            return []
+
+        single_re = re.compile(rf"^(?P<inits>{_RSC_INIT_TOKEN})(?P<surname>{_RSC_SURNAME_TOKEN})$")
+        parsed: list[Author] = []
+        for seg in segments:
+            m_seg = single_re.match(seg)
+            if not m_seg:
+                return []
+            inits_raw = m_seg.group("inits").strip()
+            surname_raw = m_seg.group("surname").strip()
+            inits_norm = re.sub(r"\.?-", ". ", inits_raw)
+            a_obj = normalize_author(f"{surname_raw}, {inits_norm}")
+            if not a_obj.last_name.strip():
+                return []
+            parsed.append(
+                Author(
+                    last_name=a_obj.last_name,
+                    initials=a_obj.initials,
+                    full_first_names=a_obj.full_first_names,
+                    normalized=a_obj.normalized,
+                    raw=seg,
+                )
+            )
+        return parsed
+
+    @staticmethod
+    def _split_rsc_title_and_venue(mid_raw: str) -> tuple[str | None, str | None]:
+        """Split RSC/Wiley/APS ``mid`` field into ``(title, venue)`` without swallowing titles."""
+        mid = (mid_raw or "").strip().rstrip(",").strip()
+        if not mid or len(mid) < 2:
+            return None, None
+
+        # 1. Quoted title: "Title," Chem. Sci.
+        q_m = re.match(
+            r"^[\"\u201c'\u2018](?P<qt>[^\"\u201d'\u2019]{4,})[\"\u201d'\u2019][,.]?\s+(?P<qv>.+)$",
+            mid,
+        )
+        if q_m:
+            qt = q_m.group("qt").strip().rstrip(",.")
+            qv = q_m.group("qv").strip().rstrip(",").strip()
+            if not qv or re.search(r"\bvol\.\s*$", qv, re.I):
+                return None, None
+            return qt, qv
+
+        # 2. Period-separated unquoted title: "Quantum Gravity Hallucination. Chem. Sci."
+        _non_title_end_abbrevs = _JOURNAL_ABBREV_STEMS | {
+            "dr", "mr", "ms", "prof", "st", "jr", "sr", "ed", "eds",
+            "vol", "no", "pp", "fig", "eq", "ch", "pt", "vs", "cf", "al",
+        }
+        for m_dot in reversed(list(re.finditer(r"\.\s+", mid))):
+            left = mid[: m_dot.start()].strip()
+            right = mid[m_dot.end() :].strip().rstrip(",").strip()
+            if not left or not right or not re.match(r"^[A-Z]", right):
+                continue
+            last_w_m = re.search(r"([A-Za-zÀ-ÿ'\u2019\-]+)$", left)
+            last_w = (last_w_m.group(1) if last_w_m else "").lower()
+            if len(last_w) >= 4 and last_w not in _non_title_end_abbrevs:
+                if re.search(r"\bvol\.\s*$", right, re.I) or len(right) > 85:
+                    return None, None
+                return left.rstrip(",."), right
+
+        # 3. Unquoted comma-delimited RSC title: "Nickel-Catalyzed Cross-Coupling..., Chem. Sci."
+        # Preserve legitimate comma-containing RSC journals like "Angew. Chem., Int. Ed."
+        # or "J. Chem. Soc., Chem. Commun." (whose prefix before comma ends with ".").
+        comma_parts = [p.strip() for p in re.split(r",\s+", mid) if p.strip()]
+        if len(comma_parts) >= 2:
+            for idx in range(len(comma_parts) - 1, 0, -1):
+                cand_title = ", ".join(comma_parts[:idx]).strip()
+                cand_venue = ", ".join(comma_parts[idx:]).strip().rstrip(",").strip()
+                if cand_title.endswith(".") or len(cand_title) < 8:
+                    continue
+                unabbrev_words = re.findall(r"\b[A-Za-zÀ-ÿ'\u2019\-]{3,}\b(?!\.)", cand_title)
+                if (
+                    len(unabbrev_words) >= 2
+                    and re.match(r"^[A-Z]", cand_venue)
+                    and len(cand_venue) <= 85
+                    and not re.search(r"\bvol\.\s*$", cand_venue, re.I)
+                ):
+                    return cand_title.rstrip(",."), cand_venue
+
+        # 4. Title-less journal venue
+        if (
+            len(mid) > 85
+            or re.search(r"\bvol\.\s*$", mid, re.I)
+            or re.search(r"[;:?!]", mid)
+        ):
+            return None, None
+        return None, mid
 
     def _parse_rsc_wiley_entry(
         self,
@@ -496,15 +627,14 @@ class ACSFormat:
         authors_str = (match.group("authors") or "").strip()
         if not authors_str:
             return None
-        authors = parse_authors(authors_str.replace(";", ","), format_name="IEEE")
-        if not authors or any(not getattr(a, "last_name", "").strip() for a in authors):
+        authors = self._parse_rsc_authors(authors_str)
+        if not authors:
             return None
 
-        venue_raw = (match.group("venue") or "").strip().rstrip(",").strip()
+        parsed_title, venue_raw = self._split_rsc_title_and_venue(
+            match.groupdict().get("mid") or ""
+        )
         if not venue_raw or len(venue_raw) < 2:
-            return None
-        # Guard against capturing prose or IEEE "vol." inside venue
-        if re.search(r"\bvol\.\s*$", venue_raw, re.IGNORECASE):
             return None
 
         citation = Citation(
@@ -524,11 +654,9 @@ class ACSFormat:
         if index:
             citation.numeric_index = int(index)
 
-        raw_title = match.groupdict().get("title")
-        if raw_title and raw_title.strip():
-            title = raw_title.strip().rstrip(",.")
-            citation.title = title
-            citation.title_normalized = self._normalize_title(title)
+        if parsed_title:
+            citation.title = parsed_title
+            citation.title_normalized = self._normalize_title(parsed_title)
         else:
             citation.title = None
             citation.title_normalized = None
