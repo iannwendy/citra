@@ -7,6 +7,7 @@ import inspect
 import os
 import tempfile
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,10 +17,11 @@ from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
 from integrity_checker.api.deps import get_current_user, get_db, get_pipeline, require_admin
+from integrity_checker.api.job_recovery import refund_upload_quota_once
 from integrity_checker.api.progress import get_pipeline_admission_controller, get_tracker
 from integrity_checker.billing.plans import ensure_user_quota_current, get_user_plan_policy
 from integrity_checker.config import PROJECT_ROOT, is_test_runtime
-from integrity_checker.db.models import CitationRecord, User, VerdictRecord
+from integrity_checker.db.models import CitationRecord, EssayRecord, User, VerdictRecord
 from integrity_checker.db.repository import Repository
 from integrity_checker.models.api_schemas import EssayUploadResponse
 from integrity_checker.pipeline.integrity_pipeline import IntegrityPipeline
@@ -33,6 +35,14 @@ UPLOADS_DIR = PROJECT_ROOT / "data" / "essays" / "uploads"
 ALLOWED_UPLOAD_EXTENSIONS = (".pdf", ".docx", ".bib", ".ris")
 
 _QUOTA_CLAIM_LOCK = threading.Lock()
+
+
+def _get_worker_mode() -> str:
+    """Return configured worker execution mode ('inline', 'web_only', or 'worker_only')."""
+    mode = os.getenv("CITRA_WORKER_MODE", "inline").strip().lower()
+    if mode in {"web_only", "worker_only", "inline"}:
+        return mode
+    return "inline"
 
 
 def _claim_monthly_upload_slot_and_create_essay(
@@ -102,6 +112,11 @@ def _claim_monthly_upload_slot_and_create_essay(
             user_id=fresh_user.id,
             class_id=class_id,
         )
+        essay.job_status = "queued"
+        essay.quota_charged = 1
+        essay.job_attempt_count = 0
+        essay.job_heartbeat_at = datetime.now(UTC)
+        essay.job_error = None
         repo.commit()
         db.refresh(essay)
         db.refresh(current_user)
@@ -117,6 +132,14 @@ def _get_persisted_upload_path(essay_id: int, ext: str | None = None) -> Path:
         if candidate.is_file():
             return candidate
     return UPLOADS_DIR / f"{essay_id}.pdf"
+
+
+def _persist_upload_bytes(essay_id: int, ext: str, content: bytes) -> Path:
+    """Persist uploaded document bytes under UPLOADS_DIR for worker/recovery access."""
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    persisted_path = _get_persisted_upload_path(essay_id, ext=ext)
+    persisted_path.write_bytes(content)
+    return persisted_path
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +183,17 @@ async def _run_pipeline_task(
             if not admitted:
                 logger.info(f"Queued essay {essay_id} was cancelled before pipeline execution")
                 return
+
+            status_session = get_session()
+            try:
+                essay_row = status_session.get(EssayRecord, essay_id)
+                if essay_row is not None:
+                    essay_row.job_status = "processing"
+                    essay_row.job_heartbeat_at = datetime.now(UTC)
+                    essay_row.job_error = None
+                    status_session.commit()
+            finally:
+                status_session.close()
 
             max_citations: int | None = None
             allow_serpapi: bool | None = None
@@ -306,6 +340,10 @@ async def _run_pipeline_task(
                 style_profile=style_profile_dict,
                 cis=cis_dict,
             )
+            if essay:
+                essay.job_status = "completed"
+                essay.job_heartbeat_at = datetime.now(UTC)
+                essay.job_error = None
             repo.commit()
         finally:
             session.close()
@@ -322,6 +360,16 @@ async def _run_pipeline_task(
             safe_err = "Document file is corrupted or unreadable."
         else:
             safe_err = "Analysis failed due to an internal processing error."
+        try:
+            err_session = get_session()
+            try:
+                refund_upload_quota_once(err_session, essay_id, safe_err)
+            finally:
+                err_session.close()
+        except Exception as refund_exc:
+            logger.warning(
+                f"Could not persist quota refund for failed essay {essay_id}: {refund_exc}"
+            )
         tracker.fail(essay_id, safe_err)
     finally:
         if cleanup_file:
@@ -516,15 +564,25 @@ async def upload_essay(
         structured_error=False,
     )
 
+    if _get_worker_mode() == "web_only":
+        _persist_upload_bytes(essay.id, upload_ext, content)
+        get_tracker().clear(essay.id)
+        return EssayUploadResponse(
+            essay_id=essay.id,
+            filename=essay.filename,
+            num_pages=0,
+            num_citations=0,
+            citations=[],
+            summary={"status": "queued"},
+        )
+
     if is_test_runtime():
         with tempfile.NamedTemporaryFile(delete=False, suffix=upload_ext) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
         cleanup_file = True
     else:
-        UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-        persisted_path = _get_persisted_upload_path(essay.id, ext=upload_ext)
-        persisted_path.write_bytes(content)
+        persisted_path = _persist_upload_bytes(essay.id, upload_ext, content)
         tmp_path = str(persisted_path)
         cleanup_file = False
 
@@ -580,13 +638,15 @@ def get_essay_status(
     if not repo.can_user_access_essay(current_user, essay):
         raise HTTPException(status_code=403, detail="Access denied")
 
+    worker_mode = _get_worker_mode()
     tracker = get_tracker()
-    state = tracker.get(essay_id)
+    state = None if worker_mode == "web_only" else tracker.get(essay_id)
 
     if state is not None:
         # Auto-retry at most once if a prior background run failed solely due to transient sqlite I/O error
         if (
-            state.status == "failed"
+            worker_mode != "web_only"
+            and state.status == "failed"
             and state.error
             and "disk I/O error" in state.error
             and not is_test_runtime()
@@ -641,6 +701,28 @@ def get_essay_status(
             "document_diagnostics": doc_diag,
         }
 
+    if getattr(essay, "job_status", None) == "failed":
+        fail_err = (
+            essay.job_error
+            or (persisted_snap or {}).get("error")
+            or "Analysis failed due to an internal processing error."
+        )
+        return {
+            "status": "failed",
+            "step": (persisted_snap or {}).get("step", "parsing"),
+            "step_index": int((persisted_snap or {}).get("step_index", 0) or 0),
+            "total_steps": 8,
+            "message": f"Failed: {fail_err}",
+            "citations_found": int((persisted_snap or {}).get("citations_found", 0) or 0),
+            "references_found": int((persisted_snap or {}).get("references_found", 0) or 0),
+            "linked": int((persisted_snap or {}).get("linked", 0) or 0),
+            "sources_queried": (persisted_snap or {}).get("sources_queried", {}),
+            "elapsed_seconds": float((persisted_snap or {}).get("elapsed_seconds", 0.0) or 0.0),
+            "finished_at": (persisted_snap or {}).get("finished_at"),
+            "error": fail_err,
+            "queue_position": None,
+        }
+
     if persisted_snap is not None and persisted_snap.get("status") in (
         "failed",
         "processing",
@@ -651,7 +733,12 @@ def get_essay_status(
     # Server restarted before background analysis finished: auto-resume at most once
     # if the uploaded PDF is persisted on disk.
     persisted_pdf = _get_persisted_upload_path(essay_id)
-    if not is_test_runtime() and persisted_pdf.is_file() and tracker.can_auto_retry(essay_id):
+    if (
+        worker_mode != "web_only"
+        and not is_test_runtime()
+        and persisted_pdf.is_file()
+        and tracker.can_auto_retry(essay_id)
+    ):
         resumed_state = tracker.init(essay_id, is_retry=True)
         background_tasks.add_task(
             _run_pipeline_task,
@@ -664,12 +751,13 @@ def get_essay_status(
         return resumed_state.to_snapshot()
 
     # No tracker and no verdicts — either queued or server restarted mid-run
+    is_queued = getattr(essay, "job_status", None) == "queued"
     return {
-        "status": "processing",
-        "step": "parsing",
+        "status": "queued" if is_queued else "processing",
+        "step": "queued" if is_queued else "parsing",
         "step_index": 0,
         "total_steps": 8,
-        "message": "Processing...",
+        "message": "Queued for analysis..." if is_queued else "Processing...",
         "citations_found": 0,
         "references_found": 0,
         "linked": 0,
@@ -719,6 +807,14 @@ async def reanalyze_essay(
             persisted_path = found_alt
         else:
             raise HTTPException(status_code=404, detail="Persisted document file not found on disk")
+
+    if _get_worker_mode() == "web_only":
+        essay.job_status = "queued"
+        essay.job_heartbeat_at = datetime.now(UTC)
+        essay.job_error = None
+        db.commit()
+        get_tracker().clear(essay_id)
+        return {"status": "queued", "essay_id": essay.id}
 
     tracker = get_tracker()
     tracker.init(essay_id, is_retry=True)
@@ -2009,21 +2105,23 @@ async def generate_sandbox_pdf_manuscript(
         structured_error=True,
     )
 
-    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    persisted_path = _get_persisted_upload_path(essay.id, ext=".pdf")
-    persisted_path.write_bytes(pdf_bytes)
+    persisted_path = _persist_upload_bytes(essay.id, ".pdf", pdf_bytes)
 
-    tracker = get_tracker()
-    tracker.init(essay.id)
-
-    background_tasks.add_task(
-        _run_pipeline_task,
-        essay.id,
-        str(persisted_path),
-        current_user.id,
-        pipeline,
-        False,
-    )
+    if _get_worker_mode() == "web_only":
+        get_tracker().clear(essay.id)
+        initial_status = "queued"
+    else:
+        tracker = get_tracker()
+        tracker.init(essay.id)
+        background_tasks.add_task(
+            _run_pipeline_task,
+            essay.id,
+            str(persisted_path),
+            current_user.id,
+            pipeline,
+            False,
+        )
+        initial_status = "processing"
 
     return {
         "essay_id": essay.id,
@@ -2034,7 +2132,7 @@ async def generate_sandbox_pdf_manuscript(
         "in_text_markers_preview": in_text_markers[:25],
         "references_preview": ref_lines[:25],
         "pdf_base64": base64.b64encode(pdf_bytes).decode("ascii"),
-        "status": "processing",
+        "status": initial_status,
     }
 
 

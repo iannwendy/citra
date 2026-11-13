@@ -160,7 +160,7 @@ def _drop_columns_safe(
 
 
 # ---------------------------------------------------------------------------
-# Versioned Migration Steps (0001 - 0009)
+# Versioned Migration Steps (0001 - 0010)
 # ---------------------------------------------------------------------------
 
 
@@ -641,6 +641,79 @@ def _downgrade_0009(conn: Connection, _op: Operations) -> None:
         _drop_index_if_exists(conn, idx_name)
 
 
+def _upgrade_0010(conn: Connection, op: Operations) -> None:
+    _add_column_if_missing(
+        conn,
+        op,
+        "essays",
+        sa.Column(
+            "job_status",
+            sa.String(20),
+            nullable=False,
+            server_default=sa.text("'completed'"),
+        ),
+    )
+    _add_column_if_missing(
+        conn,
+        op,
+        "essays",
+        sa.Column(
+            "job_attempt_count",
+            sa.Integer(),
+            nullable=False,
+            server_default=sa.text("0"),
+        ),
+    )
+    _add_column_if_missing(
+        conn,
+        op,
+        "essays",
+        sa.Column("job_heartbeat_at", sa.DateTime(), nullable=True),
+    )
+    _add_column_if_missing(
+        conn,
+        op,
+        "essays",
+        sa.Column("job_error", sa.Text(), nullable=True),
+    )
+    _add_column_if_missing(
+        conn,
+        op,
+        "essays",
+        sa.Column(
+            "quota_charged",
+            sa.Integer(),
+            nullable=False,
+            server_default=sa.text("0"),
+        ),
+    )
+    conn.exec_driver_sql(
+        "CREATE INDEX IF NOT EXISTS ix_essays_job_status ON essays(job_status)"
+    )
+    conn.execute(
+        text(
+            "UPDATE essays "
+            "SET job_status = CASE WHEN cis_json IS NOT NULL THEN 'completed' ELSE 'failed' END"
+        )
+    )
+
+
+def _downgrade_0010(conn: Connection, op: Operations) -> None:
+    _drop_columns_safe(
+        conn,
+        op,
+        "essays",
+        (
+            "quota_charged",
+            "job_error",
+            "job_heartbeat_at",
+            "job_attempt_count",
+            "job_status",
+        ),
+        extra_indexes=("ix_essays_job_status",),
+    )
+
+
 MIGRATIONS: tuple[MigrationStep, ...] = (
     MigrationStep(
         version="0001",
@@ -704,6 +777,13 @@ MIGRATIONS: tuple[MigrationStep, ...] = (
         description="Clean up orphan citation and verdict rows and create composite B-Tree indexes",
         upgrade=_upgrade_0009,
         downgrade=_downgrade_0009,
+    ),
+    MigrationStep(
+        version="0010",
+        name="essay_job_lifecycle_and_quota_ledger",
+        description="Add job_status, job_attempt_count, job_heartbeat_at, job_error, and quota_charged columns to essays",
+        upgrade=_upgrade_0010,
+        downgrade=_downgrade_0010,
     ),
 )
 

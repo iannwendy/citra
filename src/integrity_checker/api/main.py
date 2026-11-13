@@ -88,10 +88,11 @@ def create_app() -> FastAPI:
     init_db()
     logger.info("Database initialized")
 
-    if not is_test_runtime():
+    worker_mode = os.getenv("CITRA_WORKER_MODE", "inline").strip().lower() or "inline"
+    if not is_test_runtime() and worker_mode != "web_only":
         import threading
 
-        def _prewarm_local_papers_stats() -> None:
+        def _startup_background_maintenance() -> None:
             try:
                 from integrity_checker.database import LocalDatabase
 
@@ -111,7 +112,17 @@ def create_app() -> FastAPI:
             except Exception as exc:
                 logger.debug(f"Could not pre-warm SemanticMatcher model: {exc}")
 
-        threading.Thread(target=_prewarm_local_papers_stats, daemon=True).start()
+            try:
+                from integrity_checker.api.deps import get_pipeline
+                from integrity_checker.api.job_recovery import recover_orphaned_essay_jobs
+
+                recovery_summary = recover_orphaned_essay_jobs(get_pipeline)
+                if any(recovery_summary.values()):
+                    logger.info(f"Startup orphan job recovery summary: {recovery_summary}")
+            except Exception as exc:
+                logger.warning(f"Startup orphan job recovery failed: {exc}")
+
+        threading.Thread(target=_startup_background_maintenance, daemon=True).start()
 
     # Ensure avatars directory exists before mounting
     from integrity_checker.config import PROJECT_ROOT

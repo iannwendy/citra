@@ -92,7 +92,7 @@ def _run_inline_migrations(engine: Engine) -> None:
     """Apply incremental schema migrations not covered by create_all.
 
     Delegates to the versioned, SHA-256 checksum-verified migration runner in
-    ``integrity_checker.db.migrations.run_migrations`` (revisions ``0001``–``0009``).
+    ``integrity_checker.db.migrations.run_migrations`` (revisions ``0001``–``0010``).
 
     History:
         2026-09-30 (v1.8) — citations table gained mapping_status,

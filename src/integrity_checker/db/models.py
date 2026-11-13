@@ -181,6 +181,28 @@ class EssayRecord(Base):
     # v1.2 — full pipeline output (JSON serialized)
     style_profile_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     cis_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # v3.61 (B2) — persistent job lifecycle & atomic quota ledger
+    job_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="completed",
+        server_default="completed",
+        index=True,
+    )
+    job_attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    job_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    job_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    quota_charged: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
 
     user: Mapped[User | None] = relationship(back_populates="essays")
 
