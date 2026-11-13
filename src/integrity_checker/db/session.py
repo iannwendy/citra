@@ -19,6 +19,10 @@ from integrity_checker.db.models import (  # noqa: F401
     SchemaMigrationRecord,
     User,
 )
+from integrity_checker.db.sqlite_tuning import (
+    apply_sqlite_connection_pragmas,
+    resolve_sqlite_journal_mode,
+)
 
 _engine: Engine | None = None
 _engine_url: str | None = None
@@ -37,7 +41,8 @@ def get_engine() -> Engine:
 
     if _engine is None or _engine_url != url:
         is_sqlite = url.startswith("sqlite")
-        is_memory = url == "sqlite:///:memory:" or ":memory:" in url
+        is_memory = url in ("sqlite://", "sqlite:///", "sqlite:///:memory:") or ":memory:" in url
+        raw_path = ""
         if is_sqlite and not is_memory and url.startswith("sqlite:///"):
             raw_path = url.removeprefix("sqlite:///").split("?", 1)[0]
             if raw_path:
@@ -55,21 +60,16 @@ def get_engine() -> Engine:
             # across requests over Docker VirtioFS bind mounts.
             kwargs["poolclass"] = NullPool
         _engine = create_engine(url, **kwargs)
-        if is_sqlite and not is_memory:
-            journal_mode = os.getenv("SQLITE_JOURNAL_MODE", "DELETE").strip().upper()
-            if journal_mode not in ("DELETE", "WAL", "TRUNCATE", "PERSIST", "MEMORY", "OFF"):
-                journal_mode = "DELETE"
+        if is_sqlite and not is_memory and raw_path:
+            journal_mode = resolve_sqlite_journal_mode(Path(raw_path))
 
             @event.listens_for(_engine, "connect")
             def _set_sqlite_pragma(dbapi_connection, _connection_record) -> None:
-                cursor = dbapi_connection.cursor()
-                cursor.execute("PRAGMA busy_timeout=30000")
-                cursor.execute("PRAGMA synchronous=NORMAL")
-                cursor.close()
+                apply_sqlite_connection_pragmas(dbapi_connection, journal_mode)
 
             try:
-                with _engine.connect() as _init_conn:
-                    _init_conn.exec_driver_sql(f"PRAGMA journal_mode={journal_mode}")
+                with _engine.connect():
+                    pass
             except Exception:
                 pass
 

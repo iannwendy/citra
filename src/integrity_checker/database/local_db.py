@@ -23,6 +23,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from integrity_checker.db.sqlite_tuning import (
+    apply_sqlite_connection_pragmas,
+    resolve_sqlite_journal_mode,
+)
 from integrity_checker.retrieval.normalization import (
     author_keys,
     normalize_arxiv_id,
@@ -40,7 +44,7 @@ DEFAULT_DB_PATH = Path(__file__).resolve().parents[3] / "data" / "local_papers.d
 
 _DB_CACHE_LOCK = threading.Lock()
 _STATS_COMPUTE_LOCK = threading.Lock()
-_INITIALIZED_DB_INODES: dict[str, int] = {}
+_INITIALIZED_DB_INODES: dict[str, tuple[int, str]] = {}
 _STATS_CACHE: dict[str, tuple[float, int, int, int, dict[str, Any]]] = {}
 _PAPERS_COUNTS_CACHE: dict[str, tuple[float, int, int, dict[str, int]]] = {}
 _STATS_CACHE_TTL_SECONDS = 3600.0
@@ -107,11 +111,12 @@ class LocalDatabase:
             db_path: Path to SQLite database file. Defaults to ./data/local_papers.db
         """
         self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+        self._journal_mode = resolve_sqlite_journal_mode(self.db_path)
         self._query_cache = _QUERY_CACHE
         self._init_db()
 
     def _init_db(self) -> None:
-        """Initialize database schema if not exists (cached per file inode)."""
+        """Initialize database schema if not exists (cached per file inode and journal mode)."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         resolved_key = str(self.db_path.resolve())
         try:
@@ -119,7 +124,10 @@ class LocalDatabase:
                 stat = self.db_path.stat()
                 if stat.st_size > 0:
                     with _DB_CACHE_LOCK:
-                        if _INITIALIZED_DB_INODES.get(resolved_key) == stat.st_ino:
+                        if _INITIALIZED_DB_INODES.get(resolved_key) == (
+                            stat.st_ino,
+                            self._journal_mode,
+                        ):
                             return
         except OSError:
             pass
@@ -127,27 +135,25 @@ class LocalDatabase:
         with self._get_conn() as conn:
             for stmt in INIT_STATEMENTS:
                 conn.executescript(stmt)
-            # ``PRAGMA journal_mode`` returns a row, so it must be a query (not
-            # part of a script). Use DELETE mode for Docker VirtioFS compatibility.
-            conn.execute("PRAGMA journal_mode=DELETE")
-            conn.execute("PRAGMA synchronous=NORMAL")
-            conn.execute("PRAGMA busy_timeout=30000")
+            # ``PRAGMA journal_mode`` returns a row, so it must be executed via
+            # ``apply_sqlite_connection_pragmas`` rather than inside ``executescript``.
+            apply_sqlite_connection_pragmas(conn, self._journal_mode, mmap_bytes=67108864)
             conn.commit()
 
         try:
             stat = self.db_path.stat()
             if stat.st_size > 0:
                 with _DB_CACHE_LOCK:
-                    _INITIALIZED_DB_INODES[resolved_key] = stat.st_ino
+                    _INITIALIZED_DB_INODES[resolved_key] = (stat.st_ino, self._journal_mode)
         except OSError:
             pass
 
     @contextmanager
     def _get_conn(self) -> Generator[sqlite3.Connection, None, None]:
-        """Get database connection with row factory and in-memory FTS5 cache."""
+        """Get database connection with row factory, adaptive WAL/mmap, and FTS5 cache."""
         conn = sqlite3.connect(str(self.db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA busy_timeout=30000")
+        apply_sqlite_connection_pragmas(conn, self._journal_mode, mmap_bytes=67108864)
         conn.execute("PRAGMA cache_size=-16000")
         conn.execute("PRAGMA temp_store=MEMORY")
         try:
