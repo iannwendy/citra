@@ -876,7 +876,22 @@ class IntegrityPipeline:
             or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in retrieve_params.values())
         )
 
+        prefetched_by_id: dict[int, SourceResult] = {}
+        prefetch_fn = getattr(self.orchestrator, "prefetch_identifiers", None)
+        if unique_list and inspect.iscoroutinefunction(prefetch_fn):
+            async with global_retrieval_sem.acquire():
+                maybe_prefetched = await prefetch_fn(unique_list)
+                if isinstance(maybe_prefetched, dict):
+                    prefetched_by_id = {
+                        k: v
+                        for k, v in maybe_prefetched.items()
+                        if isinstance(k, int) and isinstance(v, SourceResult)
+                    }
+
         async def _bounded_retrieve(cit: Citation) -> SourceResult:
+            pre_resolved = prefetched_by_id.get(id(cit))
+            if pre_resolved is not None:
+                return pre_resolved
             async with retrieval_sem, global_retrieval_sem.acquire():
                 token = _ALLOW_SERPAPI_OVERRIDE.set(allow_serpapi)
                 try:

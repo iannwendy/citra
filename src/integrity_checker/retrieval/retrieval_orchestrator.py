@@ -60,12 +60,18 @@ from integrity_checker.retrieval.normalization import (
     author_keys,
     author_match_score,
     is_book_review_mismatch,
+    normalize_arxiv_id,
     normalize_doi,
     title_similarity,
 )
 from integrity_checker.retrieval.openaire_hal_client import OpenAIREHalClient
 from integrity_checker.retrieval.openalex_client import OpenAlexClient
 from integrity_checker.retrieval.openlibrary_client import OpenLibraryClient
+from integrity_checker.retrieval.persistent_cache import (
+    POSITIVE_MATCH_TTL_SECONDS,
+    PersistentVerificationCache,
+    build_verification_cache_key,
+)
 from integrity_checker.retrieval.rate_limiter import RateLimiter
 from integrity_checker.retrieval.serpapi_client import (
     GoogleScholarFallbackClient,
@@ -1091,6 +1097,8 @@ class RetrievalOrchestrator:
         link_validator: object | None = None,
         enable_link_validation: bool | None = None,
         circuit_breakers: CircuitBreakerRegistry | None = None,
+        persistent_cache: PersistentVerificationCache | None = None,
+        use_persistent_cache: bool | None = None,
     ) -> None:
         settings_global = get_settings()
         settings = settings_global.retrieval
@@ -1186,6 +1194,17 @@ class RetrievalOrchestrator:
             ttl_seconds=int(getattr(settings, "negative_cache_ttl_seconds", 21600)),
             max_entries=int(getattr(settings, "negative_cache_max_entries", 4096)),
         )
+        if persistent_cache is not None:
+            self._persistent_cache: PersistentVerificationCache | None = persistent_cache
+        elif use_persistent_cache is False or self.cache is not None:
+            self._persistent_cache = None
+        elif use_persistent_cache is True:
+            self._persistent_cache = PersistentVerificationCache()
+        else:
+            self._persistent_cache = PersistentVerificationCache(
+                require_isolated_test_db=True
+            )
+        self._wave0_memory_cache: dict[str, SourceResult] = {}
 
         # Local database
         self._local_db: LocalDatabase | None = None
@@ -1907,6 +1926,326 @@ class RetrievalOrchestrator:
                 return False
         return clean_count >= 3
 
+    async def _execute_batch_with_ratelimit(
+        self,
+        source_name: str,
+        client: object,
+        batch_coro_fn: Callable[[], Awaitable[dict[str, SourceCandidate]]],
+    ) -> tuple[dict[str, SourceCandidate], str | None]:
+        """Run a Wave-0 batch lookup with CircuitBreakerRegistry + RateLimiter integration."""
+        allowed, rem = self._circuit_breakers.allow_request(source_name)
+        if not allowed:
+            logger.debug(
+                f"Skipping {source_name} Wave-0 batch while circuit breaker is open ({rem:.1f}s remaining)"
+            )
+            return {}, f"circuit_open ({rem:.0f}s remaining)"
+
+        outcome_recorded = False
+        try:
+            limiter = self._rate_limiters.get(source_name)
+            if limiter:
+                fast_fail = (
+                    limiter.should_fast_fail() is True
+                    if hasattr(limiter, "should_fast_fail")
+                    else limiter.is_in_backoff() is True
+                )
+                if fast_fail:
+                    return {}, f"{source_name}: skipped (rate-limit backoff active)"
+                await limiter.wait()
+
+            notified_429 = False
+
+            def _on_http_429(src: str, retry_after: float | None) -> None:
+                nonlocal notified_429
+                if limiter and src == source_name and not notified_429:
+                    notified_429 = True
+                    if isinstance(retry_after, (int, float)):
+                        limiter.report_rate_limited(float(retry_after))
+                    else:
+                        limiter.report_rate_limited()
+
+            reset_task_http_status(source_name)
+            started_at = time.perf_counter()
+            cb_token = set_rate_limit_callback(_on_http_429) if limiter else None
+            try:
+                batch_map = await batch_coro_fn()
+            except httpx.HTTPStatusError as exc:
+                latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
+                status_code = exc.response.status_code if exc.response is not None else None
+                if status_code == 429 or (status_code is not None and status_code >= 500):
+                    reason = f"HTTP {status_code}: {exc}"
+                    self._circuit_breakers.record_infra_failure(source_name, reason, latency_ms)
+                    outcome_recorded = True
+                    return {}, reason
+                if status_code is not None and 200 <= status_code < 500:
+                    self._circuit_breakers.record_success(source_name, latency_ms)
+                    outcome_recorded = True
+                raise
+            except Exception as exc:
+                latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
+                if isinstance(exc, AssertionError):
+                    raise
+                reason = f"{exc.__class__.__name__}: {exc}"
+                self._circuit_breakers.record_infra_failure(source_name, reason, latency_ms)
+                outcome_recorded = True
+                return {}, reason
+            finally:
+                if cb_token is not None:
+                    reset_rate_limit_callback(cb_token)
+
+            latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
+            http_status, _http_ra, http_transport_err = get_task_http_status(source_name)
+
+            if limiter:
+                if notified_429 or http_status == 429:
+                    if not notified_429:
+                        retry_after_val = getattr(client, "_last_retry_after", None)
+                        if isinstance(retry_after_val, (int, float)):
+                            limiter.report_rate_limited(float(retry_after_val))
+                        else:
+                            limiter.report_rate_limited()
+                else:
+                    limiter.report_success()
+
+            infra_reason: str | None = None
+            if notified_429 or http_status == 429:
+                infra_reason = "HTTP 429 rate limited"
+            elif http_status is not None and http_status >= 500:
+                infra_reason = f"HTTP {http_status}"
+            elif http_transport_err:
+                infra_reason = http_transport_err
+
+            if infra_reason is not None:
+                self._circuit_breakers.record_infra_failure(source_name, infra_reason, latency_ms)
+            else:
+                self._circuit_breakers.record_success(source_name, latency_ms)
+            outcome_recorded = True
+            return batch_map or {}, infra_reason
+        finally:
+            if not outcome_recorded:
+                self._circuit_breakers.release_probe(source_name)
+
+    async def prefetch_identifiers(
+        self,
+        citations: list[Citation],
+    ) -> dict[int, SourceResult]:
+        """Wave-0 batch DOI/arXiv pre-fetcher + persistent cache lookup.
+
+        Resolves cached citations and multi-source DOI/arXiv consensus hits in a single
+        parallel wave (``OpenAlex + Crossref + arXiv``) keyed by ``id(citation)``.
+        """
+        if not citations or self.cache is not None:
+            return {}
+
+        resolved_by_id: dict[int, SourceResult] = {}
+        key_by_id: dict[int, str] = {}
+        pending: list[Citation] = []
+
+        for cit in citations:
+            if cit is None:
+                continue
+            ckey = build_verification_cache_key(cit)
+            key_by_id[id(cit)] = ckey
+            mem_hit = self._wave0_memory_cache.get(ckey)
+            if mem_hit is not None:
+                cloned = copy.deepcopy(mem_hit)
+                cloned.citation_raw = cit.raw_text
+                resolved_by_id[id(cit)] = cloned
+            else:
+                pending.append(cit)
+
+        if pending and self._persistent_cache is not None:
+            db_hits = self._persistent_cache.get_many([key_by_id[id(c)] for c in pending])
+            still_pending: list[Citation] = []
+            for cit in pending:
+                hit = db_hits.get(key_by_id[id(cit)])
+                if hit is not None:
+                    cloned = copy.deepcopy(hit)
+                    cloned.citation_raw = cit.raw_text
+                    if cit.url and self.enable_link_validation and cloned.url_status is None:
+                        u_st, u_code, u_arch = await self._validate_citation_url_with_archive(cit)
+                        cloned.url_status = u_st
+                        cloned.url_status_code = u_code
+                        cloned.archive_url = u_arch
+                    resolved_by_id[id(cit)] = cloned
+                else:
+                    still_pending.append(cit)
+            pending = still_pending
+
+        if not pending:
+            return resolved_by_id
+
+        src_cfg = get_settings().retrieval.sources
+        oa_enabled = bool(
+            src_cfg.openalex
+            and self.openalex is not None
+            and hasattr(self.openalex, "lookup_dois_batch")
+        )
+        cr_enabled = bool(
+            src_cfg.crossref
+            and self.crossref is not None
+            and hasattr(self.crossref, "lookup_dois_batch")
+        )
+        ax_enabled = bool(
+            getattr(src_cfg, "arxiv", True)
+            and self.arxiv is not None
+            and hasattr(self.arxiv, "lookup_arxiv_batch")
+        )
+
+        oa_dois: list[str] = []
+        oa_seen: set[str] = set()
+        cr_dois: list[str] = []
+        cr_seen: set[str] = set()
+        ax_ids: list[str] = []
+        ax_seen: set[str] = set()
+        id_targets: list[tuple[Citation, str | None, str | None]] = []
+
+        for cit in pending:
+            raw_doi = re.sub(r"^\s*doi\s*:\s*", "", str(cit.doi or ""), flags=re.IGNORECASE)
+            norm_doi = normalize_doi(raw_doi) if raw_doi else None
+            raw_arxiv = ArxivClient.extract_arxiv_id(cit)
+            norm_arxiv = normalize_arxiv_id(raw_arxiv) if raw_arxiv else None
+
+            if not norm_doi and not norm_arxiv:
+                continue
+
+            id_targets.append((cit, norm_doi, norm_arxiv))
+            if norm_doi:
+                if oa_enabled and norm_doi not in oa_seen:
+                    oa_seen.add(norm_doi)
+                    oa_dois.append(norm_doi)
+                if not norm_doi.startswith("10.48550/arxiv."):
+                    if cr_enabled and norm_doi not in cr_seen:
+                        cr_seen.add(norm_doi)
+                        cr_dois.append(norm_doi)
+            elif norm_arxiv and oa_enabled:
+                synth_doi = f"10.48550/arxiv.{norm_arxiv}"
+                if synth_doi not in oa_seen:
+                    oa_seen.add(synth_doi)
+                    oa_dois.append(synth_doi)
+
+            if norm_arxiv and ax_enabled and norm_arxiv not in ax_seen:
+                ax_seen.add(norm_arxiv)
+                ax_ids.append(norm_arxiv)
+
+        if not id_targets:
+            return resolved_by_id
+
+        async def _empty_batch() -> tuple[dict[str, SourceCandidate], str | None]:
+            return {}, None
+
+        oa_task = (
+            self._execute_batch_with_ratelimit(
+                self.openalex.name,
+                self.openalex,
+                lambda: self.openalex.lookup_dois_batch(oa_dois),
+            )
+            if oa_dois
+            else _empty_batch()
+        )
+        cr_task = (
+            self._execute_batch_with_ratelimit(
+                self.crossref.name,
+                self.crossref,
+                lambda: self.crossref.lookup_dois_batch(cr_dois),
+            )
+            if cr_dois
+            else _empty_batch()
+        )
+        ax_task = (
+            self._execute_batch_with_ratelimit(
+                self.arxiv.name,
+                self.arxiv,
+                lambda: self.arxiv.lookup_arxiv_batch(ax_ids),
+            )
+            if ax_ids
+            else _empty_batch()
+        )
+
+        (oa_map, oa_err), (cr_map, cr_err), (ax_map, ax_err) = await asyncio.gather(
+            oa_task,
+            cr_task,
+            ax_task,
+        )
+
+        for cit, norm_doi, norm_arxiv in id_targets:
+            cands: list[SourceCandidate] = []
+            queried: list[str] = []
+            succeeded: list[str] = []
+            failed: dict[str, str] = {}
+
+            oa_lookup_doi = norm_doi or (f"10.48550/arxiv.{norm_arxiv}" if norm_arxiv else None)
+            if oa_lookup_doi and oa_lookup_doi in oa_seen:
+                queried.append(self.openalex.name)
+                oa_cand = oa_map.get(oa_lookup_doi)
+                if oa_cand is not None and oa_cand.found:
+                    cands.append(copy.deepcopy(oa_cand))
+                    succeeded.append(self.openalex.name)
+                else:
+                    failed[self.openalex.name] = oa_err or "not found"
+
+            if norm_doi and norm_doi in cr_seen:
+                queried.append(self.crossref.name)
+                cr_cand = cr_map.get(norm_doi)
+                if cr_cand is not None and cr_cand.found:
+                    cands.append(copy.deepcopy(cr_cand))
+                    succeeded.append(self.crossref.name)
+                else:
+                    failed[self.crossref.name] = cr_err or "not found"
+
+            if norm_arxiv and norm_arxiv in ax_seen:
+                queried.append(self.arxiv.name)
+                ax_cand = ax_map.get(norm_arxiv)
+                if ax_cand is not None and ax_cand.found:
+                    cands.append(copy.deepcopy(ax_cand))
+                    succeeded.append(self.arxiv.name)
+                else:
+                    failed[self.arxiv.name] = ax_err or "not found"
+
+            if not cands:
+                continue
+
+            deduped = self._dedupe_candidates(cands, citation=cit)
+            quality_candidates, quality_succeeded = self._filter_quality_candidates(
+                deduped, succeeded, cit
+            )
+            if not quality_candidates:
+                continue
+
+            is_retracted = any(
+                c.found
+                and c.external_ids
+                and str(c.external_ids.get("is_retracted", "")).lower() == "true"
+                for c in quality_candidates
+            )
+            result = SourceResult(
+                citation_raw=cit.raw_text,
+                candidates=quality_candidates,
+                sources_queried=queried,
+                sources_succeeded=quality_succeeded,
+                sources_failed=failed,
+                is_retracted=is_retracted,
+            )
+            if result.consensus_count() < 2:
+                continue
+
+            if cit.url and self.enable_link_validation:
+                u_st, u_code, u_arch = await self._validate_citation_url_with_archive(cit)
+                result.url_status = u_st
+                result.url_status_code = u_code
+                result.archive_url = u_arch
+
+            if self._local_db is not None:
+                self._sync_to_local_db(quality_candidates, quality_succeeded, citation=cit)
+
+            ckey = key_by_id[id(cit)]
+            self._wave0_memory_cache[ckey] = copy.deepcopy(result)
+            if self._persistent_cache is not None:
+                self._persistent_cache.set(ckey, result, POSITIVE_MATCH_TTL_SECONDS)
+            resolved_by_id[id(cit)] = result
+
+        return resolved_by_id
+
     async def retrieve(
         self,
         citation: Citation,
@@ -1917,8 +2256,34 @@ class RetrievalOrchestrator:
         verified clean-miss TTL Negative Cache, and smart domain-aware staged execution.
         """
         # Legacy explicit DiskCache test adapter bypasses Singleflight/NegativeCache
-        if self.cache is not None or not self._singleflight_enabled:
+        if self.cache is not None:
             return await self._retrieve_uncached(citation, allow_serpapi=allow_serpapi)
+
+        p_key = build_verification_cache_key(citation)
+        mem_hit = self._wave0_memory_cache.get(p_key)
+        if mem_hit is not None:
+            cloned_mem = copy.deepcopy(mem_hit)
+            cloned_mem.citation_raw = citation.raw_text
+            return cloned_mem
+
+        if self._persistent_cache is not None:
+            p_hit = self._persistent_cache.get(p_key)
+            if p_hit is not None:
+                p_hit.citation_raw = citation.raw_text
+                if citation.url and self.enable_link_validation and p_hit.url_status is None:
+                    u_st, u_code, u_arch = await self._validate_citation_url_with_archive(citation)
+                    p_hit.url_status = u_st
+                    p_hit.url_status_code = u_code
+                    p_hit.archive_url = u_arch
+                return p_hit
+
+        if not self._singleflight_enabled:
+            uncached_res = await self._retrieve_uncached(citation, allow_serpapi=allow_serpapi)
+            if self._persistent_cache is not None:
+                ttl = self._persistent_cache.resolve_ttl_seconds(uncached_res)
+                if ttl is not None:
+                    self._persistent_cache.set(p_key, uncached_res, ttl)
+            return uncached_res
 
         effective_allow_serpapi = (
             allow_serpapi
@@ -1951,8 +2316,13 @@ class RetrievalOrchestrator:
             logger.debug(
                 f"Singleflight COALESCED in-flight lookup for: '{(citation.title or citation.raw_text)[:50]}'"
             )
-        elif self._is_cacheable_clean_miss(citation, result):
-            self._negative_cache.set(sf_key, result)
+        else:
+            if self._is_cacheable_clean_miss(citation, result):
+                self._negative_cache.set(sf_key, result)
+            if self._persistent_cache is not None:
+                ttl = self._persistent_cache.resolve_ttl_seconds(result)
+                if ttl is not None:
+                    self._persistent_cache.set(p_key, result, ttl)
 
         return result
 
@@ -3596,6 +3966,11 @@ class RetrievalOrchestrator:
                 if secondary.external_ids:
                     merged_ext = dict(secondary.external_ids)
                     merged_ext.update(primary.external_ids or {})
+                    if (
+                        str((secondary.external_ids or {}).get("is_retracted", "")).lower() == "true"
+                        or str((primary.external_ids or {}).get("is_retracted", "")).lower() == "true"
+                    ):
+                        merged_ext["is_retracted"] = "true"
                     primary.external_ids = merged_ext
                 bucket[canonical_key] = primary
             else:

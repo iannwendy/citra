@@ -38,6 +38,7 @@ from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     author_key,
     author_match_score,
+    normalize_arxiv_id,
     normalize_doi,
     title_similarity,
     title_tokens,
@@ -192,6 +193,63 @@ class ArxivClient(BaseScholarClient):
         cand.confidence = 0.98
         cand.score = 1.0
         return cand
+
+    async def lookup_arxiv_batch(self, arxiv_ids: list[str]) -> dict[str, SourceCandidate]:
+        """Batch-resolve up to 40 normalized arXiv IDs per request via ``id_list={id1},{id2},...``."""
+        self._reset_http_telemetry()
+        self._last_timed_out = False
+
+        norm_ids: list[str] = []
+        seen: set[str] = set()
+        for raw in arxiv_ids or []:
+            text = str(raw or "").strip()
+            if not text:
+                continue
+            extracted: str | None = None
+            for pat in _ARXIV_ID_PATTERNS:
+                m = pat.search(text)
+                if m:
+                    extracted = m.group(1)
+                    break
+            aid = normalize_arxiv_id(extracted or text)
+            if aid and aid not in seen:
+                seen.add(aid)
+                norm_ids.append(aid)
+
+        if not norm_ids:
+            return {}
+
+        out: dict[str, SourceCandidate] = {}
+        chunk_size = 40
+        for idx in range(0, len(norm_ids), chunk_size):
+            chunk = norm_ids[idx : idx + chunk_size]
+            xml_text = await self._fetch_xml_with_retry(
+                {"id_list": ",".join(chunk), "max_results": 50}
+            )
+            if not xml_text:
+                if (
+                    self._last_status_code == 429
+                    or (self._last_status_code is not None and self._last_status_code >= 500)
+                    or self._last_transport_error
+                    or self._last_timed_out
+                ):
+                    break
+                continue
+
+            for cand in self._parse_atom_entries(xml_text):
+                if not cand.title:
+                    continue
+                raw_aid = (cand.external_ids or {}).get("arxiv")
+                norm_aid = normalize_arxiv_id(raw_aid)
+                if not norm_aid:
+                    continue
+                cand.external_ids["arxiv"] = norm_aid
+                cand.found = True
+                cand.confidence = 0.98
+                cand.score = 1.0
+                out[norm_aid] = cand
+
+        return out
 
     async def _lookup_by_search(self, citation: Citation) -> SourceCandidate:
         if not citation.title:

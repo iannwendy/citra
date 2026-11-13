@@ -31,6 +31,7 @@ from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     author_match_score,
     is_book_review_mismatch,
+    normalize_doi,
     title_similarity,
     title_tokens,
 )
@@ -128,6 +129,64 @@ class CrossrefClient(BaseScholarClient):
         cand.found = True
         cand.confidence = 1.0  # DOI exact = highest confidence
         return cand
+
+    async def lookup_dois_batch(self, dois: list[str]) -> dict[str, SourceCandidate]:
+        """Batch-resolve DOIs via ``GET /works?filter=doi:{d1},doi:{d2},...&rows=50``.
+
+        Chunks up to 40 DOIs per HTTP GET and preserves retraction flags
+        (``is_retracted=True`` from ``update-to`` / ``relation`` / title markers).
+        """
+        self._reset_http_telemetry()
+        self._last_status_code = None
+
+        norm_dois: list[str] = []
+        seen: set[str] = set()
+        for raw in dois or []:
+            cleaned = re.sub(r"^\s*doi\s*:\s*", "", str(raw or ""), flags=re.IGNORECASE)
+            nd = normalize_doi(cleaned)
+            if nd and nd not in seen:
+                seen.add(nd)
+                norm_dois.append(nd)
+
+        if not norm_dois:
+            return {}
+
+        out: dict[str, SourceCandidate] = {}
+        chunk_size = 40
+        for idx in range(0, len(norm_dois), chunk_size):
+            chunk = norm_dois[idx : idx + chunk_size]
+            doi_filter = ",".join(f"doi:{d}" for d in chunk)
+            data = await self._fetch_json_with_retry(
+                "/works",
+                params={"filter": doi_filter, "rows": 50},
+            )
+            if not data:
+                if (
+                    self._last_status_code == 429
+                    or (self._last_status_code is not None and self._last_status_code >= 500)
+                    or self._last_transport_error
+                ):
+                    break
+                continue
+
+            items = (data.get("message") or {}).get("items") or []
+            for item in items:
+                cand = self._message_to_candidate(item)
+                cleaned_cand_doi = re.sub(
+                    r"^\s*doi\s*:\s*",
+                    "",
+                    str(cand.doi or ""),
+                    flags=re.IGNORECASE,
+                )
+                norm_cand_doi = normalize_doi(cleaned_cand_doi)
+                if not norm_cand_doi or (not cand.title and not cand.doi):
+                    continue
+                cand.doi = norm_cand_doi
+                cand.found = True
+                cand.confidence = 1.0
+                out[norm_cand_doi] = cand
+
+        return out
 
     async def _lookup_by_bibliographic(self, citation: Citation) -> SourceCandidate:
         """GET /works?query.bibliographic=...&rows=3."""
