@@ -436,17 +436,20 @@ class PersistentVerificationCache:
         key: str,
         result: SourceResult,
         ttl_seconds: int | None = None,
-    ) -> None:
-        """Persist a ``SourceResult`` with tiered TTL; refuses partial/transient-failure results."""
+    ) -> bool:
+        """Persist a ``SourceResult`` with tiered TTL; refuses partial/transient-failure results.
+
+        Returns ``True`` if persisted to ``CitationCache``, ``False`` otherwise.
+        """
         if not key or not self._is_storage_enabled():
-            return
+            return False
 
         policy_ttl = self.resolve_ttl_seconds(result)
         if policy_ttl is None:
             logger.debug(
                 f"PersistentVerificationCache refused transient/degraded result for {key!r}"
             )
-            return
+            return False
 
         from integrity_checker.db.models import CitationCache
 
@@ -502,6 +505,7 @@ class PersistentVerificationCache:
                             )
                         )
                     session.commit()
+                    return True
                 except IntegrityError:
                     session.rollback()
                     existing = (
@@ -515,7 +519,9 @@ class PersistentVerificationCache:
                         existing.matched_fields = meta_json
                         existing.created_at = datetime.now(UTC)
                         session.commit()
+                        return True
         except OperationalError as exc:
             logger.debug(f"PersistentVerificationCache set skipped (DB uninitialized/busy): {exc}")
         except Exception as exc:
             logger.debug(f"PersistentVerificationCache set failed for {key!r}: {exc}")
+        return False

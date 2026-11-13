@@ -1204,7 +1204,7 @@ class RetrievalOrchestrator:
             self._persistent_cache = PersistentVerificationCache(
                 require_isolated_test_db=True
             )
-        self._wave0_memory_cache: dict[str, SourceResult] = {}
+        self._wave0_memory_cache: OrderedDict[str, tuple[float, SourceResult]] = OrderedDict()
 
         # Local database
         self._local_db: LocalDatabase | None = None
@@ -2025,6 +2025,26 @@ class RetrievalOrchestrator:
             if not outcome_recorded:
                 self._circuit_breakers.release_probe(source_name)
 
+    def _get_wave0_memory_hit(self, key: str) -> SourceResult | None:
+        item = self._wave0_memory_cache.get(key)
+        if item is None:
+            return None
+        expires_at, stored = item
+        if time.monotonic() >= expires_at:
+            self._wave0_memory_cache.pop(key, None)
+            return None
+        self._wave0_memory_cache.move_to_end(key)
+        return copy.deepcopy(stored)
+
+    def _put_wave0_memory_hit(self, key: str, result: SourceResult) -> None:
+        self._wave0_memory_cache[key] = (
+            time.monotonic() + float(POSITIVE_MATCH_TTL_SECONDS),
+            copy.deepcopy(result),
+        )
+        self._wave0_memory_cache.move_to_end(key)
+        while len(self._wave0_memory_cache) > 512:
+            self._wave0_memory_cache.popitem(last=False)
+
     async def prefetch_identifiers(
         self,
         citations: list[Citation],
@@ -2046,13 +2066,7 @@ class RetrievalOrchestrator:
                 continue
             ckey = build_verification_cache_key(cit)
             key_by_id[id(cit)] = ckey
-            mem_hit = self._wave0_memory_cache.get(ckey)
-            if mem_hit is not None:
-                cloned = copy.deepcopy(mem_hit)
-                cloned.citation_raw = cit.raw_text
-                resolved_by_id[id(cit)] = cloned
-            else:
-                pending.append(cit)
+            pending.append(cit)
 
         if pending and self._persistent_cache is not None:
             db_hits = self._persistent_cache.get_many([key_by_id[id(c)] for c in pending])
@@ -2071,6 +2085,17 @@ class RetrievalOrchestrator:
                 else:
                     still_pending.append(cit)
             pending = still_pending
+
+        if pending and self._wave0_memory_cache:
+            after_mem: list[Citation] = []
+            for cit in pending:
+                mem_hit = self._get_wave0_memory_hit(key_by_id[id(cit)])
+                if mem_hit is not None:
+                    mem_hit.citation_raw = cit.raw_text
+                    resolved_by_id[id(cit)] = mem_hit
+                else:
+                    after_mem.append(cit)
+            pending = after_mem
 
         if not pending:
             return resolved_by_id
@@ -2239,9 +2264,13 @@ class RetrievalOrchestrator:
                 self._sync_to_local_db(quality_candidates, quality_succeeded, citation=cit)
 
             ckey = key_by_id[id(cit)]
-            self._wave0_memory_cache[ckey] = copy.deepcopy(result)
+            stored_in_db = False
             if self._persistent_cache is not None:
-                self._persistent_cache.set(ckey, result, POSITIVE_MATCH_TTL_SECONDS)
+                stored_in_db = self._persistent_cache.set(
+                    ckey, result, POSITIVE_MATCH_TTL_SECONDS
+                )
+            if not stored_in_db:
+                self._put_wave0_memory_hit(ckey, result)
             resolved_by_id[id(cit)] = result
 
         return resolved_by_id
@@ -2260,12 +2289,6 @@ class RetrievalOrchestrator:
             return await self._retrieve_uncached(citation, allow_serpapi=allow_serpapi)
 
         p_key = build_verification_cache_key(citation)
-        mem_hit = self._wave0_memory_cache.get(p_key)
-        if mem_hit is not None:
-            cloned_mem = copy.deepcopy(mem_hit)
-            cloned_mem.citation_raw = citation.raw_text
-            return cloned_mem
-
         if self._persistent_cache is not None:
             p_hit = self._persistent_cache.get(p_key)
             if p_hit is not None:
@@ -2276,6 +2299,11 @@ class RetrievalOrchestrator:
                     p_hit.url_status_code = u_code
                     p_hit.archive_url = u_arch
                 return p_hit
+
+        mem_hit = self._get_wave0_memory_hit(p_key)
+        if mem_hit is not None:
+            mem_hit.citation_raw = citation.raw_text
+            return mem_hit
 
         if not self._singleflight_enabled:
             uncached_res = await self._retrieve_uncached(citation, allow_serpapi=allow_serpapi)
