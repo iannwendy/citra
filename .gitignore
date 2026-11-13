@@ -131,3 +131,7 @@ tai_lieu_tham_khao_TDTU.md
 # Local runtime data (dev containers write these)
 web/data/
 web/tests/e2e/_debug.spec.ts
+
+# Git worktrees & SDD state
+.worktrees/
+.superpowers/
