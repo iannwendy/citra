@@ -192,7 +192,7 @@ const MOCK_REPORT = {
 // ============================================================
 
 test.use({
-  baseURL: 'http://localhost:5173',
+  baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173',
 });
 
 // ============================================================
