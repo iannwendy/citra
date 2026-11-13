@@ -729,11 +729,25 @@ class DocumentParser:
             r"(?:\s*,\s*(?:[1-9]\d{0,2}[a-z]?|[a-z])(?:\s*[-–—−]\s*(?:[1-9]\d{0,2})?[a-z])?)*)"
             r"\s*\)"
         )
+        _non_cit_head = (
+            r"(?:Figures?|Figs?\.?|Tables?|Tabs?\.?|Schemes?|Schs?\.?|Charts?|"
+            r"Compounds?|Compds?\.?|Structures?|Products?|Intermediates?|"
+            r"Isomers?|Enantiomers?|Diastereomers?|Conformers?|Tautomers?|"
+            r"Ligands?|Catalysts?|Complex(?:es)?|Monomers?|Polymers?|Oligomers?|"
+            r"Substrates?|Reagents?|Derivatives?|Analog(?:ue)?s?|Adducts?|Precursors?|"
+            r"Salts?|Ketones?|Aldehydes?|Esters?|Amides?|Amines?|Imides?|Imines?|"
+            r"Alcohols?|Acids?|Phenols?|Ethers?|Epoxides?|Lactones?|Lactams?|"
+            r"Halides?|Fluorides?|Chlorides?|Bromides?|Iodides?|Triflates?|Tosylate|"
+            r"Alkenes?|Alkynes?|Alkanes?|Arenes?|Heteroarenes?|Indoles?|Pyridines?|Quinolines?|"
+            r"Silanes?|Boranes?|Phosphines?|Thiols?|Sulfides?|Sulfones?|Sulfoxides?|Nitriles?|"
+            r"Equations?|Eqs?\.?|Formulas?|Sections?|Secs?\.?|Chapters?|Chaps?\.?|"
+            r"Parts?|Steps?|Entries|Entry|Pathways?|Routes?|Cycles?|States?|Modes?|Models?|"
+            r"Hình|Bảng|Sơ\s+đồ|Hợp\s+chất|Chất|Dẫn\s+xuất|Công\s+thức|Phương\s+trình)"
+        )
         non_cit_prefix_re = re.compile(
-            r"\b(?:Figure|Fig\.?|Table|Tab\.?|Scheme|Chart|Compound|Compd\.?|Structure|"
-            r"Product|Intermediate|Isomer|Ligand|Catalyst|Complex|Monomer|Polymer|"
-            r"Equation|Eq\.?|Section|Sec\.?|Part|Step|Entry|Pathway|Route|"
-            r"Hình|Bảng|Sơ\s+đồ|Hợp\s+chất|Công\s+thức)\s*$",
+            rf"\b{_non_cit_head}\s+"
+            rf"(?:\(\s*[1-9]\d{{0,2}}[a-z][^()]*\)\s*"
+            rf"(?:,\s*(?:and\s+|or\s+)?|\s+(?:and|or|&|to|vs\.?)\s+|[-–—]\s*))*$",
             flags=re.IGNORECASE,
         )
 
@@ -760,7 +774,25 @@ class DocumentParser:
                     raw_hit = re.sub(r"\s+", " ", m.group(0).strip())
                     if (pnum, raw_hit) in existing_raw_by_page:
                         continue
-                    prefix = re.sub(r"\s+", " ", txt[max(0, m.start() - 35) : m.start()])
+                    line_start = txt.rfind("\n", 0, m.start()) + 1
+                    line_end = txt.find("\n", m.end())
+                    if line_end == -1:
+                        line_end = len(txt)
+                    line_before = txt[line_start : m.start()]
+                    line_after = txt[m.end() : line_end]
+                    # Guard against display-equation numbering at end of line: "k_obs = k_1 [A]   (1a)"
+                    if (
+                        not line_after.strip()
+                        and re.search(r"[=≈≡≤≥→↔⇌]", line_before)
+                        and not re.search(r"[A-Za-z]{3,}(?:\s+[A-Za-z]{3,}){2,}\s*$", line_before)
+                    ):
+                        continue
+                    para_floor = max(0, txt.rfind("\n\n", 0, m.start()))
+                    prefix = re.sub(
+                        r"\s+",
+                        " ",
+                        txt[max(para_floor, m.start() - 100) : m.start()],
+                    )
                     if non_cit_prefix_re.search(prefix):
                         continue
                     nums_in_hit = [int(n) for n in re.findall(r"\d+", m.group(1))]
@@ -2862,6 +2894,58 @@ class DocumentParser:
                         g_cit.numeric_index = new_idx
                 grobid_refs = coalesced_grobid
 
+        orig_grobid_count = len(grobid_refs)
+        regex_comp_by_num: dict[int, list[Citation]] = {}
+        for rc in regex_refs:
+            if rc.numeric_index is not None and getattr(rc, "sub_index", None):
+                regex_comp_by_num.setdefault(rc.numeric_index, []).append(rc)
+        regex_comp_by_num = {
+            num: subs for num, subs in regex_comp_by_num.items() if len(subs) >= 2
+        }
+        if regex_comp_by_num:
+            filtered_grobid: list[Citation] = []
+            for g in grobid_refs:
+                if getattr(g, "sub_index", None) is None:
+                    matched_comp_num: int | None = None
+                    if g.numeric_index in regex_comp_by_num:
+                        matched_comp_num = g.numeric_index
+                    else:
+                        for c_num, c_subs in regex_comp_by_num.items():
+                            if any(
+                                (
+                                    g.doi
+                                    and sc.doi
+                                    and g.doi.strip().rstrip(".").lower()
+                                    == sc.doi.strip().rstrip(".").lower()
+                                )
+                                or _is_duplicate_reference(sc, [g])
+                                for sc in c_subs
+                            ):
+                                matched_comp_num = c_num
+                                break
+                    if matched_comp_num is not None:
+                        for sc in regex_comp_by_num[matched_comp_num]:
+                            if g.grobid_ref_id and not sc.grobid_ref_id:
+                                sc.grobid_ref_id = g.grobid_ref_id
+                            if (
+                                g.title
+                                and not sc.title
+                                and (
+                                    (
+                                        g.doi
+                                        and sc.doi
+                                        and g.doi.strip().rstrip(".").lower()
+                                        == sc.doi.strip().rstrip(".").lower()
+                                    )
+                                    or _is_duplicate_reference(sc, [g])
+                                )
+                            ):
+                                sc.title = g.title
+                                sc.title_normalized = g.title_normalized
+                        continue
+                filtered_grobid.append(g)
+            grobid_refs = filtered_grobid
+
         merged: list[Citation] = []
 
         # Track GROBID ref IDs để avoid duplicate (store list per DOI so chimera/duplicate DOIs
@@ -3152,7 +3236,21 @@ class DocumentParser:
                 and re.match(r"^\s*(?:\[\s*\d+\s*\]|\d+\.\s)", c.raw_text or "")
                 and len(c.raw_text or "") <= 420
             )
-            if len(grobid_refs) >= 5 and not is_missing_numbered_slot:
+            is_missing_composite_sub_slot = bool(
+                c.numeric_index is not None
+                and getattr(c, "sub_index", None) is not None
+                and (c.numeric_index, getattr(c, "sub_index", None))
+                not in {
+                    (m.numeric_index, getattr(m, "sub_index", None))
+                    for m in merged
+                    if m.numeric_index is not None
+                }
+            )
+            if (
+                orig_grobid_count >= 5
+                and not is_missing_numbered_slot
+                and not is_missing_composite_sub_slot
+            ):
                 is_noisy_vancouver = (
                     (c.matched_pattern or "") == "vancouver_reference_entry"
                     and (not c.authors or len(grobid_refs) >= len(regex_refs) - 2)
@@ -3217,6 +3315,7 @@ class DocumentParser:
                 if (m.title or "").strip()
                 or m.doi
                 or m.url
+                or getattr(m, "sub_index", None) is not None
                 or (self._citation_key(m)[2], str(m.year or "")) not in titled_author_years
             ]
 

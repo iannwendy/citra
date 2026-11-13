@@ -6,7 +6,8 @@ Expands multi-part ACS / RSC / APS / AIP reference-list entries such as:
 into distinct ``Citation`` items carrying ``numeric_index=14``,
 ``sub_index="a"`` / ``"b"``, and ``composite_label="14a"`` / ``"14b"``,
 while strictly guarding against chemical isomer names (``(a)-isomer``,
-``poly(a)``) and prose enumerations inside single-paper titles.
+``poly(a)``), single-paper subtitle colons/semicolons, and historical year
+phrases inside single-paper titles.
 """
 
 from __future__ import annotations
@@ -41,27 +42,40 @@ _DIRECT_FIRST_MARKER_RE = re.compile(
 #   "For recent reviews on C–H activation, see: (a) ..."
 #   "See, for example, (a) ..."
 #   "Reviews: a) ..."
+# Requires an explicit editorial cue word at the start so "Author, A. Main Title: (a) ..."
+# is never misread as a composite lead-in.
 _LEAD_IN_FIRST_MARKER_RE = re.compile(
     r"^(?P<lead_in>"
-    r"(?:[^:;]{1,110}[:;]"
-    r"|(?:for\b|see\b|cf\.?\b|e\.g\.?\b|reviews?\b|examples?\b|xem\b)[^:;]{0,100},\s*(?:see\b[^:;]{0,30},\s*)?)"
+    r"(?:for\b|see\b|cf\.?\b|e\.g\.?\b|reviews?\b|examples?\b|references?\b|"
+    r"accounts?\b|overviews?\b|perspectives?\b|selected\b|recent\b|representative\b|xem\b)"
+    r"[^:;]{0,100}[:;,]"
     r")\s*(?P<marker>\(\s*a\s*\)|a\))(?P<ws>\s+)(?=\S)",
     flags=re.IGNORECASE,
 )
 
+# Author-initial or multi-sentence patterns that disqualify a lead-in string
+_LEAD_IN_AUTHOR_OR_SENTENCE_RE = re.compile(
+    r"(?:"
+    r"\b[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+,\s*(?:[A-ZÀ-Ý]\.)+"
+    r"|(?:^|[,;]\s*|\band\s+)(?:[A-ZÀ-Ý]\.\s*)+[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]{2,}"
+    r"|[A-Za-z]{3,}\.\s+[A-ZÀ-Ý]"
+    r")"
+)
+
 # Candidate boundary sub-markers inside the composite body.
-# Requires:
-#   - start of sub-body OR preceding clause delimiter (; . , : or newline, with optional "and")
-#   - lowercase ASCII single letter a..z in "(x)" or "x)"
-#   - mandatory trailing whitespace before non-whitespace content (blocks "(a)-isomer", "(a,b)", etc.)
+# Parenthesized "(b)" may follow ";", ".", ",", "\n", closing paren "(2020) ", or
+# whitespace after a DOI/URL/page-number token (checked in _split_sequential_sub_segments).
+# Bare "b)" requires start-of-string or ";", ":", ".", or "\n".
 _SUB_MARKER_CANDIDATE_RE = re.compile(
-    r"(?:^|(?P<delim>;\s*(?:and\s+)?|\.\s+|,\s+and\s+|\n\s*))"
+    r"(?:^|(?P<delim>[;.,:]\s*(?:and\s+)?|\n\s*|\s+(?:and\s+)?))"
     r"(?P<marker>\(\s*(?P<p_letter>[a-z])\s*\)|(?P<b_letter>[a-z])\))"
     r"\s+(?=\S)"
 )
 
 # Independent bibliographic signals required inside sub-segments
-_YEAR_SIGNAL_RE = re.compile(r"\b(?:18|19|20)\d{2}[a-z]?\b")
+_STANDALONE_PUB_YEAR_RE = re.compile(
+    r"(?<![\d–—-])\b(?:18|19|20)\d{2}[a-z]?\b(?!\s*[-–—]\s*\d{2,4})"
+)
 _DOI_SIGNAL_RE = re.compile(r"\b10\.\d{4,9}/[^\s,;]+", flags=re.IGNORECASE)
 _URL_ARXIV_SIGNAL_RE = re.compile(
     r"(?:https?://\S+|\barxiv\s*:\s*\d{4}\.\d{4,5})",
@@ -70,8 +84,27 @@ _URL_ARXIV_SIGNAL_RE = re.compile(
 _VOL_PAGE_SIGNAL_RE = re.compile(
     r"(?:"
     r"\b\d{1,4}\s*(?:\([^)]{1,15}\)\s*)?,\s*(?:pp?\.\s*)?[A-Za-z]?\d{1,6}\s*[-–—]\s*[A-Za-z]?\d{1,6}\b"
+    r"|\b\d{1,4}\s*,\s*[A-Za-z]?\d{2,6}\s*\(\s*(?:18|19|20)\d{2}[a-z]?\s*\)"
+    r"|\b(?:18|19|20)\d{2}\s*;\s*\d{1,4}(?:\([^)]{1,15}\))?\s*:\s*\d{1,6}"
+    r"|\bvol\.?\s*\d{1,4}\b"
     r"|\bpp?\.\s*\d{1,6}(?:\s*[-–—]\s*\d{1,6})?\b"
     r")",
+    flags=re.IGNORECASE,
+)
+_AUTHOR_OR_PUBLISHER_SIGNAL_RE = re.compile(
+    r"(?:"
+    r"\b[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+,\s*(?:[A-ZÀ-Ý]\.\s*)+"
+    r"|\b(?:[A-ZÀ-Ý]\.\s*)+[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]{2,}"
+    r"|\bet\s+al\."
+    r"|\b[A-ZÀ-Ý][^:;()]{2,60}:\s*[A-ZÀ-Ý][^,;:()]{2,40},\s*(?:18|19|20)\d{2}\b"
+    r"|\(\s*[A-ZÀ-Ý][^()]{2,60},\s*(?:18|19|20)\d{2}[a-z]?\s*\)"
+    r")"
+)
+_YEAR_IN_BIB_TAIL_RE = re.compile(
+    r"(?:[,;.(]\s*|\b\s+)(?:18|19|20)\d{2}[a-z]?\)?\.?\s*$"
+)
+_PRECEDING_END_TOKEN_RE = re.compile(
+    r"(?:\b10\.\d{4,9}/\S+|https?://\S+|\)\s*|\b\d{2,6}[A-Za-z]?)\s*$",
     flags=re.IGNORECASE,
 )
 _IBID_SIGNAL_RE = re.compile(r"\b(?:ibid\.?|idem|loc\.\s*cit\.?)\b", flags=re.IGNORECASE)
@@ -79,13 +112,29 @@ _IBID_SIGNAL_RE = re.compile(r"\b(?:ibid\.?|idem|loc\.\s*cit\.?)\b", flags=re.IG
 
 def _has_bibliographic_signal(segment: str) -> bool:
     """Return True if ``segment`` independently exhibits bibliographic metadata."""
-    if not segment or len(segment.strip()) < 8:
+    seg = (segment or "").strip()
+    if len(seg) < 10:
+        return False
+    if (
+        _DOI_SIGNAL_RE.search(seg)
+        or _URL_ARXIV_SIGNAL_RE.search(seg)
+        or _VOL_PAGE_SIGNAL_RE.search(seg)
+    ):
+        return True
+
+    # Without DOI / URL / arXiv / volume-page, require a standalone publication year
+    # (never a year range like "1990–1991" or leading year phrase like "2019 baseline")
+    # paired with real author-initial or publisher structure and year in bibliographic position.
+    if re.match(r"^(?:18|19|20)\d{2}\b", seg):
+        return False
+    if not _STANDALONE_PUB_YEAR_RE.search(seg):
         return False
     return bool(
-        _YEAR_SIGNAL_RE.search(segment)
-        or _DOI_SIGNAL_RE.search(segment)
-        or _URL_ARXIV_SIGNAL_RE.search(segment)
-        or _VOL_PAGE_SIGNAL_RE.search(segment)
+        _AUTHOR_OR_PUBLISHER_SIGNAL_RE.search(seg)
+        and (
+            _YEAR_IN_BIB_TAIL_RE.search(seg)
+            or re.search(r"\(\s*(?:18|19|20)\d{2}[a-z]?\s*\)", seg)
+        )
     )
 
 
@@ -123,10 +172,10 @@ def _locate_composite_sub_body(body: str) -> str | None:
     m_lead = _LEAD_IN_FIRST_MARKER_RE.match(body)
     if m_lead:
         lead_in = m_lead.group("lead_in")
-        # Guard: a genuine lead-in ("For recent reviews, see:") never contains its own DOI
-        # or full journal year+volume+page citation.
-        if _DOI_SIGNAL_RE.search(lead_in) or (
-            _YEAR_SIGNAL_RE.search(lead_in) and _VOL_PAGE_SIGNAL_RE.search(lead_in)
+        if (
+            _DOI_SIGNAL_RE.search(lead_in)
+            or _VOL_PAGE_SIGNAL_RE.search(lead_in)
+            or _LEAD_IN_AUTHOR_OR_SENTENCE_RE.search(lead_in)
         ):
             return None
         marker_start = m_lead.start("marker")
@@ -146,12 +195,27 @@ def _split_sequential_sub_segments(sub_body: str) -> list[tuple[str, str, str]] 
         letter = m.group("p_letter") or m.group("b_letter")
         marker_tok = m.group("marker").strip()
         delim = m.group("delim") or ""
-        # Bare "x)" (without opening paren) after a comma inside prose is risky;
-        # require start-of-string, ";", ":", ".", or newline for bare "x)".
-        if m.group("b_letter") and m.start() > 0:
-            if not re.match(r"^(?:[;:.]\s*|\n\s*)", delim):
-                continue
-        matches.append((letter, marker_tok, m.start("marker"), m.end()))
+        marker_pos = m.start("marker")
+
+        if marker_pos > 0:
+            if m.group("b_letter"):
+                # Bare "x)" inside prose is risky; require ";", ":", ".", or newline.
+                if not re.match(r"^(?:[;:.]\s*|\n\s*)", delim):
+                    continue
+            else:
+                # Parenthesized "(x)" may follow ";", ".", ",", ":", "\n", or whitespace
+                # immediately after a closing paren "(2020) " or DOI/URL/page token.
+                has_punct_delim = bool(re.match(r"^(?:[;.,:]\s*|\n\s*)", delim))
+                if not has_punct_delim:
+                    preceding = sub_body[:marker_pos].rstrip()
+                    if re.search(r"\band$", preceding, flags=re.IGNORECASE):
+                        preceding = re.sub(
+                            r"\s*\band$", "", preceding, flags=re.IGNORECASE
+                        ).rstrip()
+                    if not _PRECEDING_END_TOKEN_RE.search(preceding):
+                        continue
+
+        matches.append((letter, marker_tok, marker_pos, m.end()))
 
     if len(matches) < 2:
         return None
@@ -169,8 +233,8 @@ def _split_sequential_sub_segments(sub_body: str) -> list[tuple[str, str, str]] 
     for idx, (letter, marker_tok, _m_start, content_start) in enumerate(matches):
         next_marker_start = matches[idx + 1][2] if idx + 1 < len(matches) else len(sub_body)
         raw_seg = sub_body[content_start:next_marker_start].strip()
-        # Trim trailing clause separator (";" or ", and" or ",") left before next marker
-        raw_seg = re.sub(r"(?:\s*,\s*and|\s*[;,])\s*$", "", raw_seg).strip()
+        # Trim trailing clause separator (";" or ", and" or "," or "and") left before next marker
+        raw_seg = re.sub(r"(?:\s*[;,]?\s*\band|\s*[;,])\s*$", "", raw_seg).strip()
         if not raw_seg:
             return None
         segments.append((letter, marker_tok, raw_seg))
@@ -187,7 +251,7 @@ def _fallback_sub_citation(
     seg_text: str,
 ) -> Citation:
     """Construct a best-effort ``Citation`` when strict format patterns miss a sub-entry."""
-    year_m = _YEAR_SIGNAL_RE.search(seg_text)
+    year_m = _STANDALONE_PUB_YEAR_RE.search(seg_text)
     doi = extract_doi(seg_text)
     url = extract_url(seg_text)
     if url and re.search(r"doi\.org/10\.\d{4,9}/", url, re.IGNORECASE):
@@ -272,7 +336,7 @@ def expand_composite_reference(
         synth_entry = (
             f"[{numeric_index}] {parse_input}"
             if prefix_style == "bracket"
-            else f"({numeric_index}) {parse_input}"
+            else f"{numeric_index}. {parse_input}"
         )
 
         parsed = ref_parser.parse_single_entry(

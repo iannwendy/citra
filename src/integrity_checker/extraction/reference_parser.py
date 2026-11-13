@@ -1440,6 +1440,10 @@ class ReferenceListParser:
         )
 
         # Step 3: Split at every URL/DOI terminator.
+        _sub_tail_re = re.compile(r"^[;,.]?\s*(?:and\s+)?(?:\(\s*[b-z]\s*\)|[b-z]\))\s+\S")
+        _outer_num_entry_split_re = re.compile(
+            r"(?<=[.;)])\s+(?=(?:\[\s*\d{1,4}\s*\]\s+\S|\(\s*\d{1,4}\s*\)\s+[A-ZÀ-Ý]|\d{1,4}\.\s+(?:[A-ZÀ-Ý]|\(\s*a\s*\)|a\)\s)))"
+        )
         matches = list(_URL_BOUNDARY_RE.finditer(flat))
         url_chunks: list[str] = []
         if len(matches) >= 1:
@@ -1447,11 +1451,17 @@ class ReferenceListParser:
             for m in matches:
                 end = m.end()
                 chunk = flat[start:end].strip()
-                if (
+                if url_chunks and _sub_tail_re.match(chunk):
+                    parts = _outer_num_entry_split_re.split(chunk)
+                    url_chunks[-1] = f"{url_chunks[-1]} {parts[0].strip()}"
+                    for rem_part in parts[1:]:
+                        rem_s = rem_part.strip()
+                        if len(rem_s) > 20 or is_vn_legal_reference(rem_s):
+                            url_chunks.append(rem_s)
+                elif (
                     url_chunks
                     and (
                         re.match(r"^(?:and|or|&|và|,)\s+(?:https?://|www\.)\S+\s*$", chunk, re.IGNORECASE)
-                        or re.match(r"^;?\s*(?:and\s+)?(?:\(\s*[b-z]\s*\)|[b-z]\))\s+\S", chunk)
                         or (
                             not re.search(r"\b(?:18|19|20)\d{2}\b", chunk)
                             and re.match(r"^[^.]{1,35}\.\s*url\s*:\s*(?:https?://|www\.)\S+", chunk, re.IGNORECASE)
@@ -1463,11 +1473,13 @@ class ReferenceListParser:
                     url_chunks.append(chunk)
                 start = end
             last_chunk = flat[start:].strip()
-            if (
-                url_chunks
-                and re.match(r"^;?\s*(?:and\s+)?(?:\(\s*[b-z]\s*\)|[b-z]\))\s+\S", last_chunk)
-            ):
-                url_chunks[-1] = f"{url_chunks[-1]} {last_chunk}"
+            if url_chunks and _sub_tail_re.match(last_chunk):
+                parts = _outer_num_entry_split_re.split(last_chunk)
+                url_chunks[-1] = f"{url_chunks[-1]} {parts[0].strip()}"
+                for rem_part in parts[1:]:
+                    rem_s = rem_part.strip()
+                    if len(rem_s) > 20 or is_vn_legal_reference(rem_s):
+                        url_chunks.append(rem_s)
             elif len(last_chunk) > 20 or is_vn_legal_reference(last_chunk):
                 url_chunks.append(last_chunk)
         elif "\n" in text:
@@ -1981,7 +1993,8 @@ class ReferenceListParser:
         is_ama_specific = bool(
             re.match(r"^\s*\d+\.\s+", entry)
             and not re.search(
-                r"\b(?:18|19|20)\d{2}\s*,\s*\d+\s*(?:\([^)]+\)\s*)?,\s*[A-Za-z]?\d+",
+                r"\b(?:18|19|20)\d{2}\s*,\s*[A-Za-z]?\d+\s*(?:\([^)]+\)\s*)?,\s*[A-Za-z]?\d+"
+                r"|\b\d+\s*,\s*[A-Za-z]?\d+(?:\s*[-–—]\s*[A-Za-z]?\d+)?\s*\(\s*(?:18|19|20)\d{2}[a-z]?\s*\)",
                 entry,
             )
             and (
@@ -2035,9 +2048,17 @@ class ReferenceListParser:
                     and (not has_year or len((citation.title or "").strip()) < 8)
                 ):
                     continue
-                # Accept if: (has title AND (has year OR doi OR url)), OR (has year AND has numeric_index)
-                if (has_title and (has_year or citation.doi or citation.url)) or (
-                    has_year and has_numeric_index
+                # Accept if: (has title AND (has year OR doi OR url)), OR (has year AND has numeric_index),
+                # OR title-less chemistry/physics journal entry with authors + venue + year + (volume OR doi)
+                if (
+                    (has_title and (has_year or citation.doi or citation.url))
+                    or (has_year and has_numeric_index)
+                    or (
+                        has_year
+                        and bool(citation.authors)
+                        and bool(citation.venue)
+                        and bool(citation.volume or citation.doi)
+                    )
                 ):
                     if citation.title and not re.match(r"^https?://\S+$", citation.title.strip(), re.IGNORECASE):
                         cleaned_t = re.sub(r"\s*https?://\S+\s*$", "", citation.title).strip().rstrip(".,;:")

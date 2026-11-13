@@ -49,7 +49,7 @@ from integrity_checker.models.citation import Citation, CitationStyle, CitationT
 # Superscript numbers: ^1, ^2 (math-safe)
 _CSE_SUPERSCRIPT = CompiledPattern.create(
     name="cse_superscript",
-    pattern=r"(?:(?<=^)|(?<=[A-Za-zÀ-ÿ]{2})|(?<=[A-Za-zÀ-ÿ]{2}[.,;:\])]))\^(\d{1,3}(?:\s*[,–-]\s*\d{1,3})*)",
+    pattern=r"(?:(?<=^)|(?<=[A-Za-zÀ-ÿ]{2})|(?<=[A-Za-zÀ-ÿ]{2}[.,;:\])]))\^(\d{1,3}(?:\s*[,–-]\s*\d{1,3})*)(?![0-9A-Za-z]|\s*[,–-]\s*(?:\d{1,3}[a-z]|[a-z]\b))",
     pattern_type=PatternType.IN_TEXT,
     description="CSE superscript: ^1 | ^2",
 )

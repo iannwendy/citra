@@ -75,7 +75,7 @@ _CHICAGO_AD_NARRATIVE = CompiledPattern.create(
 # Superscript footnote: ^1, ^2 (math-safe: requires 2+ letters before ^)
 _CHICAGO_NOTES_SUPERSCRIPT = CompiledPattern.create(
     name="chicago_notes_superscript",
-    pattern=r"(?:(?<=^)|(?<=[A-Za-zÀ-ÿ]{2})|(?<=[A-Za-zÀ-ÿ]{2}[.,;:\])\"\u201d]))\^(\d{1,3}(?:[,-]\d{1,3})*)\b",
+    pattern=r"(?:(?<=^)|(?<=[A-Za-zÀ-ÿ]{2})|(?<=[A-Za-zÀ-ÿ]{2}[.,;:\])\"\u201d]))\^(\d{1,3}(?:[,-]\d{1,3})*)(?![0-9A-Za-z]|\s*[,–-]\s*(?:\d{1,3}[a-z]|[a-z]\b))\b",
     pattern_type=PatternType.IN_TEXT,
     description="Chicago Notes superscript: ^1 | ^2",
 )

@@ -43,15 +43,21 @@ from integrity_checker.models.citation import Citation, CitationStyle, CitationT
 # Superscript numbers: ^1, ^2, ^14b (math-safe)
 _ACS_SUPERSCRIPT = CompiledPattern.create(
     name="acs_superscript",
-    pattern=r"(?:(?<=^)|(?<=[A-Za-zÀ-ÿ]{2})|(?<=[A-Za-zÀ-ÿ]{2}[.,;:\])]))\^(\d{1,3}[a-z]?(?:\s*[,–-]\s*(?:\d{1,3}[a-z]?|[a-z]))*)",
+    pattern=r"(?:(?<=^)|(?<=[A-Za-zÀ-ÿ]{2})|(?<=[A-Za-zÀ-ÿ]{2}[.,;:\])]))\^(\d{1,3}[a-z]?(?:\s*[,–-]\s*(?:\d{1,3}[a-z]?|[a-z]))*)(?![A-Za-z0-9])",
     pattern_type=PatternType.IN_TEXT,
     description="ACS superscript: ^1 | ^2 | ^14b",
 )
 
-# Superscript with author: Smith^1, Smith^14b
+# Superscript with author: Smith^1, Smith^14b, Zhang^14c
 _ACS_AUTHOR_SUPERSCRIPT = CompiledPattern.create(
     name="acs_author_superscript",
-    pattern=r"([A-Z][a-zA-ZÀ-žÀ-ž]+)\^(\d{1,3}[a-z]?(?:\s*[,–-]\s*(?:\d{1,3}[a-z]?|[a-z]))*)",
+    pattern=(
+        r"(?!(?:However|Moreover|Furthermore|Therefore|Nevertheless|Consequently|Previously|"
+        r"Recently|Although|Whereas|Notably|Specifically|Similarly|Meanwhile|Table|Figure|"
+        r"Scheme|Equation|Section|Chapter|Appendix|Entry|Step|Part|Compound|Catalysis|"
+        r"Synthesis|Reaction|Method|Results|Discussion|Conclusion|Introduction)\^)"
+        r"\b([A-Z][a-zA-ZÀ-ž'-]+)\^(\d{1,3}[a-z]?(?:\s*[,–-]\s*(?:\d{1,3}[a-z]?|[a-z]))*)(?![A-Za-z0-9])"
+    ),
     pattern_type=PatternType.IN_TEXT,
     description="ACS author-superscript: Smith^1 | Smith^14b",
 )
@@ -75,6 +81,65 @@ _ACS_PREFIX = (
     r"|(?!\s*(?:\(\s*\d+\s*\)|\d+\.\s|\[\s*\d+\s*\])))"
 )
 
+_ACS_AUTHOR_STOP_GUARD = (
+    r"(?!(?:[A-ZÀ-Ý]\.(?!\s+[A-Z][a-z]+\.)"
+    r"|[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+(?:\s*[,;]|\s+(?:and|&|et\s+al)\b)"
+    r"|;|and\b|&|et\s+al\.))"
+)
+
+_RSC_INIT_TOKEN = r"(?:[A-ZÀ-Ý](?:-[A-ZÀ-Ý])?\.\s*)+"
+_RSC_SURNAME_TOKEN = (
+    r"(?:(?:de|van|von|del|da|di|le|la|du|al|el|St\.|Mc|Mac)\s+)?"
+    r"[A-ZÀ-Ý][A-Za-zÀ-ÿ'\u2019\-]+(?!\.)"
+)
+_RSC_SINGLE_AUTHOR = rf"{_RSC_INIT_TOKEN}{_RSC_SURNAME_TOKEN}"
+_RSC_AUTHORS_GROUP = (
+    rf"(?P<authors>{_RSC_SINGLE_AUTHOR}"
+    rf"(?:\s*(?:,\s*(?:and\s+|&\s*)?|;\s*(?:and\s+|&\s*)?|\s+(?:and|&)\s+){_RSC_SINGLE_AUTHOR})*"
+    rf"(?:,?\s+et\s+al\.?)?)"
+)
+
+# RSC / Wiley / Angewandte initials-first comma-delimited journal article:
+# 14. Y. Zhang and X. Liu, Chem. Sci., 2020, 11, 1234–1240, DOI: 10.1039/D0SC00111A.
+# [14] Y. Zhang, X. Liu, Angew. Chem. Int. Ed. 2020, 59, 1234–1240.
+_ACS_REFERENCE_RSC_WILEY = CompiledPattern.create(
+    name="acs_reference_rsc_wiley",
+    pattern=(
+        _ACS_PREFIX
+        + _RSC_AUTHORS_GROUP
+        + r",\s+"
+        + r"(?:[\"\u201c](?P<title>[^\"\u201d]{5,})[\"\u201d],?\s+)?"
+        + r"(?P<venue>[A-Z][A-Za-z0-9.\s&–\-]{1,80}?)(?:,\s*|\s+)"
+        + r"(?P<year>(?:18|19|20)\d{2})\s*,\s*"
+        + r"(?P<volume>[A-Za-z]?\d+)"
+        + r"(?:\s*\((?P<issue>[^)]+)\))?"
+        + r"(?:\s*,\s*(?:pp?\.\s*)?(?P<pages>[A-Za-z]?\d+(?:\s*[-–—]\s*[A-Za-z]?\d+)?))?"
+        + r"\.?\s*(?P<rest>.*)$"
+    ),
+    pattern_type=PatternType.REFERENCE_ENTRY,
+    description="RSC/Wiley journal: N. I. Surname, Journal, Year, Vol, Pages.",
+)
+
+# APS / AIP initials-first compact physics article:
+# [14] Y. Zhang and X. Liu, Phys. Rev. Lett. 124, 123001 (2020).
+_ACS_REFERENCE_APS_COMPACT = CompiledPattern.create(
+    name="acs_reference_aps_compact",
+    pattern=(
+        _ACS_PREFIX
+        + _RSC_AUTHORS_GROUP
+        + r",\s+"
+        + r"(?:[\"\u201c](?P<title>[^\"\u201d]{5,})[\"\u201d],?\s+)?"
+        + r"(?P<venue>[A-Z][A-Za-z0-9.\s&–\-]{1,80}?)(?:,\s*|\s+)"
+        + r"(?P<volume>\d+)"
+        + r"(?:\s*\((?P<issue>[^)]+)\))?\s*,\s*"
+        + r"(?:pp?\.\s*)?(?P<pages>[A-Za-z]?\d+(?:\s*[-–—]\s*[A-Za-z]?\d+)?)\s*"
+        + r"\(\s*(?P<year>(?:18|19|20)\d{2}[a-z]?)\s*\)"
+        + r"\.?\s*(?P<rest>.*)$"
+    ),
+    pattern_type=PatternType.REFERENCE_ENTRY,
+    description="APS compact journal: [N] I. Surname, Journal Vol, Pages (Year).",
+)
+
 # ACS article:
 # (1) Authors. Title. Journal Abbrev. Year, Volume (Issue), Pages.
 # or 1. Authors. Title. Journal Year, Volume, Pages.
@@ -82,7 +147,8 @@ _ACS_REFERENCE_ARTICLE = CompiledPattern.create(
     name="acs_reference_article",
     pattern=(
         _ACS_PREFIX
-        + r"(?P<authors>.+?)\.\s+(?!(?:[A-ZÀ-Ý]\.(?!\s+[A-Z][a-z]+\.)|;|and\b|et\s+al\.))"  # Authors. (don't stop at initial)
+        + r"(?P<authors>.+?)\.\s+"
+        + _ACS_AUTHOR_STOP_GUARD  # Authors. (don't stop at initial)
         + r"(?P<title>[^.]{5,}?)\.\s+"  # Title (at least 5 chars, not an abbrev token like J. or Am.).
         + r"(?P<venue>[^;]+?)\.?\s+"  # Journal (with or without abbreviation period)
         + r"(?P<year>(?:19|20)\d{2})\s*,\s*"  # Year,
@@ -102,7 +168,8 @@ _ACS_REFERENCE_JOURNAL_ABBREV = CompiledPattern.create(
     name="acs_reference_journal_abbrev",
     pattern=(
         _ACS_PREFIX
-        + r"(?P<authors>.+?)\.\s+(?!(?:[A-ZÀ-Ý]\.(?!\s+[A-Z][a-z]+\.)|;|and\b|et\s+al\.))"
+        + r"(?P<authors>.+?)\.\s+"
+        + _ACS_AUTHOR_STOP_GUARD
         + r"(?:(?P<title>[^.]{5,}?)\.\s+)?"
         + r"(?P<venue>[A-Z][^;0-9]+?)(?:\.\s*|\s+)"
         + r"(?P<year>(?:19|20)\d{2})(?!\s*;)"
@@ -121,7 +188,8 @@ _ACS_REFERENCE_DOI = CompiledPattern.create(
     name="acs_reference_doi",
     pattern=(
         _ACS_PREFIX
-        + r"(?P<authors>.+?)\.\s+(?!(?:[A-ZÀ-Ý]\.(?!\s+[A-Z][a-z]+\.)|;|and\b|et\s+al\.))"
+        + r"(?P<authors>.+?)\.\s+"
+        + _ACS_AUTHOR_STOP_GUARD
         + r"(?P<title>[^.]{5,}?)\.\s+"
         + r"(?P<venue>[^;]+?)\.?\s+"
         + r"(?P<year>(?:19|20)\d{2})(?!\s*;)"
@@ -242,8 +310,8 @@ class ACSFormat:
     def in_text_patterns(self) -> list[CompiledPattern]:
         """Patterns for extracting ACS in-text citations."""
         return [
-            _ACS_SUPERSCRIPT,
             _ACS_AUTHOR_SUPERSCRIPT,
+            _ACS_SUPERSCRIPT,
             # FIX: removed _ACS_PARENTHESIZED and _ACS_COMMA_SEPARATED — matches (1), (2)
             # and numbers with commas in body text.
         ]
@@ -252,6 +320,8 @@ class ACSFormat:
     def reference_patterns(self) -> list[CompiledPattern]:
         """Patterns for extracting ACS reference list entries."""
         return [
+            _ACS_REFERENCE_RSC_WILEY,
+            _ACS_REFERENCE_APS_COMPACT,
             _ACS_REFERENCE_DOI,
             _ACS_REFERENCE_ARTICLE,
             _ACS_REFERENCE_JOURNAL_ABBREV,
@@ -285,6 +355,13 @@ class ACSFormat:
         idx_match = re.match(r'^(?:\(\s*(\d+)\s*\)|(\d+)\.|\[\s*(\d+)\s*\])\s*', text)
         if idx_match:
             numeric_index = int(idx_match.group(1) or idx_match.group(2) or idx_match.group(3))
+
+        # Try RSC / Wiley / APS initials-first comma-delimited journal formats first
+        citation = self._try_parse_rsc_wiley(text)
+        if citation:
+            if numeric_index and citation.numeric_index is None:
+                citation.numeric_index = numeric_index
+            return citation
 
         # Try article with DOI format first (most specific)
         citation = self._try_parse_article_doi(text)
@@ -331,6 +408,19 @@ class ACSFormat:
         # Fallback
         return self._parse_acs_fallback(text)
 
+    def _try_parse_rsc_wiley(self, text: str) -> Citation | None:
+        """Try to parse RSC / Wiley / APS initials-first comma-delimited journal formats."""
+        for compiled, pattern_name in (
+            (_ACS_REFERENCE_RSC_WILEY, "acs_reference_rsc_wiley"),
+            (_ACS_REFERENCE_APS_COMPACT, "acs_reference_aps_compact"),
+        ):
+            match = compiled.search(text)
+            if match:
+                parsed = self._parse_rsc_wiley_entry(match, text, pattern_name=pattern_name)
+                if parsed is not None:
+                    return parsed
+        return None
+
     def _try_parse_article(self, text: str) -> Citation | None:
         """Try to parse ACS article format."""
         match = _ACS_REFERENCE_ARTICLE.search(text)
@@ -373,26 +463,126 @@ class ACSFormat:
             return self._parse_tech_report_entry(match, text)
         return None
 
+    @staticmethod
+    def _has_incomplete_author_segment(authors_str: str) -> bool:
+        """Return True when ``authors_str`` stopped prematurely on a bare initial."""
+        cleaned = (authors_str or "").strip()
+        if not cleaned or not re.search(r"[A-Za-zÀ-ÿ]{2,}", cleaned):
+            return True
+        for seg in re.split(r"\s*(?:;|\band\b|&)\s*", cleaned):
+            seg_s = seg.strip()
+            if not seg_s:
+                continue
+            if re.fullmatch(r"(?:[A-ZÀ-Ý](?:-[A-ZÀ-Ý])?\.?\s*)+", seg_s):
+                return True
+        if re.match(r"^(?:[A-ZÀ-Ý](?:-[A-ZÀ-Ý])?\.\s*)+[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+", cleaned):
+            for cseg in [s.strip() for s in cleaned.split(",") if s.strip()]:
+                if re.match(r"^et\s+al\.?$", cseg, re.IGNORECASE):
+                    continue
+                if re.fullmatch(r"(?:[A-ZÀ-Ý](?:-[A-ZÀ-Ý])?\.?\s*)+", cseg):
+                    return True
+                if not re.search(r"[A-ZÀ-Ý]\.", cseg):
+                    return True
+        return False
+
+    def _parse_rsc_wiley_entry(
+        self,
+        match: re.Match,
+        text: str,
+        *,
+        pattern_name: str = "acs_reference_rsc_wiley",
+    ) -> Citation | None:
+        """Parse RSC / Wiley / APS initials-first comma-delimited journal entry."""
+        authors_str = (match.group("authors") or "").strip()
+        if not authors_str:
+            return None
+        authors = parse_authors(authors_str.replace(";", ","), format_name="IEEE")
+        if not authors or any(not getattr(a, "last_name", "").strip() for a in authors):
+            return None
+
+        venue_raw = (match.group("venue") or "").strip().rstrip(",").strip()
+        if not venue_raw or len(venue_raw) < 2:
+            return None
+        # Guard against capturing prose or IEEE "vol." inside venue
+        if re.search(r"\bvol\.\s*$", venue_raw, re.IGNORECASE):
+            return None
+
+        citation = Citation(
+            raw_text=text,
+            citation_type=CitationType.REFERENCE_LIST,
+            style=CitationStyle.ACS,
+            matched_pattern=pattern_name,
+            authors=authors,
+            venue=venue_raw,
+        )
+
+        index = (
+            match.groupdict().get("index")
+            or match.groupdict().get("num")
+            or match.groupdict().get("b_idx")
+        )
+        if index:
+            citation.numeric_index = int(index)
+
+        raw_title = match.groupdict().get("title")
+        if raw_title and raw_title.strip():
+            title = raw_title.strip().rstrip(",.")
+            citation.title = title
+            citation.title_normalized = self._normalize_title(title)
+        else:
+            citation.title = None
+            citation.title_normalized = None
+
+        year_str = match.groupdict().get("year")
+        if year_str:
+            yr_m = re.match(r"(\d{4})([a-z]?)", year_str.strip())
+            if yr_m:
+                citation.year = yr_m.group(1)
+                if yr_m.group(2):
+                    citation.year_suffix = yr_m.group(2)
+            else:
+                citation.year = year_str.strip()
+
+        volume = match.groupdict().get("volume")
+        if volume:
+            citation.volume = volume.strip()
+        issue = match.groupdict().get("issue")
+        if issue:
+            citation.issue = issue.strip()
+        pages = match.groupdict().get("pages")
+        if pages:
+            citation.pages = re.sub(r"\s+", "", pages.strip())
+
+        doi_match = re.search(r"10\.\d{4,9}/[^\s\]\)\,;]+", text)
+        if doi_match:
+            citation.doi = doi_match.group(0).rstrip(".")
+
+        citation.confidence = self._estimate_confidence(citation)
+        return citation
+
     def _parse_article_entry(
         self, match: re.Match, text: str
     ) -> Citation | None:
         """Parse ACS article entry."""
+        authors_str = match.group('authors')
+        if not authors_str or self._has_incomplete_author_segment(authors_str):
+            return None
+        parsed_authors = self._parse_authors(authors_str)
+        if not parsed_authors:
+            return None
+
         citation = Citation(
             raw_text=text,
             citation_type=CitationType.REFERENCE_LIST,
             style=CitationStyle.ACS,
             matched_pattern="acs_reference_article",
+            authors=parsed_authors,
         )
 
         # Extract numeric index
         index = match.groupdict().get('index') or match.groupdict().get('num') or match.groupdict().get('b_idx')
         if index:
             citation.numeric_index = int(index)
-
-        # Extract authors
-        authors_str = match.group('authors')
-        if authors_str:
-            citation.authors = self._parse_authors(authors_str)
 
         # Extract venue
         venue = match.group('venue').strip()
@@ -436,22 +626,25 @@ class ACSFormat:
         self, match: re.Match, text: str
     ) -> Citation | None:
         """Parse ACS article with DOI entry."""
+        authors_str = match.group('authors')
+        if not authors_str or self._has_incomplete_author_segment(authors_str):
+            return None
+        parsed_authors = self._parse_authors(authors_str)
+        if not parsed_authors:
+            return None
+
         citation = Citation(
             raw_text=text,
             citation_type=CitationType.REFERENCE_LIST,
             style=CitationStyle.ACS,
             matched_pattern="acs_reference_doi",
+            authors=parsed_authors,
         )
 
         # Extract numeric index
         index = match.groupdict().get('index') or match.groupdict().get('num') or match.groupdict().get('b_idx')
         if index:
             citation.numeric_index = int(index)
-
-        # Extract authors
-        authors_str = match.group('authors')
-        if authors_str:
-            citation.authors = self._parse_authors(authors_str)
 
         # Extract venue
         venue = match.group('venue').strip()
@@ -499,22 +692,25 @@ class ACSFormat:
         self, match: re.Match, text: str
     ) -> Citation | None:
         """Parse ACS journal abbreviation entry."""
+        authors_str = match.group('authors')
+        if not authors_str or self._has_incomplete_author_segment(authors_str):
+            return None
+        parsed_authors = self._parse_authors(authors_str)
+        if not parsed_authors:
+            return None
+
         citation = Citation(
             raw_text=text,
             citation_type=CitationType.REFERENCE_LIST,
             style=CitationStyle.ACS,
             matched_pattern="acs_reference_journal_abbrev",
+            authors=parsed_authors,
         )
 
         # Extract numeric index
         index = match.groupdict().get('index') or match.groupdict().get('num') or match.groupdict().get('b_idx')
         if index:
             citation.numeric_index = int(index)
-
-        # Extract authors
-        authors_str = match.group('authors')
-        if authors_str:
-            citation.authors = self._parse_authors(authors_str)
 
         # Extract venue
         venue = match.group('venue').strip()
@@ -771,6 +967,8 @@ class ACSFormat:
         score = 0.0
         if citation.title:
             score += 0.4
+        elif citation.venue and citation.volume:
+            score += 0.35
         if citation.year:
             score += 0.3
         if citation.authors:
@@ -831,12 +1029,14 @@ register_format(ACSFormat())
 # =============================================================================
 
 ACS_IN_TEXT_PATTERNS = [
-    _ACS_SUPERSCRIPT,
     _ACS_AUTHOR_SUPERSCRIPT,
+    _ACS_SUPERSCRIPT,
     # FIX: removed _ACS_PARENTHESIZED and _ACS_COMMA_SEPARATED
 ]
 
 ACS_REFERENCE_PATTERNS = [
+    _ACS_REFERENCE_RSC_WILEY,
+    _ACS_REFERENCE_APS_COMPACT,
     _ACS_REFERENCE_DOI,
     _ACS_REFERENCE_ARTICLE,
     _ACS_REFERENCE_JOURNAL_ABBREV,

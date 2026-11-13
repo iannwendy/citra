@@ -496,6 +496,7 @@ class CitationLinker:
                 and (
                     (getattr(cit, "style", None) and getattr(cit.style, "value", "") == "ieee")
                     or _IEEE_NUM_RE.fullmatch(raw_stripped)
+                    or re.search(r"\^\d", raw_stripped)
                     or re.search(
                         r"\[\s*\d+[a-z]?\s*\]\s*[-–—−]\s*\[\s*\d+[a-z]?\s*\]",
                         cit.raw_text or "",

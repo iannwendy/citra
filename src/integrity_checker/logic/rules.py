@@ -1361,6 +1361,12 @@ class SymbolicRules:
         if provenance_penalty > 0:
             provenance_note = f" [provenance penalty: -{provenance_penalty:.0%}]"
 
+        _norm_cit_title = (citation_title or "").strip().rstrip(".,;").lower()
+        _norm_cit_venue = (citation_venue or "").strip().rstrip(".,;").lower()
+        is_titleless_journal_ref = bool(_norm_cit_venue) and (
+            not _norm_cit_title or _norm_cit_title == _norm_cit_venue
+        )
+
         # --- Rule 1: DOI + title + author strong match → VERIFIED ---
         # Guard against a self-confirming match: when the citation's DOI comes
         # from the local DB / known-paper cache, ``doi_exact_match`` only proves
@@ -1369,14 +1375,23 @@ class SymbolicRules:
         # strongest VERIFIED verdict.
         if (
             doi_match
-            and title_sim >= self.title_sim_verified
             and (
-                author_sim >= self.author_jaccard_verified
+                (
+                    title_sim >= self.title_sim_verified
+                    and (
+                        author_sim >= self.author_jaccard_verified
+                        or (
+                            not citation_authors
+                            and author_sim == 0.0
+                            and bool(citation_doi)
+                            and title_sim >= 0.95
+                        )
+                    )
+                )
                 or (
-                    not citation_authors
-                    and author_sim == 0.0
-                    and bool(citation_doi)
-                    and title_sim >= 0.95
+                    is_titleless_journal_ref
+                    and bool(citation_authors)
+                    and author_sim >= self.author_jaccard_verified
                 )
             )
             and (year_dist <= max(self.year_tolerance, 1) or year_dist >= 900)
@@ -1385,11 +1400,12 @@ class SymbolicRules:
             triggered_rules.append("R-DOI-TITLE-AUTHOR")
             if "doi_ra" in source.sources_succeeded or (best and best.source_name == "doi_ra"):
                 triggered_rules.append("R-GLOBAL-DOI-RA-VERIFIED")
+            eff_title_sim = max(title_sim, 0.85) if is_titleless_journal_ref else title_sim
             return RuleOutcome(
                 label=ValidationLabel.VERIFIED,
                 confidence=max(
                     0.0,
-                    min(0.95, 0.7 + title_sim * 0.2 + author_sim * 0.1)
+                    min(0.95, 0.7 + eff_title_sim * 0.2 + author_sim * 0.1)
                     - style_penalty
                     - provenance_penalty,
                 ),
@@ -1806,6 +1822,7 @@ class SymbolicRules:
             and _has_live_source(source, verified_sources)
             and not is_cross_lingual_title
             and not (not citation_authors and author_sim == 0.0 and title_sim >= 0.85)
+            and not (is_titleless_journal_ref and bool(citation_authors) and author_sim >= 0.20)
             and (
                 (title_sim < 0.35 and author_sim < 0.20)
                 or (features.title_sim_fuzzy < 0.25 and features.title_sim_semantic < 0.45)

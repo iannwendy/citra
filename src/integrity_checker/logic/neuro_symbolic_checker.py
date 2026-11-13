@@ -576,8 +576,14 @@ class NeuroSymbolicChecker:
             # (e.g., another paper by the same first author in the same year, like Kaiser & Bengio 2016).
             citation_title = citation.title
             known_title = paper_info.get("title", "")
+            _is_titleless_journal = bool(
+                citation_title
+                and citation.venue
+                and citation_title.strip().rstrip(".,;").lower()
+                == citation.venue.strip().rstrip(".,;").lower()
+            )
 
-            if citation_title and known_title:
+            if citation_title and not _is_titleless_journal and known_title:
                 # Calculate title similarity using FuzzyMatcher
                 title_sim = self.rules.fuzzy.token_set_ratio(
                     citation_title.lower(), known_title.lower()

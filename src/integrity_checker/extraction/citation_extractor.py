@@ -531,6 +531,7 @@ class CitationExtractor:
         # well let one survivor through per type — a numeric and an in_text
         # variant of the very same "[24]" — which doubled every numeric
         # occurrence in the report ("x4" instead of "x2").
+        positioned_results: list[tuple[int, int, Citation]] = []
         seen_spans: set[tuple[int, int]] = set()
         accepted_spans: set[tuple[int, int]] = set()
         search_text = self.preprocessor._normalize_unicode(
@@ -590,6 +591,18 @@ class CitationExtractor:
                     bracket_nums = [int(n) for n, _ in bracket_tokens]
                     bracket_pairs = [(int(n), sub) for n, sub in bracket_tokens]
                     if bracket_nums:
+                        # Reject standalone dimension / orbital brackets like [2d], [3d], [4d], [4f], [5f]
+                        # unless part of a multi-item/range bracket like [2a, 2d] or [2a–d].
+                        if (
+                            len(bracket_pairs) == 1
+                            and bracket_pairs[0][1]
+                            and not re.search(r"[-–—−,]", raw_without_page)
+                            and (
+                                (bracket_pairs[0][1] == "d" and 1 <= bracket_pairs[0][0] <= 6)
+                                or (bracket_pairs[0][1] == "f" and bracket_pairs[0][0] in {4, 5})
+                            )
+                        ):
+                            continue
                         # Reject duplicate tokens inside the same bracket ([1, 1], [10, 255, 255]), large buffer/pixel sizes (>= 300),
                         # or non-ascending multi-number vectors containing values >= 50 (e.g. token IDs [101, 205, 89]).
                         # Distinct composite sub-labels like [14a, 14c] have distinct (14, 'a') vs (14, 'c') pairs.
@@ -887,7 +900,9 @@ class CitationExtractor:
                 )
                 # Parse các field con
                 self._populate_fields(citation, raw)
-                results.append(citation)
+                positioned_results.append((raw_start, len(positioned_results), citation))
+        positioned_results.sort(key=lambda item: (item[0], item[1]))
+        results.extend(cit for _, _, cit in positioned_results)
         return results
 
     def _populate_fields(self, citation: Citation, raw: str) -> None:
