@@ -1402,9 +1402,34 @@ class SymbolicRules:
         # --- Rule 1a-ext: Technical standard (IETF RFC / PyPI / NPM / GitHub / Curated VN Standard & Textbook) ---
         best_ext_ids = (best.external_ids or {}) if best else {}
         if best and best.source_name == "tech_standard" and "vn_standard_code" in best_ext_ids:
+            from integrity_checker.retrieval.tech_standard_client import (
+                compute_vn_standard_core_subject_similarity,
+                extract_vn_standard_core_subject,
+            )
+
             official_std_code = str(best_ext_ids.get("vn_standard_code") or "").strip()
             cited_std_code = str(best_ext_ids.get("cited_vn_standard_code") or "").strip()
-            has_std_title_mismatch = features.title_sim_fuzzy < 0.75
+            cited_core_subj = extract_vn_standard_core_subject(
+                citation_title,
+                raw_text=citation_raw or source.citation_raw,
+            )
+            raw_official_subjs = str(best_ext_ids.get("vn_standard_subjects") or "").strip()
+            official_core_subjs = [
+                s.strip() for s in raw_official_subjs.split(" || ") if s and s.strip()
+            ]
+            fallback_cand_subj = extract_vn_standard_core_subject(best.title)
+            if fallback_cand_subj and fallback_cand_subj not in official_core_subjs:
+                official_core_subjs.append(fallback_cand_subj)
+            core_subj_sim = compute_vn_standard_core_subject_similarity(
+                cited_core_subj,
+                official_core_subjs,
+            )
+            if cited_core_subj:
+                has_std_title_mismatch = core_subj_sim < 0.70 or (
+                    bool(citation_title) and features.title_sim_fuzzy < 0.75
+                )
+            else:
+                has_std_title_mismatch = bool(citation_title) and features.title_sim_fuzzy < 0.75
             has_std_year_mismatch = bool(
                 (cited_std_code and official_std_code and cited_std_code != official_std_code)
                 or (year_dist > self.year_tolerance and year_dist < 900)

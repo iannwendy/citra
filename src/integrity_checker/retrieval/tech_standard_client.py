@@ -104,10 +104,13 @@ def _load_vn_registry() -> dict[str, Any]:
                 prefix, rest = norm_code.split(":", 1)
                 prefix_clean = prefix.strip()
                 if "/" in rest:
+                    # QCVN sequence numbers are scoped per ministry (e.g. QCVN 01/BXD vs QCVN 01/BCT);
+                    # never index QCVN entries under a ministry-agnostic key like "QCVN 01".
                     _, min_part = rest.split("/", 1)
                     base_with_ministry = f"{prefix_clean}/{min_part.strip()}"
                     standards_by_base_code.setdefault(base_with_ministry, []).append(item)
-                standards_by_base_code.setdefault(prefix_clean, []).append(item)
+                else:
+                    standards_by_base_code.setdefault(prefix_clean, []).append(item)
 
     return {
         "ministry_codes": dict(raw.get("ministry_codes") or {}),
@@ -115,6 +118,132 @@ def _load_vn_registry() -> dict[str, Any]:
         "standards_by_base_code": standards_by_base_code,
         "textbooks": list(raw.get("textbooks") or []),
     }
+
+
+_VN_STD_CODE_STRIP_RE = re.compile(
+    r"\b(?:"
+    r"QCVN\s+[A-ZĐ0-9]{1,6}(?:-[A-ZĐ0-9]{1,4})*(?:\s*:\s*(?:19|20)\d{2}(?:\s*/\s*B[A-ZĐ]+)?)?"
+    r"|TCVN\s+(?:ISO(?:/IEC)?\s+)?\d{3,5}(?:-\d+)*(?:\s*:\s*(?:19|20)\d{2})?"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_VN_STD_BOILERPLATE_PREFIX_RE = re.compile(
+    r"^[\s:.,;()\-–—]*(?:"
+    r"quy\s+chuẩn\s+kỹ\s+thuật\s+quốc\s+gia"
+    r"|tiêu\s+chuẩn\s+quốc\s+gia(?:\s+việt\s+nam)?"
+    r"|tiêu\s+chuẩn\s+việt\s+nam"
+    r"|national\s+technical\s+regulation"
+    r"|vietnam\s+national\s+standard"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_VN_STD_LEADING_CONNECTOR_RE = re.compile(
+    r"^[\s:.,;()\-–—]*(?:về|on)\b",
+    re.IGNORECASE,
+)
+
+_VN_STD_RAW_TAIL_RE = re.compile(
+    r"(?:\b(?:Truy\s+cập|Retrieved|Available\s+at|Có\s+tại)\b.*$"
+    r"|https?://\S+.*$"
+    r"|\.\s+(?:NXB\b|Nhà\s+xuất\s+bản\b|Hà\s+Nội\b|TP\.?\s*HCM\b|"
+    r"Tiêu\s+chuẩn\s+Quốc\s+gia\s+Việt\s+Nam\s*\(|"
+    r"Quy\s+chuẩn\s+Kỹ\s+thuật\s+Quốc\s+gia\s+Việt\s+Nam\s*\().*$)",
+    re.IGNORECASE,
+)
+
+_VN_STD_SUBJECT_STOPWORDS = frozenset({
+    "ve", "cho", "va", "cua", "trong", "doi", "voi", "cac", "mot", "nhung", "la", "duoc", "theo",
+    "the", "of", "in", "and", "for", "on", "to", "with", "at", "by", "from",
+})
+
+
+def _vn_standard_base_key(
+    kind: str,
+    canonical_code: str,
+    ministry_code: str | None,
+) -> str | None:
+    prefix = canonical_code.split(":", 1)[0].strip()
+    if kind == "QCVN":
+        if not ministry_code:
+            return None
+        return f"{prefix}/{ministry_code.strip().upper()}"
+    return prefix
+
+
+def extract_vn_standard_core_subject(
+    title: str | None,
+    *,
+    raw_text: str | None = None,
+) -> str:
+    """Extract the core technical subject of a ``TCVN``/``QCVN`` citation after stripping
+    standard codes and Vietnamese regulatory header boilerplate (e.g. ``Quy chuẩn kỹ thuật quốc gia về``)."""
+    candidate = ""
+    if title and str(title).strip():
+        candidate = str(title).strip()
+    elif raw_text and str(raw_text).strip():
+        raw_str = str(raw_text).strip()
+        m_code = _QCVN_PATTERN.search(raw_str) or _TCVN_PATTERN.search(raw_str)
+        if m_code:
+            after_code = raw_str[m_code.end() :]
+            after_code = _VN_STD_RAW_TAIL_RE.sub("", after_code)
+            candidate = after_code.strip()
+
+    if not candidate:
+        return ""
+
+    stripped = _VN_STD_CODE_STRIP_RE.sub(" ", candidate)
+    for _ in range(4):
+        next_s = _VN_STD_BOILERPLATE_PREFIX_RE.sub("", stripped).strip()
+        next_s = _VN_STD_LEADING_CONNECTOR_RE.sub("", next_s).strip(" :.,;()-–—")
+        if next_s == stripped:
+            break
+        stripped = next_s
+
+    cleaned = re.sub(r"\s+", " ", stripped).strip(" :.,;()-–—")
+    return cleaned if len(normalize_text(cleaned)) >= 4 else ""
+
+
+def compute_vn_standard_core_subject_similarity(
+    cited_subject: str | None,
+    official_subjects: list[str],
+) -> float:
+    """Return best ``[0, 1]`` similarity between stripped ``cited_subject`` and ``official_subjects``,
+    enforcing content-token alignment so vowel/length similarity alone cannot pass fabricated subjects."""
+    if not cited_subject or not cited_subject.strip():
+        return 1.0
+    valid_official = [s.strip() for s in official_subjects if s and s.strip()]
+    if not valid_official:
+        return 1.0
+
+    c_toks = {
+        t
+        for t in normalize_text(cited_subject).split()
+        if (len(t) >= 2 or t.isdigit()) and t not in _VN_STD_SUBJECT_STOPWORDS
+    }
+    best = 0.0
+    for off_subj in valid_official:
+        seq_sim = title_similarity(cited_subject, off_subj)
+        o_toks = {
+            t
+            for t in normalize_text(off_subj).split()
+            if (len(t) >= 2 or t.isdigit()) and t not in _VN_STD_SUBJECT_STOPWORDS
+        }
+        if len(c_toks) >= 2 and len(o_toks) >= 2:
+            inter = len(c_toks & o_toks)
+            union = len(c_toks | o_toks)
+            jacc = inter / union if union else 0.0
+            containment = inter / min(len(c_toks), len(o_toks))
+            if containment < 0.60:
+                pair_sim = min(seq_sim, max(jacc, containment * 0.85))
+            else:
+                pair_sim = max(seq_sim, jacc, containment * 0.90)
+        else:
+            pair_sim = seq_sim
+        if pair_sim > best:
+            best = pair_sim
+    return min(1.0, best)
 
 
 def _clean_vn_author_role(name: str) -> str:
@@ -323,7 +452,7 @@ class TechStandardClient(BaseScholarClient):
 
     @classmethod
     def is_curated_vn_standard(cls, citation: Citation) -> bool:
-        """Return True iff ``citation`` cites a TCVN/QCVN code present (by exact or base code) in the curated registry."""
+        """Return True iff ``citation`` cites a TCVN/QCVN code present (by exact or per-ministry base code) in the curated registry."""
         vn_std = cls.extract_vn_standard_code(citation)
         if vn_std is None:
             return False
@@ -333,9 +462,8 @@ class TechStandardClient(BaseScholarClient):
         if canonical_code in standards_by_code:
             return True
         standards_by_base = registry.get("standards_by_base_code") or {}
-        prefix = canonical_code.split(":", 1)[0].strip()
-        base_primary = f"{prefix}/{ministry_code}" if (kind == "QCVN" and ministry_code) else prefix
-        return bool(standards_by_base.get(base_primary) or standards_by_base.get(prefix))
+        base_key = _vn_standard_base_key(kind, canonical_code, ministry_code)
+        return bool(base_key and standards_by_base.get(base_key))
 
     @classmethod
     def match_vn_textbook(cls, citation: Citation) -> dict[str, Any] | None:
@@ -518,17 +646,10 @@ class TechStandardClient(BaseScholarClient):
 
         matched_entry = standards_by_code.get(canonical_code)
         if matched_entry is None:
-            prefix = canonical_code.split(":", 1)[0].strip()
-            base_primary = (
-                f"{prefix}/{ministry_code}" if (kind == "QCVN" and ministry_code) else prefix
-            )
-            base_matches = (
-                standards_by_base.get(base_primary)
-                or standards_by_base.get(prefix)
-                or []
-            )
+            base_key = _vn_standard_base_key(kind, canonical_code, ministry_code)
+            base_matches = standards_by_base.get(base_key) or [] if base_key else []
             if not base_matches:
-                # Uncurated TCVN/QCVN code: never synthesize a self-echoing found=True candidate.
+                # Uncurated TCVN/QCVN code (or different ministry namespace): never synthesize found=True.
                 return None
 
             cited_yr_int = int(code_year) if code_year.isdigit() else 0
@@ -550,6 +671,23 @@ class TechStandardClient(BaseScholarClient):
             str(matched_entry.get("title") or ""),
             *(str(a) for a in (matched_entry.get("aliases") or []) if a),
         ]
+        official_subjects = [
+            subj
+            for bt in base_titles
+            if bt
+            for subj in (extract_vn_standard_core_subject(bt),)
+            if subj
+        ]
+        cited_subject = (
+            extract_vn_standard_core_subject(citation.title, raw_text=citation.raw_text)
+            if citation is not None
+            else ""
+        )
+        core_subject_sim = compute_vn_standard_core_subject_similarity(
+            cited_subject,
+            official_subjects,
+        )
+
         title_variants: list[str] = []
         for bt in base_titles:
             if bt:
@@ -566,7 +704,7 @@ class TechStandardClient(BaseScholarClient):
             cit_title_norm = normalize_text(citation.title)
             if cit_title_norm in {normalize_text(official_code), normalize_text(canonical_code)}:
                 chosen_title = official_code
-            elif title_variants:
+            elif title_variants and (not cited_subject or core_subject_sim >= 0.70):
                 best_variant = max(
                     title_variants,
                     key=lambda v: title_similarity(citation.title, v),
@@ -593,6 +731,7 @@ class TechStandardClient(BaseScholarClient):
             external_ids={
                 "vn_standard_code": official_code,
                 "cited_vn_standard_code": canonical_code,
+                "vn_standard_subjects": " || ".join(official_subjects),
                 "standard_type": kind,
             },
             confidence=0.97 if official_code == canonical_code else 0.90,

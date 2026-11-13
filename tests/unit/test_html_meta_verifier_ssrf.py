@@ -1115,3 +1115,133 @@ async def test_round1_finding6_vn_textbook_negative_cases_and_author_mismatch_ru
         citation_type=CitationType.REFERENCE_LIST,
     )
     assert (await client.lookup(cit_fab_tb)).found is False
+
+
+# ============================================================================
+# 7. Fix Round 2 Regression Tests (QCVN/TCVN Core Subject & Ministry Namespace)
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_round2_qcvn_tcvn_core_subject_mismatch_and_per_ministry_namespace() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from integrity_checker.models.source import SourceCandidate
+    from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
+
+    empty_stub = lambda name: SimpleNamespace(  # noqa: E731
+        name=name,
+        lookup=AsyncMock(
+            return_value=SourceCandidate(
+                source_name=name, found=False, error=f"{name}: no results"
+            )
+        ),
+    )
+    orch = RetrievalOrchestrator(
+        crossref=empty_stub("crossref"),
+        openalex=empty_stub("openalex"),
+        tech_standard=TechStandardClient(),
+        enable_link_validation=False,
+        use_local_db=False,
+        use_persistent_cache=False,
+    )
+    checker = NeuroSymbolicChecker(
+        feature_calculator=FeatureCalculator(enable_content_alignment=False),
+        enable_content_alignment=False,
+    )
+
+    # 2a. Curated QCVN 06:2022/BXD + standard "Quy chuẩn kỹ thuật quốc gia về ..." boilerplate
+    #     with fabricated core subject MUST return METADATA_ERROR (title), NOT VERIFIED!
+    cit_qcvn_fab_subj = Citation(
+        raw_text=(
+            "Bộ Xây dựng (2022). QCVN 06:2022/BXD Quy chuẩn kỹ thuật quốc gia về "
+            "chế tạo động cơ phản lực hạt nhân."
+        ),
+        title="QCVN 06:2022/BXD Quy chuẩn kỹ thuật quốc gia về chế tạo động cơ phản lực hạt nhân",
+        authors=["Bộ Xây dựng"],
+        year="2022",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    src_qcvn_fab = await orch.retrieve(cit_qcvn_fab_subj)
+    verdict_qcvn_fab = checker.check(cit_qcvn_fab_subj, src_qcvn_fab)
+    assert verdict_qcvn_fab.label == ValidationLabel.METADATA_ERROR
+    assert "title" in verdict_qcvn_fab.mismatched_fields
+    assert "R-VN-STANDARD-VERIFIED" not in verdict_qcvn_fab.triggered_rules
+
+    # Also verify when citation.title is None (only raw_text populated)
+    cit_qcvn_fab_raw_only = Citation(
+        raw_text=cit_qcvn_fab_subj.raw_text,
+        title=None,
+        authors=["Bộ Xây dựng"],
+        year="2022",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    src_qcvn_fab_raw = await orch.retrieve(cit_qcvn_fab_raw_only)
+    verdict_qcvn_fab_raw = checker.check(cit_qcvn_fab_raw_only, src_qcvn_fab_raw)
+    assert verdict_qcvn_fab_raw.label == ValidationLabel.METADATA_ERROR
+    assert "title" in verdict_qcvn_fab_raw.mismatched_fields
+
+    # 2b. Curated TCVN 5574:2018 + "Tiêu chuẩn quốc gia về ..." boilerplate + fabricated subject
+    cit_tcvn_fab_subj = Citation(
+        raw_text=(
+            "Bộ Khoa học và Công nghệ (2018). TCVN 5574:2018 Tiêu chuẩn quốc gia về "
+            "quy trình nuôi trồng thủy sản nước lợ."
+        ),
+        title="TCVN 5574:2018 Tiêu chuẩn quốc gia về quy trình nuôi trồng thủy sản nước lợ",
+        authors=["Bộ Khoa học và Công nghệ"],
+        year="2018",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    src_tcvn_fab = await orch.retrieve(cit_tcvn_fab_subj)
+    verdict_tcvn_fab = checker.check(cit_tcvn_fab_subj, src_tcvn_fab)
+    assert verdict_tcvn_fab.label == ValidationLabel.METADATA_ERROR
+    assert "title" in verdict_tcvn_fab.mismatched_fields
+
+    # 2c. Same-ministry wrong year (QCVN 06:2019/BXD vs curated 2022/2021/BXD) -> METADATA_ERROR (year)
+    cit_same_min_wrong_yr = Citation(
+        raw_text=(
+            "Bộ Xây dựng (2019). QCVN 06:2019/BXD Quy chuẩn kỹ thuật quốc gia về "
+            "an toàn cháy cho nhà và công trình."
+        ),
+        title="QCVN 06:2019/BXD Quy chuẩn kỹ thuật quốc gia về an toàn cháy cho nhà và công trình",
+        authors=["Bộ Xây dựng"],
+        year="2019",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    src_same_min = await orch.retrieve(cit_same_min_wrong_yr)
+    verdict_same_min = checker.check(cit_same_min_wrong_yr, src_same_min)
+    assert verdict_same_min.label == ValidationLabel.METADATA_ERROR
+    assert "year" in verdict_same_min.mismatched_fields
+    assert "title" not in verdict_same_min.mismatched_fields
+
+    # 2d. Different-ministry uncurated QCVN sharing number 01 or 06 (BCT / BNNPTNT vs curated BXD)
+    #     MUST NOT match BXD as METADATA_ERROR and MUST NOT be falsely VERIFIED!
+    for raw_other_min, title_other_min, auth_other_min, yr_other_min in [
+        (
+            "Bộ Công Thương (2020). QCVN 01:2020/BCT Quy chuẩn kỹ thuật quốc gia về yêu cầu thiết kế cửa hàng xăng dầu.",
+            "QCVN 01:2020/BCT Quy chuẩn kỹ thuật quốc gia về yêu cầu thiết kế cửa hàng xăng dầu",
+            "Bộ Công Thương",
+            "2020",
+        ),
+        (
+            "Bộ Nông nghiệp và Phát triển nông thôn (2021). QCVN 06:2021/BNNPTNT Quy chuẩn kỹ thuật quốc gia về thiết bị thủy lợi.",
+            "QCVN 06:2021/BNNPTNT Quy chuẩn kỹ thuật quốc gia về thiết bị thủy lợi",
+            "Bộ Nông nghiệp và Phát triển nông thôn",
+            "2021",
+        ),
+    ]:
+        cit_other_min = Citation(
+            raw_text=raw_other_min,
+            title=title_other_min,
+            authors=[auth_other_min],
+            year=yr_other_min,
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert TechStandardClient.is_curated_vn_standard(cit_other_min) is False
+        assert (await TechStandardClient().lookup(cit_other_min)).found is False
+        src_other_min = await orch.retrieve(cit_other_min)
+        verdict_other_min = checker.check(cit_other_min, src_other_min)
+        assert verdict_other_min.label in (ValidationLabel.RESOURCE, ValidationLabel.UNRESOLVED)
+        assert verdict_other_min.label != ValidationLabel.METADATA_ERROR
+        assert verdict_other_min.label != ValidationLabel.VERIFIED
