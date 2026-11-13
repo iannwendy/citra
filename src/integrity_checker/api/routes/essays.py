@@ -142,6 +142,21 @@ def _persist_upload_bytes(essay_id: int, ext: str, content: bytes) -> Path:
     return persisted_path
 
 
+def _clear_persisted_progress_snapshot(essay: EssayRecord) -> None:
+    """Strip any stale _progress_snapshot from essay.style_profile_json before re-queuing."""
+    if not essay.style_profile_json:
+        return
+    try:
+        import json as _json
+
+        parsed = _json.loads(essay.style_profile_json)
+        if isinstance(parsed, dict) and "_progress_snapshot" in parsed:
+            parsed.pop("_progress_snapshot", None)
+            essay.style_profile_json = _json.dumps(parsed) if parsed else None
+    except Exception:
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Background pipeline task
 # ---------------------------------------------------------------------------
@@ -665,9 +680,28 @@ def get_essay_status(
             return resumed_state.to_snapshot()
         return state.to_snapshot()
 
-    # No tracker entry — fall back to DB state (verdicts/CIS or persisted progress snapshot)
-    verdicts = repo.get_verdicts(essay_id)
+    # No tracker entry — fall back to DB state (queued job, verdicts/CIS, or persisted snapshot)
     persisted_snap = tracker.load_persisted_snapshot(essay_id, essay)
+    if getattr(essay, "job_status", None) == "queued":
+        if persisted_snap is not None and persisted_snap.get("status") == "queued":
+            return persisted_snap
+        return {
+            "status": "queued",
+            "step": "queued",
+            "step_index": 0,
+            "total_steps": 8,
+            "message": "Queued for analysis...",
+            "citations_found": 0,
+            "references_found": 0,
+            "linked": 0,
+            "sources_queried": {},
+            "elapsed_seconds": 0.0,
+            "finished_at": None,
+            "error": None,
+            "queue_position": None,
+        }
+
+    verdicts = repo.get_verdicts(essay_id)
     if (
         verdicts
         or essay.cis_json is not None
@@ -809,6 +843,7 @@ async def reanalyze_essay(
             raise HTTPException(status_code=404, detail="Persisted document file not found on disk")
 
     if _get_worker_mode() == "web_only":
+        _clear_persisted_progress_snapshot(essay)
         essay.job_status = "queued"
         essay.job_heartbeat_at = datetime.now(UTC)
         essay.job_error = None

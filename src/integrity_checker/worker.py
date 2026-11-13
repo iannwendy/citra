@@ -72,6 +72,7 @@ async def run_worker_loop(
     stop_event: asyncio.Event | None = None,
     max_iterations: int | None = None,
     recover_on_startup: bool = True,
+    stale_heartbeat_seconds: float = 300.0,
 ) -> dict[str, int]:
     """Continuously claim and execute queued essay analysis jobs until stopped."""
     from integrity_checker.api.routes import essays as essays_routes
@@ -86,6 +87,8 @@ async def run_worker_loop(
             session_factory=sess_factory,
             uploads_dir=uploads_dir,
             run_rescheduled=False,
+            include_queued=False,
+            stale_heartbeat_seconds=stale_heartbeat_seconds,
         )
         if any(recovery_stats.values()):
             logger.info(f"Worker startup orphan recovery: {recovery_stats}")

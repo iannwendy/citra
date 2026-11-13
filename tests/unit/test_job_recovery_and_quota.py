@@ -732,7 +732,7 @@ def test_app_startup_orphan_recovery_gating_and_worker_cli_entrypoint(
     recovery_event = threading.Event()
     recovery_calls: list[object] = []
 
-    def _fake_recover(factory):
+    def _fake_recover(factory, **_kwargs):
         recovery_calls.append(factory)
         recovery_event.set()
         return {"rescheduled": 0, "failed": 0, "refunded": 0}
@@ -771,5 +771,349 @@ def test_app_startup_orphan_recovery_gating_and_worker_cli_entrypoint(
     try:
         rc = worker_main(["--poll-interval", "0.01", "--max-iterations", "1"])
         assert rc == 0
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_refund_upload_quota_once_skips_refund_on_completed_essay_reanalyze_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fix 1: Failed re-analysis on an already-completed essay (cis_json IS NOT NULL) must NOT
+    refund monthly_uploads_used or leave job_status='failed'."""
+    from integrity_checker.api.job_recovery import refund_upload_quota_once
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'reanalyze_no_refund.db'}",
+        connect_args={"check_same_thread": False, "timeout": 30},
+    )
+    Base.metadata.create_all(bind=engine)
+    run_migrations(engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    monkeypatch.setattr("integrity_checker.db.session.get_session", SessionLocal)
+
+    setup = SessionLocal()
+    try:
+        user = _seed_student(setup, used=0)
+        essay = _claim_monthly_upload_slot_and_create_essay(
+            setup, user, filename="completed_first.pdf", num_pages=2
+        )
+        essay_id = essay.id
+        user_id = user.id
+        assert user.monthly_uploads_used == 1
+    finally:
+        setup.close()
+
+    pdf_file = tmp_path / "completed_first.pdf"
+    pdf_file.write_bytes(_make_valid_pdf_bytes())
+
+    ok_pipeline = MagicMock()
+    ok_pipeline.run_async = AsyncMock(return_value=_make_stub_report())
+    crashing_pipeline = MagicMock()
+    crashing_pipeline.run_async = AsyncMock(side_effect=RuntimeError("Upstream transient crash"))
+
+    try:
+        # Initial upload completes cleanly
+        await _run_pipeline_task(
+            essay_id=essay_id,
+            tmp_path=str(pdf_file),
+            user_id=user_id,
+            pipeline=ok_pipeline,
+            cleanup_file=False,
+        )
+
+        # Subsequent re-analysis fails mid-run after setting job_status='processing'
+        await _run_pipeline_task(
+            essay_id=essay_id,
+            tmp_path=str(pdf_file),
+            user_id=user_id,
+            pipeline=crashing_pipeline,
+            cleanup_file=False,
+        )
+
+        check = SessionLocal()
+        try:
+            direct_res = refund_upload_quota_once(check, essay_id, "Direct reanalyze error")
+            assert direct_res is False
+            fresh_user = check.get(User, user_id)
+            fresh_essay = check.get(EssayRecord, essay_id)
+            assert fresh_user is not None and fresh_essay is not None
+            assert fresh_user.monthly_uploads_used == 1
+            assert fresh_essay.quota_charged == 1
+            assert fresh_essay.cis_json is not None
+            assert fresh_essay.job_status == "completed"
+            assert fresh_essay.job_error == "Direct reanalyze error"
+        finally:
+            check.close()
+    finally:
+        engine.dispose()
+
+
+def test_web_only_reanalyze_clears_stale_snapshot_and_reports_queued_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fix 2: In CITRA_WORKER_MODE=web_only, POST /reanalyze clears stale _progress_snapshot
+    and GET /status returns 'queued' instead of stale 'completed' or 'failed'."""
+    import json
+
+    import bcrypt
+
+    from integrity_checker.api.deps import get_db
+    from integrity_checker.api.main import create_app
+    from integrity_checker.db.models import VerdictRecord
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'web_only_reanalyze.db'}",
+        connect_args={"check_same_thread": False, "timeout": 30},
+    )
+    Base.metadata.create_all(bind=engine)
+    run_migrations(engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    uploads_dir = tmp_path / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(essays_route, "UPLOADS_DIR", uploads_dir)
+    monkeypatch.setattr("integrity_checker.db.session.get_session", SessionLocal)
+    monkeypatch.setenv("CITRA_WORKER_MODE", "web_only")
+
+    def _override_db():
+        db = SessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    setup = SessionLocal()
+    try:
+        pw_hash = bcrypt.hashpw(b"Secret123!", bcrypt.gensalt()).decode()
+        student = User(
+            username="reanalyze_student",
+            password_hash=pw_hash,
+            role="user",
+            email="reanalyze_student@example.com",
+            is_active=1,
+            email_verified=1,
+            plan_tier="pro",
+            monthly_uploads_used=2,
+            quota_reset_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        setup.add(student)
+        setup.flush()
+
+        done_essay = EssayRecord(
+            filename="prev_completed.pdf",
+            num_pages=3,
+            user_id=student.id,
+            job_status="completed",
+            quota_charged=1,
+            cis_json='{"score": 88.0}',
+            style_profile_json=json.dumps(
+                {
+                    "style": "APA",
+                    "_progress_snapshot": {"status": "completed", "step": "done", "step_index": 7},
+                }
+            ),
+        )
+        failed_essay = EssayRecord(
+            filename="prev_failed.pdf",
+            num_pages=2,
+            user_id=student.id,
+            job_status="failed",
+            job_error="Prior failure",
+            quota_charged=0,
+            cis_json=None,
+            style_profile_json=json.dumps(
+                {
+                    "_progress_snapshot": {
+                        "status": "failed",
+                        "step": "parsing",
+                        "step_index": 0,
+                        "error": "Prior failure",
+                    }
+                }
+            ),
+        )
+        setup.add_all([done_essay, failed_essay])
+        setup.flush()
+        setup.add(
+            VerdictRecord(
+                essay_id=done_essay.id,
+                citation_raw="Vaswani et al. (2017)",
+                label="verified",
+                confidence=0.95,
+                reasoning="OK",
+            )
+        )
+        setup.commit()
+        done_id = done_essay.id
+        failed_id = failed_essay.id
+    finally:
+        setup.close()
+
+    pdf_bytes = _make_valid_pdf_bytes()
+    (uploads_dir / f"{done_id}.pdf").write_bytes(pdf_bytes)
+    (uploads_dir / f"{failed_id}.pdf").write_bytes(pdf_bytes)
+
+    web_app = create_app()
+    web_app.dependency_overrides[get_db] = _override_db
+    try:
+        client = TestClient(web_app)
+        token = client.post(
+            "/api/auth/login",
+            json={"username": "reanalyze_student", "password": "Secret123!"},
+        ).json()["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        for eid in (done_id, failed_id):
+            re_resp = client.post(f"/api/essays/{eid}/reanalyze", headers=headers)
+            assert re_resp.status_code == 200
+            assert re_resp.json()["status"] == "queued"
+
+            st_resp = client.get(f"/api/essays/{eid}/status", headers=headers)
+            assert st_resp.status_code == 200
+            assert st_resp.json()["status"] == "queued"
+
+        verify = SessionLocal()
+        try:
+            e_done = verify.get(EssayRecord, done_id)
+            assert e_done is not None and e_done.style_profile_json is not None
+            parsed_sp = json.loads(e_done.style_profile_json)
+            assert "_progress_snapshot" not in parsed_sp
+            assert parsed_sp.get("style") == "APA"
+        finally:
+            verify.close()
+    finally:
+        web_app.dependency_overrides.clear()
+        engine.dispose()
+
+
+def test_refund_upload_quota_once_rolls_back_session_on_mid_transaction_error(
+    tmp_path: Path,
+) -> None:
+    """Fix 3: If an error occurs mid-transaction inside refund_upload_quota_once, session is
+    rolled back cleanly so quota_charged remains 1 and session stays usable without PendingRollbackError."""
+    from integrity_checker.api.job_recovery import refund_upload_quota_once
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'rollback_guard.db'}")
+    Base.metadata.create_all(bind=engine)
+    run_migrations(engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    session = SessionLocal()
+    try:
+        user = _seed_student(session, used=0)
+        essay = _claim_monthly_upload_slot_and_create_essay(
+            session, user, filename="tx_error.pdf", num_pages=1
+        )
+        essay_id = essay.id
+
+        real_commit = session.commit
+        commit_calls = 0
+
+        def _failing_commit() -> None:
+            nonlocal commit_calls
+            commit_calls += 1
+            # Fail on the final transaction commit after UPDATE essays + UPDATE users ran
+            if not session.in_transaction():
+                return real_commit()
+            raise RuntimeError("Simulated SQLite commit IO failure")
+
+        # Ensure clean no-transaction state before patching commit so pre-commit isn't triggered
+        session.commit()
+        with patch.object(session, "commit", side_effect=_failing_commit):
+            with pytest.raises(RuntimeError, match="Simulated SQLite commit IO failure"):
+                refund_upload_quota_once(session, essay_id, "Crash")
+
+        # Session must be usable immediately (no PendingRollbackError) and write must have rolled back!
+        reloaded_essay = session.get(EssayRecord, essay_id)
+        reloaded_user = session.get(User, user.id)
+        assert reloaded_essay is not None and reloaded_user is not None
+        assert reloaded_essay.quota_charged == 1
+        assert reloaded_essay.job_status == "queued"
+        assert reloaded_user.monthly_uploads_used == 1
+    finally:
+        session.close()
+        engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_worker_startup_recovery_preserves_fresh_queued_and_active_peer_processing_jobs(
+    tmp_path: Path,
+) -> None:
+    """Fix 4: run_worker_loop startup recovery leaves queued jobs at job_attempt_count=0 and
+    ignores active peer processing jobs with fresh job_heartbeat_at, while recovering stale processing jobs."""
+    from integrity_checker.worker import run_worker_loop
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'worker_startup_hb.db'}",
+        connect_args={"check_same_thread": False, "timeout": 30},
+    )
+    Base.metadata.create_all(bind=engine)
+    run_migrations(engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    uploads_dir = tmp_path / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+
+    setup = SessionLocal()
+    try:
+        user = _seed_student(setup, used=0)
+        e_queued = _claim_monthly_upload_slot_and_create_essay(
+            setup, user, filename="fresh_queued.pdf", num_pages=1
+        )
+        e_queued.job_status = "queued"
+        e_queued.job_attempt_count = 0
+
+        e_active_peer = _claim_monthly_upload_slot_and_create_essay(
+            setup, user, filename="peer_processing.pdf", num_pages=1
+        )
+        e_active_peer.job_status = "processing"
+        e_active_peer.job_attempt_count = 0
+        e_active_peer.job_heartbeat_at = datetime.now(UTC)
+
+        e_stale_dead = _claim_monthly_upload_slot_and_create_essay(
+            setup, user, filename="dead_worker.pdf", num_pages=1
+        )
+        e_stale_dead.job_status = "processing"
+        e_stale_dead.job_attempt_count = 0
+        e_stale_dead.job_heartbeat_at = datetime.now(UTC) - timedelta(minutes=15)
+
+        setup.commit()
+        queued_id = e_queued.id
+        active_id = e_active_peer.id
+        stale_id = e_stale_dead.id
+    finally:
+        setup.close()
+
+    pdf_bytes = _make_valid_pdf_bytes()
+    for eid in (queued_id, active_id, stale_id):
+        (uploads_dir / f"{eid}.pdf").write_bytes(pdf_bytes)
+
+    try:
+        await run_worker_loop(
+            pipeline_factory=MagicMock,
+            session_factory=SessionLocal,
+            uploads_dir=uploads_dir,
+            poll_interval=0.01,
+            max_iterations=0,
+            recover_on_startup=True,
+        )
+
+        check = SessionLocal()
+        try:
+            q_row = check.get(EssayRecord, queued_id)
+            a_row = check.get(EssayRecord, active_id)
+            s_row = check.get(EssayRecord, stale_id)
+            assert q_row is not None and a_row is not None and s_row is not None
+            # Freshly queued job untouched (attempt count stays 0)
+            assert q_row.job_status == "queued"
+            assert q_row.job_attempt_count == 0
+            # Active peer processing job untouched (stays processing, attempt count stays 0)
+            assert a_row.job_status == "processing"
+            assert a_row.job_attempt_count == 0
+            # Stale dead processing job recovered back to queued with attempt count incremented to 1
+            assert s_row.job_status == "queued"
+            assert s_row.job_attempt_count == 1
+        finally:
+            check.close()
     finally:
         engine.dispose()

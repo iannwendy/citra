@@ -6,7 +6,7 @@ import asyncio
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -56,12 +56,22 @@ def resolve_persisted_upload_path(
     return None
 
 
-def refund_upload_quota_once(session: Session, essay_id: int, reason: str) -> bool:
-    """Atomically mark an essay job as failed and refund its charged upload slot at most once.
+def _as_utc_naive(dt: datetime | None) -> datetime | None:
+    """Normalize an aware or naive UTC timestamp to naive UTC for SQLite comparison."""
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(UTC).replace(tzinfo=None)
+    return dt
 
-    Uses a compare-and-swap (CAS) ``WHERE id = :essay_id AND quota_charged = 1`` update
-    so duplicate or concurrent calls across threads/workers never double-decrement
-    ``users.monthly_uploads_used`` or drive it below 0.
+
+def refund_upload_quota_once(session: Session, essay_id: int, reason: str) -> bool:
+    """Atomically mark an incomplete essay job as failed and refund its charged slot once.
+
+    Uses a compare-and-swap (CAS) ``WHERE id = :essay_id AND quota_charged = 1 AND cis_json IS NULL``
+    update so duplicate/concurrent calls never double-decrement ``users.monthly_uploads_used``
+    and failed re-analysis runs on already-completed essays (``cis_json IS NOT NULL``) never
+    refund quota or overwrite ``job_status = 'completed'``.
     """
     safe_reason = (reason or "Analysis failed due to an internal processing error.").strip()
 
@@ -72,46 +82,52 @@ def refund_upload_quota_once(session: Session, essay_id: int, reason: str) -> bo
             # Release any stale read snapshot before acquiring write lock on SQLite WAL
             session.commit()
 
-        cas_res = session.execute(
-            text(
-                "UPDATE essays "
-                "SET quota_charged = 0, job_status = 'failed', job_error = :reason "
-                "WHERE id = :essay_id AND quota_charged = 1"
-            ),
-            {"essay_id": int(essay_id), "reason": safe_reason},
-        )
-        if (cas_res.rowcount or 0) == 1:
-            uid_row = session.execute(
-                text("SELECT user_id FROM essays WHERE id = :essay_id"),
-                {"essay_id": int(essay_id)},
-            ).first()
-            user_id = uid_row[0] if uid_row is not None else None
-            if user_id is not None:
-                session.execute(
-                    text(
-                        "UPDATE users "
-                        "SET monthly_uploads_used = CASE "
-                        "WHEN COALESCE(monthly_uploads_used, 0) > 0 "
-                        "THEN monthly_uploads_used - 1 ELSE 0 END "
-                        "WHERE id = :user_id"
-                    ),
-                    {"user_id": int(user_id)},
-                )
+        try:
+            cas_res = session.execute(
+                text(
+                    "UPDATE essays "
+                    "SET quota_charged = 0, job_status = 'failed', job_error = :reason "
+                    "WHERE id = :essay_id AND quota_charged = 1 AND cis_json IS NULL"
+                ),
+                {"essay_id": int(essay_id), "reason": safe_reason},
+            )
+            if (cas_res.rowcount or 0) == 1:
+                uid_row = session.execute(
+                    text("SELECT user_id FROM essays WHERE id = :essay_id"),
+                    {"essay_id": int(essay_id)},
+                ).first()
+                user_id = uid_row[0] if uid_row is not None else None
+                if user_id is not None:
+                    session.execute(
+                        text(
+                            "UPDATE users "
+                            "SET monthly_uploads_used = CASE "
+                            "WHEN COALESCE(monthly_uploads_used, 0) > 0 "
+                            "THEN monthly_uploads_used - 1 ELSE 0 END "
+                            "WHERE id = :user_id"
+                        ),
+                        {"user_id": int(user_id)},
+                    )
+                session.commit()
+                session.expire_all()
+                return True
+
+            session.execute(
+                text(
+                    "UPDATE essays "
+                    "SET job_status = CASE "
+                    "WHEN cis_json IS NOT NULL THEN 'completed' ELSE 'failed' END, "
+                    "job_error = :reason "
+                    "WHERE id = :essay_id AND (cis_json IS NULL OR job_status != 'queued')"
+                ),
+                {"essay_id": int(essay_id), "reason": safe_reason},
+            )
             session.commit()
             session.expire_all()
-            return True
-
-        session.execute(
-            text(
-                "UPDATE essays "
-                "SET job_status = 'failed', job_error = :reason "
-                "WHERE id = :essay_id AND (cis_json IS NULL OR job_status != 'completed')"
-            ),
-            {"essay_id": int(essay_id), "reason": safe_reason},
-        )
-        session.commit()
-        session.expire_all()
-        return False
+            return False
+        except Exception:
+            session.rollback()
+            raise
 
 
 def recover_orphaned_essay_jobs(
@@ -121,6 +137,8 @@ def recover_orphaned_essay_jobs(
     uploads_dir: Path | None = None,
     max_attempts: int = MAX_ORPHAN_RECOVERY_ATTEMPTS,
     run_rescheduled: bool = True,
+    include_queued: bool = True,
+    stale_heartbeat_seconds: float | None = None,
 ) -> dict[str, int]:
     """Scan orphaned incomplete ``EssayRecord`` jobs on startup and reschedule or refund.
 
@@ -129,6 +147,9 @@ def recover_orphaned_essay_jobs(
       upload quota, and re-runs the pipeline (when ``run_rescheduled=True``).
     - When ``job_attempt_count >= max_attempts`` or the persisted upload file is missing:
       marks ``job_status = 'failed'`` and refunds ``monthly_uploads_used`` strictly once.
+    - When ``include_queued=False`` (standalone worker startup), freshly queued uploads are
+      left untouched for ``claim_next_queued_essay`` pickup without burning recovery attempts,
+      and ``stale_heartbeat_seconds`` skips active peer workers with fresh heartbeats.
     """
     from integrity_checker.api.routes import essays as essays_routes
 
@@ -137,6 +158,12 @@ def recover_orphaned_essay_jobs(
     failed_count = 0
     refunded_count = 0
     to_run: list[tuple[int, str, int]] = []
+    target_statuses = ("queued", "processing") if include_queued else ("processing",)
+    cutoff_utc: datetime | None = None
+    if stale_heartbeat_seconds is not None:
+        cutoff_utc = datetime.now(UTC).replace(tzinfo=None) - timedelta(
+            seconds=max(0.0, float(stale_heartbeat_seconds))
+        )
 
     session = sess_factory()
     try:
@@ -144,22 +171,28 @@ def recover_orphaned_essay_jobs(
             session.query(EssayRecord)
             .filter(
                 EssayRecord.cis_json.is_(None),
-                EssayRecord.job_status.in_(("queued", "processing")),
+                EssayRecord.job_status.in_(target_statuses),
             )
             .order_by(EssayRecord.id.asc())
             .all()
         )
-        orphan_snapshots = [
-            (
-                int(e.id),
-                e.filename,
-                int(e.user_id or 0),
-                int(e.job_attempt_count or 0),
+        orphan_snapshots: list[tuple[int, str | None, int, int, str]] = []
+        for e in orphans:
+            if e.job_status == "processing" and cutoff_utc is not None:
+                hb_naive = _as_utc_naive(e.job_heartbeat_at)
+                if hb_naive is not None and hb_naive > cutoff_utc:
+                    continue
+            orphan_snapshots.append(
+                (
+                    int(e.id),
+                    e.filename,
+                    int(e.user_id or 0),
+                    int(e.job_attempt_count or 0),
+                    str(e.job_status),
+                )
             )
-            for e in orphans
-        ]
 
-        for eid, filename, uid, attempt_count in orphan_snapshots:
+        for eid, filename, uid, attempt_count, prev_status in orphan_snapshots:
             upload_path = resolve_persisted_upload_path(
                 eid, filename=filename, uploads_dir=uploads_dir
             )
@@ -178,14 +211,27 @@ def recover_orphaned_essay_jobs(
                 failed_count += 1
                 continue
 
-            essay_row = session.get(EssayRecord, eid)
-            if essay_row is None:
-                continue
-            essay_row.job_attempt_count = attempt_count + 1
-            essay_row.job_status = "queued"
-            essay_row.job_heartbeat_at = datetime.now(UTC)
-            essay_row.job_error = None
+            now_utc_str = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S.%f")
+            resched_res = session.execute(
+                text(
+                    "UPDATE essays "
+                    "SET job_attempt_count = :next_attempt, "
+                    "job_status = 'queued', "
+                    "job_heartbeat_at = :now, "
+                    "job_error = NULL "
+                    "WHERE id = :eid AND cis_json IS NULL AND job_status = :expected_status"
+                ),
+                {
+                    "next_attempt": attempt_count + 1,
+                    "now": now_utc_str,
+                    "eid": eid,
+                    "expected_status": prev_status,
+                },
+            )
             session.commit()
+            session.expire_all()
+            if (resched_res.rowcount or 0) != 1:
+                continue
 
             get_tracker().init(eid, is_retry=True)
             to_run.append((eid, str(upload_path), uid))
