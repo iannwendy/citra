@@ -841,6 +841,7 @@ class SymbolicRules:
             citation_authors=citation_authors,
             citation_year=citation_year,
             citation_raw=citation_raw,
+            citation_venue=citation_venue,
             citation_title=citation_title,
         )
         best_cand = source.best_candidate() if source and source.candidates else None
@@ -861,6 +862,7 @@ class SymbolicRules:
                 and not _non_venue_pat.search(cv_clean)
                 and not _non_venue_pat.search(bv_clean)
                 and not (citation_doi and "10.48550/arxiv" in str(citation_doi).lower())
+                and "vn_standard_code" not in (best_cand.external_ids or {})
             ):
                 from integrity_checker.matching.venue_normalizer import VenueNormalizer
 
@@ -922,6 +924,7 @@ class SymbolicRules:
         citation_authors: list[str] | None = None,
         citation_year: str | None = None,
         citation_raw: str | None = None,
+        citation_venue: str | None = None,
         citation_title: str | None = None,
     ) -> RuleOutcome:
         """Apply rules theo thứ tự ưu tiên:
@@ -1411,7 +1414,9 @@ class SymbolicRules:
             cited_std_code = str(best_ext_ids.get("cited_vn_standard_code") or "").strip()
             cited_core_subj = extract_vn_standard_core_subject(
                 citation_title,
+                venue=citation_venue,
                 raw_text=citation_raw or source.citation_raw,
+                authors=citation_authors,
             )
             raw_official_subjs = str(best_ext_ids.get("vn_standard_subjects") or "").strip()
             official_core_subjs = [
@@ -1425,9 +1430,7 @@ class SymbolicRules:
                 official_core_subjs,
             )
             if cited_core_subj:
-                has_std_title_mismatch = core_subj_sim < 0.70 or (
-                    bool(citation_title) and features.title_sim_fuzzy < 0.75
-                )
+                has_std_title_mismatch = core_subj_sim < 0.70
             else:
                 has_std_title_mismatch = bool(citation_title) and features.title_sim_fuzzy < 0.75
             has_std_year_mismatch = bool(

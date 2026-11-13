@@ -26,6 +26,7 @@ import html
 import json
 import os
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -128,35 +129,72 @@ _VN_STD_CODE_STRIP_RE = re.compile(
     re.IGNORECASE,
 )
 
-_VN_STD_BOILERPLATE_PREFIX_RE = re.compile(
+_VN_STD_FOLDED_BOILERPLATE_PREFIX_RE = re.compile(
     r"^[\s:.,;()\-–—]*(?:"
-    r"quy\s+chuẩn\s+kỹ\s+thuật\s+quốc\s+gia"
-    r"|tiêu\s+chuẩn\s+quốc\s+gia(?:\s+việt\s+nam)?"
-    r"|tiêu\s+chuẩn\s+việt\s+nam"
+    r"quy\s+chuan\s+ky\s+thuat\s+quoc\s+gia(?:\s+viet\s+nam)?(?:\s*\(\s*qcvn\s*\))?"
+    r"|tieu\s+chuan\s+quoc\s+gia(?:\s+viet\s+nam)?(?:\s*\(\s*tcvn\s*\))?"
+    r"|tieu\s+chuan\s+viet\s+nam(?:\s*\(\s*tcvn\s*\))?"
     r"|national\s+technical\s+regulation"
     r"|vietnam\s+national\s+standard"
     r")\b",
     re.IGNORECASE,
 )
 
-_VN_STD_LEADING_CONNECTOR_RE = re.compile(
-    r"^[\s:.,;()\-–—]*(?:về|on)\b",
+_VN_STD_FOLDED_LEADING_CONNECTOR_RE = re.compile(
+    r"^[\s:.,;()\-–—]*(?:ve|on)\b",
     re.IGNORECASE,
 )
 
-_VN_STD_RAW_TAIL_RE = re.compile(
-    r"(?:\b(?:Truy\s+cập|Retrieved|Available\s+at|Có\s+tại)\b.*$"
+_VN_STD_FOLDED_TAIL_RE = re.compile(
+    r"(?:\b(?:truy\s+cap|retrieved|available\s+at|co\s+tai)\b.*$"
     r"|https?://\S+.*$"
-    r"|\.\s+(?:NXB\b|Nhà\s+xuất\s+bản\b|Hà\s+Nội\b|TP\.?\s*HCM\b|"
-    r"Tiêu\s+chuẩn\s+Quốc\s+gia\s+Việt\s+Nam\s*\(|"
-    r"Quy\s+chuẩn\s+Kỹ\s+thuật\s+Quốc\s+gia\s+Việt\s+Nam\s*\().*$)",
+    r"|(?:[.;]\s*|\s+[-–—]\s+)(?:(?:ha\s+noi|tp\.?\s*hcm|tp\.?\s*ho\s+chi\s+minh)\s*[:.,;-]*\s*)?(?:nxb|nha\s+xuat\s+ban)\b.*$"
+    r"|[.,;]\s*(?:tieu\s+chuan\s+quoc\s+gia\s+viet\s+nam\s*\(|quy\s+chuan\s+ky\s+thuat\s+quoc\s+gia\s+viet\s+nam\s*\().*$"
+    r"|[.,;]\s*(?:19|20)\d{2}[a-z]?\s*\.?$)",
+    re.IGNORECASE,
+)
+
+_VN_STD_FOLDED_PURE_PUBLISHER_RE = re.compile(
+    r"^[\s:.,;()\-–—]*(?:"
+    r"(?:(?:ha\s+noi|tp\.?\s*hcm|tp\.?\s*ho\s+chi\s+minh|viet\s+nam)[\s:.,;\-–—]+)?(?:nxb|nha\s+xuat\s+ban)\b.*$"
+    r"|(?:ha\s+noi|tp\.?\s*hcm|tp\.?\s*ho\s+chi\s+minh)(?:[\s:.,;\-–—]+(?:19|20)\d{2}[a-z]?)?$"
+    r"|(?:19|20)\d{2}[a-z]?$"
+    r")",
+    re.IGNORECASE,
+)
+
+_VN_STD_PRE_CODE_YEAR_HEADER_RE = re.compile(
+    r"^[^\(\n]{1,140}?\(\s*(?:19|20)\d{2}[a-z]?\s*\)\s*[.,:;–—-]*\s*"
+    r"|^[^\n]{1,120}?[.,;]\s*(?:19|20)\d{2}[a-z]?\s*[.,:;–—-]+\s*",
     re.IGNORECASE,
 )
 
 _VN_STD_SUBJECT_STOPWORDS = frozenset({
-    "ve", "cho", "va", "cua", "trong", "doi", "voi", "cac", "mot", "nhung", "la", "duoc", "theo",
+    "ve", "va", "cua", "doi", "voi", "cac", "mot", "nhung", "la", "duoc",
+    "cho", "trong", "theo", "tai", "phan", "yeu", "cau", "quy", "dinh", "chung",
     "the", "of", "in", "and", "for", "on", "to", "with", "at", "by", "from",
 })
+
+_VN_EXTRA_STANDARD_ISSUERS = (
+    "bo khoa hoc cong nghe va moi truong",
+    "vien khoa hoc cong nghe xay dung",
+    "tong cuc tieu chuan do luong chat luong",
+)
+
+
+def _fold_vn_ascii(text: str, *, keep_punct: bool = False) -> str:
+    """Fold Vietnamese diacritics (including ``đ/Đ -> d``) to clean lowercase ASCII."""
+    if not text:
+        return ""
+    replaced = str(text).replace("đ", "d").replace("Đ", "D")
+    decomposed = unicodedata.normalize("NFD", replaced)
+    ascii_chars = "".join(
+        ch for ch in decomposed if unicodedata.category(ch) != "Mn"
+    ).lower()
+    if keep_punct:
+        return re.sub(r"\s+", " ", ascii_chars).strip()
+    cleaned = re.sub(r"[^a-z0-9\s]+", " ", ascii_chars)
+    return re.sub(r"\s+", " ", cleaned).strip()
 
 
 def _vn_standard_base_key(
@@ -172,73 +210,150 @@ def _vn_standard_base_key(
     return prefix
 
 
+def _strip_vn_std_subject_fragment(
+    fragment: str | None,
+    *,
+    is_venue_or_raw: bool = False,
+) -> str:
+    if not fragment or not str(fragment).strip():
+        return ""
+    stripped_code = _VN_STD_CODE_STRIP_RE.sub(" ", str(fragment))
+    folded = _fold_vn_ascii(stripped_code, keep_punct=True).strip(" :.,;()-–—[]{}")
+    if not folded:
+        return ""
+    if is_venue_or_raw:
+        folded = _VN_STD_FOLDED_TAIL_RE.sub("", folded).strip(" :.,;()-–—[]{}")
+        if not folded or _VN_STD_FOLDED_PURE_PUBLISHER_RE.match(folded):
+            return ""
+    for _ in range(4):
+        next_s = _VN_STD_FOLDED_BOILERPLATE_PREFIX_RE.sub("", folded).strip()
+        next_s = _VN_STD_FOLDED_LEADING_CONNECTOR_RE.sub("", next_s).strip(" :.,;()-–—[]{}")
+        if next_s == folded:
+            break
+        folded = next_s
+    if not folded or (is_venue_or_raw and _VN_STD_FOLDED_PURE_PUBLISHER_RE.match(folded)):
+        return ""
+    cleaned = _fold_vn_ascii(folded, keep_punct=False)
+    return cleaned if len(cleaned) >= 4 else ""
+
+
+def _extract_pre_code_subject(
+    before_raw: str,
+    *,
+    authors: list[Any] | None = None,
+) -> str:
+    s = re.sub(r"^\s*(?:\[\d+\]|\(\d+\)|\d+[.)])\s*", "", str(before_raw or ""))
+    s = re.sub(r"[\s(\[{:.,;\-–—]+$", "", s)
+    if not s:
+        return ""
+    m_yr_hdr = _VN_STD_PRE_CODE_YEAR_HEADER_RE.match(s)
+    if m_yr_hdr:
+        s = s[m_yr_hdr.end() :].strip()
+    else:
+        folded_before = _fold_vn_ascii(s, keep_punct=True)
+        issuer_phrases: list[str] = []
+        for a in authors or []:
+            raw_a = getattr(a, "raw", None) or str(a)
+            folded_a = _fold_vn_ascii(raw_a, keep_punct=False)
+            if len(folded_a) >= 3:
+                issuer_phrases.append(folded_a)
+        for m_name in (_load_vn_registry().get("ministry_codes") or {}).values():
+            folded_m = _fold_vn_ascii(str(m_name), keep_punct=False)
+            if folded_m:
+                issuer_phrases.append(folded_m)
+        issuer_phrases.extend(_VN_EXTRA_STANDARD_ISSUERS)
+
+        for phrase in sorted(set(issuer_phrases), key=len, reverse=True):
+            pat = r"^" + r"[\s,;-]+".join(re.escape(tok) for tok in phrase.split()) + r"(?:$|[.,:;–—-]+)\s*"
+            new_fb = re.sub(pat, "", folded_before, count=1, flags=re.IGNORECASE).strip()
+            if new_fb != folded_before:
+                folded_before = new_fb
+                break
+        s = folded_before
+    return _strip_vn_std_subject_fragment(s, is_venue_or_raw=True)
+
+
 def extract_vn_standard_core_subject(
     title: str | None,
     *,
+    venue: str | None = None,
     raw_text: str | None = None,
+    authors: list[Any] | None = None,
 ) -> str:
-    """Extract the core technical subject of a ``TCVN``/``QCVN`` citation after stripping
-    standard codes and Vietnamese regulatory header boilerplate (e.g. ``Quy chuẩn kỹ thuật quốc gia về``)."""
-    candidate = ""
+    """Extract the ASCII-folded core technical subject of a ``TCVN``/``QCVN`` citation after
+    stripping standard codes and regulatory boilerplate across ``title``, ``venue``, and ``raw_text``."""
     if title and str(title).strip():
-        candidate = str(title).strip()
-    elif raw_text and str(raw_text).strip():
+        from_title = _strip_vn_std_subject_fragment(title, is_venue_or_raw=False)
+        if from_title:
+            return from_title
+
+    if venue and str(venue).strip():
+        from_venue = _strip_vn_std_subject_fragment(venue, is_venue_or_raw=True)
+        if from_venue:
+            return from_venue
+
+    if raw_text and str(raw_text).strip():
         raw_str = str(raw_text).strip()
         m_code = _QCVN_PATTERN.search(raw_str) or _TCVN_PATTERN.search(raw_str)
         if m_code:
-            after_code = raw_str[m_code.end() :]
-            after_code = _VN_STD_RAW_TAIL_RE.sub("", after_code)
-            candidate = after_code.strip()
+            from_after = _strip_vn_std_subject_fragment(
+                raw_str[m_code.end() :],
+                is_venue_or_raw=True,
+            )
+            if from_after:
+                return from_after
+            from_before = _extract_pre_code_subject(
+                raw_str[: m_code.start()],
+                authors=authors,
+            )
+            if from_before:
+                return from_before
 
-    if not candidate:
-        return ""
-
-    stripped = _VN_STD_CODE_STRIP_RE.sub(" ", candidate)
-    for _ in range(4):
-        next_s = _VN_STD_BOILERPLATE_PREFIX_RE.sub("", stripped).strip()
-        next_s = _VN_STD_LEADING_CONNECTOR_RE.sub("", next_s).strip(" :.,;()-–—")
-        if next_s == stripped:
-            break
-        stripped = next_s
-
-    cleaned = re.sub(r"\s+", " ", stripped).strip(" :.,;()-–—")
-    return cleaned if len(normalize_text(cleaned)) >= 4 else ""
+    return ""
 
 
 def compute_vn_standard_core_subject_similarity(
     cited_subject: str | None,
     official_subjects: list[str],
 ) -> float:
-    """Return best ``[0, 1]`` similarity between stripped ``cited_subject`` and ``official_subjects``,
-    enforcing content-token alignment so vowel/length similarity alone cannot pass fabricated subjects."""
-    if not cited_subject or not cited_subject.strip():
+    """Return best ``[0, 1]`` similarity between ``cited_subject`` and ``official_subjects`` on
+    ASCII-folded representations with Vietnamese stopword removal and strict subset containment."""
+    c_fold = _fold_vn_ascii(cited_subject or "")
+    if not c_fold:
         return 1.0
-    valid_official = [s.strip() for s in official_subjects if s and s.strip()]
+    valid_official = [_fold_vn_ascii(s) for s in official_subjects if s and _fold_vn_ascii(s)]
     if not valid_official:
         return 1.0
 
     c_toks = {
         t
-        for t in normalize_text(cited_subject).split()
+        for t in c_fold.split()
         if (len(t) >= 2 or t.isdigit()) and t not in _VN_STD_SUBJECT_STOPWORDS
     }
     best = 0.0
-    for off_subj in valid_official:
-        seq_sim = title_similarity(cited_subject, off_subj)
+    for o_fold in valid_official:
+        seq_sim = title_similarity(c_fold, o_fold)
         o_toks = {
             t
-            for t in normalize_text(off_subj).split()
+            for t in o_fold.split()
             if (len(t) >= 2 or t.isdigit()) and t not in _VN_STD_SUBJECT_STOPWORDS
         }
-        if len(c_toks) >= 2 and len(o_toks) >= 2:
+        if c_toks and o_toks:
             inter = len(c_toks & o_toks)
             union = len(c_toks | o_toks)
             jacc = inter / union if union else 0.0
+            cited_precision = inter / len(c_toks)
+            official_recall = inter / len(o_toks)
             containment = inter / min(len(c_toks), len(o_toks))
-            if containment < 0.60:
-                pair_sim = min(seq_sim, max(jacc, containment * 0.85))
-            else:
+            eligible_for_subset = cited_precision >= 0.60 and (
+                len(c_toks) >= 3 or official_recall >= 0.60
+            )
+            if eligible_for_subset:
                 pair_sim = max(seq_sim, jacc, containment * 0.90)
+            else:
+                pair_sim = min(seq_sim, jacc)
+        elif not c_toks and o_toks:
+            pair_sim = 0.0
         else:
             pair_sim = seq_sim
         if pair_sim > best:
@@ -679,7 +794,12 @@ class TechStandardClient(BaseScholarClient):
             if subj
         ]
         cited_subject = (
-            extract_vn_standard_core_subject(citation.title, raw_text=citation.raw_text)
+            extract_vn_standard_core_subject(
+                citation.title,
+                venue=citation.venue,
+                raw_text=citation.raw_text,
+                authors=citation.authors,
+            )
             if citation is not None
             else ""
         )
@@ -701,15 +821,21 @@ class TechStandardClient(BaseScholarClient):
             else official_code
         )
         if citation and citation.title:
-            cit_title_norm = normalize_text(citation.title)
-            if cit_title_norm in {normalize_text(official_code), normalize_text(canonical_code)}:
+            cit_title_fold = _fold_vn_ascii(citation.title)
+            if cit_title_fold in {
+                _fold_vn_ascii(official_code),
+                _fold_vn_ascii(canonical_code),
+            } and (not cited_subject or core_subject_sim >= 0.70):
                 chosen_title = official_code
             elif title_variants and (not cited_subject or core_subject_sim >= 0.70):
-                best_variant = max(
-                    title_variants,
-                    key=lambda v: title_similarity(citation.title, v),
-                )
-                if title_similarity(citation.title, best_variant) >= 0.45:
+                def _variant_sim(v: str) -> float:
+                    return max(
+                        title_similarity(citation.title, v),
+                        title_similarity(cit_title_fold, _fold_vn_ascii(v)),
+                    )
+
+                best_variant = max(title_variants, key=_variant_sim)
+                if _variant_sim(best_variant) >= 0.45:
                     chosen_title = best_variant
 
         authors = list(matched_entry.get("authors") or []) or ["Bộ Khoa học và Công nghệ"]

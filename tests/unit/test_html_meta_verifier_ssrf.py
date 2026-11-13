@@ -1245,3 +1245,145 @@ async def test_round2_qcvn_tcvn_core_subject_mismatch_and_per_ministry_namespace
         assert verdict_other_min.label in (ValidationLabel.RESOURCE, ValidationLabel.UNRESOLVED)
         assert verdict_other_min.label != ValidationLabel.METADATA_ERROR
         assert verdict_other_min.label != ValidationLabel.VERIFIED
+
+
+# ============================================================================
+# 8. Fix Round 3 Regression Tests (APA Venue Split, Pre-Code Subject, ASCII Fold)
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_round3_apa_venue_split_pre_code_subjects_and_ascii_folding() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from integrity_checker.extraction.patterns.apa import APAFormat
+    from integrity_checker.models.source import SourceCandidate
+    from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
+
+    empty_stub = lambda name: SimpleNamespace(  # noqa: E731
+        name=name,
+        lookup=AsyncMock(
+            return_value=SourceCandidate(
+                source_name=name, found=False, error=f"{name}: no results"
+            )
+        ),
+    )
+    orch = RetrievalOrchestrator(
+        crossref=empty_stub("crossref"),
+        openalex=empty_stub("openalex"),
+        tech_standard=TechStandardClient(),
+        enable_link_validation=False,
+        use_local_db=False,
+        use_persistent_cache=False,
+    )
+    checker = NeuroSymbolicChecker(
+        feature_calculator=FeatureCalculator(enable_content_alignment=False),
+        enable_content_alignment=False,
+    )
+
+    # 3a. Period-delimited APA parsed citation (title="QCVN 06:2022/BXD", subject in venue)
+    apa_fab = APAFormat().parse_reference_entry(
+        "Bộ Xây dựng (2022). QCVN 06:2022/BXD. Quy chuẩn kỹ thuật quốc gia về chế tạo động cơ phản lực hạt nhân."
+    )
+    assert apa_fab is not None
+    src_apa_fab = await orch.retrieve(apa_fab)
+    verdict_apa_fab = checker.check(apa_fab, src_apa_fab)
+    assert verdict_apa_fab.label == ValidationLabel.METADATA_ERROR
+    assert "title" in verdict_apa_fab.mismatched_fields
+
+    # Valid period-delimited APA parsed citation must still VERIFY cleanly
+    apa_valid = APAFormat().parse_reference_entry(
+        "Bộ Xây dựng (2022). QCVN 06:2022/BXD. Quy chuẩn kỹ thuật quốc gia về an toàn cháy cho nhà và công trình."
+    )
+    assert apa_valid is not None
+    src_apa_valid = await orch.retrieve(apa_valid)
+    verdict_apa_valid = checker.check(apa_valid, src_apa_valid)
+    assert verdict_apa_valid.label == ValidationLabel.VERIFIED
+
+    # 3b. Subject-before-code (title=None) WITH boilerplate
+    cit_pre_boiler = Citation(
+        raw_text=(
+            "Bộ Xây dựng (2022). Quy chuẩn kỹ thuật quốc gia về chế tạo động cơ phản lực hạt nhân "
+            "(QCVN 06:2022/BXD)."
+        ),
+        title=None,
+        authors=["Bộ Xây dựng"],
+        year="2022",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    src_pre_boiler = await orch.retrieve(cit_pre_boiler)
+    verdict_pre_boiler = checker.check(cit_pre_boiler, src_pre_boiler)
+    assert verdict_pre_boiler.label == ValidationLabel.METADATA_ERROR
+    assert "title" in verdict_pre_boiler.mismatched_fields
+
+    # 3c. Subject-before-code (title=None) WITHOUT boilerplate
+    cit_pre_plain = Citation(
+        raw_text=(
+            "Bộ Khoa học và Công nghệ (2018). Quy trình nuôi trồng thủy sản nước lợ ven biển "
+            "(TCVN 5574:2018)."
+        ),
+        title=None,
+        authors=["Bộ Khoa học và Công nghệ"],
+        year="2018",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    src_pre_plain = await orch.retrieve(cit_pre_plain)
+    verdict_pre_plain = checker.check(cit_pre_plain, src_pre_plain)
+    assert verdict_pre_plain.label == ValidationLabel.METADATA_ERROR
+    assert "title" in verdict_pre_plain.mismatched_fields
+
+    # 3d. Stopword-heavy fake subject ("quy định đối với nhà") against TCVN 9386-1:2012
+    cit_stopword_spoof = Citation(
+        raw_text="Bộ Khoa học và Công nghệ (2012). TCVN 9386-1:2012 Tiêu chuẩn quốc gia về quy định đối với nhà.",
+        title="TCVN 9386-1:2012 Tiêu chuẩn quốc gia về quy định đối với nhà",
+        authors=["Bộ Khoa học và Công nghệ"],
+        year="2012",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    src_stopword_spoof = await orch.retrieve(cit_stopword_spoof)
+    verdict_stopword_spoof = checker.check(cit_stopword_spoof, src_stopword_spoof)
+    assert verdict_stopword_spoof.label == ValidationLabel.METADATA_ERROR
+    assert "title" in verdict_stopword_spoof.mismatched_fields
+
+    # 3e. Valid diacritic-stripped / ASCII BibTeX citation -> ValidationLabel.VERIFIED
+    apa_ascii_valid = APAFormat().parse_reference_entry(
+        "Bo Xay dung (2022). QCVN 06:2022/BXD Quy chuan ky thuat quoc gia ve an toan chay cho nha va cong trinh."
+    )
+    assert apa_ascii_valid is not None
+    src_ascii_valid = await orch.retrieve(apa_ascii_valid)
+    verdict_ascii_valid = checker.check(apa_ascii_valid, src_ascii_valid)
+    assert verdict_ascii_valid.label == ValidationLabel.VERIFIED
+
+    cit_ascii_tcvn = Citation(
+        raw_text="Bo Khoa hoc va Cong nghe (2023). TCVN 2737:2023 Tai trong va tac dong.",
+        title="TCVN 2737:2023 Tai trong va tac dong",
+        authors=["Bo Khoa hoc va Cong nghe"],
+        year="2023",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    src_ascii_tcvn = await orch.retrieve(cit_ascii_tcvn)
+    verdict_ascii_tcvn = checker.check(cit_ascii_tcvn, src_ascii_tcvn)
+    assert verdict_ascii_tcvn.label == ValidationLabel.VERIFIED
+
+    # 3f. Pre-code IEEE-style citation without (YYYY) header + bare-code with publisher in venue
+    cit_ieee_pre_fab = Citation(
+        raw_text="[1] Bộ Xây dựng, Quy chuẩn kỹ thuật quốc gia về chế tạo động cơ phản lực hạt nhân, QCVN 06:2022/BXD, 2022.",
+        title=None,
+        authors=["Bộ Xây dựng"],
+        year="2022",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    src_ieee_pre_fab = await orch.retrieve(cit_ieee_pre_fab)
+    verdict_ieee_pre_fab = checker.check(cit_ieee_pre_fab, src_ieee_pre_fab)
+    assert verdict_ieee_pre_fab.label == ValidationLabel.METADATA_ERROR
+    assert "title" in verdict_ieee_pre_fab.mismatched_fields
+
+    apa_bare_pub = APAFormat().parse_reference_entry(
+        "Bộ Xây dựng (2022). QCVN 06:2022/BXD. Hà Nội: NXB Xây dựng."
+    )
+    assert apa_bare_pub is not None
+    src_bare_pub = await orch.retrieve(apa_bare_pub)
+    verdict_bare_pub = checker.check(apa_bare_pub, src_bare_pub)
+    assert verdict_bare_pub.label == ValidationLabel.VERIFIED
+
