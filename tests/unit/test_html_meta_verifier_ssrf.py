@@ -642,3 +642,476 @@ async def test_orchestrator_routes_tcvn_qcvn_textbooks_and_enriches_html_meta_do
     assert res_web_paper.html_meta.citation_doi == "10.1109/tro.2024.7777777"
     assert res_web_paper.best_candidate() is not None
     assert res_web_paper.best_candidate().doi == "10.1109/tro.2024.7777777"
+
+
+# ============================================================================
+# 6. Fix Round 1 Regression Tests (Findings 1–6)
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_round1_finding1_fabricated_and_wrong_year_tcvn_qcvn_not_false_verified() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from integrity_checker.models.source import SourceCandidate
+    from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
+
+    empty_stub = lambda name: SimpleNamespace(  # noqa: E731
+        name=name,
+        lookup=AsyncMock(return_value=SourceCandidate(source_name=name, found=False, error=f"{name}: no results")),
+    )
+    orch = RetrievalOrchestrator(
+        crossref=empty_stub("crossref"),
+        openalex=empty_stub("openalex"),
+        tech_standard=TechStandardClient(),
+        enable_link_validation=False,
+        use_local_db=False,
+        use_persistent_cache=False,
+    )
+    checker = NeuroSymbolicChecker(
+        feature_calculator=FeatureCalculator(enable_content_alignment=False),
+        enable_content_alignment=False,
+    )
+
+    # 1a. Fabricated / uncurated TCVN 99999:2024 MUST NOT be VERIFIED
+    cit_fab_tcvn = Citation(
+        raw_text="Bộ Khoa học và Công nghệ (2024). TCVN 99999:2024 Quy trình chế tạo động cơ phản lực hạt nhân.",
+        title="TCVN 99999:2024 Quy trình chế tạo động cơ phản lực hạt nhân",
+        authors=["Bộ Khoa học và Công nghệ"],
+        year="2024",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    cand_fab = await TechStandardClient().lookup(cit_fab_tcvn)
+    assert cand_fab.found is False
+    src_fab = await orch.retrieve(cit_fab_tcvn)
+    verdict_fab = checker.check(cit_fab_tcvn, src_fab)
+    assert verdict_fab.label != ValidationLabel.VERIFIED
+    assert "R-VN-STANDARD-VERIFIED" not in verdict_fab.triggered_rules
+
+    # 1b. Wrong-year curated TCVN 5574:2021 (official: 2018 / 2012) -> METADATA_ERROR (year)
+    cit_wrong_yr = Citation(
+        raw_text="Bộ Khoa học và Công nghệ (2021). TCVN 5574:2021 Thiết kế kết cấu bê tông và bê tông cốt thép.",
+        title="TCVN 5574:2021 Thiết kế kết cấu bê tông và bê tông cốt thép",
+        authors=["Bộ Khoa học và Công nghệ"],
+        year="2021",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    src_wrong_yr = await orch.retrieve(cit_wrong_yr)
+    verdict_wrong_yr = checker.check(cit_wrong_yr, src_wrong_yr)
+    assert verdict_wrong_yr.label == ValidationLabel.METADATA_ERROR
+    assert "year" in verdict_wrong_yr.mismatched_fields
+
+    # 1c. Curated TCVN 5574:2018 with completely fabricated unrelated title -> METADATA_ERROR (title)
+    cit_wrong_title = Citation(
+        raw_text="Bộ Khoa học và Công nghệ (2018). TCVN 5574:2018 Quy trình nuôi trồng thủy sản nước lợ ven biển.",
+        title="TCVN 5574:2018 Quy trình nuôi trồng thủy sản nước lợ ven biển",
+        authors=["Bộ Khoa học và Công nghệ"],
+        year="2018",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    src_wrong_title = await orch.retrieve(cit_wrong_title)
+    verdict_wrong_title = checker.check(cit_wrong_title, src_wrong_title)
+    assert verdict_wrong_title.label == ValidationLabel.METADATA_ERROR
+    assert "title" in verdict_wrong_title.mismatched_fields
+
+
+@pytest.mark.parametrize(
+    "inet_aton_url",
+    [
+        "http://2130706433/admin",
+        "http://0x7f000001/latest",
+        "http://0177.0.0.1/secret",
+        "http://127.1/internal",
+        "http://127.0.1/internal",
+        "http://0x7f.0.0.1/internal",
+        "http://[::ffff:0177.0.0.1]/",
+    ],
+)
+def test_round1_finding2_blocks_non_canonical_inet_aton_ipv4_literals(inet_aton_url: str) -> None:
+    from integrity_checker.retrieval.html_meta_verifier import validate_url_syntax_and_literal_ip
+
+    resolver_called = False
+
+    def spy_resolver(*args, **kwargs):
+        nonlocal resolver_called
+        resolver_called = True
+        return _make_addrinfo("93.184.216.34", 80)
+
+    syn_ok, _reason, _, _ = validate_url_syntax_and_literal_ip(inet_aton_url)
+    assert syn_ok is False
+    pub_ok, _ = validate_public_target_ips(inet_aton_url, resolver=spy_resolver)
+    assert pub_ok is False
+    assert resolver_called is False
+
+
+@pytest.mark.asyncio
+async def test_round1_finding2_network_backend_pins_verified_ip_against_live_dns_rebinding() -> None:
+    import httpcore
+
+    from integrity_checker.retrieval.html_meta_verifier import (
+        SSRFBlockedError,
+        SSRFSafeAsyncNetworkBackend,
+        build_ssrf_safe_transport,
+    )
+
+    connected_targets: list[tuple[str, int]] = []
+
+    class _FakeInnerBackend(httpcore.AsyncNetworkBackend):
+        async def connect_tcp(
+            self,
+            host: str,
+            port: int,
+            timeout=None,  # noqa: ASYNC109
+            local_address=None,
+            socket_options=None,
+        ):
+            connected_targets.append((host, port))
+            raise httpcore.ConnectError("simulated post-pin socket stop")
+
+        async def connect_unix_socket(
+            self,
+            path: str,
+            timeout=None,  # noqa: ASYNC109
+            socket_options=None,
+        ):
+            raise AssertionError("unix socket never allowed")
+
+        async def sleep(self, seconds: float) -> None:
+            return None
+
+    # 1. Stateful DNS rebinding resolver: 1st call returns public IP, 2nd call returns 127.0.0.1
+    calls = 0
+
+    def rebinding_resolver(host: str, port: int = 443, *args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return _make_addrinfo("93.184.216.34", port)
+        return _make_addrinfo("127.0.0.1", port)
+
+    safe_backend = SSRFSafeAsyncNetworkBackend(
+        resolver=rebinding_resolver,
+        inner_backend=_FakeInnerBackend(),
+    )
+
+    # Call #1 resolves once and pins literal "93.184.216.34" into inner connect_tcp (not hostname!)
+    with pytest.raises(httpcore.ConnectError):
+        await safe_backend.connect_tcp("rebind.scholar.example", 443)
+    assert connected_targets == [("93.184.216.34", 443)]
+
+    # Call #2 sees rebinding to 127.0.0.1 and aborts BEFORE inner connect_tcp is ever called!
+    with pytest.raises(SSRFBlockedError):
+        await safe_backend.connect_tcp("rebind.scholar.example", 443)
+    assert connected_targets == [("93.184.216.34", 443)]
+
+    # Verify default transport builder wires SSRFSafeAsyncNetworkBackend into httpcore pool,
+    # and end-to-end LinkValidator / SafeHtmlMetaVerifier block rebinding via default transport
+    transport = build_ssrf_safe_transport(resolver=rebinding_resolver)
+    assert isinstance(transport._pool._network_backend, SSRFSafeAsyncNetworkBackend)
+
+    lv_rebind = LinkValidator(enable_wayback_fallback=False, resolver=rebinding_resolver)
+    lv_res = await lv_rebind.validate_url("https://rebind.scholar.example/paper")
+    assert lv_res.status == LinkStatus.FAKE_DOMAIN
+    assert "ssrf blocked" in (lv_res.error or "").lower()
+
+    meta_rebind = SafeHtmlMetaVerifier(resolver=rebinding_resolver)
+    assert await meta_rebind.fetch_meta("https://rebind.scholar.example/paper") is None
+
+
+@pytest.mark.asyncio
+async def test_round1_finding3_decoy_html_meta_doi_rejected_and_valid_html_doi_verified() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from integrity_checker.models.source import SourceCandidate
+    from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
+
+    def crossref_lookup(c: Citation) -> SourceCandidate:
+        if c.doi == "10.1038/s41586-024-00001-1":
+            return SourceCandidate(
+                source_name="crossref",
+                found=True,
+                doi=c.doi,
+                title="Gold Nanoparticle Synthesis in Aqueous Solution",
+                authors=["Alice Chemist"],
+                year="2024",
+                confidence=0.98,
+            )
+        if c.doi == "10.1109/tro.2024.7777777":
+            return SourceCandidate(
+                source_name="crossref",
+                found=True,
+                doi=c.doi,
+                title="Adaptive Control of 6-DOF Robot Manipulators",
+                authors=["Van A Nguyen", "Thi B Tran"],
+                year="2024",
+                confidence=0.98,
+            )
+        return SourceCandidate(source_name="crossref", found=False, error="Crossref: no results")
+
+    crossref_stub = SimpleNamespace(name="crossref", lookup=AsyncMock(side_effect=crossref_lookup))
+    openalex_stub = SimpleNamespace(
+        name="openalex",
+        lookup=AsyncMock(return_value=SourceCandidate(source_name="openalex", found=False, error="OpenAlex: no results")),
+    )
+
+    def lv_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/decoy-paper":
+            return httpx.Response(
+                200,
+                headers={"Content-Type": "text/html; charset=utf-8"},
+                text=(
+                    "<html><head>"
+                    "<title>Gold Nanoparticle Synthesis in Aqueous Solution | Nature</title>"
+                    '<meta name="citation_doi" content="10.1038/s41586-024-00001-1">'
+                    "</head><body></body></html>"
+                ),
+                request=request,
+            )
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/html; charset=utf-8"},
+            text=(
+                "<html><head>"
+                "<title>Adaptive Control of 6-DOF Robot Manipulators | Publisher</title>"
+                '<meta name="citation_doi" content="10.1109/TRO.2024.7777777">'
+                "</head><body></body></html>"
+            ),
+            request=request,
+        )
+
+    lv = LinkValidator(
+        timeout=4.0,
+        enable_wayback_fallback=False,
+        resolver=lambda host, port=443, *a, **kw: _make_addrinfo("93.184.216.34", port),
+        transport=httpx.MockTransport(lv_handler),
+    )
+    orch = RetrievalOrchestrator(
+        crossref=crossref_stub,
+        openalex=openalex_stub,
+        link_validator=lv,
+        enable_link_validation=True,
+        use_local_db=False,
+        use_persistent_cache=False,
+    )
+    checker = NeuroSymbolicChecker(
+        feature_calculator=FeatureCalculator(enable_content_alignment=False),
+        enable_content_alignment=False,
+    )
+
+    # 3a. Decoy paper URL with unrelated citation_doi MUST trigger R-URL-CONTENT-MISMATCH
+    cit_decoy_doi = Citation(
+        raw_text="Nguyễn Văn A (2024). Điều khiển thích nghi cánh tay robot 6 bậc tự do. Truy cập từ https://pub.public.example/decoy-paper",
+        title="Điều khiển thích nghi cánh tay robot 6 bậc tự do",
+        authors=["Nguyễn Văn A"],
+        year="2024",
+        url="https://pub.public.example/decoy-paper",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    src_decoy_doi = await orch.retrieve(cit_decoy_doi)
+    assert src_decoy_doi.candidates == []
+    verdict_decoy_doi = checker.check(cit_decoy_doi, src_decoy_doi)
+    assert verdict_decoy_doi.label == ValidationLabel.METADATA_ERROR
+    assert "R-URL-CONTENT-MISMATCH" in verdict_decoy_doi.triggered_rules
+
+    # 3b. Valid web-cited academic paper (even authorless / single Crossref hit) upgrades to VERIFIED via HTML citation_doi
+    cit_valid_html_doi = Citation(
+        raw_text="Adaptive Control of 6-DOF Robot Manipulators (2024). Retrieved from https://pub.public.example/article/77",
+        title="Adaptive Control of 6-DOF Robot Manipulators",
+        authors=[],
+        year="2024",
+        url="https://pub.public.example/article/77",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    src_valid_html_doi = await orch.retrieve(cit_valid_html_doi)
+    verdict_valid_html_doi = checker.check(cit_valid_html_doi, src_valid_html_doi)
+    assert verdict_valid_html_doi.label == ValidationLabel.VERIFIED
+    assert "R-DOI-TITLE-AUTHOR" in verdict_valid_html_doi.triggered_rules
+
+    # 3c. Pure bare URL with no cited title/authors remains RESOURCE
+    cit_bare_url = Citation(
+        raw_text="https://pub.public.example/article/77",
+        title=None,
+        authors=[],
+        url="https://pub.public.example/article/77",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    src_bare_url = await orch.retrieve(cit_bare_url)
+    verdict_bare_url = checker.check(cit_bare_url, src_bare_url)
+    assert verdict_bare_url.label == ValidationLabel.RESOURCE
+
+
+def test_round1_finding4_live_semantic_similarity_prevents_false_url_mismatch_without_vi_decoy_leak() -> None:
+    from integrity_checker.retrieval.html_meta_verifier import compute_url_title_match_score
+
+    checker = NeuroSymbolicChecker(
+        feature_calculator=FeatureCalculator(enable_content_alignment=False),
+        enable_content_alignment=False,
+    )
+
+    # 4a. Paraphrased English title with ZERO lexical token overlap passes via live SemanticMatcher
+    en_cited = "Preventing SQL Injection Vulnerabilities in Web Applications"
+    en_meta = HtmlPageMeta(
+        page_title="Mitigating Database Query Tampering in Modern Backends | Security Guide"
+    )
+    assert (compute_url_title_match_score(en_cited, en_meta) or 0.0) < 0.20
+
+    en_source = SourceResult(
+        citation_raw=f"OWASP Team (2024). {en_cited}. Retrieved from https://sec.public.example/sqli",
+        candidates=[],
+        sources_queried=[],
+        sources_succeeded=[],
+        url_status="alive",
+        url_status_code=200,
+        html_meta=en_meta,
+    )
+    en_cit = Citation(
+        raw_text=en_source.citation_raw,
+        title=en_cited,
+        authors=["OWASP Team"],
+        year="2024",
+        url="https://sec.public.example/sqli",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    en_verdict = checker.check(en_cit, en_source)
+    assert "R-URL-CONTENT-MISMATCH" not in en_verdict.triggered_rules
+    assert en_verdict.label == ValidationLabel.RESOURCE
+
+    # 4b. Unrelated Vietnamese diacritic decoy ("điện mặt trời" -> "nấu phở bò") MUST still trigger R-URL-CONTENT-MISMATCH
+    vi_cited = "Thiết kế bộ nghịch lưu áp ba pha cho hệ thống điện mặt trời"
+    vi_decoy_source = SourceResult(
+        citation_raw=f"Lê Văn C (2024). {vi_cited}. Truy cập từ https://amthuc.public.example/pho-bo",
+        candidates=[],
+        sources_queried=[],
+        sources_succeeded=[],
+        url_status="alive",
+        url_status_code=200,
+        html_meta=HtmlPageMeta(page_title="Cách nấu phở bò Nam Định thơm ngon chuẩn vị"),
+    )
+    vi_decoy_cit = Citation(
+        raw_text=vi_decoy_source.citation_raw,
+        title=vi_cited,
+        authors=["Lê Văn C"],
+        year="2024",
+        url="https://amthuc.public.example/pho-bo",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    vi_verdict = checker.check(vi_decoy_cit, vi_decoy_source)
+    assert vi_verdict.label == ValidationLabel.METADATA_ERROR
+    assert "R-URL-CONTENT-MISMATCH" in vi_verdict.triggered_rules
+
+
+@pytest.mark.asyncio
+async def test_round1_finding5_link_validator_default_timeout_4s_and_head_200_get_guards() -> None:
+    assert LinkValidator().timeout == 4.0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "HEAD":
+            return httpx.Response(200, headers={"Content-Type": "text/html"}, request=request)
+        if request.url.path.startswith("/get-loop"):
+            return httpx.Response(302, headers={"Location": "/get-loop-next"}, request=request)
+        if request.url.path == "/get-403":
+            return httpx.Response(403, headers={"Content-Type": "text/html"}, request=request)
+        return httpx.Response(404, headers={"Content-Type": "text/html"}, request=request)
+
+    lv = LinkValidator(
+        enable_wayback_fallback=False,
+        resolver=lambda host, port=443, *a, **kw: _make_addrinfo("93.184.216.34", port),
+        transport=httpx.MockTransport(handler),
+        max_redirects=3,
+    )
+
+    loop_res = await lv.validate_url("https://portal.public.example/get-loop")
+    assert loop_res.status == LinkStatus.UNCHECKED
+    assert "redirect" in (loop_res.error or "").lower()
+
+    forb_res = await lv.validate_url("https://portal.public.example/get-403")
+    assert forb_res.status == LinkStatus.RESTRICTED_ALIVE
+    assert forb_res.status_code == 403
+
+    missing_res = await lv.validate_url("https://portal.public.example/get-404")
+    assert missing_res.status == LinkStatus.DEAD_LINK
+    assert missing_res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_round1_finding6_vn_textbook_negative_cases_and_author_mismatch_rule() -> None:
+    client = TechStandardClient()
+    checker = NeuroSymbolicChecker(
+        feature_calculator=FeatureCalculator(enable_content_alignment=False),
+        enable_content_alignment=False,
+    )
+
+    # 6a. Co-author token-union spoof ("Nguyễn" + "Xuân" + "Thành" split across 3 different co-authors)
+    cit_union_spoof = Citation(
+        raw_text="Nguyễn Xuân Thành (2006). Lý thuyết điều khiển phi tuyến. NXB Khoa học và Kỹ thuật.",
+        title="Lý thuyết điều khiển phi tuyến",
+        authors=["Nguyễn Xuân Thành"],
+        year="2006",
+        venue="NXB Khoa học và Kỹ thuật",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    assert TechStandardClient.match_vn_textbook(cit_union_spoof) is None
+    assert (await client.lookup(cit_union_spoof)).found is False
+
+    # 6b. Empty citation.authors when raw_text begins with a wrong author + matching publisher
+    cit_raw_wrong_author = Citation(
+        raw_text="Trần Văn Giả (2009). Lý thuyết điều khiển tuyến tính. NXB Khoa học và Kỹ thuật.",
+        title="Lý thuyết điều khiển tuyến tính",
+        authors=[],
+        year="2009",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    assert TechStandardClient.match_vn_textbook(cit_raw_wrong_author) is None
+
+    # 6c. Generic short textbook title ("trí tuệ nhân tạo") inside a longer paper raw_text when title=None
+    cit_short_substring = Citation(
+        raw_text="Lê Hoài Bắc (2022). Ứng dụng trí tuệ nhân tạo trong chẩn đoán ảnh y khoa. NXB ĐHQG TP.HCM.",
+        title=None,
+        authors=["Lê Hoài Bắc"],
+        year="2022",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    assert TechStandardClient.match_vn_textbook(cit_short_substring) is None
+
+    # 6d. SymbolicRules / NeuroSymbolicChecker enforces author_sim on vn_textbook_id candidates
+    valid_cit = Citation(
+        raw_text="Nguyễn Doãn Phước (2009). Lý thuyết điều khiển tuyến tính. NXB Khoa học và Kỹ thuật.",
+        title="Lý thuyết điều khiển tuyến tính",
+        authors=["Nguyễn Doãn Phước"],
+        year="2009",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    tb_cand = await client.lookup(valid_cit)
+    assert tb_cand.found is True
+
+    wrong_author_cit = Citation(
+        raw_text="Phạm Văn Sai (2009). Lý thuyết điều khiển tuyến tính. NXB Khoa học và Kỹ thuật.",
+        title="Lý thuyết điều khiển tuyến tính",
+        authors=["Phạm Văn Sai"],
+        year="2009",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    wrong_author_verdict = checker.check(
+        wrong_author_cit,
+        SourceResult(
+            citation_raw=wrong_author_cit.raw_text,
+            candidates=[tb_cand],
+            sources_queried=["tech_standard"],
+            sources_succeeded=["tech_standard"],
+        ),
+    )
+    assert wrong_author_verdict.label == ValidationLabel.METADATA_ERROR
+    assert "authors" in wrong_author_verdict.mismatched_fields
+
+    # 6e. Fabricated VN textbook never resolves as VERIFIED
+    cit_fab_tb = Citation(
+        raw_text="Nguyễn Văn Giả (2024). Giáo trình Lượng tử Siêu không gian Bậc 9. NXB Bách Khoa Hà Nội.",
+        title="Giáo trình Lượng tử Siêu không gian Bậc 9",
+        authors=["Nguyễn Văn Giả"],
+        year="2024",
+        venue="NXB Bách Khoa Hà Nội",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    assert (await client.lookup(cit_fab_tb)).found is False

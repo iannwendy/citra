@@ -272,6 +272,40 @@ class NeuroSymbolicChecker:
             or re.search(scholarly_paper_url_re, compact_url_candidate, re.IGNORECASE)
         )
 
+        from integrity_checker.retrieval.html_meta_verifier import (
+            compute_html_meta_semantic_similarity,
+        )
+
+        eff_url_title_early = self.rules._extract_cited_title_for_url_check(
+            citation.title,
+            raw_text or getattr(source, "citation_raw", None),
+        )
+        url_semantic_sim = compute_html_meta_semantic_similarity(
+            eff_url_title_early,
+            getattr(source, "html_meta", None),
+            getattr(self.feature_calculator, "semantic", None),
+        )
+        has_url_mismatch_early, _, _ = self.rules.check_url_content_mismatch(
+            citation_title=citation.title,
+            citation_raw=raw_text,
+            citation_url=effective_url_check or citation.url,
+            source=source,
+            semantic_sim=url_semantic_sim,
+        )
+        has_substantive_non_url_title = bool(
+            eff_url_title_early
+            and not re.match(r"^(?:https?://|www\.)\S+$", eff_url_title_early, re.IGNORECASE)
+        )
+        has_html_doi_candidate = bool(
+            not citation.doi
+            and (has_substantive_non_url_title or bool(citation.authors))
+            and getattr(getattr(source, "html_meta", None), "citation_doi", None)
+            and any(
+                getattr(c, "found", False) and getattr(c, "doi", None)
+                for c in (source.candidates or [])
+            )
+        )
+
         # Match if the candidate starts with a URL scheme (including PDF-wrapped fragment URLs).
         prefix_match = re.match(r"^(https?://|www\.)", url_candidate, re.IGNORECASE)
         url_body_match = re.match(
@@ -291,6 +325,8 @@ class NeuroSymbolicChecker:
             and not is_scholarly_paper_url
             and not has_fake_url_early
             and not is_dead_url_early
+            and not has_url_mismatch_early
+            and not has_html_doi_candidate
             and not url_candidate[len(prefix_match.group(0)) :].startswith((" ", "\n", "\t"))
         ):
             logger.debug(
@@ -318,17 +354,6 @@ class NeuroSymbolicChecker:
             )
 
         # --- Check 2: Web resource/API citations (không bắt đầu bằng URL) ---
-        has_url_mismatch_early, _, _ = self.rules.check_url_content_mismatch(
-            citation_title=citation.title,
-            citation_raw=raw_text,
-            citation_url=effective_url_check or citation.url,
-            source=source,
-        )
-        has_html_doi_candidate = bool(
-            not citation.doi
-            and getattr(getattr(source, "html_meta", None), "citation_doi", None)
-            and any(getattr(c, "found", False) and getattr(c, "doi", None) for c in (source.candidates or []))
-        )
         check_resource_str = " ".join(
             part
             for part in (raw_text, citation.title or "", citation.url or "", citation.venue or "")
@@ -780,12 +805,18 @@ class NeuroSymbolicChecker:
         )
 
         # Apply symbolic rules với content alignment features
+        effective_citation_doi = citation.doi
+        if not effective_citation_doi and has_html_doi_candidate and features.doi_exact_match:
+            effective_citation_doi = getattr(
+                getattr(source, "html_meta", None), "citation_doi", None
+            )
+
         outcome = self.rules.apply(
             features,
             source,
             mapping_status=mapping_status,
             style_profile=style_profile,
-            citation_doi=citation.doi,
+            citation_doi=effective_citation_doi,
             citation_url=citation.url,
             # NEW v1.3: Provenance tracking
             api_exhausted=api_exhausted,
@@ -797,6 +828,27 @@ class NeuroSymbolicChecker:
             citation_venue=citation.venue,
             citation_title=citation.title,
         )
+        if (
+            not citation.doi
+            and has_html_doi_candidate
+            and outcome.label == ValidationLabel.UNRESOLVED
+            and url_stat_early in ("alive", "restricted_alive")
+            and not has_url_mismatch_early
+            and not is_scholarly_paper_url
+        ):
+            return CitationVerdict(
+                citation=citation,
+                label=ValidationLabel.RESOURCE,
+                confidence=0.95,
+                matched_source=source,
+                features=features,
+                reasoning=(
+                    f"Citation URL '{effective_url_check or citation.url}' is reachable "
+                    f"and matches online documentation/web resource criteria."
+                ),
+                triggered_rules=["R-URL-RESOURCE"],
+                mismatched_fields=[],
+            )
 
         final_rules = list(outcome.triggered_rules)
         if (

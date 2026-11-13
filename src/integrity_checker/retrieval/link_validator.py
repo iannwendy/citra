@@ -28,8 +28,11 @@ from integrity_checker.logging import get_logger
 from integrity_checker.logic.rules import _is_fake_url
 from integrity_checker.retrieval.html_meta_verifier import (
     DEFAULT_MAX_REDIRECTS,
+    DEFAULT_TIMEOUT_SECONDS,
     MAX_HTML_HEAD_BYTES,
     HtmlPageMeta,
+    SSRFBlockedError,
+    build_ssrf_safe_transport,
     extract_meta_from_async_response,
     is_html_content_type,
     validate_public_target_ips,
@@ -165,7 +168,7 @@ class LinkValidator:
 
     def __init__(
         self,
-        timeout: float = 5.0,
+        timeout: float = DEFAULT_TIMEOUT_SECONDS,
         enable_wayback_fallback: bool | None = None,
         resolver: Callable[..., Any] | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
@@ -373,21 +376,36 @@ class LinkValidator:
             return LinkCheckResult(url=clean_url, status=LinkStatus.UNCHECKED)
 
         try:
+            head_is_patched = httpx.AsyncClient.head is not _ORIG_ASYNC_HEAD
+            stream_is_patched = httpx.AsyncClient.stream is not _ORIG_ASYNC_STREAM
+            uses_pinned_backend = (
+                self._transport is None and not head_is_patched and not stream_is_patched
+            )
+            transport = (
+                self._transport
+                if self._transport is not None
+                else build_ssrf_safe_transport(resolver=self.resolver)
+            )
             async with httpx.AsyncClient(
                 timeout=self.timeout,
                 follow_redirects=False,
+                trust_env=False,
                 headers=self.DEFAULT_HEADERS,
-                transport=self._transport,
+                transport=transport,
             ) as client:
                 current_url = clean_url
                 status_code = 0
                 final_url = clean_url
                 html_meta: HtmlPageMeta | None = None
-                head_is_patched = httpx.AsyncClient.head is not _ORIG_ASYNC_HEAD
-                stream_is_patched = httpx.AsyncClient.stream is not _ORIG_ASYNC_STREAM
 
                 for hop in range(self.max_redirects + 1):
-                    allowed, ssrf_reason, is_nxdomain = await self._check_ssrf_before_hop(current_url)
+                    if uses_pinned_backend:
+                        allowed, ssrf_reason, _, _ = validate_url_syntax_and_literal_ip(current_url)
+                        is_nxdomain = False
+                    else:
+                        allowed, ssrf_reason, is_nxdomain = await self._check_ssrf_before_hop(
+                            current_url
+                        )
                     if not allowed:
                         if is_nxdomain:
                             raise httpx.ConnectError(ssrf_reason)
@@ -464,19 +482,28 @@ class LinkValidator:
                         and is_html_content_type(resp_headers.get("content-type", ""))
                     ):
                         async with client.stream("GET", current_url) as get_resp:
-                            if get_resp.status_code in _REDIRECT_CODES:
+                            status_code = get_resp.status_code
+                            final_url = str(get_resp.url)
+                            if status_code in _REDIRECT_CODES:
                                 loc = (get_resp.headers.get("location") or "").strip()
                                 if loc and hop < self.max_redirects:
                                     current_url = urljoin(current_url, loc)
+                                    html_meta = None
                                     continue
-                            elif get_resp.status_code in (200, 206):
+                                if loc and hop >= self.max_redirects:
+                                    return LinkCheckResult(
+                                        url=clean_url,
+                                        status=LinkStatus.UNCHECKED,
+                                        status_code=status_code,
+                                        final_url=current_url,
+                                        error="Exceeded max safe redirects",
+                                    )
+                                break
+                            if status_code in (200, 206):
                                 html_meta = await extract_meta_from_async_response(
                                     get_resp,
                                     max_bytes=MAX_HTML_HEAD_BYTES,
                                 )
-                            elif get_resp.status_code in (404, 410):
-                                status_code = get_resp.status_code
-                                final_url = str(get_resp.url)
                     break
 
                 result = self._classify_status_code(clean_url, status_code, final_url)
@@ -515,6 +542,13 @@ class LinkValidator:
                         )
                 return result
 
+        except SSRFBlockedError as exc:
+            logger.debug(f"LinkValidator SSRF blocked '{clean_url}': {exc}")
+            return LinkCheckResult(
+                url=clean_url,
+                status=LinkStatus.FAKE_DOMAIN,
+                error=f"SSRF blocked: {exc}",
+            )
         except httpx.TimeoutException as exc:
             logger.debug(f"LinkValidator timeout for '{clean_url}': {exc}")
             _LAST_WAYBACK_OK.set(True)

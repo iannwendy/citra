@@ -126,7 +126,27 @@ class FeatureCalculator:
 
         best = self._select_best_candidate(citation, source, cited_authors)
         if best is None:
-            return MatchFeatures(source_consensus=source.consensus_count())
+            html_sem = 0.0
+            html_meta = getattr(source, "html_meta", None)
+            if html_meta is not None:
+                from integrity_checker.logic.rules import SymbolicRules
+                from integrity_checker.retrieval.html_meta_verifier import (
+                    compute_html_meta_semantic_similarity,
+                )
+
+                eff_url_title = SymbolicRules._extract_cited_title_for_url_check(
+                    citation.title,
+                    citation.raw_text or getattr(source, "citation_raw", None),
+                )
+                html_sem = compute_html_meta_semantic_similarity(
+                    eff_url_title,
+                    html_meta,
+                    self.semantic,
+                )
+            return MatchFeatures(
+                source_consensus=source.consensus_count(),
+                title_sim_semantic=html_sem,
+            )
 
         # Cross-candidate metadata fusion: enrich missing fields on `best` from consensus candidates
         best = self._fuse_consensus_metadata(best, source, cited_authors=cited_authors)
@@ -175,6 +195,10 @@ class FeatureCalculator:
         cit_doi_effective = citation.doi
         if not cit_doi_effective and cit_arxiv_id:
             cit_doi_effective = f"10.48550/arxiv.{cit_arxiv_id}"
+        if not cit_doi_effective:
+            html_meta_doi = getattr(getattr(source, "html_meta", None), "citation_doi", None)
+            if html_meta_doi and fuzzy_sim >= 0.85 and self._doi_matches(html_meta_doi, best.doi):
+                cit_doi_effective = str(html_meta_doi)
         doi_match = self._doi_matches(cit_doi_effective, best.doi)
 
         # Year distance

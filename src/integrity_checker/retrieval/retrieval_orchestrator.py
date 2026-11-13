@@ -1723,11 +1723,25 @@ class RetrievalOrchestrator:
         html_meta: HtmlPageMeta | None,
     ) -> tuple[list[SourceCandidate], list[str]]:
         """When an HTML landing page exposes a valid ``citation_doi`` and no scholarly record
-        was resolved yet, cross-check that DOI against Crossref / OpenAlex."""
+        was resolved yet, cross-check that DOI against Crossref / OpenAlex (requiring title
+        compatibility so unrelated decoy paper URLs fall through to ``R-URL-CONTENT-MISMATCH``)."""
         if html_meta is None or not html_meta.citation_doi or citation.doi:
             return [], []
         norm_meta_doi = normalize_doi(html_meta.citation_doi)
         if not norm_meta_doi or not re.match(r"^10\.\d{4,9}/\S+$", norm_meta_doi, re.IGNORECASE):
+            return [], []
+
+        from integrity_checker.logic.rules import SymbolicRules
+        from integrity_checker.retrieval.html_meta_verifier import _single_title_pair_similarity
+
+        eff_title = SymbolicRules._extract_cited_title_for_url_check(
+            citation.title, citation.raw_text
+        ) or ((citation.title or "").strip() or None)
+        if eff_title and re.match(r"^(?:https?://|www\.)\S+$", eff_title, re.IGNORECASE):
+            eff_title = None
+
+        # Pure bare-URL references with neither cited title nor cited authors stay RESOURCE.
+        if not eff_title and not citation.authors:
             return [], []
 
         src_cfg = get_settings().retrieval.sources
@@ -1745,10 +1759,32 @@ class RetrievalOrchestrator:
         found_cands: list[SourceCandidate] = []
         succ_names: list[str] = []
         for client, cand in zip(doi_clients, results, strict=False):
-            if isinstance(cand, SourceCandidate) and cand.found:
-                found_cands.append(cand)
-                if client.name not in succ_names:
-                    succ_names.append(client.name)
+            if not (isinstance(cand, SourceCandidate) and cand.found):
+                continue
+            if eff_title:
+                cand_t = (cand.title or "").strip()
+                t_compat = (
+                    max(
+                        title_similarity(eff_title, cand_t),
+                        _single_title_pair_similarity(eff_title, cand_t),
+                    )
+                    if cand_t
+                    else 0.0
+                )
+                if t_compat < 0.50:
+                    logger.debug(
+                        f"Skipping HTML citation_doi '{norm_meta_doi}' candidate '{cand_t}': "
+                        f"incompatible with cited title '{eff_title}' (sim={t_compat:.2f})"
+                    )
+                    continue
+            elif citation.authors and cand.authors:
+                from integrity_checker.retrieval.normalization import author_match_score
+
+                if author_match_score(citation.authors, list(cand.authors)) < 0.50:
+                    continue
+            found_cands.append(cand)
+            if client.name not in succ_names:
+                succ_names.append(client.name)
         if not found_cands:
             return [], []
         deduped = self._dedupe_candidates(found_cands)

@@ -199,7 +199,8 @@ _LEGAL_OR_STANDARD_SIGNAL_RE = re.compile(
     r"\b(?:"
     r"quốc\s+hội|chính\s+phủ|thủ\s+tướng|bộ\s+[a-zà-ỹ]+|nghị\s+định|thông\s+tư|quyết\s+định|"
     r"luật\s+số|bộ\s+luật|hiến\s+pháp|u\.?s\.?c\.?\s*§|c\.?f\.?r\.?\s*§|pub\.\s*l\.\s*no\.|"
-    r"iso/iec\s*\d+|nist\s+special\s+publication|nist\s+sp\s*\d+|rfc\s*\d+"
+    r"iso/iec\s*\d+|nist\s+special\s+publication|nist\s+sp\s*\d+|rfc\s*\d+|"
+    r"tcvn\s+(?:iso(?:/iec)?\s+)?\d+|qcvn\s+[a-zđ0-9]+"
     r")\b",
     re.IGNORECASE,
 )
@@ -1398,7 +1399,99 @@ class SymbolicRules:
                 style_penalty=style_penalty,
             )
 
-        # --- Rule 1a-ext: Technical standard (IETF RFC / PyPI / NPM / GitHub) or Hugging Face / Wikidata ---
+        # --- Rule 1a-ext: Technical standard (IETF RFC / PyPI / NPM / GitHub / Curated VN Standard & Textbook) ---
+        best_ext_ids = (best.external_ids or {}) if best else {}
+        if best and best.source_name == "tech_standard" and "vn_standard_code" in best_ext_ids:
+            official_std_code = str(best_ext_ids.get("vn_standard_code") or "").strip()
+            cited_std_code = str(best_ext_ids.get("cited_vn_standard_code") or "").strip()
+            has_std_title_mismatch = features.title_sim_fuzzy < 0.75
+            has_std_year_mismatch = bool(
+                (cited_std_code and official_std_code and cited_std_code != official_std_code)
+                or (year_dist > self.year_tolerance and year_dist < 900)
+            )
+            if has_std_title_mismatch or has_std_year_mismatch:
+                if has_std_title_mismatch:
+                    mismatched.append("title")
+                if has_std_year_mismatch:
+                    mismatched.append("year")
+                triggered_rules.append("R-SINGLE-SOURCE-PARTIAL")
+                return RuleOutcome(
+                    label=ValidationLabel.METADATA_ERROR,
+                    confidence=max(0.0, 0.78 - style_penalty),
+                    reasoning=(
+                        f"Vietnamese national standard '{official_std_code}' matched in curated registry "
+                        f"('{best.title}'), but cited metadata conflicts on {', '.join(mismatched)}."
+                    ),
+                    triggered_rules=triggered_rules,
+                    mismatched_fields=mismatched,
+                    style_penalty=style_penalty,
+                )
+            triggered_rules.append("R-VN-STANDARD-VERIFIED")
+            return RuleOutcome(
+                label=ValidationLabel.VERIFIED,
+                confidence=max(0.0, 0.92 - style_penalty - provenance_penalty),
+                reasoning=(
+                    f"Verified curated Vietnamese national standard via {best.venue or 'TCVN/QCVN'} "
+                    f"(title similarity={features.title_sim_fuzzy:.2f}).{provenance_note}"
+                ),
+                triggered_rules=triggered_rules,
+                mismatched_fields=[],
+                style_penalty=style_penalty,
+            )
+
+        if best and best.source_name == "tech_standard" and "vn_textbook_id" in best_ext_ids:
+            raw_for_tb = re.sub(
+                r"^\s*(?:\[\s*\d+\s*\]\.?|\d{1,3}\s*[\.\)])\s*",
+                "",
+                (citation_raw or source.citation_raw or "").strip(),
+            )
+            best_title_prefix = (best.title or "").strip().lower()[:15]
+            tb_is_title_first = bool(
+                best_title_prefix
+                and len(best_title_prefix) >= 6
+                and raw_for_tb.lower().startswith(best_title_prefix)
+            )
+            has_raw_author_prefix = bool(
+                not tb_is_title_first
+                and re.match(r"^[^\(\n]{3,90}?\s*\(\s*(?:19|20)\d{2}[a-z]?\s*\)", raw_for_tb)
+            )
+            has_tb_title_mismatch = features.title_sim_fuzzy < 0.80
+            has_tb_author_mismatch = (
+                bool(citation_authors) or has_raw_author_prefix
+            ) and author_sim < self.author_jaccard_verified
+            has_tb_year_mismatch = year_dist > self.year_tolerance and year_dist < 900
+            if has_tb_title_mismatch or has_tb_author_mismatch or has_tb_year_mismatch:
+                if has_tb_title_mismatch:
+                    mismatched.append("title")
+                if has_tb_author_mismatch:
+                    mismatched.append("authors")
+                if has_tb_year_mismatch:
+                    mismatched.append("year")
+                triggered_rules.append("R-SINGLE-SOURCE-PARTIAL")
+                return RuleOutcome(
+                    label=ValidationLabel.METADATA_ERROR,
+                    confidence=max(0.0, 0.78 - style_penalty),
+                    reasoning=(
+                        f"Vietnamese university textbook '{best.title}' matched in curated registry, "
+                        f"but cited metadata conflicts on {', '.join(mismatched)}."
+                    ),
+                    triggered_rules=triggered_rules,
+                    mismatched_fields=mismatched,
+                    style_penalty=style_penalty,
+                )
+            triggered_rules.append("R-VN-TEXTBOOK-VERIFIED")
+            return RuleOutcome(
+                label=ValidationLabel.VERIFIED,
+                confidence=max(0.0, 0.92 - style_penalty - provenance_penalty),
+                reasoning=(
+                    f"Verified curated Vietnamese university textbook via {best.venue or 'NXB Đại học'} "
+                    f"(title similarity={features.title_sim_fuzzy:.2f}, author overlap={author_sim:.2f}).{provenance_note}"
+                ),
+                triggered_rules=triggered_rules,
+                mismatched_fields=[],
+                style_penalty=style_penalty,
+            )
+
         tech_dehyph_match = False
         if best and best.source_name == "tech_standard" and best.title:
             raw_no_url = re.sub(r"https?://\S+", " ", citation_raw or source.citation_raw or "")
@@ -1416,12 +1509,7 @@ class SymbolicRules:
                 tech_dehyph_match = True
         if best and best.source_name == "tech_standard" and (features.title_sim_fuzzy >= 0.80 or tech_dehyph_match):
             ext_ids = best.external_ids or {}
-            if "vn_standard_code" in ext_ids:
-                triggered_rules.append("R-VN-STANDARD-VERIFIED")
-            elif "vn_textbook_id" in ext_ids:
-                triggered_rules.append("R-VN-TEXTBOOK-VERIFIED")
-            else:
-                triggered_rules.append("R-RFC-VERIFIED")
+            triggered_rules.append("R-RFC-VERIFIED")
             if "github_repo" in ext_ids:
                 triggered_rules.append("R-GITHUB-VERIFIED")
             elif "npm_package" in ext_ids or "pypi_package" in ext_ids:

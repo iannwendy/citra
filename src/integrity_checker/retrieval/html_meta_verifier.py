@@ -23,12 +23,13 @@ import ipaddress
 import re
 import socket
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin, urlsplit
 
+import httpcore
 import httpx
 
 from integrity_checker.logging import get_logger
@@ -52,6 +53,10 @@ _HTML_CONTENT_TYPES = frozenset({"text/html", "application/xhtml+xml"})
 _VALID_DOI_RE = re.compile(r"^10\.\d{4,9}/\S+$", re.IGNORECASE)
 _YEAR_4_RE = re.compile(r"\b((?:19|20)\d{2})\b")
 _CHARSET_RE = re.compile(r"charset\s*=\s*['\"]?([A-Za-z0-9._-]+)", re.IGNORECASE)
+_IPV4_ALT_LABEL_RE = re.compile(r"^(?:\d+|0x[0-9a-f]+)$", re.IGNORECASE)
+_CANONICAL_DEC_OCTET_RE = re.compile(r"^(?:0|[1-9]\d{0,2})$")
+_ORIG_SOCKET_GETADDRINFO = socket.getaddrinfo
+_ORIG_ASYNC_CLIENT_STREAM = httpx.AsyncClient.stream
 
 # Soft-404 title detection: matches true 404/not-found titles while avoiding false positives
 # on technical articles *about* HTTP 404 (e.g. "Understanding HTTP 404 Errors in REST APIs")
@@ -219,6 +224,30 @@ def validate_url_syntax_and_literal_ip(url: str) -> tuple[bool, str, str, int]:
     host_low = hostname.lower()
     if host_low == "localhost" or host_low.endswith((".localhost", ".local", ".internal")):
         return False, f"Disallowed local hostname '{hostname}'", hostname, effective_port
+
+    if ":" in hostname:
+        try:
+            ip_obj = ipaddress.IPv6Address(hostname)
+        except ValueError:
+            return False, f"Invalid or obfuscated IPv6 literal '{hostname}'", hostname, effective_port
+        ip_ok, ip_reason = _is_strictly_public_ip_obj(ip_obj)
+        if not ip_ok:
+            return False, f"Non-public IP literal blocked: {ip_reason}", hostname, effective_port
+        return True, "public_ip_literal", hostname, effective_port
+
+    labels = hostname.split(".")
+    if labels and all(_IPV4_ALT_LABEL_RE.match(lbl) for lbl in labels):
+        is_canonical_ipv4 = len(labels) == 4 and all(
+            _CANONICAL_DEC_OCTET_RE.match(lbl) is not None and int(lbl) <= 255
+            for lbl in labels
+        )
+        if not is_canonical_ipv4:
+            return (
+                False,
+                f"Non-canonical or obfuscated IPv4 literal '{hostname}' is not permitted",
+                hostname,
+                effective_port,
+            )
 
     try:
         ip_obj = ipaddress.ip_address(hostname)
@@ -400,22 +429,21 @@ def _single_title_pair_similarity(citation_title: str, candidate_html_title: str
     return min(1.0, best)
 
 
-def compute_url_title_match_score(
+def _extract_usable_html_titles(
     citation_title: str | None,
     html_meta: HtmlPageMeta | None,
-) -> float | None:
-    """Return best ``[0, 1]`` similarity between ``citation_title`` and ``html_meta`` titles,
-    or ``None`` when ``html_meta`` lacks a usable non-gatekeeper title (or is soft-404)."""
+) -> tuple[str | None, list[str]]:
+    """Validate ``citation_title`` and return ``(cleaned_citation_title, usable_html_titles)``."""
     if not citation_title or html_meta is None or html_meta.is_soft_404:
-        return None
+        return None, []
 
     cit_clean = _clean_meta_text(citation_title)
     if not cit_clean or len(cit_clean) < 20:
-        return None
+        return None, []
     if re.match(r"^(?:https?://|www\.)\S+$", cit_clean, re.IGNORECASE):
-        return None
+        return None, []
     if "http://" in cit_clean.lower() or "https://" in cit_clean.lower():
-        return None
+        return None, []
 
     raw_candidates = [
         t
@@ -423,7 +451,7 @@ def compute_url_title_match_score(
         if t and not is_gatekeeper_or_generic_html_title(t)
     ]
     if not raw_candidates:
-        return None
+        return cit_clean, []
 
     expanded_candidates: list[str] = []
     for raw_t in raw_candidates:
@@ -440,10 +468,209 @@ def compute_url_title_match_score(
             if p not in expanded_candidates:
                 expanded_candidates.append(p)
 
-    if not expanded_candidates:
+    return cit_clean, expanded_candidates
+
+
+def compute_url_title_match_score(
+    citation_title: str | None,
+    html_meta: HtmlPageMeta | None,
+) -> float | None:
+    """Return best ``[0, 1]`` similarity between ``citation_title`` and ``html_meta`` titles,
+    or ``None`` when ``html_meta`` lacks a usable non-gatekeeper title (or is soft-404)."""
+    cit_clean, expanded_candidates = _extract_usable_html_titles(citation_title, html_meta)
+    if not cit_clean or not expanded_candidates:
         return None
 
     return max(_single_title_pair_similarity(cit_clean, cand) for cand in expanded_candidates)
+
+
+def _project_for_english_minilm(text: str) -> str | None:
+    """Project Vietnamese academic text to English concepts before ``all-MiniLM-L6-v2`` encoding.
+
+    ``all-MiniLM-L6-v2`` uses an English WordPiece vocabulary where unrelated Vietnamese strings
+    sharing diacritics exhibit ~0.60+ cosine anisotropy; projecting Vietnamese text through
+    ``bridge_vn_to_en`` preserves cross-lingual / concept matching without false-passing VI decoys.
+    """
+    from integrity_checker.matching.vn_en_academic_bridge import (
+        bridge_vn_to_en,
+        is_vietnamese_text,
+    )
+
+    if not is_vietnamese_text(text):
+        return text
+    _, bridged, matched_pairs = bridge_vn_to_en(text)
+    if not matched_pairs:
+        return None
+    m = re.search(r"\(([^()]+)\)\s*$", bridged)
+    return m.group(1).strip() if m else None
+
+
+def compute_html_meta_semantic_similarity(
+    citation_title: str | None,
+    html_meta: HtmlPageMeta | None,
+    semantic_matcher: Any | None,
+) -> float:
+    """Compute neural semantic similarity between ``citation_title`` and ``html_meta`` titles."""
+    if semantic_matcher is None or not hasattr(semantic_matcher, "similarity"):
+        return 0.0
+
+    cit_clean, expanded_candidates = _extract_usable_html_titles(citation_title, html_meta)
+    if not cit_clean or not expanded_candidates:
+        return 0.0
+
+    try:
+        from integrity_checker.matching.semantic import SemanticMatcher
+
+        is_default_minilm = isinstance(semantic_matcher, SemanticMatcher)
+    except Exception:  # noqa: BLE001
+        is_default_minilm = False
+
+    best_sem = 0.0
+    try:
+        if is_default_minilm:
+            proj_cit = _project_for_english_minilm(cit_clean)
+            if not proj_cit:
+                return 0.0
+            for cand in expanded_candidates:
+                proj_cand = _project_for_english_minilm(cand)
+                if not proj_cand:
+                    continue
+                sim = float(semantic_matcher.similarity(proj_cit, proj_cand) or 0.0)
+                if sim > best_sem:
+                    best_sem = sim
+        else:
+            for cand in expanded_candidates:
+                sim = float(semantic_matcher.similarity(cit_clean, cand) or 0.0)
+                if sim > best_sem:
+                    best_sem = sim
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(f"compute_html_meta_semantic_similarity failed: {exc}")
+        return 0.0
+
+    return max(0.0, min(1.0, best_sem))
+
+
+class SSRFSafeAsyncNetworkBackend(httpcore.AsyncNetworkBackend):
+    """``httpcore.AsyncNetworkBackend`` that resolves DNS once, verifies ALL IPs are public,
+    and pins the verified IP literal at TCP socket connect time (eliminating DNS-rebinding TOCTOU)."""
+
+    def __init__(
+        self,
+        resolver: Callable[..., Any] | None = None,
+        inner_backend: httpcore.AsyncNetworkBackend | None = None,
+    ) -> None:
+        self.resolver = resolver
+        self._inner = (
+            inner_backend
+            if inner_backend is not None
+            else httpcore.AsyncConnectionPool()._network_backend
+        )
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,  # noqa: ASYNC109
+        local_address: str | None = None,
+        socket_options: Iterable[Any] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        if port not in (80, 443):
+            raise SSRFBlockedError(f"Disallowed port {port} (only 80 and 443 permitted)")
+
+        raw_host = (host or "").strip()
+        if raw_host.startswith("[") and raw_host.endswith("]"):
+            raw_host = raw_host[1:-1]
+        clean_host = raw_host.rstrip(".")
+        if not clean_host:
+            raise SSRFBlockedError("Missing target hostname")
+
+        scheme = "https" if port == 443 else "http"
+        host_for_url = f"[{clean_host}]" if ":" in clean_host else clean_host
+        synthetic_url = f"{scheme}://{host_for_url}:{port}/"
+
+        syntax_ok, state_or_reason, parsed_host, _ = validate_url_syntax_and_literal_ip(
+            synthetic_url
+        )
+        if not syntax_ok:
+            raise SSRFBlockedError(state_or_reason)
+
+        verified_ips: list[str] = []
+        if state_or_reason == "public_ip_literal":
+            verified_ips.append(parsed_host)
+        else:
+            try:
+                if self.resolver is not None or socket.getaddrinfo is not _ORIG_SOCKET_GETADDRINFO:
+                    resolved_ips = _invoke_resolver(self.resolver, parsed_host, port)
+                else:
+                    resolved_ips = await asyncio.to_thread(
+                        _invoke_resolver, None, parsed_host, port
+                    )
+            except (socket.gaierror, OSError, ValueError) as exc:
+                raise httpcore.ConnectError(
+                    f"DNS resolution failed for '{parsed_host}': {exc}"
+                ) from exc
+
+            if not resolved_ips:
+                raise httpcore.ConnectError(
+                    f"DNS resolution returned zero IP addresses for '{parsed_host}'"
+                )
+
+            for ip_raw in resolved_ips:
+                clean_ip = ip_raw.split("%", 1)[0]
+                try:
+                    ip_obj = ipaddress.ip_address(clean_ip)
+                except ValueError as exc:
+                    raise SSRFBlockedError(
+                        f"Invalid resolved IP address '{ip_raw}' for '{parsed_host}'"
+                    ) from exc
+                ip_ok, ip_reason = _is_strictly_public_ip_obj(ip_obj)
+                if not ip_ok:
+                    raise SSRFBlockedError(
+                        f"Resolved non-public IP {ip_raw} for '{parsed_host}': {ip_reason}"
+                    )
+                norm_ip = str(ip_obj)
+                if norm_ip not in verified_ips:
+                    verified_ips.append(norm_ip)
+
+        last_err: Exception | None = None
+        for idx, pinned_ip in enumerate(verified_ips):
+            try:
+                return await self._inner.connect_tcp(
+                    pinned_ip,
+                    port,
+                    timeout=timeout,
+                    local_address=local_address,
+                    socket_options=socket_options,
+                )
+            except Exception as exc:  # noqa: BLE001
+                last_err = exc
+                if idx + 1 >= len(verified_ips) or isinstance(exc, SSRFBlockedError):
+                    raise
+        assert last_err is not None
+        raise last_err
+
+    async def connect_unix_socket(
+        self,
+        path: str,
+        timeout: float | None = None,  # noqa: ASYNC109
+        socket_options: Iterable[Any] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        raise SSRFBlockedError("Unix domain sockets are not permitted")
+
+    async def sleep(self, seconds: float) -> None:
+        await self._inner.sleep(seconds)
+
+
+def build_ssrf_safe_transport(
+    resolver: Callable[..., Any] | None = None,
+) -> httpx.AsyncHTTPTransport:
+    """Create an ``httpx.AsyncHTTPTransport`` pinned to ``SSRFSafeAsyncNetworkBackend``."""
+    transport = httpx.AsyncHTTPTransport(trust_env=False, retries=0)
+    transport._pool._network_backend = SSRFSafeAsyncNetworkBackend(
+        resolver=resolver,
+        inner_backend=transport._pool._network_backend,
+    )
+    return transport
 
 
 class _BoundedHeadHTMLParser(HTMLParser):
@@ -664,10 +891,15 @@ class SafeHtmlMetaVerifier:
         self,
         client: httpx.AsyncClient,
         url: str,
+        *,
+        uses_pinned_backend: bool = False,
     ) -> HtmlPageMeta | None:
         current_url = url.strip()
         for hop in range(self.max_redirects + 1):
-            allowed, reason = await self._validate_target(current_url)
+            if uses_pinned_backend and httpx.AsyncClient.stream is _ORIG_ASYNC_CLIENT_STREAM:
+                allowed, reason, _, _ = validate_url_syntax_and_literal_ip(current_url)
+            else:
+                allowed, reason = await self._validate_target(current_url)
             if not allowed:
                 logger.debug(f"SafeHtmlMetaVerifier blocked '{current_url}': {reason}")
                 return None
@@ -703,13 +935,24 @@ class SafeHtmlMetaVerifier:
             if self._client is not None:
                 return await self._fetch_with_client(self._client, str(url))
 
+            uses_pinned = self._transport is None
+            transport = (
+                self._transport
+                if self._transport is not None
+                else build_ssrf_safe_transport(resolver=self.resolver)
+            )
             async with httpx.AsyncClient(
                 timeout=self.timeout,
                 follow_redirects=False,
+                trust_env=False,
                 headers=self.DEFAULT_HEADERS,
-                transport=self._transport,
+                transport=transport,
             ) as owned_client:
-                return await self._fetch_with_client(owned_client, str(url))
+                return await self._fetch_with_client(
+                    owned_client,
+                    str(url),
+                    uses_pinned_backend=uses_pinned,
+                )
         except Exception as exc:  # noqa: BLE001
             logger.debug(f"SafeHtmlMetaVerifier failed for '{url}': {exc}")
             return None

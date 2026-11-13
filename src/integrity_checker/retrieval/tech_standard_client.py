@@ -26,7 +26,6 @@ import html
 import json
 import os
 import re
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -40,7 +39,6 @@ from integrity_checker.models.source import SourceCandidate
 from integrity_checker.retrieval.base import BaseScholarClient
 from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
-    author_match_score,
     normalize_doi,
     normalize_text,
     title_similarity,
@@ -89,19 +87,78 @@ def _load_vn_registry() -> dict[str, Any]:
         raw = json.loads(_VN_REGISTRY_PATH.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"Failed to load VN standards/textbooks registry at {_VN_REGISTRY_PATH}: {exc}")
-        return {"ministry_codes": {}, "standards_by_code": {}, "textbooks": []}
+        return {
+            "ministry_codes": {},
+            "standards_by_code": {},
+            "standards_by_base_code": {},
+            "textbooks": [],
+        }
 
     standards_by_code: dict[str, dict[str, Any]] = {}
+    standards_by_base_code: dict[str, list[dict[str, Any]]] = {}
     for item in raw.get("standards") or []:
         if isinstance(item, dict) and item.get("code"):
             norm_code = re.sub(r"\s+", " ", str(item["code"]).strip().upper())
             standards_by_code[norm_code] = item
+            if ":" in norm_code:
+                prefix, rest = norm_code.split(":", 1)
+                prefix_clean = prefix.strip()
+                if "/" in rest:
+                    _, min_part = rest.split("/", 1)
+                    base_with_ministry = f"{prefix_clean}/{min_part.strip()}"
+                    standards_by_base_code.setdefault(base_with_ministry, []).append(item)
+                standards_by_base_code.setdefault(prefix_clean, []).append(item)
 
     return {
         "ministry_codes": dict(raw.get("ministry_codes") or {}),
         "standards_by_code": standards_by_code,
+        "standards_by_base_code": standards_by_base_code,
         "textbooks": list(raw.get("textbooks") or []),
     }
+
+
+def _clean_vn_author_role(name: str) -> str:
+    cleaned = re.sub(
+        r"\(\s*(?:chủ\s+biên|cb\.?|biên\s+soạn|đồng\s+chủ\s+biên)\s*\)",
+        "",
+        str(name or ""),
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"\b(?:chủ\s+biên|biên\s+soạn)\b",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    return cleaned.strip(" ,.;:-–—()")
+
+
+def _matches_individual_vn_entry_author(
+    cited_author: str,
+    entry_authors: list[str],
+) -> bool:
+    """Verify ``cited_author`` matches at least one INDIVIDUAL entry author (never unioned)."""
+    from integrity_checker.matching.author_matcher import (
+        author_match_score as strict_author_match_score,
+    )
+
+    clean_cited = _clean_vn_author_role(cited_author)
+    norm_cited = normalize_text(clean_cited)
+    if not norm_cited:
+        return False
+
+    for entry_auth in entry_authors:
+        if not entry_auth:
+            continue
+        clean_entry = _clean_vn_author_role(entry_auth)
+        norm_entry = normalize_text(clean_entry)
+        if not norm_entry:
+            continue
+        if norm_cited == norm_entry:
+            return True
+        if strict_author_match_score([clean_cited], [clean_entry]) >= 0.75:
+            return True
+    return False
 
 _GITHUB_RESERVED_OWNERS = frozenset({
     "orgs",
@@ -265,6 +322,22 @@ class TechStandardClient(BaseScholarClient):
         return None
 
     @classmethod
+    def is_curated_vn_standard(cls, citation: Citation) -> bool:
+        """Return True iff ``citation`` cites a TCVN/QCVN code present (by exact or base code) in the curated registry."""
+        vn_std = cls.extract_vn_standard_code(citation)
+        if vn_std is None:
+            return False
+        kind, canonical_code, _, ministry_code = vn_std
+        registry = _load_vn_registry()
+        standards_by_code = registry.get("standards_by_code") or {}
+        if canonical_code in standards_by_code:
+            return True
+        standards_by_base = registry.get("standards_by_base_code") or {}
+        prefix = canonical_code.split(":", 1)[0].strip()
+        base_primary = f"{prefix}/{ministry_code}" if (kind == "QCVN" and ministry_code) else prefix
+        return bool(standards_by_base.get(base_primary) or standards_by_base.get(prefix))
+
+    @classmethod
     def match_vn_textbook(cls, citation: Citation) -> dict[str, Any] | None:
         """Match a citation against the curated Vietnamese university textbook registry."""
         if citation.doi and str(citation.doi).strip():
@@ -281,7 +354,8 @@ class TechStandardClient(BaseScholarClient):
             return None
 
         norm_cit_title = normalize_text(cit_title) if cit_title else ""
-        norm_raw = normalize_text(raw_text)
+        raw_no_idx = re.sub(r"^\s*(?:\[\s*\d+\s*\]\.?|\d{1,3}\s*[\.\)])\s*", "", raw_text).strip()
+        norm_raw = normalize_text(raw_no_idx)
 
         for entry in textbooks:
             all_titles = [entry.get("title") or "", *(entry.get("aliases") or [])]
@@ -299,7 +373,12 @@ class TechStandardClient(BaseScholarClient):
                         matched_title = str(cand_t)
                 else:
                     norm_cand = normalize_text(cand_t)
-                    if len(norm_cand) >= 12 and norm_cand in norm_raw:
+                    is_specific_title = (
+                        len(norm_cand) >= 24 and len(norm_cand.split()) >= 5
+                    ) or (
+                        len(norm_cand) >= 12 and f"giao trinh {norm_cand}" in norm_raw
+                    )
+                    if is_specific_title and norm_cand in norm_raw:
                         best_sim = 0.95
                         matched_title = str(cand_t)
                         break
@@ -307,26 +386,65 @@ class TechStandardClient(BaseScholarClient):
             if matched_title is None:
                 continue
 
-            entry_authors = list(entry.get("authors") or [])
+            entry_authors = [str(a) for a in (entry.get("authors") or []) if a]
             if citation.authors:
-                a_score = author_match_score(citation.authors, entry_authors)
-                cit_auth_tokens = set(normalize_text(" ".join(str(a) for a in citation.authors)).split())
-                entry_auth_tokens = set(normalize_text(" ".join(entry_authors)).split())
-                shared_auth_tokens = len(cit_auth_tokens & entry_auth_tokens)
-                if a_score < 0.50 and shared_auth_tokens < 2:
-                    continue
-                if len(cit_auth_tokens) >= 2 and len(entry_auth_tokens) >= 2 and shared_auth_tokens < 2:
+                has_valid_author = any(
+                    _matches_individual_vn_entry_author(str(ca), entry_authors)
+                    for ca in citation.authors
+                    if ca and str(ca).strip()
+                )
+                if not has_valid_author:
                     continue
             else:
-                has_author_in_raw = any(
-                    normalize_text(a) in norm_raw for a in entry_authors if a
+                norm_matched_title = normalize_text(matched_title)
+                is_title_first = bool(
+                    norm_matched_title and norm_raw.startswith(norm_matched_title)
                 )
-                publishers = [entry.get("publisher") or "", *(entry.get("publisher_aliases") or [])]
-                has_pub_in_raw = any(
-                    normalize_text(p) in norm_raw for p in publishers if p
-                )
-                if not (has_author_in_raw or has_pub_in_raw):
-                    continue
+                author_prefix = ""
+                if not is_title_first:
+                    m_yr = re.match(
+                        r"^([^\(\n]{3,90}?)\s*\(\s*(?:19|20)\d{2}[a-z]?\s*\)",
+                        raw_no_idx,
+                    )
+                    if m_yr:
+                        author_prefix = m_yr.group(1).strip(" .,;:-–—")
+                    elif norm_matched_title and norm_matched_title in norm_raw:
+                        title_pos = norm_raw.find(norm_matched_title)
+                        if title_pos >= 4:
+                            author_prefix = norm_raw[:title_pos].strip()
+
+                if author_prefix:
+                    prefix_parts = [
+                        p.strip()
+                        for p in re.split(
+                            r"\s*(?:,|;|&|\bvà\b|\band\b)\s*",
+                            author_prefix,
+                            flags=re.IGNORECASE,
+                        )
+                        if p and len(p.strip()) >= 2
+                    ]
+                    author_ok = any(
+                        _matches_individual_vn_entry_author(part, entry_authors)
+                        for part in prefix_parts
+                    ) or any(
+                        normalize_text(ea) in normalize_text(author_prefix)
+                        for ea in entry_authors
+                    )
+                    if not author_ok:
+                        continue
+                else:
+                    has_author_in_raw = any(
+                        normalize_text(a) in norm_raw for a in entry_authors if a
+                    )
+                    publishers = [
+                        entry.get("publisher") or "",
+                        *(entry.get("publisher_aliases") or []),
+                    ]
+                    has_pub_in_raw = any(
+                        normalize_text(p) in norm_raw for p in publishers if p
+                    )
+                    if not (has_author_in_raw or has_pub_in_raw):
+                        continue
 
             return {**entry, "_matched_title": matched_title}
 
@@ -335,13 +453,13 @@ class TechStandardClient(BaseScholarClient):
     @classmethod
     def has_tech_target(cls, citation: Citation) -> bool:
         """Return True if citation references an IETF RFC, PyPI/NPM package, GitHub repo,
-        Vietnamese national standard (TCVN/QCVN), or curated VN university textbook."""
+        curated Vietnamese national standard (TCVN/QCVN), or curated VN university textbook."""
         return bool(
             cls.extract_rfc_number(citation) is not None
             or cls.extract_pypi_package(citation)
             or cls.extract_npm_package(citation)
             or cls.extract_github_repo(citation)
-            or cls.extract_vn_standard_code(citation) is not None
+            or cls.is_curated_vn_standard(citation)
             or cls.match_vn_textbook(citation) is not None
         )
 
@@ -396,19 +514,59 @@ class TechStandardClient(BaseScholarClient):
     ) -> SourceCandidate | None:
         registry = _load_vn_registry()
         standards_by_code = registry.get("standards_by_code") or {}
-        ministry_codes = registry.get("ministry_codes") or {}
+        standards_by_base = registry.get("standards_by_base_code") or {}
 
-        exact = standards_by_code.get(canonical_code)
-        if exact is not None:
-            base_titles = [str(exact.get("title") or ""), *(str(a) for a in (exact.get("aliases") or []) if a)]
-            title_variants: list[str] = []
-            for bt in base_titles:
-                if bt:
-                    title_variants.extend([f"{canonical_code} {bt}", f"{canonical_code}: {bt}", bt])
-            title_variants.append(canonical_code)
+        matched_entry = standards_by_code.get(canonical_code)
+        if matched_entry is None:
+            prefix = canonical_code.split(":", 1)[0].strip()
+            base_primary = (
+                f"{prefix}/{ministry_code}" if (kind == "QCVN" and ministry_code) else prefix
+            )
+            base_matches = (
+                standards_by_base.get(base_primary)
+                or standards_by_base.get(prefix)
+                or []
+            )
+            if not base_matches:
+                # Uncurated TCVN/QCVN code: never synthesize a self-echoing found=True candidate.
+                return None
 
-            chosen_title = f"{canonical_code}: {base_titles[0]}" if base_titles and base_titles[0] else canonical_code
-            if citation and citation.title:
+            cited_yr_int = int(code_year) if code_year.isdigit() else 0
+
+            def _closest_edition_key(item: dict[str, Any]) -> tuple[int, int]:
+                y_raw = str(item.get("year") or "0")
+                y_int = int(y_raw) if y_raw.isdigit() else 0
+                dist = abs(y_int - cited_yr_int) if (y_int and cited_yr_int) else 9999
+                return (dist, -y_int)
+
+            matched_entry = min(base_matches, key=_closest_edition_key)
+
+        official_code = re.sub(
+            r"\s+",
+            " ",
+            str(matched_entry.get("code") or canonical_code).strip().upper(),
+        )
+        base_titles = [
+            str(matched_entry.get("title") or ""),
+            *(str(a) for a in (matched_entry.get("aliases") or []) if a),
+        ]
+        title_variants: list[str] = []
+        for bt in base_titles:
+            if bt:
+                title_variants.extend(
+                    [f"{official_code} {bt}", f"{official_code}: {bt}", bt]
+                )
+
+        chosen_title = (
+            f"{official_code}: {base_titles[0]}"
+            if base_titles and base_titles[0]
+            else official_code
+        )
+        if citation and citation.title:
+            cit_title_norm = normalize_text(citation.title)
+            if cit_title_norm in {normalize_text(official_code), normalize_text(canonical_code)}:
+                chosen_title = official_code
+            elif title_variants:
                 best_variant = max(
                     title_variants,
                     key=lambda v: title_similarity(citation.title, v),
@@ -416,61 +574,28 @@ class TechStandardClient(BaseScholarClient):
                 if title_similarity(citation.title, best_variant) >= 0.45:
                     chosen_title = best_variant
 
-            authors = list(exact.get("authors") or []) or ["Bộ Khoa học và Công nghệ"]
-            venue = str(
-                exact.get("venue")
-                or (
-                    "Quy chuẩn Kỹ thuật Quốc gia Việt Nam (QCVN)"
-                    if kind == "QCVN"
-                    else "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
-                )
+        authors = list(matched_entry.get("authors") or []) or ["Bộ Khoa học và Công nghệ"]
+        venue = str(
+            matched_entry.get("venue")
+            or (
+                "Quy chuẩn Kỹ thuật Quốc gia Việt Nam (QCVN)"
+                if kind == "QCVN"
+                else "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
             )
-            return SourceCandidate(
-                source_name=self.name,
-                found=True,
-                title=chosen_title,
-                authors=authors,
-                year=str(exact.get("year") or code_year),
-                venue=venue,
-                external_ids={
-                    "vn_standard_code": canonical_code,
-                    "standard_type": kind,
-                },
-                confidence=0.97,
-                cached=True,
-            )
-
-        current_year = datetime.now().year
-        if not code_year.isdigit() or not (1960 <= int(code_year) <= current_year):
-            return None
-
-        if kind == "QCVN":
-            if not ministry_code or ministry_code not in ministry_codes:
-                return None
-            authors = [str(ministry_codes[ministry_code])]
-            venue = "Quy chuẩn Kỹ thuật Quốc gia Việt Nam (QCVN)"
-        else:
-            authors = ["Bộ Khoa học và Công nghệ"]
-            venue = "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
-
-        cit_t = (citation.title or "").strip() if citation else ""
-        chosen_title = (
-            cit_t
-            if (cit_t and len(cit_t) >= 8 and canonical_code.split(":")[0].lower() in cit_t.lower())
-            else canonical_code
         )
         return SourceCandidate(
             source_name=self.name,
             found=True,
             title=chosen_title,
             authors=authors,
-            year=code_year,
+            year=str(matched_entry.get("year") or code_year),
             venue=venue,
             external_ids={
-                "vn_standard_code": canonical_code,
+                "vn_standard_code": official_code,
+                "cited_vn_standard_code": canonical_code,
                 "standard_type": kind,
             },
-            confidence=0.93,
+            confidence=0.97 if official_code == canonical_code else 0.90,
             cached=True,
         )
 
