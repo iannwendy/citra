@@ -46,6 +46,7 @@ from integrity_checker.retrieval.dblp_client import DBLPClient
 from integrity_checker.retrieval.doaj_client import DOAJClient
 from integrity_checker.retrieval.doi_ra_client import DoiRaClient
 from integrity_checker.retrieval.europepmc_client import EuropePMCClient
+from integrity_checker.retrieval.html_meta_verifier import HtmlPageMeta
 from integrity_checker.retrieval.http_pool import (
     get_shared_http_client,
     get_task_http_status,
@@ -94,6 +95,9 @@ logger = get_logger(__name__)
 
 _ALLOW_SERPAPI_OVERRIDE: contextvars.ContextVar[bool | None] = contextvars.ContextVar(
     "_allow_serpapi_override", default=None
+)
+_LAST_HTML_META: contextvars.ContextVar[HtmlPageMeta | None] = contextvars.ContextVar(
+    "_last_html_meta", default=None
 )
 
 
@@ -1689,6 +1693,7 @@ class RetrievalOrchestrator:
             clean_extracted_url,
         )
 
+        _LAST_HTML_META.set(None)
         if citation.url:
             citation.url = clean_extracted_url(citation.url) or citation.url
         elif citation.raw_text and re.search(r"https?:", citation.raw_text, re.IGNORECASE):
@@ -1701,7 +1706,53 @@ class RetrievalOrchestrator:
         validator = self.link_validator or LinkValidator()
         link_res = await validator.validate_url(citation.url)
         archive_url = getattr(link_res, "archive_url", None)
+        _LAST_HTML_META.set(getattr(link_res, "html_meta", None))
         return link_res.status.value, link_res.status_code, archive_url
+
+    async def _validate_citation_url_with_meta(
+        self, citation: Citation
+    ) -> tuple[str | None, int | None, str | None, HtmlPageMeta | None]:
+        """Validate citation.url and also return task-local ``HtmlPageMeta`` if extracted."""
+        _LAST_HTML_META.set(None)
+        u_st, u_code, u_arch = await self._validate_citation_url_with_archive(citation)
+        return u_st, u_code, u_arch, _LAST_HTML_META.get()
+
+    async def _cross_check_html_meta_doi(
+        self,
+        citation: Citation,
+        html_meta: HtmlPageMeta | None,
+    ) -> tuple[list[SourceCandidate], list[str]]:
+        """When an HTML landing page exposes a valid ``citation_doi`` and no scholarly record
+        was resolved yet, cross-check that DOI against Crossref / OpenAlex."""
+        if html_meta is None or not html_meta.citation_doi or citation.doi:
+            return [], []
+        norm_meta_doi = normalize_doi(html_meta.citation_doi)
+        if not norm_meta_doi or not re.match(r"^10\.\d{4,9}/\S+$", norm_meta_doi, re.IGNORECASE):
+            return [], []
+
+        src_cfg = get_settings().retrieval.sources
+        doi_clients: list[BaseScholarClient] = []
+        if src_cfg.crossref and self.crossref is not None:
+            doi_clients.append(self.crossref)
+        if src_cfg.openalex and self.openalex is not None:
+            doi_clients.append(self.openalex)
+        if not doi_clients:
+            return [], []
+
+        probe = copy.copy(citation)
+        probe.doi = norm_meta_doi
+        results = await self._execute_client_batch(doi_clients, probe)
+        found_cands: list[SourceCandidate] = []
+        succ_names: list[str] = []
+        for client, cand in zip(doi_clients, results, strict=False):
+            if isinstance(cand, SourceCandidate) and cand.found:
+                found_cands.append(cand)
+                if client.name not in succ_names:
+                    succ_names.append(client.name)
+        if not found_cands:
+            return [], []
+        deduped = self._dedupe_candidates(found_cands)
+        return self._filter_quality_candidates(deduped, succ_names, probe)
 
     async def _validate_citation_url(self, citation: Citation) -> tuple[str | None, int | None]:
         """Validate citation.url via LinkValidator if present and enabled."""
@@ -2277,6 +2328,7 @@ class RetrievalOrchestrator:
             url_status_code=None if is_shared_id_key else cloned.url_status_code,
             archive_url=None if is_shared_id_key else cloned.archive_url,
             is_retracted=is_retracted,
+            html_meta=None if is_shared_id_key else getattr(cloned, "html_meta", None),
         )
 
     def _persist_verification_result(self, citation: Citation, result: SourceResult) -> None:
@@ -2328,6 +2380,7 @@ class RetrievalOrchestrator:
                 url_status_code=None if clear_url_status else result.url_status_code,
                 archive_url=None if clear_url_status else result.archive_url,
                 is_retracted=p_retracted,
+                html_meta=None if clear_url_status else getattr(result, "html_meta", None),
             )
 
         if primary_key.startswith(("doi:", "arxiv:")):
@@ -2477,12 +2530,13 @@ class RetrievalOrchestrator:
                             and self.enable_link_validation
                             and mat.url_status is None
                         ):
-                            u_st, u_code, u_arch = await self._validate_citation_url_with_archive(
+                            u_st, u_code, u_arch, u_meta = await self._validate_citation_url_with_meta(
                                 citation
                             )
                             mat.url_status = u_st
                             mat.url_status_code = u_code
                             mat.archive_url = u_arch
+                            mat.html_meta = u_meta
                         return mat
 
             mem_hit = self._get_wave0_memory_hit(candidate_key)
@@ -2495,12 +2549,13 @@ class RetrievalOrchestrator:
                 )
                 if mat is not None:
                     if citation.url and self.enable_link_validation and mat.url_status is None:
-                        u_st, u_code, u_arch = await self._validate_citation_url_with_archive(
+                        u_st, u_code, u_arch, u_meta = await self._validate_citation_url_with_meta(
                             citation
                         )
                         mat.url_status = u_st
                         mat.url_status_code = u_code
                         mat.archive_url = u_arch
+                        mat.html_meta = u_meta
                     return mat
         return None
 
@@ -2546,10 +2601,11 @@ class RetrievalOrchestrator:
                 )
                 if mat is not None:
                     if cit.url and self.enable_link_validation and mat.url_status is None:
-                        u_st, u_code, u_arch = await self._validate_citation_url_with_archive(cit)
+                        u_st, u_code, u_arch, u_meta = await self._validate_citation_url_with_meta(cit)
                         mat.url_status = u_st
                         mat.url_status_code = u_code
                         mat.archive_url = u_arch
+                        mat.html_meta = u_meta
                     resolved_by_id[id(cit)] = mat
                 else:
                     need_second_pass.append(cit)
@@ -2577,12 +2633,13 @@ class RetrievalOrchestrator:
                         )
                         if mat is not None:
                             if cit.url and self.enable_link_validation and mat.url_status is None:
-                                u_st, u_code, u_arch = (
-                                    await self._validate_citation_url_with_archive(cit)
+                                u_st, u_code, u_arch, u_meta = (
+                                    await self._validate_citation_url_with_meta(cit)
                                 )
                                 mat.url_status = u_st
                                 mat.url_status_code = u_code
                                 mat.archive_url = u_arch
+                                mat.html_meta = u_meta
                             resolved_by_id[id(cit)] = mat
                             continue
                     still_pending.append(cit)
@@ -2608,10 +2665,11 @@ class RetrievalOrchestrator:
                             break
                 if matched_mem is not None:
                     if cit.url and self.enable_link_validation and matched_mem.url_status is None:
-                        u_st, u_code, u_arch = await self._validate_citation_url_with_archive(cit)
+                        u_st, u_code, u_arch, u_meta = await self._validate_citation_url_with_meta(cit)
                         matched_mem.url_status = u_st
                         matched_mem.url_status_code = u_code
                         matched_mem.archive_url = u_arch
+                        matched_mem.html_meta = u_meta
                     resolved_by_id[id(cit)] = matched_mem
                 else:
                     after_mem.append(cit)
@@ -2835,10 +2893,11 @@ class RetrievalOrchestrator:
                 continue
 
             if cit.url and self.enable_link_validation:
-                u_st, u_code, u_arch = await self._validate_citation_url_with_archive(cit)
+                u_st, u_code, u_arch, u_meta = await self._validate_citation_url_with_meta(cit)
                 result.url_status = u_st
                 result.url_status_code = u_code
                 result.archive_url = u_arch
+                result.html_meta = u_meta
 
             if self._local_db is not None:
                 self._sync_to_local_db(quality_candidates, quality_succeeded, citation=cit)
@@ -3027,10 +3086,11 @@ class RetrievalOrchestrator:
                     source="local_db",
                     paper_id=local_candidate.paper_id if local_candidate else None,
                 )
-                url_status, url_status_code, archive_url = await self._validate_citation_url_with_archive(citation)
+                url_status, url_status_code, archive_url, html_meta = await self._validate_citation_url_with_meta(citation)
                 local_result.url_status = url_status
                 local_result.url_status_code = url_status_code
                 local_result.archive_url = archive_url
+                local_result.html_meta = html_meta
                 return local_result
             else:
                 logger.debug(f"Local DB MISS: {citation.raw_text[:50]}")
@@ -3041,10 +3101,11 @@ class RetrievalOrchestrator:
             logger.debug(f"Known paper HIT: {citation.raw_text[:50]}")
             if self._local_db is not None:
                 self._sync_to_local_db(known_result.candidates, ["known_papers"])
-            url_status, url_status_code, archive_url = await self._validate_citation_url_with_archive(citation)
+            url_status, url_status_code, archive_url, html_meta = await self._validate_citation_url_with_meta(citation)
             known_result.url_status = url_status
             known_result.url_status_code = url_status_code
             known_result.archive_url = archive_url
+            known_result.html_meta = html_meta
             return known_result
 
         # ===== 2.4. Fast-path for known fake/reserved URL domains (RFC 2606 .invalid/.test/example.com) =====
@@ -3053,7 +3114,7 @@ class RetrievalOrchestrator:
 
             is_fake_u, _ = _is_fake_url(citation.url)
             if is_fake_u:
-                url_status, url_status_code, archive_url = await self._validate_citation_url_with_archive(citation)
+                url_status, url_status_code, archive_url, html_meta = await self._validate_citation_url_with_meta(citation)
                 return SourceResult(
                     citation_raw=citation.raw_text,
                     candidates=[],
@@ -3064,6 +3125,7 @@ class RetrievalOrchestrator:
                     url_status=url_status,
                     url_status_code=url_status_code,
                     archive_url=archive_url,
+                    html_meta=html_meta,
                 )
 
         # ===== 2.5. Skip general scholarly APIs for non-academic web/software/legal resources =====
@@ -3100,17 +3162,19 @@ class RetrievalOrchestrator:
                 logger.debug(
                     f"Skipping external scholarly APIs for web/software/legal resource: {citation.raw_text[:55]}"
                 )
-                url_status, url_status_code, archive_url = await self._validate_citation_url_with_archive(citation)
+                url_status, url_status_code, archive_url, html_meta = await self._validate_citation_url_with_meta(citation)
+                doi_cands, doi_succ = await self._cross_check_html_meta_doi(citation, html_meta)
                 return SourceResult(
                     citation_raw=citation.raw_text,
-                    candidates=[],
-                    sources_queried=[],
-                    sources_succeeded=[],
+                    candidates=doi_cands,
+                    sources_queried=list(doi_succ),
+                    sources_succeeded=doi_succ,
                     sources_failed={},
                     api_exhausted=False,
                     url_status=url_status,
                     url_status_code=url_status_code,
                     archive_url=archive_url,
+                    html_meta=html_meta,
                 )
 
         # ===== 3. Smart Multi-Stage External API Retrieval =====
@@ -3390,7 +3454,20 @@ class RetrievalOrchestrator:
             min_failures_for_unresolved = 2
         else:
             min_failures_for_unresolved = len(sources_queried) // 2 + 1
-        url_status, url_status_code, archive_url = await self._validate_citation_url_with_archive(citation)
+        url_status, url_status_code, archive_url, html_meta = await self._validate_citation_url_with_meta(citation)
+        if not any_found and html_meta is not None and html_meta.citation_doi:
+            doi_cands, doi_succ = await self._cross_check_html_meta_doi(citation, html_meta)
+            if doi_cands:
+                deduped = doi_cands
+                any_found = True
+                for s_name in doi_succ:
+                    if s_name not in sources_queried:
+                        sources_queried.append(s_name)
+                    if s_name not in succeeded:
+                        succeeded.append(s_name)
+                    if s_name not in pristine_succeeded:
+                        pristine_succeeded.append(s_name)
+                pristine_found.extend(copy.deepcopy(c) for c in doi_cands)
         if (
             not any_found
             and "huggingface" in sources_queried
@@ -3439,6 +3516,7 @@ class RetrievalOrchestrator:
                 url_status=url_status,
                 url_status_code=url_status_code,
                 archive_url=archive_url,
+                html_meta=html_meta,
             )
 
         # ===== 4. Quality filtering - remove garbage/unrelated candidates =====
@@ -3484,6 +3562,7 @@ class RetrievalOrchestrator:
             url_status_code=url_status_code,
             archive_url=archive_url,
             is_retracted=is_retracted,
+            html_meta=html_meta,
         )
         final_res._pristine_candidates = pristine_found  # type: ignore[attr-defined]
         final_res._pristine_succeeded = pristine_succeeded  # type: ignore[attr-defined]
@@ -4524,7 +4603,7 @@ class RetrievalOrchestrator:
         bucket: dict[str, SourceCandidate] = {}
         title_to_key: dict[str, str] = {}
         arxiv_to_key: dict[str, str] = {}
-        sources_by_key: dict[str, set[str]] = {}
+        sources_by_key: dict[str, list[str]] = {}
 
         cit_year_int: int | None = None
         if citation and citation.year and str(citation.year)[:4].isdigit():
@@ -4577,12 +4656,12 @@ class RetrievalOrchestrator:
             if c_ax and c_ax not in arxiv_to_key:
                 arxiv_to_key[c_ax] = canonical_key
 
-            sources_by_key.setdefault(canonical_key, set())
-            if c.source_name:
-                sources_by_key[canonical_key].add(c.source_name)
+            src_list = sources_by_key.setdefault(canonical_key, [])
+            if c.source_name and c.source_name not in src_list:
+                src_list.append(c.source_name)
             for prior_src in getattr(c, "_agreed_sources", None) or []:
-                if prior_src:
-                    sources_by_key[canonical_key].add(str(prior_src))
+                if prior_src and str(prior_src) not in src_list:
+                    src_list.append(str(prior_src))
 
             if canonical_key in bucket:
                 existing = bucket[canonical_key]

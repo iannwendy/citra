@@ -750,6 +750,65 @@ class SymbolicRules:
 
         return False
 
+    @staticmethod
+    def _extract_cited_title_for_url_check(
+        citation_title: str | None,
+        citation_raw: str | None,
+    ) -> str | None:
+        if citation_title and citation_title.strip():
+            return citation_title.strip()
+        if not citation_raw or not citation_raw.strip():
+            return None
+        cleaned = re.sub(r"https?://\S+", " ", citation_raw.strip())
+        cleaned = re.sub(
+            r"\b(?:Truy\s+cập|Retrieved|Available\s+at|Có\s+tại)\b.*$",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(r"^\s*(?:\[\s*\d+\s*\]|\d{1,3}[\.\)])\s*", "", cleaned)
+        m = re.search(r"\(\s*(?:19|20)\d{2}[a-z]?\s*\)\s*[.,:]?\s*(.+)", cleaned)
+        candidate = m.group(1).strip() if m else cleaned.strip()
+        first_seg = candidate.split(".")[0].strip(" \"'“”.,;:")
+        return first_seg if len(first_seg) >= 20 else None
+
+    @classmethod
+    def check_url_content_mismatch(
+        cls,
+        *,
+        citation_title: str | None,
+        citation_raw: str | None,
+        citation_url: str | None,
+        source: SourceResult,
+        semantic_sim: float = 0.0,
+    ) -> tuple[bool, float, str]:
+        """Return ``(is_mismatch, meta_sim, observed_page_title)`` when live HTML ``<head>``
+        contradicts a substantive cited title (``meta_sim < 0.20``)."""
+        if not citation_url:
+            return False, 1.0, ""
+        url_status = getattr(source, "url_status", None)
+        if url_status not in ("alive", "restricted_alive"):
+            return False, 1.0, ""
+        html_meta = getattr(source, "html_meta", None)
+        if html_meta is None or getattr(html_meta, "is_soft_404", False):
+            return False, 1.0, ""
+
+        from integrity_checker.retrieval.html_meta_verifier import (
+            compute_url_title_match_score,
+        )
+
+        eff_title = cls._extract_cited_title_for_url_check(
+            citation_title,
+            citation_raw or getattr(source, "citation_raw", None),
+        )
+        raw_score = compute_url_title_match_score(eff_title, html_meta)
+        if raw_score is None:
+            return False, 1.0, ""
+
+        meta_sim = max(raw_score, float(semantic_sim or 0.0))
+        observed_title = str(html_meta.citation_title or html_meta.page_title or "").strip()
+        return meta_sim < 0.20, meta_sim, observed_title
+
     def apply(
         self,
         features: MatchFeatures,
@@ -766,6 +825,7 @@ class SymbolicRules:
         citation_year: str | None = None,
         citation_raw: str | None = None,
         citation_venue: str | None = None,
+        citation_title: str | None = None,
     ) -> RuleOutcome:
         """Apply symbolic rules and enforce retraction / clear venue conflict post-conditions."""
         outcome = self._apply_core(
@@ -780,6 +840,7 @@ class SymbolicRules:
             citation_authors=citation_authors,
             citation_year=citation_year,
             citation_raw=citation_raw,
+            citation_title=citation_title,
         )
         best_cand = source.best_candidate() if source and source.candidates else None
         if citation_venue and best_cand and best_cand.venue:
@@ -860,6 +921,7 @@ class SymbolicRules:
         citation_authors: list[str] | None = None,
         citation_year: str | None = None,
         citation_raw: str | None = None,
+        citation_title: str | None = None,
     ) -> RuleOutcome:
         """Apply rules theo thứ tự ưu tiên:
             0. FAKE-URL → SUSPECTED_HALLUCINATION (high priority, pre-flight)
@@ -1089,6 +1151,27 @@ class SymbolicRules:
                     triggered_rules=["R-WAYBACK-ARCHIVED", "R-URL-RESOURCE"],
                     mismatched_fields=[],
                     style_penalty=0.0,
+                )
+
+            is_url_mismatch, url_meta_sim, observed_html_title = self.check_url_content_mismatch(
+                citation_title=citation_title,
+                citation_raw=citation_raw,
+                citation_url=citation_url,
+                source=source,
+                semantic_sim=float(getattr(features, "title_sim_semantic", 0.0) or 0.0),
+            )
+            if is_url_mismatch:
+                return RuleOutcome(
+                    label=ValidationLabel.METADATA_ERROR,
+                    confidence=max(0.0, 0.85 - style_penalty),
+                    reasoning=(
+                        f"Citation URL '{citation_url}' is live, but its HTML page title "
+                        f"('{observed_html_title}') contradicts the cited title "
+                        f"(similarity={url_meta_sim:.2f} < 0.20). Suspected decoy or mismatched link."
+                    ),
+                    triggered_rules=["R-URL-CONTENT-MISMATCH"],
+                    mismatched_fields=["url", "title"],
+                    style_penalty=style_penalty,
                 )
 
             if (
@@ -1333,7 +1416,12 @@ class SymbolicRules:
                 tech_dehyph_match = True
         if best and best.source_name == "tech_standard" and (features.title_sim_fuzzy >= 0.80 or tech_dehyph_match):
             ext_ids = best.external_ids or {}
-            triggered_rules.append("R-RFC-VERIFIED")
+            if "vn_standard_code" in ext_ids:
+                triggered_rules.append("R-VN-STANDARD-VERIFIED")
+            elif "vn_textbook_id" in ext_ids:
+                triggered_rules.append("R-VN-TEXTBOOK-VERIFIED")
+            else:
+                triggered_rules.append("R-RFC-VERIFIED")
             if "github_repo" in ext_ids:
                 triggered_rules.append("R-GITHUB-VERIFIED")
             elif "npm_package" in ext_ids or "pypi_package" in ext_ids:

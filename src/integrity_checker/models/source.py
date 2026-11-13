@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from integrity_checker.retrieval.html_meta_verifier import HtmlPageMeta
 
 
 @dataclass
@@ -88,6 +92,7 @@ class SourceResult:
     url_status_code: int | None = None
     archive_url: str | None = None
     is_retracted: bool = False
+    html_meta: HtmlPageMeta | None = None
 
     def has_retracted_candidate(self) -> bool:
         """True if this result or any found candidate is marked as retracted."""

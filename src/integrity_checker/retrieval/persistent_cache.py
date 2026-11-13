@@ -252,6 +252,19 @@ def _deserialize_candidate(data: dict) -> SourceCandidate:
 
 
 def _serialize_source_result(result: SourceResult) -> dict:
+    html_meta = getattr(result, "html_meta", None)
+    html_meta_dict = (
+        {
+            "page_title": html_meta.page_title,
+            "citation_title": html_meta.citation_title,
+            "citation_authors": list(html_meta.citation_authors or []),
+            "citation_doi": html_meta.citation_doi,
+            "published_year": html_meta.published_year,
+            "is_soft_404": bool(html_meta.is_soft_404),
+        }
+        if html_meta is not None
+        else None
+    )
     return {
         "citation_raw": result.citation_raw,
         "candidates": [_serialize_candidate(c) for c in (result.candidates or [])],
@@ -263,11 +276,27 @@ def _serialize_source_result(result: SourceResult) -> dict:
         "url_status_code": result.url_status_code,
         "archive_url": result.archive_url,
         "is_retracted": bool(result.is_retracted),
+        "html_meta": html_meta_dict,
     }
 
 
 def _deserialize_source_result(data: dict) -> SourceResult:
+    from integrity_checker.retrieval.html_meta_verifier import HtmlPageMeta
+
     candidates = [_deserialize_candidate(item) for item in (data.get("candidates") or [])]
+    raw_html_meta = data.get("html_meta")
+    html_meta = (
+        HtmlPageMeta(
+            page_title=raw_html_meta.get("page_title"),
+            citation_title=raw_html_meta.get("citation_title"),
+            citation_authors=list(raw_html_meta.get("citation_authors") or []),
+            citation_doi=raw_html_meta.get("citation_doi"),
+            published_year=raw_html_meta.get("published_year"),
+            is_soft_404=bool(raw_html_meta.get("is_soft_404", False)),
+        )
+        if isinstance(raw_html_meta, dict)
+        else None
+    )
     return SourceResult(
         citation_raw=str(data.get("citation_raw") or ""),
         candidates=candidates,
@@ -279,6 +308,7 @@ def _deserialize_source_result(data: dict) -> SourceResult:
         url_status_code=data.get("url_status_code"),
         archive_url=data.get("archive_url"),
         is_retracted=bool(data.get("is_retracted", False)),
+        html_meta=html_meta,
     )
 
 

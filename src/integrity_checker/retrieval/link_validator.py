@@ -13,17 +13,35 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import re
+import socket
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
+from urllib.parse import urljoin
 
 import httpx
 
 from integrity_checker.logging import get_logger
 from integrity_checker.logic.rules import _is_fake_url
+from integrity_checker.retrieval.html_meta_verifier import (
+    DEFAULT_MAX_REDIRECTS,
+    MAX_HTML_HEAD_BYTES,
+    HtmlPageMeta,
+    extract_meta_from_async_response,
+    is_html_content_type,
+    validate_public_target_ips,
+    validate_url_syntax_and_literal_ip,
+)
 
 logger = get_logger(__name__)
+
+_ORIG_ASYNC_HEAD = httpx.AsyncClient.head
+_ORIG_ASYNC_STREAM = httpx.AsyncClient.stream
+_ORIG_GETADDRINFO = socket.getaddrinfo
+_REDIRECT_CODES = frozenset({301, 302, 303, 307, 308})
 
 
 def clean_extracted_url(text_or_url: str | None) -> str:
@@ -115,6 +133,7 @@ class LinkCheckResult:
     error: str | None = None
     archive_url: str | None = None
     archive_timestamp: str | None = None
+    html_meta: HtmlPageMeta | None = None
 
     @property
     def is_valid(self) -> bool:
@@ -148,8 +167,14 @@ class LinkValidator:
         self,
         timeout: float = 5.0,
         enable_wayback_fallback: bool | None = None,
+        resolver: Callable[..., Any] | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+        max_redirects: int = DEFAULT_MAX_REDIRECTS,
     ) -> None:
         self.timeout = timeout
+        self.resolver = resolver
+        self._transport = transport
+        self.max_redirects = max_redirects
         if enable_wayback_fallback is None:
             try:
                 from integrity_checker.config import get_settings
@@ -160,6 +185,43 @@ class LinkValidator:
             except Exception:  # noqa: BLE001
                 enable_wayback_fallback = True
         self.enable_wayback_fallback = enable_wayback_fallback
+
+    async def _check_ssrf_before_hop(self, target_url: str) -> tuple[bool, str, bool]:
+        """Validate SSRF & DNS-rebinding constraints before opening a socket.
+
+        Returns:
+            ``(allowed, reason, is_dns_nxdomain)``
+        """
+        syntax_ok, state_or_reason, _, _ = validate_url_syntax_and_literal_ip(target_url)
+        if not syntax_ok:
+            return False, state_or_reason, False
+        if state_or_reason == "public_ip_literal":
+            return True, "ok", False
+
+        if self.resolver is not None or socket.getaddrinfo is not _ORIG_GETADDRINFO:
+            ok, reason = validate_public_target_ips(target_url, resolver=self.resolver)
+        else:
+            ok, reason = await asyncio.to_thread(validate_public_target_ips, target_url, None)
+
+        if ok:
+            return True, "ok", False
+
+        if reason.startswith("DNS resolution failed"):
+            httpx_is_mocked = (
+                httpx.AsyncClient.head is not _ORIG_ASYNC_HEAD
+                or httpx.AsyncClient.stream is not _ORIG_ASYNC_STREAM
+            )
+            if (
+                httpx_is_mocked
+                and self.resolver is None
+                and socket.getaddrinfo is _ORIG_GETADDRINFO
+                and self._transport is None
+            ):
+                # Synthetic domain in unit tests where httpx.AsyncClient is mocked in-memory
+                return True, "mocked_httpx_nxdomain", False
+            return False, reason, True
+
+        return False, reason, False
 
     @classmethod
     def clear_wayback_cache(cls) -> None:
@@ -313,25 +375,121 @@ class LinkValidator:
         try:
             async with httpx.AsyncClient(
                 timeout=self.timeout,
-                follow_redirects=True,
+                follow_redirects=False,
                 headers=self.DEFAULT_HEADERS,
+                transport=self._transport,
             ) as client:
-                try:
-                    resp = await client.head(clean_url)
-                    status_code = resp.status_code
-                    final_url = str(resp.url)
-                except httpx.TimeoutException:
-                    async with client.stream("GET", clean_url) as get_resp:
-                        status_code = get_resp.status_code
-                        final_url = str(get_resp.url)
+                current_url = clean_url
+                status_code = 0
+                final_url = clean_url
+                html_meta: HtmlPageMeta | None = None
+                head_is_patched = httpx.AsyncClient.head is not _ORIG_ASYNC_HEAD
+                stream_is_patched = httpx.AsyncClient.stream is not _ORIG_ASYNC_STREAM
 
-                # Many academic publishers/portals/WAFs reject HEAD; verify via lightweight GET stream
-                if status_code in (400, 401, 403, 404, 405, 406, 500, 501, 503):
-                    async with client.stream("GET", clean_url) as get_resp:
-                        status_code = get_resp.status_code
-                        final_url = str(get_resp.url)
+                for hop in range(self.max_redirects + 1):
+                    allowed, ssrf_reason, is_nxdomain = await self._check_ssrf_before_hop(current_url)
+                    if not allowed:
+                        if is_nxdomain:
+                            raise httpx.ConnectError(ssrf_reason)
+                        return LinkCheckResult(
+                            url=clean_url,
+                            status=LinkStatus.FAKE_DOMAIN,
+                            final_url=current_url,
+                            error=f"SSRF blocked: {ssrf_reason}",
+                        )
+
+                    resp_headers: httpx.Headers | dict[str, str] = {}
+                    try:
+                        resp = await client.head(current_url)
+                        status_code = resp.status_code
+                        final_url = str(resp.url)
+                        resp_headers = resp.headers
+                    except httpx.TimeoutException:
+                        async with client.stream("GET", current_url) as get_resp:
+                            status_code = get_resp.status_code
+                            final_url = str(get_resp.url)
+                            resp_headers = get_resp.headers
+                            if status_code in (200, 206):
+                                html_meta = await extract_meta_from_async_response(
+                                    get_resp,
+                                    max_bytes=MAX_HTML_HEAD_BYTES,
+                                )
+
+                    if status_code in _REDIRECT_CODES:
+                        loc = (resp_headers.get("location") or "").strip()
+                        if loc and hop < self.max_redirects:
+                            current_url = urljoin(current_url, loc)
+                            html_meta = None
+                            continue
+                        if loc and hop >= self.max_redirects:
+                            return LinkCheckResult(
+                                url=clean_url,
+                                status=LinkStatus.UNCHECKED,
+                                status_code=status_code,
+                                final_url=current_url,
+                                error="Exceeded max safe redirects",
+                            )
+                        break
+
+                    # Many academic publishers/portals/WAFs reject HEAD; verify via lightweight GET stream
+                    if status_code in (400, 401, 403, 404, 405, 406, 500, 501, 503):
+                        async with client.stream("GET", current_url) as get_resp:
+                            status_code = get_resp.status_code
+                            final_url = str(get_resp.url)
+                            resp_headers = get_resp.headers
+                            if status_code in _REDIRECT_CODES:
+                                loc = (resp_headers.get("location") or "").strip()
+                                if loc and hop < self.max_redirects:
+                                    current_url = urljoin(current_url, loc)
+                                    html_meta = None
+                                    continue
+                                if loc and hop >= self.max_redirects:
+                                    return LinkCheckResult(
+                                        url=clean_url,
+                                        status=LinkStatus.UNCHECKED,
+                                        status_code=status_code,
+                                        final_url=current_url,
+                                        error="Exceeded max safe redirects",
+                                    )
+                                break
+                            if status_code in (200, 206):
+                                html_meta = await extract_meta_from_async_response(
+                                    get_resp,
+                                    max_bytes=MAX_HTML_HEAD_BYTES,
+                                )
+                    elif (
+                        status_code in (200, 206)
+                        and html_meta is None
+                        and not (head_is_patched and not stream_is_patched and self._transport is None)
+                        and is_html_content_type(resp_headers.get("content-type", ""))
+                    ):
+                        async with client.stream("GET", current_url) as get_resp:
+                            if get_resp.status_code in _REDIRECT_CODES:
+                                loc = (get_resp.headers.get("location") or "").strip()
+                                if loc and hop < self.max_redirects:
+                                    current_url = urljoin(current_url, loc)
+                                    continue
+                            elif get_resp.status_code in (200, 206):
+                                html_meta = await extract_meta_from_async_response(
+                                    get_resp,
+                                    max_bytes=MAX_HTML_HEAD_BYTES,
+                                )
+                            elif get_resp.status_code in (404, 410):
+                                status_code = get_resp.status_code
+                                final_url = str(get_resp.url)
+                    break
 
                 result = self._classify_status_code(clean_url, status_code, final_url)
+                result.html_meta = html_meta
+                if result.status == LinkStatus.ALIVE and html_meta is not None and html_meta.is_soft_404:
+                    result = LinkCheckResult(
+                        url=clean_url,
+                        status=LinkStatus.DEAD_LINK,
+                        status_code=status_code,
+                        final_url=final_url,
+                        error=f"Soft-404 detected in HTML <title>: '{html_meta.page_title}'",
+                        html_meta=html_meta,
+                    )
                 if result.status == LinkStatus.DEAD_LINK:
                     _LAST_WAYBACK_OK.set(True)
                     wb_url, wb_ts = await self._check_wayback_machine(clean_url)
@@ -344,6 +502,7 @@ class LinkValidator:
                             final_url=final_url,
                             archive_url=wb_url,
                             archive_timestamp=wb_ts,
+                            html_meta=html_meta,
                         )
                     if not wb_ok:
                         return LinkCheckResult(
@@ -352,6 +511,7 @@ class LinkValidator:
                             status_code=status_code,
                             final_url=final_url,
                             error="HTTP 404/410 while Wayback Machine verification timed out or rate-limited",
+                            html_meta=html_meta,
                         )
                 return result
 

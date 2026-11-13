@@ -318,12 +318,28 @@ class NeuroSymbolicChecker:
             )
 
         # --- Check 2: Web resource/API citations (không bắt đầu bằng URL) ---
+        has_url_mismatch_early, _, _ = self.rules.check_url_content_mismatch(
+            citation_title=citation.title,
+            citation_raw=raw_text,
+            citation_url=effective_url_check or citation.url,
+            source=source,
+        )
+        has_html_doi_candidate = bool(
+            not citation.doi
+            and getattr(getattr(source, "html_meta", None), "citation_doi", None)
+            and any(getattr(c, "found", False) and getattr(c, "doi", None) for c in (source.candidates or []))
+        )
         check_resource_str = " ".join(
             part
             for part in (raw_text, citation.title or "", citation.url or "", citation.venue or "")
             if part
         )
-        if not has_fake_url_early and not is_dead_url_early:
+        if (
+            not has_fake_url_early
+            and not is_dead_url_early
+            and not has_url_mismatch_early
+            and not has_html_doi_candidate
+        ):
             for pattern in _WEB_RESOURCE_PATTERNS:
                 if not citation.doi and pattern.search(check_resource_str):
                     logger.debug(
@@ -444,6 +460,8 @@ class NeuroSymbolicChecker:
         if (
             not has_fake_url_early
             and not is_dead_url_early
+            and not has_url_mismatch_early
+            and not has_html_doi_candidate
             and not has_specialist_candidate
             and not specialist_explicitly_not_found
             and RetrievalOrchestrator.is_web_or_legal_resource(citation)
@@ -777,6 +795,7 @@ class NeuroSymbolicChecker:
             citation_year=citation.year,
             citation_raw=citation.raw_text,
             citation_venue=citation.venue,
+            citation_title=citation.title,
         )
 
         final_rules = list(outcome.triggered_rules)

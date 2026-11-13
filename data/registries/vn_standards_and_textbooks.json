@@ -1,0 +1,621 @@
+{
+  "schema_version": 1,
+  "ministry_codes": {
+    "BXD": "Bộ Xây dựng",
+    "BYT": "Bộ Y tế",
+    "BGTVT": "Bộ Giao thông vận tải",
+    "BTNMT": "Bộ Tài nguyên và Môi trường",
+    "BTTTT": "Bộ Thông tin và Truyền thông",
+    "BKHCN": "Bộ Khoa học và Công nghệ",
+    "BCT": "Bộ Công Thương",
+    "BNNPTNT": "Bộ Nông nghiệp và Phát triển nông thôn",
+    "BLĐTBXH": "Bộ Lao động - Thương binh và Xã hội",
+    "BCA": "Bộ Công an",
+    "BTC": "Bộ Tài chính",
+    "BGDĐT": "Bộ Giáo dục và Đào tạo",
+    "BVHTTDL": "Bộ Văn hóa, Thể thao và Du lịch",
+    "BQP": "Bộ Quốc phòng"
+  },
+  "standards": [
+    {
+      "code": "TCVN 5574:2018",
+      "kind": "TCVN",
+      "title": "Thiết kế kết cấu bê tông và bê tông cốt thép",
+      "aliases": [
+        "Kết cấu bê tông và bê tông cốt thép - Tiêu chuẩn thiết kế",
+        "Design of concrete and reinforced concrete structures"
+      ],
+      "year": "2018",
+      "authors": ["Bộ Khoa học và Công nghệ", "Bộ Xây dựng", "Viện Khoa học Công nghệ Xây dựng"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 5574:2012",
+      "kind": "TCVN",
+      "title": "Kết cấu bê tông và bê tông cốt thép - Tiêu chuẩn thiết kế",
+      "aliases": ["Thiết kế kết cấu bê tông và bê tông cốt thép"],
+      "year": "2012",
+      "authors": ["Bộ Khoa học và Công nghệ", "Bộ Xây dựng"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 5575:2012",
+      "kind": "TCVN",
+      "title": "Kết cấu thép - Tiêu chuẩn thiết kế",
+      "aliases": ["Thiết kế kết cấu thép"],
+      "year": "2012",
+      "authors": ["Bộ Khoa học và Công nghệ", "Bộ Xây dựng"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 9386-1:2012",
+      "kind": "TCVN",
+      "title": "Thiết kế công trình chịu động đất - Phần 1: Quy định chung, tác động động đất và quy định đối với kết cấu nhà",
+      "aliases": ["Thiết kế công trình chịu động đất"],
+      "year": "2012",
+      "authors": ["Bộ Khoa học và Công nghệ", "Bộ Xây dựng"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 9386-2:2012",
+      "kind": "TCVN",
+      "title": "Thiết kế công trình chịu động đất - Phần 2: Nền móng, tường chắn và các vấn đề địa kỹ thuật",
+      "aliases": [],
+      "year": "2012",
+      "authors": ["Bộ Khoa học và Công nghệ", "Bộ Xây dựng"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 2737:2023",
+      "kind": "TCVN",
+      "title": "Tải trọng và tác động",
+      "aliases": ["Tải trọng và tác động - Tiêu chuẩn thiết kế"],
+      "year": "2023",
+      "authors": ["Bộ Khoa học và Công nghệ", "Bộ Xây dựng"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 2737:1995",
+      "kind": "TCVN",
+      "title": "Tải trọng và tác động - Tiêu chuẩn thiết kế",
+      "aliases": ["Tải trọng và tác động"],
+      "year": "1995",
+      "authors": ["Bộ Xây dựng", "Bộ Khoa học, Công nghệ và Môi trường"],
+      "venue": "Tiêu chuẩn Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 10304:2014",
+      "kind": "TCVN",
+      "title": "Móng cọc - Tiêu chuẩn thiết kế",
+      "aliases": ["Thiết kế móng cọc"],
+      "year": "2014",
+      "authors": ["Bộ Khoa học và Công nghệ", "Bộ Xây dựng"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 9362:2012",
+      "kind": "TCVN",
+      "title": "Tiêu chuẩn thiết kế nền nhà và công trình",
+      "aliases": ["Thiết kế nền nhà và công trình"],
+      "year": "2012",
+      "authors": ["Bộ Khoa học và Công nghệ", "Bộ Xây dựng"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 4447:2012",
+      "kind": "TCVN",
+      "title": "Công tác đất - Thi công và nghiệm thu",
+      "aliases": [],
+      "year": "2012",
+      "authors": ["Bộ Khoa học và Công nghệ", "Bộ Xây dựng"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 4054:2005",
+      "kind": "TCVN",
+      "title": "Đường ô tô - Yêu cầu thiết kế",
+      "aliases": [],
+      "year": "2005",
+      "authors": ["Bộ Khoa học và Công nghệ", "Bộ Giao thông vận tải"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 11823:2017",
+      "kind": "TCVN",
+      "title": "Thiết kế cầu đường bộ",
+      "aliases": [],
+      "year": "2017",
+      "authors": ["Bộ Khoa học và Công nghệ", "Bộ Giao thông vận tải"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 11930:2017",
+      "kind": "TCVN",
+      "title": "Công nghệ thông tin - Các kỹ thuật an toàn - Yêu cầu cơ bản về an toàn hệ thống thông tin theo cấp độ",
+      "aliases": ["Yêu cầu cơ bản về an toàn hệ thống thông tin theo cấp độ"],
+      "year": "2017",
+      "authors": ["Bộ Khoa học và Công nghệ", "Bộ Thông tin và Truyền thông"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 7562:2005",
+      "kind": "TCVN",
+      "title": "Thông tin và tư liệu - Trích dẫn thư mục - Nội dung, hình thức và cấu trúc",
+      "aliases": ["Trích dẫn thư mục"],
+      "year": "2005",
+      "authors": ["Bộ Khoa học và Công nghệ"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 9206:2012",
+      "kind": "TCVN",
+      "title": "Đặt thiết bị điện trong nhà ở và công trình công cộng - Tiêu chuẩn thiết kế",
+      "aliases": [],
+      "year": "2012",
+      "authors": ["Bộ Khoa học và Công nghệ", "Bộ Xây dựng"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "TCVN 9207:2012",
+      "kind": "TCVN",
+      "title": "Đặt đường dây dẫn điện trong nhà ở và công trình công cộng - Tiêu chuẩn thiết kế",
+      "aliases": [],
+      "year": "2012",
+      "authors": ["Bộ Khoa học và Công nghệ", "Bộ Xây dựng"],
+      "venue": "Tiêu chuẩn Quốc gia Việt Nam (TCVN)"
+    },
+    {
+      "code": "QCVN 06:2022/BXD",
+      "kind": "QCVN",
+      "title": "Quy chuẩn kỹ thuật quốc gia về an toàn cháy cho nhà và công trình",
+      "aliases": ["An toàn cháy cho nhà và công trình"],
+      "year": "2022",
+      "authors": ["Bộ Xây dựng"],
+      "venue": "Quy chuẩn Kỹ thuật Quốc gia Việt Nam (QCVN)"
+    },
+    {
+      "code": "QCVN 06:2021/BXD",
+      "kind": "QCVN",
+      "title": "Quy chuẩn kỹ thuật quốc gia về an toàn cháy cho nhà và công trình",
+      "aliases": ["An toàn cháy cho nhà và công trình"],
+      "year": "2021",
+      "authors": ["Bộ Xây dựng"],
+      "venue": "Quy chuẩn Kỹ thuật Quốc gia Việt Nam (QCVN)"
+    },
+    {
+      "code": "QCVN 02:2022/BXD",
+      "kind": "QCVN",
+      "title": "Quy chuẩn kỹ thuật quốc gia về số liệu điều kiện tự nhiên dùng trong xây dựng",
+      "aliases": ["Số liệu điều kiện tự nhiên dùng trong xây dựng"],
+      "year": "2022",
+      "authors": ["Bộ Xây dựng"],
+      "venue": "Quy chuẩn Kỹ thuật Quốc gia Việt Nam (QCVN)"
+    },
+    {
+      "code": "QCVN 04:2021/BXD",
+      "kind": "QCVN",
+      "title": "Quy chuẩn kỹ thuật quốc gia về nhà chung cư",
+      "aliases": ["Quy chuẩn nhà chung cư"],
+      "year": "2021",
+      "authors": ["Bộ Xây dựng"],
+      "venue": "Quy chuẩn Kỹ thuật Quốc gia Việt Nam (QCVN)"
+    },
+    {
+      "code": "QCVN 01:2021/BXD",
+      "kind": "QCVN",
+      "title": "Quy chuẩn kỹ thuật quốc gia về quy hoạch xây dựng",
+      "aliases": ["Quy hoạch xây dựng"],
+      "year": "2021",
+      "authors": ["Bộ Xây dựng"],
+      "venue": "Quy chuẩn Kỹ thuật Quốc gia Việt Nam (QCVN)"
+    },
+    {
+      "code": "QCVN 01-1:2018/BYT",
+      "kind": "QCVN",
+      "title": "Quy chuẩn kỹ thuật quốc gia về chất lượng nước sạch sử dụng cho mục đích sinh hoạt",
+      "aliases": ["Chất lượng nước sạch sử dụng cho mục đích sinh hoạt"],
+      "year": "2018",
+      "authors": ["Bộ Y tế"],
+      "venue": "Quy chuẩn Kỹ thuật Quốc gia Việt Nam (QCVN)"
+    },
+    {
+      "code": "QCVN 41:2019/BGTVT",
+      "kind": "QCVN",
+      "title": "Quy chuẩn kỹ thuật quốc gia về báo hiệu đường bộ",
+      "aliases": ["Báo hiệu đường bộ"],
+      "year": "2019",
+      "authors": ["Bộ Giao thông vận tải"],
+      "venue": "Quy chuẩn Kỹ thuật Quốc gia Việt Nam (QCVN)"
+    },
+    {
+      "code": "QCVN 14:2008/BTNMT",
+      "kind": "QCVN",
+      "title": "Quy chuẩn kỹ thuật quốc gia về nước thải sinh hoạt",
+      "aliases": ["Nước thải sinh hoạt"],
+      "year": "2008",
+      "authors": ["Bộ Tài nguyên và Môi trường"],
+      "venue": "Quy chuẩn Kỹ thuật Quốc gia Việt Nam (QCVN)"
+    },
+    {
+      "code": "QCVN 40:2011/BTNMT",
+      "kind": "QCVN",
+      "title": "Quy chuẩn kỹ thuật quốc gia về nước thải công nghiệp",
+      "aliases": ["Nước thải công nghiệp"],
+      "year": "2011",
+      "authors": ["Bộ Tài nguyên và Môi trường"],
+      "venue": "Quy chuẩn Kỹ thuật Quốc gia Việt Nam (QCVN)"
+    },
+    {
+      "code": "QCVN 05:2023/BTNMT",
+      "kind": "QCVN",
+      "title": "Quy chuẩn kỹ thuật quốc gia về chất lượng không khí xung quanh",
+      "aliases": ["Chất lượng không khí xung quanh"],
+      "year": "2023",
+      "authors": ["Bộ Tài nguyên và Môi trường"],
+      "venue": "Quy chuẩn Kỹ thuật Quốc gia Việt Nam (QCVN)"
+    },
+    {
+      "code": "QCVN 101:2020/BTTTT",
+      "kind": "QCVN",
+      "title": "Quy chuẩn kỹ thuật quốc gia về pin lithium cho thiết bị cầm tay",
+      "aliases": [],
+      "year": "2020",
+      "authors": ["Bộ Thông tin và Truyền thông"],
+      "venue": "Quy chuẩn Kỹ thuật Quốc gia Việt Nam (QCVN)"
+    }
+  ],
+  "textbooks": [
+    {
+      "id": "vn_tb_nguyen_doan_phuoc_ltdktt",
+      "title": "Lý thuyết điều khiển tuyến tính",
+      "aliases": ["Giáo trình Lý thuyết điều khiển tuyến tính"],
+      "authors": ["Nguyễn Doãn Phước"],
+      "year": "2009",
+      "years": ["2002", "2005", "2007", "2009", "2012", "2015", "2018", "2020"],
+      "publisher": "NXB Khoa học và Kỹ thuật",
+      "publisher_aliases": ["Nhà xuất bản Khoa học và Kỹ thuật", "NXB Bách Khoa Hà Nội"],
+      "subject": "Control Engineering"
+    },
+    {
+      "id": "vn_tb_nguyen_doan_phuoc_ltdkpt",
+      "title": "Lý thuyết điều khiển phi tuyến",
+      "aliases": ["Giáo trình Lý thuyết điều khiển phi tuyến", "Lý thuyết điều khiển tự động"],
+      "authors": ["Nguyễn Doãn Phước", "Phan Xuân Minh", "Hán Thành Trung"],
+      "year": "2006",
+      "years": ["2003", "2006", "2008", "2012", "2016"],
+      "publisher": "NXB Khoa học và Kỹ thuật",
+      "publisher_aliases": ["Nhà xuất bản Khoa học và Kỹ thuật"],
+      "subject": "Control Engineering"
+    },
+    {
+      "id": "vn_tb_phan_xuan_minh_dkmo",
+      "title": "Lý thuyết điều khiển mờ",
+      "aliases": ["Điều khiển mờ và mạng nơ-ron"],
+      "authors": ["Phan Xuân Minh", "Nguyễn Doãn Phước"],
+      "year": "2006",
+      "years": ["2002", "2004", "2006", "2009", "2014"],
+      "publisher": "NXB Khoa học và Kỹ thuật",
+      "publisher_aliases": ["Nhà xuất bản Khoa học và Kỹ thuật"],
+      "subject": "Control Engineering"
+    },
+    {
+      "id": "vn_tb_nguyen_phung_quang_matlab",
+      "title": "MATLAB & Simulink dành cho kỹ sư điều khiển tự động",
+      "aliases": ["MATLAB và Simulink dành cho kỹ sư điều khiển tự động"],
+      "authors": ["Nguyễn Phùng Quang"],
+      "year": "2008",
+      "years": ["2004", "2005", "2006", "2008", "2013", "2017"],
+      "publisher": "NXB Khoa học và Kỹ thuật",
+      "publisher_aliases": ["Nhà xuất bản Khoa học và Kỹ thuật"],
+      "subject": "Control & Automation"
+    },
+    {
+      "id": "vn_tb_bui_quoc_khanh_truyen_dong_dien",
+      "title": "Điều chỉnh tự động truyền động điện",
+      "aliases": ["Cơ sở truyền động điện"],
+      "authors": ["Bùi Quốc Khánh", "Nguyễn Văn Liễn", "Nguyễn Thị Hiền"],
+      "year": "2007",
+      "years": ["2005", "2007", "2011", "2015"],
+      "publisher": "NXB Khoa học và Kỹ thuật",
+      "publisher_aliases": ["Nhà xuất bản Khoa học và Kỹ thuật", "NXB Bách Khoa Hà Nội"],
+      "subject": "Electrical Engineering"
+    },
+    {
+      "id": "vn_tb_do_xuan_loi_ctdl",
+      "title": "Cấu trúc dữ liệu và giải thuật",
+      "aliases": ["Giáo trình Cấu trúc dữ liệu và giải thuật"],
+      "authors": ["Đỗ Xuân Lôi"],
+      "year": "2005",
+      "years": ["1999", "2001", "2004", "2005", "2008", "2010", "2012"],
+      "publisher": "NXB Đại học Quốc gia Hà Nội",
+      "publisher_aliases": ["NXB ĐHQG Hà Nội", "NXB Giáo dục", "NXB Khoa học và Kỹ thuật"],
+      "subject": "Computer Science"
+    },
+    {
+      "id": "vn_tb_le_minh_hoang_giai_thuat",
+      "title": "Giải thuật và lập trình",
+      "aliases": ["Bài giảng Giải thuật và lập trình"],
+      "authors": ["Lê Minh Hoàng"],
+      "year": "2003",
+      "years": ["1999", "2002", "2003", "2007", "2016", "2020"],
+      "publisher": "NXB Đại học Sư phạm",
+      "publisher_aliases": ["NXB Giáo dục", "NXB ĐHQG Hà Nội"],
+      "subject": "Computer Science"
+    },
+    {
+      "id": "vn_tb_nguyen_duc_nghia_toan_roi_rac",
+      "title": "Toán rời rạc",
+      "aliases": ["Giáo trình Toán rời rạc"],
+      "authors": ["Nguyễn Đức Nghĩa", "Nguyễn Tô Thành"],
+      "year": "2009",
+      "years": ["2003", "2007", "2009", "2013", "2017", "2020"],
+      "publisher": "NXB Đại học Quốc gia Hà Nội",
+      "publisher_aliases": ["NXB ĐHQG Hà Nội", "NXB Giáo dục", "NXB Bách Khoa Hà Nội"],
+      "subject": "Mathematics / Computer Science"
+    },
+    {
+      "id": "vn_tb_nguyen_dinh_tri_toan_cao_cap",
+      "title": "Toán học cao cấp",
+      "aliases": ["Giáo trình Toán học cao cấp", "Bài tập Toán học cao cấp"],
+      "authors": ["Nguyễn Đình Trí", "Tạ Văn Đĩnh", "Nguyễn Hồ Quỳnh"],
+      "year": "2015",
+      "years": ["2006", "2009", "2012", "2015", "2018", "2021"],
+      "publisher": "NXB Giáo dục Việt Nam",
+      "publisher_aliases": ["NXB Giáo dục", "Nhà xuất bản Giáo dục Việt Nam"],
+      "subject": "Mathematics"
+    },
+    {
+      "id": "vn_tb_luong_duyen_binh_vat_ly_dai_cuong",
+      "title": "Vật lý đại cương",
+      "aliases": ["Giáo trình Vật lý đại cương"],
+      "authors": ["Lương Duyên Bình"],
+      "year": "2014",
+      "years": ["2006", "2008", "2010", "2014", "2018", "2020"],
+      "publisher": "NXB Giáo dục Việt Nam",
+      "publisher_aliases": ["NXB Giáo dục", "Nhà xuất bản Giáo dục Việt Nam"],
+      "subject": "Physics"
+    },
+    {
+      "id": "vn_tb_ha_quang_thuy_khai_pha_du_lieu",
+      "title": "Khai phá dữ liệu",
+      "aliases": ["Giáo trình Khai phá dữ liệu", "Nhập môn Khai phá dữ liệu"],
+      "authors": ["Hà Quang Thụy", "Phan Xuân Hiếu", "Đoàn Sơn", "Nguyễn Trí Thành"],
+      "year": "2011",
+      "years": ["2009", "2011", "2014", "2017"],
+      "publisher": "NXB Đại học Quốc gia Hà Nội",
+      "publisher_aliases": ["NXB ĐHQG Hà Nội", "NXB Khoa học và Kỹ thuật"],
+      "subject": "Data Mining / AI"
+    },
+    {
+      "id": "vn_tb_le_hoai_bac_tri_tue_nhan_tao",
+      "title": "Trí tuệ nhân tạo",
+      "aliases": ["Giáo trình Trí tuệ nhân tạo", "Cơ sở Trí tuệ nhân tạo"],
+      "authors": ["Lê Hoài Bắc", "Tô Hoài Việt"],
+      "year": "2014",
+      "years": ["2008", "2011", "2014", "2018", "2020"],
+      "publisher": "NXB Đại học Quốc gia TP.HCM",
+      "publisher_aliases": ["NXB ĐHQG TP.HCM", "Nhà xuất bản Đại học Quốc gia TP.HCM"],
+      "subject": "Artificial Intelligence"
+    },
+    {
+      "id": "vn_tb_duong_ton_dam_csdl",
+      "title": "Cơ sở dữ liệu",
+      "aliases": ["Giáo trình Cơ sở dữ liệu"],
+      "authors": ["Dương Tôn Đảm", "Trần Hạnh Nhi"],
+      "year": "2012",
+      "years": ["2006", "2009", "2012", "2016", "2019"],
+      "publisher": "NXB Đại học Quốc gia TP.HCM",
+      "publisher_aliases": ["NXB ĐHQG TP.HCM", "Nhà xuất bản Đại học Quốc gia TP.HCM"],
+      "subject": "Database Systems"
+    },
+    {
+      "id": "vn_tb_nguyen_thi_lien_diep_quan_tri_hoc",
+      "title": "Quản trị học",
+      "aliases": ["Giáo trình Quản trị học"],
+      "authors": ["Nguyễn Thị Liên Diệp"],
+      "year": "2016",
+      "years": ["2008", "2012", "2016", "2019", "2022"],
+      "publisher": "NXB Lao động - Xã hội",
+      "publisher_aliases": ["NXB Thống kê", "NXB Tài chính", "NXB ĐHQG TP.HCM"],
+      "subject": "Management"
+    },
+    {
+      "id": "vn_tb_hoang_trong_spss",
+      "title": "Phân tích dữ liệu nghiên cứu với SPSS",
+      "aliases": ["Phân tích dữ liệu nghiên cứu với SPSS Tập 1", "Phân tích dữ liệu nghiên cứu với SPSS Tập 2"],
+      "authors": ["Hoàng Trọng", "Chu Nguyễn Mộng Ngọc"],
+      "year": "2008",
+      "years": ["2005", "2008", "2011", "2015", "2018"],
+      "publisher": "NXB Hồng Đức",
+      "publisher_aliases": ["NXB Thống kê", "NXB ĐHQG TP.HCM"],
+      "subject": "Statistics / Research Methods"
+    },
+    {
+      "id": "vn_tb_nguyen_quang_dong_kinh_te_luong",
+      "title": "Giáo trình Kinh tế lượng",
+      "aliases": ["Kinh tế lượng"],
+      "authors": ["Nguyễn Quang Đông", "Nguyễn Thị Minh"],
+      "year": "2015",
+      "years": ["2012", "2013", "2015", "2017", "2019", "2021"],
+      "publisher": "NXB Đại học Kinh tế Quốc dân",
+      "publisher_aliases": ["NXB Thống kê", "NXB Khoa học và Kỹ thuật"],
+      "subject": "Econometrics"
+    },
+    {
+      "id": "vn_tb_tran_thi_kim_thu_ly_thuyet_thong_ke",
+      "title": "Giáo trình Lý thuyết thống kê",
+      "aliases": ["Lý thuyết thống kê"],
+      "authors": ["Trần Thị Kim Thu"],
+      "year": "2015",
+      "years": ["2009", "2012", "2015", "2018", "2021"],
+      "publisher": "NXB Đại học Kinh tế Quốc dân",
+      "publisher_aliases": ["NXB Thống kê"],
+      "subject": "Statistics"
+    },
+    {
+      "id": "vn_tb_nguyen_cao_van_xac_suat_thong_ke",
+      "title": "Giáo trình Lý thuyết xác suất và thống kê toán",
+      "aliases": ["Lý thuyết xác suất và thống kê toán"],
+      "authors": ["Nguyễn Cao Văn", "Trần Thái Ninh", "Ngô Văn Thứ"],
+      "year": "2014",
+      "years": ["2008", "2012", "2014", "2017", "2020"],
+      "publisher": "NXB Đại học Kinh tế Quốc dân",
+      "publisher_aliases": ["NXB Thống kê", "NXB Giáo dục Việt Nam"],
+      "subject": "Probability & Statistics"
+    },
+    {
+      "id": "vn_tb_tran_van_dich_cong_nghe_che_tao_may",
+      "title": "Công nghệ chế tạo máy",
+      "aliases": ["Giáo trình Công nghệ chế tạo máy", "Cơ sở Công nghệ chế tạo máy"],
+      "authors": ["Trần Văn Địch", "Nguyễn Trọng Bình", "Nguyễn Thế Đạt", "Nguyễn Viết Tiếp", "Trần Xuân Việt"],
+      "year": "2008",
+      "years": ["2003", "2006", "2008", "2011", "2017"],
+      "publisher": "NXB Khoa học và Kỹ thuật",
+      "publisher_aliases": ["NXB Bách Khoa Hà Nội", "Nhà xuất bản Khoa học và Kỹ thuật"],
+      "subject": "Mechanical Engineering"
+    },
+    {
+      "id": "vn_tb_nguyen_trong_hiep_chi_tiet_may",
+      "title": "Chi tiết máy",
+      "aliases": ["Giáo trình Chi tiết máy", "Thiết kế Chi tiết máy"],
+      "authors": ["Nguyễn Trọng Hiệp"],
+      "year": "2006",
+      "years": ["1999", "2004", "2006", "2010", "2015"],
+      "publisher": "NXB Giáo dục Việt Nam",
+      "publisher_aliases": ["NXB Giáo dục", "NXB Bách Khoa Hà Nội"],
+      "subject": "Mechanical Engineering"
+    },
+    {
+      "id": "vn_tb_phan_quang_minh_btct",
+      "title": "Kết cấu bê tông cốt thép - Phần cấu kiện cơ bản",
+      "aliases": ["Kết cấu bê tông cốt thép"],
+      "authors": ["Phan Quang Minh", "Ngô Thế Phong", "Nguyễn Đình Cống"],
+      "year": "2012",
+      "years": ["2006", "2008", "2012", "2016", "2020"],
+      "publisher": "NXB Khoa học và Kỹ thuật",
+      "publisher_aliases": ["NXB Xây dựng", "NXB Bách Khoa Hà Nội"],
+      "subject": "Civil Engineering"
+    },
+    {
+      "id": "vn_tb_bgddt_triet_hoc_mac_lenin",
+      "title": "Giáo trình Triết học Mác - Lênin",
+      "aliases": ["Triết học Mác - Lênin"],
+      "authors": ["Bộ Giáo dục và Đào tạo"],
+      "year": "2021",
+      "years": ["2009", "2014", "2019", "2021", "2022", "2023"],
+      "publisher": "NXB Chính trị Quốc gia Sự thật",
+      "publisher_aliases": ["Nhà xuất bản Chính trị quốc gia Sự thật"],
+      "subject": "Philosophy"
+    },
+    {
+      "id": "vn_tb_bgddt_kinh_te_chinh_tri_mac_lenin",
+      "title": "Giáo trình Kinh tế chính trị Mác - Lênin",
+      "aliases": ["Kinh tế chính trị Mác - Lênin"],
+      "authors": ["Bộ Giáo dục và Đào tạo"],
+      "year": "2021",
+      "years": ["2019", "2021", "2022", "2023"],
+      "publisher": "NXB Chính trị Quốc gia Sự thật",
+      "publisher_aliases": ["Nhà xuất bản Chính trị quốc gia Sự thật"],
+      "subject": "Political Economy"
+    },
+    {
+      "id": "vn_tb_bgddt_cnxh_khoa_hoc",
+      "title": "Giáo trình Chủ nghĩa xã hội khoa học",
+      "aliases": ["Chủ nghĩa xã hội khoa học"],
+      "authors": ["Bộ Giáo dục và Đào tạo"],
+      "year": "2021",
+      "years": ["2019", "2021", "2022", "2023"],
+      "publisher": "NXB Chính trị Quốc gia Sự thật",
+      "publisher_aliases": ["Nhà xuất bản Chính trị quốc gia Sự thật"],
+      "subject": "Social Sciences"
+    },
+    {
+      "id": "vn_tb_bgddt_tu_tuong_ho_chi_minh",
+      "title": "Giáo trình Tư tưởng Hồ Chí Minh",
+      "aliases": ["Tư tưởng Hồ Chí Minh"],
+      "authors": ["Bộ Giáo dục và Đào tạo"],
+      "year": "2021",
+      "years": ["2009", "2015", "2019", "2021", "2022", "2023"],
+      "publisher": "NXB Chính trị Quốc gia Sự thật",
+      "publisher_aliases": ["Nhà xuất bản Chính trị quốc gia Sự thật"],
+      "subject": "Political Studies"
+    },
+    {
+      "id": "vn_tb_bgddt_lich_su_dang",
+      "title": "Giáo trình Lịch sử Đảng Cộng sản Việt Nam",
+      "aliases": ["Lịch sử Đảng Cộng sản Việt Nam"],
+      "authors": ["Bộ Giáo dục và Đào tạo"],
+      "year": "2021",
+      "years": ["2018", "2019", "2021", "2022", "2023"],
+      "publisher": "NXB Chính trị Quốc gia Sự thật",
+      "publisher_aliases": ["Nhà xuất bản Chính trị quốc gia Sự thật"],
+      "subject": "History"
+    },
+    {
+      "id": "vn_tb_vu_cao_dam_ppnckh",
+      "title": "Phương pháp luận nghiên cứu khoa học",
+      "aliases": ["Giáo trình Phương pháp luận nghiên cứu khoa học"],
+      "authors": ["Vũ Cao Đàm"],
+      "year": "2011",
+      "years": ["2005", "2008", "2011", "2014", "2018", "2020"],
+      "publisher": "NXB Giáo dục Việt Nam",
+      "publisher_aliases": ["NXB Khoa học và Kỹ thuật", "NXB Giáo dục"],
+      "subject": "Research Methodology"
+    },
+    {
+      "id": "vn_tb_dinh_van_son_ppnckh",
+      "title": "Giáo trình Phương pháp nghiên cứu khoa học trong kinh doanh",
+      "aliases": ["Phương pháp nghiên cứu khoa học trong kinh doanh"],
+      "authors": ["Nguyễn Đình Thọ"],
+      "year": "2011",
+      "years": ["2011", "2012", "2013", "2014"],
+      "publisher": "NXB Lao động - Xã hội",
+      "publisher_aliases": ["NXB Tài chính", "NXB ĐHQG TP.HCM", "NXB Thống kê"],
+      "subject": "Business Research Methods"
+    },
+    {
+      "id": "vn_tb_nguyen_viet_trung_cau_btct",
+      "title": "Cầu bê tông cốt thép",
+      "aliases": ["Thiết kế cầu bê tông cốt thép"],
+      "authors": ["Nguyễn Viết Trung"],
+      "year": "2011",
+      "years": ["2005", "2008", "2011", "2015", "2019"],
+      "publisher": "NXB Xây dựng",
+      "publisher_aliases": ["NXB Giao thông vận tải", "NXB Giáo dục Việt Nam"],
+      "subject": "Civil & Bridge Engineering"
+    },
+    {
+      "id": "vn_tb_tran_thong_que_ctdl_dhqg",
+      "title": "Cấu trúc dữ liệu và giải thuật phân tích và cài đặt với C/C++",
+      "aliases": ["Cấu trúc dữ liệu và giải thuật với C/C++"],
+      "authors": ["Trần Thông Quế"],
+      "year": "2018",
+      "years": ["2015", "2018", "2020"],
+      "publisher": "NXB Thông tin và Truyền thông",
+      "publisher_aliases": ["NXB ĐHQG Hà Nội", "NXB Bách Khoa Hà Nội"],
+      "subject": "Computer Science"
+    },
+    {
+      "id": "vn_tb_nguyen_van_khang_dao_dong_ky_thuat",
+      "title": "Dao động kỹ thuật",
+      "aliases": ["Giáo trình Dao động kỹ thuật", "Cơ học kỹ thuật"],
+      "authors": ["Nguyễn Văn Khang"],
+      "year": "2017",
+      "years": ["2005", "2011", "2017", "2021"],
+      "publisher": "NXB Bách Khoa Hà Nội",
+      "publisher_aliases": ["Nhà xuất bản Bách Khoa Hà Nội", "NXB Khoa học và Kỹ thuật"],
+      "subject": "Mechanical Engineering"
+    },
+    {
+      "id": "vn_tb_pham_ngoc_kiem_thong_ke_kinh_te",
+      "title": "Giáo trình Thống kê kinh doanh",
+      "aliases": ["Thống kê kinh doanh", "Giáo trình Nguyên lý thống kê kinh tế"],
+      "authors": ["Phạm Ngọc Kiểm", "Nguyễn Công Nhự"],
+      "year": "2013",
+      "years": ["2007", "2010", "2013", "2017"],
+      "publisher": "NXB Thống kê",
+      "publisher_aliases": ["Nhà xuất bản Thống kê", "NXB Tài chính"],
+      "subject": "Statistics / Economics"
+    }
+  ]
+}
