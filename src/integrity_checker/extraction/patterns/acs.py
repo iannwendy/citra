@@ -87,20 +87,35 @@ _ACS_PREFIX = (
 
 _JZ_STARTS_JOURNAL_LOOKAHEAD = (
     r"\s+(?:[A-Z][a-z]+|of\b|f[uü]r\b|de\b|la\b)"
-    r"(?!(?:(?!(?:18|19|20)\d{2}\b)[^;])*?\b[A-Za-zÀ-ÿ'\u2019\-]{2,}\s+[A-Za-zÀ-ÿ'\u2019\-]{4,}\.\s+[A-Z])"
+    r"(?!(?:(?!(?:18|19|20)\d{2}\b)[^;])*?\S+\s+[a-zà-ÿ]{1,}\b(?:(?!(?:18|19|20)\d{2}\b)[^;])*?\.\s+[A-Z])"
+    r"(?!(?:(?!(?:18|19|20)\d{2}\b)[^;])*?\b[A-Za-zÀ-ÿ'\u2019\-]{2,}\s+"
+    r"(?!(?:Sci|Chem|Phys|Biol|Eng|Tech|Technol|Med|Env|Environ|Planet|Manag|Toxicol|Biochem|Lett|Rev|Soc|Trans|Commun|Anal|Mater|Polym|Catal|Mol|Pharmacol)\.)"
+    r"(?:[A-Z0-9]{2,8}|[A-Za-zÀ-ÿ'\u2019\-]{3,})\.\s+[A-Z])"
     r"(?!(?:(?!(?:18|19|20)\d{2}\b)[^;])*?\s+(?!(?:of|the|and|in|on|for|to|a|an|de|la|le|du|des|et|f[uü]r|und|der)\b)[a-zà-ÿ]{3,}\b)"
+)
+
+_ACS_PARTICLE_PREFIX_PAT = (
+    r"(?:(?:van|den|der|ten|ter|te|della|del|des|dos|das|du|de|di|da|do|"
+    r"la|le|von|zum|zur|zu|af|al|el|ibn|bin|mac|mc|st\.?)(?:\s+|[-'\u2019])|[dD]['\u2019]){0,3}"
 )
 
 _ACS_AUTHOR_STOP_GUARD = (
     r"(?!(?:[JZ]\.(?!" + _JZ_STARTS_JOURNAL_LOOKAHEAD + r")"
     r"|[A-IK-YÀ-Ý]\."
-    r"|(?:(?:van|de|den|der|von|del|da|di|le|la|du|al|el)\s+)?[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+(?:\s*[,;]|\s+(?:and|&|et\s+al)\b)"
+    r"|"
+    + _ACS_PARTICLE_PREFIX_PAT
+    + r"(?!(?:Of|On|In|To|At|By|For|The|An|From|With|Into|Over|Under)\b)"
+    + r"[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+){0,2}"
+    + r"(?:\s*[,;]|\s+et\s+al\b|\s+(?:and|&)\s+(?=[A-ZÀ-Ý]\.|"
+    + _ACS_PARTICLE_PREFIX_PAT
+    + r"[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+\s*,))"
     r"|;|and\b|&|et\s+al\.))"
 )
 
 _RSC_INIT_TOKEN = r"(?:[A-ZÀ-Ý]\.?-[A-ZÀ-Ý]\.\s*|[A-ZÀ-Ý]\.\s*)+"
 _RSC_SURNAME_TOKEN = (
-    r"(?:(?:de|van|den|der|von|del|da|di|le|la|du|al|el)(?:\s+|-)|d'|St\.\s+|Mc\s+|Mac\s+)?"
+    r"(?:(?:van|den|der|ten|ter|te|della|del|des|dos|das|du|de|di|da|do|"
+    r"la|le|von|zum|zur|zu|af|al|el|ibn|bin|St\.|Mc|Mac)(?:\s+|-)|[dD]['\u2019]){0,3}"
     r"[A-ZÀ-Ý][A-Za-zÀ-ÿ'\u2019\-]+(?!\.)"
 )
 _RSC_SINGLE_AUTHOR = rf"{_RSC_INIT_TOKEN}{_RSC_SURNAME_TOKEN}"
@@ -115,6 +130,42 @@ _TITLE_CONNECTORS: frozenset[str] = frozenset(
         "of", "the", "and", "in", "on", "for", "to", "a", "an",
         "de", "la", "le", "du", "des", "et", "fur", "für", "und", "der", "&",
     }
+)
+
+_SURNAME_PARTICLES: frozenset[str] = frozenset(
+    {
+        "van", "den", "der", "ten", "ter", "te",
+        "de", "del", "della", "di", "da", "do", "dos", "das", "du", "des",
+        "la", "le", "von", "zu", "zum", "zur", "af",
+        "al", "el", "ibn", "bin", "mac", "mc", "st", "st.",
+    }
+)
+
+_ISO4_TRUNCATED_STEM_RE = re.compile(
+    r"^(?:"
+    r"(?:agro|bio|cosmo|electro|geo|histo|immuno|micro|mikro|neuro|petro|photo|phyto|radio|stereo|thermo)?ch[ei]m|"
+    r"(?:astro|bio|geo|metallo|photo|psychro|thermo)?phys|"
+    r"(?:agro|bio|geo|micro|mol|neuro|photo|phyto|radio|socio)?biol|"
+    r"(?:bio|geo|nano)?eng|"
+    r"(?:bio|nano)?technol|"
+    r"(?:bio|nano|tele|vet)?med|"
+    r"env(?:iron)?|planet|clim|struct|cogn|infect|dis|discuss|"
+    r"sci|lett|rev|toxicol|pharm(?:acol|aceut)?|biochem|"
+    r"mater|catal|(?:bio|macro|supra)?mol|polym|"
+    r"(?:bio|electro|immuno|micro|radio|thermo)?anal|"
+    r"(?:bio|in|metallo)?org|anorg|allg|sustain|"
+    r"soc|assoc|acad|inst|found|"
+    r"trans|commun|proc|bull|ann|arch|acta|zeit|"
+    r"natl|int|eur|am|chin|jpn|aust|russ|brit|ger|helv|gazz|"
+    r"appl|ind|res|dev|exp|theor|comput|math|stat|"
+    r"clin|surg|pathol|oncol|neurol|cardiol|dermatol|psychiatr|pediatr|genet|genom|proteom|virol|bacteriol|immunol|endocrinol|physiol|nutr|"
+    r"ecol|geol|geophys|meteorol|oceanogr|hydrol|agric|agron|"
+    r"chromatogr|spectrosc|crystallogr|metall|miner|ceram|corros|tribol|rheol|"
+    r"educ|manag|econ|inf|syst|autom|electron|opt|acoust|nucl|"
+    r"interf|sep|purif|hazard|biomacromol|biomater|nanomater|nanosci|nanotechnol|"
+    r"ed|ser|sect|suppl|dept|univ"
+    r")$",
+    flags=re.IGNORECASE,
 )
 
 _COMMA_VENUE_SUBTITLE_RE = re.compile(
@@ -194,7 +245,7 @@ _ACS_REFERENCE_ARTICLE = CompiledPattern.create(
         + r"(?P<authors>.+?)\.\s+"
         + _ACS_AUTHOR_STOP_GUARD  # Authors. (don't stop at initial)
         + r"(?P<title>[^.]{5,}?)\.\s+"  # Title (at least 5 chars, not an abbrev token like J. or Am.).
-        + r"(?P<venue>[^;]+?)\.?\s+"  # Journal (with or without abbreviation period)
+        + r"(?P<venue>[^;]+?)(?P<venue_dot>\.)?\s+"  # Journal (preserving optional trailing period)
         + r"(?P<year>(?:19|20)\d{2})\s*,\s*"  # Year,
         + r"(?P<volume>\d+)"  # Volume
         + r"(?:\s*\((?P<issue>[^)]+)\))?"  # Optional (Issue)
@@ -215,7 +266,7 @@ _ACS_REFERENCE_JOURNAL_ABBREV = CompiledPattern.create(
         + r"(?P<authors>.+?)\.\s+"
         + _ACS_AUTHOR_STOP_GUARD
         + r"(?:(?P<title>[^.]{5,}?)\.\s+)?"
-        + r"(?P<venue>[A-Z][^;0-9]+?)(?:\.\s*|\s+)"
+        + r"(?P<venue>[A-Z][^;0-9]+?)(?:(?P<venue_dot>\.)\s*|\s+)"
         + r"(?P<year>(?:19|20)\d{2})(?!\s*;)"
         + r"(?:,\s*(?P<volume>\d+))"
         + r"(?:\s*\((?P<issue>[^)]+)\))?"
@@ -235,7 +286,7 @@ _ACS_REFERENCE_DOI = CompiledPattern.create(
         + r"(?P<authors>.+?)\.\s+"
         + _ACS_AUTHOR_STOP_GUARD
         + r"(?P<title>[^.]{5,}?)\.\s+"
-        + r"(?P<venue>[^;]+?)\.?\s+"
+        + r"(?P<venue>[^;]+?)(?P<venue_dot>\.)?\s+"
         + r"(?P<year>(?:19|20)\d{2})(?!\s*;)"
         + r"(?:\s*,\s*(?P<volume>\d+))?"
         + r"(?:\s*\((?P<issue>[^)]+)\))?"
@@ -517,25 +568,73 @@ class ACSFormat:
             return True
         _init_only_re = r"(?:[A-ZÀ-Ý]\.?-[A-ZÀ-Ý]\.?\s*|[A-ZÀ-Ý]\.?\s*)+"
         _surname_init_swallowed_re = re.compile(
-            r"^(?:(?:van|de|den|der|von|del|da|di|le|la|du|al|el)\s+)?"
-            r"[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+\s*,\s*"
+            r"^"
+            + _ACS_PARTICLE_PREFIX_PAT
+            + r"[A-ZÀ-Ý][A-Za-zÀ-ÿ'\u2019\-]*(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'\u2019\-]*){0,2}\s*,\s*"
             r"(?:[A-ZÀ-Ý]\.?-[A-ZÀ-Ý]\.\s*|[A-ZÀ-Ý]\.\s*)+"
             r"(?!Jr\.?\b|Sr\.?\b|II\b|III\b|IV\b)[A-Za-zÀ-ÿ]{2,}"
         )
+
+        def _is_valid_surname_given_unit(unit: str) -> bool:
+            if "," not in unit:
+                return False
+            before, after = unit.split(",", 1)
+            s_words = [w for w in before.strip().split() if w]
+            if not (1 <= len(s_words) <= 4):
+                return False
+            for w in s_words:
+                wl = w.lower()
+                if wl in _SURNAME_PARTICLES:
+                    continue
+                if "." in w:
+                    return False
+                if re.match(r"^[dD]['\u2019][A-ZÀ-Ý]", w):
+                    continue
+                if not (w[0].isupper() and wl not in _TITLE_CONNECTORS):
+                    return False
+            g_clean = re.sub(
+                r"^(?:,\s*)?|,?\s*(?:Jr\.?|Sr\.?|II|III|IV|et\s+al\.?)\s*$",
+                "",
+                after.strip(),
+                flags=re.IGNORECASE,
+            ).strip()
+            if not g_clean or "," in g_clean:
+                return False
+            if re.fullmatch(_init_only_re, g_clean):
+                return True
+            g_words = g_clean.split()
+            return 1 <= len(g_words) <= 2 and all(
+                w[0].isupper() and w.lower() not in _TITLE_CONNECTORS for w in g_words
+            )
+
+        comma_pair_split_re = re.compile(
+            r"(?<=\b[A-ZÀ-Ý]\.)\s*,\s*(?=" + _ACS_PARTICLE_PREFIX_PAT + r"[A-ZÀ-Ý][a-zà-ÿ])"
+        )
+
         for seg in re.split(r"\s*(?:;|\band\b|&)\s*", cleaned):
-            seg_s = seg.strip()
+            seg_s = seg.strip().rstrip(",").strip()
             if not seg_s:
+                continue
+            if re.match(r"^et\s+al\.?$", seg_s, re.IGNORECASE):
                 continue
             if re.fullmatch(_init_only_re, seg_s):
                 return True
             if _surname_init_swallowed_re.match(seg_s):
                 return True
-        for cseg in [s.strip() for s in cleaned.split(",") if s.strip()]:
-            if re.match(r"^(?:and\b|&|et\s+al\.?|Jr\.?|Sr\.?|II|III|IV)", cseg, re.IGNORECASE):
+            sub_units = [u.strip() for u in comma_pair_split_re.split(seg_s) if u.strip()]
+            if sub_units and all(_is_valid_surname_given_unit(u) for u in sub_units):
                 continue
-            c_words = [w for w in cseg.split() if w.lower() not in _TITLE_CONNECTORS]
-            if len(c_words) >= 3 and not re.search(r"[A-ZÀ-Ý]\.|;", cseg):
-                return True
+            for cseg in [s.strip() for s in seg_s.split(",") if s.strip()]:
+                if re.match(r"^(?:and\b|&|et\s+al\.?|Jr\.?|Sr\.?|II|III|IV)", cseg, re.IGNORECASE):
+                    continue
+                c_words = [
+                    w
+                    for w in cseg.split()
+                    if w.lower() not in _TITLE_CONNECTORS and w.lower() not in _SURNAME_PARTICLES
+                ]
+                if len(c_words) >= 3 and not re.search(r"[A-ZÀ-Ý]\.|;", cseg):
+                    return True
+
         if re.match(rf"^{_RSC_INIT_TOKEN}[A-ZÀ-Ý][a-zà-ÿ'\u2019\-]+", cleaned):
             for cseg in [s.strip() for s in cleaned.split(",") if s.strip()]:
                 if re.match(r"^et\s+al\.?$", cseg, re.IGNORECASE):
@@ -588,41 +687,62 @@ class ACSFormat:
 
     @staticmethod
     def _is_unquoted_title_split(left_full: str, right: str | None = None) -> bool:
-        """Structural ISO-4 vs unquoted sentence/article title detector (allowlist-free).
-
-        In any ISO-4 abbreviated journal (``Org. Biomol. Chem.``, ``ACS Cent. Sci.``,
-        ``ACS Sustain. Chem. Eng.``, ``Proc. Natl. Acad. Sci. U. S. A.``,
-        ``Bioorg. Med. Chem. Lett.``, ``Chin. J. Chem.``), every non-connector word
-        before a ``. `` either ends with ``.`` or is an all-caps acronym. An unquoted
-        article title before ``. Journal`` has >= 2 words in the clause before ``.``
-        where at least one prior non-connector word neither ends with ``.`` nor is an
-        all-caps acronym, or contains lowercase non-connector content words.
-        """
+        """ISO 4:1997 §4.1/§4.2 detector distinguishing unquoted article titles from journal names."""
         if right is not None:
             right_clean = right.strip().rstrip(",").strip()
             if not right_clean or not re.match(r"^[A-Z]", right_clean):
                 return False
-            if re.fullmatch(r"[A-Za-z]{1,6}\.", right_clean):
+            if re.match(
+                r"^(?:Int\.\s*Ed\.(?:\s*Engl\.)?|U\.\s*S\.\s*A\.|U\.S\.A\.|S\.\s*A\.|"
+                r"(?:Part|Ser\.|Series|Sect\.|Section|Suppl\.)\s+[A-Z0-9]+\.?)$",
+                right_clean,
+                flags=re.IGNORECASE,
+            ):
                 return False
+            if " " not in right_clean:
+                right_stem = right_clean.rstrip(".")
+                if re.fullmatch(r"[IVX]+|[A-Z][a-z]{0,2}", right_stem):
+                    return False
+                if _ISO4_TRUNCATED_STEM_RE.fullmatch(right_stem):
+                    return False
+                if right_clean.endswith(".") and len(right_stem) <= 5:
+                    return False
 
-        parts = re.split(r"(?<=\.)\s+", (left_full or "").strip())
+        parts = re.split(r"(?<=\.)\s+(?=[A-Z0-9\"\u201c'\u2018(])", (left_full or "").strip())
         clause = parts[-1].strip() if parts else ""
         tokens = [
-            t.strip(",:()\"'\u201c\u201d[]")
+            t.strip(",:()\"'\u201c\u201d\u2018\u2019[]")
             for t in clause.split()
-            if t.strip(",:()\"'\u201c\u201d[]")
+            if t.strip(",:()\"'\u201c\u201d\u2018\u2019[]")
         ]
         if len(tokens) < 2:
             return False
-        last_stem = re.sub(r"[^A-Za-zÀ-ÿ]", "", tokens[-1].rstrip("."))
-        if len(last_stem) < 4:
+        if re.match(
+            r"^(?:Journal|Proceedings|Transactions|Bulletin|Annals|Annales|Zeitschrift)\s+(?:of|f[uü]r|de|des)\b",
+            clause,
+            flags=re.IGNORECASE,
+        ):
             return False
 
-        non_conn = [t for t in tokens if t.rstrip(".").lower() not in _TITLE_CONNECTORS]
-        if len(non_conn) < 2:
-            return False
-        if any(t[0].islower() for t in non_conn if t[0].isalpha()):
+        # ISO 4:1997 §4.2 Preposition Law: abbreviated ISO-4 journal names omit English
+        # prepositions, articles, and lowercase words. Any multi-token clause containing
+        # a lowercase-leading token (e.g. "Reduction of CO2", "Structure of Photosystem II",
+        # "Mechanics of DNA") is an article title regardless of final token length/formula.
+        foreign_journal_links = {"für", "fur", "de", "du", "des", "der", "la", "le"}
+        if any(
+            t[0].isalpha() and t[0].islower() and t.rstrip(".").lower() not in foreign_journal_links
+            for t in tokens
+        ):
             return True
+
+        # Title-Case-only clauses (zero lowercase-leading words):
+        last_bare = tokens[-1].rstrip(".")
+        if not last_bare:
+            return False
+        if len(last_bare) == 1 and last_bare not in {"I", "V"}:
+            return False
+        if _ISO4_TRUNCATED_STEM_RE.fullmatch(last_bare):
+            return False
 
         if (
             parts[:-1]
@@ -636,16 +756,11 @@ class ACSFormat:
                 for p in parts[:-1]
             )
             and len(tokens) == 2
-            and len(last_stem) <= 5
         ):
             return False
 
         prior_tokens = [t for t in tokens[:-1] if t.rstrip(".").lower() not in _TITLE_CONNECTORS]
-        unabbrev_prior = [
-            t
-            for t in prior_tokens
-            if not t.endswith(".") and not re.fullmatch(r"[A-Z0-9]{2,8}", t)
-        ]
+        unabbrev_prior = [t for t in prior_tokens if not t.endswith(".")]
         return len(unabbrev_prior) >= 1
 
     @classmethod
@@ -792,8 +907,9 @@ class ACSFormat:
         if not authors_str or self._has_incomplete_author_segment(authors_str):
             return None
         venue = match.group('venue').strip()
+        venue_with_dot = f"{venue}{match.groupdict().get('venue_dot') or ''}"
         raw_title = (match.groupdict().get('title') or '').strip()
-        if raw_title and not self._is_unquoted_title_split(f"{raw_title}.", venue):
+        if raw_title and not self._is_unquoted_title_split(f"{raw_title}.", venue_with_dot):
             return None
         parsed_authors = self._parse_authors(authors_str)
         if not parsed_authors:
@@ -855,8 +971,9 @@ class ACSFormat:
         if not authors_str or self._has_incomplete_author_segment(authors_str):
             return None
         venue = match.group('venue').strip()
+        venue_with_dot = f"{venue}{match.groupdict().get('venue_dot') or ''}"
         raw_title = (match.groupdict().get('title') or '').strip()
-        if raw_title and not self._is_unquoted_title_split(f"{raw_title}.", venue):
+        if raw_title and not self._is_unquoted_title_split(f"{raw_title}.", venue_with_dot):
             venue = f"{raw_title}. {venue}"
             raw_title = ""
         parsed_authors = self._parse_authors(authors_str)
@@ -879,11 +996,17 @@ class ACSFormat:
         # Extract venue
         citation.venue = venue
 
+        has_sub_prefix = bool(
+            re.match(
+                r"^\s*(?:(?:\(\s*\d+\s*\)|\d+\.|\[\s*\d+\s*\])\s*)?(?:\(\s*[a-z]\s*\)|[a-z]\))\s+",
+                text,
+            )
+        )
         # Extract title (optional in ACS journal citations)
         if raw_title:
             citation.title = raw_title
             citation.title_normalized = self._normalize_title(raw_title)
-        elif venue and match.groupdict().get('index'):
+        elif venue and match.groupdict().get('index') and not has_sub_prefix:
             citation.title = venue
             citation.title_normalized = self._normalize_title(venue)
 
@@ -941,8 +1064,9 @@ class ACSFormat:
 
         # Extract venue and optional title without splitting ISO-4 journal stems
         venue = match.group('venue').strip()
+        venue_with_dot = f"{venue}{match.groupdict().get('venue_dot') or ''}"
         raw_title = (match.groupdict().get('title') or '').strip()
-        if raw_title and not self._is_unquoted_title_split(f"{raw_title}.", venue):
+        if raw_title and not self._is_unquoted_title_split(f"{raw_title}.", venue_with_dot):
             venue = f"{raw_title}. {venue}"
             raw_title = ""
         citation.venue = venue
@@ -1185,10 +1309,8 @@ class ACSFormat:
         Returns:
             List of author strings
         """
-        # ACS uses semicolons between authors
-        # "Smith, J.; Jones, A.; Brown, B."
-        authors_str = authors_str.replace(';', ',')
-        return parse_authors(authors_str)
+        # ACS uses semicolons between authors ("Smith, J.; Jones, A.; Brown, B.")
+        return parse_authors(authors_str, format_name="ACS")
 
     def _normalize_title(self, title: str) -> str:
         """Normalize title for comparison: lowercase, remove punctuation."""

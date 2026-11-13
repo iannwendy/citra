@@ -71,36 +71,89 @@ _REPO_DOI_VENUE_PREFIXES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("10.17632/", ("mendeley",)),
     ("10.5061/dryad", ("dryad",)),
     ("10.7910/dvn", ("dataverse",)),
+    ("10.13140/rg", ("researchgate",)),
+)
+
+_ISO4_TRUNCATED_STEM_RE = re.compile(
+    r"^(?:"
+    r"(?:agro|bio|cosmo|electro|geo|histo|immuno|micro|mikro|neuro|petro|photo|phyto|radio|stereo|thermo)?ch[ei]m|"
+    r"(?:astro|bio|geo|metallo|photo|psychro|thermo)?phys|"
+    r"(?:agro|bio|geo|micro|mol|neuro|photo|phyto|radio|socio)?biol|"
+    r"(?:bio|geo|nano)?eng|"
+    r"(?:bio|nano)?technol|"
+    r"(?:bio|nano|tele|vet)?med|"
+    r"env(?:iron)?|planet|clim|struct|cogn|infect|dis|discuss|"
+    r"sci|lett|rev|toxicol|pharm(?:acol|aceut)?|biochem|"
+    r"mater|catal|(?:bio|macro|supra)?mol|polym|"
+    r"(?:bio|electro|immuno|micro|radio|thermo)?anal|"
+    r"(?:bio|in|metallo)?org|anorg|allg|sustain|"
+    r"soc|assoc|acad|inst|found|"
+    r"trans|commun|proc|bull|ann|arch|acta|zeit|"
+    r"natl|int|eur|am|chin|jpn|aust|russ|brit|ger|helv|gazz|"
+    r"appl|ind|res|dev|exp|theor|comput|math|stat|"
+    r"clin|surg|pathol|oncol|neurol|cardiol|dermatol|psychiatr|pediatr|genet|genom|proteom|virol|bacteriol|immunol|endocrinol|physiol|nutr|"
+    r"ecol|geol|geophys|meteorol|oceanogr|hydrol|agric|agron|"
+    r"chromatogr|spectrosc|crystallogr|metall|miner|ceram|corros|tribol|rheol|"
+    r"educ|manag|econ|inf|syst|autom|electron|opt|acoust|nucl|"
+    r"interf|sep|purif|hazard|biomacromol|biomater|nanomater|nanosci|nanotechnol|"
+    r"ed|ser|sect|suppl|dept|univ"
+    r")$",
+    flags=re.IGNORECASE,
 )
 
 
 def _is_unquoted_title_clause_before_dot(left_full: str, right: str | None = None) -> bool:
-    """Structural ISO-4 vs unquoted sentence/title detector before ``. `` (allowlist-free)."""
+    """ISO 4:1997 §4.1/§4.2 detector distinguishing unquoted article titles from journal names."""
     if right is not None:
         right_clean = right.strip().rstrip(",").strip()
         if not right_clean or not re.match(r"^[A-Z]", right_clean):
             return False
-        if re.fullmatch(r"[A-Za-z]{1,6}\.", right_clean):
+        if re.match(
+            r"^(?:Int\.\s*Ed\.(?:\s*Engl\.)?|U\.\s*S\.\s*A\.|U\.S\.A\.|S\.\s*A\.|"
+            r"(?:Part|Ser\.|Series|Sect\.|Section|Suppl\.)\s+[A-Z0-9]+\.?)$",
+            right_clean,
+            flags=re.IGNORECASE,
+        ):
             return False
+        if " " not in right_clean:
+            right_stem = right_clean.rstrip(".")
+            if re.fullmatch(r"[IVX]+|[A-Z][a-z]{0,2}", right_stem):
+                return False
+            if _ISO4_TRUNCATED_STEM_RE.fullmatch(right_stem):
+                return False
+            if right_clean.endswith(".") and len(right_stem) <= 5:
+                return False
 
-    parts = re.split(r"(?<=\.)\s+", (left_full or "").strip())
+    parts = re.split(r"(?<=\.)\s+(?=[A-Z0-9\"\u201c'\u2018(])", (left_full or "").strip())
     clause = parts[-1].strip() if parts else ""
     tokens = [
-        t.strip(",:()\"'\u201c\u201d[]")
+        t.strip(",:()\"'\u201c\u201d\u2018\u2019[]")
         for t in clause.split()
-        if t.strip(",:()\"'\u201c\u201d[]")
+        if t.strip(",:()\"'\u201c\u201d\u2018\u2019[]")
     ]
     if len(tokens) < 2:
         return False
-    last_stem = re.sub(r"[^A-Za-zÀ-ÿ]", "", tokens[-1].rstrip("."))
-    if len(last_stem) < 4:
+    if re.match(
+        r"^(?:Journal|Proceedings|Transactions|Bulletin|Annals|Annales|Zeitschrift)\s+(?:of|f[uü]r|de|des)\b",
+        clause,
+        flags=re.IGNORECASE,
+    ):
         return False
 
-    non_conn = [t for t in tokens if t.rstrip(".").lower() not in _VENUE_STOP_TOKENS]
-    if len(non_conn) < 2:
-        return False
-    if any(t[0].islower() for t in non_conn if t[0].isalpha()):
+    foreign_journal_links = {"für", "fur", "de", "du", "des", "der", "la", "le"}
+    if any(
+        t[0].isalpha() and t[0].islower() and t.rstrip(".").lower() not in foreign_journal_links
+        for t in tokens
+    ):
         return True
+
+    last_bare = tokens[-1].rstrip(".")
+    if not last_bare:
+        return False
+    if len(last_bare) == 1 and last_bare not in {"I", "V"}:
+        return False
+    if _ISO4_TRUNCATED_STEM_RE.fullmatch(last_bare):
+        return False
 
     if (
         parts[:-1]
@@ -114,16 +167,11 @@ def _is_unquoted_title_clause_before_dot(left_full: str, right: str | None = Non
             for p in parts[:-1]
         )
         and len(tokens) == 2
-        and len(last_stem) <= 5
     ):
         return False
 
     prior_tokens = [t for t in tokens[:-1] if t.rstrip(".").lower() not in _VENUE_STOP_TOKENS]
-    unabbrev_prior = [
-        t
-        for t in prior_tokens
-        if not t.endswith(".") and not re.fullmatch(r"[A-Z0-9]{2,8}", t)
-    ]
+    unabbrev_prior = [t for t in prior_tokens if not t.endswith(".")]
     return len(unabbrev_prior) >= 1
 
 
@@ -202,6 +250,8 @@ def _iso4_tokens_align(abbr_toks: list[str], full_toks: list[str]) -> bool:
         and unmatched_abbr
         and all(t in {"u", "s", "usa", "uk", "int", "intl", "ed", "engl"} for t in unmatched_abbr)
     ):
+        return True
+    if len(abbr_toks) >= 2 and matched == len(abbr_toks):
         return True
     min_req = len(abbr_toks) - 1 if len(abbr_toks) >= 4 else len(abbr_toks)
     if matched < max(1, min_req):
@@ -1548,12 +1598,13 @@ class SymbolicRules:
         if provenance_penalty > 0:
             provenance_note = f" [provenance penalty: -{provenance_penalty:.0%}]"
 
+        _eff_raw = citation_raw or source.citation_raw
         _norm_cit_title = (citation_title or "").strip().rstrip(".,;").lower()
         _norm_cit_venue = (citation_venue or "").strip().rstrip(".,;").lower()
         is_titleless_journal_ref = (
             bool(_norm_cit_venue)
             and not _has_sentence_period_in_venue(citation_venue)
-            and not _raw_has_unparsed_title_before_venue(citation_raw, citation_venue)
+            and not _raw_has_unparsed_title_before_venue(_eff_raw, citation_venue)
             and (not _norm_cit_title or _norm_cit_title == _norm_cit_venue)
         )
         titleless_venue_ok = _venues_compatible_for_titleless_ref(
@@ -2010,7 +2061,7 @@ class SymbolicRules:
             _cand_tokens = {
                 w
                 for w in re.findall(r"[a-z0-9]{4,}", best.title.lower())
-                if w not in _stop
+                if w not in _stop and not re.fullmatch(r"(?:18|19|20)\d{2}", w)
             }
             _raw_tokens = set(re.findall(r"[a-z0-9]{4,}", citation_raw.lower()))
             if len(_cand_tokens) >= 3 and len(_cand_tokens & _raw_tokens) == 0:
@@ -2021,6 +2072,38 @@ class SymbolicRules:
             and bool(citation_authors)
             and author_sim >= 0.34
             and titleless_venue_ok
+        )
+        _doi_check_norm = ((best.doi if best and best.doi else citation_doi) or "").strip().lower()
+        _is_repo_doi_on_journal = bool(
+            _doi_check_norm
+            and any(
+                _doi_check_norm.startswith(prefix)
+                and not any(h in _norm_cit_venue for h in allowed_hosts)
+                for prefix, allowed_hosts in _REPO_DOI_VENUE_PREFIXES
+            )
+        )
+        _has_journal_vol_page_sig = bool(
+            re.search(
+                r"\b(?:18|19|20)\d{2}\b\s*,\s*[A-Za-z]?\d+\s*,|"
+                r"\b\d+\s*(?:\([^)]+\))?\s*,\s*(?:pp?\.\s*)?[A-Za-z]?\d+\s*(?:[-–—]|\(\s*(?:18|19|20)\d{2})",
+                _eff_raw or "",
+            )
+        )
+        _cand_venue_str = (best.venue or "").strip() if best else ""
+        _titleless_chimeric_venue_mismatch = bool(
+            doi_match
+            and is_titleless_journal_ref
+            and not titleless_venue_ok
+            and features.title_sim_fuzzy < 0.65
+            and (
+                (
+                    bool(_cand_venue_str)
+                    and float(getattr(features, "venue_sim", 0.0) or 0.0) < 0.25
+                    and VenueNormalizer().similarity(citation_venue, _cand_venue_str) < 0.25
+                )
+                or _is_repo_doi_on_journal
+                or (not _cand_venue_str and _has_journal_vol_page_sig)
+            )
         )
 
         if (
@@ -2033,9 +2116,12 @@ class SymbolicRules:
                 (title_sim < 0.35 and author_sim < 0.20)
                 or (features.title_sim_fuzzy < 0.25 and features.title_sim_semantic < 0.45)
                 or _chimeric_zero_content_overlap
+                or _titleless_chimeric_venue_mismatch
             )
         ):
             mismatched.extend(["doi", "title"])
+            if _titleless_chimeric_venue_mismatch:
+                mismatched.append("venue")
             if author_sim < 0.50:
                 mismatched.append("author")
             if year_dist > self.year_tolerance and year_dist < 900:

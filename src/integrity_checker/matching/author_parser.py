@@ -43,18 +43,20 @@ logger = logging.getLogger(__name__)
 # --- Common Dutch multi-word last names (rule-based heuristic) ---
 # Nếu first word là 1 trong các từ này → "X Y Z, F." → last_name = "X Y Z".
 _DUTCH_MULTI_WORD_PREFIXES = frozenset([
-    "van", "de", "den", "der", "ten", "ter",
-    "von", "zu", "zur", "af",
-    "le", "la", "du", "di", "da",
-    "el", "al", "st", "st.",
+    "van", "de", "den", "der", "ten", "ter", "te",
+    "del", "della", "des", "dos", "das", "du", "di", "da", "do",
+    "von", "zu", "zum", "zur", "af",
+    "le", "la",
+    "el", "al", "ibn", "bin", "st", "st.",
 ])
 
 # Particles trong nhiều ngôn ngữ — viết THƯỜNG trong họ
 _PARTICLES = frozenset([
-    "van", "de", "den", "der", "ten", "ter",
-    "von", "zu", "zur", "af",
-    "le", "la", "du", "di", "da",
-    "el", "al", "st", "st.",
+    "van", "de", "den", "der", "ten", "ter", "te",
+    "del", "della", "des", "dos", "das", "du", "di", "da", "do",
+    "von", "zu", "zum", "zur", "af",
+    "le", "la",
+    "el", "al", "ibn", "bin", "st", "st.",
 ])
 
 
@@ -639,19 +641,22 @@ def _safe_parse(piece: str) -> Author | None:
 #
 # Compound particles (van der, de la) need to be matched together.
 # Use ordered alternation: longest first ("van der", "de la", etc.) then individual.
-_PARTICLES_GROUP = (
-    r"(?:[Vv]an\s+der|[Tt]en\s+ter|[Dd]e\s+la|[Dd]er\s+den|[Zz]u\s+zur|[Ll]e\s+la|[Dd]os\s+[Rr]eis)?"  # compound particles first
-    r"(?:[Vv]an|[Dd]e|[Dd]er|[Dd]en|[Vv]on|[Zz]u|[Zz]ur|[Aa]f|[Ll]e|[Ll]a|[Dd]u|[Dd]i|[Dd]a|[Dd]os|[Ee]l|[Aa]l|[Tt]en|[Tt]er|[Ss]t\.)?"  # then single particles
+_SINGLE_PARTICLE_PAT = (
+    r"(?:"
+    r"[Vv]an|[Dd]en|[Dd]er|[Tt]en|[Tt]er|[Tt]e|"
+    r"[Dd]ella|[Dd]el|[Dd]es|[Dd]os|[Dd]as|[Dd]u|[Dd]e|[Dd]i|[Dd]a|[Dd]o|"
+    r"[Ll]a|[Ll]e|[Vv]on|[Zz]um|[Zz]ur|[Zz]u|[Aa]f|"
+    r"[Ee]l|[Aa]l|[Ii]bn|[Bb]in|[Ss]t\.?"
+    r")(?:\s+|[-'\u2019])"
+    r"|[Dd]['\u2019]"
 )
+_PARTICLES_GROUP = rf"(?:(?<![A-Za-zÀ-ỹ'\u2019\-])(?:{_SINGLE_PARTICLE_PAT})){{0,3}}"
 
 _APA_AUTHOR_RE = re.compile(
     rf"""
+    (?<![A-Za-zÀ-ỹ'\u2019\-])
     (?P<author>
-        { _PARTICLES_GROUP }\s*  # optional particles
-        {_UPPER_VN}[a-zà-ỹ\-\'\u2019]+(?:[A-ZÀ-Ý][a-zà-ỹ\-\'\u2019]+)*(?:\s+{_UPPER_VN}[a-zà-ỹ\-\'\u2019]+){{0,2}}   # 1-3 word surname
-        ,\s*
-        (?:{_UPPER_VN}\.(?:\s*[-–]?\s*{_UPPER_VN}\.?)*|{_UPPER_VN}(?:\s*[-–]?\s*{_UPPER_VN})*)(?![A-Za-zÀ-ỹ])
-    |
+        { _PARTICLES_GROUP }\s*  # optional particles (0-3, e.g. van den, del, de la, al-)
         {_UPPER_VN}[a-zà-ỹ\-\'\u2019]+(?:[A-ZÀ-Ý][a-zà-ỹ\-\'\u2019]+)*(?:\s+{_UPPER_VN}[a-zà-ỹ\-\'\u2019]+){{0,2}}   # 1-3 word surname
         ,\s*
         (?:{_UPPER_VN}\.(?:\s*[-–]?\s*{_UPPER_VN}\.?)*|{_UPPER_VN}(?:\s*[-–]?\s*{_UPPER_VN})*)(?![A-Za-zÀ-ỹ])

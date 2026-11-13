@@ -591,21 +591,49 @@ class CitationExtractor:
                     bracket_nums = [int(n) for n, _ in bracket_tokens]
                     bracket_pairs = [(int(n), sub) for n, sub in bracket_tokens]
                     if bracket_nums:
-                        # Reject standalone unit / dimension / orbital brackets like [24h], [10m], [30s],
-                        # [5g], [2d], [3d], [4f] unless part of a multi-item/range bracket like [14a–g] or
-                        # [2a, 2d], or accompanied by sibling composite callouts ([Na]/[Nb]/[Nc]) in text.
-                        if (
-                            len(bracket_pairs) == 1
-                            and bracket_pairs[0][1]
-                            and not re.search(r"[-–—−,]", raw_without_page)
-                            and (
-                                bracket_pairs[0][1] in "ghijklmnopqrstuvwxyz"
-                                or (bracket_pairs[0][1] == "d" and 1 <= bracket_pairs[0][0] <= 6)
-                                or (bracket_pairs[0][1] == "f" and bracket_pairs[0][0] in {4, 5})
+                        # 1) Never allow a range across different parent numbers when suffixes are attached
+                        # (e.g. [10k-50k], [10k]-[50k], [1a-2b]); valid composite ranges share a parent ([14a-c], [14a-14c]).
+                        if any(
+                            (m_r.group(2) or m_r.group(4)) and int(m_r.group(1)) != int(m_r.group(3))
+                            for m_r in re.finditer(
+                                r"(\d+)([a-z]?)\s*\]?\s*[-–—−]\s*\[?\s*(\d+)([a-z]?)",
+                                raw_without_page,
                             )
-                            and not re.search(rf"\[\s*{bracket_pairs[0][0]}[abc]\b", search_text)
                         ):
                             continue
+
+                        def _has_composite_abc_sibling(
+                            parent_num: int,
+                            pairs: list[tuple[int, str]] = bracket_pairs,
+                        ) -> bool:
+                            return any(
+                                n2 == parent_num and s2 in {"a", "b", "c"}
+                                for n2, s2 in pairs
+                            ) or bool(re.search(rf"\[\s*{parent_num}[abc]\b", search_text))
+
+                        # 2) Reject unit / multiplier / dimension / orbital suffixes (g..z, 1d..6d, 4f..5f)
+                        # on ANY bracket item (single or multi-item) unless that parent number has an a/b/c sibling.
+                        if any(
+                            sub
+                            and (
+                                sub in "ghijklmnopqrstuvwxyz"
+                                or (sub == "d" and 1 <= num <= 6)
+                                or (sub == "f" and num in {4, 5})
+                            )
+                            and not _has_composite_abc_sibling(num)
+                            for num, sub in bracket_pairs
+                        ):
+                            continue
+
+                        # 3) Reject multi-item brackets where >=2 distinct parent numbers carry the exact same
+                        # unit/scale suffix in {d, f, g, h, k, l, m, n, p, s, t, u, v, w, x, z} without siblings.
+                        if len(bracket_pairs) >= 2:
+                            _unit_suffix_parents: dict[str, set[int]] = {}
+                            for num, sub in bracket_pairs:
+                                if sub in set("dfghklmnpstuvwxz") and not _has_composite_abc_sibling(num):
+                                    _unit_suffix_parents.setdefault(sub, set()).add(num)
+                            if any(len(p_set) >= 2 for p_set in _unit_suffix_parents.values()):
+                                continue
                         # Reject duplicate tokens inside the same bracket ([1, 1], [10, 255, 255]), large buffer/pixel sizes (>= 300),
                         # or non-ascending multi-number vectors containing values >= 50 (e.g. token IDs [101, 205, 89]).
                         # Distinct composite sub-labels like [14a, 14c] have distinct (14, 'a') vs (14, 'c') pairs.

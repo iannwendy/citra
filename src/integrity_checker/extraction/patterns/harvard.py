@@ -356,6 +356,21 @@ class HarvardFormat:
             auth_s,
         ):
             return True
+        if ";" in auth_s or re.match(
+            r"^(?:(?:\(\s*\d+\s*\)|\d+\.|\[\s*\d+\s*\])\s*)?(?:\(\s*[a-z]\s*\)|[a-z]\))\s+",
+            auth_s,
+        ):
+            return True
+        if re.search(
+            r",\s*(?:[A-ZÀ-Ý]\.?-[A-ZÀ-Ý]\.\s*|[A-ZÀ-Ý]\.\s*)+(?!Jr\.?\b|Sr\.?\b|II\b|III\b|IV\b)[A-ZÀ-Ý][A-Za-zÀ-ÿ]{1,}",
+            auth_s,
+        ):
+            return True
+        title_clean = (title_str or "").strip().strip("'\"\u2018\u2019\u201c\u201d.").strip()
+        if not re.search(r"[A-Za-zÀ-ÿ]{2,}", title_clean) or re.fullmatch(
+            r"[A-Za-z]?\d+(?:\s*\([^)]+\))?", title_clean
+        ):
+            return True
         if re.match(r"^(?:URL\s+|https?://|doi:|arXiv:)", (title_str or "").strip(), re.IGNORECASE):
             return True
         return False

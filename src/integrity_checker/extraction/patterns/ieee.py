@@ -38,6 +38,7 @@ _IEEE_NUMERIC = CompiledPattern.create(
     name="ieee_numeric",
     pattern=(
         r"\[("
+        r"(?![^\]]*\b(?P<_rnum>[1-9]\d{0,2})[a-z]\s*[-–—−]\s*(?!(?P=_rnum)[a-z]\b)[1-9]\d{0,2}[a-z]?\b)"
         r"[1-9]\d{0,2}(?:[a-z](?:\s*[-–—−]\s*[a-z])?(?:\s*,\s*[a-z])*)?"
         r"(?:[,\s\-–—−]+[1-9]\d{0,2}(?:[a-z](?:\s*[-–—−]\s*[a-z])?(?:\s*,\s*[a-z])*)?)*"
         r"(?:\s*[,;:]\s*(?:[Tt]r\.?|[Tt]rang|[Pp]p?\.?)\s*\d+(?:\s*[,–\-—−]\s*\d+)*)?"

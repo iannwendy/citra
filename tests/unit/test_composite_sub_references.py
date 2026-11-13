@@ -1762,3 +1762,402 @@ class TestFixRound3Regressions:
         parsed = dp.parse(str(dummy_pdf), use_service_manager=False)
         assert [c.raw_text for c in parsed.body_citations] == ["[1a]", "[1d]"]
 
+
+class TestFixRound4Regressions:
+    """Regression suite covering all 5 open findings from Task 7 Fix Round 4."""
+
+    def test_iso4_surname_first_and_multistem_titleless_journals_not_split_and_dalton_trans_aligns(
+        self,
+    ) -> None:
+        parser = ReferenceListParser()
+        checker = NeuroSymbolicChecker(enable_content_alignment=False)
+
+        # 1) Surname-first ACS composite with ACS Sustainable Chem. Eng. & Energy Environ. Sci.
+        acs_comp_raw = (
+            "14. (a) Zhang, Y.; Liu, X. ACS Sustainable Chem. Eng. 2020, 8, 1000–1010. "
+            "DOI: 10.1021/acssuschemeng.0c00111; "
+            "(b) Wang, L. Energy Environ. Sci. 2021, 14, 550–558. "
+            "DOI: 10.1039/D1EE00222A."
+        )
+        acs_subs = parser.parse_reference_section(acs_comp_raw, page_num=5)
+        assert len(acs_subs) == 2
+        assert acs_subs[0].title is None
+        assert (acs_subs[0].venue or "").rstrip(".") == "ACS Sustainable Chem. Eng"
+        assert acs_subs[1].title is None
+        assert (acs_subs[1].venue or "").rstrip(".") == "Energy Environ. Sci"
+
+        for sub_cit, full_ven, cand_auth, cand_yr in (
+            (
+                acs_subs[0],
+                "ACS Sustainable Chemistry & Engineering",
+                ["Y. Zhang", "X. Liu"],
+                "2020",
+            ),
+            (
+                acs_subs[1],
+                "Energy & Environmental Science",
+                ["L. Wang"],
+                "2021",
+            ),
+        ):
+            verdict = checker.check(
+                sub_cit,
+                SourceResult(
+                    citation_raw=sub_cit.raw_text,
+                    candidates=[
+                        SourceCandidate(
+                            source_name="crossref",
+                            found=True,
+                            title="Electrocatalytic Valorization of Biomass Derivatives",
+                            authors=cand_auth,
+                            year=cand_yr,
+                            venue=full_ven,
+                            doi=sub_cit.doi,
+                            confidence=0.95,
+                            score=1.0,
+                        )
+                    ],
+                    sources_queried=["crossref"],
+                    sources_succeeded=["crossref"],
+                ),
+            )
+            assert verdict.label == ValidationLabel.VERIFIED
+
+        # 2) Multi-stem / >=7-char-tail ISO-4 journals with unabbreviated leading word + Dalton Trans. / Chem. Commun.
+        rsc_cases = [
+            (
+                "15. (a) Y. Zhang and X. Liu, Earth Planet. Sci. Lett., 2020, 530, 115900, "
+                "DOI: 10.1016/j.epsl.2019.115900; "
+                "(b) L. Wang, Green Chem. Lett. Rev., 2021, 14, 100–110, "
+                "DOI: 10.1080/17518253.2021.1880000.",
+                [
+                    ("Earth Planet. Sci. Lett.", "Earth and Planetary Science Letters", ["Y. Zhang", "X. Liu"], "2020"),
+                    ("Green Chem. Lett. Rev.", "Green Chemistry Letters and Reviews", ["L. Wang"], "2021"),
+                ],
+            ),
+            (
+                "16. (a) Y. Zhang and X. Liu, Food Chem. Toxicol., 2020, 138, 111200, "
+                "DOI: 10.1016/j.fct.2020.111200; "
+                "(b) L. Wang, Soil Biol. Biochem., 2021, 155, 108150, "
+                "DOI: 10.1016/j.soilbio.2021.108150.",
+                [
+                    ("Food Chem. Toxicol.", "Food and Chemical Toxicology", ["Y. Zhang", "X. Liu"], "2020"),
+                    ("Soil Biol. Biochem.", "Soil Biology and Biochemistry", ["L. Wang"], "2021"),
+                ],
+            ),
+            (
+                "17. (a) Y. Zhang and X. Liu, Dalton Trans., 1998, 5, 550–556, "
+                "DOI: 10.1039/A800111A; "
+                "(b) L. Wang, Chem. Commun., 1996, 3, 301–302, "
+                "DOI: 10.1039/CC9960000301.",
+                [
+                    ("Dalton Trans.", "Journal of the Chemical Society, Dalton Transactions", ["Y. Zhang", "X. Liu"], "1998"),
+                    ("Chem. Commun.", "Journal of the Chemical Society, Chemical Communications", ["L. Wang"], "1996"),
+                ],
+            ),
+        ]
+        for raw_entry, expected in rsc_cases:
+            subs = parser.parse_reference_section(raw_entry, page_num=5)
+            assert len(subs) == 2
+            for sub_cit, (exp_ven, full_ven, cand_auth, cand_yr) in zip(subs, expected, strict=True):
+                assert sub_cit.title is None, f"Unexpected title={sub_cit.title!r} for {exp_ven!r}"
+                assert sub_cit.venue == exp_ven
+                v = checker.check(
+                    sub_cit,
+                    SourceResult(
+                        citation_raw=sub_cit.raw_text,
+                        candidates=[
+                            SourceCandidate(
+                                source_name="crossref",
+                                found=True,
+                                title="Isotopic and Coordination Studies in Solution",
+                                authors=cand_auth,
+                                year=cand_yr,
+                                venue=full_ven,
+                                doi=sub_cit.doi,
+                                confidence=0.95,
+                                score=1.0,
+                            )
+                        ],
+                        sources_queried=["crossref"],
+                        sources_succeeded=["crossref"],
+                    ),
+                )
+                assert v.label == ValidationLabel.VERIFIED
+
+    def test_titled_acs_and_rsc_ending_in_formulas_acronyms_roman_numerals_preserve_title_and_j_initial(
+        self,
+    ) -> None:
+        parser = ReferenceListParser()
+        checker = NeuroSymbolicChecker(enable_content_alignment=False)
+
+        titled_acs_cases = [
+            (
+                "2. Doe, A. J. Structure of Photosystem II. J. Am. Chem. Soc. 2020, 142, 100–110.",
+                "doe",
+                ["a", "j"],
+                "Structure of Photosystem II",
+                "J. Am. Chem. Soc",
+            ),
+            (
+                "8. Doe, A. J. Mechanics of DNA. J. Am. Chem. Soc. 2020, 142, 100–110.",
+                "doe",
+                ["a", "j"],
+                "Mechanics of DNA",
+                "J. Am. Chem. Soc",
+            ),
+            (
+                "1. Smith, J. Electrochemical Reduction of CO2. J. Am. Chem. Soc. 2020, 142, 100–110.",
+                "smith",
+                ["j"],
+                "Electrochemical Reduction of CO2",
+                "J. Am. Chem. Soc",
+            ),
+            (
+                "9. Doe, A. J. Of Mice and Molecules. J. Chem. Educ. 2020, 97, 100–105.",
+                "doe",
+                ["a", "j"],
+                "Of Mice and Molecules",
+                "J. Chem. Educ",
+            ),
+        ]
+        for raw, exp_last, exp_inits, exp_title, exp_venue in titled_acs_cases:
+            cit = parser.parse_single_entry(raw, order_index=1, page_num=4)
+            assert cit is not None
+            assert cit.authors[0].last_name == exp_last
+            assert [i.lower().rstrip(".") for i in cit.authors[0].initials] == exp_inits
+            assert cit.title == exp_title
+            assert (cit.venue or "").rstrip(".") == exp_venue
+
+        # RSC chimeric DOI with title ending in CO2 MUST keep title and trigger R-CHIMERIC-DOI-MISMATCH
+        chimeric_co2_raw = (
+            "14. Y. Zhang and X. Liu, Photoredox Quantum Gravity of CO2. "
+            "Chem. Sci., 2020, 11, 100–110, DOI: 10.1039/D0SC00111A."
+        )
+        cit_co2 = parser.parse_single_entry(chimeric_co2_raw, order_index=14, page_num=5)
+        assert cit_co2 is not None
+        assert cit_co2.title == "Photoredox Quantum Gravity of CO2"
+        assert cit_co2.venue == "Chem. Sci."
+        v_co2 = checker.check(
+            cit_co2,
+            SourceResult(
+                citation_raw=cit_co2.raw_text,
+                candidates=[
+                    SourceCandidate(
+                        source_name="crossref",
+                        found=True,
+                        title="Nickel-Catalyzed Reductive Cross-Coupling of Alkyl Bromides",
+                        authors=["Y. Zhang", "X. Liu"],
+                        year="2020",
+                        venue="Chemical Science",
+                        doi="10.1039/D0SC00111A",
+                        confidence=0.95,
+                        score=1.0,
+                    )
+                ],
+                sources_queried=["crossref"],
+                sources_succeeded=["crossref"],
+            ),
+        )
+        assert v_co2.label == ValidationLabel.SUSPECTED_HALLUCINATION
+        assert "R-CHIMERIC-DOI-MISMATCH" in v_co2.triggered_rules
+
+    def test_titleless_chimeric_doi_with_year_token_in_cand_title_and_harvard_no_hijack(
+        self,
+    ) -> None:
+        parser = ReferenceListParser()
+        checker = NeuroSymbolicChecker(enable_content_alignment=False)
+
+        chimeric_probes = [
+            (
+                "14. (a) Y. Zhang and X. Liu, Chem. Sci., 2020, 11, 1234–1240, "
+                "DOI: 10.1109/CVPR42600.2020.00123",
+                SourceCandidate(
+                    source_name="crossref",
+                    found=True,
+                    title="2020 Challenge on Real-World Super-Resolution",
+                    authors=["Y. Zhang", "X. Liu"],
+                    year="2020",
+                    venue="2020 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)",
+                    doi="10.1109/CVPR42600.2020.00123",
+                    confidence=0.95,
+                    score=1.0,
+                ),
+            ),
+            (
+                "14. (a) Y. Zhang and X. Liu, Chem. Sci., 2020, 11, 1234–1240, "
+                "DOI: 10.5281/zenodo.3900123",
+                SourceCandidate(
+                    source_name="crossref",
+                    found=True,
+                    title="Dataset for 2020 Experiments",
+                    authors=["Y. Zhang", "X. Liu"],
+                    year="2020",
+                    venue=None,
+                    doi="10.5281/zenodo.3900123",
+                    confidence=0.95,
+                    score=1.0,
+                ),
+            ),
+            (
+                "14. (a) Y. Zhang and X. Liu, Chem. Sci., 2020, 11, 1234–1240, "
+                "DOI: 10.6084/m9.figshare.1234567",
+                SourceCandidate(
+                    source_name="crossref",
+                    found=True,
+                    title="Raw NMR Spectra 2020",
+                    authors=["Y. Zhang", "X. Liu"],
+                    year="2020",
+                    venue=None,
+                    doi="10.6084/m9.figshare.1234567",
+                    confidence=0.95,
+                    score=1.0,
+                ),
+            ),
+        ]
+        for raw_probe, cand in chimeric_probes:
+            cit = parser.parse_single_entry(raw_probe, order_index=14, page_num=5)
+            assert cit is not None
+            verdict = checker.check(
+                cit,
+                SourceResult(
+                    citation_raw=cit.raw_text,
+                    candidates=[cand],
+                    sources_queried=["crossref"],
+                    sources_succeeded=["crossref"],
+                ),
+            )
+            assert verdict.label == ValidationLabel.SUSPECTED_HALLUCINATION, (
+                f"Expected SUSPECTED_HALLUCINATION for {cand.doi}, got {verdict.label} ({verdict.triggered_rules})"
+            )
+            assert "R-CHIMERIC-DOI-MISMATCH" in verdict.triggered_rules
+
+        # Compatible-venue year typo (year_dist >= 2) MUST still route to Rule 2c METADATA_ERROR
+        cit_typo = parser.parse_single_entry(
+            "14. (a) Y. Zhang and X. Liu, Chem. Sci., 2018, 11, 1234–1240, DOI: 10.1039/D0SC00111A",
+            order_index=14,
+            page_num=5,
+        )
+        assert cit_typo is not None
+        v_typo = checker.check(
+            cit_typo,
+            SourceResult(
+                citation_raw=cit_typo.raw_text,
+                candidates=[
+                    SourceCandidate(
+                        source_name="crossref",
+                        found=True,
+                        title="2020 Catalytic Reactions in Water",
+                        authors=["Y. Zhang", "X. Liu"],
+                        year="2020",
+                        venue="Chemical Science",
+                        doi="10.1039/D0SC00111A",
+                        confidence=0.95,
+                        score=1.0,
+                    )
+                ],
+                sources_queried=["crossref"],
+                sources_succeeded=["crossref"],
+            ),
+        )
+        assert v_typo.label == ValidationLabel.METADATA_ERROR
+
+        # HarvardFormat must NOT hijack lone (a) or [14] surname-first ACS entries
+        acs_non_j_entries = [
+            (
+                "14. (a) Zhang, Y.; Liu, X. ACS Nano 2020, 14, 100–110. DOI: 10.1021/acsnano.0c00111.",
+                "ACS Nano",
+                "14",
+                "100–110",
+            ),
+            (
+                "[14] Zhang, Y.; Liu, X. ACS Nano 2020, 14, 100–110.",
+                "ACS Nano",
+                "14",
+                "100–110",
+            ),
+            (
+                "[14] Zhang, Y.; Liu, X. Green Chem. 2020, 22, 100–110.",
+                "Green Chem",
+                "22",
+                "100–110",
+            ),
+            (
+                "14. (a) Zhang, Y.; Liu, X. Dalton Trans. 2020, 49, 100–110.",
+                "Dalton Trans",
+                "49",
+                "100–110",
+            ),
+        ]
+        for raw_acs, exp_ven, exp_vol, exp_pages in acs_non_j_entries:
+            parsed_acs = parser.parse_single_entry(raw_acs, order_index=14, page_num=6)
+            assert parsed_acs is not None
+            assert parsed_acs.style == CitationStyle.ACS
+            assert parsed_acs.title is None
+            assert (parsed_acs.venue or "").rstrip(".") == exp_ven
+            assert parsed_acs.volume == exp_vol
+            assert parsed_acs.pages == exp_pages
+            assert [a.last_name for a in parsed_acs.authors] == ["zhang", "liu"]
+
+    def test_acs_three_word_particle_and_compound_surnames_parsed_cleanly(self) -> None:
+        parser = ReferenceListParser()
+
+        c1 = parser.parse_single_entry(
+            "1. van den Berg, A.; Jansen, B. Synthesis of Ketones. J. Org. Chem. 2020, 85, 100–110.",
+            order_index=1,
+            page_num=5,
+        )
+        assert c1 is not None
+        assert c1.style == CitationStyle.ACS
+        assert [a.last_name for a in c1.authors] == ["van den berg", "jansen"]
+        assert c1.title == "Synthesis of Ketones"
+        assert (c1.venue or "").rstrip(".") == "J. Org. Chem"
+
+        c2 = parser.parse_single_entry(
+            "2. del Rio Garcia, J. Asymmetric Catalysis. Org. Lett. 2020, 22, 100–105.",
+            order_index=2,
+            page_num=5,
+        )
+        assert c2 is not None
+        assert c2.style == CitationStyle.ACS
+        assert [a.last_name for a in c2.authors] == ["del rio garcia"]
+        assert c2.title == "Asymmetric Catalysis"
+        assert (c2.venue or "").rstrip(".") == "Org. Lett"
+
+        c3 = parser.parse_single_entry(
+            "3. Garcia Marquez, G. Synthesis of Natural Products. J. Am. Chem. Soc. 2020, 142, 100–110.",
+            order_index=3,
+            page_num=5,
+        )
+        assert c3 is not None
+        assert c3.style == CitationStyle.ACS
+        assert [a.last_name for a in c3.authors] == ["garcia marquez"]
+        assert c3.title == "Synthesis of Natural Products"
+        assert (c3.venue or "").rstrip(".") == "J. Am. Chem. Soc"
+
+    def test_multi_item_unit_multiplier_and_scale_brackets_rejected(self) -> None:
+        extractor = CitationExtractor(preserve_occurrences=True)
+
+        non_citation_prose = (
+            "We benchmarked context lengths [4k, 8k, 16k] and dataset sizes [10k-50k] "
+            "across upscaling factors [2x, 4x], latency budgets [5s, 10s, 30s], "
+            "distances [10m, 50m], incubation times [1h, 6h, 24h], and meshes [2d, 3d]."
+        )
+        assert extractor.extract_from_text(non_citation_prose, page_num=1) == []
+
+        valid_prose = (
+            "Earlier work [14a, 14c], full series [14a–g], mixed callouts [12, 14b, 15], "
+            "and prior studies [14a], [14b], [14c], and [14g] confirmed the mechanism."
+        )
+        extracted = extractor.extract_from_text(valid_prose, page_num=1)
+        assert [c.raw_text for c in extracted] == [
+            "[14a, 14c]",
+            "[14a–g]",
+            "[12, 14b, 15]",
+            "[14a]",
+            "[14b]",
+            "[14c]",
+            "[14g]",
+        ]
+
+

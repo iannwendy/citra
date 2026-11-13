@@ -742,6 +742,11 @@ class DocumentParser:
         )
 
         def _has_disallowed_unit_token(spec: str) -> bool:
+            if any(
+                (m_r.group(2) or m_r.group(4)) and int(m_r.group(1)) != int(m_r.group(3))
+                for m_r in re.finditer(r"(\d+)([a-z]?)\s*[-–—−]\s*(\d+)([a-z]?)", spec)
+            ):
+                return True
             pairs = re.findall(r"(\d+)([a-z])", spec)
             if not pairs:
                 return True
@@ -752,7 +757,7 @@ class DocumentParser:
                     continue
                 if n_val not in composite_nums:
                     return True
-                if sub_ch in {"h", "m", "s", "v", "w", "k", "l"} or (
+                if sub_ch in {"h", "m", "s", "v", "w", "k", "l", "n", "p", "t", "u", "x", "z"} or (
                     sub_ch == "g" and n_val <= 6
                 ):
                     return True
