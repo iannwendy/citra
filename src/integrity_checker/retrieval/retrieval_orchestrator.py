@@ -28,6 +28,8 @@ from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
+import httpx
+
 from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
 from integrity_checker.models.citation import Citation
@@ -3087,6 +3089,13 @@ class RetrievalOrchestrator:
             return cand.error or "HTTP 429 rate limited"
         if http_status is not None and http_status >= 500:
             return f"HTTP {http_status}: {cand.error or 'server error'}"
+        if (
+            http_status is not None
+            and 200 <= http_status < 500
+            and http_status != 429
+            and not http_transport_err
+        ):
+            return None
         if http_transport_err:
             te_l = http_transport_err.lower()
             if "timeout" in te_l or "timed out" in te_l:
@@ -3112,8 +3121,6 @@ class RetrievalOrchestrator:
         )
         if any(m in err_no_quotes for m in clean_miss_markers):
             return None
-        if http_status in (200, 404):
-            return None
         if "404" in err_no_quotes or (
             "not found" in err_no_quotes
             and not any(
@@ -3130,7 +3137,7 @@ class RetrievalOrchestrator:
         ):
             return raw_err
         if re.search(
-            r"\b(?:http[\s/_-]*)?50[0-9]\b|\b5xx\b|service unavailable|bad gateway|"
+            r"\b(?:http[\s/_-]*)?5\d{2}\b|\b5xx\b|service unavailable|bad gateway|"
             r"gateway timeout|internal server error",
             err_no_quotes,
         ):
@@ -3169,97 +3176,108 @@ class RetrievalOrchestrator:
                 error=f"circuit_open ({rem:.0f}s remaining)",
             )
 
-        limiter = self._rate_limiters.get(client.name)
-        if limiter:
-            fast_fail = (
-                limiter.should_fast_fail() is True
-                if hasattr(limiter, "should_fast_fail")
-                else limiter.is_in_backoff() is True
-            )
-            if fast_fail:
-                logger.debug(
-                    f"Skipping {client.name} lookup while rate-limit backoff is active"
-                )
-                self._circuit_breakers.record_infra_failure(
-                    client.name,
-                    "HTTP 429 rate-limit backoff active",
-                    0.0,
-                )
-                return SourceCandidate(
-                    source_name=client.name,
-                    found=False,
-                    error=f"{client.name}: skipped (rate-limit backoff active)",
-                )
-            await limiter.wait()
-
-        notified_429 = False
-
-        def _on_http_429(source_name: str, retry_after: float | None) -> None:
-            nonlocal notified_429
-            if limiter and source_name == client.name and not notified_429:
-                notified_429 = True
-                if isinstance(retry_after, (int, float)):
-                    limiter.report_rate_limited(float(retry_after))
-                else:
-                    limiter.report_rate_limited()
-
-        reset_task_http_status(client.name)
-        started_at = time.perf_counter()
-        cb_token = set_rate_limit_callback(_on_http_429) if limiter else None
+        outcome_recorded = False
         try:
-            cand = await client.lookup(citation)
-        except asyncio.CancelledError:
-            self._circuit_breakers.release_probe(client.name)
-            raise
-        except Exception as exc:
-            latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
-            if isinstance(exc, AssertionError):
-                self._circuit_breakers.release_probe(client.name)
-            else:
-                self._circuit_breakers.record_infra_failure(
-                    client.name,
-                    f"{exc.__class__.__name__}: {exc}",
-                    latency_ms,
+            limiter = self._rate_limiters.get(client.name)
+            if limiter:
+                fast_fail = (
+                    limiter.should_fast_fail() is True
+                    if hasattr(limiter, "should_fast_fail")
+                    else limiter.is_in_backoff() is True
                 )
-            raise
-        finally:
-            if cb_token is not None:
-                reset_rate_limit_callback(cb_token)
+                if fast_fail:
+                    logger.debug(
+                        f"Skipping {client.name} lookup while rate-limit backoff is active"
+                    )
+                    return SourceCandidate(
+                        source_name=client.name,
+                        found=False,
+                        error=f"{client.name}: skipped (rate-limit backoff active)",
+                    )
+                await limiter.wait()
 
-        latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
-        http_status, _http_ra, http_transport_err = get_task_http_status(client.name)
+            notified_429 = False
 
-        if limiter:
-            err_lower = (cand.error or "").lower()
-            is_429 = bool(
-                cand.error and ("429" in cand.error or "rate limit" in err_lower)
-            )
-            if is_429:
-                if not notified_429:
-                    retry_after_val = getattr(client, "_last_retry_after", None)
-                    if isinstance(retry_after_val, (int, float)):
-                        limiter.report_rate_limited(float(retry_after_val))
+            def _on_http_429(source_name: str, retry_after: float | None) -> None:
+                nonlocal notified_429
+                if limiter and source_name == client.name and not notified_429:
+                    notified_429 = True
+                    if isinstance(retry_after, (int, float)):
+                        limiter.report_rate_limited(float(retry_after))
                     else:
                         limiter.report_rate_limited()
-            elif not notified_429:
-                limiter.report_success()
 
-        infra_reason = self._classify_lookup_infra_failure(
-            cand,
-            http_status=http_status,
-            http_transport_err=http_transport_err,
-            notified_429=notified_429,
-        )
-        if infra_reason is not None:
-            self._circuit_breakers.record_infra_failure(
-                client.name,
-                infra_reason,
-                latency_ms,
+            reset_task_http_status(client.name)
+            started_at = time.perf_counter()
+            cb_token = set_rate_limit_callback(_on_http_429) if limiter else None
+            try:
+                cand = await client.lookup(citation)
+            except httpx.HTTPStatusError as exc:
+                latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
+                status_code = exc.response.status_code if exc.response is not None else None
+                if status_code == 429 or (status_code is not None and status_code >= 500):
+                    self._circuit_breakers.record_infra_failure(
+                        client.name,
+                        f"HTTP {status_code}: {exc}",
+                        latency_ms,
+                    )
+                    outcome_recorded = True
+                elif status_code is not None and 200 <= status_code < 500:
+                    self._circuit_breakers.record_success(client.name, latency_ms)
+                    outcome_recorded = True
+                raise
+            except Exception as exc:
+                latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
+                if not isinstance(exc, AssertionError):
+                    self._circuit_breakers.record_infra_failure(
+                        client.name,
+                        f"{exc.__class__.__name__}: {exc}",
+                        latency_ms,
+                    )
+                    outcome_recorded = True
+                raise
+            finally:
+                if cb_token is not None:
+                    reset_rate_limit_callback(cb_token)
+
+            latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
+            http_status, _http_ra, http_transport_err = get_task_http_status(client.name)
+
+            if limiter:
+                err_lower = (cand.error or "").lower()
+                is_429 = bool(
+                    cand.error and ("429" in cand.error or "rate limit" in err_lower)
+                )
+                if is_429:
+                    if not notified_429:
+                        retry_after_val = getattr(client, "_last_retry_after", None)
+                        if isinstance(retry_after_val, (int, float)):
+                            limiter.report_rate_limited(float(retry_after_val))
+                        else:
+                            limiter.report_rate_limited()
+                elif not notified_429:
+                    limiter.report_success()
+
+            infra_reason = self._classify_lookup_infra_failure(
+                cand,
+                http_status=http_status,
+                http_transport_err=http_transport_err,
+                notified_429=notified_429,
             )
-        else:
-            self._circuit_breakers.record_success(client.name, latency_ms)
+            if infra_reason is not None:
+                self._circuit_breakers.record_infra_failure(
+                    client.name,
+                    infra_reason,
+                    latency_ms,
+                )
+            else:
+                self._circuit_breakers.record_success(client.name, latency_ms)
+            outcome_recorded = True
 
-        return cand
+            return cand
+        finally:
+            if not outcome_recorded:
+                self._circuit_breakers.release_probe(client.name)
 
     async def _lookup_with_cache_and_ratelimit(
         self,

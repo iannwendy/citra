@@ -11,8 +11,8 @@ from enum import Enum
 from typing import Any
 
 _HTTP_5XX_RE = re.compile(
-    r"\b(?:http[\s/_-]*)?50[0-9]\b|\b5xx\b|service unavailable|bad gateway|"
-    r"gateway timeout|internal server error|httpstatuserror",
+    r"\b(?:http[\s/_-]*)?5\d{2}\b|\b5xx\b|service unavailable|bad gateway|"
+    r"gateway timeout|internal server error",
     re.IGNORECASE,
 )
 
@@ -40,6 +40,7 @@ class _SourceCircuit:
     has_latency_sample: bool = False
     open_until: float = 0.0
     probe_in_flight: bool = False
+    probe_started_at: float = 0.0
 
 
 class CircuitBreakerRegistry:
@@ -98,22 +99,28 @@ class CircuitBreakerRegistry:
                 if now >= entry.open_until:
                     entry.state = CircuitState.HALF_OPEN
                     entry.probe_in_flight = True
+                    entry.probe_started_at = now
                     entry.open_until = 0.0
                     return True, 0.0
                 return False, max(0.0, entry.open_until - now)
 
-            # HALF_OPEN: admit at most 1 probe caller concurrently
-            if not entry.probe_in_flight:
+            # HALF_OPEN: admit at most 1 probe caller concurrently (auto-expiring stale probes)
+            if (
+                not entry.probe_in_flight
+                or (now - entry.probe_started_at) >= self._recovery_timeout_seconds
+            ):
                 entry.probe_in_flight = True
+                entry.probe_started_at = now
                 return True, 0.0
             return False, max(0.0, entry.open_until - now)
 
     def release_probe(self, source_name: str) -> None:
-        """Clear `probe_in_flight` if a `HALF_OPEN` probe task is cancelled mid-flight."""
+        """Clear `probe_in_flight` if a `HALF_OPEN` probe task is cancelled or skipped."""
         with self._lock:
             entry = self._circuits.get(source_name)
             if entry is not None and entry.state == CircuitState.HALF_OPEN:
                 entry.probe_in_flight = False
+                entry.probe_started_at = 0.0
 
     def record_success(self, source_name: str, latency_ms: float) -> None:
         """Record a clean hit or clean scholarly miss (e.g. HTTP 200 empty / HTTP 404)."""
@@ -124,6 +131,7 @@ class CircuitBreakerRegistry:
             self._update_ema(entry, latency_ms)
             entry.consecutive_failures = 0
             entry.probe_in_flight = False
+            entry.probe_started_at = 0.0
             entry.open_until = 0.0
             if entry.state != CircuitState.CLOSED:
                 entry.state = CircuitState.CLOSED
@@ -163,6 +171,7 @@ class CircuitBreakerRegistry:
                 entry.state = CircuitState.OPEN
                 entry.open_until = float(self._now_fn()) + self._recovery_timeout_seconds
                 entry.probe_in_flight = False
+                entry.probe_started_at = 0.0
 
     def snapshot_all(self) -> dict[str, dict[str, Any]]:
         """Return per-source telemetry dictionary for `/api/system/health` observability."""
