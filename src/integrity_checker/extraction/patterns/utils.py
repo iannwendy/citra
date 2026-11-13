@@ -30,13 +30,14 @@ from integrity_checker.extraction.patterns.base import CompiledPattern, PatternT
 
 DOI_PATTERN = CompiledPattern.create(
     name="doi",
-    pattern=r"10\.\d{4,9}/(?:[^\s\]\)\,;()]|\([^\s\]\)\,;()]*\))+",
+    pattern=r"10\.\d{4,9}/(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))+",
     pattern_type=PatternType.UTILITY,
     description="DOI: Matches 10.xxxx/yyyy format (Digital Object Identifier)",
 )
 
 # Pre-compiled regex for direct use
-_DOI_REGEX = re.compile(r"10\.\d{4,9}/(?:[^\s\]\)\,;()]|\([^\s\]\)\,;()]*\))+")
+_DOI_REGEX = re.compile(r"10\.\d{4,9}/(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))+")
+_ZERO_WIDTH_RE = re.compile(r"[\u200b\u200c\u200d\ufeff]")
 
 
 def extract_doi(text: str) -> str | None:
@@ -58,11 +59,14 @@ def extract_doi(text: str) -> str | None:
     """
     if not text:
         return None
-    match = _DOI_REGEX.search(text)
+    cleaned = _ZERO_WIDTH_RE.sub("", text)
+    match = _DOI_REGEX.search(cleaned)
     if match:
         doi = match.group(0)
+        doi = re.sub(r"[?#].*$", "", doi)
+        doi = re.sub(r"&[A-Za-z_][A-Za-z0-9_]*=.*$", "", doi)
         # Clean trailing punctuation
-        return doi.rstrip(".,;:")
+        return doi.rstrip(".,;:>")
     return None
 
 
@@ -81,13 +85,17 @@ def extract_doi(text: str) -> str | None:
 
 URL_PATTERN = CompiledPattern.create(
     name="url",
-    pattern=r"https?://(?:[^\s\]\)\,;()]|\([^\s\]\)\,;()]*\))+",
+    pattern=r"https?://(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))+",
     pattern_type=PatternType.UTILITY,
     description="URL: Matches http(s)://... format (Uniform Resource Locator)",
 )
 
 # Pre-compiled regex for direct use
-_URL_REGEX = re.compile(r"https?://(?:[^\s\]\)\,;()]|\([^\s\]\)\,;()]*\))+")
+_URL_REGEX = re.compile(r"https?://(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))+")
+_WWW_URL_REGEX = re.compile(
+    r"\bwww\.[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+(?:/(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))*)?",
+    re.IGNORECASE,
+)
 
 
 def extract_url(text: str) -> str | None:
@@ -109,15 +117,21 @@ def extract_url(text: str) -> str | None:
     """
     if not text:
         return None
+    clean_input = _ZERO_WIDTH_RE.sub("", text)
     repaired_text = re.sub(
         r"\b(https?://)\s+(?=[A-Za-z0-9][^\s/]*\.[a-z]{2,})",
         r"\1",
-        text,
+        clean_input,
         flags=re.IGNORECASE,
     )
     match = _URL_REGEX.search(repaired_text)
-    if match:
-        url = match.group(0)
+    raw_url: str | None = match.group(0) if match else None
+    if raw_url is None:
+        www_match = _WWW_URL_REGEX.search(repaired_text)
+        if www_match:
+            raw_url = f"https://{www_match.group(0)}"
+    if raw_url:
+        url = raw_url
         # Split concatenated URLs (e.g. "https://github.com/a/b-https://github.com/c/d" or "...pdfhttps://...")
         scheme_end = url.find("://") + 3
         second_url_m = re.search(
@@ -134,9 +148,9 @@ def extract_url(text: str) -> str | None:
             flags=re.IGNORECASE,
         )
         # Clean trailing punctuation while preserving balanced parentheses in URL path
-        url = url.rstrip(".,;:'\"\u2019\u201d")
+        url = url.rstrip(".,;:'\"\u2019\u201d>")
         while url.endswith(")") and url.count(")") > url.count("("):
-            url = url[:-1].rstrip(".,;:'\"\u2019\u201d")
+            url = url[:-1].rstrip(".,;:'\"\u2019\u201d>")
         host_m = re.match(r"^https?://([^/\s]+)", url, re.IGNORECASE)
         if not host_m or ("." not in host_m.group(1) and host_m.group(1).lower() != "localhost"):
             return None

@@ -117,6 +117,31 @@ def grobid_to_references(output: GrobidOutput) -> list:
 
     for idx, bib in enumerate(output.bibliography, start=1):
         citation = _grobid_bib_to_citation(bib, idx)
+        # Guard against GROBID PDF layout bleed attaching a neighbor entry's DOI
+        # onto an entry whose raw_reference contains no DOI at all (e.g. 20-theses/30.pdf).
+        raw_ref = (getattr(bib, "raw_reference", "") or "").strip()
+        if citation.doi and len(raw_ref) >= 15 and "10." not in raw_ref:
+            doi_compact = re.sub(r"[\s\-]+", "", citation.doi.lower())
+            neighbor_has_doi = False
+            for n_idx in (idx - 2, idx):
+                if 0 <= n_idx < len(output.bibliography):
+                    n_raw = re.sub(
+                        r"[\s\-]+",
+                        "",
+                        (getattr(output.bibliography[n_idx], "raw_reference", "") or "").lower(),
+                    )
+                    if doi_compact and doi_compact in n_raw:
+                        neighbor_has_doi = True
+                        break
+            if neighbor_has_doi or citation.url:
+                old_doi = citation.doi
+                citation.doi = None
+                if citation.raw_text:
+                    citation.raw_text = re.sub(
+                        rf"\s*DOI:\s*{re.escape(old_doi)}",
+                        "",
+                        citation.raw_text,
+                    ).strip()
         citations.append(citation)
 
     return citations
@@ -188,7 +213,10 @@ def _grobid_bib_to_citation(bib: GrobidBibEntry, order_index: int) -> Citation:
     elif venue and title and venue.strip().rstrip(".,").lower() == title.strip().rstrip(".,").lower():
         venue = None
 
-    url = getattr(bib, "url", None)
+    from integrity_checker.extraction.patterns.utils import extract_doi
+
+    raw_url_orig = getattr(bib, "url", None)
+    url = raw_url_orig
     if title and not re.match(r"^(?:https?://|www\.)", title.strip(), re.IGNORECASE):
         trailing_url_m = re.search(r"\s+(https?://\S+)\s*$", title.strip(), re.IGNORECASE)
         if trailing_url_m:
@@ -196,10 +224,35 @@ def _grobid_bib_to_citation(bib: GrobidBibEntry, order_index: int) -> Citation:
                 url = trailing_url_m.group(1)
             title = title.strip()[: trailing_url_m.start()].strip().rstrip(".,;")
     if url:
-        url = re.sub(r"[\(\[](?:ac-?\s*cessed|re-?\s*trieved)\b.*$", "", url, flags=re.IGNORECASE).rstrip(".,;)'\"\u2019\u201d")
+        url = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", url)
+        url = re.sub(r"[\(\[](?:ac-?\s*cessed|re-?\s*trieved)\b.*$", "", url, flags=re.IGNORECASE).rstrip(".,;)'\"\u2019\u201d>")
         host_m = re.match(r"^https?://([^/\s]+)", url, re.IGNORECASE)
         if not host_m or "." not in host_m.group(1):
             url = None
+
+    doi_val: str | None = bib.doi
+    if doi_val:
+        doi_val = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", doi_val).strip()
+        if re.match(r"^(?:https?://|(?:dx\.)?doi\.org/)", doi_val, re.IGNORECASE):
+            doi_val = extract_doi(doi_val)
+        elif doi_val:
+            doi_val = re.sub(r"[?#].*$", "", doi_val)
+            doi_val = re.sub(r"&[A-Za-z_][A-Za-z0-9_]*=.*$", "", doi_val).rstrip(".,;:>")
+    if doi_val:
+        full_doi = extract_doi(url or "") or extract_doi(raw_ref_str or "")
+        if (
+            full_doi
+            and full_doi.lower().startswith(doi_val.lower())
+            and len(full_doi) > len(doi_val)
+        ):
+            doi_val = full_doi
+        elif re.fullmatch(r"10\.\d{4,9}/[A-Za-z]", doi_val) or re.search(
+            rf"{re.escape(doi_val)}[./]?\u200b",
+            f"{raw_url_orig or ''} {raw_ref_str or ''}",
+            re.IGNORECASE,
+        ):
+            doi_val = None
+
     if not year and url:
         arxiv_yr_m = re.search(r"arxiv\.org/(?:abs|pdf)/(\d{2})\d{2}\.\d{4,5}", url, re.IGNORECASE)
         if arxiv_yr_m:
@@ -230,8 +283,8 @@ def _grobid_bib_to_citation(bib: GrobidBibEntry, order_index: int) -> Citation:
         raw_parts.append(title)
     if venue:
         raw_parts.append(venue)
-    if bib.doi:
-        raw_parts.append(f"DOI: {bib.doi}")
+    if doi_val:
+        raw_parts.append(f"DOI: {doi_val}")
     if url:
         raw_parts.append(url)
     raw_text = " ".join(raw_parts) if raw_parts else title or raw_ref_str or ""
@@ -239,7 +292,7 @@ def _grobid_bib_to_citation(bib: GrobidBibEntry, order_index: int) -> Citation:
         raw_text = raw_ref_str
 
     # Estimate confidence based on field completeness
-    confidence = _estimate_bib_confidence(bib, authors_raw, title, year, bib.doi)
+    confidence = _estimate_bib_confidence(bib, authors_raw, title, year, doi_val)
 
     # Create Citation with provenance stored in matched_pattern (backward compat)
     # NOTE: In Phase 2, we add provenance fields directly to Citation model
@@ -252,7 +305,7 @@ def _grobid_bib_to_citation(bib: GrobidBibEntry, order_index: int) -> Citation:
         year=year,
         title=title,
         venue=venue,
-        doi=bib.doi,
+        doi=doi_val,
         url=url,
         order_index=order_index,
         numeric_index=order_index,  # GROBID bib order = numeric reference index
@@ -603,6 +656,24 @@ def _normalize_url_for_dedup(url: str | None) -> str:
     return u
 
 
+def _years_compatible_for_dedup(a: Citation, b: Citation) -> bool:
+    """Return True if two citations have compatible publication years/suffixes."""
+    if not a.year or not b.year:
+        return True
+    sa_raw = str(a.year).strip()
+    sb_raw = str(b.year).strip()
+    ya = sa_raw[:4] if len(sa_raw) >= 4 and sa_raw[:4].isdigit() else sa_raw
+    yb = sb_raw[:4] if len(sb_raw) >= 4 and sb_raw[:4].isdigit() else sb_raw
+    raw_comb = f"{a.raw_text or ''} {b.raw_text or ''}".lower()
+    if ya != yb:
+        return "accessed" in raw_comb
+    sfx_a = (getattr(a, "year_suffix", None) or (sa_raw[4:] if len(sa_raw) > 4 else "")).strip().lower()
+    sfx_b = (getattr(b, "year_suffix", None) or (sb_raw[4:] if len(sb_raw) > 4 else "")).strip().lower()
+    if sfx_a and sfx_b and sfx_a != sfx_b:
+        return False
+    return True
+
+
 def _is_duplicate_reference(cit: Citation, existing: list[Citation]) -> bool:
     """Check if citation is a duplicate of an existing entry.
 
@@ -624,12 +695,7 @@ def _is_duplicate_reference(cit: Citation, existing: list[Citation]) -> bool:
             ex_url = _normalize_url_for_dedup(getattr(existing_cit, "url", None))
             if not ex_url:
                 continue
-            if (
-                cit.year
-                and existing_cit.year
-                and str(cit.year) != str(existing_cit.year)
-                and "accessed" not in f"{cit.raw_text or ''} {existing_cit.raw_text or ''}".lower()
-            ):
+            if not _years_compatible_for_dedup(cit, existing_cit):
                 continue
             if cit_url == ex_url:
                 return True
@@ -653,10 +719,8 @@ def _is_duplicate_reference(cit: Citation, existing: list[Citation]) -> bool:
 def _title_author_year_match(a: Citation, b: Citation) -> bool:
     """Check if two citations match on title + author + year."""
     # Year must match when both have a year, unless one side picked up an "Accessed YYYY" year
-    if a.year and b.year and a.year != b.year:
-        raw_comb = f"{a.raw_text or ''} {b.raw_text or ''}".lower()
-        if "accessed" not in raw_comb:
-            return False
+    if not _years_compatible_for_dedup(a, b):
+        return False
 
     # Author must have significant overlap when both citations have authors
     def _get_author_names(authors_list) -> set:

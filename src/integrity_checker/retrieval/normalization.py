@@ -297,6 +297,18 @@ def citation_key(citation: Citation) -> str:
     title = normalize_text(citation.title)
     authors = sorted(author_keys(citation.authors))
     year = year_key(citation.year)
+    sfx = (getattr(citation, "year_suffix", None) or "").strip().lower()
+    if not sfx and citation.year:
+        m_sfx = re.search(r"(?:18|19|20)\d{2}([a-zA-Z])$", str(citation.year).strip())
+        if m_sfx:
+            sfx = m_sfx.group(1).lower()
+    year_with_sfx = f"{year or ''}{sfx}"
+    url_norm = (citation.url or "").strip().rstrip("/.,;").lower()
     if title:
-        return f"title:{title}|author:{','.join(authors[:3])}|year:{year or ''}"
+        key = f"title:{title}|author:{','.join(authors[:3])}|year:{year_with_sfx}"
+        if url_norm and (sfx or len(title.split()) <= 2):
+            key = f"{key}|url:{url_norm}"
+        return key
+    if url_norm:
+        return f"url:{url_norm}|year:{year_with_sfx}"
     return f"raw:{normalize_text(citation.raw_text)}"

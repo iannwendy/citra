@@ -42,12 +42,12 @@ _STOPWORDS_AHEAD = (
     r"|Likewise|Otherwise|Subsequently|Accordingly|Alternatively|Finally|Overall"
     r"|Also|First|Firstly|Second|Secondly|Third|Thirdly|Lastly"
     r"|Recently|Traditionally|Historically|Yet|Still|Even|While|Whereas|Because"
-    r"|Since|When|Where|If|Unless|Until|After|Before|Once|Despite|Unlike|Like"
+    r"|Since|When|Where|If|Unless|Until|After|Before|Once|Despite|Unlike|Like|During|Through|Throughout|Within|Without|Between|Among|Around|About|Under|Over|Against|Toward|Towards|Into|Upon|Across"
     r"|Table|Figure|Chapter|Section|Appendix|Part|Page|Papers|Networks"
     r"|Only|Both|Either|Neither|All|Most|Many|Some|Several|Few|Other|Such|These|Those|Each|Every|No|Nor|Not"
     r"|Binary|Logistic|Probit|Heckman|Tobit|Regression|Random|Forest|Gradient|Boosting)(?:,|\s+))"
 )
-_AUTHOR_TOKEN = rf"(?:(?:van|de|der|von)\s+)*{_UPPER_VN}[a-zA-ZÀ-ỹ'\u2019\-]+"
+_AUTHOR_TOKEN = rf"(?:(?:van|de|der|von)\s+)*{_UPPER_VN}[a-zA-ZÀ-ỹ\-]+(?:['\u2019][a-zA-ZÀ-ỹ\-]+)*"
 _AUTHOR_PHRASE = rf"{_STOPWORDS_AHEAD}{_AUTHOR_TOKEN}(?:[^\S\n]+{_STOPWORDS_AHEAD}{_AUTHOR_TOKEN}){{0,3}}"
 _COAUTHOR_PHRASE = rf"{_STOPWORDS_AHEAD}{_AUTHOR_TOKEN}(?:\s+{_STOPWORDS_AHEAD}{_AUTHOR_TOKEN}){{0,3}}"
 _CORP_AUTHOR_NARRATIVE = (
@@ -81,7 +81,7 @@ _APA_INTEXT_NARRATIVE = CompiledPattern.create(
         rf"({_CORP_AUTHOR_NARRATIVE}|{_AUTHOR_PHRASE}"
         rf"(?:(?:\s*,\s*(?:và|and|&)\s+|\s+(?:và|and|&)\s+|\s*,\s*){_COAUTHOR_PHRASE})*"
         rf"(?:\s*,?\s*(?:et\s+a?l\.?|và\s+cộng\s+sự|và\s+cs\.?|và\s+ctv\.?|và\s+cộng\s+tác\s+viên))?"
-        rf"(?:[\s,]{_UPPER_VN}[a-zA-ZÀ-ỹ'\u2019\-]*)*)"
+        rf"(?:[\s,]{_UPPER_VN}[a-zA-ZÀ-ỹ\-]*(?:['\u2019][a-zA-ZÀ-ỹ\-]+)*)*)"
         rf"\s+[\(\[]((?:18|19|20)\d{{2}}[a-z]?|n\.?\s*d\.?(?:-[a-z])?){_PAGE_OR_SECONDARY_SUFFIX}[\)\]]"
         rf"|({_AUTHOR_PHRASE}\s+et\s+al\.)\s+((?:18|19|20)\d{{2}}[a-z]?)\b"
     ),
@@ -100,7 +100,7 @@ _APA_REFERENCE_ENTRY = CompiledPattern.create(
         r"(?P<authors>.+?)"
         r"\s*,?\s*\(\s*(?:(?:\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*)?(?P<year>(?:18|19|20)\d{2})(?P<suffix>[a-z])?(?:\s*[,–\-/]\s*[^)]+)?|(?P<nd>n\.?\s*d\.?)(?:-(?P<nd_suffix>[a-z]))?)\s*\)"
         r"[.,:]?\s*"
-        r"(?P<title>[^\.]+?)"
+        r"(?P<title>(?!https?://|www\.)[^\.]+?)"
         r"\.(?:\s*)"
         r"(?P<venue>.+)"
         r"$"
@@ -133,9 +133,9 @@ _APA_NUMBERED_REFERENCE = CompiledPattern.create(
     pattern=(
         r"^\[\s*\d+\s*\]\s*"
         r"(?P<authors>[A-Z][a-zÀ-ž]+(?:,\s*[A-Z]\.?\s*[A-Z]?[a-zÀ-ž]*)*)"
-        r"\s+\(\s*(?P<year>\d{4})(?P<suffix>[a-z])?(?:\s*,\s*[^)]+)?\s*\)"
+        r"\s+\(\s*(?P<year>(?:18|19|20)\d{2})(?P<suffix>[a-z])?(?:\s*,\s*[^)]+)?\s*\)"
         r"\.?\s*"
-        r"(?P<title>[^\.]+?)"
+        r"(?P<title>(?!https?://|www\.)[^\.]+?)"
         r"\.(?:\s*)"
         r"(?P<venue>.+)"
     ),
@@ -149,9 +149,9 @@ _APA_BOOK_CHAPTER = CompiledPattern.create(
     pattern=(
         r"^"
         r"(?P<authors>.+?)"
-        r"\s+\(\s*(?P<year>\d{4})(?P<suffix>[a-z])?(?:\s*,\s*[^)]+)?\s*\)"
+        r"\s+\(\s*(?P<year>(?:18|19|20)\d{2})(?P<suffix>[a-z])?(?:\s*,\s*[^)]+)?\s*\)"
         r"\.?\s*"
-        r"(?P<title>[^\.]+?)"
+        r"(?P<title>(?!https?://|www\.)[^\.]+?)"
         r"\.\s*"
         r"In\s+"
         r"(?P<editor>.+?)"
@@ -171,9 +171,9 @@ _APA_SIMPLE_ENTRY = CompiledPattern.create(
     pattern=(
         r"^"
         r"(?P<authors>[A-Z][a-zA-ZÀ-ž0-9.'\u2019\-]+(?:,\s*[A-Z]\.?\s*[A-Z]?[a-zÀ-ž]*|\s+[A-Z][a-zA-ZÀ-ž0-9.'\u2019\-]+){0,5})"
-        r"\.?\s+\(\s*(?P<year>\d{4})(?P<suffix>[a-z])?\)"
+        r"\.?\s+\(\s*(?P<year>(?:18|19|20)\d{2})(?P<suffix>[a-z])?\)"
         r"\.?\s*"
-        r"(?P<title>[^\.]+?)"
+        r"(?P<title>(?!https?://|www\.)[^\.]+?)"
         r"\.\s*"
         r"(?P<venue>.+)"
         r"$"
@@ -1055,7 +1055,7 @@ class APAFormat:
         )
 
         # Try to extract year
-        year_match = re.search(r"\((\d{4})([a-z])?\)", text)
+        year_match = re.search(r"\(((?:18|19|20)\d{2})([a-z])?\)", text)
         if year_match:
             before_year = text[:year_match.start()].strip()
             after_year = text[year_match.end():].strip()
@@ -1071,15 +1071,24 @@ class APAFormat:
             if clean_auth:
                 citation.authors = self._parse_authors(clean_auth)
 
-        # Try to extract title (text between year and period after it)
+        # Try to extract title (text between year and period after it, without splitting a bare URL at domain dots)
         if year_match:
             after_year = text[year_match.end():]
-            title_match = re.search(r"\.?\s*(.+?)(?:\.|$)", after_year)
-            if title_match:
-                title = title_match.group(1).strip()
-                if title and len(title) > 5:
-                    citation.title = title
-                    citation.title_normalized = self._normalize_title(title)
+            after_year_clean = re.sub(r"^[.,:]?\s*", "", after_year).strip()
+            bare_url_m = re.match(r"^((?:https?://|www\.)\S+)", after_year_clean, re.IGNORECASE)
+            if bare_url_m:
+                full_u = bare_url_m.group(1).rstrip(".,;>")
+                if full_u.lower().startswith("www."):
+                    full_u = f"https://{full_u}"
+                citation.title = full_u
+                citation.title_normalized = self._normalize_title(full_u)
+            else:
+                title_match = re.search(r"\.?\s*(.+?)(?:\.|$)", after_year)
+                if title_match:
+                    title = title_match.group(1).strip()
+                    if title and len(title) > 5:
+                        citation.title = title
+                        citation.title_normalized = self._normalize_title(title)
 
         # Try to extract DOI
         doi_match = re.search(r"(10\.\d{4,9}/(?:[^\s\]\)\,;()]|\([^\s\]\)\,;()]*\))+)", text)

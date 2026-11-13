@@ -158,6 +158,47 @@ class DuplicateDetector:
                     )
                 )
 
+            # 2b. Specific URL exact groups (handles authorless web duplicates such as Wikipedia #cite_note)
+            url_groups: dict[str, list[tuple[int, Citation]]] = {}
+            for i, cit in enumerate(bib_citations):
+                if i in assigned:
+                    continue
+                spec_url = self._normalize_specific_url(cit.url)
+                if spec_url:
+                    url_groups.setdefault(spec_url, []).append((i, cit))
+
+            for spec_url, entries in url_groups.items():
+                if len(entries) < 2:
+                    continue
+                base_idx, base_cit = entries[0]
+                compatible = [(base_idx, base_cit)]
+                base_title = self._title_key(base_cit)
+                for idx_e, cand_cit in entries[1:]:
+                    if idx_e in assigned or self._explicitly_distinct(base_cit, cand_cit):
+                        continue
+                    if (
+                        base_cit.year
+                        and cand_cit.year
+                        and str(base_cit.year)[:4] != str(cand_cit.year)[:4]
+                    ):
+                        continue
+                    cand_title = self._title_key(cand_cit)
+                    if base_title and cand_title and self._jaccard_words(base_title, cand_title) < 0.5:
+                        continue
+                    compatible.append((idx_e, cand_cit))
+                if len(compatible) < 2:
+                    continue
+                for idx_c, _ in compatible:
+                    assigned.add(idx_c)
+                groups.append(
+                    DuplicateGroup(
+                        citations=[c for _, c in compatible],
+                        reason=f"Exact URL match: {spec_url}",
+                        score=1.0,
+                        representative=compatible[0][1],
+                    )
+                )
+
         # 3. Title + year + author similarity fallback
         if self.threshold < 1.0:
             remaining = [
@@ -266,6 +307,22 @@ class DuplicateDetector:
             return ""
         d = _DOI_PREFIX_RE.sub("", str(doi).strip())
         return d.rstrip(".,;)").strip().lower()
+
+    @staticmethod
+    def _normalize_specific_url(url: str | None) -> str:
+        """Normalize a URL that points to a specific path/resource (rejects bare root domains)."""
+        if not url:
+            return ""
+        u = re.sub(r"^https?://(?:www\.)?", "", str(url).strip(), flags=re.IGNORECASE)
+        u = u.rstrip(".,;)>")
+        slash_pos = u.find("/")
+        if slash_pos < 0:
+            return ""
+        host = u[:slash_pos].lower()
+        path_part = u[slash_pos:].rstrip("/")
+        if len(path_part.lstrip("/")) < 4:
+            return ""
+        return f"{host}{path_part}"
 
     @staticmethod
     def _title_key(cit: Citation) -> str:

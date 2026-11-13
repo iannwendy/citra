@@ -64,9 +64,16 @@ _NARRATIVE_YEAR_RE = re.compile(
     r"([A-Za-zÀ-ỹ][A-Za-zÀ-ỹ0-9/'\u2019.\s,&\-\[\]]*?)\s*[\(\[]\s*((?:18|19|20)\d{2}[a-z]?|n\.?\s*d\.?(?:-[a-z])?)(?:\s*[,:]\s*[^)\]]*)?\s*[\)\]]",
     re.IGNORECASE,
 )
-# Secondary citation (trích dẫn gián tiếp): "(Smith, 2005, dẫn theo Tran, 2016)" / "Smith (2005, as cited in Tran, 2016)" / "(quoted in Smith, 2020)"
+# Secondary citation (trích dẫn gián tiếp): "(Smith, 2005, dẫn theo Tran, 2016)" / "Smith (2005, as cited in Tran, 2016)" / "(all cited by Fox et al., 2023)"
 _SECONDARY_CITATION_RE = re.compile(
-    r"(?:dẫn\s+(?:lại\s+)?(?:theo|từ)|trích\s+(?:dẫn\s+)?(?:trong|từ|theo)|(?:as\s+)?(?:cited|quoted)\s+in)\s+([^)]+)\)?",
+    r"(?:dẫn\s+(?:lại\s+)?(?:theo|từ)|trích\s+(?:dẫn\s+)?(?:trong|từ|theo)|(?:all\s+)?(?:as\s+)?(?:cited|quoted)\s+(?:in|by))\s+([^)]+)\)?",
+    re.IGNORECASE,
+)
+# Same-author multi-year citation component: "Beck et al., 1979 & 2005" or "Smith, 2019, 2021"
+_SAME_AUTHOR_MULTI_YEAR_RE = re.compile(
+    r"^(?P<author>[A-Za-zÀ-ỹ][^,()\[\]]*?),\s*"
+    r"(?P<first_yr>(?:18|19|20)\d{2}[a-z]?)"
+    r"(?P<rest_yrs>(?:\s*(?:,|&|\band\b|\bvà\b)\s*(?:18|19|20)\d{2}[a-z]?)+)\s*$",
     re.IGNORECASE,
 )
 # Institutional / Corporate / Legal author indicator
@@ -473,19 +480,35 @@ class CitationLinker:
         # author-year keys separated by semicolons.  The extractor keeps this
         # as one occurrence (important for audit/UI), but the occurrence must
         # still link to every cited bibliography entry.
-        if cit.citation_type == CitationType.IN_TEXT and ";" in cit.raw_text:
+        stripped_intext = re.sub(r"(?<=\w)-\s+(?=\w)", "", (cit.raw_text or "")).strip().strip("()[]")
+        if cit.citation_type == CitationType.IN_TEXT and (
+            ";" in cit.raw_text or bool(_SAME_AUTHOR_MULTI_YEAR_RE.match(stripped_intext))
+        ):
             multi_links: list[CitationLink] = []
             has_trailing_secondary = bool(_SECONDARY_CITATION_RE.search(cit.raw_text))
-            raw_semi_parts = cit.raw_text.split(";")
+            raw_semi_parts = cit.raw_text.split(";") if ";" in cit.raw_text else [cit.raw_text]
             merged_semi_parts: list[str] = []
             buf_semi = ""
-            for rp in raw_semi_parts:
+            for idx_rp, rp in enumerate(raw_semi_parts):
                 rp_clean = rp.strip().strip("()[]")
-                buf_semi = f"{buf_semi}, {rp.strip()}" if buf_semi else rp.strip()
-                if (
+                has_year_tok = bool(
                     re.search(r"\b(?:18|19|20)\d{2}\b|\bn\.?\s*d\.?\b|\b\d{1,4}\b", rp, re.I)
-                    or not rp_clean.isupper()
+                )
+                if (
+                    not buf_semi
+                    and not has_year_tok
+                    and re.fullmatch(r"[A-Z0-9/\-]{2,15}", rp_clean)
+                    and idx_rp + 1 < len(raw_semi_parts)
+                    and re.search(
+                        r"[A-Za-zÀ-ỹ]{2,}.*\b(?:(?:18|19|20)\d{2}|n\.?\s*d\.?)\b",
+                        raw_semi_parts[idx_rp + 1],
+                        re.I,
+                    )
                 ):
+                    # Drop parenthetical acronym definition before semicolon, e.g. "(SEIS; Schutte et al., 2009)"
+                    continue
+                buf_semi = f"{buf_semi}, {rp.strip()}" if buf_semi else rp.strip()
+                if has_year_tok or not rp_clean.isupper():
                     merged_semi_parts.append(buf_semi)
                     buf_semi = ""
             if buf_semi:
@@ -493,7 +516,20 @@ class CitationLinker:
                     merged_semi_parts[-1] = f"{merged_semi_parts[-1]}, {buf_semi}"
                 else:
                     merged_semi_parts.append(buf_semi)
-            for part in merged_semi_parts:
+            expanded_semi_parts: list[str] = []
+            for raw_part in merged_semi_parts:
+                clean_p = re.sub(r"(?<=\w)-\s+(?=\w)", "", raw_part).strip().strip("()[]")
+                my_m = _SAME_AUTHOR_MULTI_YEAR_RE.match(clean_p)
+                if my_m:
+                    auth_prefix = my_m.group("author").strip()
+                    yrs = [my_m.group("first_yr")] + re.findall(
+                        r"(?:18|19|20)\d{2}[a-z]?", my_m.group("rest_yrs")
+                    )
+                    for yr_item in yrs:
+                        expanded_semi_parts.append(f"{auth_prefix}, {yr_item}")
+                else:
+                    expanded_semi_parts.append(raw_part)
+            for part in expanded_semi_parts:
                 # Splitting removes the outer closing parenthesis from every
                 # component except the last one.  Parse each component as a
                 # standalone APA key and repair PDF line-break hyphenation.
@@ -549,6 +585,7 @@ class CitationLinker:
                             status=CitationMappingStatus.MISSING_REFERENCE,
                             confidence=0.0,
                             method=MappingMethod.NO_KEYS,
+                            evidence={"sub_citation": part.strip("()")},
                         ))
             if any(lnk.status == CitationMappingStatus.MATCHED for lnk in multi_links):
                 return multi_links
@@ -731,9 +768,17 @@ class CitationLinker:
                 )
 
         # Pass 2: Minor spelling/transposition typo on surname when year agrees (e.g. Beauvias/Beauvais, Adizogel/Adigozel, Kato-Katoaka/Kato-Kataoka, Shet/Shen, Zade/Zadeh)
-        if len(author_folded) >= 3:
+        is_vn_legal_query = bool(
+            re.match(
+                r"^(?:bo\s+luat|luat|phap\s+lenh|nghi\s+dinh|thong\s+tu|quyet\s+dinh|nghi\s+quyet|hien\s+phap)\b",
+                author_folded,
+            )
+        )
+        if len(author_folded) >= 3 and not is_vn_legal_query:
             from integrity_checker.matching.author_matcher import author_match_score
             for bib_idx, bib in enumerate(bib_citations):
+                if getattr(bib, "matched_pattern", None) == "vn_legal_document":
+                    continue
                 bib_norm_yr, _ = self._resolve_bib_year_and_suffix(bib)
                 if not bib.authors or (bib_norm_yr != year and (bib.year or "") != year):
                     continue

@@ -328,7 +328,7 @@ def _is_fake_entry(entry: str) -> bool:
         ):
             return False
         if len(text_stripped) >= 15 and re.match(
-            r"^\s*(?:\[\s*\d{1,3}\s*\]\.?|\d{1,3}\s*[\.\)])\s*(?:https?://|www\.|[A-ZÀ-Ý]\S+)",
+            r"^\s*(?:\[\s*\d{1,3}\s*\]\.?|\d{1,3}\s*[\.\)])\s*(?:https?://|www\.|[A-ZÀ-Ý]\S+|\d{1,4}\s+(?:U\.S\.C\.|U\.S\.|S\.\s*Ct\.|L\.\s*Ed\.|F\.\s*(?:2d|3d|4th|Supp\.)|Stat\.|C\.F\.R\.|Fed\.\s*Reg\.))",
             text_stripped,
             re.IGNORECASE,
         ):
@@ -554,6 +554,7 @@ class ReferenceListParser:
         import unicodedata
 
         text = unicodedata.normalize("NFC", text)
+        started_with_notes_header = bool(re.match(r"^\s*notes\s*\n", text, flags=re.IGNORECASE))
 
         # 1. Strip header prefix
         header_strip_re = re.compile(
@@ -658,7 +659,9 @@ class ReferenceListParser:
                 return alpha_result
 
         # 3b. Sequentially dot/paren-numbered bibliography ('1. ...', '2. ...', '3. ...')
-        dot_numbered_split = self._split_sequential_dot_numbered(text)
+        dot_numbered_split = self._split_sequential_dot_numbered(
+            text, allow_wider_gaps=started_with_notes_header
+        )
         if len(dot_numbered_split) >= 2:
             return dot_numbered_split
 
@@ -677,13 +680,17 @@ class ReferenceListParser:
         # 6. Chỉ 1 entry
         return [text] if len(text) > 20 else []
 
-    def _split_sequential_dot_numbered(self, text: str) -> list[str]:
+    def _split_sequential_dot_numbered(
+        self, text: str, *, allow_wider_gaps: bool = False
+    ) -> list[str]:
         """Split a bibliography that uses sequential dot/paren numbering ('1. ...', '2. ...').
 
         Also handles multi-section numbered lists ('I. Văn bản... 1..M', 'II. Tài liệu... 1..N')
         and hybrid TDTU lists ('A. Văn bản... 1..3', 'B. Tài liệu... unnumbered APA').
         """
         lines = text.splitlines()
+        is_synthetic_notes = allow_wider_gaps or text.lstrip().startswith("Notes\n")
+        max_num_gap = 12 if is_synthetic_notes else 2
         num_line_re = re.compile(
             r"^\s*(?:(?:\((?P<pnum>\d{1,3})\)|(?P<num>\d{1,3})\s*[\.\)])(?:\s+(?P<rest>\S.*)|(?P<nospace_rest>(?:https?://|www\.)\S.*|[A-ZÀ-ÝĂÂĐÊÔƠƯ][A-Za-zÀ-ỹ'\u2019\-]+,\s*\S.*))?|(?P<tnum>\d{1,3})[\t\u2002\u2003]+\s*(?P<trest>[A-ZÀ-Ý]\S.*))$"
         )
@@ -706,7 +713,7 @@ class ReferenceListParser:
                 if (
                     not found_nums
                     or n == expected
-                    or (expected < n <= expected + 2)
+                    or (expected < n <= expected + max_num_gap)
                     or (n == 1 and (len(found_nums) >= 1 or allow_reset_to_one))
                 ):
                     found_nums.append(n)
@@ -784,7 +791,7 @@ class ReferenceListParser:
             m = num_line_re.match(raw_ln) or num_line_re.match(ln)
             if m:
                 n = int(m.group("num") or m.group("pnum") or m.group("tnum"))
-                if n == expected or (expected < n <= expected + 2) or (n == 1 and entries):
+                if n == expected or (expected < n <= expected + max_num_gap) or (n == 1 and entries):
                     if in_unnumbered_section and unnumbered_tail_lines:
                         tail_text = "\n".join(unnumbered_tail_lines)
                         entries.extend(self._split_by_year_boundary(tail_text))
@@ -1474,6 +1481,13 @@ class ReferenceListParser:
         running_header_re = re.compile(r"^[\w\s]+?\s{3,}\d{1,3}\s*$")
         running_head_prefix_re = re.compile(r"^\s*Running\s+head\s*:.*$", re.IGNORECASE)
         allcaps_header_page_re = re.compile(r"^[A-Z0-9\s,'\-:]{4,70}\s+\d{1,3}\s*$")
+        pipe_running_header_re = re.compile(
+            r"^[^|\n]{3,65}\|\s*[^|\n]{2,45}\s+\d{1,4}\s*$"
+        )
+        journal_doi_footer_re = re.compile(
+            r"^\s*(?:PLOS\s+[A-Z]+|[A-Z][A-Za-z\s&]{2,40})\s*\|\s*(?:https?://(?:dx\.)?doi\.org/|DOI:\s*)10\.\d{4,9}/\S+.*\b\d{1,4}\s*/\s*\d{1,4}\s*$",
+            re.IGNORECASE,
+        )
         conf_running_header_re = re.compile(
             r"^\s*(?:(?:Published|Under\s+review)\s+as\s+a\s+(?:conference|workshop)\s+paper\s+at\s+.+|Preprint\.?(?:\s+Under\s+review\.?)?|(?:(?:Page\s+)?\d+\s+of\s+\d+|Page\s+\d+|of\s+\d{1,4})|(?:\d{1,3}\s+)?[A-Z][A-Za-zÀ-ÿ\-]+\s+et\s+al\.(?:\s+\d{1,3})?)\s*$",
             re.IGNORECASE,
@@ -1522,6 +1536,17 @@ class ReferenceListParser:
                 and any(c.strip() for c in cleaned)
             ):
                 break
+            # Stop at unheaded author biography paragraphs at the end of IEEE/RTU/Elsevier papers
+            # (e.g. "Daniils Aleksandrovs-Moisejs was born in Riga in 1997. He obtained his...")
+            if (
+                any(c.strip() for c in cleaned)
+                and re.match(
+                    r"^[A-ZÀ-Ý][A-Za-zÀ-ỹ'\u2019\-]+(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ỹ.'\u2019\-]+){1,3}\s+(?:was\s+born\s+in\b|received\s+(?:the|his|her)\s+(?:B\.S\.|M\.S\.|Ph\.D\.|Bachelor|Master))",
+                    stripped,
+                )
+                and not any(re.match(r"^\s*\[\d+\]", rem_ln) for rem_ln in lines[idx_ln + 1 :])
+            ):
+                break
             # Drop HTML hyperlink return anchors ("return to" / "text") and Australian TEXT journal footers
             if re.fullmatch(
                 r"(?:return\s+to(?:\s+text)?|TEXT\s+Vol\s+\d+\s+No\s+\d+.*|.*Revista\s+de\s+Estudios\s+Norteamericanos.*ISSN\s+\d{4}-\d{3,4}.*)",
@@ -1545,7 +1570,7 @@ class ReferenceListParser:
             # Skip standalone page numbers, page fractions ("16/20"), or PDF font encoding bullet '®'
             # (unless the previous line ended mid-DOI/URL, e.g. "...2020.acl-main.\n740")
             if re.fullmatch(
-                r"(?:\d{1,4}|\d{1,4}\s*/\s*\d{1,4}|\[\d{3,4}\]|®|Trang\s+\d{1,4}(?:\s*/\s*\d{1,4})?|\d{1,4}\s*\|\s*Page)",
+                r"(?:\d{1,4}|\d{1,4}\s*/\s*\d{1,4}|\[\d{3,4}\]|®|Trang\s+\d{1,4}(?:\s*/\s*\d{1,4})?|\d{1,4}\s*\|\s*P\s*a\s*g\s*e|P\s*a\s*g\s*e\s*\|\s*\d{1,4})",
                 stripped,
                 re.IGNORECASE,
             ):
@@ -1565,9 +1590,14 @@ class ReferenceListParser:
                             next_nonempty_rem,
                         )
                     )
+                    ends_with_completed_doi_or_url_dot = bool(
+                        prev_clean.endswith(".")
+                        and not re.search(r"(?:10\.|[A-Za-z\-]\.)$", prev_clean)
+                    )
                     if (
                         not is_root_domain_slash
                         and not followed_by_new_ref
+                        and not ends_with_completed_doi_or_url_dot
                         and re.search(
                             r"(?:https?://|\b10\.\d{4,9}/)\S*[./\-_]$",
                             prev_clean,
@@ -1607,6 +1637,8 @@ class ReferenceListParser:
                 running_header_re.match(stripped)
                 or running_head_prefix_re.match(stripped)
                 or allcaps_header_page_re.match(stripped)
+                or pipe_running_header_re.match(stripped)
+                or journal_doi_footer_re.match(stripped)
                 or conf_running_header_re.match(stripped)
             ):
                 continue
@@ -1862,6 +1894,32 @@ class ReferenceListParser:
                 confidence=0.9,
             )
 
+        body_after_idx = re.sub(
+            r"^\s*(?:\[\s*\d+\s*\]|\(\s*\d{1,3}\s*\)|\d{1,3}\s*[\.\)])\s*",
+            "",
+            entry,
+        ).strip()
+        bluebook_statute_m = re.match(
+            r"^(?P<cite>\d{1,4}\s+(?:U\.S\.C\.(?:\s*A\.|\s*S\.)?|U\.S\.|S\.\s*Ct\.|L\.\s*Ed\.(?:\s*2d)?|F\.\s*(?:2d|3d|4th|Supp\.(?:\s*2d|\s*3d)?)|Stat\.|C\.F\.R\.|Fed\.\s*Reg\.)\s*(?:§+\s*)?[\w.\-–—()]+(?:\s+et\s+seq\.)?)\s*\(\s*(?P<yr>(?:17|18|19|20)\d{2})\s*\)\.?\s*$",
+            body_after_idx,
+        )
+        if bluebook_statute_m:
+            cite_title = bluebook_statute_m.group("cite").strip()
+            yr = bluebook_statute_m.group("yr")
+            return Citation(
+                raw_text=original_entry_raw,
+                citation_type=CitationType.REFERENCE_LIST,
+                style=CitationStyle.CHICAGO,
+                page_num=page_num,
+                order_index=order_index,
+                numeric_index=numeric_index,
+                matched_pattern="bluebook_statute_entry",
+                title=cite_title,
+                title_normalized=_normalize_title(cite_title),
+                year=yr,
+                confidence=0.9,
+            )
+
         # Unquoted book/chapter entry: ``Surname, Initials, Title (Year) venue``.
         # Must run BEFORE the format registry — ``nature_book`` claims these
         # entries with a one-letter "title" and provably wrong authors.
@@ -1959,6 +2017,12 @@ class ReferenceListParser:
                     # Set numeric_index if found and not already set
                     if numeric_index and citation.numeric_index is None:
                         citation.numeric_index = numeric_index
+                    if not citation.doi:
+                        from integrity_checker.extraction.patterns.utils import extract_doi
+
+                        extracted_d = extract_doi(entry)
+                        if extracted_d:
+                            citation.doi = extracted_d
                     if not citation.url:
                         from integrity_checker.extraction.patterns.utils import extract_url
 
@@ -1976,6 +2040,12 @@ class ReferenceListParser:
             if citation:
                 if numeric_index and citation.numeric_index is None:
                     citation.numeric_index = numeric_index
+                if not citation.doi:
+                    from integrity_checker.extraction.patterns.utils import extract_doi
+
+                    extracted_d = extract_doi(entry)
+                    if extracted_d:
+                        citation.doi = extracted_d
                 if not citation.url:
                     from integrity_checker.extraction.patterns.utils import extract_url
 
@@ -1992,6 +2062,20 @@ class ReferenceListParser:
                 citation.raw_text = original_entry_raw
             if numeric_index and citation.numeric_index is None:
                 citation.numeric_index = numeric_index
+            if not citation.doi:
+                from integrity_checker.extraction.patterns.utils import extract_doi
+
+                extracted_d = extract_doi(entry)
+                if extracted_d:
+                    citation.doi = extracted_d
+            if not citation.url:
+                from integrity_checker.extraction.patterns.utils import extract_url
+
+                extracted_u = extract_url(entry)
+                if extracted_u and not re.search(
+                    r"doi\.org/10\.\d{4,9}/", extracted_u, re.IGNORECASE
+                ):
+                    citation.url = extracted_u
             return citation
 
         # Vancouver last — heuristic loose

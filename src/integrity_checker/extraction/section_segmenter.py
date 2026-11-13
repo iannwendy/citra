@@ -608,14 +608,18 @@ class SectionSegmenter:
                         continue
                 if re.fullmatch(r"references?\s*[:.]?", stripped, re.IGNORECASE):
                     # Only inspect non-empty lines AFTER any standalone page-number line in the running header
+                    page_hdr_re = re.compile(
+                        r"^(?:\d{1,3}|page\s+\d{1,3}(?:\s*(?:/|of)\s*\d{1,3})?)$",
+                        re.IGNORECASE,
+                    )
                     last_page_num_line = -1
                     for p_idx in range(idx):
-                        if re.fullmatch(r"\d{1,3}", lines[p_idx].strip()):
+                        if page_hdr_re.fullmatch(lines[p_idx].strip()):
                             last_page_num_line = p_idx
                     prev_nonpage = [
                         ln.strip()
                         for ln in lines[last_page_num_line + 1 : idx]
-                        if ln.strip() and not re.fullmatch(r"\d{1,3}", ln.strip())
+                        if ln.strip() and not page_hdr_re.fullmatch(ln.strip())
                     ]
                     if (
                         len(prev_nonpage) >= 2
@@ -627,7 +631,7 @@ class SectionSegmenter:
                             for ln in prev_nonpage[-2:]
                         )
                         and not any(
-                            re.match(r"^\s*(?:\[\s*1\s*\]|1\.)\s+\S", ln)
+                            re.match(r"^\s*(?:\[\s*1\s*\]\.?|1\.)(?:\s+\S|\s*$)", ln)
                             or re.search(
                                 r"^[A-ZÀ-Ý][A-Za-zÀ-ỹ'\u2019\-]+,\s+[A-Z].*\b(?:18|19|20)\d{2}\b",
                                 ln,
@@ -890,7 +894,9 @@ class SectionSegmenter:
             r"^(?:\d{1,3}|Page\s+\d+\s+of\s+\d+|URL:\s*https?://\S+.*|History\s+of\s+Education)$",
             re.IGNORECASE,
         )
-        fn_start_re = re.compile(r"^\s*(\d{1,3})\.?\s+([A-ZÀ-Ý“\"‘'].*)")
+        fn_start_re = re.compile(
+            r"^\s*(\d{1,3})\.?\s+((?:[A-ZÀ-Ý“\"‘']|\d{1,4}\s+(?:U\.S\.C\.|U\.S\.|S\.\s*Ct\.|F\.\d[a-z]*|F\.\s*Supp\.|Stat\.|C\.F\.R\.|Fed\.\s*Reg\.|[A-Z][A-Za-z.\s]{1,20}(?:§|v\.))).*)"
+        )
         lead_prefix_re = re.compile(
             r"^(?:For\s+example\s*:\s*|See\s+also\s+|See\s+|Including\s+|"
             r"For\s+an\s+overview\s+of\s+[^,]{1,40},\s*see\s+|Cf\.\s+)",
@@ -923,7 +929,7 @@ class SectionSegmenter:
                     window = " ".join(raw_lines[idx : min(len(raw_lines), idx + 6)])
                     has_cue = bool(
                         re.search(
-                            r"\b(?:18|19|20)\d{2}\b|\b(?:Ibid|op\.\s*cit|ed\.|eds\.|pp?\.|Vol\.)\b|[“\"‘']|:.*,",
+                            r"\b(?:18|19|20)\d{2}\b|§|\b(?:Ibid|Id\.|supra|op\.\s*cit|ed\.|eds\.|pp?\.|Vol\.)\b|[“\"‘']|:.*,",
                             window,
                             re.IGNORECASE,
                         )

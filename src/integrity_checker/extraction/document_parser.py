@@ -1808,6 +1808,38 @@ class DocumentParser:
                         )
                         continue
 
+                # Filter out unstructured GROBID hallucinations (no year, no DOI, no URL, and no real author)
+                # when the document has NO bibliography section at all (e.g. 086_uit) or first-person 'I'
+                # questionnaire items from an appendix (e.g. 57.pdf 'I could not get going').
+                has_pronoun_i_author = bool(
+                    ref.authors
+                    and len(ref.authors) == 1
+                    and str(ref.authors[0]).strip().rstrip(".") in {"I", "We"}
+                )
+                is_unstructured_hallucination = bool(
+                    not ref.year
+                    and not ref.doi
+                    and not ref.url
+                    and (not bib_words_norm or has_pronoun_i_author)
+                    and (
+                        not ref.authors
+                        or all(len(re.sub(r"[^A-Za-zÀ-ỹ]", "", str(a))) <= 2 for a in ref.authors)
+                    )
+                    and non_bib_words_norm
+                )
+                if is_unstructured_hallucination:
+                    u_words = re.sub(
+                        r"\W+",
+                        " ",
+                        (ref.title or ref.venue or ref.raw_text or "").lower(),
+                    ).split()
+                    u_snip = " ".join(u_words[:4]) if len(u_words) >= 4 else ""
+                    if u_snip and u_snip in non_bib_words_norm and (not bib_words_norm or u_snip not in bib_words_norm):
+                        logger.debug(
+                            f"Filtered unstructured GROBID body/appendix hallucination: {ref.raw_text[:50]}..."
+                        )
+                        continue
+
                 # Filter out DOI-less/URL-less GROBID entries extracted from outside BIBLIOGRAPHY
                 # (e.g. Author Contributions / Acknowledgments / Chapter Summaries / Appendix prompts / discursive footnotes in BODY or APPENDIX)
                 if (
@@ -2104,8 +2136,15 @@ class DocumentParser:
                 and str(donor.year)[:4].isdigit()
                 and str(target.year)[:4] != str(donor.year)[:4]
             )
+            is_single_bracketed_entry = bool(
+                re.match(r"^\s*\[\s*\d+\s*\]", donor.raw_text or "")
+                and not re.search(r"\[\s*\d+\s*\]", (donor.raw_text or "")[8:])
+            )
             donor_is_multi_chunk = (
-                len(donor.raw_text or "") > max(len(target.raw_text or "") * 2.2, 320)
+                (
+                    not is_single_bracketed_entry
+                    and len(donor.raw_text or "") > max(len(target.raw_text or "") * 2.2, 320)
+                )
                 or years_conflict
             )
             donor_first_author = (
@@ -2275,8 +2314,15 @@ class DocumentParser:
                 and str(donor.year)[:4].isdigit()
                 and str(target.year)[:4] != str(donor.year)[:4]
             )
+            is_single_bracketed_entry = bool(
+                re.match(r"^\s*\[\s*\d+\s*\]", donor.raw_text or "")
+                and not re.search(r"\[\s*\d+\s*\]", (donor.raw_text or "")[8:])
+            )
             donor_is_multi_chunk = (
-                len(donor.raw_text or "") > max(len(target.raw_text or "") * 2.2, 320)
+                (
+                    not is_single_bracketed_entry
+                    and len(donor.raw_text or "") > max(len(target.raw_text or "") * 2.2, 320)
+                )
                 or years_conflict
             )
             donor_idx_taken = bool(
@@ -2303,28 +2349,62 @@ class DocumentParser:
                     donor_head,
                 ):
                     target._has_et_al_ellipsis = True  # type: ignore[attr-defined]
-            # Restore dropped leading or trailing authors when GROBID missed co-authors on a line/hyphen break
+            # Restore dropped leading or trailing authors when GROBID missed co-authors on a line/hyphen break,
+            # or when GROBID mistook a hyphenated/digit acronym in the title (e.g. 'SOCS-3') for the sole author.
+            donor_auth_clean: list[str] = []
+            seen_auth_fold: set[str] = set()
+            for a_obj in donor.authors or []:
+                a_raw = (getattr(a_obj, "raw", None) or str(a_obj)).strip()
+                a_fold = re.sub(r"\s+", " ", a_raw.lower().rstrip("."))
+                if a_raw and a_fold not in seen_auth_fold:
+                    seen_auth_fold.add(a_fold)
+                    donor_auth_clean.append(a_raw)
+
+            donor_authors_look_polluted = bool(
+                donor.matched_pattern == "apa_fallback"
+                or any(
+                    ":" in a_str
+                    or re.search(r"\d", a_str)
+                    or len(a_str.split()) > 5
+                    or (
+                        target.title
+                        and len(target.title.strip()) >= 10
+                        and target.title.strip().lower()[:12] in a_str.lower()
+                    )
+                    for a_str in donor_auth_clean
+                )
+            )
+            target_author_is_title_acronym = bool(
+                target.authors
+                and len(target.authors) == 1
+                and target.title
+                and re.search(r"[\d\-]", str(target.authors[0]))
+                and str(target.authors[0]).strip().lower() in target.title.lower()
+            )
             if (
-                donor.authors
+                donor_auth_clean
                 and target.authors
-                and len(donor.authors) > len(target.authors)
                 and not donor_is_multi_chunk
+                and not donor_authors_look_polluted
+                and (len(donor_auth_clean) > len(target.authors) or target_author_is_title_acronym)
             ):
-                first_d = (getattr(donor.authors[0], "raw", None) or str(donor.authors[0])).strip().rstrip(".").lower()
+                first_d = donor_auth_clean[0].rstrip(".").lower()
                 t_first = (getattr(target.authors[0], "last_name", None) or str(target.authors[0])).split(",")[0].strip().lower()
                 d_first = (getattr(donor.authors[0], "last_name", None) or str(donor.authors[0])).split(",")[0].strip().lower()
                 t_last = (getattr(target.authors[-1], "last_name", None) or str(target.authors[-1])).split(",")[0].strip().lower()
                 d_last = (getattr(donor.authors[-1], "last_name", None) or str(donor.authors[-1])).split(",")[0].strip().lower()
                 if (
-                    ((t_last and t_last == d_last) or (t_first and t_first == d_first))
+                    (
+                        target_author_is_title_acronym
+                        or (t_last and t_last == d_last)
+                        or (t_first and t_first == d_first)
+                    )
                     and first_d not in {"iii", "ii", "iv", "jr", "sr"}
                 ):
                     old_auth_str = ", ".join(
                         getattr(a, "raw", None) or str(a) for a in target.authors
                     )
-                    target.authors = [
-                        getattr(a, "raw", None) or str(a) for a in donor.authors
-                    ]
+                    target.authors = list(donor_auth_clean)
                     new_auth_str = ", ".join(target.authors)
                     if old_auth_str and old_auth_str in (target.raw_text or ""):
                         target.raw_text = (target.raw_text or "").replace(
@@ -2341,13 +2421,40 @@ class DocumentParser:
                     target.raw_text,
                 )
 
+            def _clean_doi_value(raw_doi: str) -> str:
+                d_val = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", raw_doi).strip()
+                if re.match(r"^(?:https?://|(?:dx\.)?doi\.org/)", d_val, re.IGNORECASE):
+                    m_doi = re.search(r"10\.\d{4,9}/(?:[^\s\]\)\,;()<>]|\([^\s\]\)\,;()<>]*\))+", d_val)
+                    if not m_doi:
+                        return ""
+                    d_val = m_doi.group(0)
+                d_val = re.sub(r"[?#].*$", "", d_val)
+                d_val = re.sub(r"&[A-Za-z_][A-Za-z0-9_]*=.*$", "", d_val)
+                d_val = re.sub(
+                    r"[\(\[]?\s*(?:ac-?\s*cessed|re-?\s*trieved)\b.*$",
+                    "",
+                    d_val,
+                    flags=re.IGNORECASE,
+                )
+                d_val = re.sub(r"\.pdf$", "", d_val, flags=re.IGNORECASE)
+                d_val = re.sub(r"(?<=\d)[A-Z][a-z]{2,}.*$", "", d_val)
+                return d_val.rstrip(".,;:>)")
+
             if donor.doi and not donor_is_multi_chunk:
-                if (
+                clean_donor_doi = _clean_doi_value(donor.doi)
+                clean_target_doi = _clean_doi_value(target.doi) if target.doi else ""
+                if clean_target_doi and target.doi != clean_target_doi:
+                    target.doi = clean_target_doi
+                if clean_donor_doi and (
                     not target.doi
                     or target.doi.endswith("-")
-                    or (donor.doi.lower().startswith(target.doi.lower()) and len(donor.doi) > len(target.doi))
+                    or (
+                        clean_donor_doi.lower().startswith(target.doi.lower())
+                        and len(clean_donor_doi) > len(target.doi)
+                        and not re.fullmatch(r"\.\d{1,3}", clean_donor_doi[len(target.doi):])
+                    )
                 ):
-                    target.doi = donor.doi
+                    target.doi = clean_donor_doi
             if donor.url and (
                 not donor_is_multi_chunk
                 or (donor.numeric_index is not None and donor.numeric_index == target.numeric_index)
@@ -2360,7 +2467,27 @@ class DocumentParser:
             if not target.venue and donor.venue:
                 target.venue = donor.venue
             if not target.year and donor.year:
-                target.year = donor.year
+                d_yr_str = str(donor.year).strip()
+                if len(d_yr_str) > 4 and d_yr_str[:4].isdigit() and d_yr_str[4:].isalpha():
+                    target.year = d_yr_str[:4]
+                    if not target.year_suffix:
+                        target.year_suffix = d_yr_str[4:].lower()
+                else:
+                    target.year = donor.year
+            if not target.year_suffix and not donor_is_multi_chunk:
+                donor_sfx = (getattr(donor, "year_suffix", None) or "").strip().lower()
+                if not donor_sfx and donor.year:
+                    d_yr_str = str(donor.year).strip()
+                    if len(d_yr_str) > 4 and d_yr_str[:4].isdigit() and d_yr_str[4:].isalpha():
+                        donor_sfx = d_yr_str[4:].lower()
+                if donor_sfx and target.year and str(target.year)[:4] == str(donor.year or target.year)[:4]:
+                    target.year_suffix = donor_sfx
+                    if target.raw_text and f"({target.year})" in target.raw_text:
+                        target.raw_text = target.raw_text.replace(
+                            f"({target.year})",
+                            f"({target.year}{donor_sfx})",
+                            1,
+                        )
             if not target.title and donor.title:
                 donor_t_clean = re.sub(
                     r"[,\s]+(?:18|19|20)\d{2}[a-z]?\.?$", "", donor.title.strip()
@@ -2384,11 +2511,30 @@ class DocumentParser:
                         target.raw_text = f"{(target.raw_text or '').rstrip('. ')}. {donor.title}"
                         if target.venue and target.venue not in target.raw_text:
                             target.raw_text = f"{target.raw_text.rstrip('. ')}. {target.venue}"
+            target_author_key = self._citation_key(target)[2]
+            donor_author_key = self._citation_key(donor)[2]
+            authors_conflict = bool(
+                target_author_key
+                and donor_author_key
+                and len(re.findall(r"[a-z]", target_author_key)) >= 2
+                and len(re.findall(r"[a-z]", donor_author_key)) >= 2
+                and target_author_key != donor_author_key
+                and target_author_key not in donor_author_key
+                and donor_author_key not in target_author_key
+            )
+            shared_same_doi = bool(
+                target.doi
+                and donor.doi
+                and target.doi.strip().lower() == donor.doi.strip().lower()
+            )
             target_already_confirmed = bool(
-                getattr(target, "_num_idx_confirmed", False)
-                and target.numeric_index is not None
+                target.numeric_index is not None
                 and donor.numeric_index is not None
                 and target.numeric_index != donor.numeric_index
+                and (
+                    getattr(target, "_num_idx_confirmed", False)
+                    or (shared_same_doi and authors_conflict)
+                )
             )
             if (
                 donor.numeric_index is not None
@@ -2491,6 +2637,68 @@ class DocumentParser:
                         coalesced_grobid.append(cur)
                         gi += 2
                         continue
+                    # Split Pattern D1: line-wrapped DOI registrant+suffix fragment (e.g. 'https://doi.org/10.' + '1186/ s12882-022-02869-6 (2022).')
+                    nxt_raw_s = (nxt.raw_text or "").strip()
+                    nxt_first_auth = str(nxt.authors[0]).strip() if nxt.authors else ""
+                    m_doi_frag = re.match(
+                        r"^(\d{4,9}/\s*[^\s()]+)",
+                        nxt_first_auth if re.match(r"^\d{4,9}/", nxt_first_auth) else nxt_raw_s,
+                    )
+                    if (
+                        cur_has_title
+                        and not cur.doi
+                        and not nxt_has_title
+                        and (
+                            m_doi_frag is not None
+                            or bool(re.search(r"(?:doi\.org/|doi:\s*)10\.?$", (cur.raw_text or "").strip(), re.I))
+                        )
+                    ):
+                        if m_doi_frag is not None:
+                            doi_tail = re.sub(r"\s+", "", m_doi_frag.group(1)).rstrip(".,;)")
+                            cur.doi = f"10.{doi_tail}"
+                        else:
+                            cur.doi = nxt.doi
+                        cur.year = cur.year or nxt.year
+                        cur.raw_text = f"{(cur.raw_text or '').rstrip('. ')} {nxt_raw_s}".strip()
+                        coalesced_grobid.append(cur)
+                        gi += 2
+                        continue
+                    # Split Pattern D2: line-wrapped URL filename + 'Accessed YYYY' fragment (e.g. TDTU_PDF/064_hcmus)
+                    if (
+                        cur_has_title
+                        and len(nxt.authors or []) == 1
+                        and nxt_first_auth.lower().rstrip(".:,") in {"accessed", "retrieved", "visited", "online"}
+                        and not nxt.doi
+                    ):
+                        if cur.url and cur.url.endswith("/") and nxt.title and " " not in nxt.title.strip():
+                            cur.url = f"{cur.url}{nxt.title.strip()}"
+                        cur.year = cur.year or nxt.year
+                        cur.raw_text = f"{(cur.raw_text or '').rstrip('. ')} {nxt_raw_s}".strip()
+                        coalesced_grobid.append(cur)
+                        gi += 2
+                        continue
+                    # Split Pattern D3: authorless trailing standard/publisher + year fragment split from preceding entry (e.g. ACS/hard_01 RFC 8446)
+                    if (
+                        cur_has_title
+                        and cur.authors
+                        and not cur.year
+                        and not nxt.authors
+                        and nxt.year
+                        and not nxt.doi
+                        and not nxt.url
+                        and any(
+                            (cur.title or "").lower()[:20] in (rx.raw_text or "").lower()
+                            and (nxt.title or nxt_raw_s).lower()[:18] in (rx.raw_text or "").lower()
+                            for rx in regex_refs
+                        )
+                    ):
+                        cur.year = nxt.year
+                        if nxt.title:
+                            cur.venue = f"{cur.venue}; {nxt.title}" if cur.venue else nxt.title
+                        cur.raw_text = f"{(cur.raw_text or '').rstrip('. ')}. {nxt_raw_s}".strip()
+                        coalesced_grobid.append(cur)
+                        gi += 2
+                        continue
                     # Split Pattern C: cur has title, nxt has no title, no year, no venue, no DOI, no URL (trailing publisher/editor/org tail)
                     if (
                         cur_has_title
@@ -2517,28 +2725,84 @@ class DocumentParser:
 
         merged: list[Citation] = []
 
-        # Track GROBID ref IDs để avoid duplicate
-        grobid_by_doi: dict[str, Citation] = {
-            c.doi.lower(): c for c in grobid_refs if c.doi
-        }
+        # Track GROBID ref IDs để avoid duplicate (store list per DOI so chimera/duplicate DOIs
+        # never overwrite earlier or later entries in the map).
+        grobid_by_doi: dict[str, list[Citation]] = {}
         grobid_by_key: dict[tuple, Citation] = {}
         grobid_by_num: dict[int, Citation] = {}
 
         for c in grobid_refs:
+            if c.doi:
+                grobid_by_doi.setdefault(c.doi.lower(), []).append(c)
             key = self._citation_key(c)
             grobid_by_key[key] = c
             if c.numeric_index is not None and c.numeric_index not in grobid_by_num:
                 grobid_by_num[c.numeric_index] = c
             merged.append(c)
 
+        def _authors_conflict_pair(a: Citation, b: Citation) -> bool:
+            ka = self._citation_key(a)[2]
+            kb = self._citation_key(b)[2]
+            return bool(
+                ka
+                and kb
+                and len(re.findall(r"[a-z]", ka)) >= 2
+                and len(re.findall(r"[a-z]", kb)) >= 2
+                and ka != kb
+                and ka not in kb
+                and kb not in ka
+            )
+
+        def _would_clobber_numbered_slot(c_ref: Citation, g_ref: Citation) -> bool:
+            if (
+                c_ref.numeric_index is None
+                or g_ref.numeric_index is None
+                or c_ref.numeric_index == g_ref.numeric_index
+            ):
+                return False
+            has_explicit_marker = bool(
+                re.match(r"^\s*(?:\[\s*\d+\s*\]|\(\s*\d+\s*\)|\d+\.\s)", c_ref.raw_text or "")
+            )
+            if not has_explicit_marker:
+                return False
+            confirmed_nums = {
+                m.numeric_index
+                for m in merged
+                if m.numeric_index is not None
+                and (
+                    getattr(m, "_num_idx_confirmed", False)
+                    or getattr(m, "source", "") == "merged"
+                )
+            }
+            if c_ref.numeric_index in confirmed_nums:
+                return False
+            return bool(
+                getattr(g_ref, "_num_idx_confirmed", False)
+                or _authors_conflict_pair(c_ref, g_ref)
+            )
+
         # Add regex entries không trùng với GROBID
         for c in regex_refs:
             key = self._citation_key(c)
 
-            # Check DOI match (only if publication years do not conflict)
+            # Check DOI match (only if publication years and numbered slots/authors do not conflict)
             if c.doi and c.doi.lower() in grobid_by_doi:
-                g_doi_ref = grobid_by_doi[c.doi.lower()]
-                if not c.year or not g_doi_ref.year or str(c.year) == str(g_doi_ref.year):
+                doi_candidates = [
+                    g
+                    for g in grobid_by_doi[c.doi.lower()]
+                    if (
+                        not c.year
+                        or not g.year
+                        or str(c.year)[:4] == str(g.year)[:4]
+                    )
+                    and not _authors_conflict_pair(c, g)
+                    and not _would_clobber_numbered_slot(c, g)
+                ]
+                g_doi_ref = next(
+                    (g for g in doi_candidates if c.numeric_index is not None and g.numeric_index == c.numeric_index),
+                    doi_candidates[0] if doi_candidates else None,
+                )
+                if g_doi_ref is not None:
                     _enrich_grobid_ref(g_doi_ref, c)
                     logger.debug(f"Skipping regex duplicate by DOI: {c.raw_text[:50]}")
                     continue
@@ -2565,9 +2829,10 @@ class DocumentParser:
                     )
                     if alt_g is not None:
                         g_key_target = alt_g
-                _enrich_grobid_ref(g_key_target, c)
-                logger.debug(f"Skipping regex duplicate by key: {c.raw_text[:50]}")
-                continue
+                if not _would_clobber_numbered_slot(c, g_key_target):
+                    _enrich_grobid_ref(g_key_target, c)
+                    logger.debug(f"Skipping regex duplicate by key: {c.raw_text[:50]}")
+                    continue
 
             # Check URL exact match before fuzzy duplicate scan (only if years do not conflict)
             c_url_norm = (c.url or "").strip().rstrip("/.,;").lower()
@@ -2577,7 +2842,8 @@ class DocumentParser:
                         g
                         for g in grobid_refs
                         if (g.url or "").strip().rstrip("/.,;").lower() == c_url_norm
-                        and (not c.year or not g.year or str(c.year) == str(g.year))
+                        and (not c.year or not g.year or str(c.year)[:4] == str(g.year)[:4])
+                        and not _would_clobber_numbered_slot(c, g)
                         and (
                             c.numeric_index is None
                             or not getattr(g, "_num_idx_confirmed", False)
@@ -2590,7 +2856,8 @@ class DocumentParser:
                         g
                         for g in grobid_refs
                         if (g.url or "").strip().rstrip("/.,;").lower() == c_url_norm
-                        and (not c.year or not g.year or str(c.year) == str(g.year))
+                        and (not c.year or not g.year or str(c.year)[:4] == str(g.year)[:4])
+                        and not _would_clobber_numbered_slot(c, g)
                     ),
                     None,
                 )
@@ -2605,6 +2872,7 @@ class DocumentParser:
                     g
                     for g in grobid_refs
                     if _is_duplicate_reference(c, [g])
+                    and not _would_clobber_numbered_slot(c, g)
                     and (
                         c.numeric_index is None
                         or not getattr(g, "_num_idx_confirmed", False)
@@ -2613,7 +2881,12 @@ class DocumentParser:
                 ),
                 None,
             ) or next(
-                (g for g in grobid_refs if _is_duplicate_reference(c, [g])),
+                (
+                    g
+                    for g in grobid_refs
+                    if _is_duplicate_reference(c, [g])
+                    and not _would_clobber_numbered_slot(c, g)
+                ),
                 None,
             )
             if dup_match is not None:
@@ -2654,7 +2927,9 @@ class DocumentParser:
             c_title_norm = re.sub(r"\s+", " ", c_title_norm).strip()
             overlap_g: Citation | None = None
             for g in grobid_refs:
-                if c.year and g.year and str(c.year) != str(g.year):
+                if _would_clobber_numbered_slot(c, g):
+                    continue
+                if c.year and g.year and str(c.year)[:4] != str(g.year)[:4]:
                     continue
                 g_url_norm = (g.url or "").strip().rstrip("/.,;").lower()
                 if c_url_norm and g_url_norm and (c_url_norm == g_url_norm or c_url_norm in g_url_norm or g_url_norm in c_url_norm):
@@ -2692,7 +2967,20 @@ class DocumentParser:
                 ):
                     overlap_g = g
                     break
-                if not g.title and c.authors and len(c.authors) >= 2:
+                if (
+                    c.authors
+                    and len(c.authors) >= 2
+                    and (
+                        not g.title
+                        or (
+                            c.year
+                            and g.year
+                            and str(c.year)[:4] == str(g.year)[:4]
+                            and self._citation_key(g)[2]
+                            and self._citation_key(g)[2] == self._citation_key(c)[2]
+                        )
+                    )
+                ):
                     c_surnames = []
                     for a in c.authors[:5]:
                         a_str = (getattr(a, "last_name", None) or getattr(a, "raw", None) or str(a)).strip()
@@ -2710,7 +2998,14 @@ class DocumentParser:
 
             # When GROBID has already extracted a substantive bibliography (>= 5 entries),
             # do not append noisy cross-style fallback fragments or unsplit multi-entry chunks.
-            if len(grobid_refs) >= 5:
+            is_missing_numbered_slot = bool(
+                c.numeric_index is not None
+                and 1 <= c.numeric_index <= len(regex_refs) + 2
+                and c.numeric_index not in {m.numeric_index for m in merged if m.numeric_index is not None}
+                and re.match(r"^\s*(?:\[\s*\d+\s*\]|\d+\.\s)", c.raw_text or "")
+                and len(c.raw_text or "") <= 420
+            )
+            if len(grobid_refs) >= 5 and not is_missing_numbered_slot:
                 is_noisy_vancouver = (
                     (c.matched_pattern or "") == "vancouver_reference_entry"
                     and (not c.authors or len(grobid_refs) >= len(regex_refs) - 2)

@@ -896,20 +896,20 @@ class IntegrityPipeline:
                 f"{len(unique_list)} verifiable (references only)"
             )
 
-        # Duplicate bibliography entries (same DOI/arXiv/title key) collapse
-        # into one retrieval above; they still need their own verdict so the
-        # report can surface DUPLICATE_REFERENCE. Reuse the canonical source.
+        # Duplicate or same-key bibliography entries (same DOI/arXiv/title key)
+        # collapse into one retrieval above; every bibliography entry still needs
+        # its own verdict so report.verdicts never drops a reference entry.
         verdict_pairs: list[tuple[Citation, SourceResult]] = list(
             zip(unique_list, unique_sources, strict=True)
         )
         duplicate_ref_ids = set(getattr(linking_result, "duplicate_reference_ids", None) or [])
-        if duplicate_ref_ids:
+        if ref_citations:
             source_by_key = dict(zip(verifiable_keys, unique_sources, strict=True))
             in_verdicts = {id(c) for c in unique_list}
             for ref in ref_citations:
                 if max_citations is not None and max_citations > 0 and len(verdict_pairs) >= max_citations:
                     break
-                if id(ref) in in_verdicts or ref.reference_id not in duplicate_ref_ids:
+                if id(ref) in in_verdicts or not _is_verifiable(ref):
                     continue
                 shared_source = source_by_key.get(citation_key(ref))
                 if shared_source is None:
@@ -2016,9 +2016,11 @@ class IntegrityPipeline:
             if not key:
                 return
             bucket = lookup.setdefault(key, [])
-            # Guard against re-adding the identical edge (the three key forms
-            # can collide, e.g. a raw text that normalizes to itself).
-            if link not in bucket:
+            # Guard against re-adding the identical edge instance (the three key
+            # forms can collide, e.g. a raw text that normalizes to itself), while
+            # preserving distinct CitationLink objects emitted for separate parts
+            # of a compound citation (e.g. 2 MISSING_REFERENCE parts on one occ_id).
+            if all(existing is not link for existing in bucket):
                 bucket.append(link)
 
         for link in links:

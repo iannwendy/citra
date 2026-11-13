@@ -777,10 +777,58 @@ class CitationExtractor:
                     narrative_ctx_prefix = re.sub(
                         r"\s+", " ", search_text[max(0, raw_start - 60) : raw_start]
                     )
+                    narrative_head = re.split(r"\s*[\(\[]", raw, maxsplit=1)[0].strip()
+                    has_collab_marker = bool(
+                        re.search(
+                            r"\b(?:et\s+al\.?|và\s+cộng\s+sự|và\s+cs\.?|&)\b",
+                            narrative_head,
+                            re.IGNORECASE,
+                        )
+                    )
+                    if not has_collab_marker:
+                        is_inst_head = bool(
+                            re.search(
+                                r"\b(?:Bank|Organization|Organisation|Association|Institute|Ministry|Department|Commission|Committee|Council|Reserve|Nations|Union|Agency|Bureau|Board|Foundation|Society|College|University|Academy|Center|Centre|Group|Team|Project|Lancet|Economist|Guardian|Times|Post|Press|Journal|Report|Office|Authority|Federation|Coalition|Consortium|Alliance|Forum|Observatory|Clinic|Clinics|Hospital|Trust)\b",
+                                narrative_head,
+                                re.IGNORECASE,
+                            )
+                        )
+                        # Reject quoted work titles followed by (Year), e.g. "‘Decline of the Roman Empire’ (2018)"
+                        if re.search(r"['\u2019\"\u201d]\s*[\(\[]", raw):
+                            accepted_spans.add(span_key)
+                            continue
+                        # Reject non-institutional phrases starting with article 'The ' (e.g. "The Machiavellian Moment (1975)", "The Second Industrial Revolution (1870)")
+                        if (
+                            re.match(r"^The\s+", narrative_head)
+                            or re.search(r"\bThe\s+$", narrative_ctx_prefix)
+                        ) and not is_inst_head:
+                            accepted_spans.add(span_key)
+                            continue
+                        # Reject unconditional work-title / historical-concept nouns before (Year)
+                        if re.search(
+                            r"\b(?:Revolution|Revolutions|Moment|History|Histories|Historiography|Constitution|Treaty|Manifesto|Edition|Survey|Index|Tradition|Condition|Empire|Empires|Government|Republic|Kingdom|Triumph|Reformation|Enlightenment|Renaissance|Declaration|Convention|Charter|Discontents|Sovereignty)$",
+                            narrative_head,
+                        ) and not is_inst_head:
+                            accepted_spans.add(span_key)
+                            continue
+                        # Reject multi-word work titles ending in Law/War/Fall/Thought/Era/Age (e.g. "Feudal Law (1957)", "Decline and Fall (2003)")
+                        head_words = narrative_head.split()
+                        if (
+                            len(head_words) >= 2
+                            and "," not in narrative_head
+                            and not re.match(r"^[A-Z]\.\s+", narrative_head)
+                            and re.search(
+                                r"\b(?:Law|Laws|War|Wars|Fall|Thought|Age|Era|Period|Movement|Crisis|Depression)$",
+                                narrative_head,
+                            )
+                            and not is_inst_head
+                        ):
+                            accepted_spans.add(span_key)
+                            continue
                     if (
                         not re.search(r"\b(?:et\s+al\.?|và\s+cộng\s+sự|và\s+cs\.?|&|and)\b", raw, re.IGNORECASE)
                         and re.search(
-                            r"\b(?:bộ\s+phim|phim|tác\s+phẩm\s+điện\s+ảnh|hệ\s+thống(?:\s+dịch(?:\s+máy)?)?|dòng\s+máy|trường\s+thi|chiến\s+dịch|phong\s+trào|khởi\s+nghĩa|hiệp\s+định|tỉnh|thành\s+phố)\s+$",
+                            r"\b(?:bộ\s+phim|phim|tác\s+phẩm\s+điện\s+ảnh|hệ\s+thống(?:\s+dịch(?:\s+máy)?)?|dòng\s+máy|trường\s+thi|chiến\s+dịch|phong\s+trào|khởi\s+nghĩa|hiệp\s+định|tỉnh|thành\s+phố|(?:treaty|battle|peace|edict|statute|diet|council)\s+of)\s+$",
                             narrative_ctx_prefix,
                             re.IGNORECASE,
                         )
