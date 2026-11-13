@@ -1393,3 +1393,416 @@ async def test_round1_openalex_batch_maps_published_arxiv_locations_and_prefers_
     assert id(bert_arxiv_cit) in wave0
     assert wave0[id(bert_arxiv_cit)].consensus_count() >= 2
 
+
+@pytest.mark.asyncio
+async def test_round2_split_brain_chimeric_doi_and_title_no_bare_key_poisoning_or_wave0_shortcircuit(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Round 2: Split-brain chimeric citations returning BOTH AlphaFold (via DOI) and Vaswani (via title/arXiv)
+    must never poison bare doi:/arxiv: keys, leak retraction flags, or short-circuit Wave-0.
+    """
+    db_file = tmp_path / "round2_split_brain.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
+    get_settings.cache_clear()
+    init_db()
+
+    alphafold_doi = "10.1038/s41586-021-03819-2"
+    alphafold_title = "Highly accurate protein structure prediction with AlphaFold"
+    roberta_title = "RoBERTa: A Robustly Optimized BERT Pretraining Approach"
+    vaswani_title = "Attention Is All You Need"
+
+    def _make_split_brain_stubs(*, retracted_title_hit: bool = True) -> dict[str, object]:
+        def _alphafold_cand(src: str) -> SourceCandidate:
+            return SourceCandidate(
+                source_name=src,
+                found=True,
+                doi=alphafold_doi,
+                title=alphafold_title,
+                authors=["John Jumper", "Demis Hassabis"],
+                year="2021",
+                venue="Nature",
+                confidence=1.0,
+            )
+
+        def _roberta_cand(src: str, *, with_arxiv: bool = False) -> SourceCandidate:
+            ext: dict[str, str] = {}
+            if with_arxiv:
+                ext["arxiv"] = "1907.11692"
+            if retracted_title_hit:
+                ext["is_retracted"] = "true"
+            return SourceCandidate(
+                source_name=src,
+                found=True,
+                doi="10.48550/arxiv.1907.11692",
+                title=roberta_title,
+                authors=["Yinhan Liu", "Myle Ott"],
+                year="2019",
+                venue="arXiv",
+                external_ids=ext,
+                confidence=0.98,
+            )
+
+        def _vaswani_cand(src: str, *, with_arxiv: bool = False) -> SourceCandidate:
+            ext: dict[str, str] = {}
+            if with_arxiv:
+                ext["arxiv"] = "1706.03762"
+            if retracted_title_hit:
+                ext["is_retracted"] = "true"
+            return SourceCandidate(
+                source_name=src,
+                found=True,
+                doi="10.5555/3295222.3295349",
+                title=vaswani_title,
+                authors=["Ashish Vaswani", "Noam Shazeer"],
+                year="2017",
+                venue="NeurIPS",
+                external_ids=ext,
+                confidence=0.98,
+            )
+
+        stubs: dict[str, object] = {}
+        for name in ("crossref", "openalex", "dblp", "arxiv", "openlibrary", "europepmc"):
+            c = SimpleNamespace(name=name)
+
+            async def _lookup(cit: Citation, _src: str = name) -> SourceCandidate:
+                # DOI-first registries (crossref, openalex) return AlphaFold when DOI is cited
+                if _src in ("crossref", "openalex") and (cit.doi or "").strip() == alphafold_doi:
+                    return _alphafold_cand(_src)
+                t_low = (cit.title or "").lower()
+                if "roberta: a robustly optimized" in t_low and _src in ("dblp", "arxiv"):
+                    return _roberta_cand(_src, with_arxiv=(_src == "arxiv"))
+                if "attention is all you need" in t_low and _src in ("dblp", "arxiv"):
+                    return _vaswani_cand(_src, with_arxiv=(_src == "arxiv"))
+                if "highly accurate protein structure" in t_low and _src in ("crossref", "openalex"):
+                    return _alphafold_cand(_src)
+                return SourceCandidate(
+                    source_name=_src,
+                    found=False,
+                    error=f"{_src}: no results for '{cit.title}'",
+                )
+
+            c.lookup = AsyncMock(side_effect=_lookup)
+            stubs[name] = c
+
+        stubs["openalex"].lookup_dois_batch = AsyncMock(
+            side_effect=lambda dois: {
+                d: _alphafold_cand("openalex") for d in dois if d == alphafold_doi
+            }
+        )
+        stubs["crossref"].lookup_dois_batch = AsyncMock(
+            side_effect=lambda dois: {
+                d: _alphafold_cand("crossref") for d in dois if d == alphafold_doi
+            }
+        )
+        stubs["arxiv"].lookup_arxiv_batch = AsyncMock(
+            side_effect=lambda ids: {
+                aid: (
+                    _vaswani_cand("arxiv", with_arxiv=True)
+                    if aid == "1706.03762"
+                    else _roberta_cand("arxiv", with_arxiv=True)
+                )
+                for aid in ids
+                if aid in ("1706.03762", "1907.11692")
+            }
+        )
+        return stubs
+
+    # --- 2A. Essay A chimeric (RoBERTa title + AlphaFold DOI) via retrieve() must NOT poison bare doi: key ---
+    orch_a = RetrievalOrchestrator(
+        **_make_split_brain_stubs(retracted_title_hit=True),
+        use_local_db=False,
+        enable_link_validation=False,
+    )
+    essay_a_chimeric = Citation(
+        raw_text=f"Liu, Y., & Ott, M. (2019). {roberta_title}. https://doi.org/{alphafold_doi}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Yinhan Liu", "Myle Ott"],
+        year="2019",
+        title=roberta_title,
+        venue="arXiv",
+        doi=alphafold_doi,
+    )
+    res_a = await orch_a.retrieve(essay_a_chimeric)
+    titles_a = {c.title for c in res_a.candidates}
+    assert alphafold_title in titles_a and roberta_title in titles_a
+
+    p_cache = PersistentVerificationCache()
+    bare_doi_cached = p_cache.get(f"doi:{alphafold_doi}")
+    assert bare_doi_cached is None, (
+        "Mixed chimeric [AlphaFold, RoBERTa] result must NEVER be persisted under bare doi: key!"
+    )
+
+    # Essay B citing real AlphaFold must get ONLY clean AlphaFold (no Vaswani, no leaked is_retracted=True)
+    orch_b = RetrievalOrchestrator(
+        **_make_split_brain_stubs(retracted_title_hit=True),
+        use_local_db=False,
+        enable_link_validation=False,
+    )
+    essay_b_real_alphafold = Citation(
+        raw_text=f"Jumper, J., & Hassabis, D. (2021). {alphafold_title}. Nature. https://doi.org/{alphafold_doi}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["John Jumper", "Demis Hassabis"],
+        year="2021",
+        title=alphafold_title,
+        venue="Nature",
+        doi=alphafold_doi,
+    )
+    res_b = await orch_b.retrieve(essay_b_real_alphafold)
+    assert len(res_b.candidates) == 1
+    assert res_b.best_candidate() is not None
+    assert res_b.best_candidate().title == alphafold_title
+    assert res_b.is_retracted is False
+    assert res_b.best_candidate().is_retracted is False
+
+    # Bare doi: key now holds ONLY clean AlphaFold; another chimeric Essay C must NOT short-circuit Wave-0
+    bare_after_b = p_cache.get(f"doi:{alphafold_doi}")
+    assert bare_after_b is not None
+    assert all(c.title == alphafold_title for c in bare_after_b.candidates)
+    assert bare_after_b.is_retracted is False
+
+    orch_c = RetrievalOrchestrator(
+        **_make_split_brain_stubs(retracted_title_hit=False),
+        use_local_db=False,
+        enable_link_validation=False,
+    )
+    essay_c_chimeric = Citation(
+        raw_text=f"Vaswani, A. (2018). {vaswani_title}. https://doi.org/{alphafold_doi}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Ashish Vaswani"],
+        year="2018",
+        title=vaswani_title,
+        doi=alphafold_doi,
+    )
+    wave0_c = await orch_c.prefetch_identifiers([essay_c_chimeric])
+    assert id(essay_c_chimeric) not in wave0_c
+
+    # --- 2B. Wave-0 dual-ID chimeric citations (AlphaFold DOI + Vaswani arXiv:1706.03762) must NOT short-circuit ---
+    db_file_w0 = tmp_path / "round2_wave0_dual_id.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file_w0}")
+    get_settings.cache_clear()
+    init_db()
+
+    orch_w0 = RetrievalOrchestrator(
+        **_make_split_brain_stubs(retracted_title_hit=True),
+        use_local_db=False,
+        enable_link_validation=False,
+    )
+    dual_id_vaswani_title = Citation(
+        raw_text=f"Vaswani, A. (2017). {vaswani_title}. arXiv:1706.03762 https://doi.org/{alphafold_doi}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Ashish Vaswani"],
+        year="2017",
+        title=vaswani_title,
+        doi=alphafold_doi,
+    )
+    dual_id_alphafold_title = Citation(
+        raw_text=f"Jumper, J. (2021). {alphafold_title}. arXiv:1706.03762 https://doi.org/{alphafold_doi}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["John Jumper"],
+        year="2021",
+        title=alphafold_title,
+        doi=alphafold_doi,
+    )
+    dual_id_untitled = Citation(
+        raw_text=f"https://doi.org/{alphafold_doi} arXiv:1706.03762",
+        citation_type=CitationType.REFERENCE_LIST,
+        doi=alphafold_doi,
+    )
+
+    wave0_dual = await orch_w0.prefetch_identifiers(
+        [dual_id_vaswani_title, dual_id_alphafold_title, dual_id_untitled]
+    )
+    assert wave0_dual == {}, (
+        "Wave-0 must NOT short-circuit any dual-ID citation where DOI and arXiv candidates disagree!"
+    )
+    p_cache_w0 = PersistentVerificationCache()
+    assert p_cache_w0.get(f"doi:{alphafold_doi}") is None
+    assert p_cache_w0.get("arxiv:1706.03762") is None
+
+
+@pytest.mark.asyncio
+async def test_round2_shared_key_purity_and_stale_mixed_cache_read_sanitization(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Round 2 defense-in-depth: shared doi:/arxiv: entries store ONLY confirming candidates,
+    sanitize stale mixed cache entries on read, and support legitimate agreeing dual-ID papers.
+    """
+    db_file = tmp_path / "round2_purity.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
+    get_settings.cache_clear()
+    init_db()
+
+    bert_pub_doi = "10.18653/v1/n19-1423"
+    bert_title = "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"
+
+    p_cache = PersistentVerificationCache()
+    # Seed a hypothetical legacy mixed row under bare doi: key containing BERT (clean) + RoBERTa (retracted)
+    legacy_mixed = SourceResult(
+        citation_raw="Legacy Mixed",
+        candidates=[
+            SourceCandidate(
+                source_name="openalex",
+                found=True,
+                doi=bert_pub_doi,
+                title=bert_title,
+                authors=["Jacob Devlin", "Ming-Wei Chang"],
+                year="2019",
+                confidence=1.0,
+            ),
+            SourceCandidate(
+                source_name="crossref",
+                found=True,
+                doi=bert_pub_doi,
+                title=bert_title,
+                authors=["Jacob Devlin", "Ming-Wei Chang"],
+                year="2019",
+                confidence=1.0,
+            ),
+            SourceCandidate(
+                source_name="dblp",
+                found=True,
+                doi="10.48550/arxiv.1907.11692",
+                title="RoBERTa: A Robustly Optimized BERT Pretraining Approach",
+                authors=["Yinhan Liu"],
+                year="2019",
+                external_ids={"is_retracted": "true"},
+                confidence=0.95,
+            ),
+        ],
+        sources_queried=["openalex", "crossref", "dblp"],
+        sources_succeeded=["openalex", "crossref", "dblp"],
+        sources_failed={},
+        is_retracted=True,
+    )
+    assert p_cache.set(f"doi:{bert_pub_doi}", legacy_mixed) is True
+
+    stubs = {}
+    for name in ("crossref", "openalex", "dblp", "arxiv", "openlibrary", "europepmc"):
+        s = SimpleNamespace(
+            name=name,
+            lookup=AsyncMock(
+                return_value=SourceCandidate(source_name=name, found=False, error="no results")
+            ),
+        )
+        stubs[name] = s
+    stubs["openalex"].lookup_dois_batch = AsyncMock(return_value={})
+    stubs["crossref"].lookup_dois_batch = AsyncMock(return_value={})
+    stubs["arxiv"].lookup_arxiv_batch = AsyncMock(return_value={})
+
+    orch = RetrievalOrchestrator(
+        **stubs,
+        use_local_db=False,
+        enable_link_validation=False,
+    )
+
+    # 1. Chimeric RoBERTa title + BERT DOI MUST reject the legacy mixed bare doi: entry
+    chimeric_roberta = Citation(
+        raw_text=f"Liu, Y. (2019). RoBERTa: A Robustly Optimized BERT Pretraining Approach. https://doi.org/{bert_pub_doi}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Yinhan Liu"],
+        year="2019",
+        title="RoBERTa: A Robustly Optimized BERT Pretraining Approach",
+        doi=bert_pub_doi,
+    )
+    assert await orch.prefetch_identifiers([chimeric_roberta]) == {}
+
+    # 2. Valid BERT citation strips non-confirming RoBERTa and clears leaked is_retracted=True on read
+    valid_bert = Citation(
+        raw_text=f"Devlin, J. (2019). {bert_title}. https://doi.org/{bert_pub_doi}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Jacob Devlin", "Ming-Wei Chang"],
+        year="2019",
+        title=bert_title,
+        doi=bert_pub_doi,
+    )
+    valid_hit = await orch.retrieve(valid_bert)
+    assert len(valid_hit.candidates) == 1
+    assert valid_hit.best_candidate().title == bert_title
+    assert valid_hit.is_retracted is False
+    assert valid_hit.sources_succeeded == ["openalex", "crossref"]
+
+    # 3. Reverse-order chimeric dual-ID citation (BERT DOI + unrelated Vaswani arXiv:1706.03762)
+    # must NOT hit the bare doi:10.18653/v1/n19-1423 cache entry because 1706.03762 is unconfirmed
+    reverse_dual_chimeric = Citation(
+        raw_text=f"Devlin, J. (2019). {bert_title}. arXiv:1706.03762 https://doi.org/{bert_pub_doi}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Jacob Devlin"],
+        year="2019",
+        title=bert_title,
+        doi=bert_pub_doi,
+    )
+    assert await orch.prefetch_identifiers([reverse_dual_chimeric]) == {}
+
+    # 4. Legitimate agreeing dual-ID BERT citation (BERT publisher DOI + BERT arXiv:1810.04805)
+    # resolves cleanly in Wave-0 and keeps bare doi: pure
+    db_file_agree = tmp_path / "round2_dual_agree.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file_agree}")
+    get_settings.cache_clear()
+    init_db()
+
+    stubs["openalex"].lookup_dois_batch = AsyncMock(
+        return_value={
+            bert_pub_doi: SourceCandidate(
+                source_name="openalex",
+                found=True,
+                doi=bert_pub_doi,
+                title=bert_title,
+                authors=["Jacob Devlin", "Ming-Wei Chang"],
+                year="2019",
+                external_ids={"arxiv": "1810.04805"},
+                confidence=1.0,
+            )
+        }
+    )
+    stubs["crossref"].lookup_dois_batch = AsyncMock(
+        return_value={
+            bert_pub_doi: SourceCandidate(
+                source_name="crossref",
+                found=True,
+                doi=bert_pub_doi,
+                title=bert_title,
+                authors=["Jacob Devlin", "Ming-Wei Chang"],
+                year="2019",
+                confidence=1.0,
+            )
+        }
+    )
+    stubs["arxiv"].lookup_arxiv_batch = AsyncMock(
+        return_value={
+            "1810.04805": SourceCandidate(
+                source_name="arxiv",
+                found=True,
+                doi="10.48550/arxiv.1810.04805",
+                title=bert_title,
+                authors=["Jacob Devlin", "Ming-Wei Chang"],
+                year="2019",
+                external_ids={"arxiv": "1810.04805"},
+                confidence=0.98,
+            )
+        }
+    )
+    orch_agree = RetrievalOrchestrator(
+        **stubs,
+        use_local_db=False,
+        enable_link_validation=False,
+    )
+    legit_dual_bert = Citation(
+        raw_text=f"Devlin, J., & Chang, M. (2019). {bert_title}. NAACL. arXiv:1810.04805 https://doi.org/{bert_pub_doi}",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Jacob Devlin", "Ming-Wei Chang"],
+        year="2019",
+        title=bert_title,
+        doi=bert_pub_doi,
+    )
+    w0_agree = await orch_agree.prefetch_identifiers([legit_dual_bert])
+    assert id(legit_dual_bert) in w0_agree
+    assert w0_agree[id(legit_dual_bert)].consensus_count() >= 2
+
+    pure_stored = PersistentVerificationCache().get(f"doi:{bert_pub_doi}")
+    assert pure_stored is not None
+    assert all(c.doi == bert_pub_doi for c in pure_stored.candidates)
+
+
+

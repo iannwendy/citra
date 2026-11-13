@@ -2026,7 +2026,27 @@ class RetrievalOrchestrator:
                 self._circuit_breakers.release_probe(source_name)
 
     @staticmethod
+    def _candidate_matches_citation_title(
+        citation: Citation,
+        cand: SourceCandidate,
+    ) -> bool:
+        """Return True when ``citation.title`` is absent or ``cand.title`` matches it >= 0.70."""
+        cit_title = (citation.title or "").strip()
+        if not cit_title:
+            return True
+        if not cand.found or not (cand.title and cand.title.strip()):
+            return False
+        cit_stripped = OpenLibraryClient.strip_edition_suffix(cit_title)
+        cand_stripped = OpenLibraryClient.strip_edition_suffix(cand.title)
+        sim = max(
+            title_similarity(cit_title, cand.title),
+            title_similarity(cit_stripped, cand_stripped),
+        )
+        return sim >= 0.70
+
+    @classmethod
     def _candidates_match_citation_title(
+        cls,
         citation: Citation,
         candidates: list[SourceCandidate],
     ) -> bool:
@@ -2034,61 +2054,104 @@ class RetrievalOrchestrator:
         cit_title = (citation.title or "").strip()
         if not cit_title:
             return True
-        cit_stripped = OpenLibraryClient.strip_edition_suffix(cit_title)
-        best_sim = 0.0
-        for cand in candidates or []:
-            if not cand.found or not (cand.title and cand.title.strip()):
-                continue
-            cand_stripped = OpenLibraryClient.strip_edition_suffix(cand.title)
-            sim = max(
-                title_similarity(cit_title, cand.title),
-                title_similarity(cit_stripped, cand_stripped),
-            )
-            if sim > best_sim:
-                best_sim = sim
-        return best_sim >= 0.70
+        return any(
+            cls._candidate_matches_citation_title(citation, cand)
+            for cand in (candidates or [])
+            if cand.found
+        )
 
     @staticmethod
-    def _candidates_confirm_identifier(
-        primary_key: str,
-        candidates: list[SourceCandidate],
+    def _candidates_titles_agree(
+        cand_a: SourceCandidate,
+        cand_b: SourceCandidate,
     ) -> bool:
-        """Return True only when a found candidate actually carries the shared DOI/arXiv key."""
+        """Return True when two found candidates agree on work title (>= 0.70)."""
+        t_a = (cand_a.title or "").strip()
+        t_b = (cand_b.title or "").strip()
+        if not t_a or not t_b:
+            return False
+        a_stripped = OpenLibraryClient.strip_edition_suffix(t_a)
+        b_stripped = OpenLibraryClient.strip_edition_suffix(t_b)
+        return (
+            max(
+                title_similarity(t_a, t_b),
+                title_similarity(a_stripped, b_stripped),
+            )
+            >= 0.70
+        )
+
+    @staticmethod
+    def _candidate_confirms_identifier(
+        primary_key: str,
+        cand: SourceCandidate,
+    ) -> bool:
+        """Return True iff ``cand`` explicitly carries the DOI or arXiv ID of ``primary_key``."""
+        if not cand.found:
+            return False
+        ext = cand.external_ids or {}
+        cand_arxiv = normalize_arxiv_id(ext.get("arxiv") or ext.get("ArXiv"))
+        if not cand_arxiv and cand.url and "arxiv.org/" in cand.url.lower():
+            m_url = re.search(
+                r"arxiv\.org/(?:abs|pdf)/(\d{4}\.\d{4,5}|[a-z-]+(?:\.[a-z]{2})?/\d{7})",
+                cand.url,
+                re.IGNORECASE,
+            )
+            if m_url:
+                cand_arxiv = normalize_arxiv_id(m_url.group(1))
+        cand_doi = normalize_doi(cand.doi) if cand.doi else None
+        raw_ext_doi = ext.get("doi") or ext.get("DOI")
+        ext_doi = normalize_doi(raw_ext_doi) if raw_ext_doi else None
+
         if primary_key.startswith("doi:"):
             target_doi = primary_key.removeprefix("doi:")
-            target_arxiv = (
-                normalize_arxiv_id(target_doi.removeprefix("10.48550/arxiv."))
-                if target_doi.startswith("10.48550/arxiv.")
-                else None
-            )
-            for c in candidates or []:
-                if not c.found:
-                    continue
-                if c.doi and normalize_doi(c.doi) == target_doi:
-                    return True
-                c_ax = normalize_arxiv_id(
-                    (c.external_ids or {}).get("arxiv")
-                    or (c.external_ids or {}).get("ArXiv")
-                )
-                if target_arxiv and c_ax == target_arxiv:
+            if cand_doi == target_doi or ext_doi == target_doi:
+                return True
+            if target_doi.startswith("10.48550/arxiv."):
+                target_arxiv = normalize_arxiv_id(target_doi.removeprefix("10.48550/arxiv."))
+                if target_arxiv and cand_arxiv == target_arxiv:
                     return True
             return False
+
         if primary_key.startswith("arxiv:"):
             target_arxiv = primary_key.removeprefix("arxiv:")
             synth_doi = f"10.48550/arxiv.{target_arxiv}"
-            for c in candidates or []:
-                if not c.found:
-                    continue
-                c_ax = normalize_arxiv_id(
-                    (c.external_ids or {}).get("arxiv")
-                    or (c.external_ids or {}).get("ArXiv")
-                )
-                if c_ax == target_arxiv:
-                    return True
-                if c.doi and normalize_doi(c.doi) == synth_doi:
-                    return True
+            if cand_arxiv == target_arxiv:
+                return True
+            if cand_doi == synth_doi or ext_doi == synth_doi:
+                return True
             return False
+
         return True
+
+    @classmethod
+    def _candidates_confirm_identifier(
+        cls,
+        primary_key: str,
+        candidates: list[SourceCandidate],
+    ) -> bool:
+        """Return True only when at least one found candidate carries ``primary_key``."""
+        return any(
+            cls._candidate_confirms_identifier(primary_key, c)
+            for c in (candidates or [])
+            if c.found
+        )
+
+    @staticmethod
+    def _extract_distinct_secondary_id_key(
+        citation: Citation,
+        primary_key: str,
+    ) -> str | None:
+        """If ``citation`` carries both a non-arXiv DOI and a distinct arXiv ID, return ``arxiv:{id}``."""
+        if not primary_key.startswith("doi:"):
+            return None
+        target_doi = primary_key.removeprefix("doi:")
+        raw_arxiv = ArxivClient.extract_arxiv_id(citation)
+        norm_arxiv = normalize_arxiv_id(raw_arxiv) if raw_arxiv else None
+        if not norm_arxiv:
+            return None
+        if target_doi == f"10.48550/arxiv.{norm_arxiv}":
+            return None
+        return f"arxiv:{norm_arxiv}"
 
     @staticmethod
     def _cache_read_plan(citation: Citation) -> list[tuple[str, bool]]:
@@ -2101,7 +2164,7 @@ class RetrievalOrchestrator:
             return [(meta_key, False)]
         if primary_key.startswith(("doi:", "arxiv:")):
             plan: list[tuple[str, bool]] = [(primary_key, True)]
-            if has_title and meta_key != primary_key:
+            if meta_key != primary_key:
                 plan.append((meta_key, False))
             return plan
         return [(primary_key, primary_key.startswith("url:"))]
@@ -2112,15 +2175,43 @@ class RetrievalOrchestrator:
         cached: SourceResult,
         *,
         is_shared_id_key: bool,
+        candidate_key: str = "",
     ) -> SourceResult | None:
         """Validate a cached ``SourceResult`` against ``citation`` and re-run quality filtering."""
         has_title = bool(citation.title and citation.title.strip())
         has_positive = any(c.found for c in (cached.candidates or []))
+        effective_key = candidate_key or build_verification_cache_key(citation)
+        secondary_key = (
+            self._extract_distinct_secondary_id_key(citation, effective_key)
+            if is_shared_id_key
+            else None
+        )
+
         if is_shared_id_key:
-            if has_positive:
-                if not self._candidates_match_citation_title(citation, cached.candidates):
+            if not has_positive:
+                if has_title or secondary_key is not None:
                     return None
-            elif has_title:
+            elif effective_key.startswith(("doi:", "arxiv:")):
+                confirming_cached = [
+                    c
+                    for c in (cached.candidates or [])
+                    if c.found and self._candidate_confirms_identifier(effective_key, c)
+                ]
+                if not confirming_cached:
+                    return None
+                anchor = confirming_cached[0]
+                if not all(
+                    self._candidate_matches_citation_title(citation, c)
+                    and self._candidates_titles_agree(anchor, c)
+                    for c in confirming_cached
+                ):
+                    return None
+                if secondary_key is not None and not any(
+                    self._candidate_confirms_identifier(secondary_key, c)
+                    for c in confirming_cached
+                ):
+                    return None
+            elif not self._candidates_match_citation_title(citation, cached.candidates):
                 return None
 
         cloned = copy.deepcopy(cached)
@@ -2128,22 +2219,52 @@ class RetrievalOrchestrator:
         if not has_positive:
             return cloned
 
-        deduped = self._dedupe_candidates(cloned.candidates, citation=citation)
+        cand_pool = cloned.candidates or []
+        succ_pool = list(cloned.sources_succeeded or [])
+        if is_shared_id_key and effective_key.startswith(("doi:", "arxiv:")):
+            cand_pool = [
+                c
+                for c in cand_pool
+                if c.found and self._candidate_confirms_identifier(effective_key, c)
+            ]
+            allowed_srcs: set[str] = set()
+            for c in cand_pool:
+                if c.source_name:
+                    allowed_srcs.add(c.source_name)
+                for s_name in getattr(c, "_agreed_sources", None) or []:
+                    if s_name:
+                        allowed_srcs.add(str(s_name))
+            succ_pool = [s for s in succ_pool if s in allowed_srcs] or list(allowed_srcs)
+
+        deduped = self._dedupe_candidates(cand_pool, citation=citation)
         quality_cands, quality_succeeded = self._filter_quality_candidates(
             deduped,
-            list(cloned.sources_succeeded or []),
+            succ_pool,
             citation,
         )
         if not quality_cands:
             return None
-        if is_shared_id_key and not self._candidates_match_citation_title(citation, quality_cands):
-            return None
+        if is_shared_id_key:
+            if effective_key.startswith(("doi:", "arxiv:")):
+                if not all(
+                    self._candidate_confirms_identifier(effective_key, c)
+                    and self._candidate_matches_citation_title(citation, c)
+                    for c in quality_cands
+                ):
+                    return None
+            elif not self._candidates_match_citation_title(citation, quality_cands):
+                return None
 
-        is_retracted = bool(cloned.is_retracted) or any(
+        retracted_from_cands = any(
             c.found
             and c.external_ids
             and str(c.external_ids.get("is_retracted", "")).lower() == "true"
             for c in quality_cands
+        )
+        is_retracted = (
+            retracted_from_cands
+            if (is_shared_id_key and effective_key.startswith(("doi:", "arxiv:")))
+            else (bool(cloned.is_retracted) or retracted_from_cands)
         )
         return SourceResult(
             citation_raw=citation.raw_text,
@@ -2159,7 +2280,7 @@ class RetrievalOrchestrator:
         )
 
     def _persist_verification_result(self, citation: Citation, result: SourceResult) -> None:
-        """Persist ``result`` using shared identifier keys ONLY for title-verified pristine hits."""
+        """Persist ``result`` using shared identifier keys ONLY for pure, conjunctive hits."""
         if self._persistent_cache is None:
             return
         if result.sources_succeeded and set(result.sources_succeeded).issubset(
@@ -2179,7 +2300,7 @@ class RetrievalOrchestrator:
         pristine_cands = getattr(result, "_pristine_candidates", None)
         pristine_succ = getattr(result, "_pristine_succeeded", None)
 
-        def _build_pristine(*, clear_url_status: bool) -> SourceResult:
+        def _build_pristine_all(*, clear_url_status: bool) -> SourceResult:
             raw_cands = (
                 [copy.deepcopy(c) for c in pristine_cands]
                 if (has_positive and pristine_cands)
@@ -2210,38 +2331,108 @@ class RetrievalOrchestrator:
             )
 
         if primary_key.startswith(("doi:", "arxiv:")):
-            if (
-                has_positive
-                and self._candidates_match_citation_title(citation, result.candidates)
-                and self._candidates_confirm_identifier(primary_key, result.candidates)
-            ):
-                self._persistent_cache.set(
-                    primary_key,
-                    _build_pristine(clear_url_status=True),
-                    ttl,
+            secondary_key = self._extract_distinct_secondary_id_key(citation, primary_key)
+            if has_positive:
+                raw_pool = (
+                    [copy.deepcopy(c) for c in pristine_cands if c.found]
+                    if pristine_cands
+                    else [copy.deepcopy(c) for c in (result.candidates or []) if c.found]
                 )
-            elif has_title:
+                qual_pool = [c for c in (result.candidates or []) if c.found]
+                confirming_qual = [
+                    c for c in qual_pool if self._candidate_confirms_identifier(primary_key, c)
+                ]
+                confirming_raw = [
+                    c for c in raw_pool if self._candidate_confirms_identifier(primary_key, c)
+                ]
+                anchor = confirming_qual[0] if confirming_qual else None
+                can_persist_shared_id = bool(
+                    anchor is not None
+                    and confirming_raw
+                    and all(
+                        self._candidate_matches_citation_title(citation, c)
+                        and self._candidates_titles_agree(anchor, c)
+                        for c in confirming_qual + confirming_raw
+                    )
+                    and all(
+                        self._candidate_matches_citation_title(citation, other)
+                        and self._candidates_titles_agree(anchor, other)
+                        for other in qual_pool + raw_pool
+                    )
+                    and (
+                        secondary_key is None
+                        or any(
+                            self._candidate_confirms_identifier(secondary_key, c)
+                            for c in confirming_qual
+                        )
+                    )
+                )
+                if can_persist_shared_id:
+                    allowed_srcs: set[str] = set()
+                    for c in confirming_raw:
+                        if c.source_name:
+                            allowed_srcs.add(c.source_name)
+                        for s_name in getattr(c, "_agreed_sources", None) or []:
+                            if s_name:
+                                allowed_srcs.add(str(s_name))
+                    base_succ = (
+                        list(pristine_succ)
+                        if pristine_succ
+                        else list(result.sources_succeeded or [])
+                    )
+                    pure_succ = [s for s in base_succ if s in allowed_srcs]
+                    for s_name in allowed_srcs:
+                        if s_name not in pure_succ:
+                            pure_succ.append(s_name)
+                    pure_retracted = any(
+                        c.found
+                        and c.external_ids
+                        and str(c.external_ids.get("is_retracted", "")).lower() == "true"
+                        for c in confirming_raw + confirming_qual
+                    )
+                    pure_result = SourceResult(
+                        citation_raw=result.citation_raw,
+                        candidates=confirming_raw,
+                        sources_queried=list(result.sources_queried or []),
+                        sources_succeeded=pure_succ,
+                        sources_failed=dict(result.sources_failed or {}),
+                        api_exhausted=bool(result.api_exhausted),
+                        url_status=None,
+                        url_status_code=None,
+                        archive_url=None,
+                        is_retracted=pure_retracted,
+                    )
+                    pure_ttl = self._persistent_cache.resolve_ttl_seconds(pure_result)
+                    if pure_ttl is not None:
+                        self._persistent_cache.set(primary_key, pure_result, pure_ttl)
+                elif meta_key != primary_key:
+                    self._persistent_cache.set(
+                        meta_key,
+                        _build_pristine_all(clear_url_status=False),
+                        ttl,
+                    )
+            elif has_title or secondary_key is not None:
                 self._persistent_cache.set(
                     meta_key,
-                    _build_pristine(clear_url_status=False),
+                    _build_pristine_all(clear_url_status=False),
                     ttl,
                 )
             else:
                 self._persistent_cache.set(
                     primary_key,
-                    _build_pristine(clear_url_status=False),
+                    _build_pristine_all(clear_url_status=False),
                     ttl,
                 )
         elif primary_key.startswith("url:") and has_title:
             self._persistent_cache.set(
                 meta_key,
-                _build_pristine(clear_url_status=False),
+                _build_pristine_all(clear_url_status=False),
                 ttl,
             )
         else:
             self._persistent_cache.set(
                 primary_key,
-                _build_pristine(clear_url_status=False),
+                _build_pristine_all(clear_url_status=False),
                 ttl,
             )
 
@@ -2278,6 +2469,7 @@ class RetrievalOrchestrator:
                         citation,
                         p_hit,
                         is_shared_id_key=is_shared_id_key,
+                        candidate_key=candidate_key,
                     )
                     if mat is not None:
                         if (
@@ -2299,6 +2491,7 @@ class RetrievalOrchestrator:
                     citation,
                     mem_hit,
                     is_shared_id_key=is_shared_id_key,
+                    candidate_key=candidate_key,
                 )
                 if mat is not None:
                     if citation.url and self.enable_link_validation and mat.url_status is None:
@@ -2346,6 +2539,7 @@ class RetrievalOrchestrator:
                         cit,
                         hit,
                         is_shared_id_key=is_shared,
+                        candidate_key=first_key,
                     )
                     if hit is not None
                     else None
@@ -2376,6 +2570,7 @@ class RetrievalOrchestrator:
                                 cit,
                                 sec_hit,
                                 is_shared_id_key=sec_shared,
+                                candidate_key=sec_key,
                             )
                             if sec_hit is not None
                             else None
@@ -2406,6 +2601,7 @@ class RetrievalOrchestrator:
                             cit,
                             mem_hit,
                             is_shared_id_key=m_shared,
+                            candidate_key=m_key,
                         )
                         if mat is not None:
                             matched_mem = mat
@@ -2524,40 +2720,84 @@ class RetrievalOrchestrator:
             failed: dict[str, str] = {}
 
             synth_oa_doi = f"10.48550/arxiv.{norm_arxiv}" if norm_arxiv else None
+            has_distinct_dual_id = bool(
+                norm_doi and norm_arxiv and norm_doi != synth_oa_doi
+            )
+
+            oa_doi_cand: SourceCandidate | None = None
+            oa_ax_cand: SourceCandidate | None = None
+            if norm_doi and norm_doi in oa_seen and norm_doi in oa_map and oa_map[norm_doi].found:
+                oa_doi_cand = copy.deepcopy(oa_map[norm_doi])
+            if (
+                synth_oa_doi
+                and synth_oa_doi in oa_seen
+                and synth_oa_doi in oa_map
+                and oa_map[synth_oa_doi].found
+            ):
+                oa_ax_cand = copy.deepcopy(oa_map[synth_oa_doi])
+                if norm_arxiv:
+                    oa_ax_cand.external_ids = dict(oa_ax_cand.external_ids or {})
+                    oa_ax_cand.external_ids.setdefault("arxiv", norm_arxiv)
+
             oa_lookup_keys = [
                 k for k in dict.fromkeys([norm_doi, synth_oa_doi]) if k and k in oa_seen
             ]
             if oa_lookup_keys:
                 queried.append(self.openalex.name)
-                oa_cand = next(
-                    (oa_map[k] for k in oa_lookup_keys if k in oa_map and oa_map[k].found),
-                    None,
-                )
-                if oa_cand is not None:
-                    cands.append(copy.deepcopy(oa_cand))
+                chosen_oa = oa_doi_cand if oa_doi_cand is not None else oa_ax_cand
+                if chosen_oa is not None:
+                    cands.append(copy.deepcopy(chosen_oa))
                     succeeded.append(self.openalex.name)
                 else:
                     failed[self.openalex.name] = oa_err or "not found"
 
+            cr_cand: SourceCandidate | None = None
             if norm_doi and norm_doi in cr_seen:
                 queried.append(self.crossref.name)
-                cr_cand = cr_map.get(norm_doi)
-                if cr_cand is not None and cr_cand.found:
+                raw_cr = cr_map.get(norm_doi)
+                if raw_cr is not None and raw_cr.found:
+                    cr_cand = copy.deepcopy(raw_cr)
                     cands.append(copy.deepcopy(cr_cand))
                     succeeded.append(self.crossref.name)
                 else:
                     failed[self.crossref.name] = cr_err or "not found"
 
+            ax_cand: SourceCandidate | None = None
             if norm_arxiv and norm_arxiv in ax_seen:
                 queried.append(self.arxiv.name)
-                ax_cand = ax_map.get(norm_arxiv)
-                if ax_cand is not None and ax_cand.found:
+                raw_ax = ax_map.get(norm_arxiv)
+                if raw_ax is not None and raw_ax.found:
+                    ax_cand = copy.deepcopy(raw_ax)
                     cands.append(copy.deepcopy(ax_cand))
                     succeeded.append(self.arxiv.name)
                 else:
                     failed[self.arxiv.name] = ax_err or "not found"
 
-            if not cands:
+            all_wave0_found = [
+                c for c in (oa_doi_cand, oa_ax_cand, cr_cand, ax_cand) if c is not None and c.found
+            ]
+            if not cands or not all_wave0_found:
+                continue
+
+            # If a citation carries BOTH a DOI and a distinct arXiv ID, require both IDs
+            # to resolve in Wave-0 and agree on the same work before short-circuiting.
+            if has_distinct_dual_id:
+                doi_queried = bool(norm_doi and (norm_doi in oa_seen or norm_doi in cr_seen))
+                ax_queried = bool(
+                    norm_arxiv
+                    and ((synth_oa_doi and synth_oa_doi in oa_seen) or norm_arxiv in ax_seen)
+                )
+                doi_group = [c for c in (oa_doi_cand, cr_cand) if c is not None and c.found]
+                ax_group = [c for c in (oa_ax_cand, ax_cand) if c is not None and c.found]
+                if (doi_queried and not doi_group) or (ax_queried and not ax_group):
+                    continue
+
+            wave0_anchor = all_wave0_found[0]
+            if not all(
+                self._candidate_matches_citation_title(cit, c)
+                and self._candidates_titles_agree(wave0_anchor, c)
+                for c in all_wave0_found
+            ):
                 continue
 
             pristine_cands = [copy.deepcopy(c) for c in cands if c.found]
@@ -2570,8 +2810,11 @@ class RetrievalOrchestrator:
             if not quality_candidates:
                 continue
 
-            # Guard against short-circuiting real papers that have a typo/swapped DOI or arXiv ID
-            if not self._candidates_match_citation_title(cit, quality_candidates):
+            if not all(
+                self._candidate_matches_citation_title(cit, c)
+                and self._candidates_titles_agree(wave0_anchor, c)
+                for c in quality_candidates
+            ):
                 continue
 
             is_retracted = any(
@@ -2601,34 +2844,82 @@ class RetrievalOrchestrator:
                 self._sync_to_local_db(quality_candidates, quality_succeeded, citation=cit)
 
             primary_key = build_verification_cache_key(cit)
-            pristine_retracted = any(
-                c.found
-                and c.external_ids
-                and str(c.external_ids.get("is_retracted", "")).lower() == "true"
-                for c in pristine_cands
-            )
-            pristine_result = SourceResult(
-                citation_raw=cit.raw_text,
-                candidates=pristine_cands,
-                sources_queried=list(queried),
-                sources_succeeded=pristine_succeeded,
-                sources_failed=dict(failed),
-                is_retracted=pristine_retracted,
-            )
-            if self._candidates_confirm_identifier(primary_key, quality_candidates):
-                cache_key = primary_key
-            else:
-                cache_key = build_metadata_bound_cache_key(cit)
+            meta_key = build_metadata_bound_cache_key(cit)
+            secondary_key = self._extract_distinct_secondary_id_key(cit, primary_key)
 
-            stored_in_db = False
-            if self._persistent_cache is not None:
-                stored_in_db = self._persistent_cache.set(
-                    cache_key, pristine_result, POSITIVE_MATCH_TTL_SECONDS
+            confirming_pristine = [
+                copy.deepcopy(c)
+                for c in pristine_cands
+                if self._candidate_confirms_identifier(primary_key, c)
+            ]
+            pure_deduped = (
+                self._dedupe_candidates(copy.deepcopy(confirming_pristine), citation=cit)
+                if confirming_pristine
+                else []
+            )
+            pure_consensus = max(
+                (getattr(c, "_consensus_count", 1) for c in pure_deduped if c.found),
+                default=0,
+            )
+
+            def _store_wave0_entry(entry_key: str, entry_res: SourceResult) -> None:
+                stored_db = False
+                if self._persistent_cache is not None:
+                    stored_db = self._persistent_cache.set(
+                        entry_key, entry_res, POSITIVE_MATCH_TTL_SECONDS
+                    )
+                if not stored_db and not PersistentVerificationCache.has_transient_failure(
+                    entry_res
+                ):
+                    self._put_wave0_memory_hit(entry_key, entry_res)
+
+            if confirming_pristine and pure_consensus >= 2:
+                pure_srcs: list[str] = []
+                for c in confirming_pristine:
+                    if c.source_name and c.source_name not in pure_srcs:
+                        pure_srcs.append(c.source_name)
+                pure_failed = {
+                    k: v
+                    for k, v in failed.items()
+                    if not (has_distinct_dual_id and self.arxiv and k == self.arxiv.name)
+                }
+                pure_queried = [
+                    s for s in queried if s in pure_srcs or s in pure_failed
+                ]
+                pure_retracted = any(
+                    c.found
+                    and c.external_ids
+                    and str(c.external_ids.get("is_retracted", "")).lower() == "true"
+                    for c in confirming_pristine
                 )
-            if not stored_in_db and not PersistentVerificationCache.has_transient_failure(
-                pristine_result
-            ):
-                self._put_wave0_memory_hit(cache_key, pristine_result)
+                pure_pristine_result = SourceResult(
+                    citation_raw=cit.raw_text,
+                    candidates=confirming_pristine,
+                    sources_queried=pure_queried,
+                    sources_succeeded=pure_srcs,
+                    sources_failed=pure_failed,
+                    is_retracted=pure_retracted,
+                )
+                _store_wave0_entry(primary_key, pure_pristine_result)
+
+            if secondary_key is not None or pure_consensus < 2:
+                pristine_retracted = any(
+                    c.found
+                    and c.external_ids
+                    and str(c.external_ids.get("is_retracted", "")).lower() == "true"
+                    for c in pristine_cands
+                )
+                pristine_result = SourceResult(
+                    citation_raw=cit.raw_text,
+                    candidates=pristine_cands,
+                    sources_queried=list(queried),
+                    sources_succeeded=pristine_succeeded,
+                    sources_failed=dict(failed),
+                    is_retracted=pristine_retracted,
+                )
+                if meta_key != primary_key:
+                    _store_wave0_entry(meta_key, pristine_result)
+
             resolved_by_id[id(cit)] = result
 
         return resolved_by_id
