@@ -141,32 +141,98 @@ _SURNAME_PARTICLES: frozenset[str] = frozenset(
     }
 )
 
-_ISO4_TRUNCATED_STEM_RE = re.compile(
+_ISO4_PURE_STEM_RE = re.compile(
     r"^(?:"
-    r"(?:agro|bio|cosmo|electro|geo|histo|immuno|micro|mikro|neuro|petro|photo|phyto|radio|stereo|thermo)?ch[ei]m|"
-    r"(?:astro|bio|geo|metallo|photo|psychro|thermo)?phys|"
-    r"(?:agro|bio|geo|micro|mol|neuro|photo|phyto|radio|socio)?biol|"
+    r"(?:agro|bio|cosmo|cyto|electro|geo|histo|immuno|mechano|micro|mikro|neuro|petro|photo|phyto|radio|son|sono|stereo|thermo)?ch[ei]m|"
+    r"(?:astro|bio|geo|metallo|neuro|photo|psychro|thermo)?phys|"
+    r"(?:agro|astro|bio|geo|micro|mol|neuro|photo|phyto|radio|socio)?biol|"
     r"(?:bio|geo|nano)?eng|"
     r"(?:bio|nano)?technol|"
     r"(?:bio|nano|tele|vet)?med|"
-    r"env(?:iron)?|planet|clim|struct|cogn|infect|dis|discuss|"
-    r"sci|lett|rev|toxicol|pharm(?:acol|aceut)?|biochem|"
-    r"mater|catal|(?:bio|macro|supra)?mol|polym|"
-    r"(?:bio|electro|immuno|micro|radio|thermo)?anal|"
-    r"(?:bio|in|metallo)?org|anorg|allg|sustain|"
-    r"soc|assoc|acad|inst|found|"
-    r"trans|commun|proc|bull|ann|arch|acta|zeit|"
-    r"natl|int|eur|am|chin|jpn|aust|russ|brit|ger|helv|gazz|"
-    r"appl|ind|res|dev|exp|theor|comput|math|stat|"
-    r"clin|surg|pathol|oncol|neurol|cardiol|dermatol|psychiatr|pediatr|genet|genom|proteom|virol|bacteriol|immunol|endocrinol|physiol|nutr|"
-    r"ecol|geol|geophys|meteorol|oceanogr|hydrol|agric|agron|"
-    r"chromatogr|spectrosc|crystallogr|metall|miner|ceram|corros|tribol|rheol|"
-    r"educ|manag|econ|inf|syst|autom|electron|opt|acoust|nucl|"
-    r"interf|sep|purif|hazard|biomacromol|biomater|nanomater|nanosci|nanotechnol|"
-    r"ed|ser|sect|suppl|dept|univ"
+    r"manage?|convers|resour|biorefin|sustain|env(?:iron)?|planet|clim|conserv|biodivers|pollut|bioenerg|hydroelectr|"
+    r"transduct|deliv|transl|ther(?:ap)?|chemother|immunother|diag|progn|prev|clin|surg|anesthesiol|emerg|"
+    r"pharm(?:acol|aceut|acokinet)?|toxicol|ecotoxicol|mutagen|carcinog|"
+    r"pathol|oncol|canc|neurol|neurosci|neurosurg|cardiol|vasc|hematol|pulm|respir|thorac|gastroenterol|hepatol|"
+    r"endocrinol|diabet|metab|nutr|nephrol|urol|obstet|gynecol|reprod|perinat|neonatol|pediatr|geriatr|gerontol|"
+    r"psychiatr|psychol|behav|cogn|rheumatol|orthop|rehabil|biomech|dermatol|ophthalmol|otolaryngol|stomatol|"
+    r"radiol|ultrason|forens|epidemiol|hyg|occup|ergon|trop|virol|bacteriol|mycol|parasitol|immunol|allergol|vaccin|transpl|"
+    r"genet|genom|proteom|metabolom|bioinform|biostat|biocatal|biosens|biomater|biomacromol|"
+    r"evol|systemat|morphol|anatom|histol|cytol|embryol|physiol|zool|ornithol|entomol|phytopathol|agron|agric|hortic|silvic|aquac|pedol|irrig|"
+    r"mater|catal|synth|polym|plast|elast|cellul|compos|nanocompos|nanomater|nanosci|nanophoton|"
+    r"(?:bio|macro|supra)?mol|(?:bio|electro|immuno|micro|radio|thermo)?anal|"
+    r"(?:bio|in|metallo)?org|organomet|anorg|allg|"
+    r"quant|kinet|thermodyn|calorim|heterocycl|aliphat|aromat|fluor|pept|carbohydr|glycosci|nucleos|nucleot|"
+    r"microelectron|optoelectron|electron|semicond|supercond|dielectr|ferroelectr|piezoelectr|spintron|"
+    r"luminesc|fluoresc|spectrosc|spectrom|chromatogr|electrophor|microsc|tomogr|crystallogr|"
+    r"metall|miner|ceram|corros|tribol|lubr|adhes|concr|rheol|"
+    r"metrol|instrum|meas|sens|actuat|mechatron|aerosp|automat|veh|hydraul|therm|propuls|nucl|radiat|isot|"
+    r"ecol|geol|geotech|paleontol|stratigr|sedimentol|seismol|hydrol|limnol|oceanogr|meteorol|climatol|atmos|astron|"
+    r"sci|lett|rev|res|dev|innov|exp|theor|comput|simulat|optim|imag|recognit|intell|mach|"
+    r"appl|ind|manuf|constr|archit|transp|logist|struct|syst|autom|acoust|vib|fract|fatig|aerodyn|hydrodyn|turbul|transf|refrig|cryog|"
+    r"alg|geom|topol|calc|equat|probab|stoch|combinat|numer|approxim|cybernet|cryptol|softw|parall|distrib|multimed|"
+    r"sociol|anthropol|archaeol|demogr|geogr|econ|econometr|financ|admin|strateg|entrep|polit|publ|diplom|jurisp|legis|criminol|educ|pedagog|curric|hist|philos|libr|"
+    r"interf|sep|purif|hazard|dis|discov|funct|healthc|annu|acc|coord|memb|antioxid|cryst|des|simul|cognit|"
+    r"theranost|regener|transfus|palliat|marit|aviat|auton|decis|reliab|"
+    r"soc|assoc|acad|inst|found|univ|dept|sect|ser|suppl|ed|pt|"
+    r"trans|commun|comm|proc|ann|acta|zeit|monogr|symp|conf|cong|worksh|acct|"
+    r"natl|int|eur|am|amer|jpn|aust|russ|brit|br|ger|fr|ital|kor|helv|scand|gazz|roy|inf"
     r")$",
     flags=re.IGNORECASE,
 )
+
+_ISO4_CONTEXT_STEM_RE = re.compile(
+    r"^(?:"
+    r"target|process|bioprocess|photon|plasmon|robot|taxon|mineral|petrol|organ|linguist|"
+    r"coat|surf|arch|bull|bus|account|dent|ferment|span|front|cent|chin|can|mar|pol|vet|bot|"
+    r"batt|vac|discuss|react|interact|inform|infect|refract|diffract|combust|convect|opt|math|stat|"
+    r"stud|prog|adv|curr|opin|perspect|rep|rec|mem|lit|fed|div|oper|rel|saf|renew|clean|prod|maint|signal"
+    r")$",
+    flags=re.IGNORECASE,
+)
+
+_ISO4_ORTHO_SUFFIX_RE = re.compile(
+    r"(?:nsduct|deliv|transl|convers|resour|biorefin|sustain|environ|"
+    r"biomol|bioorg|organomet|comput|agric|pharmacol|toxicol|spectrosc|"
+    r"chromatogr|crystallogr|optoelectron|microelectron|semicond|supercond|"
+    r"ferroelectr|piezoelectr|dielectr|luminesc|fluoresc|electrophor|"
+    r"paleontol|sedimentol|oceanogr|meteorol|climatol|astrophys|biodivers|"
+    r"ecotoxicol|pharmacokinet|gastroenterol|endocrinol|neonatol|gerontol|"
+    r"neuropharmacol|psychopharmacol|otolaryngol|ophthalmol|epidemiol|"
+    r"bacteriol|parasitol|biotechnol|nanotechnol|macromol|supramol|"
+    r"thermodyn|mechanochem|electrochem|photochem|radiochem|sonochem|"
+    r"biochem|geochem|neurochem|phytochem|agrochem|histochem|immunochem|cytochem)$",
+    flags=re.IGNORECASE,
+)
+
+_SINGLE_WORD_UNABBREV_VENUES: frozenset[str] = frozenset(
+    {"chem", "stat", "cell", "gut", "eye", "age", "lab", "air"}
+)
+
+
+def _is_iso4_abbreviated_stem(stem: str, right_clean: str | None = None) -> bool:
+    """Return True if ``stem`` is an LTWA/CASSI abbreviated stem in a Title-Case clause."""
+    s = (stem or "").strip().rstrip(".")
+    if not s:
+        return False
+    if _ISO4_PURE_STEM_RE.fullmatch(s):
+        return True
+    if len(s) >= 4 and _ISO4_ORTHO_SUFFIX_RE.search(s):
+        return True
+    if _ISO4_CONTEXT_STEM_RE.fullmatch(s):
+        if right_clean is None or "." in right_clean:
+            return True
+        right_parts = right_clean.split()
+        right_last = right_parts[-1].rstrip(".") if right_parts else ""
+        if (
+            right_last
+            and not (len(right_parts) == 1 and right_last.lower() in _SINGLE_WORD_UNABBREV_VENUES)
+            and (
+                bool(_ISO4_PURE_STEM_RE.fullmatch(right_last))
+                or (len(right_last) >= 4 and bool(_ISO4_ORTHO_SUFFIX_RE.search(right_last)))
+            )
+        ):
+            return True
+    return False
 
 _COMMA_VENUE_SUBTITLE_RE = re.compile(
     r"^(?:"
@@ -688,6 +754,7 @@ class ACSFormat:
     @staticmethod
     def _is_unquoted_title_split(left_full: str, right: str | None = None) -> bool:
         """ISO 4:1997 §4.1/§4.2 detector distinguishing unquoted article titles from journal names."""
+        right_clean: str | None = None
         if right is not None:
             right_clean = right.strip().rstrip(",").strip()
             if not right_clean or not re.match(r"^[A-Z]", right_clean):
@@ -700,12 +767,9 @@ class ACSFormat:
             ):
                 return False
             if " " not in right_clean:
-                right_stem = right_clean.rstrip(".")
-                if re.fullmatch(r"[IVX]+|[A-Z][a-z]{0,2}", right_stem):
+                if right_clean.endswith("."):
                     return False
-                if _ISO4_TRUNCATED_STEM_RE.fullmatch(right_stem):
-                    return False
-                if right_clean.endswith(".") and len(right_stem) <= 5:
+                if re.fullmatch(r"[IVX]+|[A-Z]", right_clean):
                     return False
 
         parts = re.split(r"(?<=\.)\s+(?=[A-Z0-9\"\u201c'\u2018(])", (left_full or "").strip())
@@ -741,7 +805,7 @@ class ACSFormat:
             return False
         if len(last_bare) == 1 and last_bare not in {"I", "V"}:
             return False
-        if _ISO4_TRUNCATED_STEM_RE.fullmatch(last_bare):
+        if _is_iso4_abbreviated_stem(last_bare, right_clean):
             return False
 
         if (

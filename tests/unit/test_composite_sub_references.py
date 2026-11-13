@@ -2161,3 +2161,317 @@ class TestFixRound4Regressions:
         ]
 
 
+class TestFixRound5Regressions:
+    """Round 5 surgical regressions: unabbreviated 1-word journals vs multi-stem ISO-4 venues."""
+
+    def test_unabbreviated_single_word_journals_preserve_title_and_verify(self) -> None:
+        parser = ReferenceListParser()
+        checker = NeuroSymbolicChecker(enable_content_alignment=False)
+
+        primary_cases = [
+            (
+                "1. Smith, J.; Doe, A. Ammonia Synthesis on Copper. Chem 2020, 6, 100–110. "
+                "DOI: 10.1016/j.chempr.2020.01.001.",
+                "Ammonia Synthesis on Copper",
+                "Chem",
+                ["J. Smith", "A. Doe"],
+                "2020",
+                "10.1016/j.chempr.2020.01.001",
+            ),
+            (
+                "14. Y. Zhang and X. Liu, Ammonia Synthesis on Copper. Chem, 2020, 6, 100–110, "
+                "DOI: 10.1016/j.chempr.2020.01.001.",
+                "Ammonia Synthesis on Copper",
+                "Chem",
+                ["Y. Zhang", "X. Liu"],
+                "2020",
+                "10.1016/j.chempr.2020.01.001",
+            ),
+            (
+                "15. Smith, J.; Doe, A. Colitis Therapy. Gut 2020, 69, 100–110. "
+                "DOI: 10.1136/gutjnl-2020-001.",
+                "Colitis Therapy",
+                "Gut",
+                ["J. Smith", "A. Doe"],
+                "2020",
+                "10.1136/gutjnl-2020-001",
+            ),
+            (
+                "16. Smith, J.; Doe, A. Causal Inference. Stat 2020, 9, e260. "
+                "DOI: 10.1002/sta4.260.",
+                "Causal Inference",
+                "Stat",
+                ["J. Smith", "A. Doe"],
+                "2020",
+                "10.1002/sta4.260",
+            ),
+        ]
+
+        for raw, exp_title, exp_venue, cand_authors, cand_yr, cand_doi in primary_cases:
+            cit = parser.parse_single_entry(raw, order_index=1, page_num=5)
+            assert cit is not None, f"Failed to parse {raw!r}"
+            assert cit.title == exp_title, f"Expected title={exp_title!r}, got {cit.title!r}"
+            assert cit.venue == exp_venue, f"Expected venue={exp_venue!r}, got {cit.venue!r}"
+            verdict = checker.check(
+                cit,
+                SourceResult(
+                    citation_raw=cit.raw_text,
+                    candidates=[
+                        SourceCandidate(
+                            source_name="crossref",
+                            found=True,
+                            title=exp_title,
+                            authors=cand_authors,
+                            year=cand_yr,
+                            venue=exp_venue,
+                            doi=cand_doi,
+                            confidence=0.95,
+                            score=1.0,
+                        )
+                    ],
+                    sources_queried=["crossref"],
+                    sources_succeeded=["crossref"],
+                ),
+            )
+            assert verdict.label == ValidationLabel.VERIFIED, (
+                f"Expected VERIFIED for {exp_venue!r}, got {verdict.label} ({verdict.triggered_rules})"
+            )
+
+        # Without-DOI and additional 1-word flagship journals (ACS surname-first + RSC initials-first)
+        one_word_venues = [
+            ("Chem", "Ammonia Synthesis on Copper"),
+            ("Gut", "Colitis Therapy"),
+            ("Stat", "Causal Inference"),
+            ("Eye", "Retinal Detachment Surgery"),
+            ("Age", "Cellular Senescence Markers"),
+            ("Lab", "Microfluidic Droplet Sorting"),
+            ("Air", "Indoor Aerosol Dynamics"),
+            ("Cell", "Chromatin Remodeling Complexes"),
+            ("Joule", "Perovskite Tandem Photovoltaics"),
+            ("Nature", "Topological Quantum Matter"),
+            ("Science", "Cryogenic Electron Microscopy"),
+        ]
+        for venue_name, art_title in one_word_venues:
+            acs_no_doi = f"1. Smith, J.; Doe, A. {art_title}. {venue_name} 2020, 12, 100–110."
+            rsc_no_doi = f"2. Y. Zhang and X. Liu, {art_title}. {venue_name}, 2020, 12, 100–110."
+            for raw_entry, cand_auth in (
+                (acs_no_doi, ["J. Smith", "A. Doe"]),
+                (rsc_no_doi, ["Y. Zhang", "X. Liu"]),
+            ):
+                cit = parser.parse_single_entry(raw_entry, order_index=1, page_num=5)
+                assert cit is not None
+                assert cit.title == art_title, f"Lost title for {venue_name}: {cit.title!r}"
+                assert cit.venue == venue_name, f"Bad venue for {venue_name}: {cit.venue!r}"
+                v = checker.check(
+                    cit,
+                    SourceResult(
+                        citation_raw=cit.raw_text,
+                        candidates=[
+                            SourceCandidate(
+                                source_name="crossref",
+                                found=True,
+                                title=art_title,
+                                authors=cand_auth,
+                                year="2020",
+                                venue=venue_name,
+                                confidence=0.95,
+                                score=1.0,
+                            )
+                        ],
+                        sources_queried=["crossref"],
+                        sources_succeeded=["crossref"],
+                    ),
+                )
+                assert v.label == ValidationLabel.VERIFIED
+
+    def test_multi_stem_and_long_tail_iso4_titleless_journals_acs_and_rsc_verify(self) -> None:
+        parser = ReferenceListParser()
+        checker = NeuroSymbolicChecker(enable_content_alignment=False)
+
+        iso4_journals = [
+            (
+                "ACS Sustainable Resour. Manage.",
+                "ACS Sustainable Resource Management",
+                "10.1021/acssusresmgt.0c00111",
+            ),
+            (
+                "Energy Convers. Manage.",
+                "Energy Conversion and Management",
+                "10.1016/j.enconman.2020.112800",
+            ),
+            (
+                "Carbon Resour. Convers.",
+                "Carbon Resources Conversion",
+                "10.1016/j.crcon.2020.05.001",
+            ),
+            (
+                "Signal Transduct. Target. Ther.",
+                "Signal Transduction and Targeted Therapy",
+                "10.1038/s41392-020-00100-0",
+            ),
+            (
+                "Drug Deliv. Transl. Res.",
+                "Drug Delivery and Translational Research",
+                "10.1007/s13346-020-00750-1",
+            ),
+            (
+                "Biomass Convers. Biorefin.",
+                "Biomass Conversion and Biorefinery",
+                "10.1007/s13399-020-00800-2",
+            ),
+        ]
+
+        for abbr_venue, full_venue, doi in iso4_journals:
+            acs_raw = (
+                f"14. (a) Zhang, Y.; Liu, X. {abbr_venue} 2020, 10, 100–110. DOI: {doi}; "
+                f"(b) Wang, L. {abbr_venue} 2021, 11, 200–210. DOI: {doi}b."
+            )
+            rsc_raw = (
+                f"14. (a) Y. Zhang and X. Liu, {abbr_venue}, 2020, 10, 100–110, DOI: {doi}; "
+                f"(b) L. Wang, {abbr_venue}, 2021, 11, 200–210, DOI: {doi}b."
+            )
+            for raw_block in (acs_raw, rsc_raw):
+                subs = parser.parse_reference_section(raw_block, page_num=5)
+                assert len(subs) == 2, f"Expected 2 sub-refs for {raw_block!r}, got {len(subs)}"
+                for sub_cit, cand_auth, cand_yr in zip(
+                    subs,
+                    (["Y. Zhang", "X. Liu"], ["L. Wang"]),
+                    ("2020", "2021"),
+                    strict=True,
+                ):
+                    assert sub_cit.title is None, (
+                        f"Falsely split title={sub_cit.title!r} on {abbr_venue!r} ({raw_block!r})"
+                    )
+                    assert (sub_cit.venue or "").rstrip(".") == abbr_venue.rstrip("."), (
+                        f"Unexpected venue={sub_cit.venue!r} for {abbr_venue!r}"
+                    )
+                    verdict = checker.check(
+                        sub_cit,
+                        SourceResult(
+                            citation_raw=sub_cit.raw_text,
+                            candidates=[
+                                SourceCandidate(
+                                    source_name="crossref",
+                                    found=True,
+                                    title="Catalytic Valorization of Renewable Feedstocks in Flow",
+                                    authors=cand_auth,
+                                    year=cand_yr,
+                                    venue=full_venue,
+                                    doi=sub_cit.doi,
+                                    confidence=0.95,
+                                    score=1.0,
+                                )
+                            ],
+                            sources_queried=["crossref"],
+                            sources_succeeded=["crossref"],
+                        ),
+                    )
+                    assert verdict.label == ValidationLabel.VERIFIED, (
+                        f"Expected VERIFIED for {abbr_venue!r}, got {verdict.label} ({verdict.triggered_rules})"
+                    )
+
+    def test_short_title_case_fabricated_titles_caught_as_chimeric_doi_mismatch(self) -> None:
+        parser = ReferenceListParser()
+        checker = NeuroSymbolicChecker(enable_content_alignment=False)
+
+        rsc_chimeric = parser.parse_single_entry(
+            "14. (a) Y. Zhang and X. Liu, Quantum Gravity Hallucination. "
+            "Chem. Sci., 2020, 11, 1234–1240, DOI: 10.1039/D0SC00111A",
+            order_index=14,
+            page_num=5,
+        )
+        assert rsc_chimeric is not None
+        assert rsc_chimeric.title == "Quantum Gravity Hallucination"
+        assert rsc_chimeric.venue == "Chem. Sci."
+        v_rsc = checker.check(
+            rsc_chimeric,
+            SourceResult(
+                citation_raw=rsc_chimeric.raw_text,
+                candidates=[
+                    SourceCandidate(
+                        source_name="crossref",
+                        found=True,
+                        title="Photoredox Cross-Coupling of Aryl Halides",
+                        authors=["Y. Zhang", "X. Liu"],
+                        year="2020",
+                        venue="Chemical Science",
+                        doi="10.1039/D0SC00111A",
+                        confidence=0.95,
+                        score=1.0,
+                    )
+                ],
+                sources_queried=["crossref"],
+                sources_succeeded=["crossref"],
+            ),
+        )
+        assert v_rsc.label == ValidationLabel.SUSPECTED_HALLUCINATION
+        assert "R-CHIMERIC-DOI-MISMATCH" in v_rsc.triggered_rules
+
+        acs_chimeric = parser.parse_single_entry(
+            "14. (a) Zhang, Y.; Liu, X. Asymmetric Catalysis. "
+            "J. Am. Chem. Soc. 2020, 142, 1234–1240. DOI: 10.1021/jacs.0c00111",
+            order_index=14,
+            page_num=5,
+        )
+        assert acs_chimeric is not None
+        assert acs_chimeric.title == "Asymmetric Catalysis"
+        assert (acs_chimeric.venue or "").rstrip(".") == "J. Am. Chem. Soc"
+        v_acs = checker.check(
+            acs_chimeric,
+            SourceResult(
+                citation_raw=acs_chimeric.raw_text,
+                candidates=[
+                    SourceCandidate(
+                        source_name="crossref",
+                        found=True,
+                        title="Total Synthesis of Taxol",
+                        authors=["Y. Zhang", "X. Liu"],
+                        year="2020",
+                        venue="Journal of the American Chemical Society",
+                        doi="10.1021/jacs.0c00111",
+                        confidence=0.95,
+                        score=1.0,
+                    )
+                ],
+                sources_queried=["crossref"],
+                sources_succeeded=["crossref"],
+            ),
+        )
+        assert v_acs.label == ValidationLabel.SUSPECTED_HALLUCINATION
+        assert "R-CHIMERIC-DOI-MISMATCH" in v_acs.triggered_rules
+
+        chem_chimeric = parser.parse_single_entry(
+            "1. Smith, J.; Doe, A. Quantum Gravity Hallucination. "
+            "Chem 2020, 6, 100–110. DOI: 10.1016/j.chempr.2020.01.001.",
+            order_index=1,
+            page_num=5,
+        )
+        assert chem_chimeric is not None
+        assert chem_chimeric.title == "Quantum Gravity Hallucination"
+        assert chem_chimeric.venue == "Chem"
+        v_chem = checker.check(
+            chem_chimeric,
+            SourceResult(
+                citation_raw=chem_chimeric.raw_text,
+                candidates=[
+                    SourceCandidate(
+                        source_name="crossref",
+                        found=True,
+                        title="Ammonia Synthesis on Copper",
+                        authors=["J. Smith", "A. Doe"],
+                        year="2020",
+                        venue="Chem",
+                        doi="10.1016/j.chempr.2020.01.001",
+                        confidence=0.95,
+                        score=1.0,
+                    )
+                ],
+                sources_queried=["crossref"],
+                sources_succeeded=["crossref"],
+            ),
+        )
+        assert v_chem.label == ValidationLabel.SUSPECTED_HALLUCINATION
+        assert "R-CHIMERIC-DOI-MISMATCH" in v_chem.triggered_rules
+
+
+
