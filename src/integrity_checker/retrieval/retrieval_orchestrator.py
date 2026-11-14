@@ -854,7 +854,7 @@ _VENUE_YEAR_KNOWN: dict[tuple[str, str], tuple[str, str]] = {
 # Domain routing regexes for Smart Multi-Stage RetrievalOrchestrator
 _BOOK_SIGNAL_RE = re.compile(
     r"\b(?:"
-    r"(?:\d+(?:st|nd|rd|th)|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|revised|updated)\s+(?:ed\.?|edition)"
+    r"(?:\d+(?:st|nd|rd|th)|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|revised|updated)\s+(?:ed\.?|edn\.?|edition)"
     r"|isbn(?:-1[03])?"
     r"|o['’]reilly|addison-wesley|prentice\s+hall|pearson|wiley|mcgraw-hill|manning\s+publications|apress|packt|no\s+starch"
     r"|cambridge\s+university\s+press|oxford\s+university\s+press|mit\s+press|harvard\s+university\s+press|princeton\s+university\s+press"
@@ -995,8 +995,8 @@ _WEB_RESOURCE_PATTERNS = [
     ),
     re.compile(
         r"https?://(?:[a-z0-9-]+\.)*(?:docker\.com|kubernetes\.io|cncf\.io|nodejs\.org|npmjs\.com|pypi\.org|"
-        r"python\.org|react\.dev|vuejs\.org|angular\.io|nextjs\.org|expressjs\.com|fastapi\.tiangolo\.com|mupdf\.com|"
-        r"djangoproject\.com|redis\.io|mysql\.com|postgresql\.org|mongodb\.com|nginx\.org|nginx\.com|"
+        r"python\.org|r-project\.org|react\.dev|vuejs\.org|angular\.io|nextjs\.org|expressjs\.com|fastapi\.tiangolo\.com|mupdf\.com|"
+        r"djangoproject\.com|redis\.io|mysql\.com|postgresql\.org|mongodb\.org|mongodb\.com|nginx\.org|nginx\.com|"
         r"apache\.org|mozilla\.org|w3\.org|ietf\.org|rfc-editor\.org|owasp\.org|cloudflare\.com|"
         r"aws\.amazon\.com|cloud\.google\.com|azure\.microsoft\.com|huggingface\.co|pytorch\.org|"
         r"tensorflow\.org|scikit-learn\.org|gitlab\.com|bitbucket\.org|stackoverflow\.com|wikipedia\.org)(?:/|\b)",
@@ -1013,14 +1013,17 @@ _WEB_RESOURCE_PATTERNS = [
         r"cloud\s+native\s+terminology)\b.*https?://",
         re.IGNORECASE,
     ),
-    # Audiovisual / YouTube / News / Government / Health / Industry web portals (BUG-22)
+    # Audiovisual / YouTube / Social / News / Government / Health / Industry web portals (BUG-22)
     re.compile(
-        r"(?:youtube\.com|youtu\.be|\[Video\]|forbes\.com|nytimes\.com|reuters\.com|bbc\.(?:com|co\.uk)|"
-        r"theguardian\.com|washingtonpost\.com|wsj\.com|bloomberg\.com|cnbc\.com|techcrunch\.com|"
+        r"(?:youtube\.com|youtu\.be|\[Video\]|\[Twitter\]|\[Tweet\]|"
+        r"https?://(?:www\.|mobile\.)?(?:twitter\.com|x\.com)/[A-Za-z0-9_]+|"
+        r"forbes\.com|nytimes\.com|reuters\.com|apnews\.com|bbc\.(?:com|co\.uk)|"
+        r"theguardian\.com|washingtonpost\.com|wsj\.com|ft\.com|economist\.com|politico\.(?:com|eu)|"
+        r"svd\.se|dn\.se|bloomberg\.com|cnbc\.com|techcrunch\.com|"
         r"wired\.com|theverge\.com|arstechnica\.com|gartner\.com|mckinsey\.com|deloitte\.com|pwc\.com|"
         r"ibm\.com|cisco\.com|crowdstrike\.com|mandiant\.com|fireeye\.com|paloaltonetworks\.com|"
         r"fortinet\.com|kaspersky\.com|symantec\.com|securityriskadvisors\.com|sans\.org|mitre\.org|"
-        r"cve\.org|nist\.gov|cisa\.gov|cdc\.gov|fda\.gov|sec\.gov|ftc\.gov|state\.gov|whitehouse\.gov|"
+        r"cve\.org|nist\.gov|cisa\.gov|cdc\.gov|fda\.gov|sec\.gov|ftc\.gov|state\.gov|whitehouse\.gov|archives\.gov|"
         r"nimh\.nih\.gov|samhsa\.gov|europa\.eu|un\.org|worldbank\.org|imf\.org|oecd\.org|weforum\.org|"
         r"statista\.com|investopedia\.com|pewresearch\.org|gallup\.com|mayoclinic\.org|"
         r"clevelandclinic\.org|webmd\.com|healthline\.com|verywellmind\.com|verywellhealth\.com|"
@@ -1223,7 +1226,8 @@ class RetrievalOrchestrator:
                 settings_global = get_settings()
                 db_path = settings_global.paths.data_dir / "local_papers.db"
                 self._local_db = local_db or LocalDatabase(db_path)
-                logger.info(f"Local database enabled: {db_path}")
+                actual_db_path = getattr(self._local_db, "db_path", db_path)
+                logger.info(f"Local database enabled: {actual_db_path}")
             except Exception as e:
                 logger.warning(f"Local database unavailable: {e}")
                 self._local_db = None
@@ -1524,6 +1528,14 @@ class RetrievalOrchestrator:
             tier2 = _pick(["datacite", "huggingface", "crossref"])
             return tier1, tier2
 
+        # 2b. Bare incomplete fragment or placeholder access-date / URL-tail title (no DOI/arXiv/ISBN):
+        # query 3 fast parallel primary JSON catalogs (Crossref + OpenAlex + DOAJ) without specialist fan-out.
+        if not self._six_core_only_explicit_mode and (
+            self._is_incomplete_bibliography_fragment(citation)
+            or self._has_only_access_date_or_url_tail_title(citation)
+        ):
+            return _pick(["crossref", "openalex", "doaj"]), []
+
         # 3. Book / Textbook / Edition / ISBN citation
         if signals["is_book"]:
             tier1 = _pick(["openlibrary", "crossref", "openalex"])
@@ -1571,6 +1583,49 @@ class RetrievalOrchestrator:
         else:
             tier2 = _pick(["doaj", "openaire_hal", "dblp", "arxiv", "openlibrary", "europepmc"])
         return tier1, tier2
+
+    @staticmethod
+    def _is_incomplete_bibliography_fragment(citation: Citation) -> bool:
+        """Return True when ``citation`` lacks minimum scholarly bibliographic metadata."""
+        from integrity_checker.logic.completeness import assess_bibliographic_completeness
+
+        return assess_bibliographic_completeness(
+            citation_raw=citation.raw_text,
+            citation_authors=citation.authors,
+            citation_year=citation.year,
+            citation_venue=citation.venue,
+            citation_doi=citation.doi,
+            citation_url=citation.url,
+            arxiv_id=ArxivClient.extract_arxiv_id(citation),
+            isbn=OpenLibraryClient.extract_isbn(citation),
+            citation_type=citation.citation_type,
+            citation_title=citation.title,
+        ).is_incomplete
+
+    @staticmethod
+    def _has_only_access_date_or_url_tail_title(citation: Citation) -> bool:
+        """Return True when ``citation.title`` is merely an ``[Accessed ...]`` note or dangling URL `.pdf` tail."""
+        if (
+            citation.doi
+            or ArxivClient.extract_arxiv_id(citation)
+            or OpenLibraryClient.extract_isbn(citation)
+        ):
+            return False
+        raw_title = (citation.title or "").strip()
+        if not raw_title:
+            return False
+        stripped = re.sub(
+            r"(?:\[\s*(?:accessed|truy\s+cập|retrieved)[^\]]*\]|\(\s*(?:accessed|truy\s+cập|retrieved)[^)]*\))",
+            "",
+            raw_title,
+            flags=re.IGNORECASE,
+        )
+        stripped = stripped.strip(" \t\r\n.,;:-–—/")
+        if not stripped or stripped.lower() in {"pdf", "html", "htm", "online"}:
+            return True
+        if re.match(r"^\s*\S*%[0-9A-Fa-f]{2}\S*\.pdf\b", citation.raw_text or "", re.IGNORECASE):
+            return True
+        return False
 
     @classmethod
     def _is_tier1_sufficient(
@@ -1979,7 +2034,7 @@ class RetrievalOrchestrator:
             return False
         if citation.url or result.url_status is not None:
             return False
-        if len(result.sources_queried) < 3 or not result.sources_failed:
+        if len(result.sources_queried) < 3:
             return False
 
         probe = SourceResult(
@@ -2620,6 +2675,25 @@ class RetrievalOrchestrator:
         resolved_by_id: dict[int, SourceResult] = {}
         plans_by_id: dict[int, list[tuple[str, bool]]] = {}
         pending: list[Citation] = []
+        url_validation_pairs: list[tuple[Citation, SourceResult]] = []
+
+        async def _flush_url_validations() -> None:
+            if not url_validation_pairs or not self.enable_link_validation:
+                return
+            sem = asyncio.Semaphore(8)
+
+            async def _check_pair(cit_item: Citation, res_item: SourceResult) -> None:
+                async with sem:
+                    u_st, u_code, u_arch, u_meta = await self._validate_citation_url_with_meta(
+                        cit_item
+                    )
+                    res_item.url_status = u_st
+                    res_item.url_status_code = u_code
+                    res_item.archive_url = u_arch
+                    res_item.html_meta = u_meta
+
+            await asyncio.gather(*(_check_pair(c, r) for c, r in url_validation_pairs))
+            url_validation_pairs.clear()
 
         for cit in citations:
             if cit is None:
@@ -2647,11 +2721,7 @@ class RetrievalOrchestrator:
                 )
                 if mat is not None:
                     if cit.url and self.enable_link_validation and mat.url_status is None:
-                        u_st, u_code, u_arch, u_meta = await self._validate_citation_url_with_meta(cit)
-                        mat.url_status = u_st
-                        mat.url_status_code = u_code
-                        mat.archive_url = u_arch
-                        mat.html_meta = u_meta
+                        url_validation_pairs.append((cit, mat))
                     resolved_by_id[id(cit)] = mat
                 else:
                     need_second_pass.append(cit)
@@ -2679,13 +2749,7 @@ class RetrievalOrchestrator:
                         )
                         if mat is not None:
                             if cit.url and self.enable_link_validation and mat.url_status is None:
-                                u_st, u_code, u_arch, u_meta = (
-                                    await self._validate_citation_url_with_meta(cit)
-                                )
-                                mat.url_status = u_st
-                                mat.url_status_code = u_code
-                                mat.archive_url = u_arch
-                                mat.html_meta = u_meta
+                                url_validation_pairs.append((cit, mat))
                             resolved_by_id[id(cit)] = mat
                             continue
                     still_pending.append(cit)
@@ -2711,17 +2775,14 @@ class RetrievalOrchestrator:
                             break
                 if matched_mem is not None:
                     if cit.url and self.enable_link_validation and matched_mem.url_status is None:
-                        u_st, u_code, u_arch, u_meta = await self._validate_citation_url_with_meta(cit)
-                        matched_mem.url_status = u_st
-                        matched_mem.url_status_code = u_code
-                        matched_mem.archive_url = u_arch
-                        matched_mem.html_meta = u_meta
+                        url_validation_pairs.append((cit, matched_mem))
                     resolved_by_id[id(cit)] = matched_mem
                 else:
                     after_mem.append(cit)
             pending = after_mem
 
         if not pending:
+            await _flush_url_validations()
             return resolved_by_id
 
         src_cfg = get_settings().retrieval.sources
@@ -2939,11 +3000,7 @@ class RetrievalOrchestrator:
                 continue
 
             if cit.url and self.enable_link_validation:
-                u_st, u_code, u_arch, u_meta = await self._validate_citation_url_with_meta(cit)
-                result.url_status = u_st
-                result.url_status_code = u_code
-                result.archive_url = u_arch
-                result.html_meta = u_meta
+                url_validation_pairs.append((cit, result))
 
             if self._local_db is not None:
                 self._sync_to_local_db(quality_candidates, quality_succeeded, citation=cit)
@@ -3027,6 +3084,7 @@ class RetrievalOrchestrator:
 
             resolved_by_id[id(cit)] = result
 
+        await _flush_url_validations()
         return resolved_by_id
 
     async def retrieve(
@@ -3333,10 +3391,46 @@ class RetrievalOrchestrator:
 
         # ===== 3.6. arXiv Fallback (trước Wikidata/OpenCitations & SerpApi) =====
         # Khi mọi API ở Tier 1 + Tier 2 + DOI RA đều không tìm thấy (0 found) và arXiv chưa được gọi,
-        # luôn thử qua arXiv một lượt cuối trước khi gọi fallback tiếp theo.
+        # luôn thử qua arXiv một lượt cuối trước khi gọi fallback tiếp theo (trừ các trích dẫn cụt,
+        # sách xuất bản, mục (n.d.) không năm, hoặc URL web tổng quát không mang tín hiệu CS/AI/arXiv).
+        is_incomplete_fragment = False
+        is_placeholder_title = False
+        skip_arxiv_fallback = False
+        skip_wikidata_fallback = False
+        if not self._six_core_only_explicit_mode:
+            is_incomplete_fragment = self._is_incomplete_bibliography_fragment(citation)
+            is_placeholder_title = self._has_only_access_date_or_url_tail_title(citation)
+            signals_fb = self.classify_citation_domain(citation)
+            year_norm_fb = (citation.year or "").strip().lower()
+            skip_arxiv_fallback = (
+                is_incomplete_fragment
+                or is_placeholder_title
+                or bool(signals_fb.get("is_book"))
+                or (year_norm_fb in {"", "n.d.", "nd"} and not signals_fb.get("is_arxiv"))
+                or (
+                    bool(citation.url)
+                    and not signals_fb.get("is_arxiv")
+                    and not signals_fb.get("is_cs_ai")
+                )
+            )
+            skip_wikidata_fallback = (
+                is_incomplete_fragment
+                or is_placeholder_title
+                or (
+                    year_norm_fb in {"", "n.d.", "nd"}
+                    and not signals_fb.get("is_knowledge_graph")
+                )
+                or (
+                    bool(citation.url)
+                    and not citation.doi
+                    and not signals_fb.get("is_knowledge_graph")
+                )
+            )
+
         if (
             not any(c.found for c in valid)
             and not nonexistent_registry_confirmed
+            and not skip_arxiv_fallback
             and self.arxiv is not None
             and getattr(get_settings().retrieval.sources, "arxiv", True)
             and self.arxiv.name not in sources_queried
@@ -3354,6 +3448,7 @@ class RetrievalOrchestrator:
         # ICD-11) hoặc DOI mở chưa tìm thấy ở các bước trên trước khi phải dùng đến SerpApi.
         if (
             not self._six_core_only_explicit_mode
+            and not skip_wikidata_fallback
             and not any(c.found for c in valid)
             and not nonexistent_registry_confirmed
             and self.wikidata_opencitations is not None

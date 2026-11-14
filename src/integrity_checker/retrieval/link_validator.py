@@ -290,7 +290,8 @@ class LinkValidator:
 
         global _WAYBACK_GLOBAL_LAST_AT
         sem, lock, loop_id = _get_wayback_concurrency()
-        backoffs = (0.0, 0.35, 0.75)
+        backoffs = (0.0, 0.08)
+        wb_timeout = min(self.timeout, 0.95) if self.timeout > 0 else 0.95
         last_exc: Exception | None = None
 
         for attempt, backoff_sec in enumerate(backoffs):
@@ -310,7 +311,7 @@ class LinkValidator:
 
                 try:
                     async with httpx.AsyncClient(
-                        timeout=min(max(self.timeout, 2.0), 4.5),
+                        timeout=wb_timeout,
                         follow_redirects=True,
                         headers={
                             "User-Agent": self.DEFAULT_HEADERS["User-Agent"],
@@ -376,6 +377,11 @@ class LinkValidator:
                                 _WAYBACK_CACHE.pop(next(iter(_WAYBACK_CACHE)))
                             _WAYBACK_CACHE[cache_key] = (None, None)
                             return None, None, True
+                except httpx.TimeoutException as exc:
+                    last_exc = exc
+                    logger.debug(
+                        f"Wayback Machine timed out on attempt {attempt + 1}/{len(backoffs)} for '{url}': {exc}"
+                    )
                 except Exception as exc:  # noqa: BLE001
                     last_exc = exc
                     logger.debug(

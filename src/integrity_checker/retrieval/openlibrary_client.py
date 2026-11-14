@@ -41,7 +41,7 @@ logger = get_logger(__name__)
 MIN_TITLE_SIMILARITY = 0.60
 
 _EDITION_SUFFIX_RE = re.compile(
-    r"(?:[,\s—–-]+|\s*\()?(?:\d+(?:st|nd|rd|th)|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|revised|updated|international)\s+(?:ed\.?|edition)\)?\.?$",
+    r"(?:[,\s—–-]+|\s*\()?(?:\d+(?:st|nd|rd|th)|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|revised|updated|international)\s+(?:ed\.?|edn\.?|edition)(?:\)|\s*,\s*[A-ZÀ-Ỹ][^:]{1,45}:\s*[^.]{2,80})?\.?$",
     re.IGNORECASE,
 )
 _ISBN_RE = re.compile(

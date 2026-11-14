@@ -46,6 +46,12 @@ _CLEAN_MISS_MARKERS = (
     "no title match",
     "does not exist",
     "no matching",
+    "empty title",
+    "empty search query",
+    "empty bibliographic query",
+    "no title for search",
+    "no title or",
+    "matched different author",
 )
 
 _DNS_NOT_FOUND_MARKERS = (
@@ -373,36 +379,64 @@ class PersistentVerificationCache:
     @classmethod
     def resolve_ttl_seconds(cls, result: SourceResult) -> int | None:
         """Determine tiered TTL in seconds, or None if the result must NOT be cached."""
-        if cls.has_transient_failure(result):
+        non_cacheable_url_statuses = {"timeout", "error", "unknown", "skipped", "unchecked"}
+        if result.api_exhausted or result.url_status in {"timeout", "error"}:
             return None
 
+        has_transient = cls.has_transient_failure(result)
         has_positive = any(c.found for c in (result.candidates or []))
         if has_positive:
-            return POSITIVE_MATCH_TTL_SECONDS
+            if result.url_status in non_cacheable_url_statuses:
+                return None
+            if not has_transient or len(result.sources_succeeded or []) >= 2:
+                return POSITIVE_MATCH_TTL_SECONDS
+            return None
 
         if (
             not result.candidates
             and result.url_status is not None
-            and result.url_status not in {"timeout", "error", "unknown", "skipped"}
+            and result.url_status not in non_cacheable_url_statuses
         ):
-            return URL_CHECK_TTL_SECONDS
+            if not has_transient:
+                return URL_CHECK_TTL_SECONDS
+            clean_url_misses = 0
+            only_aux_skips = True
+            for err in (result.sources_failed or {}).values():
+                err_no_quotes = _strip_quoted_query(err)
+                if _is_clean_miss_error(err_no_quotes):
+                    clean_url_misses += 1
+                elif any(s in err_no_quotes for s in ("skipped", "circuit_open")):
+                    continue
+                else:
+                    only_aux_skips = False
+                    break
+            if only_aux_skips and clean_url_misses >= 2:
+                return URL_CHECK_TTL_SECONDS
+            return None
+
+        if has_transient:
+            return None
 
         # Clean negative miss: require >= 3 queried sources all returning clean HTTP-200 misses
+        # (including HTTP-200 queries whose noisy candidates were all quality-filtered out).
         if (
             not result.candidates
             and not result.sources_succeeded
             and result.url_status is None
             and len(result.sources_queried or []) >= 3
-            and result.sources_failed
         ):
             clean_count = 0
-            for err in result.sources_failed.values():
+            for err in (result.sources_failed or {}).values():
                 err_no_quotes = _strip_quoted_query(err)
                 if _is_clean_miss_error(err_no_quotes):
                     clean_count += 1
                 else:
                     return None
-            if clean_count >= 3:
+            quality_filtered_count = max(
+                0,
+                len(set(result.sources_queried or [])) - len(result.sources_failed or {}),
+            )
+            if clean_count + quality_filtered_count >= 3:
                 return CLEAN_MISS_TTL_SECONDS
 
         return None

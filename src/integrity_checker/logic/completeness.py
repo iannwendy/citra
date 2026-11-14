@@ -58,6 +58,15 @@ _VN_LEGAL_OR_STANDARD_ID_RE = re.compile(
 )
 _URL_IN_RAW_RE = re.compile(r"https?://[^\s\]\)\,;]+", re.IGNORECASE)
 _YEAR_TOKEN_RE = re.compile(r"(?<![\d\-–—])\b((?:18|19|20)\d{2})[a-z]?\b(?![\s]*[-–—][\s]*\d)")
+_ACCESS_DATE_CLAUSE_RE = re.compile(
+    r"(?:"
+    r"\[\s*(?:accessed|truy\s+cập|retrieved)[^\]]*\]|"
+    r"\(\s*(?:accessed|truy\s+cập|retrieved)[^)]*\)|"
+    r"\b(?:accessed|retrieved)\s+(?:on\s+)?(?:[A-Za-z]+\s+\d{1,2},?\s+|\d{1,2}\s+[A-Za-z]+\s+)(?:18|19|20)\d{2}\b|"
+    r"\btruy\s+cập(?:\s+ngày)?\s+\d{1,2}[/-]\d{1,2}[/-](?:18|19|20)\d{2}\b"
+    r")",
+    re.IGNORECASE,
+)
 
 _REF_MARKER_PREFIX_RE = re.compile(
     r"^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*\d+[a-z]?\s*\)|\d+[a-z]?[.)])\s*"
@@ -438,15 +447,20 @@ def assess_bibliographic_completeness(
         or has_live_or_resolvable_url
     )
 
-    # 3. Valid publication year check (1800 .. current_year + 1)
+    # 3. Valid publication year check (1800 .. current_year + 1), excluding [Accessed ...] dates
     max_valid_year = max(2027, datetime.datetime.now(datetime.UTC).year + 1)
+    raw_no_access = _ACCESS_DATE_CLAUSE_RE.sub(" ", raw) if raw else ""
+    had_access_clause = bool(raw and raw_no_access != raw)
     has_valid_year = False
     if citation_year is not None and str(citation_year).strip():
         m_yr = re.search(r"(18|19|20)\d{2}", str(citation_year))
         if m_yr and 1800 <= int(m_yr.group(0)) <= max_valid_year:
-            has_valid_year = True
-    elif raw:
-        for m_yr in _YEAR_TOKEN_RE.finditer(raw):
+            yr_token = m_yr.group(0)
+            leaked_from_access_date = had_access_clause and (yr_token not in raw_no_access)
+            if not leaked_from_access_date:
+                has_valid_year = True
+    elif raw_no_access:
+        for m_yr in _YEAR_TOKEN_RE.finditer(raw_no_access):
             yr_val = int(m_yr.group(1))
             if 1800 <= yr_val <= max_valid_year:
                 has_valid_year = True

@@ -730,3 +730,283 @@ def test_finding11_sentence_transformers_minimum_3_2_in_packaging_manifests() ->
 
     assert "sentence-transformers>=3.2,<4.0" in requirements_text
     assert "sentence-transformers>=2.6" not in requirements_text
+
+
+# ============================================================================
+# Live Benchmark Hardening: Web Resource Routing, Bare Fragment Escalation,
+# Persistent Cache Auxiliary-Skip Resilience & Fast Wayback Timeout Bailout
+# ============================================================================
+
+
+def test_live_bench_twitter_x_and_r_project_detected_as_web_resources() -> None:
+    cit_tweet = Citation(
+        raw_text="Trump, D. J. (2018a). Donald J. Trump [Twitter], https://x.com/realDonaldTrump/status/969525362580484098 [Accessed 1 August 2025].",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Donald J. Trump"],
+        year="2018a",
+        title="Donald J. Trump [Twitter]",
+        url="https://x.com/realDonaldTrump/status/969525362580484098",
+    )
+    cit_r = Citation(
+        raw_text="The R Core Team (2025). R: A Language and Environment for Statistical Computing, https://www.R-project.org/ [Accessed 29 June 2025].",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["The R Core Team"],
+        year="2025",
+        title="R: A Language and Environment for Statistical Computing",
+        url="https://www.R-project.org/",
+    )
+    assert RetrievalOrchestrator.is_web_or_legal_resource(cit_tweet) is True
+    assert RetrievalOrchestrator.is_web_or_legal_resource(cit_r) is True
+
+
+@pytest.mark.asyncio
+async def test_live_bench_bare_incomplete_fragment_and_book_skip_arxiv_fallback() -> None:
+    called: list[str] = []
+
+    def _stub(name: str) -> object:
+        c = SimpleNamespace(name=name)
+
+        async def _lookup(_cit: Citation) -> SourceCandidate:
+            called.append(name)
+            return SourceCandidate(source_name=name, found=False, error=f"{name}: no results")
+
+        c.lookup = AsyncMock(side_effect=_lookup)
+        return c
+
+    orch = RetrievalOrchestrator(
+        crossref=_stub("crossref"),
+        openalex=_stub("openalex"),
+        dblp=_stub("dblp"),
+        arxiv=_stub("arxiv"),
+        openlibrary=_stub("openlibrary"),
+        europepmc=_stub("europepmc"),
+        datacite=_stub("datacite"),
+        doi_ra=_stub("doi_ra"),
+        doaj=_stub("doaj"),
+        openaire_hal=_stub("openaire_hal"),
+        ncbi_biorxiv=_stub("ncbi_biorxiv"),
+        huggingface=_stub("huggingface"),
+        tech_standard=_stub("tech_standard"),
+        wikidata_opencitations=_stub("wikidata_opencitations"),
+        use_local_db=False,
+        use_persistent_cache=False,
+        enable_link_validation=False,
+    )
+
+    bare_cit = Citation(
+        raw_text="[2] Making a robot vacuum cleaner to avoid falling down the stairs",
+        citation_type=CitationType.REFERENCE_LIST,
+        title="Making a robot vacuum cleaner to avoid falling down the stairs",
+    )
+    res_bare = await orch.retrieve(bare_cit)
+    assert len(res_bare.sources_queried) == 3
+    assert "arxiv" not in called
+    assert "dblp" not in called
+    assert "wikidata_opencitations" not in called
+
+    called.clear()
+    book_cit = Citation(
+        raw_text="Baltagi, B. H. (2005). Econometric Analysis of Panel Data, 3rd edn., Wiley.",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["B. H. Baltagi"],
+        year="2005",
+        title="Econometric Analysis of Panel Data, 3rd edn.",
+        venue="Wiley",
+    )
+    await orch.retrieve(book_cit)
+    assert "arxiv" not in called
+
+
+def test_live_bench_persistent_cache_ttl_guards_unchecked_url_and_allows_verified_with_aux_skip() -> None:
+    from integrity_checker.retrieval.persistent_cache import (
+        POSITIVE_MATCH_TTL_SECONDS,
+        URL_CHECK_TTL_SECONDS,
+        PersistentVerificationCache,
+    )
+
+    # 1. Transient Wayback timeout (url_status='unchecked') must NEVER be cached for 7 days
+    unchecked_res = SourceResult(
+        citation_raw="Broken thesis URL",
+        candidates=[],
+        sources_queried=["crossref", "openalex", "doaj"],
+        sources_succeeded=[],
+        sources_failed={"crossref": "no results", "openalex": "no results", "doaj": "no results"},
+        url_status="unchecked",
+        url_status_code=404,
+    )
+    assert PersistentVerificationCache.resolve_ttl_seconds(unchecked_res) is None
+
+    # 2. Multi-source positive match (>=2 succeeded) caches even if an auxiliary client skipped
+    pos_with_skip = SourceResult(
+        citation_raw="Verified paper",
+        candidates=[
+            SourceCandidate(source_name="crossref", found=True, title="Paper", confidence=0.95),
+            SourceCandidate(source_name="openalex", found=True, title="Paper", confidence=0.95),
+        ],
+        sources_queried=["crossref", "openalex", "dblp"],
+        sources_succeeded=["crossref", "openalex"],
+        sources_failed={"dblp": "dblp: skipped (rate-limit backoff active)"},
+    )
+    assert PersistentVerificationCache.resolve_ttl_seconds(pos_with_skip) == POSITIVE_MATCH_TTL_SECONDS
+
+    # 3. Single-source positive match with degraded 2nd source STILL refuses caching
+    single_pos_degraded = SourceResult(
+        citation_raw="Single source degraded",
+        candidates=[
+            SourceCandidate(source_name="crossref", found=True, title="Paper", confidence=0.95),
+        ],
+        sources_queried=["crossref", "openalex"],
+        sources_succeeded=["crossref"],
+        sources_failed={"openalex": "HTTP 429 rate limited"},
+    )
+    assert PersistentVerificationCache.resolve_ttl_seconds(single_pos_degraded) is None
+
+    # 4. Definitively verified URL with >=2 clean scholarly misses + auxiliary circuit_open skip caches URL_CHECK
+    url_with_aux_skip = SourceResult(
+        citation_raw="Kielos (2025) newspaper URL",
+        candidates=[],
+        sources_queried=["crossref", "openalex", "arxiv"],
+        sources_succeeded=[],
+        sources_failed={
+            "crossref": "no results",
+            "openalex": "no results",
+            "arxiv": "circuit_open (30s remaining)",
+        },
+        url_status="alive",
+        url_status_code=200,
+    )
+    assert PersistentVerificationCache.resolve_ttl_seconds(url_with_aux_skip) == URL_CHECK_TTL_SECONDS
+
+
+@pytest.mark.asyncio
+async def test_live_bench_wayback_fallback_caps_retries_to_two_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from integrity_checker.retrieval import link_validator as lv_mod
+
+    lv_mod._WAYBACK_CACHE.clear()
+    attempts = {"count": 0}
+
+    class TimeoutWaybackClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args) -> None:
+            return None
+
+        async def get(self, url: str, **_kwargs):
+            attempts["count"] += 1
+            raise httpx.ReadTimeout("Wayback read timed out")
+
+    monkeypatch.setattr(lv_mod.httpx, "AsyncClient", TimeoutWaybackClient)
+    lv = LinkValidator(timeout=1.5, enable_wayback_fallback=True)
+    wb_url, wb_ts, wb_ok = await lv._check_wayback_machine_status(
+        "https://econ.berkeley.edu/sites/default/files/missing-thesis-check.pdf"
+    )
+    assert (wb_url, wb_ts, wb_ok) == (None, None, False)
+    assert attempts["count"] == 2
+
+
+def test_live_bench_harvard_book_edition_suffix_and_web_news_archive_routing() -> None:
+    from integrity_checker.retrieval.openlibrary_client import OpenLibraryClient
+    from integrity_checker.retrieval.persistent_cache import (
+        CLEAN_MISS_TTL_SECONDS,
+        PersistentVerificationCache,
+    )
+
+    assert (
+        OpenLibraryClient.strip_edition_suffix(
+            "Principles of Corporate Finance, 6th edn, Boston: Irwin/McGraw-Hill"
+        )
+        == "Principles of Corporate Finance"
+    )
+    assert (
+        OpenLibraryClient.strip_edition_suffix(
+            "Econometric Analysis of Panel Data, 3rd edn, Chichester: John Wiley & Sons"
+        )
+        == "Econometric Analysis of Panel Data"
+    )
+    assert (
+        OpenLibraryClient.strip_edition_suffix(
+            "Econometric Analysis of Cross Section and Panel Data, 2nd edn, Cambridge: MIT Press"
+        )
+        == "Econometric Analysis of Cross Section and Panel Data"
+    )
+
+    brealey = Citation(
+        raw_text="Brealey, R. and Myers, S. (2000). Principles of Corporate Finance, 6th edn, Boston: Irwin/McGraw-Hill.",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["R. Brealey", "S. Myers"],
+        year="2000",
+        title="Principles of Corporate Finance, 6th edn, Boston: Irwin/McGraw-Hill",
+    )
+    assert RetrievalOrchestrator.classify_citation_domain(brealey)["is_book"] is True
+
+    archives_cit = Citation(
+        raw_text="Trump, D. J. (2018b). Presidential Proclamation, https://trumpwhitehouse.archives.gov/presidential-actions/proclamation/",
+        citation_type=CitationType.REFERENCE_LIST,
+        url="https://trumpwhitehouse.archives.gov/presidential-actions/proclamation/",
+    )
+    svd_cit = Citation(
+        raw_text="Kielos, K. (2025). Marknaden tar inte Trump på orden, Svenska Dagbladet, https://www.svd.se/a/example",
+        citation_type=CitationType.REFERENCE_LIST,
+        url="https://www.svd.se/a/example",
+    )
+    assert RetrievalOrchestrator.is_web_or_legal_resource(archives_cit) is True
+    assert RetrievalOrchestrator.is_web_or_legal_resource(svd_cit) is True
+
+    cap_iq = Citation(
+        raw_text="Capital IQ (n.d.). [Accessed 7 June 2025].",
+        citation_type=CitationType.REFERENCE_LIST,
+        authors=["Capital IQ"],
+        year="n.d.",
+        title="[Accessed 7 June 2025]",
+    )
+    url_tail = Citation(
+        raw_text="Yann Honors%20Thesis.pdf, [Accessed 1 August 2025].",
+        citation_type=CitationType.REFERENCE_LIST,
+        title="pdf, [Accessed 1 August 2025]",
+    )
+    assert RetrievalOrchestrator._has_only_access_date_or_url_tail_title(cap_iq) is True
+    assert RetrievalOrchestrator._has_only_access_date_or_url_tail_title(url_tail) is True
+
+    # HTTP-200 quality-filtered noisy hits across >=3 queried sources with 0 transient errors cache as clean miss
+    filtered_miss = SourceResult(
+        citation_raw="Capital IQ (n.d.). [Accessed 7 June 2025].",
+        candidates=[],
+        sources_queried=["crossref", "openalex", "doaj"],
+        sources_succeeded=[],
+        sources_failed={
+            "openalex": "OpenAlex: no results",
+            "doaj": "DOAJ: empty title query",
+        },
+    )
+    assert PersistentVerificationCache.resolve_ttl_seconds(filtered_miss) == CLEAN_MISS_TTL_SECONDS
+
+    # Access-date years ([Accessed 1 August 2025]) must NOT count as publication years in completeness check
+    from integrity_checker.logic.completeness import assess_bibliographic_completeness
+
+    dangling_tail = assess_bibliographic_completeness(
+        citation_raw="Yann Honors%20Thesis.pdf, [Accessed 1 August 2025].",
+        citation_authors=["Yann Honors%20Thesis"],
+        citation_year=None,
+        citation_title="pdf, [Accessed 1 August 2025]",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    assert dangling_tail.has_valid_year is False
+    assert dangling_tail.is_incomplete is True
+
+    undated_terminal = assess_bibliographic_completeness(
+        citation_raw="Capital IQ (n.d.). [Accessed 7 June 2025].",
+        citation_authors=["Capital IQ"],
+        citation_year="n.d.",
+        citation_title="[Accessed 7 June 2025]",
+        citation_type=CitationType.REFERENCE_LIST,
+    )
+    assert undated_terminal.has_valid_year is False
+    assert undated_terminal.is_incomplete is True
+
+
