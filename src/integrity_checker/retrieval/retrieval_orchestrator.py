@@ -32,7 +32,7 @@ import httpx
 
 from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
-from integrity_checker.models.citation import Citation
+from integrity_checker.models.citation import Citation, CitationType
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.retrieval.arxiv_client import ArxivClient
 from integrity_checker.retrieval.base import BaseScholarClient
@@ -1212,6 +1212,7 @@ class RetrievalOrchestrator:
             self._persistent_cache = PersistentVerificationCache(
                 require_isolated_test_db=True
             )
+        self._wave0_memory_lock = threading.Lock()
         self._wave0_memory_cache: OrderedDict[str, tuple[float, SourceResult]] = OrderedDict()
 
         # Local database
@@ -2525,25 +2526,34 @@ class RetrievalOrchestrator:
                 ttl,
             )
 
+    def clear_runtime_caches(self) -> None:
+        """Purge in-memory Wave-0 positive hits and verified clean-miss negative cache."""
+        with self._wave0_memory_lock:
+            self._wave0_memory_cache.clear()
+        self._negative_cache.clear()
+
     def _get_wave0_memory_hit(self, key: str) -> SourceResult | None:
-        item = self._wave0_memory_cache.get(key)
-        if item is None:
-            return None
-        expires_at, stored = item
-        if time.monotonic() >= expires_at:
-            self._wave0_memory_cache.pop(key, None)
-            return None
-        self._wave0_memory_cache.move_to_end(key)
-        return copy.deepcopy(stored)
+        with self._wave0_memory_lock:
+            item = self._wave0_memory_cache.get(key)
+            if item is None:
+                return None
+            expires_at, stored = item
+            if time.monotonic() >= expires_at:
+                self._wave0_memory_cache.pop(key, None)
+                return None
+            self._wave0_memory_cache.move_to_end(key)
+            return copy.deepcopy(stored)
 
     def _put_wave0_memory_hit(self, key: str, result: SourceResult) -> None:
-        self._wave0_memory_cache[key] = (
-            time.monotonic() + float(POSITIVE_MATCH_TTL_SECONDS),
-            copy.deepcopy(result),
-        )
-        self._wave0_memory_cache.move_to_end(key)
-        while len(self._wave0_memory_cache) > 512:
-            self._wave0_memory_cache.popitem(last=False)
+        snapshot = copy.deepcopy(result)
+        with self._wave0_memory_lock:
+            self._wave0_memory_cache[key] = (
+                time.monotonic() + float(POSITIVE_MATCH_TTL_SECONDS),
+                snapshot,
+            )
+            self._wave0_memory_cache.move_to_end(key)
+            while len(self._wave0_memory_cache) > 512:
+                self._wave0_memory_cache.popitem(last=False)
 
     async def _resolve_from_verification_caches(
         self,
@@ -3996,6 +4006,42 @@ class RetrievalOrchestrator:
 
         if not is_known or not paper_info:
             return None
+
+        # Never hijack title-less bibliography entries (e.g., ACS/RSC chemistry references
+        # or 14a/14b/14c sub-entries) via (surname, year) alone; in-text callouts still match.
+        if citation.citation_type == CitationType.REFERENCE_LIST and not (
+            citation.title and citation.title.strip()
+        ):
+            return None
+
+        # Reject if both DOIs are present and normalize to different identifiers.
+        if citation.doi and paper_info.get("doi"):
+            norm_cit_doi = normalize_doi(citation.doi)
+            norm_kp_doi = normalize_doi(str(paper_info["doi"]))
+            if norm_cit_doi and norm_kp_doi and norm_cit_doi != norm_kp_doi:
+                return None
+
+        # Reject if both venues are present and clearly incompatible.
+        if (
+            citation.venue
+            and citation.venue.strip()
+            and paper_info.get("venue")
+            and str(paper_info["venue"]).strip()
+        ):
+            from integrity_checker.matching.venue_normalizer import VenueNormalizer
+
+            cit_venue = citation.venue.strip()
+            kp_venue = str(paper_info["venue"]).strip()
+            v_sim = max(
+                title_similarity(cit_venue, kp_venue),
+                VenueNormalizer().similarity(cit_venue, kp_venue),
+            )
+            if (
+                v_sim < 0.45
+                and kp_venue.lower() not in cit_venue.lower()
+                and cit_venue.lower() not in kp_venue.lower()
+            ):
+                return None
 
         # If citation provides a full title that does not match the known paper title,
         # do not short-circuit API retrieval (the author may have published another paper that year).

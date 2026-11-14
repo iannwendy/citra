@@ -20,7 +20,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
@@ -226,6 +226,41 @@ class LinkValidator:
 
         return False, reason, False
 
+    def _is_benign_nonstandard_port_url(self, target_url: str, ssrf_reason: str | None) -> bool:
+        """Return True iff target_url was rejected solely for a non-80/443 port on a public host."""
+        reason_low = (ssrf_reason or "").lower()
+        if "port" not in reason_low or "invalid url port" in reason_low:
+            return False
+        try:
+            parsed = urlsplit(str(target_url).strip())
+            port = parsed.port
+        except ValueError:
+            return False
+        if port is None or port in (80, 443):
+            return False
+        scheme = (parsed.scheme or "").lower()
+        hostname = (parsed.hostname or "").strip().rstrip(".")
+        if scheme not in ("http", "https") or not hostname:
+            return False
+        if (
+            parsed.username is not None
+            or parsed.password is not None
+            or "@" in (parsed.netloc or "")
+        ):
+            return False
+        host_repr = f"[{hostname}]" if ":" in hostname else hostname
+        probe_url = f"{scheme}://{host_repr}/"
+        syntax_ok, state_or_reason, _, _ = validate_url_syntax_and_literal_ip(probe_url)
+        if not syntax_ok:
+            return False
+        if state_or_reason == "public_ip_literal":
+            return True
+        if self.resolver is not None or socket.getaddrinfo is not _ORIG_GETADDRINFO:
+            ok, dns_reason = validate_public_target_ips(probe_url, resolver=self.resolver)
+            if not ok and not dns_reason.startswith("DNS resolution failed"):
+                return False
+        return True
+
     @classmethod
     def clear_wayback_cache(cls) -> None:
         """Clear session-level Wayback Machine lookup cache (primarily for tests)."""
@@ -409,6 +444,15 @@ class LinkValidator:
                     if not allowed:
                         if is_nxdomain:
                             raise httpx.ConnectError(ssrf_reason)
+                        if hop == 0 and self._is_benign_nonstandard_port_url(
+                            current_url, ssrf_reason
+                        ):
+                            return LinkCheckResult(
+                                url=clean_url,
+                                status=LinkStatus.UNCHECKED,
+                                final_url=current_url,
+                                error=f"SSRF blocked: {ssrf_reason}",
+                            )
                         return LinkCheckResult(
                             url=clean_url,
                             status=LinkStatus.FAKE_DOMAIN,

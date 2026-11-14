@@ -21,7 +21,7 @@ PyMuPDF>=1.24,<2.0
 pdfplumber>=0.10,<1.0
 
 # --- NLP / embeddings ---
-sentence-transformers>=2.6,<4.0
+sentence-transformers>=3.2,<4.0
 rapidfuzz>=3.6,<4.0
 
 # --- Scholarly API clients ---

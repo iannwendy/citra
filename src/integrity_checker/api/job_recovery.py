@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -25,6 +26,7 @@ logger = get_logger(__name__)
 
 MAX_ORPHAN_RECOVERY_ATTEMPTS = 2
 _REFUND_LOCK = threading.Lock()
+QUOTA_LEDGER_LOCK = _REFUND_LOCK
 
 
 def resolve_persisted_upload_path(
@@ -236,6 +238,51 @@ def recover_orphaned_essay_jobs(
             get_tracker().init(eid, is_retry=True)
             to_run.append((eid, str(upload_path), uid))
             rescheduled_count += 1
+
+        # Also recover orphaned re-analysis jobs on already-completed essays (cis_json IS NOT NULL)
+        # so they never remain stuck in 'queued' / 'processing' after SIGKILL / OOM.
+        reanalysis_orphans = (
+            session.query(EssayRecord)
+            .filter(
+                EssayRecord.cis_json.is_not(None),
+                EssayRecord.job_status.in_(target_statuses),
+            )
+            .order_by(EssayRecord.id.asc())
+            .all()
+        )
+        restored_reanalysis_ids: list[int] = []
+        for re_essay in reanalysis_orphans:
+            if cutoff_utc is not None:
+                hb_naive = _as_utc_naive(re_essay.job_heartbeat_at)
+                if hb_naive is not None and hb_naive > cutoff_utc:
+                    continue
+            re_essay.job_status = "completed"
+            re_essay.job_error = (
+                "Orphaned re-analysis interrupted; previous completed report preserved."
+            )
+            if re_essay.style_profile_json:
+                try:
+                    parsed_sp = json.loads(re_essay.style_profile_json)
+                    if isinstance(parsed_sp, dict) and isinstance(
+                        parsed_sp.get("_progress_snapshot"), dict
+                    ):
+                        if parsed_sp["_progress_snapshot"].get("status") != "completed":
+                            parsed_sp.pop("_progress_snapshot", None)
+                            re_essay.style_profile_json = (
+                                json.dumps(parsed_sp) if parsed_sp else None
+                            )
+                except Exception:
+                    pass
+            restored_reanalysis_ids.append(int(re_essay.id))
+
+        if restored_reanalysis_ids:
+            session.commit()
+            session.expire_all()
+            tracker = get_tracker()
+            for re_id in restored_reanalysis_ids:
+                st = tracker.get(re_id)
+                if st is not None and st.status != "completed":
+                    tracker.clear(re_id)
     finally:
         session.close()
 

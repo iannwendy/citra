@@ -7,7 +7,6 @@ import inspect
 import json
 import os
 import tempfile
-import threading
 import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -29,7 +28,7 @@ from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
 from integrity_checker.api.deps import get_current_user, get_db, get_pipeline, require_admin
-from integrity_checker.api.job_recovery import refund_upload_quota_once
+from integrity_checker.api.job_recovery import QUOTA_LEDGER_LOCK, refund_upload_quota_once
 from integrity_checker.api.progress import get_pipeline_admission_controller, get_tracker
 from integrity_checker.billing.plans import ensure_user_quota_current, get_user_plan_policy
 from integrity_checker.config import PROJECT_ROOT, is_test_runtime
@@ -46,7 +45,7 @@ UPLOADS_DIR = PROJECT_ROOT / "data" / "essays" / "uploads"
 
 ALLOWED_UPLOAD_EXTENSIONS = (".pdf", ".docx", ".bib", ".ris")
 
-_QUOTA_CLAIM_LOCK = threading.Lock()
+_QUOTA_CLAIM_LOCK = QUOTA_LEDGER_LOCK
 
 SSE_POLL_INTERVAL_SECONDS: float = 1.0
 SSE_HEARTBEAT_INTERVAL_SECONDS: float = 15.0
@@ -390,22 +389,32 @@ async def _run_pipeline_task(
     except Exception as exc:
         logger.exception(f"Pipeline failed for essay {essay_id}: {exc}")
         raw_err = str(exc)
-        if "disk I/O error" in raw_err:
+        raw_err_low = raw_err.lower()
+        if "disk i/o error" in raw_err_low:
             safe_err = "Transient database disk I/O error"
-        elif "corrupted or unreadable" in raw_err:
+        elif "corrupted or unreadable" in raw_err_low:
             safe_err = "Document file is corrupted or unreadable."
         else:
             safe_err = "Analysis failed due to an internal processing error."
-        try:
-            err_session = get_session()
+
+        eligible_for_in_process_retry = (
+            _get_worker_mode() == "inline"
+            and "disk i/o error" in raw_err_low
+            and not is_test_runtime()
+            and _get_persisted_upload_path(essay_id).is_file()
+            and tracker.can_auto_retry(essay_id)
+        )
+        if not eligible_for_in_process_retry:
             try:
-                refund_upload_quota_once(err_session, essay_id, safe_err)
-            finally:
-                err_session.close()
-        except Exception as refund_exc:
-            logger.warning(
-                f"Could not persist quota refund for failed essay {essay_id}: {refund_exc}"
-            )
+                err_session = get_session()
+                try:
+                    refund_upload_quota_once(err_session, essay_id, safe_err)
+                finally:
+                    err_session.close()
+            except Exception as refund_exc:
+                logger.warning(
+                    f"Could not persist quota refund for failed essay {essay_id}: {refund_exc}"
+                )
         tracker.fail(essay_id, safe_err)
     finally:
         if cleanup_file:

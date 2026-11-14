@@ -46,8 +46,28 @@ def clear_cache(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> CacheClearResponse:
+    from integrity_checker.api import deps
+    from integrity_checker.api.routes import essays
+
     del admin
     repo = Repository(db)
     deleted_count = repo.clear_cache()
     repo.commit()
+
+    seen_orchestrators: set[int] = set()
+    for candidate_pipeline in (
+        deps._pipeline_singleton,
+        getattr(essays, "_pipeline", None),
+    ):
+        orch = (
+            getattr(candidate_pipeline, "orchestrator", None)
+            if candidate_pipeline is not None
+            else None
+        )
+        if orch is not None and id(orch) not in seen_orchestrators:
+            seen_orchestrators.add(id(orch))
+            clear_fn = getattr(orch, "clear_runtime_caches", None)
+            if callable(clear_fn):
+                clear_fn()
+
     return CacheClearResponse(deleted_count=deleted_count)

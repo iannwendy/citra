@@ -179,13 +179,18 @@ class CircuitBreakerRegistry:
             now = float(self._now_fn())
             out: dict[str, dict[str, Any]] = {}
             for source_name, entry in sorted(self._circuits.items()):
+                effective_state = (
+                    CircuitState.HALF_OPEN
+                    if (entry.state == CircuitState.OPEN and now >= entry.open_until)
+                    else entry.state
+                )
                 rem = (
                     max(0.0, entry.open_until - now)
-                    if entry.state == CircuitState.OPEN
+                    if effective_state == CircuitState.OPEN
                     else 0.0
                 )
                 out[source_name] = {
-                    "state": entry.state.value,
+                    "state": effective_state.value,
                     "consecutive_failures": entry.consecutive_failures,
                     "total_calls": entry.total_calls,
                     "success_count": entry.success_count,

@@ -40,7 +40,7 @@ const CACHE_STAT_LABELS: Record<string, { en: string; vi: string }> = {
   hit_rate_percent: { en: 'Cache Hit Rate (%)', vi: 'Tỷ lệ trúng đệm (%)' },
 };
 
-const UPSTREAM_PROVIDER_LABELS: Record<string, string> = {
+const UPSTREAM_PROVIDER_LABELS: Record<string, string | { en: string; vi: string }> = {
   openalex: 'OpenAlex',
   crossref: 'Crossref',
   semanticscholar: 'Semantic Scholar',
@@ -60,6 +60,9 @@ const UPSTREAM_PROVIDER_LABELS: Record<string, string> = {
   huggingface: 'Hugging Face',
   tech_standard: 'Tech Standards',
   wikidata_opencitations: 'Wikidata / OpenCitations',
+  wikidata_opencitatio: 'Wikidata / OpenCitations',
+  url_check: { en: 'URL Check', vi: 'Kiểm chứng URL' },
+  clean_miss: { en: 'Verified Clean Miss', vi: 'Không có bản ghi (Đã xác thực)' },
   serpapi: 'SerpAPI (Google Scholar)',
   vn_registry: 'VN Academic Registry',
   html_head: 'HTML Meta Verifier',
@@ -67,10 +70,11 @@ const UPSTREAM_PROVIDER_LABELS: Record<string, string> = {
   known_papers: 'Curated Known Papers',
 };
 
-function formatProviderName(key: string): string {
+function formatProviderName(key: string, lang: 'en' | 'vi' = 'en'): string {
   const normalized = key.trim().toLowerCase();
-  if (UPSTREAM_PROVIDER_LABELS[normalized]) {
-    return UPSTREAM_PROVIDER_LABELS[normalized];
+  const mapped = UPSTREAM_PROVIDER_LABELS[normalized];
+  if (mapped) {
+    return typeof mapped === 'string' ? mapped : mapped[lang];
   }
   return key
     .replace(/_/g, ' ')
@@ -626,7 +630,7 @@ export function SystemHealthPage() {
                         <td className="py-3 px-3.5 align-middle">
                           <div className="flex flex-col gap-0.5">
                             <span className="font-semibold text-slate-900 dark:text-slate-100">
-                              {formatProviderName(sourceKey)}
+                              {formatProviderName(sourceKey, lang)}
                             </span>
                             <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
                               {sourceKey}
@@ -647,7 +651,7 @@ export function SystemHealthPage() {
                             <span className="text-[11px] text-slate-500 dark:text-slate-400">
                               {visuals.caption}
                             </span>
-                            {normalizedState === 'open' && openRemainingSeconds > 0 && (
+                            {normalizedState === 'open' && openRemainingSeconds >= 0.05 && (
                               <span
                                 data-testid={`circuit-cooldown-${sourceKey}`}
                                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/60 border border-rose-200/70 dark:border-rose-800/70 text-[10px] font-mono text-rose-700 dark:text-rose-300"
@@ -743,7 +747,7 @@ export function SystemHealthPage() {
                     key={sourceKey}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-200"
                   >
-                    <span className="font-semibold">{formatProviderName(sourceKey)}</span>
+                    <span className="font-semibold">{formatProviderName(sourceKey, lang)}</span>
                     <span className="text-indigo-600 dark:text-indigo-400 font-bold tabular-nums">
                       {count}
                     </span>

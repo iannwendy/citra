@@ -193,7 +193,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    os.environ.setdefault("CITRA_WORKER_MODE", "worker_only")
+    os.environ["CITRA_WORKER_MODE"] = "worker_only"
     configure_logging()
     db_session.init_db()
     logger.info("Starting CITRA standalone worker (CITRA_WORKER_MODE=worker_only)")

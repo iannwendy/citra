@@ -415,6 +415,62 @@ describe('SystemHealthPage', () => {
     expect(await screen.findByTestId('upstream-sources-empty')).toBeDefined();
     expect(screen.queryByTestId('upstream-circuit-table')).toBeNull();
   });
+
+  it('maps url_check, clean_miss, and wikidata_opencitatio labels bilingually and suppresses sub-0.05s 0s cooldown pills', async () => {
+    const payload = health({
+      cache_stats: {
+        total: 30,
+        total_hits: 90,
+        by_source: {
+          url_check: 14,
+          clean_miss: 9,
+          wikidata_opencitatio: 7,
+        },
+      },
+      upstream_sources: {
+        crossref: {
+          state: 'open',
+          consecutive_failures: 4,
+          total_calls: 10,
+          success_count: 6,
+          timeout_count: 2,
+          http_429_count: 2,
+          http_5xx_count: 0,
+          ema_latency_ms: 400,
+          open_remaining_seconds: 0.03,
+        },
+        openalex: {
+          state: 'open',
+          consecutive_failures: 4,
+          total_calls: 10,
+          success_count: 6,
+          timeout_count: 2,
+          http_429_count: 2,
+          http_5xx_count: 0,
+          ema_latency_ms: 410,
+          open_remaining_seconds: 0.08,
+        },
+      },
+    });
+
+    vi.spyOn(api, 'getSystemHealth').mockResolvedValue(payload);
+    const { unmount } = renderWithProviders(<SystemHealthPage />);
+    const enStats = await screen.findByTestId('cache-stats');
+    expect(enStats.textContent).toContain('URL Check');
+    expect(enStats.textContent).toContain('Verified Clean Miss');
+    expect(enStats.textContent).toContain('Wikidata / OpenCitations');
+    expect(screen.queryByTestId('circuit-cooldown-crossref')).toBeNull();
+    expect(screen.getByTestId('circuit-cooldown-openalex').textContent).toContain('0.1s');
+    unmount();
+
+    await i18n.changeLanguage('vi');
+    vi.spyOn(api, 'getSystemHealth').mockResolvedValue(payload);
+    renderWithProviders(<SystemHealthPage />);
+    const viStats = await screen.findByTestId('cache-stats');
+    expect(viStats.textContent).toContain('Kiểm chứng URL');
+    expect(viStats.textContent).toContain('Không có bản ghi (Đã xác thực)');
+    expect(viStats.textContent).toContain('Wikidata / OpenCitations');
+  });
 });
 
 describe('Multi-format & Telemetry Accuracy (BUG-03 & BUG-09)', () => {

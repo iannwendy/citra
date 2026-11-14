@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
 from datetime import UTC, datetime
 from html import escape
 from typing import Any
@@ -69,13 +70,24 @@ def get_report(
                 ),
             )
 
-    # If the pipeline is still running, return 425 so the frontend knows to keep polling.
+    # If the pipeline is still queued/running, return 425 so the frontend knows to keep polling.
+    worker_mode = os.getenv("CITRA_WORKER_MODE", "inline").strip().lower() or "inline"
     tracker = get_tracker()
-    state = tracker.get(essay_id)
-    if state is not None and state.status == "processing":
-        persisted = tracker.load_persisted_snapshot(essay_id, essay_record=essay)
-        if essay.cis_json and persisted is None:
+    state = None if worker_mode == "web_only" else tracker.get(essay_id)
+    sql_job_status = getattr(essay, "job_status", None)
+
+    if (state is not None and state.status in ("queued", "processing")) or sql_job_status in (
+        "queued",
+        "processing",
+    ):
+        if (
+            state is not None
+            and essay.cis_json
+            and tracker.load_persisted_snapshot(essay_id, essay_record=essay) is None
+            and sql_job_status not in ("queued", "processing")
+        ):
             tracker.clear(essay_id)
+            state = None
         else:
             return JSONResponse(
                 status_code=425,
@@ -84,6 +96,17 @@ def get_report(
             )
 
     verdicts = repo.get_verdicts(essay_id)
+    if (
+        format == "json"
+        and essay.cis_json is None
+        and not verdicts
+        and ((state is not None and state.status == "failed") or sql_job_status == "failed")
+    ):
+        return JSONResponse(
+            status_code=425,
+            content={"detail": "Analysis failed before report generation", "retry_after": 1},
+            headers={"Retry-After": "1"},
+        )
 
     if format == "csv":
         return _csv_response(essay.filename, verdicts)

@@ -487,7 +487,10 @@ _THESIS_OR_REPORT_SIGNAL_RE = re.compile(
 
 _LEGAL_OR_STANDARD_SIGNAL_RE = re.compile(
     r"\b(?:"
-    r"quốc\s+hội|chính\s+phủ|thủ\s+tướng|bộ\s+[a-zà-ỹ]+|"
+    r"quốc\s+hội|chính\s+phủ|thủ\s+tướng|"
+    r"bộ\s+(?:giáo\s+dục|khoa\s+học|xây\s+dựng|tài\s+nguyên|công\s+thương|y\s+tế|tài\s+chính|"
+    r"giao\s+thông|thông\s+tin|nông\s+nghiệp|lao\s+động|tư\s+pháp|nội\s+vụ|kế\s+hoạch|"
+    r"công\s+an|quốc\s+phòng|văn\s+hóa|văn\s+hoá|ngoại\s+giao|dân\s+tộc)\b|"
     r"nghị\s+định(?:\s+số|\s+\d+|\s+của|\s+về|\s+quy\s+định)|"
     r"thông\s+tư(?:\s+liên\s+tịch|\s+số|\s+\d+|\s+của|\s+hướng\s+dẫn|\s+quy\s+định)|"
     r"(?<!cây\s)(?<!ra\s)quyết\s+định(?:\s+số|\s+\d+|\s+của|\s+về|\s+ban\s+hành|\s+phê\s+duyệt)|"
@@ -1618,7 +1621,7 @@ class SymbolicRules:
                 for s, err in (source.sources_failed or {}).items()
                 if any(
                     marker in (err or "").lower()
-                    for marker in ("429", "rate limit", "backoff")
+                    for marker in ("429", "rate limit", "rate-limit", "backoff", "circuit_open")
                 )
             ]
 
@@ -1656,11 +1659,21 @@ class SymbolicRules:
                 citation_year,
             )
 
+            primary_graph_degraded = any(
+                s in ("crossref", "openalex") for s in rate_limited_sources
+            )
+
             # When >= 2 live scholarly registries responded cleanly (HTTP 200) and found
             # zero matching records for a substantive citation, flag as SUSPECTED_HALLUCINATION
-            # UNLESS the reference is a non-journal source (book, classical/Bible text, web URL,
+            # UNLESS a primary graph (Crossref/OpenAlex) is rate-limited/circuit-open or the
+            # reference is a non-journal source (book, classical/Bible text, web URL,
             # thesis, or legal/gov report — BUG-22).
-            if has_substantive_meta and len(clean_empty_sources) >= 2 and not is_known_author:
+            if (
+                has_substantive_meta
+                and len(clean_empty_sources) >= 2
+                and not is_known_author
+                and not primary_graph_degraded
+            ):
                 if citation_doi and str(citation_doi).strip():
                     return RuleOutcome(
                         label=ValidationLabel.SUSPECTED_HALLUCINATION,

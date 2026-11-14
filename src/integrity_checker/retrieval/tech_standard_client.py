@@ -77,17 +77,34 @@ _QCVN_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-_VN_REGISTRY_PATH = (
-    Path(__file__).resolve().parents[3] / "data" / "registries" / "vn_standards_and_textbooks.json"
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_VN_REGISTRY_PATH = _REPO_ROOT / "data" / "registries" / "vn_standards_and_textbooks.json"
+_VN_REGISTRY_FALLBACK_PATH = (
+    _REPO_ROOT / "configs" / "registries" / "vn_standards_and_textbooks.json"
+)
+_VN_REGISTRY_CANDIDATE_PATHS: tuple[Path, ...] = (
+    _VN_REGISTRY_PATH,
+    _VN_REGISTRY_FALLBACK_PATH,
 )
 
 
 @functools.lru_cache(maxsize=1)
 def _load_vn_registry() -> dict[str, Any]:
-    try:
-        raw = json.loads(_VN_REGISTRY_PATH.read_text(encoding="utf-8"))
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(f"Failed to load VN standards/textbooks registry at {_VN_REGISTRY_PATH}: {exc}")
+    raw: dict[str, Any] | None = None
+    last_exc: Exception | None = None
+    for cand_path in _VN_REGISTRY_CANDIDATE_PATHS:
+        try:
+            if not cand_path.is_file():
+                continue
+            raw = json.loads(cand_path.read_text(encoding="utf-8"))
+            break
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+
+    if raw is None:
+        logger.warning(
+            f"Failed to load VN standards/textbooks registry from {_VN_REGISTRY_CANDIDATE_PATHS}: {last_exc or 'file not found'}"
+        )
         return {
             "ministry_codes": {},
             "standards_by_code": {},
