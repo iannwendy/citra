@@ -8,6 +8,7 @@ import {
   useState,
   useEffect,
   useCallback,
+  useRef,
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -56,6 +57,17 @@ export function ThemeProvider({
   });
 
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>('light');
+  const switchingTimerRef = useRef<number | null>(null);
+
+  const resolveActualTheme = useCallback((candidate: Theme): ResolvedTheme => {
+    if (candidate === 'system') {
+      if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+        return 'light';
+      }
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return candidate;
+  }, []);
 
   // Resolve actual theme based on theme setting and system preference
   useEffect(() => {
@@ -67,13 +79,8 @@ export function ThemeProvider({
       setResolvedTheme(resolved);
     };
 
-    const getSystemTheme = (): ResolvedTheme => {
-      if (typeof window === 'undefined') return 'light';
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    };
-
     if (theme === 'system') {
-      applyTheme(getSystemTheme());
+      applyTheme(resolveActualTheme('system'));
 
       // Listen for system theme changes
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -88,13 +95,52 @@ export function ThemeProvider({
     } else {
       applyTheme(theme);
     }
-  }, [theme]);
+  }, [theme, resolveActualTheme]);
 
-  // Set theme and persist
-  const setTheme = useCallback((newTheme: Theme): void => {
-    localStorage.setItem(STORAGE_KEY, newTheme);
-    setThemeState(newTheme);
+  useEffect(() => {
+    return () => {
+      if (switchingTimerRef.current !== null) {
+        window.clearTimeout(switchingTimerRef.current);
+      }
+      if (typeof document !== 'undefined') {
+        document.documentElement.removeAttribute('data-theme-switching');
+      }
+    };
   }, []);
+
+  // Set theme, update root class synchronously on click tick, and trigger transient 180ms surface cross-fade
+  const setTheme = useCallback(
+    (newTheme: Theme): void => {
+      localStorage.setItem(STORAGE_KEY, newTheme);
+      if (typeof document !== 'undefined') {
+        const root = document.documentElement;
+        const resolved = resolveActualTheme(newTheme);
+        const reduced =
+          typeof window !== 'undefined' &&
+          typeof window.matchMedia === 'function' &&
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        if (!reduced) {
+          root.setAttribute('data-theme-switching', 'true');
+          if (switchingTimerRef.current !== null) {
+            window.clearTimeout(switchingTimerRef.current);
+          }
+          switchingTimerRef.current = window.setTimeout(() => {
+            root.removeAttribute('data-theme-switching');
+            switchingTimerRef.current = null;
+          }, 220);
+        } else {
+          root.removeAttribute('data-theme-switching');
+        }
+
+        root.classList.remove('light', 'dark');
+        root.classList.add(resolved);
+        setResolvedTheme(resolved);
+      }
+      setThemeState(newTheme);
+    },
+    [resolveActualTheme],
+  );
 
   // Toggle theme (light -> dark -> system -> light)
   const toggleTheme = useCallback((): void => {

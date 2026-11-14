@@ -33,6 +33,7 @@ import { HelpModal } from './HelpModal';
 import { GoogleOnboardingModal } from './GoogleOnboardingModal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
+import { m, SPRING_PILL } from '@/components/ui/motion-primitives';
 
 /* ============================================================
    CITRA — App Layout Component (Scholarly Precision v2.0)
@@ -345,10 +346,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         <Link
                           key={item.path}
                           to={item.path}
+                          viewTransition
+                          data-view-transition="true"
                           onClick={() => setMobileOpen(false)}
                           className={`
                             relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium
-                            transition-all duration-200
+                            transition-[background-color,color,box-shadow] duration-200
                             ${active
                               ? 'bg-indigo-50/90 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-semibold ring-1 ring-indigo-500/20 shadow-2xs'
                               : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-800/60'
@@ -356,7 +359,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           `}
                         >
                           {active && (
-                            <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-indigo-600 dark:bg-indigo-400" />
+                            <m.span
+                              layoutId="citra-sidebar-active-bar"
+                              transition={SPRING_PILL}
+                              data-testid="sidebar-active-indicator"
+                              className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-indigo-600 dark:bg-indigo-400"
+                            />
                           )}
                           <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-indigo-600 dark:text-indigo-400' : ''}`} />
                           <span className="truncate">{t(item.labelKey)}</span>
@@ -437,7 +445,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </div>
                 <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-300 ${
+                    className={`h-full rounded-full transition-[width,background-color] duration-300 ${
                       sidebarQuota.exhausted
                         ? 'bg-red-500'
                         : 'bg-indigo-600 dark:bg-indigo-400'
@@ -540,7 +548,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               onClick={handleLogout}
               disabled={loggingOut}
               title="Logout"
-              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all duration-200 disabled:opacity-50"
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-[background-color,color,opacity] duration-200 disabled:opacity-50"
             >
               {loggingOut ? (
                 <div className="h-4 w-4 border-2 border-red-600/30 border-t-red-600 rounded-full animate-spin" />

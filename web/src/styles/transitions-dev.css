@@ -1505,9 +1505,48 @@
 }
 
 /* ==========================================================================
+   Theme Switch Cross-Fade & Route View Transitions
+   Scoped strictly to transient [data-theme-switching="true"] (~220ms)
+   ========================================================================== */
+html[data-theme-switching="true"],
+html[data-theme-switching="true"] body,
+html[data-theme-switching="true"] header,
+html[data-theme-switching="true"] aside,
+html[data-theme-switching="true"] main,
+html[data-theme-switching="true"] section,
+html[data-theme-switching="true"] footer,
+html[data-theme-switching="true"] nav,
+html[data-theme-switching="true"] div,
+html[data-theme-switching="true"] article {
+  transition:
+    background-color 180ms var(--ease-smooth-out),
+    border-color     180ms var(--ease-smooth-out),
+    color            180ms var(--ease-smooth-out) !important;
+}
+
+::view-transition-old(root) {
+  animation: 140ms cubic-bezier(0.32, 0.72, 0, 1) both t-vt-fade-out;
+}
+::view-transition-new(root) {
+  animation: 210ms cubic-bezier(0.22, 1, 0.36, 1) both t-vt-fade-in;
+}
+@keyframes t-vt-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes t-vt-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ==========================================================================
    Accessibility Guard: prefers-reduced-motion: reduce
    ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
+  }
   .t-gen {
     display: none !important;
   }

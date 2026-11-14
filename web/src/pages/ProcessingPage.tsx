@@ -40,6 +40,7 @@ import {
   SubtleNumber,
   MatrixDotLoader,
   SuccessCheck,
+  ReasoningStream,
 } from '@/components/ui/transitions';
 
 /* ============================================================
@@ -165,6 +166,85 @@ function formatLiveSourceName(key: string): string {
       .replace(/_/g, ' ')
       .replace(/\b\w/g, (ch) => ch.toUpperCase())
   );
+}
+
+function buildPipelineReasoningLines(
+  status: EssayStatus,
+  effectiveStepIndex: number,
+  liveSourcesEntries: Array<[string, unknown]>,
+  lang: 'vi' | 'en',
+): string[] {
+  const lines: string[] = [];
+
+  lines.push(
+    lang === 'vi'
+      ? '[01/08] GROBID TEI-XML · Bóc tách bố cục & phân vùng tài liệu'
+      : '[01/08] GROBID TEI-XML · Structural section & layout segmentation',
+  );
+
+  if (effectiveStepIndex >= 1) {
+    lines.push(
+      lang === 'vi'
+        ? '[02/08] STYLE ENGINE · Nhận diện quy chuẩn trích dẫn học thuật'
+        : '[02/08] STYLE ENGINE · Citation format & delimiter classification',
+    );
+  }
+
+  if (effectiveStepIndex >= 2 || status.citations_found > 0 || status.references_found > 0) {
+    lines.push(
+      lang === 'vi'
+        ? `[03/08] PARSER · Bóc tách ${status.citations_found} trích dẫn & ${status.references_found} tài liệu tham khảo`
+        : `[03/08] PARSER · Extracted ${status.citations_found} in-text markers & ${status.references_found} references`,
+    );
+  }
+
+  if (effectiveStepIndex >= 3 || status.linked > 0) {
+    lines.push(
+      lang === 'vi'
+        ? `[04/08] LINKER · Ánh xạ hai chiều ${status.linked} liên kết In-text ↔ Bibliography`
+        : `[04/08] LINKER · Resolved ${status.linked} bidirectional In-text ↔ Bibliography edges`,
+    );
+  }
+
+  if (effectiveStepIndex >= 4 || liveSourcesEntries.length > 0) {
+    const sourcePreview =
+      liveSourcesEntries
+        .slice(0, 4)
+        .map(([k]) => formatLiveSourceName(k))
+        .join(' · ') || 'Crossref · OpenAlex';
+    const countLabel = liveSourcesEntries.length > 0 ? String(liveSourcesEntries.length) : SCHOLARLY_APIS_LABEL;
+    lines.push(
+      lang === 'vi'
+        ? `[05/08] FEDERATED IO · Truy vấn ${countLabel} CSDL (${sourcePreview})`
+        : `[05/08] FEDERATED IO · Querying ${countLabel} registries (${sourcePreview})`,
+    );
+  }
+
+  if (effectiveStepIndex >= 5) {
+    lines.push(
+      lang === 'vi'
+        ? '[06/08] NEURAL DIFF · Đối sánh ngữ nghĩa Bi-Encoder & Cross-Encoder'
+        : '[06/08] NEURAL DIFF · Bi-Encoder & Cross-Encoder metadata comparison',
+    );
+  }
+
+  if (effectiveStepIndex >= 6) {
+    lines.push(
+      lang === 'vi'
+        ? `[07/08] SYMBOLIC ENGINE · Rà soát ${SYMBOLIC_RULES_COUNT} luật hình thức & hiệu chỉnh Platt`
+        : `[07/08] SYMBOLIC ENGINE · Evaluating ${SYMBOLIC_RULES_COUNT} formal rules & Platt calibration`,
+    );
+  }
+
+  if (effectiveStepIndex >= 7) {
+    lines.push(
+      lang === 'vi'
+        ? '[08/08] CIS SCORER · Tổng hợp điểm Toàn vẹn Trích dẫn & báo cáo'
+        : '[08/08] CIS SCORER · Aggregating Citation Integrity Score & report',
+    );
+  }
+
+  return lines;
 }
 
 function classifyLiveSourceTone(rawStatus: string): {
@@ -789,13 +869,30 @@ export function ProcessingPage() {
         </div>
 
         <div className="p-4 sm:p-6 space-y-6">
-          {/* Progress Bar */}
+          {/* Progress Bar & Live #29 ReasoningStream Telemetry */}
           <div>
             <Progress value={effectiveProgress} className="h-2.5" />
             {status && !visualDone && !isFailed && (
-              <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-2">
-                &gt; <ThinkingStateText text={status.message} />
-              </p>
+              <>
+                <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-2">
+                  &gt; <ThinkingStateText text={status.message} />
+                </p>
+                {!isQueued && (
+                  <ReasoningStream
+                    data-testid="processing-reasoning-stream"
+                    lines={buildPipelineReasoningLines(
+                      status,
+                      effectiveStepIndex,
+                      liveSourcesEntries,
+                      lang,
+                    )}
+                    visibleLines={3}
+                    lineHeightPx={20}
+                    stepMs={360}
+                    className="mt-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-950/60 border border-slate-200/70 dark:border-slate-800/80 px-3 py-1.5 font-mono text-[11px] text-slate-600 dark:text-slate-300"
+                  />
+                )}
+              </>
             )}
           </div>
 
@@ -811,7 +908,7 @@ export function ProcessingPage() {
                   key={idx}
                   data-testid={`pipeline-step-${idx + 1}`}
                   data-step-status={s}
-                  className={`flex items-start gap-3.5 p-3 rounded-xl border transition-all duration-200 ${
+                  className={`flex items-start gap-3.5 p-3 rounded-xl border transition-[background-color,border-color,box-shadow] duration-200 ${
                     s === 'error'
                       ? 'bg-rose-50/70 dark:bg-rose-950/35 border-rose-300 dark:border-rose-800 shadow-2xs'
                       : s === 'active'
@@ -822,7 +919,7 @@ export function ProcessingPage() {
                   }`}
                 >
                   <div
-                    className={`mt-0.5 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all duration-300 ${
+                    className={`mt-0.5 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-[background-color,border-color,box-shadow] duration-300 ${
                       s === 'error'
                         ? 'bg-rose-100 dark:bg-rose-900/60 border border-rose-200 dark:border-rose-800'
                         : s === 'completed'

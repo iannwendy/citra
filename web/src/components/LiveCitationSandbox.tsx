@@ -12,6 +12,12 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CardResize, IconSwap, TextMorph } from '@/components/ui/transitions';
 import {
+  m,
+  AnimatePresence,
+  TRANSITION_ENTER,
+  TRANSITION_EXIT,
+} from '@/components/ui/motion-primitives';
+import {
   extractObservedWebMeta,
   getCitationMarkerLabel,
   getSourceDisplayName,
@@ -911,8 +917,13 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
 
         {/* Instant Verification Results Panel */}
         <CardResize>
+          <AnimatePresence mode="wait">
           {instantResult && (
-            <div
+            <m.div
+              key="sandbox-instant-results"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0, transition: TRANSITION_ENTER }}
+              exit={{ opacity: 0, y: -4, transition: TRANSITION_EXIT }}
               data-testid="sandbox-instant-results"
               className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3"
             >
@@ -1174,8 +1185,9 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                   );
                 })}
               </div>
-            </div>
+            </m.div>
           )}
+          </AnimatePresence>
         </CardResize>
       </div>
     </Card>
