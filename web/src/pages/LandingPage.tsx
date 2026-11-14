@@ -41,6 +41,7 @@ import {
   LearnMoreChevron,
   UIGenerationReveal,
   useSlidingPill,
+  useExitPresence,
 } from '@/components/ui/transitions';
 import { SolvaFilmSection } from '@/components/landing/CitraFilm';
 import { ThemeToggle } from '@/contexts/ThemeContext';
@@ -455,6 +456,8 @@ function SolvaHeader({
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const dropdownPresence = useExitPresence(dropdownOpen, 150);
+  const mobileDrawerPresence = useExitPresence(mobileMenuOpen, 150);
   const [headerEntered, setHeaderEntered] = useState(false);
   const [headerSettled, setHeaderSettled] = useState(false);
 
@@ -607,8 +610,12 @@ function SolvaHeader({
               <SymmetricChevron open={dropdownOpen} size={14} />
             </button>
 
-            {dropdownOpen && (
-              <div className="absolute left-0 top-[44px] pt-1 z-50 t-dropdown is-open">
+            {dropdownPresence.mounted && (
+              <div
+                className={`absolute left-0 top-[44px] pt-1 z-50 t-dropdown ${
+                  dropdownPresence.phase === 'open' ? 'is-open' : 'is-closing'
+                }`}
+              >
                 <div
                   style={{
                     backgroundColor: 'var(--solva-bg)',
@@ -756,14 +763,16 @@ function SolvaHeader({
       </div>
 
       {/* Mobile Drawer */}
-      {mobileMenuOpen && (
+      {mobileDrawerPresence.mounted && (
         <nav
           aria-label="Mobile Navigation"
           style={{
             backgroundColor: 'var(--solva-bg)',
             borderColor: 'var(--solva-border)',
           }}
-          className="lg:hidden border-t border-b px-5 py-4 space-y-2 shadow-lg animate-debugger-switch"
+          className={`lg:hidden border-t border-b px-5 py-4 space-y-2 shadow-lg t-mobile-drawer ${
+            mobileDrawerPresence.phase === 'open' ? 'is-open' : 'is-closing'
+          }`}
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {[

@@ -22,7 +22,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Globe,
-  ChevronDown,
   ChevronRight,
   Menu,
   Plus,
@@ -39,8 +38,11 @@ import { getQuotaView } from '@/lib/quotaDisplay';
 import { ThemeToggle } from '@/contexts/ThemeContext';
 import {
   CardHoverTilt,
+  IconSwap,
   SoftTextSwap,
+  SymmetricChevron,
   useSlidingPill,
+  useExitPresence,
 } from '@/components/ui/transitions';
 import {
   type Lang,
@@ -1664,6 +1666,8 @@ function PricingSolvaHeader({
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const dropdownPresence = useExitPresence(dropdownOpen, 150);
+  const mobileDrawerPresence = useExitPresence(mobileMenuOpen, 150);
   const [headerEntered, setHeaderEntered] = useState(false);
   const [headerSettled, setHeaderSettled] = useState(false);
 
@@ -1820,15 +1824,15 @@ function PricingSolvaHeader({
               className="inline-flex items-center gap-[6px] h-[44px] px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal hover:opacity-80 transition-opacity cursor-pointer"
             >
               <span>{lang === 'vi' ? 'Nền tảng' : 'Platform'}</span>
-              <ChevronDown
-                className={`w-3.5 h-3.5 transition-transform duration-200 ${
-                  dropdownOpen ? 'rotate-180' : ''
-                }`}
-              />
+              <SymmetricChevron open={dropdownOpen} size={14} />
             </button>
 
-            {dropdownOpen && (
-              <div className="absolute left-0 top-[44px] pt-1 z-50 animate-debugger-switch">
+            {dropdownPresence.mounted && (
+              <div
+                className={`absolute left-0 top-[44px] pt-1 z-50 t-dropdown ${
+                  dropdownPresence.phase === 'open' ? 'is-open' : 'is-closing'
+                }`}
+              >
                 <div
                   style={{
                     backgroundColor: 'var(--solva-bg)',
@@ -1938,20 +1942,26 @@ function PricingSolvaHeader({
             }}
             className="lg:hidden inline-flex items-center justify-center w-[40px] h-[40px] rounded-[8px] cursor-pointer"
           >
-            {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            <IconSwap
+              active={mobileMenuOpen}
+              iconA={<Menu className="w-4 h-4" />}
+              iconB={<X className="w-4 h-4" />}
+            />
           </button>
         </div>
       </div>
 
       {/* Mobile Drawer */}
-      {mobileMenuOpen && (
+      {mobileDrawerPresence.mounted && (
         <nav
           aria-label="Mobile Pricing Navigation"
           style={{
             backgroundColor: 'var(--solva-bg)',
             borderColor: 'var(--solva-border)',
           }}
-          className="lg:hidden border-t border-b px-5 py-4 space-y-2 shadow-lg animate-debugger-switch"
+          className={`lg:hidden border-t border-b px-5 py-4 space-y-2 shadow-lg t-mobile-drawer ${
+            mobileDrawerPresence.phase === 'open' ? 'is-open' : 'is-closing'
+          }`}
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             <Link

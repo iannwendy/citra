@@ -1248,6 +1248,54 @@ export function useErrorShake(revertHoldMs = 3000) {
 }
 
 /* ==========================================================================
+   #05/#06 Exit presence hook (useExitPresence)
+   Retains mounted=true with phase="closing" for closeDurationMs (default 150ms)
+   so CSS .is-closing exit animations complete before unmount
+   ========================================================================== */
+export function useExitPresence(open: boolean, closeDurationMs = 150) {
+  const [mounted, setMounted] = useState(open);
+  const [phase, setPhase] = useState<'open' | 'closing' | 'closed'>(
+    open ? 'open' : 'closed',
+  );
+
+  if (open && (!mounted || phase !== 'open')) {
+    setMounted(true);
+    setPhase('open');
+  }
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      setPhase('open');
+      return;
+    }
+    if (!mounted) return;
+    if (prefersReducedMotion()) {
+      setMounted(false);
+      setPhase('closed');
+      return;
+    }
+    setPhase('closing');
+    const timer = setTimeout(() => {
+      setMounted(false);
+      setPhase('closed');
+    }, closeDurationMs);
+    return () => clearTimeout(timer);
+  }, [open, mounted, closeDurationMs]);
+
+  if (open) {
+    return { mounted: true, phase: 'open' as const };
+  }
+  if (prefersReducedMotion() || !mounted) {
+    return { mounted: false, phase: 'closed' as const };
+  }
+  return {
+    mounted: true,
+    phase: phase === 'open' ? ('closing' as const) : phase,
+  };
+}
+
+/* ==========================================================================
    #16 Sliding pill hook (useSlidingPill)
    Measures the active item inside a container and returns 120fps transform/size
    ========================================================================== */

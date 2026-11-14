@@ -124,6 +124,18 @@ const config: Config = {
         'slide-up': 'slideUp 340ms cubic-bezier(0.22, 1, 0.36, 1)',
         'slide-down': 'slideDown 240ms cubic-bezier(0.22, 1, 0.36, 1)',
         'scale-in': 'scaleIn 260ms cubic-bezier(0.22, 1, 0.36, 1)',
+        'dialog-overlay-in':
+          'dialogOverlayIn var(--modal-open-dur, 250ms) var(--modal-ease, cubic-bezier(0.22, 1, 0.36, 1)) forwards',
+        'dialog-overlay-out':
+          'dialogOverlayOut var(--modal-close-dur, 150ms) var(--modal-ease, cubic-bezier(0.22, 1, 0.36, 1)) forwards',
+        'dialog-content-in':
+          'dialogContentIn var(--modal-open-dur, 250ms) var(--modal-ease, cubic-bezier(0.22, 1, 0.36, 1)) forwards',
+        'dialog-content-out':
+          'dialogContentOut var(--modal-close-dur, 150ms) var(--modal-ease, cubic-bezier(0.22, 1, 0.36, 1)) forwards',
+        'dropdown-in':
+          'dropdownIn var(--dropdown-open-dur, 250ms) var(--dropdown-ease, cubic-bezier(0.22, 1, 0.36, 1)) forwards',
+        'dropdown-out':
+          'dropdownOut var(--dropdown-close-dur, 150ms) var(--dropdown-ease, cubic-bezier(0.22, 1, 0.36, 1)) forwards',
         'pulse-soft': 'pulseSoft 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'toast-enter': 'citraToastEnter 380ms cubic-bezier(0.22, 1, 0.36, 1) forwards',
         'toast-exit': 'citraToastExit 220ms cubic-bezier(0.4, 0, 1, 1) forwards',
@@ -136,6 +148,54 @@ const config: Config = {
         fadeIn: {
           from: { opacity: '0' },
           to: { opacity: '1' },
+        },
+        dialogOverlayIn: {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        dialogOverlayOut: {
+          from: { opacity: '1' },
+          to: { opacity: '0' },
+        },
+        dialogContentIn: {
+          from: {
+            opacity: '0',
+            transform: 'translate3d(-50%, calc(-50% + 6px), 0) scale3d(0.96, 0.96, 1)',
+          },
+          to: {
+            opacity: '1',
+            transform: 'translate3d(-50%, -50%, 0) scale3d(1, 1, 1)',
+          },
+        },
+        dialogContentOut: {
+          from: {
+            opacity: '1',
+            transform: 'translate3d(-50%, -50%, 0) scale3d(1, 1, 1)',
+          },
+          to: {
+            opacity: '0',
+            transform: 'translate3d(-50%, calc(-50% + 4px), 0) scale3d(0.96, 0.96, 1)',
+          },
+        },
+        dropdownIn: {
+          from: {
+            opacity: '0',
+            transform: 'scale3d(0.97, 0.97, 1) translate3d(0, -4px, 0)',
+          },
+          to: {
+            opacity: '1',
+            transform: 'scale3d(1, 1, 1) translate3d(0, 0, 0)',
+          },
+        },
+        dropdownOut: {
+          from: {
+            opacity: '1',
+            transform: 'scale3d(1, 1, 1) translate3d(0, 0, 0)',
+          },
+          to: {
+            opacity: '0',
+            transform: 'scale3d(0.99, 0.99, 1) translate3d(0, -2px, 0)',
+          },
         },
         slideUp: {
           from: { transform: 'translate3d(0, 18px, 0) scale3d(0.97, 0.97, 1)', opacity: '0' },

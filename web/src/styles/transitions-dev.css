@@ -488,6 +488,38 @@
     opacity   var(--dropdown-close-dur) var(--dropdown-ease);
 }
 
+.t-mobile-drawer {
+  transform-origin: top center;
+  will-change: transform, opacity;
+}
+.t-mobile-drawer.is-open {
+  animation: t-mobile-drawer-in 240ms var(--dropdown-ease) both;
+}
+.t-mobile-drawer.is-closing {
+  pointer-events: none;
+  animation: t-mobile-drawer-out var(--dropdown-close-dur) var(--dropdown-ease) both;
+}
+@keyframes t-mobile-drawer-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+@keyframes t-mobile-drawer-out {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0);
+  }
+}
+
 /* ==========================================================================
    #06 Modal open / close (.t-modal)
    ========================================================================== */
@@ -1450,6 +1482,7 @@
   .t-badge-dot,
   .t-text-swap,
   .t-dropdown,
+  .t-mobile-drawer,
   .t-modal,
   .t-panel-slide,
   .t-icon-swap .t-icon,
