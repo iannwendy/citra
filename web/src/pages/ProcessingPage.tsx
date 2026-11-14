@@ -11,10 +11,15 @@ import {
   Loader2,
   Quote,
   AlertTriangle,
+  AlertCircle,
+  XCircle,
   Terminal,
   Clock,
   ArrowRight,
   Upload,
+  History,
+  ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, type EssayStatus } from '@/api/client';
@@ -39,7 +44,7 @@ import {
 
 /* ============================================================
    ProcessingPage — Real-time pipeline progress (Scholarly Precision v2.0)
-   Polls GET /essays/{id}/status for live step/source updates.
+   Streams SSE /essays/{id}/events with GET /essays/{id}/status fallback.
    ============================================================ */
 
 const STEP_LABELS: Array<{
@@ -119,13 +124,102 @@ const STEP_KEY_TO_INDEX: Record<string, number> = {
   done: 7,
 };
 
+const SOURCE_DISPLAY_NAMES: Record<string, string> = {
+  openalex: 'OpenAlex',
+  crossref: 'Crossref',
+  semanticscholar: 'Semantic Scholar',
+  semantic_scholar: 'Semantic Scholar',
+  arxiv: 'arXiv',
+  pubmed: 'PubMed',
+  europepmc: 'Europe PMC',
+  europe_pmc: 'Europe PMC',
+  dblp: 'DBLP',
+  openlibrary: 'Open Library',
+  open_library: 'Open Library',
+  datacite: 'DataCite',
+  doi_ra: 'DOI RA',
+  doaj: 'DOAJ',
+  openaire_hal: 'OpenAIRE / HAL',
+  ncbi_biorxiv: 'NCBI / bioRxiv',
+  huggingface: 'Hugging Face',
+  wikidata_opencitations: 'Wikidata / OpenCitations',
+  wikidata_opencitatio: 'Wikidata / OpenCitations',
+  tech_standard: 'Tech Standards',
+  vn_tech_standard: 'VN Tech Standards',
+  vn_textbook_registry: 'VN Textbook Registry',
+  vn_legal_registry: 'VN Legal Registry',
+  vn_registry: 'VN Registry',
+  web_html_meta: 'Web HTML Meta',
+  html_head: 'Web HTML Meta',
+  wayback_html_meta: 'Wayback Archive',
+  serpapi: 'Google Scholar',
+  local_db: 'Local Corpus',
+  known_papers: 'Known Papers',
+};
+
+function formatLiveSourceName(key: string): string {
+  const normalized = key.trim().toLowerCase();
+  return (
+    SOURCE_DISPLAY_NAMES[normalized] ??
+    key
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (ch) => ch.toUpperCase())
+  );
+}
+
+function classifyLiveSourceTone(rawStatus: string): {
+  dotClass: string;
+  pillClass: string;
+} {
+  const val = rawStatus.trim().toLowerCase();
+  if (val === 'ok' || val === 'done' || val === 'hit' || val === 'success') {
+    return {
+      dotClass: 'bg-emerald-500',
+      pillClass:
+        'bg-emerald-50/80 dark:bg-emerald-950/50 border-emerald-200/80 dark:border-emerald-800/70 text-emerald-800 dark:text-emerald-200',
+    };
+  }
+  if (
+    val.startsWith('failed') ||
+    val.startsWith('error') ||
+    val.startsWith('timeout') ||
+    val === 'circuit_open'
+  ) {
+    return {
+      dotClass: 'bg-rose-500',
+      pillClass:
+        'bg-rose-50/80 dark:bg-rose-950/50 border-rose-200/80 dark:border-rose-800/70 text-rose-800 dark:text-rose-200',
+    };
+  }
+  if (
+    val === 'partial' ||
+    val === 'empty' ||
+    val === 'miss' ||
+    val === '0' ||
+    val === 'skipped'
+  ) {
+    return {
+      dotClass: 'bg-slate-400 dark:bg-slate-500',
+      pillClass:
+        'bg-slate-100/80 dark:bg-slate-800/70 border-slate-200/80 dark:border-slate-700 text-slate-600 dark:text-slate-300',
+    };
+  }
+  return {
+    dotClass: 'bg-indigo-500 animate-pulse',
+    pillClass:
+      'bg-indigo-50/80 dark:bg-indigo-950/50 border-indigo-200/80 dark:border-indigo-800/70 text-indigo-800 dark:text-indigo-200',
+  };
+}
+
 function stepStatus(
   idx: number,
   backendIndex: number,
-  done: boolean
+  done: boolean,
+  failed: boolean = false,
 ): 'completed' | 'active' | 'pending' | 'error' {
-  if (done || idx < backendIndex) return 'completed';
-  if (idx === backendIndex) return 'active';
+  if (done) return 'completed';
+  if (idx < backendIndex) return 'completed';
+  if (idx === backendIndex) return failed ? 'error' : 'active';
   return 'pending';
 }
 
@@ -154,11 +248,15 @@ export function ProcessingPage() {
       : null;
   const [displayedStepIndex, setDisplayedStepIndex] = useState<number>(0);
   const [redirecting, setRedirecting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [finalElapsedSeconds, setFinalElapsedSeconds] = useState<number | null>(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     setDisplayedStepIndex(0);
     setRedirecting(false);
+    setErrorMsg(null);
+    setFinalElapsedSeconds(null);
   }, [essayId]);
 
   useEffect(
@@ -178,11 +276,32 @@ export function ProcessingPage() {
       consecutiveErrors = 0;
       setStatusEntry({ essayId, snap });
       syncSingleCheckFromStatus(essayId, snap);
+      if (snap.status === 'failed') {
+        setRedirecting(false);
+        setErrorMsg(snap.error);
+        if (
+          typeof snap.elapsed_seconds === 'number' &&
+          Number.isFinite(snap.elapsed_seconds)
+        ) {
+          setFinalElapsedSeconds(Math.max(0, snap.elapsed_seconds));
+        }
+        void queryClient.invalidateQueries({ queryKey: ['essays'] });
+      } else if (snap.status === 'completed') {
+        setErrorMsg(null);
+        if (
+          typeof snap.elapsed_seconds === 'number' &&
+          Number.isFinite(snap.elapsed_seconds)
+        ) {
+          setFinalElapsedSeconds(Math.max(0, snap.elapsed_seconds));
+        }
+      }
     };
 
     const tick = async () => {
       try {
-        const snap = await api.getEssayStatus(essayId);
+        const snap = await api.getEssayStatus(essayId, {
+          signal: controller.signal,
+        });
         if (cancelled) return;
         applySnap(snap);
         if (snap.status === 'failed' || snap.status === 'completed') {
@@ -210,8 +329,7 @@ export function ProcessingPage() {
                 ? err.message
                 : 'Unable to fetch processing status.',
           };
-          setStatusEntry({ essayId, snap: failedSnap });
-          syncSingleCheckFromStatus(essayId, failedSnap);
+          applySnap(failedSnap);
         }
       }
     };
@@ -228,16 +346,27 @@ export function ProcessingPage() {
       controller.abort();
       if (timer) clearInterval(timer);
     };
-  }, [essayId, syncSingleCheckFromStatus]);
+  }, [essayId, queryClient, syncSingleCheckFromStatus]);
 
-  const backendIndex = status
-    ? Math.min(STEP_KEY_TO_INDEX[status.step] ?? 0, STEP_LABELS.length - 1)
+  const rawStepIndex = status
+    ? typeof status.step_index === 'number' && Number.isFinite(status.step_index)
+      ? status.step_index
+      : (STEP_KEY_TO_INDEX[status.step] ?? 0)
     : 0;
+  const backendIndex = Math.max(0, Math.min(rawStepIndex, STEP_LABELS.length - 1));
 
   const isDone = status?.status === 'completed';
   const isFailed = status?.status === 'failed';
-  const isQueued = status?.status === 'queued';
-  const queuePos = status?.queue_position ?? null;
+  const isQueued = status
+    ? status.status === 'queued'
+    : essayId !== null &&
+      activeSingleCheck?.essayId === essayId &&
+      activeSingleCheck.status === 'queued';
+  const queuePos =
+    status?.queue_position ??
+    (essayId !== null && activeSingleCheck?.essayId === essayId
+      ? activeSingleCheck.queuePosition
+      : null);
 
   const targetStepIndex = isQueued
     ? 0
@@ -263,11 +392,16 @@ export function ProcessingPage() {
     return () => clearTimeout(stepTimer);
   }, [displayedStepIndex, targetStepIndex, isQueued, isFailed, backendIndex]);
 
-  const visualDone = isDone && displayedStepIndex >= STEP_LABELS.length;
+  const effectiveStepIndex = isFailed ? backendIndex : displayedStepIndex;
+  const visualDone = isDone && !isFailed && displayedStepIndex >= STEP_LABELS.length;
 
   useEffect(() => {
     if (essayId === null) return;
-    if (!visualDone && !isFailed) return;
+    if (isFailed) {
+      setRedirecting(false);
+      return;
+    }
+    if (!visualDone) return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -277,21 +411,17 @@ export function ProcessingPage() {
       timer = setTimeout(() => {
         acknowledgeSingleCheck(essayId);
         navigate(`/verification/report/${id}`);
-      }, isFailed ? 3000 : 1200);
+      }, 1200);
     };
 
-    if (visualDone) {
-      void queryClient.invalidateQueries({ queryKey: ['essays'] });
-      api
-        .getEssay(essayId)
-        .then((report) => {
-          if (report) queryClient.setQueryData(['essay-report', essayId], report);
-        })
-        .catch(() => {})
-        .finally(finish);
-    } else {
-      finish();
-    }
+    void queryClient.invalidateQueries({ queryKey: ['essays'] });
+    api
+      .getEssay(essayId)
+      .then((report) => {
+        if (report) queryClient.setQueryData(['essay-report', essayId], report);
+      })
+      .catch(() => {})
+      .finally(finish);
 
     return () => {
       cancelled = true;
@@ -301,9 +431,9 @@ export function ProcessingPage() {
 
   const progress = status
     ? Math.round(
-        (Math.min(displayedStepIndex, STEP_LABELS.length) /
+        (Math.min(effectiveStepIndex, STEP_LABELS.length) /
           STEP_LABELS.length) *
-          100
+          100,
       )
     : 0;
 
@@ -315,6 +445,12 @@ export function ProcessingPage() {
     !activeSingleCheck.filename.startsWith('ID #')
       ? activeSingleCheck.filename
       : null;
+
+  const liveSourcesEntries = Object.entries(status?.sources_queried ?? {});
+  const diagnostics = status?.document_diagnostics ?? null;
+  const ocrRecoveredPages = diagnostics?.ocr_pages_recovered ?? [];
+  const legacyEncoding = diagnostics?.legacy_encoding_detected ?? null;
+  const legacyPagesCount = diagnostics?.legacy_encoding_pages_count ?? null;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-10">
@@ -348,7 +484,11 @@ export function ProcessingPage() {
                 {lang === 'vi' ? `Hàng đợi #${queuePos}` : `Queue #${queuePos}`}
               </Badge>
             )}
-            <LiveElapsedTimer key={essayId ?? 'none'} status={status} />
+            <LiveElapsedTimer
+              key={essayId ?? 'none'}
+              status={status}
+              frozenElapsedSeconds={finalElapsedSeconds}
+            />
           </div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
             {isFailed
@@ -370,8 +510,8 @@ export function ProcessingPage() {
           <p className="text-sm text-slate-600 dark:text-slate-400">
             {isFailed
               ? lang === 'vi'
-                ? 'Đã xảy ra lỗi trong quá trình xử lý pipeline.'
-                : 'An error occurred during processing.'
+                ? 'Quá trình phân tích đã dừng lại do gặp sự cố kỹ thuật — không chuyển hướng tự động.'
+                : 'The verification pipeline stopped due to an error — inspect details or upload another file below.'
               : visualDone
                 ? lang === 'vi'
                   ? 'Đang chuyển hướng tới báo cáo kiểm chứng chi tiết…'
@@ -398,7 +538,7 @@ export function ProcessingPage() {
               <span>{t('upload.checkAnotherFile')}</span>
             </Link>
           </Button>
-          {id && (
+          {id && !isFailed && (
             <Button asChild variant="outline" size="sm" className="rounded-xl shrink-0">
               <Link
                 to={`/verification/report/${id}`}
@@ -436,20 +576,85 @@ export function ProcessingPage() {
         </div>
       )}
 
-      {/* Failed banner */}
+      {/* Failed Pipeline Alert + Credit Refund Reassurance + Action Buttons */}
       {isFailed && (
-        <Alert variant="destructive" className="rounded-2xl">
+        <Alert
+          variant="destructive"
+          data-testid="failed-pipeline-alert"
+          className="rounded-2xl border-rose-300 dark:border-rose-800 bg-rose-50/90 dark:bg-rose-950/40"
+        >
           <AlertTriangle className="h-5 w-5" />
-          <AlertTitle>Pipeline error</AlertTitle>
-          <AlertDescription>
-            {status?.error ??
-              'Unknown error — please try uploading the document again.'}
+          <AlertTitle className="font-display font-bold">
+            {lang === 'vi' ? 'Lỗi tiến trình phân tích' : 'Pipeline error'}
+          </AlertTitle>
+          <AlertDescription className="space-y-3 mt-1.5">
+            <p className="text-sm leading-relaxed">
+              {errorMsg ??
+                status?.error ??
+                (lang === 'vi'
+                  ? 'Đã xảy ra lỗi không xác định — vui lòng thử tải lại tài liệu.'
+                  : 'Unknown error — please try uploading the document again.')}
+            </p>
+
+            {status?.quota_charged === false && (
+              <div
+                data-testid="quota-refund-badge"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/90 dark:border-emerald-800/80 text-xs font-medium text-emerald-800 dark:text-emerald-200"
+              >
+                <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>
+                  {lang === 'vi'
+                    ? 'Lượt tải lên trong tháng của bạn đã được hoàn lại (không trừ hạn ngạch)'
+                    : 'Your monthly upload credit was automatically refunded'}
+                </span>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2.5 pt-1">
+              <Button
+                asChild
+                size="sm"
+                className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+              >
+                <Link
+                  to="/upload"
+                  data-testid="failed-upload-another-btn"
+                  onClick={() => {
+                    if (essayId !== null) acknowledgeSingleCheck(essayId);
+                  }}
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>
+                    {lang === 'vi' ? 'Tải lại tài liệu khác' : 'Upload Another Document'}
+                  </span>
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+              >
+                <Link
+                  to="/history"
+                  data-testid="failed-back-history-btn"
+                  onClick={() => {
+                    if (essayId !== null) acknowledgeSingleCheck(essayId);
+                  }}
+                >
+                  <History className="h-3.5 w-3.5" />
+                  <span>
+                    {lang === 'vi' ? 'Về Lịch sử kiểm tra' : 'Back to History'}
+                  </span>
+                </Link>
+              </Button>
+            </div>
           </AlertDescription>
         </Alert>
       )}
 
       {/* Scanned PDF Guardrail banner during/after processing */}
-      {status?.document_diagnostics?.is_scanned_pdf && (
+      {diagnostics?.is_scanned_pdf && (
         <div
           data-testid="scanned-pdf-processing-banner"
           className="rounded-2xl border border-amber-400 dark:border-amber-700 bg-amber-50/90 dark:bg-amber-950/60 p-4 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3"
@@ -462,7 +667,44 @@ export function ProcessingPage() {
                 : 'Scanned / Image-Only PDF Detected (Missing Digital Text Layer)'}
             </p>
             <p className="mt-0.5">
-              {status.document_diagnostics.warning_message}
+              {diagnostics.warning_message ||
+                (lang === 'vi'
+                  ? 'Tài liệu có mật độ văn bản số hóa rất thấp; hệ thống tự động kích hoạt nhánh khôi phục OCR nếu khả dụng.'
+                  : 'Low extractable text density detected; OCR fallback recovery will run where supported.')}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Early Legacy Vietnamese Encoding Transcoding Info Pill */}
+      {legacyEncoding && (
+        <div
+          data-testid="legacy-encoding-processing-banner"
+          className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/85 dark:bg-indigo-950/45 p-3.5 text-xs text-indigo-900 dark:text-indigo-200 flex items-start gap-3"
+        >
+          <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold font-display">
+              {lang === 'vi'
+                ? `Phát hiện bảng mã tiếng Việt cũ (${String(legacyEncoding).toUpperCase()}) — Đã tự động chuyển mã sang chuẩn Unicode NFC${legacyPagesCount ? ` (${legacyPagesCount} trang)` : ''}`
+                : `Legacy Vietnamese encoding detected (${String(legacyEncoding).toUpperCase()}) — Automatically transcoded to Unicode NFC${legacyPagesCount ? ` (${legacyPagesCount} ${legacyPagesCount === 1 ? 'page' : 'pages'})` : ''}`}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Early OCR Pages Recovered Info Pill */}
+      {ocrRecoveredPages.length > 0 && (
+        <div
+          data-testid="ocr-recovered-processing-banner"
+          className="rounded-2xl border border-teal-200 dark:border-teal-800/80 bg-teal-50/85 dark:bg-teal-950/45 p-3.5 text-xs text-teal-900 dark:text-teal-200 flex items-start gap-3"
+        >
+          <FileCheck className="h-4 w-4 text-teal-600 dark:text-teal-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold font-display">
+              {lang === 'vi'
+                ? `Đã khôi phục lớp văn bản OCR tự động trên ${ocrRecoveredPages.length} trang (${ocrRecoveredPages.map((p) => `tr.${p}`).join(', ')})`
+                : `OCR text layer automatically recovered on ${ocrRecoveredPages.length} ${ocrRecoveredPages.length === 1 ? 'page' : 'pages'} (${ocrRecoveredPages.map((p) => `p.${p}`).join(', ')})`}
             </p>
           </div>
         </div>
@@ -535,7 +777,11 @@ export function ProcessingPage() {
             </span>
             <Badge
               variant="secondary"
-              className="font-mono text-xs bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+              className={`font-mono text-xs ${
+                isFailed
+                  ? 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300'
+                  : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+              }`}
             >
               <SubtleNumber value={effectiveProgress} suffix="%" />
             </Badge>
@@ -558,7 +804,7 @@ export function ProcessingPage() {
             {STEP_LABELS.map((step, idx) => {
               const s = isQueued
                 ? 'pending'
-                : stepStatus(idx, displayedStepIndex, visualDone || isFailed);
+                : stepStatus(idx, effectiveStepIndex, visualDone, isFailed);
 
               return (
                 <div
@@ -566,23 +812,29 @@ export function ProcessingPage() {
                   data-testid={`pipeline-step-${idx + 1}`}
                   data-step-status={s}
                   className={`flex items-start gap-3.5 p-3 rounded-xl border transition-all duration-200 ${
-                    s === 'active'
-                      ? 'bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 shadow-2xs'
-                      : s === 'completed'
-                        ? 'bg-emerald-50/30 dark:bg-emerald-950/15 border-emerald-200/70 dark:border-emerald-900/50'
-                        : 'bg-slate-50/50 dark:bg-slate-950/40 border-slate-200/60 dark:border-slate-800/70'
+                    s === 'error'
+                      ? 'bg-rose-50/70 dark:bg-rose-950/35 border-rose-300 dark:border-rose-800 shadow-2xs'
+                      : s === 'active'
+                        ? 'bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 shadow-2xs'
+                        : s === 'completed'
+                          ? 'bg-emerald-50/30 dark:bg-emerald-950/15 border-emerald-200/70 dark:border-emerald-900/50'
+                          : 'bg-slate-50/50 dark:bg-slate-950/40 border-slate-200/60 dark:border-slate-800/70'
                   }`}
                 >
                   <div
                     className={`mt-0.5 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all duration-300 ${
-                      s === 'completed'
-                        ? 'bg-emerald-100 dark:bg-emerald-900/60'
-                        : s === 'active'
-                          ? 'bg-white dark:bg-slate-900 border border-indigo-200/90 dark:border-indigo-700/80 shadow-xs'
-                          : 'bg-slate-200/70 dark:bg-slate-800'
+                      s === 'error'
+                        ? 'bg-rose-100 dark:bg-rose-900/60 border border-rose-200 dark:border-rose-800'
+                        : s === 'completed'
+                          ? 'bg-emerald-100 dark:bg-emerald-900/60'
+                          : s === 'active'
+                            ? 'bg-white dark:bg-slate-900 border border-indigo-200/90 dark:border-indigo-700/80 shadow-xs'
+                            : 'bg-slate-200/70 dark:bg-slate-800'
                     }`}
                   >
-                    {s === 'completed' ? (
+                    {s === 'error' ? (
+                      <XCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                    ) : s === 'completed' ? (
                       <SuccessCheck
                         size={16}
                         className="text-emerald-600 dark:text-emerald-400"
@@ -598,16 +850,27 @@ export function ProcessingPage() {
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <p
                         className={`text-sm font-medium transition-colors duration-200 ${
-                          s === 'completed'
-                            ? 'text-slate-900 dark:text-slate-100'
-                            : s === 'active'
-                              ? 'text-indigo-700 dark:text-indigo-300 font-semibold'
-                              : 'text-slate-500 dark:text-slate-400'
+                          s === 'error'
+                            ? 'text-rose-700 dark:text-rose-300 font-semibold'
+                            : s === 'completed'
+                              ? 'text-slate-900 dark:text-slate-100'
+                              : s === 'active'
+                                ? 'text-indigo-700 dark:text-indigo-300 font-semibold'
+                                : 'text-slate-500 dark:text-slate-400'
                         }`}
                       >
                         {lang === 'vi' ? step.labelVi : step.labelEn}
                       </p>
                       <div className="flex items-center gap-2 shrink-0">
+                        {s === 'error' && (
+                          <span
+                            data-testid={`pipeline-step-error-badge-${idx + 1}`}
+                            className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300"
+                          >
+                            <AlertCircle className="h-3 w-3" />
+                            {lang === 'vi' ? 'Lỗi' : 'Failed'}
+                          </span>
+                        )}
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 text-slate-500 dark:text-slate-400">
                           {step.tag}
                         </span>
@@ -621,7 +884,7 @@ export function ProcessingPage() {
                       {lang === 'vi' ? step.detailsVi : step.detailsEn}
                     </p>
 
-                    {idx === 2 && status && displayedStepIndex >= 2 && (
+                    {idx === 2 && status && effectiveStepIndex >= 2 && (
                       <div className="flex flex-wrap gap-2 sm:gap-3 mt-2 text-xs font-mono">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
                           <Quote className="h-3 w-3 text-indigo-500" />
@@ -634,12 +897,38 @@ export function ProcessingPage() {
                       </div>
                     )}
 
-                    {idx === 3 && status && displayedStepIndex >= 3 && (
+                    {idx === 3 && status && effectiveStepIndex >= 3 && (
                       <div className="flex gap-3 mt-2 text-xs font-mono">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300">
                           <Check className="h-3 w-3" />
                           {status.linked} linked
                         </span>
+                      </div>
+                    )}
+
+                    {idx === 4 && liveSourcesEntries.length > 0 && (
+                      <div
+                        data-testid="live-sources-queried"
+                        className="flex flex-wrap items-center gap-1.5 mt-2.5"
+                      >
+                        {liveSourcesEntries.map(([sourceKey, sourceState]) => {
+                          const tone = classifyLiveSourceTone(String(sourceState));
+                          return (
+                            <span
+                              key={sourceKey}
+                              data-testid={`live-source-pill-${sourceKey}`}
+                              data-source-status={String(sourceState)}
+                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-mono ${tone.pillClass}`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${tone.dotClass}`}
+                              />
+                              <span className="font-semibold">
+                                {formatLiveSourceName(sourceKey)}
+                              </span>
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -650,9 +939,12 @@ export function ProcessingPage() {
         </div>
       </Card>
 
-      {/* Completion banner */}
-      {(visualDone || redirecting) && (
-        <div className="p-6 rounded-2xl bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center shadow-xs">
+      {/* Completion banner — strictly suppressed on failed jobs */}
+      {(visualDone || redirecting) && !isFailed && (
+        <div
+          data-testid="processing-completion-banner"
+          className="p-6 rounded-2xl bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center shadow-xs"
+        >
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-900/60 mb-3">
             <FileCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
           </div>
@@ -707,7 +999,13 @@ function StatCard({
   );
 }
 
-function LiveElapsedTimer({ status }: { status: EssayStatus | null }) {
+function LiveElapsedTimer({
+  status,
+  frozenElapsedSeconds,
+}: {
+  status: EssayStatus | null;
+  frozenElapsedSeconds?: number | null;
+}) {
   const anchorRef = useRef<{ baseElapsed: number; baseTimeMs: number } | null>(
     null,
   );
@@ -788,7 +1086,13 @@ function LiveElapsedTimer({ status }: { status: EssayStatus | null }) {
     };
   }, [hasStatus, isTerminal]);
 
-  const shownSeconds = Math.max(displaySeconds, serverElapsed);
+  const shownSeconds = Math.max(
+    displaySeconds,
+    serverElapsed,
+    isTerminal && typeof frozenElapsedSeconds === 'number'
+      ? frozenElapsedSeconds
+      : 0,
+  );
 
   if (!status || (isTerminal && shownSeconds <= 0)) {
     return null;
@@ -804,4 +1108,3 @@ function LiveElapsedTimer({ status }: { status: EssayStatus | null }) {
     </span>
   );
 }
-

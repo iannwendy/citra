@@ -169,6 +169,10 @@ class Repository:
                 # NEW v1.16 — surrounding PDF text, so the Document Inspector
                 # can show the sentence the citation sits in after a reload.
                 context=getattr(c, "context", None),
+                # NEW v3.69 — composite sub-reference indexing (14a, 14b, 14c)
+                numeric_index=getattr(c, "numeric_index", None),
+                sub_index=getattr(c, "sub_index", None),
+                composite_label=getattr(c, "composite_label", None),
             )
             for c in citations
         ]
@@ -184,83 +188,121 @@ class Repository:
             VerdictRecord.essay_id == essay_id
         ).delete(synchronize_session=False)
 
-        records = [
-            VerdictRecord(
-                essay_id=essay_id,
-                citation_raw=v.citation.raw_text,
-                label=v.label.value if hasattr(v.label, "value") else str(v.label),
-                confidence=v.confidence,
-                reasoning=v.reasoning,
-                triggered_rules=json.dumps(v.triggered_rules, ensure_ascii=False),
-                mismatched_fields=json.dumps(v.mismatched_fields, ensure_ascii=False),
-                features=json.dumps(
-                    {
-                        "title_sim_fuzzy": getattr(v.features, "title_sim_fuzzy", 0.0) if v.features else 0.0,
-                        "title_sim_semantic": getattr(v.features, "title_sim_semantic", 0.0) if v.features else 0.0,
-                        "author_jaccard": getattr(v.features, "author_jaccard", 0.0) if v.features else 0.0,
-                        "year_distance": getattr(v.features, "year_distance", 0) if v.features else 0,
-                        "doi_exact_match": getattr(v.features, "doi_exact_match", False) if v.features else False,
-                        "source_consensus": getattr(v.features, "source_consensus", 0) if v.features else 0,
-                        "venue_sim": getattr(v.features, "venue_sim", 0.0) if v.features else 0.0,
-                        "content_alignment_score": getattr(v.features, "content_alignment_score", 0.0) if v.features else 0.0,
-                        "content_alignment_confidence": getattr(v.features, "content_alignment_confidence", "") if v.features else "",
-                        "content_is_aligned": getattr(v.features, "content_is_aligned", False) if v.features else False,
-                        "title_context_sim": getattr(v.features, "title_context_sim", 0.0) if v.features else 0.0,
-                        "abstract_context_sim": getattr(v.features, "abstract_context_sim", None) if v.features else None,
-                        "best_evidence_sentence": getattr(v.features, "best_evidence_sentence", None) if v.features else None,
-                        "best_evidence_score": getattr(v.features, "best_evidence_score", None) if v.features else None,
-                        "best_cited_sentence": getattr(v.features, "best_cited_sentence", None) if v.features else None,
-                        "citation_intent": getattr(v.features, "citation_intent", "") if v.features else "",
-                        "stance_label": getattr(v.features, "stance_label", "") if v.features else "",
-                        "cross_lingual_detected": getattr(v.features, "cross_lingual_detected", False) if v.features else False,
-                        "bridged_concepts": getattr(v.features, "bridged_concepts", []) if v.features else [],
-                        "cross_lingual_title_detected": getattr(v.features, "cross_lingual_title_detected", False) if v.features else False,
-                        "cross_lingual_title_sim": getattr(v.features, "cross_lingual_title_sim", 0.0) if v.features else 0.0,
-                        "context_source": getattr(v.features, "context_source", "") if v.features else "",
-                        "occurrence_alignments": getattr(v.features, "occurrence_alignments", []) if v.features else [],
-                        "url_status": getattr(v.matched_source, "url_status", None) if getattr(v, "matched_source", None) else None,
-                        "url_status_code": getattr(v.matched_source, "url_status_code", None) if getattr(v, "matched_source", None) else None,
-                        "archive_url": getattr(v.matched_source, "archive_url", None) if getattr(v, "matched_source", None) else None,
-                        "is_retracted": bool(
-                            (getattr(v.matched_source, "is_retracted", False) if getattr(v, "matched_source", None) else False)
-                            or ("R-RETRACTED-PAPER" in (getattr(v, "triggered_rules", None) or []))
-                        ),
-                        "checked_url": getattr(v.citation, "url", None) if getattr(v, "citation", None) else None,
-                        "matched_sources": _serialize_matched_sources(getattr(v, "matched_source", None)),
-                        "citation_link": (
-                            {
-                                "occurrence_id": v.citation_link.occurrence_id,
-                                "reference_id": v.citation_link.reference_id,
-                                "status": getattr(
-                                    v.citation_link.status,
-                                    "value",
-                                    v.citation_link.status,
-                                ),
-                                "confidence": v.citation_link.confidence,
-                                "method": getattr(
-                                    v.citation_link.method,
-                                    "value",
-                                    v.citation_link.method,
-                                ),
-                            }
-                            if getattr(v, "citation_link", None) is not None
-                            else None
-                        ),
-                    },
-                    ensure_ascii=False,
-                ),
-                # v1.2 fields
-                mapping_status=v.mapping_status.value if hasattr(v.mapping_status, "value") else (v.mapping_status or "matched"),
-                mapping_confidence=v.mapping_confidence,
-                style_penalty=getattr(v, "style_penalty", None),
-                domain_exception=getattr(v, "domain_exception", False),
-                is_overridden=v.is_overridden,
-                # NEW v1.16 — surrounding PDF text of the citation, carried
-                # over from the Citation object the verdict was built from.
-                context=getattr(v.citation, "context", None),
+        cit_meta_by_raw: dict[str, tuple[int | None, str | None, str | None]] = {}
+        for cr in (
+            self.session.query(CitationRecord)
+            .filter(CitationRecord.essay_id == essay_id)
+            .all()
+        ):
+            if cr.raw_text and cr.raw_text not in cit_meta_by_raw:
+                cit_meta_by_raw[cr.raw_text] = (
+                    cr.numeric_index,
+                    cr.sub_index,
+                    cr.composite_label,
+                )
+
+        def _resolve_composite_fields(
+            v: CitationVerdict,
+        ) -> tuple[int | None, str | None, str | None]:
+            cit = getattr(v, "citation", None)
+            num_idx = getattr(cit, "numeric_index", None) if cit is not None else None
+            sub_idx = getattr(cit, "sub_index", None) if cit is not None else None
+            comp_lbl = getattr(cit, "composite_label", None) if cit is not None else None
+            if (
+                num_idx is None
+                and sub_idx is None
+                and comp_lbl is None
+                and cit is not None
+                and getattr(cit, "raw_text", None) in cit_meta_by_raw
+            ):
+                return cit_meta_by_raw[cit.raw_text]
+            return num_idx, sub_idx, comp_lbl
+
+        records: list[VerdictRecord] = []
+        for v in verdicts:
+            num_idx, sub_idx, comp_lbl = _resolve_composite_fields(v)
+            records.append(
+                VerdictRecord(
+                    essay_id=essay_id,
+                    citation_raw=v.citation.raw_text,
+                    label=v.label.value if hasattr(v.label, "value") else str(v.label),
+                    confidence=v.confidence,
+                    reasoning=v.reasoning,
+                    triggered_rules=json.dumps(v.triggered_rules, ensure_ascii=False),
+                    mismatched_fields=json.dumps(v.mismatched_fields, ensure_ascii=False),
+                    features=json.dumps(
+                        {
+                            "title_sim_fuzzy": getattr(v.features, "title_sim_fuzzy", 0.0) if v.features else 0.0,
+                            "title_sim_semantic": getattr(v.features, "title_sim_semantic", 0.0) if v.features else 0.0,
+                            "author_jaccard": getattr(v.features, "author_jaccard", 0.0) if v.features else 0.0,
+                            "year_distance": getattr(v.features, "year_distance", 0) if v.features else 0,
+                            "doi_exact_match": getattr(v.features, "doi_exact_match", False) if v.features else False,
+                            "source_consensus": getattr(v.features, "source_consensus", 0) if v.features else 0,
+                            "venue_sim": getattr(v.features, "venue_sim", 0.0) if v.features else 0.0,
+                            "content_alignment_score": getattr(v.features, "content_alignment_score", 0.0) if v.features else 0.0,
+                            "content_alignment_confidence": getattr(v.features, "content_alignment_confidence", "") if v.features else "",
+                            "content_is_aligned": getattr(v.features, "content_is_aligned", False) if v.features else False,
+                            "title_context_sim": getattr(v.features, "title_context_sim", 0.0) if v.features else 0.0,
+                            "abstract_context_sim": getattr(v.features, "abstract_context_sim", None) if v.features else None,
+                            "best_evidence_sentence": getattr(v.features, "best_evidence_sentence", None) if v.features else None,
+                            "best_evidence_score": getattr(v.features, "best_evidence_score", None) if v.features else None,
+                            "best_cited_sentence": getattr(v.features, "best_cited_sentence", None) if v.features else None,
+                            "citation_intent": getattr(v.features, "citation_intent", "") if v.features else "",
+                            "stance_label": getattr(v.features, "stance_label", "") if v.features else "",
+                            "cross_lingual_detected": getattr(v.features, "cross_lingual_detected", False) if v.features else False,
+                            "bridged_concepts": getattr(v.features, "bridged_concepts", []) if v.features else [],
+                            "cross_lingual_title_detected": getattr(v.features, "cross_lingual_title_detected", False) if v.features else False,
+                            "cross_lingual_title_sim": getattr(v.features, "cross_lingual_title_sim", 0.0) if v.features else 0.0,
+                            "context_source": getattr(v.features, "context_source", "") if v.features else "",
+                            "occurrence_alignments": getattr(v.features, "occurrence_alignments", []) if v.features else [],
+                            "html_meta": getattr(v.features, "html_meta", None) if v.features else None,
+                            "html_meta_title_sim": getattr(v.features, "html_meta_title_sim", None) if v.features else None,
+                            "has_scholarly_candidate": bool(getattr(v.features, "has_scholarly_candidate", True)) if v.features else True,
+                            "numeric_index": num_idx,
+                            "sub_index": sub_idx,
+                            "composite_label": comp_lbl,
+                            "url_status": getattr(v.matched_source, "url_status", None) if getattr(v, "matched_source", None) else None,
+                            "url_status_code": getattr(v.matched_source, "url_status_code", None) if getattr(v, "matched_source", None) else None,
+                            "archive_url": getattr(v.matched_source, "archive_url", None) if getattr(v, "matched_source", None) else None,
+                            "is_retracted": bool(
+                                (getattr(v.matched_source, "is_retracted", False) if getattr(v, "matched_source", None) else False)
+                                or ("R-RETRACTED-PAPER" in (getattr(v, "triggered_rules", None) or []))
+                            ),
+                            "checked_url": getattr(v.citation, "url", None) if getattr(v, "citation", None) else None,
+                            "matched_sources": _serialize_matched_sources(getattr(v, "matched_source", None)),
+                            "citation_link": (
+                                {
+                                    "occurrence_id": v.citation_link.occurrence_id,
+                                    "reference_id": v.citation_link.reference_id,
+                                    "status": getattr(
+                                        v.citation_link.status,
+                                        "value",
+                                        v.citation_link.status,
+                                    ),
+                                    "confidence": v.citation_link.confidence,
+                                    "method": getattr(
+                                        v.citation_link.method,
+                                        "value",
+                                        v.citation_link.method,
+                                    ),
+                                }
+                                if getattr(v, "citation_link", None) is not None
+                                else None
+                            ),
+                        },
+                        ensure_ascii=False,
+                    ),
+                    # v1.2 fields
+                    mapping_status=v.mapping_status.value if hasattr(v.mapping_status, "value") else (v.mapping_status or "matched"),
+                    mapping_confidence=v.mapping_confidence,
+                    style_penalty=getattr(v, "style_penalty", None),
+                    domain_exception=getattr(v, "domain_exception", False),
+                    is_overridden=v.is_overridden,
+                    # NEW v1.16 — surrounding PDF text of the citation, carried
+                    # over from the Citation object the verdict was built from.
+                    context=getattr(v.citation, "context", None),
+                )
             )
-            for v in verdicts
-        ]
         self.session.add_all(records)
         self.session.flush()
 
@@ -1211,12 +1253,21 @@ class Repository:
     def _essay_quality(essay: EssayRecord, citation_counts: dict[int, int]) -> tuple[int, int, str, int]:
         """Rank key for keeping the best copy of a duplicated upload.
 
-        Prefers essays that actually produced results (verdicts/citations),
-        then the most recent upload, then a stable id tie-breaker.
+        Surfaces active ``queued``/``processing`` re-uploads immediately, keeps
+        recent ``failed`` attempts on equal footing with completed uploads so a
+        newer failed upload is never silently hidden behind an older copy, and
+        still demotes abandoned empty ``completed`` rows without results.
         """
         uploaded = essay.uploaded_at.isoformat() if essay.uploaded_at else ""
+        status_low = (getattr(essay, "job_status", None) or "completed").strip().lower()
         has_results = 1 if (citation_counts.get(essay.id, 0) > 0 or bool(essay.cis_json)) else 0
-        return (has_results, 1 if uploaded else 0, uploaded, essay.id or 0)
+        if status_low in ("queued", "processing"):
+            quality_tier = 2
+        elif has_results or status_low == "failed":
+            quality_tier = 1
+        else:
+            quality_tier = 0
+        return (quality_tier, 1 if uploaded else 0, uploaded, essay.id or 0)
 
     def get_all_essays_deduped(
         self,
@@ -1336,7 +1387,7 @@ class Repository:
             self.session.flush()
 
     def get_cache_stats(self) -> dict:
-        total = self.session.query(func.count(CitationCache.id)).scalar() or 0
+        now_ts = datetime.now(UTC).timestamp()
         by_source: dict[str, int] = {
             src: 0
             for src in [
@@ -1357,21 +1408,57 @@ class Repository:
                 "serpapi",
             ]
         }
-        for src, cnt in (
-            self.session.query(CitationCache.source, func.count(CitationCache.id))
-            .group_by(CitationCache.source)
-            .all()
-        ):
+
+        persistent_entries = 0
+        expired_entries = 0
+        persistent_hits = 0
+
+        for src, hit_cnt, matched_fields, raw_response in self.session.query(
+            CitationCache.source,
+            CitationCache.hit_count,
+            CitationCache.matched_fields,
+            CitationCache.raw_response,
+        ).all():
+            persistent_hits += int(hit_cnt or 0)
+            is_expired = False
+            exp_val = None
+            for blob in (matched_fields, raw_response):
+                if not blob:
+                    continue
+                try:
+                    parsed_blob = json.loads(blob)
+                except Exception:  # noqa: BLE001
+                    continue
+                if isinstance(parsed_blob, dict) and "expires_at" in parsed_blob:
+                    exp_val = parsed_blob.get("expires_at")
+                    break
+            if isinstance(exp_val, (int, float)):
+                is_expired = now_ts >= float(exp_val)
+            elif isinstance(exp_val, str) and exp_val.strip():
+                try:
+                    exp_dt = datetime.fromisoformat(exp_val.strip().replace("Z", "+00:00"))
+                    if exp_dt.tzinfo is None:
+                        exp_dt = exp_dt.replace(tzinfo=UTC)
+                    is_expired = now_ts >= exp_dt.timestamp()
+                except ValueError:
+                    is_expired = False
+
+            if is_expired:
+                expired_entries += 1
+            else:
+                persistent_entries += 1
+
             if src:
-                by_source[str(src)] = int(cnt or 0)
-        total_hits = int(
-            self.session.query(func.coalesce(func.sum(CitationCache.hit_count), 0)).scalar()
-            or 0
-        )
+                key = str(src)
+                by_source[key] = by_source.get(key, 0) + 1
+
+        total = persistent_entries + expired_entries
 
         local_papers_count = 0
         local_queries_count = 0
+        local_hits_count = 0
         local_hit_rate_percent = 0.0
+        local_corpus_by_source: dict[str, int] = {}
         try:
             from integrity_checker.database import LocalDatabase
 
@@ -1379,22 +1466,33 @@ class Repository:
             local_papers_count = int(local_stats.get("total_papers", 0) or 0)
             local_queries_count = int(local_stats.get("total_queries", 0) or 0)
             local_hit_rate_percent = float(local_stats.get("hit_rate_percent", 0.0) or 0.0)
-            for src, count in (local_stats.get("source_counts") or {}).items():
-                key = str(src or "unknown")
-                by_source[key] = by_source.get(key, 0) + int(count or 0)
-        except Exception:
+            local_hits_count = int(
+                local_stats.get(
+                    "local_hits_count",
+                    round(local_queries_count * local_hit_rate_percent / 100.0),
+                )
+                or 0
+            )
+            local_corpus_by_source = {
+                str(k or "unknown"): int(v or 0)
+                for k, v in (local_stats.get("source_counts") or {}).items()
+            }
+        except Exception:  # noqa: BLE001
             pass
 
-        combined_total = total + local_papers_count
-        combined_hits = total_hits + local_queries_count
         return {
-            "total": combined_total,
+            "total": total + local_papers_count,
+            "total_hits": persistent_hits + local_hits_count,
+            "persistent_entries": persistent_entries,
+            "expired_entries": expired_entries,
+            "persistent_hits": persistent_hits,
+            "avg_hit_count": round(persistent_hits / total, 2) if total > 0 else 0.0,
             "by_source": by_source,
-            "total_hits": combined_hits,
-            "avg_hit_count": round(combined_hits / combined_total, 2) if combined_total > 0 else 0.0,
             "local_papers_count": local_papers_count,
             "local_queries_count": local_queries_count,
+            "local_hits_count": local_hits_count,
             "local_hit_rate_percent": local_hit_rate_percent,
+            "local_corpus_by_source": local_corpus_by_source,
         }
 
     def clear_cache(self) -> int:

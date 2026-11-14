@@ -47,8 +47,22 @@ export interface CitationLink {
   confidence: number;
 }
 
+export interface HtmlPageMetaPayload {
+  page_title?: string | null;
+  citation_title?: string | null;
+  citation_authors?: string[];
+  authors?: string[];
+  citation_doi?: string | null;
+  doi?: string | null;
+  published_year?: number | null;
+  year?: number | string | null;
+  site_name?: string | null;
+  canonical_url?: string | null;
+  is_soft_404?: boolean;
+}
+
 export interface MatchedSource {
-  source: string; // 'crossref' | 'openalex' | 'dblp' | 'arxiv' | 'openlibrary' | 'europepmc' | 'local_db' | 'known_papers'
+  source: string; // 'crossref' | 'openalex' | 'dblp' | 'arxiv' | 'openlibrary' | 'europepmc' | 'local_db' | 'known_papers' | 'web_html_meta'
   matched_fields: string[];
   checked_at: string;
   url?: string | null;
@@ -58,6 +72,7 @@ export interface MatchedSource {
   year?: string | null;
   venue?: string | null;
   confidence?: number;
+  external_ids?: Record<string, string>;
 }
 
 export interface StyleProfile {
@@ -99,12 +114,16 @@ export type UrlValidationStatus =
   | 'restricted_alive'
   | 'archived_alive'
   | 'dead_link'
-  | 'fake_domain';
+  | 'fake_domain'
+  | 'unchecked';
 
 export interface Verdict {
   citation_id: string;
   citation_raw: string;
   citation_type?: CitationType;
+  numeric_index?: number | null;
+  sub_index?: string | null;
+  composite_label?: string | null;
   // NEW v1.5: surrounding sentence/paragraph context (from PDF extraction)
   // Optional — older cached reports may not have this field populated.
   context?: string;
@@ -127,6 +146,8 @@ export interface Verdict {
   url_status?: UrlValidationStatus | null;
   url_status_code?: number | null;
   archive_url?: string | null;
+  cited_url?: string | null;
+  html_meta?: HtmlPageMetaPayload | null;
   is_retracted?: boolean;
   features?: {
     title_sim_fuzzy?: number;
@@ -150,6 +171,12 @@ export interface Verdict {
     bridged_concepts?: string[];
     cross_lingual_title_detected?: boolean;
     cross_lingual_title_sim?: number;
+    html_meta_title_sim?: number | null;
+    html_meta?: HtmlPageMetaPayload | null;
+    has_scholarly_candidate?: boolean;
+    numeric_index?: number | null;
+    sub_index?: string | null;
+    composite_label?: string | null;
     context_source?: string | null;
     occurrence_alignments?: Array<{
       page: number;
@@ -195,9 +222,13 @@ export interface DocumentDiagnostics {
   scanned_pages_count: number;
   total_extractable_chars: number;
   avg_chars_per_page: number;
+  parser_used?: string | null;
   warning_code?: string | null;
   warning_message?: string | null;
   parser_warnings?: string[];
+  ocr_pages_recovered?: number[];
+  legacy_encoding_detected?: string | null;
+  legacy_encoding_pages_count?: number;
 }
 
 export interface RevisionChangeItem {
@@ -311,6 +342,7 @@ export interface SandboxInstantVerdictItem {
   cited_year?: number | string | null;
   cited_venue?: string | null;
   cited_doi?: string | null;
+  cited_url?: string | null;
   label: string;
   confidence: number;
   mapping_status: string;
@@ -319,6 +351,16 @@ export interface SandboxInstantVerdictItem {
   triggered_rules: string[];
   mismatched_fields: string[];
   matched_source?: MatchedSource | null;
+  matched_sources?: MatchedSource[];
+  url_status?: UrlValidationStatus | null;
+  url_status_code?: number | null;
+  archive_url?: string | null;
+  is_retracted?: boolean;
+  html_meta?: HtmlPageMetaPayload | null;
+  features?: Verdict['features'];
+  numeric_index?: number | null;
+  sub_index?: string | null;
+  composite_label?: string | null;
   sources_succeeded?: string[];
   used_local_db?: boolean;
 }
@@ -332,6 +374,8 @@ export interface SandboxInstantVerifyResponse {
     suspected_hallucination: number;
     layer1_linking_issues: number;
     incomplete_metadata?: number;
+    resource?: number;
+    unresolved?: number;
   };
   results: SandboxInstantVerdictItem[];
   remediation?: RemediatedBibliographyResponse;
@@ -374,6 +418,7 @@ export interface EssayStatus {
   error: string | null;
   queue_position?: number | null;
   document_diagnostics?: DocumentDiagnostics | null;
+  quota_charged?: boolean;
 }
 
 // --- Upload ---
@@ -400,6 +445,7 @@ export interface HealthResponse {
 
 export interface Citation {
   id?: number;
+  reference_id?: string;
   raw_text: string;
   citation_type: CitationType;
   style: string;
@@ -411,6 +457,9 @@ export interface Citation {
   url?: string | null;
   page_num: number;
   confidence: number;
+  numeric_index?: number | null;
+  sub_index?: string | null;
+  composite_label?: string | null;
   // NEW v1.16 — surrounding PDF text of the citation, shown in the Document
   // Inspector. Optional — older reports have no context.
   context?: string | null;
@@ -455,6 +504,10 @@ export interface EssaySummary {
   num_citations?: number;
   num_verdicts?: number;
   num_verified?: number;
+  job_status?: 'queued' | 'processing' | 'completed' | 'failed' | string;
+  job_error?: string | null;
+  job_attempt_count?: number;
+  quota_charged?: boolean;
 }
 
 // --- Aggregate essay stats (GET /essays/stats, contract C2) ---
@@ -497,6 +550,16 @@ export interface SharedVerdictItem {
   mismatched_fields?: string[];
   matched_source?: MatchedSource | null;
   matched_sources?: MatchedSource[];
+  url_status?: UrlValidationStatus | null;
+  url_status_code?: number | null;
+  archive_url?: string | null;
+  cited_url?: string | null;
+  is_retracted?: boolean;
+  html_meta?: HtmlPageMetaPayload | null;
+  features?: Verdict['features'];
+  numeric_index?: number | null;
+  sub_index?: string | null;
+  composite_label?: string | null;
 }
 
 export interface SharedEssayReport {
@@ -534,9 +597,14 @@ export interface CacheStats {
   by_source: Record<string, number>;
   total_hits: number;
   avg_hit_count: number;
+  persistent_entries?: number;
+  expired_entries?: number;
+  persistent_hits?: number;
   local_papers_count?: number;
   local_queries_count?: number;
+  local_hits_count?: number;
   local_hit_rate_percent?: number;
+  local_corpus_by_source?: Record<string, number>;
 }
 
 export interface CacheClearResponse {
@@ -1120,7 +1188,16 @@ export interface UpstreamSourceHealth {
   http_429_count: number;
   http_5xx_count: number;
   ema_latency_ms: number;
+  avg_latency_ms?: number | null;
+  p95_latency_ms?: number | null;
+  has_latency_sample?: boolean;
+  failure_count?: number;
+  total_failures?: number;
   open_remaining_seconds: number;
+  cooldown_remaining_s?: number;
+  last_error?: string | null;
+  last_status_code?: number | null;
+  last_failure_at?: number | null;
 }
 
 export interface SystemHealth {
@@ -1142,6 +1219,10 @@ export interface SystemHealth {
   grobid_available?: boolean;
   /** Per-provider circuit breaker & upstream API telemetry (Subsystem B4). */
   upstream_sources?: Record<string, UpstreamSourceHealth>;
+  sqlite_wal?: {
+    app_db?: Record<string, unknown> | null;
+    local_papers_db?: Record<string, unknown> | null;
+  };
 }
 
 export interface AuditLogEntry {

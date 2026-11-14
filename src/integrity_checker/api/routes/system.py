@@ -8,9 +8,13 @@ from sqlalchemy.orm import Session
 
 from integrity_checker.api.deps import get_db, require_admin
 from integrity_checker.api.routes.health import _get_grobid_health
+from integrity_checker.config import get_settings
+from integrity_checker.database.local_db import get_local_papers_tuning_report
 from integrity_checker.db.models import EssayRecord, User, VerdictRecord
 from integrity_checker.db.repository import Repository
+from integrity_checker.db.session import get_app_db_tuning_report
 from integrity_checker.retrieval.circuit_breaker import get_circuit_breaker_registry
+from integrity_checker.retrieval.retrieval_orchestrator import ensure_enabled_sources_registered
 
 router = APIRouter()
 
@@ -53,6 +57,11 @@ def get_system_health(
     if not grobid_health.available and grobid_health.container_running:
         services["grobid"] = "degraded"
 
+    registry = ensure_enabled_sources_registered(
+        get_circuit_breaker_registry(),
+        get_settings(),
+    )
+
     return {
         "status": "degraded" if "grobid" in services else "ok",
         "services": services,
@@ -68,5 +77,9 @@ def get_system_health(
         },
         "verdict_label_counts": label_counts,
         "cache_stats": cache_stats,
-        "upstream_sources": get_circuit_breaker_registry().snapshot_all(),
+        "upstream_sources": registry.snapshot_all(),
+        "sqlite_wal": {
+            "app_db": get_app_db_tuning_report(),
+            "local_papers_db": get_local_papers_tuning_report(),
+        },
     }

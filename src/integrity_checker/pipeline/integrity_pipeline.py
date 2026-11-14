@@ -150,7 +150,7 @@ logger = get_logger(__name__)
 
 # Bump whenever extraction/linking output shape changes so previously cached
 # (and possibly wrong) reports are recomputed instead of served from disk.
-_REPORT_CACHE_VERSION = "report-v20"
+_REPORT_CACHE_VERSION = "report-v21"
 
 # NEW v1.7: Only retrieve + verify REFERENCE_LIST citations (and DOI/URL inline
 # with enough metadata). In-text citations are verified via linking only.
@@ -266,6 +266,12 @@ class AnalysisReport:
                         "cross_lingual_title_sim": getattr(v.features, "cross_lingual_title_sim", 0.0) if v.features else 0.0,
                         "context_source": getattr(v.features, "context_source", "") if v.features else None,
                         "occurrence_alignments": getattr(v.features, "occurrence_alignments", []) if v.features else [],
+                        "html_meta": getattr(v.features, "html_meta", None) if v.features else None,
+                        "html_meta_title_sim": getattr(v.features, "html_meta_title_sim", None) if v.features else None,
+                        "has_scholarly_candidate": bool(getattr(v.features, "has_scholarly_candidate", True)) if v.features else True,
+                        "numeric_index": getattr(v.citation, "numeric_index", None) if v.citation else None,
+                        "sub_index": getattr(v.citation, "sub_index", None) if v.citation else None,
+                        "composite_label": getattr(v.citation, "composite_label", None) if v.citation else None,
                         "url_status": getattr(v.matched_source, "url_status", None) if v.matched_source else None,
                         "url_status_code": getattr(v.matched_source, "url_status_code", None) if v.matched_source else None,
                         "archive_url": getattr(v.matched_source, "archive_url", None) if v.matched_source else None,
@@ -275,6 +281,12 @@ class AnalysisReport:
                         ),
                         "checked_url": getattr(v.citation, "url", None) if v.citation else None,
                     },
+                    "html_meta": getattr(v.features, "html_meta", None) if v.features else None,
+                    "html_meta_title_sim": getattr(v.features, "html_meta_title_sim", None) if v.features else None,
+                    "has_scholarly_candidate": bool(getattr(v.features, "has_scholarly_candidate", True)) if v.features else True,
+                    "numeric_index": getattr(v.citation, "numeric_index", None) if v.citation else None,
+                    "sub_index": getattr(v.citation, "sub_index", None) if v.citation else None,
+                    "composite_label": getattr(v.citation, "composite_label", None) if v.citation else None,
                     "url_status": getattr(v.matched_source, "url_status", None) if v.matched_source else None,
                     "url_status_code": getattr(v.matched_source, "url_status_code", None) if v.matched_source else None,
                     "archive_url": getattr(v.matched_source, "archive_url", None) if v.matched_source else None,
@@ -372,6 +384,8 @@ class AnalysisReport:
                     url_status_code=url_status_code,
                     archive_url=archive_url,
                     is_retracted=is_retracted,
+                    html_meta_dict=(raw_verdict.get("features") or {}).get("html_meta")
+                    or raw_verdict.get("html_meta"),
                 ),
             )
             verdicts.append(verdict)
@@ -553,16 +567,18 @@ class IntegrityPipeline:
 
     def run(
         self,
-        pdf_path: str,
+        pdf_path: str | Path,
         essay_id: int = 0,
         max_citations: int | None = None,
         allow_serpapi: bool | None = None,
+        progress_callback: Any | None = None,
     ) -> AnalysisReport:
         """Sync wrapper quanh async run_async."""
         return asyncio.run(
             self.run_async(
-                pdf_path,
+                str(pdf_path),
                 essay_id=essay_id,
+                progress_callback=progress_callback,
                 max_citations=max_citations,
                 allow_serpapi=allow_serpapi,
             )
@@ -722,6 +738,11 @@ class IntegrityPipeline:
             "scanned_pages_count": scanned_pages_count,
             "total_extractable_chars": total_extractable_chars,
             "avg_chars_per_page": avg_chars_per_page,
+            "ocr_pages_recovered": list(doc_metadata.get("ocr_pages_recovered") or []),
+            "legacy_encoding_detected": doc_metadata.get("legacy_encoding_detected"),
+            "legacy_encoding_pages_count": int(
+                doc_metadata.get("legacy_encoding_pages_count") or 0
+            ),
             "warning_code": "SCANNED_PDF_DETECTED" if is_scanned_pdf else None,
             "warning_message": (
                 doc_metadata.get("warning_message")
@@ -741,6 +762,7 @@ class IntegrityPipeline:
             2,
             citations_found=len(in_text_citations),
             references_found=len(ref_citations),
+            document_diagnostics=style_profile_dict["document_diagnostics"],
             message=f"Found {len(in_text_citations)} in-text + {len(ref_citations)} references",
         )
         body_pages_for_discovery = self._filter_body_pages_for_discovery(
@@ -2161,6 +2183,9 @@ def _serialize_citation(citation: Citation) -> dict[str, Any]:
     }
 
 
+_serialize_citation_for_json = _serialize_citation
+
+
 def _deserialize_citation(data: dict[str, Any]) -> Citation:
     """Deserialize a cached citation without rerunning PDF extraction."""
     try:
@@ -2248,6 +2273,13 @@ def _match_features_from_dict(data: dict[str, Any]) -> MatchFeatures:
         cross_lingual_title_sim=float(data.get("cross_lingual_title_sim") or 0.0),
         context_source=data.get("context_source") or "",
         occurrence_alignments=list(data.get("occurrence_alignments") or []),
+        html_meta_title_sim=(
+            float(data["html_meta_title_sim"])
+            if data.get("html_meta_title_sim") is not None
+            else None
+        ),
+        html_meta=dict(data["html_meta"]) if isinstance(data.get("html_meta"), dict) else None,
+        has_scholarly_candidate=bool(data.get("has_scholarly_candidate", True)),
     )
 
 
@@ -2286,23 +2318,7 @@ def _serialize_verdict_for_json(v: CitationVerdict) -> dict[str, Any]:
         getattr(v, "is_retracted", False)
         or (getattr(v.matched_source, "is_retracted", False) if v.matched_source else False)
     )
-    matched_sources: list[dict[str, Any]] = []
-    if v.matched_source and getattr(v.matched_source, "candidates", None):
-        for cand in v.matched_source.candidates:
-            if not getattr(cand, "found", True):
-                continue
-            matched_sources.append(
-                {
-                    "source_name": cand.source_name,
-                    "title": cand.title,
-                    "authors": list(cand.authors or []),
-                    "year": cand.year,
-                    "doi": cand.doi,
-                    "venue": cand.venue,
-                    "url": cand.url,
-                    "confidence": cand.confidence,
-                }
-            )
+    matched_sources: list[dict[str, Any]] = _serialize_matched_sources(v.matched_source)
     return {
         "citation_raw": v.citation.raw_text,
         "label": v.label.value,
@@ -2334,12 +2350,24 @@ def _serialize_verdict_for_json(v: CitationVerdict) -> dict[str, Any]:
             "cross_lingual_title_sim": getattr(v.features, "cross_lingual_title_sim", 0.0) if v.features else 0.0,
             "context_source": getattr(v.features, "context_source", "") if v.features else "",
             "occurrence_alignments": getattr(v.features, "occurrence_alignments", []) if v.features else [],
+            "html_meta": getattr(v.features, "html_meta", None) if v.features else None,
+            "html_meta_title_sim": getattr(v.features, "html_meta_title_sim", None) if v.features else None,
+            "has_scholarly_candidate": bool(getattr(v.features, "has_scholarly_candidate", True)) if v.features else True,
+            "numeric_index": getattr(v.citation, "numeric_index", None) if v.citation else None,
+            "sub_index": getattr(v.citation, "sub_index", None) if v.citation else None,
+            "composite_label": getattr(v.citation, "composite_label", None) if v.citation else None,
             "url_status": getattr(v.matched_source, "url_status", None) if v.matched_source else None,
             "url_status_code": getattr(v.matched_source, "url_status_code", None) if v.matched_source else None,
             "checked_url": getattr(v.citation, "url", None) if v.citation else None,
             "archive_url": archive_url,
             "is_retracted": is_retracted,
         },
+        "html_meta": getattr(v.features, "html_meta", None) if v.features else None,
+        "html_meta_title_sim": getattr(v.features, "html_meta_title_sim", None) if v.features else None,
+        "has_scholarly_candidate": bool(getattr(v.features, "has_scholarly_candidate", True)) if v.features else True,
+        "numeric_index": getattr(v.citation, "numeric_index", None) if v.citation else None,
+        "sub_index": getattr(v.citation, "sub_index", None) if v.citation else None,
+        "composite_label": getattr(v.citation, "composite_label", None) if v.citation else None,
         "url_status": getattr(v.matched_source, "url_status", None) if v.matched_source else None,
         "url_status_code": getattr(v.matched_source, "url_status_code", None) if v.matched_source else None,
         "archive_url": archive_url,
@@ -2444,9 +2472,9 @@ def _serialize_matched_sources(source: Any) -> list[dict[str, Any]]:
     source name, which fields were matched, the URL/DOI, and the
     candidate's confidence.
 
-    Only successful (found=True) candidates are returned, plus a fallback
-    entry per source we queried so the UI can show the database even when
-    it returned no hits.
+    Only successful (found=True) candidates are returned; when no scholarly
+    candidates exist, falls back to synthesized ``web_html_meta`` /
+    ``wayback_html_meta`` metadata when non-soft-404 HTML ``<head>`` fields exist.
     """
     out: list[dict[str, Any]] = []
     if source is None:
@@ -2476,7 +2504,7 @@ def _serialize_matched_sources(source: Any) -> list[dict[str, Any]]:
                 serialized_authors.append(" ".join(p for p in parts if p))
             else:
                 serialized_authors.append(str(a))
-        out.append({
+        entry: dict[str, Any] = {
             "source": getattr(c, "source_name", "unknown"),
             "matched_fields": matched_fields,
             "checked_at": datetime.now(UTC).isoformat(),
@@ -2487,7 +2515,56 @@ def _serialize_matched_sources(source: Any) -> list[dict[str, Any]]:
             "year": str(getattr(c, "year", "")) if getattr(c, "year", None) else None,
             "venue": getattr(c, "venue", None),
             "confidence": float(getattr(c, "confidence", 0.0) or 0.0),
-        })
+        }
+        ext_ids = getattr(c, "external_ids", None)
+        if ext_ids:
+            entry["external_ids"] = dict(ext_ids)
+        out.append(entry)
+
+    if not out:
+        html_meta = getattr(source, "html_meta", None)
+        if html_meta is not None and not getattr(html_meta, "is_soft_404", False):
+            hm_title = getattr(html_meta, "citation_title", None) or getattr(
+                html_meta, "page_title", None
+            )
+            hm_authors = list(getattr(html_meta, "citation_authors", None) or [])
+            hm_pub_year = getattr(html_meta, "published_year", None)
+            hm_year = str(hm_pub_year) if hm_pub_year else None
+            hm_venue = getattr(html_meta, "site_name", None)
+            hm_doi = getattr(html_meta, "citation_doi", None)
+            if hm_title or hm_authors or hm_venue or hm_doi or hm_year:
+                url_stat = getattr(source, "url_status", None)
+                arch_url = getattr(source, "archive_url", None)
+                is_wayback_meta = url_stat in ("archived_alive", "archived_only") or bool(
+                    arch_url and url_stat not in ("alive", "restricted_alive")
+                )
+                web_src_name = (
+                    "wayback_html_meta" if is_wayback_meta else "web_html_meta"
+                )
+                web_matched_fields: list[str] = []
+                if hm_doi:
+                    web_matched_fields.append("doi")
+                if hm_title:
+                    web_matched_fields.append("title")
+                if hm_authors:
+                    web_matched_fields.append("authors")
+                if hm_year:
+                    web_matched_fields.append("year")
+                if hm_venue:
+                    web_matched_fields.append("venue")
+                out.append({
+                    "source": web_src_name,
+                    "matched_fields": web_matched_fields,
+                    "checked_at": datetime.now(UTC).isoformat(),
+                    "url": getattr(source, "archive_url", None)
+                    or getattr(html_meta, "canonical_url", None),
+                    "doi": hm_doi,
+                    "title": hm_title,
+                    "authors": hm_authors,
+                    "year": hm_year,
+                    "venue": hm_venue,
+                    "confidence": 0.80,
+                })
     return out
 
 
@@ -2497,18 +2574,35 @@ def _deserialize_matched_sources(
     url_status_code: int | None = None,
     archive_url: str | None = None,
     is_retracted: bool = False,
+    html_meta_dict: dict[str, Any] | None = None,
 ) -> SourceResult | None:
     """Rebuild a minimal SourceResult from a list of MatchedSource dicts.
 
     Used when rehydrating cached reports so the API keeps returning
     ``matched_sources`` instead of silently dropping them.
     """
+    from integrity_checker.retrieval.html_meta_verifier import HtmlPageMeta
+
+    rehydrated_html_meta = HtmlPageMeta.from_dict(html_meta_dict)
     candidates: list[SourceCandidate] = []
     succeeded: list[str] = []
     for item in payload or []:
         if not isinstance(item, dict):
             continue
         name = (item.get("source") or "unknown").lower()
+        if name in ("web_html_meta", "wayback_html_meta"):
+            if rehydrated_html_meta is None:
+                rehydrated_html_meta = HtmlPageMeta.from_dict(
+                    {
+                        "citation_title": item.get("title"),
+                        "citation_authors": item.get("authors") or [],
+                        "published_year": item.get("year"),
+                        "site_name": item.get("venue"),
+                        "citation_doi": item.get("doi"),
+                        "canonical_url": item.get("url"),
+                    }
+                )
+            continue
         candidates.append(
             SourceCandidate(
                 source_name=name,
@@ -2520,11 +2614,18 @@ def _deserialize_matched_sources(
                 venue=item.get("venue"),
                 url=item.get("url"),
                 confidence=float(item.get("confidence", 0.0) or 0.0),
+                external_ids=dict(item.get("external_ids") or {}),
             )
         )
         if name not in succeeded:
             succeeded.append(name)
-    if not candidates and url_status is None and archive_url is None and not is_retracted:
+    if (
+        not candidates
+        and url_status is None
+        and archive_url is None
+        and not is_retracted
+        and rehydrated_html_meta is None
+    ):
         return None
     return SourceResult(
         citation_raw="",
@@ -2535,6 +2636,7 @@ def _deserialize_matched_sources(
         url_status_code=url_status_code,
         archive_url=archive_url,
         is_retracted=is_retracted,
+        html_meta=rehydrated_html_meta,
     )
 
 

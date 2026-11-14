@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { type Verdict, type Citation } from '@/api/client';
 import { VerdictBadge } from '@/components/VerdictBadge';
-import { isUrlResource } from '@/lib/verdictExplanation';
+import { getCitationMarkerLabel, isUrlResource } from '@/lib/verdictExplanation';
 import { MappingStatusBadge } from '@/components/MappingStatusBadge';
 import { useOrphanReport } from '@/hooks/useOrphanReport';
 import { EssayHeader } from './essay/EssayHeader';
@@ -34,11 +34,22 @@ interface OrphanCitation {
   label: string;
   mapping_status: string;
   triggered_rules?: string[];
+  numeric_index?: number | null;
+  sub_index?: string | null;
+  composite_label?: string | null;
+  reference_id?: string;
+  citation_link?: Verdict['citation_link'];
+  features?: Verdict['features'];
 }
 
 interface UncitedReference {
   reference_id: string;
   raw_text: string;
+  numeric_index?: number | null;
+  sub_index?: string | null;
+  composite_label?: string | null;
+  citation_link?: Verdict['citation_link'];
+  features?: Verdict['features'];
 }
 
 function getOrphanStats(
@@ -61,6 +72,11 @@ function getOrphanStats(
       citation_raw: c.raw_text,
       label: 'unresolved',
       mapping_status: c.mapping_status || 'missing_reference',
+      numeric_index: c.numeric_index,
+      sub_index: c.sub_index,
+      composite_label: c.composite_label,
+      reference_id: c.reference_id,
+      citation_link: c.citation_link,
     }));
 
   const citationsWithoutReference: OrphanCitation[] = [
@@ -78,14 +94,23 @@ function getOrphanStats(
         !seenUncitedRaw.has(r.raw_text)
     )
     .map((r, i) => ({
-      reference_id: String(r.id ?? `ref-uncited-${i}`),
+      reference_id: r.reference_id || String(r.id ?? `ref-uncited-${i}`),
       raw_text: r.raw_text,
+      numeric_index: r.numeric_index,
+      sub_index: r.sub_index,
+      composite_label: r.composite_label,
+      citation_link: r.citation_link,
     }));
 
   const uncitedReferences: UncitedReference[] = [
     ...verdictUncited.map((v) => ({
-      reference_id: v.citation_id,
+      reference_id: v.citation_link?.reference_id || v.citation_id,
       raw_text: v.citation_raw,
+      numeric_index: v.numeric_index,
+      sub_index: v.sub_index,
+      composite_label: v.composite_label,
+      citation_link: v.citation_link,
+      features: v.features,
     })),
     ...extraUncitedFromRefs,
   ];
@@ -118,6 +143,8 @@ function OrphanCitationCard({
   index: number;
   isVi: boolean;
 }) {
+  const markerLabel = getCitationMarkerLabel(citation, index);
+  const displayRaw = citation.citation_raw.replace(/^\s*\[\s*\d+[a-z]?\s*\]\s*/i, '');
   return (
     <Card className="rounded-xl border-red-200/90 dark:border-red-900/70 p-4 bg-red-50/40 dark:bg-red-950/25 hover:bg-red-50/80 dark:hover:bg-red-950/45 transition-colors shadow-2xs">
       <div className="flex items-start gap-3">
@@ -127,7 +154,7 @@ function OrphanCitationCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5">
             <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400">
-              #{String(index + 1).padStart(2, '0')}
+              {markerLabel}
             </span>
             <Badge
               variant="hallucination"
@@ -138,7 +165,7 @@ function OrphanCitationCard({
             </Badge>
           </div>
           <p className="text-sm font-serif text-slate-800 dark:text-slate-200 line-clamp-2 leading-relaxed break-words [overflow-wrap:anywhere]">
-            {citation.citation_raw}
+            {displayRaw || citation.citation_raw}
           </p>
           <div className="flex items-center gap-2 mt-2.5 flex-wrap">
             <VerdictBadge
@@ -163,6 +190,8 @@ function UncitedReferenceCard({
   index: number;
   isVi: boolean;
 }) {
+  const markerLabel = getCitationMarkerLabel(reference, index);
+  const displayRaw = reference.raw_text.replace(/^\s*\[\s*\d+[a-z]?\s*\]\s*/i, '');
   return (
     <Card className="rounded-xl border-amber-200/90 dark:border-amber-900/70 p-4 bg-amber-50/40 dark:bg-amber-950/25 hover:bg-amber-50/80 dark:hover:bg-amber-950/45 transition-colors shadow-2xs">
       <div className="flex items-start gap-3">
@@ -172,7 +201,7 @@ function UncitedReferenceCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5">
             <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400">
-              #{String(index + 1).padStart(2, '0')}
+              {markerLabel}
             </span>
             <Badge
               variant="metadata_error"
@@ -183,7 +212,7 @@ function UncitedReferenceCard({
             </Badge>
           </div>
           <p className="text-sm font-serif text-slate-800 dark:text-slate-200 line-clamp-2 leading-relaxed break-words [overflow-wrap:anywhere]">
-            {reference.raw_text}
+            {displayRaw || reference.raw_text}
           </p>
         </div>
       </div>
@@ -447,13 +476,7 @@ export function OrphanDetectionPage() {
                       {stats.citationsWithoutReference.map((citation, index) => (
                         <OrphanCitationCard
                           key={citation.citation_id}
-                          citation={{
-                            citation_id: citation.citation_id,
-                            citation_raw: citation.citation_raw,
-                            label: citation.label,
-                            mapping_status: citation.mapping_status,
-                            triggered_rules: citation.triggered_rules,
-                          }}
+                          citation={citation}
                           index={index}
                           isVi={Boolean(isVi)}
                         />
@@ -505,13 +528,7 @@ export function OrphanDetectionPage() {
                       {stats.ambiguousMappings.map((citation, index) => (
                         <OrphanCitationCard
                           key={citation.citation_id}
-                          citation={{
-                            citation_id: citation.citation_id,
-                            citation_raw: citation.citation_raw,
-                            label: citation.label,
-                            mapping_status: citation.mapping_status,
-                            triggered_rules: citation.triggered_rules,
-                          }}
+                          citation={citation}
                           index={index}
                           isVi={Boolean(isVi)}
                         />
@@ -535,28 +552,24 @@ export function OrphanDetectionPage() {
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     {stats.correctlyLinked.map((v, index) => {
-                      const rawBracketMatch = (v.citation_raw ?? '').match(
-                        /^\s*\[(\d+)\]/,
+                      const markerLabel = getCitationMarkerLabel(v, index);
+                      const displayRaw = v.citation_raw.replace(
+                        /^\s*\[\s*\d+[a-z]?\s*\]\s*/i,
+                        '',
                       );
-                      const refIdNumMatch =
-                        v.citation_link?.reference_id?.match(/^ref-0*(\d+)$/);
-                      const badgeNum =
-                        rawBracketMatch?.[1] ||
-                        refIdNumMatch?.[1] ||
-                        String(index + 1);
                       return (
                         <Card
                           key={v.citation_id}
                           className="rounded-xl border-emerald-200/80 dark:border-emerald-900/60 p-4 bg-emerald-50/30 dark:bg-emerald-950/20 transition-colors shadow-2xs"
                         >
                           <div className="flex items-start gap-3">
-                            <div className="p-2 rounded-xl bg-emerald-100/80 dark:bg-emerald-900/50 border border-emerald-200/60 dark:border-emerald-800/60 shrink-0">
+                            <div className="p-2 rounded-xl bg-emerald-100/80 dark:bg-emerald-900/50 border border-emerald-200/60 dark:border-emerald-800/70 shrink-0">
                               <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                                 <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400">
-                                  [{String(badgeNum).padStart(2, '0')}]
+                                  {markerLabel}
                                 </span>
                                 <VerdictBadge
                                   verdict={
@@ -571,7 +584,7 @@ export function OrphanDetectionPage() {
                                 />
                               </div>
                               <p className="text-sm font-serif text-slate-800 dark:text-slate-200 line-clamp-2 leading-relaxed break-words [overflow-wrap:anywhere]">
-                                {v.citation_raw.replace(/^\s*\[\d+\]\s*/, '')}
+                                {displayRaw || v.citation_raw}
                               </p>
                             </div>
                           </div>

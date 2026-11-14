@@ -34,6 +34,7 @@ from integrity_checker.retrieval.html_meta_verifier import (
     SSRFBlockedError,
     build_ssrf_safe_transport,
     extract_meta_from_async_response,
+    extract_year_from_url,
     is_html_content_type,
     validate_public_target_ips,
     validate_url_syntax_and_literal_ip,
@@ -43,8 +44,13 @@ logger = get_logger(__name__)
 
 _ORIG_ASYNC_HEAD = httpx.AsyncClient.head
 _ORIG_ASYNC_STREAM = httpx.AsyncClient.stream
+_ORIG_ASYNC_GET = httpx.AsyncClient.get
 _ORIG_GETADDRINFO = socket.getaddrinfo
 _REDIRECT_CODES = frozenset({301, 302, 303, 307, 308})
+_WAYBACK_RAW_SNAPSHOT_RE = re.compile(
+    r"^https?://web\.archive\.org/web/(\d{4,14})(?:[a-z]{2}_)?/(.+)$",
+    re.IGNORECASE,
+)
 
 
 def clean_extracted_url(text_or_url: str | None) -> str:
@@ -100,6 +106,7 @@ _WAYBACK_GLOBAL_LAST_AT: float = 0.0
 _WAYBACK_MIN_INTERVAL = 0.25
 # Cache confirmed Wayback lookups: url -> (archive_url, archive_timestamp)
 _WAYBACK_CACHE: dict[str, tuple[str | None, str | None]] = {}
+_WAYBACK_META_CACHE: dict[str, HtmlPageMeta] = {}
 _WAYBACK_CACHE_MAX = 1024
 _LAST_WAYBACK_OK: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "_last_wayback_ok", default=True
@@ -265,6 +272,7 @@ class LinkValidator:
     def clear_wayback_cache(cls) -> None:
         """Clear session-level Wayback Machine lookup cache (primarily for tests)."""
         _WAYBACK_CACHE.clear()
+        _WAYBACK_META_CACHE.clear()
 
     async def _check_wayback_machine_status(
         self, url: str
@@ -291,7 +299,11 @@ class LinkValidator:
         global _WAYBACK_GLOBAL_LAST_AT
         sem, lock, loop_id = _get_wayback_concurrency()
         backoffs = (0.0, 0.08)
-        wb_timeout = min(self.timeout, 0.95) if self.timeout > 0 else 0.95
+        wb_timeout = (
+            min(self.timeout, 3.0)
+            if self.timeout >= 2.0
+            else (min(self.timeout, 0.95) if self.timeout > 0 else 3.0)
+        )
         last_exc: Exception | None = None
 
         for attempt, backoff_sec in enumerate(backoffs):
@@ -310,14 +322,17 @@ class LinkValidator:
                     await asyncio.sleep(wait_sec)
 
                 try:
-                    async with httpx.AsyncClient(
-                        timeout=wb_timeout,
-                        follow_redirects=True,
-                        headers={
+                    wb_client_kwargs: dict[str, Any] = {
+                        "timeout": wb_timeout,
+                        "follow_redirects": True,
+                        "headers": {
                             "User-Agent": self.DEFAULT_HEADERS["User-Agent"],
                             "Accept": "application/json",
                         },
-                    ) as client:
+                    }
+                    if self._transport is not None:
+                        wb_client_kwargs["transport"] = self._transport
+                    async with httpx.AsyncClient(**wb_client_kwargs) as client:
                         resp = await client.get(self.WAYBACK_API_URL, params={"url": url})
                         if resp.status_code in (429, 500, 502, 503, 504):
                             last_exc = RuntimeError(f"Wayback HTTP {resp.status_code}")
@@ -396,6 +411,141 @@ class LinkValidator:
         wb_url, wb_ts, wb_ok = await self._check_wayback_machine_status(url)
         _LAST_WAYBACK_OK.set(wb_ok)
         return wb_url, wb_ts
+
+    @staticmethod
+    def _to_wayback_raw_id_url(wb_url: str | None) -> str | None:
+        """Convert a Wayback snapshot URL into its raw ``{timestamp}id_`` HTML form."""
+        if not wb_url or not str(wb_url).strip():
+            return None
+        m = _WAYBACK_RAW_SNAPSHOT_RE.match(str(wb_url).strip())
+        if not m:
+            return None
+        return f"https://web.archive.org/web/{m.group(1)}id_/{m.group(2)}"
+
+    @staticmethod
+    def _is_nonempty_html_meta(meta: HtmlPageMeta | None) -> bool:
+        if meta is None or meta.is_soft_404:
+            return False
+        return bool(
+            meta.page_title
+            or meta.citation_title
+            or meta.citation_authors
+            or meta.citation_doi
+            or meta.published_year
+            or meta.site_name
+            or meta.canonical_url
+        )
+
+    async def _fetch_wayback_html_meta(
+        self,
+        client: httpx.AsyncClient | None,
+        wb_url: str,
+        original_url: str | None = None,
+    ) -> HtmlPageMeta | None:
+        """Fetch bounded ``<head>`` metadata from Wayback's raw ``id_`` snapshot safely."""
+        try:
+            raw_wb_url = self._to_wayback_raw_id_url(wb_url)
+            if not raw_wb_url:
+                return None
+
+            if raw_wb_url in _WAYBACK_META_CACHE:
+                return _WAYBACK_META_CACHE[raw_wb_url]
+
+            head_is_patched = httpx.AsyncClient.head is not _ORIG_ASYNC_HEAD
+            stream_is_patched = httpx.AsyncClient.stream is not _ORIG_ASYNC_STREAM
+            if head_is_patched and not stream_is_patched and self._transport is None:
+                return None
+
+            uses_pinned_backend = (
+                self._transport is None and not head_is_patched and not stream_is_patched
+            )
+            wb_meta_timeout = (
+                min(max(self.timeout, 5.5), 7.0)
+                if self.timeout >= 2.0
+                else (self.timeout if self.timeout > 0 else 5.5)
+            )
+
+            async def _stream_once(active_client: httpx.AsyncClient) -> HtmlPageMeta | None:
+                cur_wb = raw_wb_url
+                for hop in range(3):
+                    parsed_wb = urlsplit(cur_wb)
+                    if (parsed_wb.hostname or "").lower() != "web.archive.org":
+                        return None
+                    if uses_pinned_backend:
+                        allowed, _, _, _ = validate_url_syntax_and_literal_ip(cur_wb)
+                    else:
+                        allowed, _, _ = await self._check_ssrf_before_hop(cur_wb)
+                    if not allowed:
+                        return None
+
+                    async with active_client.stream(
+                        "GET",
+                        cur_wb,
+                        timeout=wb_meta_timeout,
+                    ) as wb_resp:
+                        if wb_resp.status_code in _REDIRECT_CODES:
+                            loc = (wb_resp.headers.get("location") or "").strip()
+                            if not loc or hop >= 2:
+                                return None
+                            next_url = urljoin(cur_wb, loc)
+                            rewritten = self._to_wayback_raw_id_url(next_url)
+                            cur_wb = rewritten or next_url
+                            continue
+                        if wb_resp.status_code in (429, 500, 502, 503, 504):
+                            raise httpx.TransportError(
+                                f"Wayback replay transient HTTP {wb_resp.status_code}"
+                            )
+                        if wb_resp.status_code not in (200, 206):
+                            return None
+                        meta = await extract_meta_from_async_response(
+                            wb_resp,
+                            max_bytes=MAX_HTML_HEAD_BYTES,
+                            source_url=original_url or wb_url,
+                        )
+                        if self._is_nonempty_html_meta(meta):
+                            if len(_WAYBACK_META_CACHE) >= _WAYBACK_CACHE_MAX:
+                                oldest_key = next(iter(_WAYBACK_META_CACHE))
+                                _WAYBACK_META_CACHE.pop(oldest_key, None)
+                            _WAYBACK_META_CACHE[raw_wb_url] = meta  # type: ignore[assignment]
+                            return meta
+                        return None
+                return None
+
+            async def _stream_with_retry(active_client: httpx.AsyncClient) -> HtmlPageMeta | None:
+                last_err: Exception | None = None
+                for meta_attempt in range(2):
+                    if meta_attempt > 0:
+                        await asyncio.sleep(0.12)
+                    try:
+                        return await _stream_once(active_client)
+                    except (httpx.TimeoutException, httpx.TransportError) as err:
+                        last_err = err
+                        continue
+                if last_err is not None:
+                    logger.debug(
+                        f"Wayback <head> metadata fetch exhausted retries for '{wb_url}': {last_err}"
+                    )
+                return None
+
+            if client is not None:
+                return await _stream_with_retry(client)
+
+            transport = (
+                self._transport
+                if self._transport is not None
+                else build_ssrf_safe_transport(resolver=self.resolver)
+            )
+            async with httpx.AsyncClient(
+                timeout=wb_meta_timeout,
+                follow_redirects=False,
+                trust_env=False,
+                headers=self.DEFAULT_HEADERS,
+                transport=transport,
+            ) as owned_client:
+                return await _stream_with_retry(owned_client)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"Wayback <head> metadata fetch skipped for '{wb_url}': {exc}")
+            return None
 
     async def validate_url(self, url: str | None) -> LinkCheckResult:
         """Validate whether a citation URL is reachable and alive (or archived on Wayback Machine)."""
@@ -481,6 +631,7 @@ class LinkValidator:
                                 html_meta = await extract_meta_from_async_response(
                                     get_resp,
                                     max_bytes=MAX_HTML_HEAD_BYTES,
+                                    source_url=final_url or current_url,
                                 )
 
                     if status_code in _REDIRECT_CODES:
@@ -524,6 +675,7 @@ class LinkValidator:
                                 html_meta = await extract_meta_from_async_response(
                                     get_resp,
                                     max_bytes=MAX_HTML_HEAD_BYTES,
+                                    source_url=final_url or current_url,
                                 )
                     elif (
                         status_code in (200, 206)
@@ -553,12 +705,15 @@ class LinkValidator:
                                 html_meta = await extract_meta_from_async_response(
                                     get_resp,
                                     max_bytes=MAX_HTML_HEAD_BYTES,
+                                    source_url=final_url or current_url,
                                 )
                     break
 
                 result = self._classify_status_code(clean_url, status_code, final_url)
                 result.html_meta = html_meta
+                was_soft_404 = False
                 if result.status == LinkStatus.ALIVE and html_meta is not None and html_meta.is_soft_404:
+                    was_soft_404 = True
                     result = LinkCheckResult(
                         url=clean_url,
                         status=LinkStatus.DEAD_LINK,
@@ -572,6 +727,13 @@ class LinkValidator:
                     wb_url, wb_ts = await self._check_wayback_machine(clean_url)
                     wb_ok = _LAST_WAYBACK_OK.get()
                     if wb_url:
+                        recovered_meta = None if was_soft_404 else html_meta
+                        if recovered_meta is None:
+                            recovered_meta = await self._fetch_wayback_html_meta(
+                                client,
+                                wb_url,
+                                original_url=clean_url,
+                            )
                         return LinkCheckResult(
                             url=clean_url,
                             status=LinkStatus.ARCHIVED_ALIVE,
@@ -579,7 +741,7 @@ class LinkValidator:
                             final_url=final_url,
                             archive_url=wb_url,
                             archive_timestamp=wb_ts,
-                            html_meta=html_meta,
+                            html_meta=recovered_meta,
                         )
                     if not wb_ok:
                         return LinkCheckResult(
@@ -590,6 +752,35 @@ class LinkValidator:
                             error="HTTP 404/410 while Wayback Machine verification timed out or rate-limited",
                             html_meta=html_meta,
                         )
+                elif status_code in (403, 406) and html_meta is None:
+                    wb_is_mocked_or_live = not (
+                        (head_is_patched or stream_is_patched)
+                        and httpx.AsyncClient.get is _ORIG_ASYNC_GET
+                        and self._transport is None
+                        and getattr(self._check_wayback_machine, "__func__", None)
+                        is LinkValidator._check_wayback_machine
+                        and getattr(self._check_wayback_machine_status, "__func__", None)
+                        is LinkValidator._check_wayback_machine_status
+                        and clean_url.strip() not in _WAYBACK_CACHE
+                    )
+                    if self.enable_wayback_fallback and wb_is_mocked_or_live:
+                        wb_url, wb_ts = await self._check_wayback_machine(clean_url)
+                        if wb_url:
+                            result.archive_url = wb_url
+                            result.archive_timestamp = wb_ts
+                            result.html_meta = await self._fetch_wayback_html_meta(
+                                client,
+                                wb_url,
+                                original_url=clean_url,
+                            )
+                    if result.html_meta is None:
+                        url_yr = extract_year_from_url(final_url or clean_url)
+                        if url_yr is not None:
+                            result.html_meta = HtmlPageMeta(published_year=str(url_yr))
+                elif result.status == LinkStatus.ALIVE and result.html_meta is None:
+                    url_yr = extract_year_from_url(final_url or clean_url)
+                    if url_yr is not None:
+                        result.html_meta = HtmlPageMeta(published_year=str(url_yr))
                 return result
 
         except SSRFBlockedError as exc:
@@ -604,12 +795,18 @@ class LinkValidator:
             _LAST_WAYBACK_OK.set(True)
             wb_url, wb_ts = await self._check_wayback_machine(clean_url)
             if wb_url:
+                wb_meta = await self._fetch_wayback_html_meta(
+                    None,
+                    wb_url,
+                    original_url=clean_url,
+                )
                 return LinkCheckResult(
                     url=clean_url,
                     status=LinkStatus.ARCHIVED_ALIVE,
                     error=f"Live host timed out, recovered via Wayback Machine ({wb_ts or 'archived'})",
                     archive_url=wb_url,
                     archive_timestamp=wb_ts,
+                    html_meta=wb_meta,
                 )
             return LinkCheckResult(
                 url=clean_url,
@@ -640,12 +837,18 @@ class LinkValidator:
             wb_url, wb_ts = await self._check_wayback_machine(clean_url)
             wb_ok = _LAST_WAYBACK_OK.get()
             if wb_url:
+                wb_meta = await self._fetch_wayback_html_meta(
+                    None,
+                    wb_url,
+                    original_url=clean_url,
+                )
                 return LinkCheckResult(
                     url=clean_url,
                     status=LinkStatus.ARCHIVED_ALIVE,
                     error=f"Live host unreachable, recovered via Wayback Machine ({wb_ts or 'archived'})",
                     archive_url=wb_url,
                     archive_timestamp=wb_ts,
+                    html_meta=wb_meta,
                 )
             if not wb_ok:
                 return LinkCheckResult(

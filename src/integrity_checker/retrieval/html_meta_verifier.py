@@ -9,17 +9,21 @@ Security & resource invariants:
      ``100.64.0.0/10``) is strictly globally routable.
    - Disables automatic redirects (``follow_redirects=False``) and re-validates every
      redirect ``Location`` target (up to ``max_redirects=3``) before following.
-2. Bounded streaming (``MAX_HTML_HEAD_BYTES = 65536``):
-   - Streams HTML chunks up to ``64 KB`` or ``</head>``/``<body>``, closing the stream
-     immediately so infinite or multi-megabyte responses never consume memory.
+2. Bounded streaming (``MAX_HTML_HEAD_BYTES = 131072``):
+   - Streams HTML chunks up to ``128 KB`` or ``</head>``/``<body>``, closing the stream
+     immediately so infinite or multi-megabyte responses never consume memory while still
+     capturing ``<script type="application/ld+json">`` blocks placed after inline CSS in
+     modern SSR ``<head>`` sections.
 """
 
 from __future__ import annotations
 
 import asyncio
 import codecs
+import datetime
 import html
 import ipaddress
+import json
 import re
 import socket
 import unicodedata
@@ -37,7 +41,7 @@ from integrity_checker.retrieval.normalization import normalize_doi, normalize_t
 
 logger = get_logger(__name__)
 
-MAX_HTML_HEAD_BYTES = 65_536
+MAX_HTML_HEAD_BYTES = 131_072
 DEFAULT_MAX_REDIRECTS = 3
 DEFAULT_TIMEOUT_SECONDS = 4.0
 
@@ -134,7 +138,84 @@ class HtmlPageMeta:
     citation_authors: list[str] = field(default_factory=list)
     citation_doi: str | None = None
     published_year: str | None = None
+    site_name: str | None = None
+    canonical_url: str | None = None
     is_soft_404: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize metadata to a JSON-compatible dictionary."""
+        return {
+            "page_title": self.page_title,
+            "citation_title": self.citation_title,
+            "citation_authors": list(self.citation_authors or []),
+            "citation_doi": self.citation_doi,
+            "published_year": (
+                str(self.published_year) if self.published_year is not None else None
+            ),
+            "site_name": self.site_name,
+            "canonical_url": self.canonical_url,
+            "is_soft_404": bool(self.is_soft_404),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> HtmlPageMeta | None:
+        """Deserialize metadata from a dictionary, returning ``None`` when empty/None."""
+        if not data or not isinstance(data, dict):
+            return None
+
+        raw_authors = data.get("citation_authors")
+        if raw_authors is None:
+            raw_authors = data.get("authors")
+        authors: list[str] = []
+        if isinstance(raw_authors, str):
+            cleaned_a = _clean_meta_text(raw_authors)
+            if cleaned_a:
+                authors.append(cleaned_a)
+        elif isinstance(raw_authors, Iterable):
+            seen_low: set[str] = set()
+            for item in raw_authors:
+                if item is None:
+                    continue
+                cleaned_a = _clean_meta_text(str(item))
+                if cleaned_a and cleaned_a.casefold() not in seen_low:
+                    seen_low.add(cleaned_a.casefold())
+                    authors.append(cleaned_a)
+
+        page_title = _clean_meta_text(data.get("page_title"))
+        citation_title = _clean_meta_text(data.get("citation_title"))
+        citation_doi = _normalize_candidate_doi(data.get("citation_doi")) or _clean_meta_text(
+            data.get("citation_doi")
+        )
+        raw_year = data.get("published_year")
+        published_year = (
+            _clean_meta_text(str(raw_year)) if raw_year is not None and str(raw_year).strip() else None
+        )
+        site_name = _clean_meta_text(data.get("site_name"))
+        canonical_url = _clean_meta_text(data.get("canonical_url"))
+        is_soft_404 = bool(data.get("is_soft_404", False))
+
+        if (
+            not page_title
+            and not citation_title
+            and not authors
+            and not citation_doi
+            and not published_year
+            and not site_name
+            and not canonical_url
+            and not is_soft_404
+        ):
+            return None
+
+        return cls(
+            page_title=page_title,
+            citation_title=citation_title,
+            citation_authors=authors,
+            citation_doi=citation_doi,
+            published_year=published_year,
+            site_name=site_name,
+            canonical_url=canonical_url,
+            is_soft_404=is_soft_404,
+        )
 
 
 def _is_strictly_public_ip_obj(
@@ -673,11 +754,163 @@ def build_ssrf_safe_transport(
     return transport
 
 
-class _BoundedHeadHTMLParser(HTMLParser):
-    """Streaming stdlib HTMLParser extracting scholarly & OpenGraph tags within ``<head>``."""
+_WAYBACK_WRAPPER_URL_RE = re.compile(
+    r"^https?://web\.archive\.org/web/\d+(?:[a-z]+_)?/(https?://.+)$",
+    re.IGNORECASE,
+)
+_URL_SLASH_DATE_RE = re.compile(
+    r"/(19\d{2}|20\d{2})/(0?[1-9]|1[0-2])/(0?[1-9]|[12]\d|3[01])(?:/|_|-|\.|$)"
+)
+_URL_HYPHEN_DATE_RE = re.compile(
+    r"(?:^|/|_|-)(19\d{2}|20\d{2})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?:/|_|-|\.|$)"
+)
+_NUMBERED_CITATION_AUTHOR_RE = re.compile(r"^citation_author(\d+)$")
+_BYLINE_PREFIX_RE = re.compile(
+    r"^(?:by\s+|theo\s+|tác\s+giả\s*:\s*|tac\s+gia\s*:\s*)",
+    re.IGNORECASE,
+)
+_CRAN_ROLE_SUFFIX_RE = re.compile(
+    r"\s*\[(?:aut|cre|ctb|cph|ths|trl|edt|fnd|rev|dtc)"
+    r"(?:[\s,]+(?:aut|cre|ctb|cph|ths|trl|edt|fnd|rev|dtc))*\]\s*$",
+    re.IGNORECASE,
+)
+_BARE_DOMAIN_RE = re.compile(r"^[a-z0-9-]+(?:\.[a-z0-9-]+)+$")
+_JSONLD_PRIMARY_TYPES = frozenset({
+    "article",
+    "newsarticle",
+    "blogposting",
+    "scholarlyarticle",
+    "techarticle",
+    "report",
+    "dataset",
+    "softwaresourcecode",
+    "book",
+})
+_JSONLD_FALLBACK_TYPES = frozenset({"webpage"})
+MAX_JSONLD_BLOCKS = 4
+MAX_JSONLD_BLOCK_CHARS = 32_768
 
-    def __init__(self) -> None:
+
+def extract_year_from_url(url: str | None) -> int | None:
+    """Extract an unambiguous publication year from ``/YYYY/MM/DD/`` or ``/YYYY-MM-DD`` URL paths."""
+    if not url or not str(url).strip():
+        return None
+    raw = str(url).strip()
+    wb_match = _WAYBACK_WRAPPER_URL_RE.match(raw)
+    if wb_match:
+        raw = wb_match.group(1).strip()
+    try:
+        parsed = urlsplit(raw)
+    except ValueError:
+        return None
+    path = parsed.path or ""
+    if not path:
+        return None
+
+    for pattern in (_URL_SLASH_DATE_RE, _URL_HYPHEN_DATE_RE):
+        for m in pattern.finditer(path):
+            yr, mo, dy = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            try:
+                datetime.date(yr, mo, dy)
+            except ValueError:
+                continue
+            return yr
+    return None
+
+
+def _resolve_canonical_http_url(candidate: str | None, base_url: str | None = None) -> str | None:
+    """Resolve and validate an ``http(s)://`` canonical URL candidate."""
+    cleaned = _clean_meta_text(candidate)
+    if not cleaned:
+        return None
+    resolved = cleaned
+    if not cleaned.lower().startswith(("http://", "https://")):
+        if base_url and base_url.lower().startswith(("http://", "https://")):
+            wb_match = _WAYBACK_WRAPPER_URL_RE.match(base_url)
+            effective_base = wb_match.group(1) if wb_match else base_url
+            resolved = urljoin(effective_base, cleaned)
+        else:
+            return None
+    try:
+        sp = urlsplit(resolved)
+    except ValueError:
+        return None
+    if (sp.scheme or "").lower() not in ("http", "https") or not sp.hostname:
+        return None
+    return resolved
+
+
+def _clean_author_candidate(raw: str | None, *, strip_byline: bool = False) -> str | None:
+    """Normalize an author tag value, rejecting URLs, handles, and bare domains."""
+    cleaned = _clean_meta_text(raw)
+    if not cleaned:
+        return None
+    low = cleaned.lower()
+    if low.startswith(("http://", "https://", "www.", "mailto:", "/", "@")) or "://" in low:
+        return None
+    if strip_byline:
+        cleaned = _BYLINE_PREFIX_RE.sub("", cleaned).strip(" \t\r\n,-–—:|")
+    cleaned = _CRAN_ROLE_SUFFIX_RE.sub("", cleaned).strip()
+    if not cleaned or len(cleaned) < 2:
+        return None
+    if " " not in cleaned and _BARE_DOMAIN_RE.match(cleaned):
+        return None
+    return cleaned
+
+
+def _extract_host_labels(url: str | None) -> set[str]:
+    if not url:
+        return set()
+    raw = str(url).strip()
+    wb_match = _WAYBACK_WRAPPER_URL_RE.match(raw)
+    if wb_match:
+        raw = wb_match.group(1).strip()
+    try:
+        host = (urlsplit(raw).hostname or "").lower().strip(".")
+    except ValueError:
+        return set()
+    if not host:
+        return set()
+    no_www = host[4:] if host.startswith("www.") else host
+    labels = {host, no_www}
+    parts = no_www.split(".")
+    if len(parts) >= 2 and len(parts[0]) >= 4:
+        labels.add(parts[0])
+    return labels
+
+
+def _normalize_site_compare(text: str | None) -> str:
+    if not text:
+        return ""
+    norm = normalize_text(text)
+    if norm.startswith("the "):
+        norm = norm[4:].strip()
+    return norm
+
+
+def _schema_types_of(node: dict[str, Any]) -> set[str]:
+    raw_t = node.get("@type") or node.get("type")
+    items = raw_t if isinstance(raw_t, list) else ([raw_t] if raw_t else [])
+    out: set[str] = set()
+    for item in items:
+        if not isinstance(item, str):
+            continue
+        s = item.strip()
+        if "/" in s:
+            s = s.rsplit("/", 1)[-1]
+        if ":" in s:
+            s = s.rsplit(":", 1)[-1]
+        if s:
+            out.add(s.lower())
+    return out
+
+
+class _BoundedHeadHTMLParser(HTMLParser):
+    """Streaming stdlib HTMLParser extracting scholarly, OpenGraph & JSON-LD metadata within ``<head>``."""
+
+    def __init__(self, source_url: str | None = None) -> None:
         super().__init__(convert_charrefs=True)
+        self.source_url: str | None = (source_url or "").strip() or None
         self.head_closed: bool = False
         self._in_title: bool = False
         self._title_chunks: list[str] = []
@@ -685,26 +918,71 @@ class _BoundedHeadHTMLParser(HTMLParser):
         self.fallback_og_title: str | None = None
         self.citation_title: str | None = None
         self.dc_title: str | None = None
+
         self.citation_authors: list[str] = []
+        self._numbered_citation_authors: list[tuple[int, str]] = []
+        self.dc_authors: list[str] = []
         self.fallback_authors: list[str] = []
+
         self.citation_doi: str | None = None
         self.published_year: str | None = None
+
+        self._scholarly_venue: str | None = None
+        self._publisher_name: str | None = None
+        self._og_site_name: str | None = None
+        self._twitter_site: str | None = None
+
+        self._link_canonical_url: str | None = None
+        self._citation_public_url: str | None = None
+        self._og_url: str | None = None
+
+        self._in_jsonld: bool = False
+        self._jsonld_chunks: list[str] = []
+        self._jsonld_chars: int = 0
+        self._jsonld_blocks: list[str] = []
+
+    @staticmethod
+    def _append_unique(target: list[str], value: str | None) -> None:
+        if not value:
+            return
+        folded = value.casefold()
+        if all(existing.casefold() != folded for existing in target):
+            target.append(value)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if self.head_closed:
             return
         tag_low = tag.lower()
         if tag_low == "body":
+            self._in_jsonld = False
             self.head_closed = True
             return
         if tag_low == "title" and self.title_tag is None:
             self._in_title = True
             self._title_chunks.clear()
             return
+
+        attr_map = {k.lower(): (v or "") for k, v in attrs if k}
+
+        if tag_low == "link":
+            rel_tokens = (attr_map.get("rel") or "").lower().split()
+            if "canonical" in rel_tokens and self._link_canonical_url is None:
+                resolved = _resolve_canonical_http_url(attr_map.get("href"), self.source_url)
+                if resolved:
+                    self._link_canonical_url = resolved
+            return
+
+        if tag_low == "script":
+            script_type = (attr_map.get("type") or "").split(";", 1)[0].strip().lower()
+            if script_type == "application/ld+json" and len(self._jsonld_blocks) < MAX_JSONLD_BLOCKS:
+                self._in_jsonld = True
+                self._jsonld_chunks.clear()
+                self._jsonld_chars = 0
+            return
+
         if tag_low != "meta":
             return
 
-        attr_map = {k.lower(): (v or "") for k, v in attrs if k}
         key = (
             attr_map.get("name")
             or attr_map.get("property")
@@ -721,12 +999,51 @@ class _BoundedHeadHTMLParser(HTMLParser):
             self.citation_title = content
         elif key in ("dc.title", "dcterms.title") and self.dc_title is None:
             self.dc_title = content
-        elif key in ("citation_author", "dc.creator", "dcterms.creator"):
-            if content not in self.citation_authors:
-                self.citation_authors.append(content)
-        elif key == "author":
-            if content not in self.fallback_authors:
-                self.fallback_authors.append(content)
+        elif key == "citation_author":
+            self._append_unique(self.citation_authors, _clean_author_candidate(content))
+        elif (num_match := _NUMBERED_CITATION_AUTHOR_RE.match(key)) is not None:
+            cleaned_a = _clean_author_candidate(content)
+            if cleaned_a:
+                self._numbered_citation_authors.append((int(num_match.group(1)), cleaned_a))
+        elif key in ("dc.creator", "dcterms.creator"):
+            self._append_unique(self.dc_authors, _clean_author_candidate(content))
+        elif key in (
+            "author",
+            "parsely-author",
+            "sailthru.author",
+            "cxenseparse:author",
+            "article:author",
+            "byl",
+        ):
+            self._append_unique(
+                self.fallback_authors,
+                _clean_author_candidate(content, strip_byline=True),
+            )
+        elif key in (
+            "citation_journal_title",
+            "citation_conference_title",
+            "citation_technical_report_institution",
+            "prism.publicationname",
+        ):
+            if self._scholarly_venue is None:
+                self._scholarly_venue = content
+        elif key in ("citation_publisher", "dc.publisher", "dcterms.publisher"):
+            if self._publisher_name is None:
+                self._publisher_name = content
+        elif key in ("og:site_name", "application-name"):
+            if self._og_site_name is None:
+                self._og_site_name = content
+        elif key == "twitter:site":
+            if self._twitter_site is None:
+                tw_clean = content.lstrip("@").strip()
+                if len(tw_clean) >= 2:
+                    self._twitter_site = tw_clean
+        elif key == "citation_public_url":
+            if self._citation_public_url is None:
+                self._citation_public_url = _resolve_canonical_http_url(content, self.source_url)
+        elif key == "og:url":
+            if self._og_url is None:
+                self._og_url = _resolve_canonical_http_url(content, self.source_url)
         elif key in (
             "citation_doi",
             "prism.doi",
@@ -745,8 +1062,14 @@ class _BoundedHeadHTMLParser(HTMLParser):
             "article:published_time",
             "og:published_time",
             "dc.date",
+            "dc.date.issued",
             "dcterms.issued",
             "prism.publicationdate",
+            "parsely-pub-date",
+            "sailthru.date",
+            "pubdate",
+            "publishdate",
+            "date",
         ):
             if self.published_year is None:
                 ym = _YEAR_4_RE.search(content)
@@ -754,33 +1077,239 @@ class _BoundedHeadHTMLParser(HTMLParser):
                     self.published_year = ym.group(1)
 
     def handle_data(self, data: str) -> None:
-        if self._in_title and not self.head_closed and len(self._title_chunks) < 64:
+        if self.head_closed:
+            return
+        if self._in_title and len(self._title_chunks) < 64:
             self._title_chunks.append(data)
+        if self._in_jsonld and self._jsonld_chars < MAX_JSONLD_BLOCK_CHARS:
+            rem = MAX_JSONLD_BLOCK_CHARS - self._jsonld_chars
+            piece = data if len(data) <= rem else data[:rem]
+            self._jsonld_chunks.append(piece)
+            self._jsonld_chars += len(piece)
 
     def handle_endtag(self, tag: str) -> None:
         tag_low = tag.lower()
         if tag_low == "title" and self._in_title:
             self._in_title = False
             self.title_tag = _clean_meta_text("".join(self._title_chunks))
+        elif tag_low == "script" and self._in_jsonld:
+            self._in_jsonld = False
+            raw_block = "".join(self._jsonld_chunks).strip()
+            self._jsonld_chunks.clear()
+            if raw_block and len(self._jsonld_blocks) < MAX_JSONLD_BLOCKS:
+                self._jsonld_blocks.append(raw_block)
         elif tag_low == "head":
             self._in_title = False
+            self._in_jsonld = False
             if self.title_tag is None and self._title_chunks:
                 self.title_tag = _clean_meta_text("".join(self._title_chunks))
             self.head_closed = True
 
+    def _extract_jsonld_fallbacks(
+        self,
+    ) -> tuple[str | None, list[str], str | None, str | None, str | None]:
+        """Parse captured JSON-LD blocks and return ``(title, authors, year, site_name, doi)``."""
+        j_title: str | None = None
+        j_authors: list[str] = []
+        j_year: str | None = None
+        j_site: str | None = None
+        j_doi: str | None = None
+
+        if not self._jsonld_blocks:
+            return j_title, j_authors, j_year, j_site, j_doi
+
+        id_map: dict[str, dict[str, Any]] = {}
+        all_nodes: list[dict[str, Any]] = []
+
+        def _collect(obj: Any, depth: int = 0) -> None:
+            if depth > 12:
+                return
+            if isinstance(obj, list):
+                for elem in obj:
+                    _collect(elem, depth + 1)
+            elif isinstance(obj, dict):
+                node_id = obj.get("@id")
+                if isinstance(node_id, str) and node_id.strip() and len(obj) > 1:
+                    id_map[node_id.strip()] = obj
+                all_nodes.append(obj)
+                graph = obj.get("@graph")
+                if isinstance(graph, list):
+                    _collect(graph, depth + 1)
+
+        for raw_block in self._jsonld_blocks:
+            try:
+                parsed = json.loads(raw_block)
+            except Exception:  # noqa: BLE001
+                continue
+            _collect(parsed)
+
+        def _resolve_ref(val: Any) -> Any:
+            if isinstance(val, dict) and len(val) == 1 and isinstance(val.get("@id"), str):
+                return id_map.get(val["@id"].strip(), val)
+            return val
+
+        def _extract_entity_name(val: Any) -> str | None:
+            val = _resolve_ref(val)
+            if isinstance(val, str):
+                return _clean_meta_text(val)
+            if isinstance(val, dict):
+                return _clean_meta_text(val.get("name"))
+            if isinstance(val, list):
+                for sub in val:
+                    nm = _extract_entity_name(sub)
+                    if nm:
+                        return nm
+            return None
+
+        def _extract_authors(val: Any, out: list[str]) -> None:
+            val = _resolve_ref(val)
+            if isinstance(val, str):
+                self._append_unique(out, _clean_author_candidate(val, strip_byline=True))
+            elif isinstance(val, dict):
+                types = _schema_types_of(val)
+                nm = _clean_author_candidate(val.get("name"), strip_byline=True)
+                if nm:
+                    if "organization" in types and j_site and _normalize_site_compare(nm) == _normalize_site_compare(j_site):
+                        return
+                    self._append_unique(out, nm)
+            elif isinstance(val, list):
+                for sub in val:
+                    _extract_authors(sub, out)
+
+        def _extract_doi_from_field(val: Any) -> str | None:
+            if isinstance(val, str):
+                return _normalize_candidate_doi(val)
+            if isinstance(val, dict):
+                for k in ("value", "@id", "url"):
+                    cand = _normalize_candidate_doi(val.get(k))
+                    if cand:
+                        return cand
+            elif isinstance(val, list):
+                for sub in val:
+                    cand = _extract_doi_from_field(sub)
+                    if cand:
+                        return cand
+            return None
+
+        primary_nodes: list[dict[str, Any]] = []
+        fallback_nodes: list[dict[str, Any]] = []
+        for node in all_nodes:
+            types = _schema_types_of(node)
+            if types & _JSONLD_PRIMARY_TYPES:
+                primary_nodes.append(node)
+            elif types & _JSONLD_FALLBACK_TYPES:
+                fallback_nodes.append(node)
+
+        for node in (*primary_nodes, *fallback_nodes):
+            if j_site is None:
+                j_site = _extract_entity_name(node.get("publisher")) or _extract_entity_name(
+                    node.get("isPartOf")
+                )
+            if j_title is None:
+                cand_t = _clean_meta_text(node.get("headline")) or _clean_meta_text(
+                    node.get("name")
+                )
+                if cand_t and not is_gatekeeper_or_generic_html_title(cand_t):
+                    j_title = cand_t
+            if not j_authors and node.get("author") is not None:
+                _extract_authors(node.get("author"), j_authors)
+            if j_year is None:
+                for date_key in ("datePublished", "dateCreated"):
+                    raw_dt = _clean_meta_text(
+                        str(node.get(date_key)) if node.get(date_key) is not None else None
+                    )
+                    if raw_dt:
+                        ym = _YEAR_4_RE.search(raw_dt)
+                        if ym:
+                            j_year = ym.group(1)
+                            break
+            if j_doi is None:
+                j_doi = _extract_doi_from_field(node.get("sameAs")) or _extract_doi_from_field(
+                    node.get("identifier")
+                )
+
+        return j_title, j_authors, j_year, j_site, j_doi
+
     def build_meta(self) -> HtmlPageMeta:
         if self.title_tag is None and self._title_chunks:
             self.title_tag = _clean_meta_text("".join(self._title_chunks))
+
+        j_title, j_authors, j_year, j_site, j_doi = self._extract_jsonld_fallbacks()
+
+        site_name = (
+            self._scholarly_venue
+            or self._publisher_name
+            or self._og_site_name
+            or j_site
+            or self._twitter_site
+        )
+        canonical_url = self._link_canonical_url or self._citation_public_url or self._og_url
+
         page_title = self.title_tag or self.fallback_og_title
-        cit_title = self.citation_title or self.dc_title
-        authors = self.citation_authors if self.citation_authors else self.fallback_authors
-        soft_404 = is_soft_404_title(page_title, citation_doi=self.citation_doi)
+        cit_title = self.citation_title or self.dc_title or j_title
+        if cit_title is None and page_title and site_name:
+            site_cmp = _normalize_site_compare(site_name)
+            if site_cmp:
+                parts = [
+                    p.strip()
+                    for p in re.split(r"\s+(?:[-–—|•·]|::)\s+", page_title)
+                    if p and p.strip()
+                ]
+                if len(parts) >= 2 and _normalize_site_compare(parts[-1]) == site_cmp:
+                    stripped_title = " - ".join(parts[:-1]).strip() if len(parts) > 2 else parts[0]
+                    if (
+                        len(stripped_title) >= 4
+                        and not is_gatekeeper_or_generic_html_title(stripped_title)
+                        and not is_soft_404_title(stripped_title)
+                    ):
+                        cit_title = stripped_title
+
+        primary_authors: list[str] = list(self.citation_authors)
+        if self._numbered_citation_authors:
+            for _, num_author in sorted(self._numbered_citation_authors, key=lambda item: item[0]):
+                self._append_unique(primary_authors, num_author)
+
+        site_cmp = _normalize_site_compare(site_name)
+        host_labels = _extract_host_labels(canonical_url or self.source_url)
+
+        def _is_generic_site_author(name: str) -> bool:
+            nm_cmp = _normalize_site_compare(name)
+            if not nm_cmp:
+                return True
+            if site_cmp and nm_cmp == site_cmp:
+                return True
+            if name.lower() in host_labels or nm_cmp in host_labels:
+                return True
+            return False
+
+        if primary_authors:
+            authors = [a for a in primary_authors if a.lower() not in host_labels]
+        elif self.dc_authors:
+            filtered_dc = [a for a in self.dc_authors if not _is_generic_site_author(a)]
+            authors = filtered_dc
+        else:
+            merged_fallbacks: list[str] = []
+            for cand_a in (*self.fallback_authors, *j_authors):
+                if not _is_generic_site_author(cand_a):
+                    self._append_unique(merged_fallbacks, cand_a)
+            authors = merged_fallbacks
+
+        doi = self.citation_doi or j_doi
+        published_year = self.published_year or j_year
+        if published_year is None:
+            url_year = extract_year_from_url(self.source_url) or extract_year_from_url(canonical_url)
+            if url_year is not None:
+                published_year = str(url_year)
+
+        soft_404 = is_soft_404_title(page_title, citation_doi=doi)
         return HtmlPageMeta(
             page_title=page_title,
             citation_title=cit_title,
             citation_authors=list(authors),
-            citation_doi=self.citation_doi,
-            published_year=self.published_year,
+            citation_doi=doi,
+            published_year=published_year,
+            site_name=site_name,
+            canonical_url=canonical_url,
             is_soft_404=soft_404,
         )
 
@@ -806,17 +1335,52 @@ def is_html_content_type(content_type: str | None) -> bool:
     return mime in _HTML_CONTENT_TYPES
 
 
+def parse_html_head_meta(
+    raw_bytes: bytes | str,
+    *,
+    content_type: str = "text/html",
+    source_url: str | None = None,
+    url: str | None = None,
+    max_bytes: int = MAX_HTML_HEAD_BYTES,
+) -> HtmlPageMeta | None:
+    """Parse bounded HTML ``<head>`` bytes/text synchronously, with optional URL-date fallback."""
+    if not is_html_content_type(content_type):
+        return None
+    effective_url = source_url or url
+    if isinstance(raw_bytes, str):
+        raw_buf = raw_bytes.encode("utf-8", errors="replace")[:max_bytes]
+    else:
+        raw_buf = bytes(raw_bytes[:max_bytes])
+    if not content_type.strip():
+        sample = raw_buf[:256].lstrip()
+        if sample.startswith((b"%PDF-", b"\x89PNG", b"\xff\xd8\xff", b"PK\x03\x04")):
+            return None
+    charset = _detect_charset(content_type, raw_buf)
+    text = raw_buf.decode(charset, errors="replace")
+    parser = _BoundedHeadHTMLParser(source_url=effective_url)
+    parser.feed(text)
+    try:
+        parser.close()
+    except Exception:  # noqa: BLE001
+        pass
+    return parser.build_meta()
+
+
 async def extract_meta_from_async_response(
     resp: httpx.Response,
     *,
     max_bytes: int = MAX_HTML_HEAD_BYTES,
+    source_url: str | None = None,
+    url: str | None = None,
 ) -> HtmlPageMeta | None:
     """Stream up to ``max_bytes`` or ``</head>`` from an open ``httpx.Response`` and parse metadata."""
     content_type = resp.headers.get("content-type", "")
     if not is_html_content_type(content_type):
         return None
 
-    parser = _BoundedHeadHTMLParser()
+    resp_url_raw = getattr(resp, "url", None)
+    effective_url = source_url or url or (str(resp_url_raw) if resp_url_raw else None)
+    parser = _BoundedHeadHTMLParser(source_url=effective_url)
     decoder: codecs.IncrementalDecoder | None = None
     bytes_read = 0
 
@@ -923,6 +1487,7 @@ class SafeHtmlMetaVerifier:
                 return await extract_meta_from_async_response(
                     resp,
                     max_bytes=self.max_bytes,
+                    source_url=current_url,
                 )
         return None
 

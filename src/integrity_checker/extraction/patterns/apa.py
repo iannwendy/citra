@@ -1179,14 +1179,36 @@ class APAFormat:
             citation.venue = re.sub(
                 r"\s*https?://(?:dx\.)?doi\.org/\S+",
                 "",
-                citation.venue
+                citation.venue,
             ).strip()
             citation.venue = re.sub(
                 r"\s*10\.\d{4,9}/\S+",
                 "",
-                citation.venue
+                citation.venue,
             ).strip()
-            citation.venue = citation.venue.rstrip(".,")
+            # Remove trailing web retrieval boilerplate ("Available at: <http://...>",
+            # "Retrieved from https://...", "[Accessed ...]", "[Online]")
+            citation.venue = re.sub(
+                r"(?:^|[.,;:\s]+)(?:available\s+(?:at|from)|retrieved(?:\s+[^:]{1,40})?\s+from|truy\s+cập\s+(?:tại|từ)|nguồn)\s*:?\s*<?(?:https?://|www\.)\S+.*$",
+                "",
+                citation.venue,
+                flags=re.IGNORECASE,
+            ).strip()
+            citation.venue = re.sub(
+                r"\s*<(?:https?://|www\.)[^>]+>\s*",
+                " ",
+                citation.venue,
+                flags=re.IGNORECASE,
+            ).strip()
+            citation.venue = re.sub(
+                r"\s*(?:\[(?:accessed|retrieved|cited|truy\s+cập)[^\]]*\]|\((?:accessed|retrieved|truy\s+cập)[^)]*\)|\[online\])\s*$",
+                "",
+                citation.venue,
+                flags=re.IGNORECASE,
+            ).strip()
+            citation.venue = citation.venue.rstrip(".,;: ")
+            if not citation.venue:
+                citation.venue = None
 
     def _normalize_title(self, title: str) -> str:
         """Normalize title for comparison: lowercase, remove punctuation."""

@@ -371,6 +371,9 @@ export function DashboardPage() {
                   {t('dashboard.tablePages')}
                 </TableHead>
                 <TableHead className="font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3">
+                  CIS
+                </TableHead>
+                <TableHead className="font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3">
                   {t('dashboard.tableUploaded')}
                 </TableHead>
                 <TableHead className="font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-5 text-right">
@@ -379,7 +382,22 @@ export function DashboardPage() {
               </TableRow>
             </TableHeader>
             <TableBody className="block sm:table-row-group divide-y divide-slate-100 dark:divide-slate-800/80">
-              {filteredEssays.map((essay) => (
+              {filteredEssays.map((essay) => {
+                const jobStatus = (essay.job_status || 'completed').toLowerCase();
+                const isQueued = jobStatus === 'queued';
+                const isProcessing = jobStatus === 'processing';
+                const isInProgress = isQueued || isProcessing;
+                const isFailed = jobStatus === 'failed';
+                const targetHref =
+                  isInProgress || isFailed
+                    ? `/verification/processing/${essay.id}`
+                    : `/verification/report/${essay.id}`;
+                const cisDisplay =
+                  !isFailed && !isInProgress && typeof essay.cis_score === 'number'
+                    ? `${Math.round(essay.cis_score)}/100`
+                    : '—';
+
+                return (
                 <TableRow
                   key={essay.id}
                   className="flex flex-col sm:table-row p-3.5 sm:p-0 gap-2 sm:gap-0 group hover:bg-slate-50/80 dark:hover:bg-slate-900/60 transition-colors"
@@ -388,13 +406,52 @@ export function DashboardPage() {
                     <div className="flex items-center gap-3 min-w-0">
                       <FileFormatIcon filename={essay.filename} size="md" />
                       <div className="min-w-0 flex-1">
-                        <Link
-                          to={`/verification/report/${essay.id}`}
-                          title={essay.filename}
-                          className="text-sm font-semibold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 truncate max-w-full sm:max-w-xs md:max-w-md block transition-colors"
-                        >
-                          {essay.filename}
-                        </Link>
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                          <Link
+                            to={targetHref}
+                            title={essay.filename}
+                            data-testid={`dashboard-essay-link-${essay.id}`}
+                            className="text-sm font-semibold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 truncate max-w-full sm:max-w-xs md:max-w-md block transition-colors"
+                          >
+                            {essay.filename}
+                          </Link>
+                          {isQueued && (
+                            <span
+                              data-testid={`job-status-badge-${essay.id}`}
+                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80 shrink-0"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                              {lang === 'vi' ? 'Hàng đợi' : 'Queued'}
+                            </span>
+                          )}
+                          {isProcessing && (
+                            <span
+                              data-testid={`job-status-badge-${essay.id}`}
+                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 shrink-0"
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                              {lang === 'vi' ? 'Đang xử lý' : 'Processing'}
+                            </span>
+                          )}
+                          {isFailed && (
+                            <span
+                              data-testid={`job-status-badge-${essay.id}`}
+                              title={essay.job_error || undefined}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/80 shrink-0"
+                            >
+                              <AlertTriangle className="h-3 w-3" />
+                              {lang === 'vi' ? 'Thất bại' : 'Failed'}
+                            </span>
+                          )}
+                          {isFailed && essay.quota_charged === false && (
+                            <span
+                              data-testid={`job-refund-badge-${essay.id}`}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 shrink-0"
+                            >
+                              {lang === 'vi' ? 'Hoàn lượt' : 'Credit Refunded'}
+                            </span>
+                          )}
+                        </div>
                         {!isUser && (
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
@@ -445,6 +502,17 @@ export function DashboardPage() {
                   </TableCell>
                   <TableCell className="py-0 sm:py-4 px-0 sm:px-4 flex items-center justify-between sm:table-cell">
                     <span className="sm:hidden text-[11px] font-mono uppercase text-slate-400">
+                      CIS
+                    </span>
+                    <span
+                      data-testid={`essay-cis-${essay.id}`}
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-xs font-mono tabular-nums font-semibold text-slate-700 dark:text-slate-300"
+                    >
+                      {cisDisplay}
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-0 sm:py-4 px-0 sm:px-4 flex items-center justify-between sm:table-cell">
+                    <span className="sm:hidden text-[11px] font-mono uppercase text-slate-400">
                       {t('dashboard.tableUploaded')}
                     </span>
                     <div className="flex items-center gap-1.5 text-xs font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
@@ -458,45 +526,58 @@ export function DashboardPage() {
                   </TableCell>
                   <TableCell className="py-1 sm:py-4 px-0 sm:px-5 text-right">
                     <div className="flex items-center justify-end gap-1.5 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800/60">
-                      <Link
-                        to={`/verification/report/${essay.id}/issues`}
-                        title={t('essay.issues')}
-                        className="hidden md:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-amber-300 dark:hover:border-amber-700 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
-                      >
-                        <AlertCircle className="h-3.5 w-3.5" />
-                        <span>{t('essay.issues')}</span>
-                      </Link>
-                      {canViewTrace ? (
-                        <Link
-                          to={`/verification/report/${essay.id}/trace`}
-                          title={t('essay.logicTrace')}
-                          data-testid={`dashboard-trace-link-${essay.id}`}
-                          className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-violet-300 dark:hover:border-violet-700 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
-                        >
-                          <GitBranch className="h-3.5 w-3.5" />
-                          <span>Trace</span>
-                        </Link>
-                      ) : (
-                        <Link
-                          to="/pricing"
-                          title={
-                            lang === 'vi'
-                              ? 'Logic Trace có trong gói Pro / Ultra — bấm để nâng cấp'
-                              : 'Logic Trace is available on Pro / Ultra — click to upgrade'
-                          }
-                          data-testid={`dashboard-trace-locked-${essay.id}`}
-                          className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium rounded-lg border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
-                        >
-                          <Lock className="h-3.5 w-3.5" />
-                          <span>Trace</span>
-                        </Link>
+                      {!isInProgress && !isFailed && (
+                        <>
+                          <Link
+                            to={`/verification/report/${essay.id}/issues`}
+                            title={t('essay.issues')}
+                            className="hidden md:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-amber-300 dark:hover:border-amber-700 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+                          >
+                            <AlertCircle className="h-3.5 w-3.5" />
+                            <span>{t('essay.issues')}</span>
+                          </Link>
+                          {canViewTrace ? (
+                            <Link
+                              to={`/verification/report/${essay.id}/trace`}
+                              title={t('essay.logicTrace')}
+                              data-testid={`dashboard-trace-link-${essay.id}`}
+                              className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-violet-300 dark:hover:border-violet-700 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+                            >
+                              <GitBranch className="h-3.5 w-3.5" />
+                              <span>Trace</span>
+                            </Link>
+                          ) : (
+                            <Link
+                              to="/pricing"
+                              title={
+                                lang === 'vi'
+                                  ? 'Logic Trace có trong gói Pro / Ultra — bấm để nâng cấp'
+                                  : 'Logic Trace is available on Pro / Ultra — click to upgrade'
+                              }
+                              data-testid={`dashboard-trace-locked-${essay.id}`}
+                              className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium rounded-lg border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+                            >
+                              <Lock className="h-3.5 w-3.5" />
+                              <span>Trace</span>
+                            </Link>
+                          )}
+                        </>
                       )}
                       <Link
-                        to={`/verification/report/${essay.id}`}
+                        to={targetHref}
+                        data-testid={`dashboard-primary-action-${essay.id}`}
                         className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-indigo-50 dark:bg-indigo-950/90 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/70 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white transition-all"
                       >
                         <Eye className="h-3.5 w-3.5" />
-                        {t('dashboard.viewReport')}
+                        {isInProgress
+                          ? lang === 'vi'
+                            ? 'Xem tiến trình'
+                            : 'Live Progress'
+                          : isFailed
+                            ? lang === 'vi'
+                              ? 'Chi tiết lỗi'
+                              : 'View Error'
+                            : t('dashboard.viewReport')}
                       </Link>
                       <button
                         onClickCapture={(e) => {
@@ -518,7 +599,8 @@ export function DashboardPage() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         )}

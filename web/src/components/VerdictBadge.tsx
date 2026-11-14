@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { CheckCircle, AlertTriangle, AlertCircle, XCircle, HelpCircle, Link2 } from 'lucide-react';
+import { CheckCircle, AlertTriangle, AlertCircle, XCircle, HelpCircle, Link2, Scale } from 'lucide-react';
+import { isLegalStatuteVerdict } from '@/lib/verdictExplanation';
 
 /* ============================================================
    SourceLogic — Verdict Badge Component
@@ -212,24 +213,35 @@ export function VerdictBadge({
   const isIncompleteMeta =
     (verdict === 'METADATA_ERROR' || verdict === 'metadata_error') &&
     Boolean(triggeredRules?.includes('R-INCOMPLETE-METADATA'));
+  const isLegalResource =
+    (verdict === 'RESOURCE' || verdict === 'resource') &&
+    isLegalStatuteVerdict({ label: verdict, triggered_rules: triggeredRules });
   const config = verdictConfig[verdict] || verdictConfig.UNVERIFIABLE;
   const labelKey = verdictLabelKey[verdict];
-  const labelText = isIncompleteMeta
-    ? t(
-        'verdict.incompleteReference',
-        isVi ? 'Thiếu quy cách trích dẫn' : 'Incomplete Reference',
-      )
-    : labelKey
-      ? t(labelKey)
-      : config.label;
-  const descriptionText = isIncompleteMeta
-    ? t(
-        'verdict.incompleteReferenceDesc',
-        isVi
-          ? 'Mục tham khảo thiếu các trường bắt buộc (tác giả, năm xuất bản hoặc nơi công bố) chứ không phải nguồn do AI bịa đặt.'
-          : 'Citation lacks required bibliographic fields (author, publication year, or academic venue) rather than being fabricated.',
-      )
-    : config.description;
+  const labelText = isLegalResource
+    ? isVi
+      ? 'Văn bản Pháp luật'
+      : 'Legal Statute'
+    : isIncompleteMeta
+      ? t(
+          'verdict.incompleteReference',
+          isVi ? 'Thiếu quy cách trích dẫn' : 'Incomplete Reference',
+        )
+      : labelKey
+        ? t(labelKey)
+        : config.label;
+  const descriptionText = isLegalResource
+    ? isVi
+      ? 'Văn bản quy phạm pháp luật đã nhận diện, không tính điểm phạt CIS.'
+      : 'Recognized legal statute or government regulation, excluded from academic citation penalty.'
+    : isIncompleteMeta
+      ? t(
+          'verdict.incompleteReferenceDesc',
+          isVi
+            ? 'Mục tham khảo thiếu các trường bắt buộc (tác giả, năm xuất bản hoặc nơi công bố) chứ không phải nguồn do AI bịa đặt.'
+            : 'Citation lacks required bibliographic fields (author, publication year, or academic venue) rather than being fabricated.',
+        )
+      : config.description;
 
   return (
     <span
@@ -243,7 +255,7 @@ export function VerdictBadge({
     >
       {showIcon && (
         <span className={config.iconColor}>
-          {config.icon}
+          {isLegalResource ? <Scale className="h-3.5 w-3.5" /> : config.icon}
         </span>
       )}
       <span className={config.iconColor}>{labelText}</span>

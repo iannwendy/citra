@@ -701,7 +701,14 @@ class IEEEFormat:
                     else:
                         before_yr = body_no_url
                         after_yr = ''
-                    if after_yr and len(after_yr) >= 5:
+                    _is_bib_tail = bool(
+                        re.match(
+                            r'^(?:pp?\.?\s*\d|vol\.?\s*\d|no\.?\s*\d|iss(?:ue)?\.?\s*\d|doi\s*:|10\.\d{4,9}/|isbn\b|issn\b|art(?:icle)?\.?\s*(?:no\.?|id)?\s*\d)',
+                            after_yr,
+                            re.IGNORECASE,
+                        )
+                    )
+                    if after_yr and len(after_yr) >= 5 and not _is_bib_tail:
                         if before_yr and not citation.authors:
                             citation.authors = self._parse_authors(before_yr)
                         title_cand = after_yr.split('. ')[0].strip().rstrip('.,;')
@@ -709,8 +716,43 @@ class IEEEFormat:
                             citation.title = title_cand
                             citation.title_normalized = self._normalize_title(title_cand)
                     elif before_yr and len(before_yr) >= 5:
-                        citation.title = before_yr
-                        citation.title_normalized = self._normalize_title(before_yr)
+                        # Strip trailing volume/issue markers from before_yr
+                        clean_before_yr = re.sub(
+                            r'[.,;]?\s*\b(?:vol(?:ume)?\.?\s*\d+[^,;.]*(?:,\s*no\.?\s*\d+[^,;.]*)?|no\.?\s*\d+[^,;.]*)\s*$',
+                            '',
+                            before_yr,
+                            flags=re.IGNORECASE,
+                        ).strip().rstrip('.,; ')
+                        comma_segs = [s.strip() for s in clean_before_yr.split(',') if s.strip()]
+                        author_segs: list[str] = []
+                        _non_name_word = re.compile(
+                            r'\b(?:using|the|in|on|of|for|to|with|from|by|toward|towards|via|under|between|through|into|study|analysis|model|predict|prediction|design|system|method|approach|survey|review|journal|proceedings|international|conference|american|european|transactions)\b',
+                            re.IGNORECASE,
+                        )
+                        for seg in comma_segs:
+                            seg_clean = re.sub(r'^(?:and|&|và)\s+', '', seg, flags=re.IGNORECASE).strip()
+                            words = seg_clean.split()
+                            if (
+                                1 <= len(words) <= 4
+                                and not _non_name_word.search(seg_clean)
+                                and all(
+                                    re.match(r'^[A-ZÀ-Ý][a-zà-ỹ\'-]*\.?$|^(?:[A-Z]\.)+$', w)
+                                    for w in words
+                                )
+                            ):
+                                author_segs.append(seg)
+                            else:
+                                break
+                        if author_segs and len(author_segs) < len(comma_segs):
+                            citation.authors = self._parse_authors(', '.join(author_segs))
+                            rem_segs = comma_segs[len(author_segs):]
+                            citation.title = rem_segs[0].strip().rstrip('.,;')
+                            citation.title_normalized = self._normalize_title(citation.title)
+                            if len(rem_segs) > 1:
+                                self._parse_venue(citation, ', '.join(rem_segs[1:]))
+                        else:
+                            citation.title = clean_before_yr
+                            citation.title_normalized = self._normalize_title(clean_before_yr)
 
         # Extract URL if present
         url_m = re.search(r'https?://[^\s\]\)\,;]+|\bwww\.[a-zA-Z0-9.-]+\.[a-z]{2,}(?:/[^\s\]\)\,;]*)?', text, re.IGNORECASE)

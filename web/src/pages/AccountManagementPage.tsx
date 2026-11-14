@@ -18,6 +18,7 @@ import { DeleteUserDialog } from '@/components/DeleteUserDialog';
 import { RoleBadge } from '@/components/RoleBadge';
 import type { User } from '@/api/client';
 import { api } from '@/api/client';
+import { getQuotaView } from '@/lib/quotaDisplay';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -327,6 +328,9 @@ export function AccountManagementPage() {
                   {t('admin.tableRole')}
                 </TableHead>
                 <TableHead className="text-left py-3 px-3 lg:px-4 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  {lang === 'vi' ? 'Gói / Hạn ngạch' : 'Plan / Quota'}
+                </TableHead>
+                <TableHead className="text-left py-3 px-3 lg:px-4 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   {t('admin.tableStatus')}
                 </TableHead>
                 <TableHead className="text-left py-3 px-3 lg:px-4 text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -379,6 +383,32 @@ export function AccountManagementPage() {
                       {t('admin.tableRole')}
                     </span>
                     <RoleBadge role={u.role} />
+                  </TableCell>
+                  <TableCell
+                    data-testid={`user-plan-quota-${u.id}`}
+                    className="flex md:table-cell items-center justify-between p-0 md:py-3 md:px-3 lg:px-4"
+                  >
+                    <span className="md:hidden text-[11px] font-mono uppercase text-slate-400">
+                      {lang === 'vi' ? 'Gói / Hạn ngạch' : 'Plan / Quota'}
+                    </span>
+                    <div className="inline-flex items-center gap-2 font-mono text-xs">
+                      <span
+                        className={`px-2 py-0.5 rounded-md border text-[11px] font-semibold ${
+                          u.plan_tier === 'ultra'
+                            ? 'bg-violet-50 dark:bg-violet-950/70 text-violet-700 dark:text-violet-300 border-violet-200/80 dark:border-violet-800/80'
+                            : u.plan_tier === 'pro'
+                              ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border-indigo-200/80 dark:border-indigo-800/80'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700'
+                        }`}
+                      >
+                        {(u.plan_tier || 'basic').toUpperCase()}
+                      </span>
+                      <span className="tabular-nums text-slate-600 dark:text-slate-300">
+                        {u.quota
+                          ? getQuotaView(u.quota, lang, { isAdmin: u.role === 'admin' }).usage
+                          : '—'}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell className="flex md:table-cell items-center justify-between p-0 md:py-3 md:px-3 lg:px-4">
                     <span className="md:hidden text-[11px] font-mono uppercase text-slate-400">

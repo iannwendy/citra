@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceResult
@@ -79,6 +80,11 @@ class MatchFeatures:
     cross_lingual_title_sim: float = 0.0    # Cross-lingual semantic similarity for translated titles (0.0–1.0)
     context_source: str = ""                # 'in_text_citation' | 'multi_occurrence' | 'implicit_body_discovery'
     occurrence_alignments: list[dict] = field(default_factory=list)  # Per-occurrence neural scores
+
+    # NEW v3.69: HTML <head> / Wayback metadata & scholarly candidate indicator
+    html_meta_title_sim: float | None = None
+    html_meta: dict[str, Any] | None = None
+    has_scholarly_candidate: bool = True
 
     @property
     def title_sim_max(self) -> float:

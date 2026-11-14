@@ -441,10 +441,17 @@ export function BibliographyRemediationModal({
                               ? 'Nguồn bị đánh dấu Lỗi Metadata'
                               : 'Flagged Metadata Error'}
                           </span>
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300">
-                            <CheckCircle2 className="h-3 w-3" />
-                            {lang === 'vi' ? 'Đã tự động khôi phục chuẩn' : 'Auto-Repaired'}
-                          </span>
+                          {entry.was_modified ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300">
+                              <CheckCircle2 className="h-3 w-3" />
+                              {lang === 'vi' ? '✓ Đã tự động khôi phục chuẩn' : '✓ Auto-Repaired'}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                              <AlertTriangle className="h-3 w-3" />
+                              {lang === 'vi' ? '⚠ Cần bổ sung thủ công' : '⚠ Manual Review Required'}
+                            </span>
+                          )}
                         </>
                       ) : entry.was_modified ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300">
@@ -568,7 +575,9 @@ export function BibliographyRemediationModal({
                           isHallucination
                             ? 'text-red-600 dark:text-red-400'
                             : isMetadataError
-                              ? 'text-emerald-700 dark:text-emerald-400'
+                              ? entry.was_modified
+                                ? 'text-emerald-700 dark:text-emerald-400'
+                                : 'text-amber-700 dark:text-amber-400'
                               : 'text-indigo-600 dark:text-indigo-400'
                         }`}
                       >
@@ -578,9 +587,13 @@ export function BibliographyRemediationModal({
                               ? `✕ CẢNH BÁO ĐỎ — Khuyến nghị xóa bỏ (${selectedStyle.toUpperCase()})`
                               : `✕ RED ALERT — Remove Fabricated Entry (${selectedStyle.toUpperCase()})`
                             : isMetadataError
-                              ? lang === 'vi'
-                                ? `✓ Bản đã sửa lỗi & Chuẩn hóa (${selectedStyle.toUpperCase()})`
-                                : `✓ Auto-Repaired & Standardized (${selectedStyle.toUpperCase()})`
+                              ? entry.was_modified
+                                ? lang === 'vi'
+                                  ? `✓ Bản đã sửa lỗi & Chuẩn hóa (${selectedStyle.toUpperCase()})`
+                                  : `✓ Auto-Repaired & Standardized (${selectedStyle.toUpperCase()})`
+                                : lang === 'vi'
+                                  ? `⚠ Cần bổ sung thủ công (${selectedStyle.toUpperCase()})`
+                                  : `⚠ Manual Review Required (${selectedStyle.toUpperCase()})`
                               : lang === 'vi'
                                 ? `Bản chuẩn hóa (${selectedStyle.toUpperCase()})`
                                 : `Canonical Output (${selectedStyle.toUpperCase()})`}

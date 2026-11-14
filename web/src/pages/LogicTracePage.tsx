@@ -6,10 +6,12 @@ import { RuleInspector } from '@/components/RuleInspector';
 import { EvidenceGraph } from '@/components/CitationGraph';
 import { VerdictBadge } from '@/components/VerdictBadge';
 import {
+  getCitationMarkerLabel,
   getSearchStepDescription,
   getVerdictExplanation,
   isUrlResource,
 } from '@/lib/verdictExplanation';
+import { SYMBOLIC_RULES_COUNT } from '@/lib/productFacts';
 import { useEssayPolling } from '@/hooks/useEssayPolling';
 import { EssayHeader } from './essay/EssayHeader';
 import { EssayActionBar } from './essay/EssayActionBar';
@@ -101,7 +103,11 @@ function buildTraceSteps(verdict: Verdict, lang: 'vi' | 'en'): TraceStep[] {
   if (f?.author_jaccard !== undefined) {
     featureParts.push(`author_jaccard=${f.author_jaccard.toFixed(2)}`);
   }
-  if (f?.year_distance !== undefined) {
+  if (
+    f?.year_distance !== undefined &&
+    f.year_distance < 900 &&
+    f.has_scholarly_candidate !== false
+  ) {
     featureParts.push(`year_dist=${f.year_distance}`);
   }
   if (f?.venue_sim !== undefined && f.venue_sim > 0) {
@@ -124,6 +130,9 @@ function buildTraceSteps(verdict: Verdict, lang: 'vi' | 'en'): TraceStep[] {
   if (f?.stance_label) {
     featureParts.push(`stance=${f.stance_label}`);
   }
+  if (f?.html_meta_title_sim !== undefined && f.html_meta_title_sim !== null) {
+    featureParts.push(`html_meta_title_sim=${f.html_meta_title_sim.toFixed(2)}`);
+  }
   if (f?.cross_lingual_detected) {
     const bridged = f.bridged_concepts ?? [];
     featureParts.push(
@@ -132,9 +141,12 @@ function buildTraceSteps(verdict: Verdict, lang: 'vi' | 'en'): TraceStep[] {
         : `cross_lingual=VI↔EN`
     );
   }
-  if (f?.cross_lingual_title_detected) {
+  if (
+    f?.cross_lingual_title_detected ||
+    (f?.cross_lingual_title_sim !== undefined && f.cross_lingual_title_sim > 0)
+  ) {
     featureParts.push(
-      `translated_title_sim=${(f.cross_lingual_title_sim ?? 0).toFixed(2)}`
+      `cross_lingual_title_sim=${(f.cross_lingual_title_sim ?? 0).toFixed(2)}`
     );
   }
   if (urlStatus) {
@@ -193,7 +205,7 @@ function buildTraceSteps(verdict: Verdict, lang: 'vi' | 'en'): TraceStep[] {
             ? 'Không phát hiện cảnh báo quy tắc bổ sung.'
             : 'No additional warnings were raised.',
       status: verdict.triggered_rules.length > 0 ? 'completed' : 'pending',
-      tag: '28 SYMBOLIC RULES',
+      tag: `${SYMBOLIC_RULES_COUNT} SYMBOLIC RULES`,
     },
     {
       id: 'verdict',
@@ -544,8 +556,24 @@ function VerdictTrace({
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [traceViewMode, setTraceViewMode] = useState<'linear' | 'dag'>('linear');
   const steps = buildTraceSteps(verdict, lang);
-  const urlStatus = verdict.url_status ?? verdict.features?.url_status;
+  const rawUrlStatus = verdict.url_status ?? verdict.features?.url_status;
+  const archiveUrl = verdict.archive_url ?? verdict.features?.archive_url;
+  const isWrongPage = (verdict.triggered_rules ?? []).includes('R-URL-CONTENT-MISMATCH');
+  const isWayback =
+    rawUrlStatus === 'archived_alive' ||
+    Boolean(archiveUrl) ||
+    (verdict.triggered_rules ?? []).includes('R-WAYBACK-ARCHIVED');
+  const urlStatus =
+    isWayback && rawUrlStatus !== 'alive' && rawUrlStatus !== 'restricted_alive'
+      ? 'archived_alive'
+      : rawUrlStatus === 'alive' ||
+          rawUrlStatus === 'restricted_alive' ||
+          rawUrlStatus === 'dead_link' ||
+          rawUrlStatus === 'fake_domain'
+        ? rawUrlStatus
+        : null;
   const urlCode = verdict.url_status_code ?? verdict.features?.url_status_code;
+  const cleanCitationTitle = verdict.citation_raw.replace(/^\[\d+[a-z]?\]\s*/i, '');
 
   return (
     <Card className="p-0 overflow-hidden rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900">
@@ -554,33 +582,37 @@ function VerdictTrace({
         className="w-full flex items-center gap-3.5 p-4 bg-white dark:bg-slate-900 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors text-left"
       >
         <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0">
-          #{index + 1}
+          {getCitationMarkerLabel(verdict, index)}
         </span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate font-serif">
-            {verdict.citation_raw}
+            {cleanCitationTitle}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {urlStatus && (
+          {(urlStatus || isWrongPage) && (
             <span
               className={`hidden md:inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold border ${
-                urlStatus === 'alive' || urlStatus === 'restricted_alive'
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800'
-                  : urlStatus === 'archived_alive'
-                    ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800'
+                isWrongPage || urlStatus === 'archived_alive'
+                  ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800'
+                  : urlStatus === 'alive' || urlStatus === 'restricted_alive'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800'
                     : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800'
               }`}
             >
-              {urlStatus === 'alive'
-                ? `✓ HTTP ${urlCode || 200} OK`
-                : urlStatus === 'restricted_alive'
-                  ? `🔒 HTTP ${urlCode || 403} OK`
-                  : urlStatus === 'archived_alive'
-                    ? '🏛️ WAYBACK ARCHIVED'
-                    : urlStatus === 'dead_link'
-                      ? `✕ HTTP ${urlCode || 404} DEAD`
-                      : '✕ FAKE URL'}
+              {isWrongPage
+                ? lang === 'vi'
+                  ? `⚠ HTTP ${urlCode || 200} · Sai trang`
+                  : `⚠ HTTP ${urlCode || 200} · Wrong Page`
+                : urlStatus === 'alive'
+                  ? `✓ HTTP ${urlCode || 200} OK`
+                  : urlStatus === 'restricted_alive'
+                    ? `🔒 HTTP ${urlCode || 403} OK`
+                    : urlStatus === 'archived_alive'
+                      ? '🏛️ WAYBACK ARCHIVED'
+                      : urlStatus === 'dead_link'
+                        ? `✕ HTTP ${urlCode || 404} DEAD`
+                        : '✕ FAKE URL'}
             </span>
           )}
           {verdict.features?.content_alignment_score !== undefined &&
@@ -675,6 +707,7 @@ function VerdictTrace({
               <RuleInspector
                 triggeredRules={verdict.triggered_rules}
                 verdictLabel={verdict.label}
+                features={verdict.features}
               />
             </div>
           )}

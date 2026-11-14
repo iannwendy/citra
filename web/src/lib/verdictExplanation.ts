@@ -1,4 +1,4 @@
-import type { Verdict } from '@/api/client';
+import type { HtmlPageMetaPayload, MatchedSource, Verdict } from '@/api/client';
 import i18n from '@/i18n';
 
 function resolveLang(lang?: unknown): 'en' | 'vi' {
@@ -20,18 +20,29 @@ const SOURCE_LABELS: Record<string, string> = {
   europepmc: 'Europe PMC (PubMed)',
   huggingface: 'Hugging Face Hub',
   tech_standard: 'IETF RFC / PyPI / NPM / GitHub',
+  vn_tech_standard: 'VN National Standards (TCVN / QCVN)',
+  vn_textbook_registry: 'VN University Textbook Registry',
   wikidata_opencitations: 'Wikidata Knowledge Graph / OpenCitations',
+  wikidata_opencitatio: 'Wikidata Knowledge Graph / OpenCitations',
   serpapi: 'Google Scholar',
+  acl: 'ACL Anthology',
+  coreapi: 'CORE',
   local_db: 'the local library',
   known_papers: 'the known-papers library',
-  vn_legal_registry: 'the Vietnamese Legal Registry',
+  vn_legal_registry: 'Vietnamese Legal Registry',
+  web_html_meta: 'Live Web Page Metadata (HTML)',
+  wayback_html_meta: 'Wayback Machine Archived Metadata',
 };
 
 const SOURCE_LABELS_VI: Record<string, string> = {
   ...SOURCE_LABELS,
+  vn_tech_standard: 'Tiêu chuẩn / Quy chuẩn Quốc gia (TCVN / QCVN)',
+  vn_textbook_registry: 'Danh mục Giáo trình Đại học Việt Nam',
   local_db: 'thư viện học thuật cục bộ',
   known_papers: 'thư viện bài báo kinh điển',
   vn_legal_registry: 'Cơ sở dữ liệu văn bản quy phạm pháp luật Việt Nam',
+  web_html_meta: 'Metadata Trang Web Trực tiếp (HTML)',
+  wayback_html_meta: 'Metadata Bản lưu Wayback Machine',
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -157,7 +168,7 @@ const RULE_LABELS_VI: Record<string, string> = {
   'R-VN-LEGAL-MISMATCH': 'Tìm thấy văn bản pháp luật nhưng sai lệch năm ban hành, số hiệu hoặc cơ quan ban hành',
   'R-VN-LEGAL-SUPERSEDED': 'Văn bản pháp luật được trích dẫn đã hết hiệu lực hoặc bị thay thế bởi văn bản mới hơn',
   'R-VN-LEGAL-FABRICATED': 'Số hiệu hoặc cơ quan ban hành văn bản pháp luật có dấu hiệu ngụy tạo / không tồn tại',
-  'R-LEGAL-STATUTE-VERIFIED': 'Đã xác minh văn bản pháp규 / quy định pháp luật chính thức',
+  'R-LEGAL-STATUTE-VERIFIED': 'Đã xác minh văn bản pháp quy / quy định pháp luật chính thức',
   'R-LEGAL-STATUTE-ERROR': 'Phát hiện sai lệch metadata hoặc văn bản pháp luật đã hết hiệu lực',
   'R-GLOBAL-DOI-RA-VERIFIED': 'Đã xác minh qua Cơ quan Đăng ký DOI Toàn cầu & CSL-JSON',
   'R-HF-VERIFIED': 'Đã xác minh mô hình AI, bộ dữ liệu hoặc bài báo trên Hugging Face Hub',
@@ -210,23 +221,191 @@ const RULE_LABELS_VI: Record<string, string> = {
   'R-DOI-METADATA-MISMATCH': 'Mã DOI trích dẫn sai lệch so với mã DOI chính thức của ấn phẩm',
 };
 
-export function getSourceDisplayName(source: string, lang?: 'en' | 'vi'): string {
+export function getSourceDisplayName(
+  source: string,
+  lang?: 'en' | 'vi',
+  context?: {
+    triggered_rules?: string[];
+    external_ids?: Record<string, string>;
+    venue?: string | null;
+    title?: string | null;
+  },
+): string {
   const key = source.toLowerCase();
   const resolved = resolveLang(lang);
+  if (key === 'tech_standard' && context) {
+    const rules = context.triggered_rules ?? [];
+    const ext = context.external_ids ?? {};
+    if (
+      rules.includes('R-VN-STANDARD-VERIFIED') ||
+      Boolean(ext.vn_standard_code) ||
+      /\b(?:TCVN|QCVN)\b/i.test(`${context.title ?? ''} ${context.venue ?? ''}`)
+    ) {
+      return resolved === 'vi'
+        ? SOURCE_LABELS_VI.vn_tech_standard
+        : SOURCE_LABELS.vn_tech_standard;
+    }
+    if (
+      rules.includes('R-VN-TEXTBOOK-VERIFIED') ||
+      Boolean(ext.vn_textbook_id) ||
+      /\b(?:NXB|Nhà xuất bản|Giáo trình)\b/i.test(`${context.title ?? ''} ${context.venue ?? ''}`)
+    ) {
+      return resolved === 'vi'
+        ? SOURCE_LABELS_VI.vn_textbook_registry
+        : SOURCE_LABELS.vn_textbook_registry;
+    }
+  }
   return (resolved === 'vi' ? SOURCE_LABELS_VI[key] : SOURCE_LABELS[key]) ?? source;
 }
 
 function matchedSourceNames(verdict: Verdict, lang: 'en' | 'vi'): string[] {
-  return (verdict.matched_sources ?? []).map((source) =>
-    getSourceDisplayName(source.source, lang),
-  );
+  return (verdict.matched_sources ?? [])
+    .filter((s) => s.source !== 'web_html_meta' && s.source !== 'wayback_html_meta')
+    .map((source) =>
+      getSourceDisplayName(source.source, lang, {
+        triggered_rules: verdict.triggered_rules,
+        external_ids: source.external_ids,
+        venue: source.venue,
+        title: source.title,
+      }),
+    );
 }
 
-/** Treat URL-only rows as web resources, including older cached reports. */
-export function isUrlResource(verdict: { citation_raw: string; label: string }): boolean {
+export function isLegalStatuteVerdict(verdict: {
+  label?: string;
+  triggered_rules?: string[];
+}): boolean {
+  return (verdict.triggered_rules ?? []).some((r) => r.includes('LEGAL'));
+}
+
+/** Treat URL-only / resource rows as web resources, excluding legal statutes and dead/fake URL errors. */
+export function isUrlResource(verdict: {
+  citation_raw: string;
+  label: string;
+  triggered_rules?: string[];
+}): boolean {
+  if (isLegalStatuteVerdict(verdict)) return false;
+  if (verdict.label === 'suspected_hallucination' || verdict.label === 'metadata_error') {
+    return false;
+  }
   if (verdict.label === 'resource') return true;
-  const raw = verdict.citation_raw.trim().replace(/[.,;:)"']+$/, '');
+  const raw = (verdict.citation_raw ?? '').trim().replace(/[.,;:)"']+$/, '');
   return /^(?:https?:\/\/|www\.)\S+$/i.test(raw);
+}
+
+export interface ObservedWebMeta {
+  title: string | null;
+  authors: string[];
+  year: string | null;
+  venue: string | null;
+  doi: string | null;
+  url: string | null;
+  isArchived: boolean;
+}
+
+export function extractObservedWebMeta(verdict: {
+  html_meta?: HtmlPageMetaPayload | null;
+  archive_url?: string | null;
+  cited_url?: string | null;
+  url_status?: string | null;
+  matched_sources?: MatchedSource[];
+  matched_source?: MatchedSource | null;
+  features?: Verdict['features'];
+}): ObservedWebMeta | null {
+  const rawMeta = verdict.html_meta ?? verdict.features?.html_meta ?? null;
+  const webSource =
+    (verdict.matched_sources ?? []).find(
+      (s) => s.source === 'web_html_meta' || s.source === 'wayback_html_meta',
+    ) ??
+    (verdict.matched_source &&
+    (verdict.matched_source.source === 'web_html_meta' ||
+      verdict.matched_source.source === 'wayback_html_meta')
+      ? verdict.matched_source
+      : null);
+
+  if (!rawMeta && !webSource) return null;
+  if (rawMeta?.is_soft_404) return null;
+
+  const title =
+    (rawMeta?.citation_title || rawMeta?.page_title || webSource?.title || '').trim() || null;
+  const rawAuthors = rawMeta?.citation_authors ?? rawMeta?.authors ?? webSource?.authors ?? [];
+  const authors = Array.isArray(rawAuthors)
+    ? rawAuthors.map((a) => String(a).trim()).filter(Boolean)
+    : [];
+  const rawYear = rawMeta?.published_year ?? rawMeta?.year ?? webSource?.year ?? null;
+  const year = rawYear != null && String(rawYear).trim() ? String(rawYear).trim() : null;
+  const venue = (rawMeta?.site_name || webSource?.venue || '').trim() || null;
+  const doi = (rawMeta?.citation_doi || rawMeta?.doi || webSource?.doi || '').trim() || null;
+  const url =
+    (
+      verdict.archive_url ||
+      verdict.features?.archive_url ||
+      rawMeta?.canonical_url ||
+      webSource?.url ||
+      verdict.cited_url ||
+      ''
+    ).trim() || null;
+
+  if (!title && authors.length === 0 && !year && !venue && !doi) {
+    return null;
+  }
+
+  const urlStatus = verdict.url_status ?? verdict.features?.url_status;
+  const hasArchiveUrl = Boolean(verdict.archive_url || verdict.features?.archive_url);
+  return {
+    title,
+    authors,
+    year,
+    venue,
+    doi,
+    url,
+    isArchived:
+      urlStatus === 'archived_alive' ||
+      webSource?.source === 'wayback_html_meta' ||
+      (hasArchiveUrl && urlStatus !== 'alive' && urlStatus !== 'restricted_alive'),
+  };
+}
+
+/**
+ * Formats bibliography / verdict index badge (`[14a]`, `[14b]`, `[15]`), preserving
+ * composite sub-reference labels across EssayPage, DocumentInspector, OrphanDetection, Issues, and SharedReport.
+ */
+export function getCitationMarkerLabel(
+  item: {
+    composite_label?: string | null;
+    numeric_index?: number | null;
+    sub_index?: string | null;
+    citation_raw?: string | null;
+    raw_text?: string | null;
+    reference_id?: string | null;
+    citation_link?: { reference_id?: string | null } | null;
+    features?: {
+      composite_label?: string | null;
+      numeric_index?: number | null;
+      sub_index?: string | null;
+    } | null;
+  },
+  fallbackIndex?: number,
+): string {
+  const comp = (item.composite_label || item.features?.composite_label || '').trim();
+  if (comp) return comp.startsWith('[') ? comp : `[${comp}]`;
+
+  const numIdx = item.numeric_index ?? item.features?.numeric_index;
+  const subIdx = (item.sub_index || item.features?.sub_index || '').trim();
+  if (typeof numIdx === 'number' && Number.isFinite(numIdx) && numIdx > 0) {
+    return `[${numIdx}${subIdx}]`;
+  }
+
+  const raw = (item.citation_raw ?? item.raw_text ?? '').trim();
+  const bracketMatch = raw.match(/^\[\s*(\d+[a-z]?)\s*\]/i);
+  if (bracketMatch?.[1]) return `[${bracketMatch[1]}]`;
+
+  const refId = item.reference_id || item.citation_link?.reference_id || '';
+  const refNumMatch = refId.match(/^ref-0*(\d+[a-z]?)$/i);
+  if (refNumMatch?.[1]) return `[${refNumMatch[1]}]`;
+
+  if (typeof fallbackIndex === 'number') return `[${fallbackIndex + 1}]`;
+  return '[?]';
 }
 
 export function getFieldDisplayName(field: string, lang?: 'en' | 'vi'): string {
@@ -317,8 +496,18 @@ export function getVerdictExplanation(verdict: Verdict, lang?: 'en' | 'vi'): str
                 ? ' Cảnh báo: URL trích dẫn sử dụng tên miền giả định hoặc ví dụ.'
                 : '';
 
+    const observedWeb = extractObservedWebMeta(verdict);
+
+    if (verdict.label === 'resource' && isLegalStatuteVerdict(verdict)) {
+      const cleanLegalRaw = verdict.citation_raw.replace(/^\[\d+[a-z]?\]\s*/i, '').replace(/\.$/, '');
+      return `Nhận diện văn bản quy phạm pháp luật Việt Nam hợp lệ (${cleanLegalRaw}). Văn bản pháp luật được phân loại là nguồn quy phạm chính thức và không trừ điểm CIS học thuật.${linkNoteVi}${retractionNoteVi}`;
+    }
+
     if (isUrlResource(verdict)) {
-      return `Phát hiện tài nguyên URL: ${verdict.citation_raw}. Đây không phải trích dẫn bài báo học thuật và không tính vào điểm CIS.${linkNoteVi}${retractionNoteVi}`;
+      const resolvedMetaVi = observedWeb?.title
+        ? ` Đã trích xuất tiêu đề trang: "${observedWeb.title}"${observedWeb.venue ? ` (${observedWeb.venue})` : ''}.`
+        : '';
+      return `Phát hiện tài nguyên URL: ${verdict.citation_raw}. Đây không phải trích dẫn bài báo học thuật và không tính vào điểm CIS.${resolvedMetaVi}${linkNoteVi}${retractionNoteVi}`;
     }
 
     if (verdict.mapping_status === 'missing_reference') {
@@ -356,8 +545,11 @@ export function getVerdictExplanation(verdict: Verdict, lang?: 'en' | 'vi'): str
           );
         }
         if ((verdict.triggered_rules ?? []).includes('R-URL-CONTENT-MISMATCH')) {
+          const observedTitleNoteVi = observedWeb?.title
+            ? ` (trang URL thực tế có tiêu đề: "${observedWeb.title}"${observedWeb.venue ? ` — ${observedWeb.venue}` : ''})`
+            : '';
           return (
-            `Nội dung hoặc tiêu đề thực tế của trang URL đính kèm không khớp với tiêu đề tài liệu được trích dẫn. Vui lòng kiểm tra lại đường dẫn hoặc tiêu đề trích dẫn.` +
+            `Nội dung hoặc tiêu đề thực tế của trang URL đính kèm${observedTitleNoteVi} không khớp với tiêu đề tài liệu được trích dẫn. Vui lòng kiểm tra lại đường dẫn hoặc tiêu đề trích dẫn.` +
             linkNoteVi +
             retractionNoteVi
           );
@@ -421,8 +613,18 @@ export function getVerdictExplanation(verdict: Verdict, lang?: 'en' | 'vi'): str
               ? ' Warning: the cited URL uses a fake or placeholder domain.'
               : '';
 
+  const observedWebEn = extractObservedWebMeta(verdict);
+
+  if (verdict.label === 'resource' && isLegalStatuteVerdict(verdict)) {
+    const cleanLegalRawEn = verdict.citation_raw.replace(/^\[\d+[a-z]?\]\s*/i, '').replace(/\.$/, '');
+    return `Recognized official Vietnamese statutory or government legal document (${cleanLegalRawEn}). Statutory sources are classified as official legal references and excluded from scholarly CIS penalties.${linkNote}${retractionNote}`;
+  }
+
   if (isUrlResource(verdict)) {
-    return `URL resource detected: ${verdict.citation_raw}. This is not an academic citation and is excluded from the CIS score.${linkNote}${retractionNote}`;
+    const resolvedMetaEn = observedWebEn?.title
+      ? ` Extracted page title: "${observedWebEn.title}"${observedWebEn.venue ? ` (${observedWebEn.venue})` : ''}.`
+      : '';
+    return `URL resource detected: ${verdict.citation_raw}. This is not an academic citation and is excluded from the CIS score.${resolvedMetaEn}${linkNote}${retractionNote}`;
   }
 
   if (verdict.mapping_status === 'missing_reference') {
@@ -454,8 +656,11 @@ export function getVerdictExplanation(verdict: Verdict, lang?: 'en' | 'vi'): str
         );
       }
       if ((verdict.triggered_rules ?? []).includes('R-URL-CONTENT-MISMATCH')) {
+        const observedTitleNoteEn = observedWebEn?.title
+          ? ` (observed web page title: "${observedWebEn.title}"${observedWebEn.venue ? ` — ${observedWebEn.venue}` : ''})`
+          : '';
         return (
-          `The live web page title or metadata at the cited URL does not match the claimed citation title. Please verify the link or citation title.` +
+          `The live web page title or metadata at the cited URL${observedTitleNoteEn} does not match the claimed citation title. Please verify the link or citation title.` +
           linkNote +
           retractionNote
         );
@@ -493,12 +698,29 @@ export function getVerdictExplanation(verdict: Verdict, lang?: 'en' | 'vi'): str
 
 export function getSourceSummary(verdict: Verdict, lang?: 'en' | 'vi'): string {
   const resolved = resolveLang(lang);
-  if (isUrlResource(verdict)) return `URL: ${verdict.citation_raw}`;
+  const observedWeb = extractObservedWebMeta(verdict);
+  if (verdict.label === 'resource' && isLegalStatuteVerdict(verdict)) {
+    return resolved === 'vi'
+      ? 'Đã đối chiếu Cơ sở dữ liệu văn bản quy phạm pháp luật Việt Nam'
+      : 'Matched in the Vietnamese Legal Registry';
+  }
+  if (isUrlResource(verdict)) {
+    if (observedWeb?.title) {
+      return `Web: ${observedWeb.title}${observedWeb.venue ? ` (${observedWeb.venue})` : ''}`;
+    }
+    return `URL: ${verdict.citation_raw}`;
+  }
   const sources = matchedSourceNames(verdict, resolved);
   if (resolved === 'vi') {
+    if (sources.length === 0 && observedWeb?.title) {
+      return `Trang URL quan sát: "${observedWeb.title}"`;
+    }
     if (sources.length === 0) return 'Không tìm thấy ấn phẩm khớp';
     if (sources.length === 1) return `Tìm thấy ấn phẩm khớp trên ${sources[0]}`;
     return `Tìm thấy ấn phẩm khớp trên ${sources.join(' và ')}`;
+  }
+  if (sources.length === 0 && observedWeb?.title) {
+    return `Observed URL page: "${observedWeb.title}"`;
   }
   if (sources.length === 0) return 'No matching publication found';
   if (sources.length === 1) return `Found a matching publication in ${sources[0]}`;
@@ -508,6 +730,7 @@ export function getSourceSummary(verdict: Verdict, lang?: 'en' | 'vi'): string {
 export function getSearchStepDescription(verdict: Verdict, lang?: 'en' | 'vi'): string {
   const resolved = resolveLang(lang);
   const sources = matchedSourceNames(verdict, resolved);
+  const observedWeb = extractObservedWebMeta(verdict);
   if (resolved === 'vi') {
     if (
       sources.every(
@@ -522,6 +745,11 @@ export function getSearchStepDescription(verdict: Verdict, lang?: 'en' | 'vi'): 
     if (sources.length > 0) {
       return `Đã kiểm tra ${sources.join(', ')} để tìm ấn phẩm khớp.`;
     }
+    if (observedWeb) {
+      return observedWeb.isArchived
+        ? 'Đã trích xuất metadata từ bản lưu trữ Internet Archive Wayback Machine.'
+        : 'Đã phân giải URL và trích xuất trực tiếp metadata HTML từ trang web.';
+    }
     return 'Không có ấn phẩm nào khớp được trả về từ các nguồn đã tra cứu.';
   }
   if (sources.every((source) => source === 'the local library' || source === 'the known-papers library') && sources.length > 0) {
@@ -529,6 +757,11 @@ export function getSearchStepDescription(verdict: Verdict, lang?: 'en' | 'vi'): 
   }
   if (sources.length > 0) {
     return `Checked ${sources.join(', ')} for a matching publication.`;
+  }
+  if (observedWeb) {
+    return observedWeb.isArchived
+      ? 'Extracted metadata from an Internet Archive Wayback Machine snapshot.'
+      : 'Resolved citation URL and extracted live HTML metadata from the web page.';
   }
   return 'No matching publication was returned by the available sources.';
 }

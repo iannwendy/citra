@@ -1070,6 +1070,54 @@ _WEB_RESOURCE_PATTERNS = [
 ]
 
 
+_SCHOLARLY_UPSTREAM_SOURCE_KEYS: tuple[str, ...] = (
+    "crossref",
+    "openalex",
+    "datacite",
+    "doaj",
+    "openaire_hal",
+    "ncbi_biorxiv",
+    "dblp",
+    "arxiv",
+    "openlibrary",
+    "europepmc",
+    "huggingface",
+    "tech_standard",
+    "wikidata_opencitations",
+    "doi_ra",
+)
+
+
+def get_enabled_upstream_source_names(settings: object | None = None) -> list[str]:
+    """Return all enabled upstream scholarly provider keys (plus `serpapi` when configured)."""
+    cfg = settings if settings is not None else get_settings()
+    retrieval_cfg = getattr(cfg, "retrieval", None)
+    sources_cfg = getattr(retrieval_cfg, "sources", None)
+
+    enabled: list[str] = []
+    for key in _SCHOLARLY_UPSTREAM_SOURCE_KEYS:
+        if sources_cfg is None or bool(getattr(sources_cfg, key, True)):
+            enabled.append(key)
+
+    serpapi_enabled = True if sources_cfg is None else bool(getattr(sources_cfg, "serpapi", True))
+    serper_key = str(getattr(cfg, "serper_api_key", "") or "").strip()
+    serpapi_key = str(getattr(cfg, "serpapi_api_key", "") or "").strip()
+    if serpapi_enabled and (serper_key or serpapi_key):
+        enabled.append("serpapi")
+
+    return enabled
+
+
+def ensure_enabled_sources_registered(
+    registry: CircuitBreakerRegistry | None = None,
+    settings: object | None = None,
+) -> CircuitBreakerRegistry:
+    """Pre-register all enabled upstream provider keys on `registry` without altering existing state."""
+    reg = registry if registry is not None else get_circuit_breaker_registry()
+    reg.register_sources(get_enabled_upstream_source_names(settings))
+    return reg
+
+
 class RetrievalOrchestrator:
     """Smart domain-aware & tiered multi-source scholarly retrieval orchestrator.
 
@@ -1195,6 +1243,11 @@ class RetrievalOrchestrator:
         self._circuit_breakers: CircuitBreakerRegistry = (
             circuit_breakers if circuit_breakers is not None else get_circuit_breaker_registry()
         )
+        if circuit_breakers is None:
+            enabled_names = get_enabled_upstream_source_names(settings_global)
+            if self.serpapi is not None and "serpapi" not in enabled_names:
+                enabled_names.append("serpapi")
+            self._circuit_breakers.register_sources(enabled_names)
 
         # Cross-loop Singleflight coalescer & verified clean-miss TTL cache
         self._singleflight_enabled: bool = bool(
@@ -2582,10 +2635,22 @@ class RetrievalOrchestrator:
             )
 
     def clear_runtime_caches(self) -> None:
-        """Purge in-memory Wave-0 positive hits and verified clean-miss negative cache."""
+        """Purge in-memory Wave-0 positive hits, verified clean-miss negative cache, and persistent cache stats."""
         with self._wave0_memory_lock:
             self._wave0_memory_cache.clear()
         self._negative_cache.clear()
+        pc = self._persistent_cache
+        if pc is not None:
+            clear_fn = getattr(pc, "clear_memory_stats", None) or getattr(pc, "reset_stats", None)
+            if callable(clear_fn):
+                clear_fn()
+            else:
+                for attr in ("hits", "misses", "_hits", "_misses"):
+                    if hasattr(pc, attr):
+                        try:
+                            setattr(pc, attr, 0)
+                        except Exception:
+                            pass
 
     def _get_wave0_memory_hit(self, key: str) -> SourceResult | None:
         with self._wave0_memory_lock:
@@ -4942,70 +5007,144 @@ class RetrievalOrchestrator:
 
         Returns:
             SourceCandidate nếu có ít nhất một API key (Serper hoặc SerpApi),
-            None nếu cả hai API key đều chưa được cấu hình.
+            None nếu cả hai API key đều chưa được cấu hình hoặc circuit breaker đang OPEN.
         """
-        # Lazy init GoogleScholarFallbackClient
-        if self.serpapi is None:
-            settings = get_settings()
-            serper_key = (getattr(settings, "serper_api_key", "") or "").strip()
-            serpapi_key = (getattr(settings, "serpapi_api_key", "") or "").strip()
-            if not serper_key and not serpapi_key:
-                logger.debug("Google Scholar fallback: No SERPER_API_KEY or SERPAPI_API_KEY, skipping fallback")
-                return None
-            self.serpapi = GoogleScholarFallbackClient(
-                serper_api_key=serper_key,
-                api_key=serpapi_key,
-            )
-            rate_cfg = settings.retrieval.rate_limits
-            use_serper_rate = bool(serper_key and not SerpApiClient._serper_quota_exhausted)
-            active_rate = (
-                getattr(rate_cfg, "serper_per_sec", 5.0)
-                if use_serper_rate
-                else rate_cfg.serpapi_per_sec
-            )
-            self._serpapi_limiter = RateLimiter(active_rate)
-            self._serpapi_limiter_mode = "serper" if use_serper_rate else "serpapi"
-            logger.info(
-                f"Google Scholar fallback: Initialized GoogleScholarFallbackClient "
-                f"(serper={'enabled' if serper_key else 'disabled'}, "
-                f"serpapi={'enabled' if serpapi_key else 'disabled'})"
-            )
-        elif (
-            self._serpapi_limiter_mode == "serper"
-            and SerpApiClient._serper_quota_exhausted
-            and getattr(self.serpapi, "api_key", "")
-        ):
-            # Dynamically step down rate limit if Serper exhausted credits mid-run and fell back to SerpApi
-            self._serpapi_limiter = RateLimiter(
-                get_settings().retrieval.rate_limits.serpapi_per_sec
-            )
-            self._serpapi_limiter_mode = "serpapi"
+        allow_res = self._circuit_breakers.allow_request("serpapi")
+        allowed = allow_res[0] if isinstance(allow_res, tuple) else bool(allow_res)
+        if not allowed:
+            logger.debug("Google Scholar fallback: circuit breaker open for serpapi, skipping fallback")
+            return None
 
-        # Apply rate limit & backoff guard
-        if self._serpapi_limiter:
-            if (
-                hasattr(self._serpapi_limiter, "should_fast_fail")
-                and self._serpapi_limiter.should_fast_fail() is True
+        outcome_recorded = False
+        try:
+            # Lazy init GoogleScholarFallbackClient
+            if self.serpapi is None:
+                settings = get_settings()
+                serper_key = (getattr(settings, "serper_api_key", "") or "").strip()
+                serpapi_key = (getattr(settings, "serpapi_api_key", "") or "").strip()
+                if not serper_key and not serpapi_key:
+                    logger.debug(
+                        "Google Scholar fallback: No SERPER_API_KEY or SERPAPI_API_KEY, skipping fallback"
+                    )
+                    return None
+                self.serpapi = GoogleScholarFallbackClient(
+                    serper_api_key=serper_key,
+                    api_key=serpapi_key,
+                )
+                rate_cfg = settings.retrieval.rate_limits
+                use_serper_rate = bool(serper_key and not SerpApiClient._serper_quota_exhausted)
+                active_rate = (
+                    getattr(rate_cfg, "serper_per_sec", 5.0)
+                    if use_serper_rate
+                    else rate_cfg.serpapi_per_sec
+                )
+                self._serpapi_limiter = RateLimiter(active_rate)
+                self._serpapi_limiter_mode = "serper" if use_serper_rate else "serpapi"
+                logger.info(
+                    f"Google Scholar fallback: Initialized GoogleScholarFallbackClient "
+                    f"(serper={'enabled' if serper_key else 'disabled'}, "
+                    f"serpapi={'enabled' if serpapi_key else 'disabled'})"
+                )
+            elif (
+                self._serpapi_limiter_mode == "serper"
+                and SerpApiClient._serper_quota_exhausted
+                and getattr(self.serpapi, "api_key", "")
             ):
+                # Dynamically step down rate limit if Serper exhausted credits mid-run and fell back to SerpApi
+                self._serpapi_limiter = RateLimiter(
+                    get_settings().retrieval.rate_limits.serpapi_per_sec
+                )
+                self._serpapi_limiter_mode = "serpapi"
+
+            # Apply rate limit & backoff guard
+            if self._serpapi_limiter:
+                if (
+                    hasattr(self._serpapi_limiter, "should_fast_fail")
+                    and self._serpapi_limiter.should_fast_fail() is True
+                ):
+                    return SourceCandidate(
+                        source_name="serpapi",
+                        found=False,
+                        error="Google Scholar fallback: skipped (rate-limit backoff active)",
+                    )
+                await self._serpapi_limiter.wait()
+
+            logger.debug(
+                f"Google Scholar fallback for: {citation.title[:40] if citation.title else citation.raw_text[:40]}"
+            )
+            reset_task_http_status("serpapi")
+            started_at = time.perf_counter()
+            try:
+                cand = await self.serpapi.lookup(citation)
+            except httpx.HTTPStatusError as exc:
+                latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
+                status_code = exc.response.status_code if exc.response is not None else None
+                if status_code == 429 or (status_code is not None and status_code >= 500):
+                    if status_code == 429 and self._serpapi_limiter:
+                        self._serpapi_limiter.report_rate_limited()
+                    self._circuit_breakers.record_infra_failure(
+                        "serpapi",
+                        f"HTTP {status_code}: {exc}",
+                        latency_ms=latency_ms,
+                    )
+                    outcome_recorded = True
+                elif status_code is not None and 200 <= status_code < 500:
+                    self._circuit_breakers.record_success("serpapi", latency_ms)
+                    outcome_recorded = True
                 return SourceCandidate(
                     source_name="serpapi",
                     found=False,
-                    error="Google Scholar fallback: skipped (rate-limit backoff active)",
+                    error=f"SerpApi: HTTP {status_code or 'error'} ({exc})",
                 )
-            await self._serpapi_limiter.wait()
+            except Exception as exc:
+                if isinstance(exc, AssertionError):
+                    raise
+                latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
+                self._circuit_breakers.record_infra_failure(
+                    "serpapi",
+                    f"{exc.__class__.__name__}: {exc}",
+                    latency_ms=latency_ms,
+                )
+                outcome_recorded = True
+                return SourceCandidate(
+                    source_name="serpapi",
+                    found=False,
+                    error=f"SerpApi: {exc.__class__.__name__}: {exc}",
+                )
 
-        logger.debug(
-            f"Google Scholar fallback for: {citation.title[:40] if citation.title else citation.raw_text[:40]}"
-        )
-        cand = await self.serpapi.lookup(citation)
-        if self._serpapi_limiter and isinstance(cand, SourceCandidate):
-            err_l = (cand.error or "").lower()
-            if cand.error and ("429" in cand.error or "rate limit" in err_l):
-                retry_after_val = getattr(self.serpapi, "_last_retry_after", None)
-                if isinstance(retry_after_val, (int, float)):
-                    self._serpapi_limiter.report_rate_limited(float(retry_after_val))
+            latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
+            http_status, _http_ra, http_transport_err = get_task_http_status("serpapi")
+            is_429 = False
+            if isinstance(cand, SourceCandidate):
+                err_l = (cand.error or "").lower()
+                is_429 = bool(cand.error and ("429" in cand.error or "rate limit" in err_l))
+                if self._serpapi_limiter:
+                    if is_429:
+                        retry_after_val = getattr(self.serpapi, "_last_retry_after", None)
+                        if isinstance(retry_after_val, (int, float)):
+                            self._serpapi_limiter.report_rate_limited(float(retry_after_val))
+                        else:
+                            self._serpapi_limiter.report_rate_limited()
+                    else:
+                        self._serpapi_limiter.report_success()
+                infra_reason = self._classify_lookup_infra_failure(
+                    cand,
+                    http_status=http_status,
+                    http_transport_err=http_transport_err,
+                    notified_429=is_429,
+                )
+                if infra_reason is not None:
+                    self._circuit_breakers.record_infra_failure(
+                        "serpapi",
+                        infra_reason,
+                        latency_ms=latency_ms,
+                    )
                 else:
-                    self._serpapi_limiter.report_rate_limited()
+                    self._circuit_breakers.record_success("serpapi", latency_ms)
             else:
-                self._serpapi_limiter.report_success()
-        return cand
+                self._circuit_breakers.record_success("serpapi", latency_ms)
+            outcome_recorded = True
+            return cand
+        finally:
+            if not outcome_recorded:
+                self._circuit_breakers.release_probe("serpapi")

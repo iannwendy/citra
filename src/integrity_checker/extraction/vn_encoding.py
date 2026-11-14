@@ -712,6 +712,8 @@ class VietnameseLegacyTranscoder:
         cls,
         text: str,
         font_hint: str | None = None,
+        *,
+        _allow_sentence_split: bool = True,
     ) -> tuple[str, str | None]:
         """Decode legacy TCVN3 or VNI-Windows lines to Unicode NFC if phonotactically proven.
 
@@ -802,9 +804,21 @@ class VietnameseLegacyTranscoder:
                 # Primary strict phonotactic gate (no font hint needed)
                 passes_strict = gained_accented >= 3 and ratio_delta >= 0.45
 
+                # Bilingual paragraph gate (e.g., Vietnamese TCVN3/VNI sentence or authors + English title
+                # inside a single DOCX paragraph): requires >= 4 gained accented syllables AND every
+                # modified chunk must be valid Vietnamese with zero untouched raw Latin-1 accents.
+                passes_bilingual = (
+                    not passes_strict
+                    and gained_accented >= 4
+                    and (after_valid - before_valid) >= 4
+                    and _validate_hinted_line_chunks(masked_line, decoded_masked, enc)
+                )
+
                 # Tightened hinted/widow gate when gained_accented is 1..2
                 passes_hinted = False
-                if not passes_strict and (hinted_enc == enc or prev_line_enc == enc):
+                if not (passes_strict or passes_bilingual) and (
+                    hinted_enc == enc or prev_line_enc == enc
+                ):
                     min_after_ratio = 1.0 if len(after_tokens) <= 3 else 0.85
                     if (
                         gained_accented >= 1
@@ -814,20 +828,65 @@ class VietnameseLegacyTranscoder:
                     ):
                         passes_hinted = True
 
-                if passes_strict or passes_hinted:
+                if passes_strict or passes_bilingual or passes_hinted:
                     cand_score = (gained_accented, ratio_delta)
                     if cand_score > best_score:
                         best_score = cand_score
                         best_enc = enc
                         best_decoded = decoded_masked
 
-            if best_enc is not None and best_decoded is not None:
+            has_multi_sentence = _allow_sentence_split and bool(
+                re.search(r"[.!?;]\s+\S", line)
+            )
+            if (
+                best_enc is not None
+                and best_decoded is not None
+                and (
+                    not has_multi_sentence
+                    or _validate_hinted_line_chunks(masked_line, best_decoded, best_enc)
+                )
+            ):
                 restored = unicodedata.normalize(
                     "NFC", _unmask_protected_spans(best_decoded, spans)
                 )
                 out_lines.append(restored + line_ending)
                 detected_counts[best_enc] += 1
                 prev_line_enc = best_enc
+            elif has_multi_sentence:
+                # Multi-sentence paragraph (common in .docx <w:p> where a legacy Vietnamese
+                # sentence is followed by English or European sentences): evaluate each sentence
+                # independently so legacy Vietnamese sentences decode while foreign sentences stay untouched.
+                sent_parts = re.split(r"((?<=[.!?;])\s+)", line)
+                if len(sent_parts) > 1:
+                    rebuilt_sents: list[str] = []
+                    sent_encs: dict[str, int] = {"tcvn3": 0, "vni_windows": 0}
+                    for sp in sent_parts:
+                        if not sp or sp.isspace() or sp.isascii():
+                            rebuilt_sents.append(sp)
+                            continue
+                        dec_sp, enc_sp = cls.normalize_legacy_vietnamese(
+                            sp,
+                            font_hint=font_hint,
+                            _allow_sentence_split=False,
+                        )
+                        rebuilt_sents.append(dec_sp)
+                        if enc_sp in sent_encs:
+                            sent_encs[enc_sp] += 1
+                    total_sent_enc = sent_encs["tcvn3"] + sent_encs["vni_windows"]
+                    if total_sent_enc > 0:
+                        dom_sent_enc = (
+                            "tcvn3"
+                            if sent_encs["tcvn3"] >= sent_encs["vni_windows"]
+                            else "vni_windows"
+                        )
+                        out_lines.append(
+                            unicodedata.normalize("NFC", "".join(rebuilt_sents)) + line_ending
+                        )
+                        detected_counts[dom_sent_enc] += 1
+                        prev_line_enc = dom_sent_enc
+                        continue
+                prev_line_enc = None
+                out_lines.append(raw_piece)
             else:
                 prev_line_enc = None
                 out_lines.append(raw_piece)

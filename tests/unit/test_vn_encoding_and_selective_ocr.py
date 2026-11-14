@@ -551,3 +551,22 @@ class TestFixRound1Regressions:
             "gieáng khoan", font_hint="VNI-Times"
         ) == ("giếng khoan", "vni_windows")
 
+    def test_bilingual_docx_paragraph_tcvn3_sentence_plus_english_and_french_sentences(
+        self,
+    ) -> None:
+        """Multi-sentence DOCX paragraph: TCVN3 Vietnamese sentence decodes while English & French stay intact."""
+        raw_para = (
+            "Tr\u00ad\u00eang \u00a7\u00b9i h\u00e4c B\u00b8ch khoa H\u00b5 N\u00e9i nghi\u00aan c\u00f8u "
+            "\u00f8ng d\u00f4ng tr\u00dd tu\u00d6 nh\u00a9n t\u00b9o trong ki\u00d3m \u00ae\u00denh ch\u00cat "
+            "l\u00ad\u00eeng c\u00abng tr\u00d7nh. "
+            "Reinforced concrete design in Vietnam strictly follows national technical standard TCVN 5574:2018 [5]. "
+            "François Müller and Søren Kierkegaard (2019) studied European philosophy."
+        )
+        decoded, detected = VietnameseLegacyTranscoder.normalize_legacy_vietnamese(raw_para)
+        assert detected == "tcvn3"
+        assert decoded.startswith(
+            "Trường Đại học Bách khoa Hà Nội nghiên cứu ứng dụng trí tuệ nhân tạo trong kiểm định chất lượng công trình. "
+        )
+        assert "François Müller and Søren Kierkegaard (2019)" in decoded
+
+

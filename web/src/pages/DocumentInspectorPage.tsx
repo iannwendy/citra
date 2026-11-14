@@ -5,7 +5,11 @@ import { useTranslation } from 'react-i18next';
 import { api, type Verdict, type Citation } from '@/api/client';
 import { VerdictBadge } from '@/components/VerdictBadge';
 import { MappingStatusBadge } from '@/components/MappingStatusBadge';
-import { getVerdictExplanation, isUrlResource } from '@/lib/verdictExplanation';
+import {
+  getCitationMarkerLabel,
+  getVerdictExplanation,
+  isUrlResource,
+} from '@/lib/verdictExplanation';
 import { useEssayPolling } from '@/hooks/useEssayPolling';
 import { EssayHeader } from './essay/EssayHeader';
 import { EssayActionBar } from './essay/EssayActionBar';
@@ -50,6 +54,8 @@ interface InlineCitation {
   id: string;
   raw: string;
   refNum: number;
+  subIndex?: string;
+  markerLabel: string;
   label: string;
   mapping_status: string;
   page: number;
@@ -65,10 +71,12 @@ interface InlineCitation {
 function ContextWithHighlight({
   context,
   marker,
+  markerLabel,
   label,
 }: {
   context: string;
   marker: string;
+  markerLabel?: string;
   label?: string;
 }) {
   if (!context) return null;
@@ -82,9 +90,15 @@ function ContextWithHighlight({
   let idx = lowerContext.indexOf(marker.toLowerCase());
   let matchLen = marker.length;
 
+  if (idx === -1 && markerLabel && markerLabel !== '[?]') {
+    idx = lowerContext.indexOf(markerLabel.toLowerCase());
+    if (idx !== -1) {
+      matchLen = markerLabel.length;
+    }
+  }
   if (idx === -1) {
-    // Try bracket number [N] from marker
-    const numMatch = marker.match(/^\s*(\[\d+\])/);
+    // Try bracket number [N] or [14a] from marker
+    const numMatch = marker.match(/^\s*(\[\s*\d+[a-z]?\s*\])/i);
     if (numMatch) {
       idx = lowerContext.indexOf(numMatch[1].toLowerCase());
       matchLen = numMatch[1].length;
@@ -136,18 +150,22 @@ function buildInlineCitations(
   const items = verdicts.map((v, vIdx) => {
     const refId =
       v.citation_link?.reference_id ?? v.citation_links?.[0]?.reference_id;
-    const rawNumMatch = (v.citation_raw ?? '').match(/^\s*\[(\d+)\]/);
-    const refIdNumMatch = refId?.match(/^ref-0*(\d+)$/);
-    const resolvedRefNum = rawNumMatch
-      ? parseInt(rawNumMatch[1], 10)
-      : refIdNumMatch
-        ? parseInt(refIdNumMatch[1], 10)
-        : vIdx + 1;
+    const markerLabel = getCitationMarkerLabel(v, vIdx);
+    const markerDigitsMatch = markerLabel.match(/^\[(\d+)([a-z]?)\]$/i);
+    const resolvedRefNum =
+      v.numeric_index ??
+      v.features?.numeric_index ??
+      (markerDigitsMatch ? parseInt(markerDigitsMatch[1], 10) : vIdx + 1);
+    const resolvedSubIndex =
+      (v.sub_index || v.features?.sub_index || markerDigitsMatch?.[2] || '').trim();
     let matchedRef: Citation | undefined;
     if (refId) {
-      const idxNum = parseInt(refId.replace(/^ref-/, ''), 10);
-      if (!Number.isNaN(idxNum) && idxNum >= 1 && idxNum <= refs.length) {
-        matchedRef = refs[idxNum - 1];
+      matchedRef = refs.find((r) => r.reference_id === refId);
+      if (!matchedRef) {
+        const idxNum = parseInt(refId.replace(/^ref-/, ''), 10);
+        if (!Number.isNaN(idxNum) && idxNum >= 1 && idxNum <= refs.length) {
+          matchedRef = refs[idxNum - 1];
+        }
       }
     }
     if (!matchedRef) {
@@ -184,6 +202,8 @@ function buildInlineCitations(
       id: v.citation_id,
       raw: v.citation_raw,
       refNum: resolvedRefNum,
+      subIndex: resolvedSubIndex || undefined,
+      markerLabel,
       label: isUrlResource(v) ? 'resource' : v.label,
       mapping_status: v.mapping_status,
       page: resolvedPage,
@@ -205,7 +225,8 @@ function buildInlineCitations(
     const aIsResource = a.label === 'resource' ? 1 : 0;
     const bIsResource = b.label === 'resource' ? 1 : 0;
     if (aIsResource !== bIsResource) return aIsResource - bIsResource;
-    return a.refNum - b.refNum;
+    if (a.refNum !== b.refNum) return a.refNum - b.refNum;
+    return (a.subIndex || '').localeCompare(b.subIndex || '');
   });
 }
 
@@ -379,28 +400,47 @@ function CitationPopup({
                 <MappingStatusBadge status={citation.mapping_status as any} size="sm" />
               </div>
             </div>
-            {(verdict?.url_status ?? verdict?.features?.url_status) && (
-              <div>
-                <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  {t('inspector.linkStatus')}
-                </label>
-                <div className="mt-1.5">
-                  {(() => {
-                    const st = verdict?.url_status ?? verdict?.features?.url_status;
-                    const code = verdict?.url_status_code ?? verdict?.features?.url_status_code;
-                    const isOk = st === 'alive' || st === 'restricted_alive';
-                    const isArchived = st === 'archived_alive';
-                    return (
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-mono font-semibold border ${
-                          isOk
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800'
-                            : isArchived
-                              ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800'
-                              : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800'
-                        }`}
-                      >
-                        {st === 'alive'
+            {(() => {
+              const rawSt = verdict?.url_status ?? verdict?.features?.url_status;
+              const archiveUrl = verdict?.archive_url ?? verdict?.features?.archive_url;
+              const isWrongPage = (verdict?.triggered_rules ?? []).includes(
+                'R-URL-CONTENT-MISMATCH',
+              );
+              const isWayback =
+                rawSt === 'archived_alive' ||
+                Boolean(archiveUrl) ||
+                (verdict?.triggered_rules ?? []).includes('R-WAYBACK-ARCHIVED');
+              const st =
+                isWayback && rawSt !== 'alive' && rawSt !== 'restricted_alive'
+                  ? 'archived_alive'
+                  : rawSt === 'alive' ||
+                      rawSt === 'restricted_alive' ||
+                      rawSt === 'dead_link' ||
+                      rawSt === 'fake_domain'
+                    ? rawSt
+                    : null;
+              if (!st && !isWrongPage) return null;
+              const code = verdict?.url_status_code ?? verdict?.features?.url_status_code;
+              const isOk = !isWrongPage && (st === 'alive' || st === 'restricted_alive');
+              const isArchived = isWrongPage || st === 'archived_alive';
+              return (
+                <div>
+                  <label className="text-[11px] font-mono font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {t('inspector.linkStatus')}
+                  </label>
+                  <div className="mt-1.5">
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-mono font-semibold border ${
+                        isOk
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800'
+                          : isArchived
+                            ? 'bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800'
+                            : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800'
+                      }`}
+                    >
+                      {isWrongPage
+                        ? `⚠ HTTP ${code || 200} · Wrong Page`
+                        : st === 'alive'
                           ? `✓ HTTP ${code || 200} OK`
                           : st === 'restricted_alive'
                             ? `🔒 HTTP ${code || 403} OK`
@@ -409,12 +449,11 @@ function CitationPopup({
                               : st === 'dead_link'
                                 ? `✕ HTTP ${code || 404} DEAD`
                                 : '✕ FAKE URL'}
-                      </span>
-                    );
-                  })()}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           {verdict && (
@@ -575,7 +614,8 @@ function CitationPopup({
 
 export function DocumentInspectorPage() {
   const { id } = useParams<{ id: string }>();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isVi = i18n.language?.startsWith('vi');
   const [selectedCitation, setSelectedCitation] = useState<InlineCitation | null>(null);
   const [selectedVerdict, setSelectedVerdict] = useState<Verdict | null>(null);
   const [filterLabel, setFilterLabel] = useState<string>('all');
@@ -705,6 +745,42 @@ export function DocumentInspectorPage() {
         styleName={report.style_profile?.style}
       />
 
+      {/* Legacy Vietnamese Encoding (TCVN3/VNI) & Page-Selective OCR Recovery Diagnostics */}
+      {(Boolean(report.document_diagnostics?.legacy_encoding_detected) ||
+        (report.document_diagnostics?.ocr_pages_recovered?.length ?? 0) > 0) && (
+        <div
+          data-testid="inspector-doc-diagnostics-banner"
+          className="flex flex-wrap items-center gap-2.5"
+        >
+          {report.document_diagnostics?.legacy_encoding_detected && (
+            <div
+              data-testid="legacy-encoding-diagnostic-pill"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-200"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <span>
+                {isVi
+                  ? `Đã tự động chuyển mã bảng mã tiếng Việt cũ (${String(report.document_diagnostics.legacy_encoding_detected).toUpperCase()} → Unicode NFC)`
+                  : `Auto-transcoded legacy Vietnamese encoding (${String(report.document_diagnostics.legacy_encoding_detected).toUpperCase()} → Unicode NFC)`}
+              </span>
+            </div>
+          )}
+          {(report.document_diagnostics?.ocr_pages_recovered?.length ?? 0) > 0 && (
+            <div
+              data-testid="ocr-recovery-diagnostic-pill"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
+            >
+              <CheckCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>
+                {isVi
+                  ? `Đã khôi phục văn bản bằng OCR (Tesseract vie+eng) tại trang: ${report.document_diagnostics!.ocr_pages_recovered!.join(', ')}`
+                  : `Recovered text via Tesseract OCR (vie+eng) on page(s): ${report.document_diagnostics!.ocr_pages_recovered!.join(', ')}`}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Shared Multi-Tab Diagnostic Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <EssayActionBar essayId={id ?? ''} />
@@ -803,7 +879,13 @@ export function DocumentInspectorPage() {
             <Separator orientation="vertical" className="h-4" />
             <Terminal className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
             <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-200">
-              document_inspector.tei
+              {report.filename?.toLowerCase().endsWith('.docx')
+                ? 'document_inspector.docx'
+                : report.filename?.toLowerCase().endsWith('.bib')
+                  ? 'document_inspector.bib'
+                  : report.filename?.toLowerCase().endsWith('.ris')
+                    ? 'document_inspector.ris'
+                    : 'document_inspector.tei'}
             </span>
           </div>
 
@@ -966,7 +1048,7 @@ export function DocumentInspectorPage() {
                       {t('inspector.noCitationsMatchFilter')}
                     </p>
                   ) : (
-                    filteredCitations.map((citation, idx) => {
+                    filteredCitations.map((citation) => {
                       const isFlaggedRed =
                         citation.label === 'suspected_hallucination' ||
                         citation.label === 'metadata_error';
@@ -995,7 +1077,10 @@ export function DocumentInspectorPage() {
                                   : 'text-indigo-600 dark:text-indigo-400'
                               }`}
                             >
-                              p{citation.page}:{String(citation.refNum || idx + 1).padStart(2, '0')}
+                              {(() => {
+                                const inner = citation.markerLabel.replace(/^\[|\]$/g, '');
+                                return `p${citation.page}:${/^\d+$/.test(inner) ? inner.padStart(2, '0') : inner}`;
+                              })()}
                             </button>
                             <p className="flex-1 min-w-0 text-slate-700 dark:text-slate-300 font-serif leading-relaxed break-words [overflow-wrap:anywhere]">
                               {citation.context ? (
@@ -1003,6 +1088,7 @@ export function DocumentInspectorPage() {
                                   <ContextWithHighlight
                                     context={citation.context}
                                     marker={citation.raw}
+                                    markerLabel={citation.markerLabel}
                                     label={citation.label}
                                   />{' '}
                                   <InlineCitationMarker
@@ -1081,7 +1167,7 @@ export function DocumentInspectorPage() {
                             : 'text-slate-400 dark:text-slate-500'
                         }`}
                       >
-                        [{String(citation.refNum || index + 1).padStart(2, '0')}]
+                        {citation.markerLabel}
                       </span>
                       <div className="flex-1 min-w-0">
                         <p
@@ -1091,7 +1177,9 @@ export function DocumentInspectorPage() {
                               : 'text-slate-800 dark:text-slate-200'
                           }`}
                         >
-                          {citation.raw.replace(/^\[\d+\]\s*/, '')}
+                          {citation.raw
+                            .replace(/^\s*\[\s*\d+[a-z]?\s*\]\s*/i, '')
+                            .replace(/^\s*\([a-z]\)\s*/i, '')}
                         </p>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           <span

@@ -13,18 +13,22 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import sqlite3
 import threading
 import time
 from collections import OrderedDict
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from integrity_checker.db import sqlite_tuning as _sqlite_tuning
 from integrity_checker.db.sqlite_tuning import (
     apply_sqlite_connection_pragmas,
+    detect_sqlite_filesystem_type,
     resolve_sqlite_journal_mode,
 )
 from integrity_checker.retrieval.normalization import (
@@ -52,6 +56,92 @@ _QUERY_CACHE: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
 _QUERY_CACHE_MAX_SIZE = 2048
 _MUTATION_VERSION = 0
 _QUERY_LOG_VERSION = 0
+_LAST_LOCAL_PAPERS_TUNING_REPORT: Any | None = None
+
+
+@dataclass(frozen=True)
+class _LocalSqliteTuningReport:
+    db_path: str
+    filesystem_type: str
+    requested_journal_mode: str
+    journal_mode: str
+    effective_journal_mode: str
+    wal_enabled: bool
+    fallback_degraded: bool
+    busy_timeout_ms: int = 30000
+    synchronous: str = "NORMAL"
+    mmap_bytes: int = 67108864
+    wal_autocheckpoint: int = 1000
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "db_path": self.db_path,
+            "filesystem_type": self.filesystem_type,
+            "requested_journal_mode": self.requested_journal_mode,
+            "journal_mode": self.journal_mode,
+            "effective_journal_mode": self.effective_journal_mode,
+            "wal_enabled": self.wal_enabled,
+            "fallback_degraded": self.fallback_degraded,
+            "busy_timeout_ms": self.busy_timeout_ms,
+            "synchronous": self.synchronous,
+            "mmap_bytes": self.mmap_bytes,
+            "wal_autocheckpoint": self.wal_autocheckpoint,
+        }
+
+
+def get_local_papers_tuning_report() -> dict[str, Any] | None:
+    """Return the latest SQLite WAL/PRAGMA tuning report for `local_papers.db`, if available."""
+    report = _LAST_LOCAL_PAPERS_TUNING_REPORT
+    if report is None:
+        return None
+    to_dict_fn = getattr(report, "to_dict", None)
+    if callable(to_dict_fn):
+        return dict(to_dict_fn())
+    if isinstance(report, dict):
+        return dict(report)
+    return None
+
+
+def clear_local_query_cache() -> None:
+    """Clear in-process `local_papers.db` query and stats caches under `_DB_CACHE_LOCK`."""
+    with _DB_CACHE_LOCK:
+        _QUERY_CACHE.clear()
+        _STATS_CACHE.clear()
+
+
+def _apply_and_capture_local_pragmas(
+    conn: Any,
+    db_path: Path,
+    journal_mode: str,
+    *,
+    mmap_bytes: int = 67108864,
+) -> str:
+    global _LAST_LOCAL_PAPERS_TUNING_REPORT
+    adaptive_fn = getattr(_sqlite_tuning, "apply_adaptive_sqlite_pragmas", None)
+    if callable(adaptive_fn):
+        rep = adaptive_fn(conn, db_path, mmap_bytes=mmap_bytes)
+        _LAST_LOCAL_PAPERS_TUNING_REPORT = rep
+        eff = getattr(rep, "effective_journal_mode", None) or getattr(rep, "journal_mode", None)
+        return str(eff or journal_mode).upper()
+
+    raw_req = (os.getenv("SQLITE_JOURNAL_MODE", "AUTO") or "AUTO").strip().upper() or "AUTO"
+    fstype = detect_sqlite_filesystem_type(db_path)
+    effective = apply_sqlite_connection_pragmas(conn, journal_mode, mmap_bytes=mmap_bytes)
+    eff_upper = str(effective or journal_mode).strip().upper()
+    _LAST_LOCAL_PAPERS_TUNING_REPORT = _LocalSqliteTuningReport(
+        db_path=str(db_path),
+        filesystem_type=fstype,
+        requested_journal_mode=raw_req,
+        journal_mode=eff_upper,
+        effective_journal_mode=eff_upper,
+        wal_enabled=(eff_upper == "WAL"),
+        fallback_degraded=(raw_req in ("AUTO", "WAL") and eff_upper != "WAL"),
+        busy_timeout_ms=30000,
+        synchronous="NORMAL",
+        mmap_bytes=int(mmap_bytes),
+        wal_autocheckpoint=1000 if eff_upper == "WAL" else 0,
+    )
+    return eff_upper
 
 
 def _bump_mutation_version() -> None:
@@ -122,7 +212,7 @@ class LocalDatabase:
         try:
             if self.db_path.is_file():
                 stat = self.db_path.stat()
-                if stat.st_size > 0:
+                if stat.st_size > 0 and _LAST_LOCAL_PAPERS_TUNING_REPORT is not None:
                     with _DB_CACHE_LOCK:
                         if _INITIALIZED_DB_INODES.get(resolved_key) == (
                             stat.st_ino,
@@ -137,7 +227,12 @@ class LocalDatabase:
                 conn.executescript(stmt)
             # ``PRAGMA journal_mode`` returns a row, so it must be executed via
             # ``apply_sqlite_connection_pragmas`` rather than inside ``executescript``.
-            apply_sqlite_connection_pragmas(conn, self._journal_mode, mmap_bytes=67108864)
+            _apply_and_capture_local_pragmas(
+                conn,
+                self.db_path,
+                self._journal_mode,
+                mmap_bytes=67108864,
+            )
             conn.commit()
 
         try:
@@ -153,7 +248,12 @@ class LocalDatabase:
         """Get database connection with row factory, adaptive WAL/mmap, and FTS5 cache."""
         conn = sqlite3.connect(str(self.db_path), timeout=30.0)
         conn.row_factory = sqlite3.Row
-        apply_sqlite_connection_pragmas(conn, self._journal_mode, mmap_bytes=67108864)
+        _apply_and_capture_local_pragmas(
+            conn,
+            self.db_path,
+            self._journal_mode,
+            mmap_bytes=67108864,
+        )
         conn.execute("PRAGMA cache_size=-16000")
         conn.execute("PRAGMA temp_store=MEMORY")
         try:
@@ -690,17 +790,19 @@ class LocalDatabase:
 
                 total_papers = sum(source_counts_dict.values())
 
-                # Count queries + hit rate in a single pass
+                # Count queries + hits + hit rate in a single pass
                 q_row = conn.execute(
                     """
                     SELECT
                         COUNT(*),
+                        COALESCE(SUM(CASE WHEN found = 1 THEN 1 ELSE 0 END), 0),
                         CAST(SUM(found) AS FLOAT) / COUNT(*) * 100
                     FROM query_log
                     """
                 ).fetchone()
-                total_queries = q_row[0] if q_row else 0
-                hit_rate = (q_row[1] if q_row and q_row[1] is not None else 0) or 0
+                total_queries = int(q_row[0] or 0) if q_row else 0
+                local_hits_count = int(q_row[1] or 0) if q_row else 0
+                hit_rate = (q_row[2] if q_row and q_row[2] is not None else 0) or 0
 
                 # Recent queries
                 recent_queries = conn.execute(
@@ -717,6 +819,7 @@ class LocalDatabase:
                     "total_papers": total_papers,
                     "source_counts": dict(source_counts_dict),
                     "total_queries": total_queries,
+                    "local_hits_count": int(local_hits_count),
                     "hit_rate_percent": round(hit_rate, 2),
                     "recent_queries": [dict(row) for row in recent_queries],
                 }

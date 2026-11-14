@@ -16,6 +16,7 @@ import {
   ExternalLink,
   Lock,
   Sparkles,
+  Scale,
 } from 'lucide-react';
 import {
   api,
@@ -28,9 +29,12 @@ import { useToast } from '@/contexts/ToastContext';
 import { copyTextToClipboard } from '@/lib/clipboard';
 import { encodeQrMatrix } from '@/lib/qrCode';
 import {
+  extractObservedWebMeta,
+  getCitationMarkerLabel,
   getRuleDisplayName,
   getSourceDisplayName,
   getVerdictExplanation,
+  isLegalStatuteVerdict,
 } from '@/lib/verdictExplanation';
 
 /**
@@ -109,6 +113,16 @@ function localizeExplanation(v: SharedVerdictItem, lang: 'en' | 'vi'): string {
         : v.matched_source
           ? [v.matched_source]
           : [],
+    url_status: v.url_status,
+    url_status_code: v.url_status_code,
+    archive_url: v.archive_url,
+    cited_url: v.cited_url,
+    is_retracted: v.is_retracted,
+    html_meta: v.html_meta,
+    features: v.features,
+    numeric_index: v.numeric_index,
+    sub_index: v.sub_index,
+    composite_label: v.composite_label,
     is_overridden: false,
     mapping_status:
       (v.mapping_status as Verdict['mapping_status']) || 'matched',
@@ -119,7 +133,13 @@ function localizeExplanation(v: SharedVerdictItem, lang: 'en' | 'vi'): string {
       /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(
         raw,
       );
-    if (!raw || hasVietnameseChars) {
+    if (
+      !raw ||
+      hasVietnameseChars ||
+      v.label === 'resource' ||
+      (v.triggered_rules ?? []).includes('R-URL-CONTENT-MISMATCH') ||
+      (v.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')
+    ) {
       return getVerdictExplanation(asVerdict, 'en');
     }
     return raw;
@@ -308,13 +328,26 @@ export function SharedReportPage() {
             {t('verdict.suspectedHallucination')}
           </span>
         );
-      case 'resource':
+      case 'resource': {
+        const isLegal = isLegalStatuteVerdict({
+          label,
+          triggered_rules: triggeredRules,
+        });
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-sky-100 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border border-sky-300/60 dark:border-sky-800">
-            <Globe className="h-3.5 w-3.5" />
-            {t('verdict.resource')}
+            {isLegal ? (
+              <Scale className="h-3.5 w-3.5" />
+            ) : (
+              <Globe className="h-3.5 w-3.5" />
+            )}
+            {isLegal
+              ? lang === 'vi'
+                ? 'Văn bản Pháp luật'
+                : 'Legal Statute'
+              : t('verdict.resource')}
           </span>
         );
+      }
       default:
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300/60 dark:border-slate-700">
@@ -686,8 +719,50 @@ export function SharedReportPage() {
             <div className="space-y-3">
               {report.verdicts.map((v, idx) => {
                 const isExpanded = Boolean(expandedIds[v.reference_id]);
-                const matched = v.matched_source;
+                const matched =
+                  v.matched_source ??
+                  (v.matched_sources && v.matched_sources.length > 0
+                    ? v.matched_sources[0]
+                    : null);
+                const observedWeb = extractObservedWebMeta(v);
+                const rawUrlStatus = v.url_status ?? v.features?.url_status;
+                const hasArchiveFallback =
+                  Boolean(v.archive_url || v.features?.archive_url) ||
+                  (v.triggered_rules ?? []).includes('R-WAYBACK-ARCHIVED');
+                const urlStatus =
+                  rawUrlStatus === 'archived_alive' ||
+                  (hasArchiveFallback &&
+                    rawUrlStatus !== 'alive' &&
+                    rawUrlStatus !== 'restricted_alive')
+                    ? 'archived_alive'
+                    : rawUrlStatus === 'alive' ||
+                        rawUrlStatus === 'restricted_alive' ||
+                        rawUrlStatus === 'dead_link' ||
+                        rawUrlStatus === 'fake_domain'
+                      ? rawUrlStatus
+                      : undefined;
+                const urlStatusCode =
+                  v.url_status_code ?? v.features?.url_status_code;
+                const isUrlContentMismatch = (v.triggered_rules ?? []).includes(
+                  'R-URL-CONTENT-MISMATCH',
+                );
+                const markerLabel = getCitationMarkerLabel(v, idx);
                 const localizedReason = localizeExplanation(v, lang);
+                const matchedSourceDisplay = matched
+                  ? matched.source?.toLowerCase() === 'vn_legal_registry' &&
+                    lang === 'en'
+                    ? 'VN Legal Registry'
+                    : getSourceDisplayName(
+                        matched.source || 'scholarly_db',
+                        lang,
+                        {
+                          triggered_rules: v.triggered_rules,
+                          external_ids: matched.external_ids,
+                          venue: matched.venue,
+                          title: matched.title,
+                        },
+                      )
+                  : '';
                 return (
                   <div
                     key={v.reference_id || idx}
@@ -702,9 +777,39 @@ export function SharedReportPage() {
                       <div className="space-y-1.5 flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-mono text-xs font-bold text-slate-400">
-                            #{idx + 1} ({v.reference_id})
+                            {markerLabel} ({v.reference_id})
                           </span>
                           {renderVerdictBadge(v.label, v.triggered_rules)}
+                          {urlStatus && (
+                            <span
+                              data-testid={`shared-url-status-${idx}`}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold border ${
+                                isUrlContentMismatch
+                                  ? 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                                  : urlStatus === 'alive'
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                    : urlStatus === 'restricted_alive'
+                                      ? 'bg-sky-50 dark:bg-sky-950/70 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                                      : urlStatus === 'archived_alive'
+                                        ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                                        : 'bg-red-50 dark:bg-red-950/70 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
+                              }`}
+                            >
+                              {isUrlContentMismatch
+                                ? `⚠ HTTP ${urlStatusCode ?? 200} · ${lang === 'vi' ? 'Sai nội dung trang' : 'Wrong Page'}`
+                                : urlStatus === 'alive'
+                                  ? `✓ HTTP ${urlStatusCode ?? 200} OK`
+                                  : urlStatus === 'restricted_alive'
+                                    ? `🔒 HTTP ${urlStatusCode ?? 403} OK`
+                                    : urlStatus === 'archived_alive'
+                                      ? lang === 'vi'
+                                        ? '🏛️ Bản lưu Wayback'
+                                        : '🏛️ Wayback Archived'
+                                      : urlStatus === 'dead_link'
+                                        ? `✕ HTTP ${urlStatusCode ?? 404} Dead`
+                                        : '✕ Fake URL'}
+                            </span>
+                          )}
                           <span className="font-mono text-xs text-slate-500">
                             {(Number(v.confidence || 0) * 100).toFixed(0)}%{' '}
                             {t('essay.confidence')}
@@ -756,10 +861,7 @@ export function SharedReportPage() {
                             <div className="font-mono font-semibold text-emerald-700 dark:text-emerald-300 flex items-center justify-between gap-2 flex-wrap">
                               <span>
                                 {t('sharedReport.matchedSourceLabel')}:{' '}
-                                {getSourceDisplayName(
-                                  matched.source || 'scholarly_db',
-                                  lang,
-                                ).toUpperCase()}
+                                {matchedSourceDisplay}
                               </span>
                               {(matched.url || matched.doi) && (
                                 <a
@@ -787,6 +889,61 @@ export function SharedReportPage() {
                                 matched.year,
                                 matched.venue,
                                 matched.doi ? `DOI: ${matched.doi}` : null,
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </div>
+                          </div>
+                        )}
+                        {!matched && observedWeb && (
+                          <div
+                            data-testid={`shared-observed-web-meta-${idx}`}
+                            className={`p-3 rounded-lg bg-white dark:bg-slate-800 border space-y-1 ${
+                              isUrlContentMismatch
+                                ? 'border-amber-200 dark:border-amber-800/80'
+                                : 'border-slate-200/80 dark:border-slate-700'
+                            }`}
+                          >
+                            <div
+                              className={`font-mono font-semibold flex items-center justify-between gap-2 flex-wrap ${
+                                isUrlContentMismatch
+                                  ? 'text-amber-700 dark:text-amber-300'
+                                  : 'text-sky-700 dark:text-sky-300'
+                              }`}
+                            >
+                              <span>
+                                {getSourceDisplayName(
+                                  observedWeb.isArchived
+                                    ? 'wayback_html_meta'
+                                    : 'web_html_meta',
+                                  lang,
+                                )}
+                              </span>
+                              {(observedWeb.url || v.cited_url) && (
+                                <a
+                                  href={observedWeb.url || v.cited_url || '#'}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline"
+                                >
+                                  {t('sharedReport.viewSourceLink')}{' '}
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                            </div>
+                            {observedWeb.title && (
+                              <div className="text-slate-800 dark:text-slate-200 font-medium">
+                                {observedWeb.title}
+                              </div>
+                            )}
+                            <div className="text-slate-500 dark:text-slate-400 font-mono text-[11px]">
+                              {[
+                                observedWeb.authors?.join(', '),
+                                observedWeb.year,
+                                observedWeb.venue,
+                                observedWeb.doi
+                                  ? `DOI: ${observedWeb.doi}`
+                                  : null,
                               ]
                                 .filter(Boolean)
                                 .join(' · ')}

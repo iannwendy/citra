@@ -102,9 +102,22 @@ def get_report(
         and not verdicts
         and ((state is not None and state.status == "failed") or sql_job_status == "failed")
     ):
+        job_err = getattr(essay, "job_error", None)
+        detail_msg = (
+            f"Analysis failed before report generation: {job_err}"
+            if job_err
+            else "Analysis failed before report generation"
+        )
         return JSONResponse(
             status_code=425,
-            content={"detail": "Analysis failed before report generation", "retry_after": 1},
+            content={
+                "detail": detail_msg,
+                "message": job_err or "Analysis failed before report generation",
+                "job_status": "failed",
+                "job_error": job_err,
+                "quota_charged": bool(getattr(essay, "quota_charged", False)),
+                "retry_after": 1,
+            },
             headers={"Retry-After": "1"},
         )
 
@@ -273,6 +286,9 @@ def _serialize_extracted_citation(c) -> dict[str, Any]:
         "style": c.style,
         "page_num": c.page_num,
         "confidence": c.confidence,
+        "numeric_index": getattr(c, "numeric_index", None),
+        "sub_index": getattr(c, "sub_index", None),
+        "composite_label": getattr(c, "composite_label", None),
         # NEW v1.16 — surrounding PDF text, so the Document Inspector can
         # show the sentence the citation appears in.
         "context": getattr(c, "context", None),
@@ -673,7 +689,7 @@ def _extract_document_diagnostics(
     citations: list,
     verdicts: list,
 ) -> dict[str, Any]:
-    """Build or recover Scanned PDF Guardrail diagnostics for the report payload."""
+    """Build or recover Scanned PDF Guardrail & encoding/OCR diagnostics for the report payload."""
     diag = (
         dict(style_profile_dict.get("document_diagnostics"))
         if isinstance(style_profile_dict, dict)
@@ -681,6 +697,9 @@ def _extract_document_diagnostics(
         else {}
     )
     if diag and "is_scanned_pdf" in diag:
+        diag.setdefault("ocr_pages_recovered", [])
+        diag.setdefault("legacy_encoding_detected", None)
+        diag.setdefault("legacy_encoding_pages_count", 0)
         return diag
 
     is_docx = str(getattr(essay, "filename", "") or "").lower().endswith(".docx")
@@ -692,6 +711,9 @@ def _extract_document_diagnostics(
         "scanned_pages_count": num_pages if is_scanned else 0,
         "total_extractable_chars": 0 if is_scanned else -1,
         "avg_chars_per_page": 0.0 if is_scanned else -1.0,
+        "ocr_pages_recovered": [],
+        "legacy_encoding_detected": None,
+        "legacy_encoding_pages_count": 0,
         "warning_code": "SCANNED_PDF_DETECTED" if is_scanned else None,
         "warning_message": (
             "Phát hiện tài liệu PDF dạng ảnh quét (Scanned/Image-only PDF) thiếu lớp văn bản số hóa (Text Layer). "
@@ -743,6 +765,15 @@ def _json_response(
     }
     verdict_list = []
     citation_types = {c.raw_text: c.citation_type for c in citations}
+    cit_composite_by_raw: dict[str, tuple[int | None, str | None, str | None]] = {}
+    for c in citations:
+        if getattr(c, "raw_text", None) and c.raw_text not in cit_composite_by_raw:
+            cit_composite_by_raw[c.raw_text] = (
+                getattr(c, "numeric_index", None),
+                getattr(c, "sub_index", None),
+                getattr(c, "composite_label", None),
+            )
+    verdict_meta_by_raw: dict[str, dict[str, Any]] = {}
     _non_matched_intext_statuses = (
         "missing_reference",
         "in_text_mismatch",
@@ -782,11 +813,49 @@ def _json_response(
         # empty list so the UI never receives undefined.
         features_dict = json.loads(v.features or "{}")
         matched_sources = features_dict.get("matched_sources", [])
+        fallback_num, fallback_sub, fallback_comp = cit_composite_by_raw.get(
+            v.citation_raw, (None, None, None)
+        )
+        v_num_idx = (
+            features_dict.get("numeric_index")
+            if features_dict.get("numeric_index") is not None
+            else fallback_num
+        )
+        v_sub_idx = (
+            features_dict.get("sub_index")
+            if features_dict.get("sub_index") is not None
+            else fallback_sub
+        )
+        v_comp_lbl = (
+            features_dict.get("composite_label")
+            if features_dict.get("composite_label") is not None
+            else fallback_comp
+        )
+        has_scholarly_cand = bool(features_dict.get("has_scholarly_candidate", True))
+        features_dict.setdefault("has_scholarly_candidate", has_scholarly_cand)
+        features_dict.setdefault("html_meta", None)
+        features_dict.setdefault("html_meta_title_sim", None)
+        if v_num_idx is not None and features_dict.get("numeric_index") is None:
+            features_dict["numeric_index"] = v_num_idx
+        if v_sub_idx is not None and features_dict.get("sub_index") is None:
+            features_dict["sub_index"] = v_sub_idx
+        if v_comp_lbl is not None and features_dict.get("composite_label") is None:
+            features_dict["composite_label"] = v_comp_lbl
+
+        if v.citation_raw and v.citation_raw not in verdict_meta_by_raw:
+            verdict_meta_by_raw[v.citation_raw] = {
+                "html_meta": features_dict.get("html_meta"),
+                "html_meta_title_sim": features_dict.get("html_meta_title_sim"),
+                "has_scholarly_candidate": has_scholarly_cand,
+            }
 
         verdict_list.append({
             "citation_id": f"v{v.id}",
             "citation_raw": v.citation_raw,
             "citation_type": citation_types.get(v.citation_raw, "unknown"),
+            "numeric_index": v_num_idx,
+            "sub_index": v_sub_idx,
+            "composite_label": v_comp_lbl,
             # NEW v1.16 — surrounding PDF text, so the Document Inspector can
             # show the sentence the citation appears in.
             "context": v.context,
@@ -803,6 +872,9 @@ def _json_response(
             "triggered_rules": json.loads(v.triggered_rules or "[]"),
             "mismatched_fields": json.loads(v.mismatched_fields or "[]"),
             "features": features_dict,
+            "html_meta": features_dict.get("html_meta"),
+            "html_meta_title_sim": features_dict.get("html_meta_title_sim"),
+            "has_scholarly_candidate": has_scholarly_cand,
             "url_status": features_dict.get("url_status"),
             "url_status_code": features_dict.get("url_status_code"),
             "archive_url": features_dict.get("archive_url"),
@@ -898,6 +970,16 @@ def _json_response(
                 "url": c.url,
                 "page_num": c.page_num,
                 "confidence": c.confidence,
+                "numeric_index": getattr(c, "numeric_index", None),
+                "sub_index": getattr(c, "sub_index", None),
+                "composite_label": getattr(c, "composite_label", None),
+                "html_meta": verdict_meta_by_raw.get(c.raw_text, {}).get("html_meta"),
+                "html_meta_title_sim": verdict_meta_by_raw.get(c.raw_text, {}).get(
+                    "html_meta_title_sim"
+                ),
+                "has_scholarly_candidate": verdict_meta_by_raw.get(c.raw_text, {}).get(
+                    "has_scholarly_candidate", True
+                ),
                 # NEW v1.16 — surrounding PDF text (borrowed from the in-text
                 # occurrence that cites this entry, when there is one).
                 "context": getattr(c, "context", None),

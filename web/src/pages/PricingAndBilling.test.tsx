@@ -967,7 +967,7 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     );
 
     await waitFor(() => {
-      expect(getReportSpy).toHaveBeenCalledWith(29);
+      expect(getReportSpy).toHaveBeenCalledWith(29, expect.anything());
       expect(screen.getAllByText('CITRA_ACL_Sandbox_APA_10refs.pdf').length).toBeGreaterThan(0);
     });
 

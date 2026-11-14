@@ -9,12 +9,14 @@ and ``Page`` data structures used by ``DocumentParser``, ``SectionSegmenter``,
 from __future__ import annotations
 
 import re
+import unicodedata
 import zipfile
 from pathlib import Path
 
 from defusedxml.ElementTree import fromstring as safe_fromstring
 
 from integrity_checker.extraction.base import BasePDFParser, Document, Page
+from integrity_checker.extraction.vn_encoding import VietnameseLegacyTranscoder
 from integrity_checker.logging import get_logger
 
 logger = get_logger(__name__)
@@ -64,9 +66,15 @@ class DocxParser(BasePDFParser):
         endnotes_map = self._extract_xml_notes(path, "word/endnotes.xml", "endnote")
 
         pages_lines: list[list[str]] = [[]]
+        pages_legacy_encs: list[str | None] = [None]
         current_chars = 0
         current_page_notes: list[str] = []
         in_bibliography = False
+        legacy_enc_counts: dict[str, int] = {}
+
+        def _record_page_enc(enc: str | None) -> None:
+            if enc and pages_legacy_encs[-1] is None:
+                pages_legacy_encs[-1] = enc
 
         def _flush_page() -> None:
             nonlocal current_chars, current_page_notes
@@ -75,19 +83,26 @@ class DocxParser(BasePDFParser):
                 current_page_notes = []
             if pages_lines[-1]:
                 pages_lines.append([])
+                pages_legacy_encs.append(None)
                 current_chars = 0
 
         body_elm = doc.element.body
         for child in body_elm.iterchildren():
             tag = child.tag
             if tag == f"{_WORD_NS}p":
-                text, note_refs, has_page_break = self._extract_paragraph_xml(
+                raw_text, note_refs, has_page_break, font_hint = self._extract_paragraph_xml(
                     child, footnotes_map, endnotes_map
                 )
                 if has_page_break and pages_lines[-1]:
                     _flush_page()
 
-                stripped = text.strip()
+                decoded_text, detected_enc = (
+                    VietnameseLegacyTranscoder.normalize_legacy_vietnamese(
+                        raw_text, font_hint=font_hint
+                    )
+                )
+                _record_page_enc(detected_enc)
+                stripped = unicodedata.normalize("NFC", decoded_text).strip()
                 if not stripped:
                     continue
 
@@ -95,6 +110,7 @@ class DocxParser(BasePDFParser):
                 if _BIB_HEADING_RE.match(stripped):
                     if pages_lines[-1]:
                         _flush_page()
+                        _record_page_enc(detected_enc)
                     in_bibliography = True
                     pages_lines[-1].append(stripped)
                     current_chars += len(stripped)
@@ -112,17 +128,29 @@ class DocxParser(BasePDFParser):
                 current_chars += len(stripped)
 
                 for note_txt in note_refs:
-                    if note_txt not in current_page_notes:
-                        current_page_notes.append(note_txt)
+                    norm_note, note_enc = (
+                        VietnameseLegacyTranscoder.normalize_legacy_vietnamese(note_txt)
+                    )
+                    _record_page_enc(note_enc)
+                    norm_note = unicodedata.normalize("NFC", norm_note)
+                    if norm_note not in current_page_notes:
+                        current_page_notes.append(norm_note)
 
                 if not in_bibliography and current_chars >= self.CHARS_PER_PAGE:
                     _flush_page()
 
             elif tag == f"{_WORD_NS}tbl":
-                table_lines = self._extract_table_xml(child)
+                table_lines, tbl_font_hint = self._extract_table_xml_with_fonts(child)
                 for tline in table_lines:
-                    pages_lines[-1].append(tline)
-                    current_chars += len(tline)
+                    norm_tline, tbl_enc = (
+                        VietnameseLegacyTranscoder.normalize_legacy_vietnamese(
+                            tline, font_hint=tbl_font_hint
+                        )
+                    )
+                    _record_page_enc(tbl_enc)
+                    norm_tline = unicodedata.normalize("NFC", norm_tline)
+                    pages_lines[-1].append(norm_tline)
+                    current_chars += len(norm_tline)
                 if not in_bibliography and current_chars >= self.CHARS_PER_PAGE:
                     _flush_page()
 
@@ -132,20 +160,47 @@ class DocxParser(BasePDFParser):
         # Append any unreferenced endnotes at the end of body if not already included
         all_joined = "\n".join("\n".join(lines) for lines in pages_lines)
         for eid, etext in sorted(endnotes_map.items()):
-            marker = f"[{eid}] {etext}"
-            if etext and etext not in all_joined:
+            norm_etext, end_enc = VietnameseLegacyTranscoder.normalize_legacy_vietnamese(etext)
+            _record_page_enc(end_enc)
+            norm_etext = unicodedata.normalize("NFC", norm_etext)
+            marker = f"[{eid}] {norm_etext}"
+            if norm_etext and norm_etext not in all_joined:
                 pages_lines[-1].append(marker)
 
-        non_empty_pages = [
-            "\n".join(lines).strip()
-            for lines in pages_lines
-            if "\n".join(lines).strip()
-        ]
+        non_empty_pages: list[str] = []
+        for idx_p, lines in enumerate(pages_lines):
+            joined_p = "\n".join(lines).strip()
+            if not joined_p:
+                continue
+            page_enc = pages_legacy_encs[idx_p] if idx_p < len(pages_legacy_encs) else None
+            if page_enc is None:
+                joined_p, page_enc = VietnameseLegacyTranscoder.normalize_legacy_vietnamese(
+                    joined_p
+                )
+                joined_p = unicodedata.normalize("NFC", joined_p)
+            if page_enc:
+                legacy_enc_counts[page_enc] = legacy_enc_counts.get(page_enc, 0) + 1
+            non_empty_pages.append(joined_p)
+
+        dominant_legacy_enc = (
+            max(legacy_enc_counts.items(), key=lambda kv: kv[1])[0]
+            if legacy_enc_counts
+            else None
+        )
+        doc_metadata = {
+            "is_scanned_pdf": False,
+            "scanned_pages_count": 0,
+            "ocr_pages_recovered": [],
+            "legacy_encoding_detected": dominant_legacy_enc,
+            "legacy_encoding_pages_count": sum(legacy_enc_counts.values()),
+        }
+
         if not non_empty_pages:
             return Document(
                 file_path=str(path),
                 num_pages=1,
                 pages=[Page(page_num=1, text="")],
+                metadata=doc_metadata,
                 parser_used=self.name,
             )
 
@@ -157,6 +212,7 @@ class DocxParser(BasePDFParser):
             file_path=str(path),
             num_pages=len(pages),
             pages=pages,
+            metadata=doc_metadata,
             parser_used=self.name,
         )
 
@@ -165,15 +221,25 @@ class DocxParser(BasePDFParser):
         p_elm,
         footnotes_map: dict[int, str],
         endnotes_map: dict[int, str],
-    ) -> tuple[str, list[str], bool]:
-        """Extract text, referenced footnotes/endnotes, and page break flag from a <w:p> element."""
+    ) -> tuple[str, list[str], bool, str | None]:
+        """Extract text, referenced footnotes/endnotes, page break flag, and font hint from <w:p>."""
         parts: list[str] = []
         note_texts: list[str] = []
+        font_names: list[str] = []
         has_page_break = False
 
         for elem in p_elm.iter():
             etag = elem.tag
-            if etag == f"{_WORD_NS}t" and elem.text:
+            if etag == f"{_WORD_NS}rFonts":
+                for attr_name in (
+                    f"{_WORD_NS}ascii",
+                    f"{_WORD_NS}hAnsi",
+                    f"{_WORD_NS}cs",
+                ):
+                    fval = elem.attrib.get(attr_name)
+                    if fval and fval not in font_names:
+                        font_names.append(fval)
+            elif etag == f"{_WORD_NS}t" and elem.text:
                 parts.append(elem.text)
             elif etag == f"{_WORD_NS}tab":
                 parts.append(" ")
@@ -199,12 +265,19 @@ class DocxParser(BasePDFParser):
                         note_texts.append(f"{eid}. {endnotes_map[eid]}")
 
         text = "".join(parts)
-        return text, note_texts, has_page_break
+        font_hint = " ".join(font_names) if font_names else None
+        return text, note_texts, has_page_break, font_hint
 
     @staticmethod
-    def _extract_table_xml(tbl_elm) -> list[str]:
-        """Extract distinct row texts from a <w:tbl> element."""
+    def _extract_table_xml_with_fonts(tbl_elm) -> tuple[list[str], str | None]:
+        """Extract distinct row texts and run font hint from a <w:tbl> element."""
         lines: list[str] = []
+        font_names: list[str] = []
+        for rf in tbl_elm.findall(f".//{_WORD_NS}rFonts"):
+            for attr_name in (f"{_WORD_NS}ascii", f"{_WORD_NS}hAnsi", f"{_WORD_NS}cs"):
+                fval = rf.attrib.get(attr_name)
+                if fval and fval not in font_names:
+                    font_names.append(fval)
         for tr in tbl_elm.findall(f".//{_WORD_NS}tr"):
             row_cells: list[str] = []
             for tc in tr.findall(f"./{_WORD_NS}tc"):
@@ -216,6 +289,13 @@ class DocxParser(BasePDFParser):
                     row_cells.append(cell_str)
             if row_cells:
                 lines.append(" | ".join(row_cells))
+        font_hint = " ".join(font_names) if font_names else None
+        return lines, font_hint
+
+    @classmethod
+    def _extract_table_xml(cls, tbl_elm) -> list[str]:
+        """Backward-compatible table row text extractor."""
+        lines, _ = cls._extract_table_xml_with_fonts(tbl_elm)
         return lines
 
     @staticmethod

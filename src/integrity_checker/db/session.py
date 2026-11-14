@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
@@ -11,6 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool, StaticPool
 
 from integrity_checker.config import get_settings, is_main_app_db_url, is_test_runtime
+from integrity_checker.db import sqlite_tuning as _sqlite_tuning
 from integrity_checker.db.migrations import run_migrations
 from integrity_checker.db.models import (  # noqa: F401
     ApiKey,
@@ -21,17 +24,105 @@ from integrity_checker.db.models import (  # noqa: F401
 )
 from integrity_checker.db.sqlite_tuning import (
     apply_sqlite_connection_pragmas,
+    detect_sqlite_filesystem_type,
     resolve_sqlite_journal_mode,
 )
+
+
+@dataclass(frozen=True)
+class SqliteTuningReport:
+    """Telemetry snapshot of adaptive SQLite WAL/PRAGMA tuning for `/api/system/health`."""
+
+    db_path: str
+    filesystem_type: str
+    requested_journal_mode: str
+    journal_mode: str
+    effective_journal_mode: str
+    wal_enabled: bool
+    fallback_degraded: bool
+    busy_timeout_ms: int = 30000
+    synchronous: str = "NORMAL"
+    mmap_bytes: int = 0
+    wal_autocheckpoint: int = 1000
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "db_path": self.db_path,
+            "filesystem_type": self.filesystem_type,
+            "requested_journal_mode": self.requested_journal_mode,
+            "journal_mode": self.journal_mode,
+            "effective_journal_mode": self.effective_journal_mode,
+            "wal_enabled": self.wal_enabled,
+            "fallback_degraded": self.fallback_degraded,
+            "busy_timeout_ms": self.busy_timeout_ms,
+            "synchronous": self.synchronous,
+            "mmap_bytes": self.mmap_bytes,
+            "wal_autocheckpoint": self.wal_autocheckpoint,
+        }
+
 
 _engine: Engine | None = None
 _engine_url: str | None = None
 _SessionLocal: sessionmaker[Session] | None = None
+_LAST_APP_DB_TUNING_REPORT: Any | None = None
+
+
+def get_app_db_tuning_report() -> dict[str, Any] | None:
+    """Return the most recent SQLite WAL/PRAGMA tuning report for `app.db`, if available."""
+    report = _LAST_APP_DB_TUNING_REPORT
+    if report is None:
+        return None
+    to_dict_fn = getattr(report, "to_dict", None)
+    if callable(to_dict_fn):
+        return dict(to_dict_fn())
+    if isinstance(report, dict):
+        return dict(report)
+    return None
+
+
+def _apply_and_capture_app_db_pragmas(
+    dbapi_connection: Any,
+    db_path: Path,
+    journal_mode: str,
+    *,
+    mmap_bytes: int = 0,
+) -> None:
+    global _LAST_APP_DB_TUNING_REPORT
+    adaptive_fn = getattr(_sqlite_tuning, "apply_adaptive_sqlite_pragmas", None)
+    if callable(adaptive_fn):
+        _LAST_APP_DB_TUNING_REPORT = adaptive_fn(
+            dbapi_connection,
+            db_path,
+            mmap_bytes=mmap_bytes,
+        )
+        return
+
+    raw_req = (os.getenv("SQLITE_JOURNAL_MODE", "AUTO") or "AUTO").strip().upper() or "AUTO"
+    fstype = detect_sqlite_filesystem_type(db_path)
+    effective = apply_sqlite_connection_pragmas(
+        dbapi_connection,
+        journal_mode,
+        mmap_bytes=mmap_bytes,
+    )
+    eff_upper = str(effective or journal_mode).strip().upper()
+    _LAST_APP_DB_TUNING_REPORT = SqliteTuningReport(
+        db_path=str(db_path),
+        filesystem_type=fstype,
+        requested_journal_mode=raw_req,
+        journal_mode=eff_upper,
+        effective_journal_mode=eff_upper,
+        wal_enabled=(eff_upper == "WAL"),
+        fallback_degraded=(raw_req in ("AUTO", "WAL") and eff_upper != "WAL"),
+        busy_timeout_ms=30000,
+        synchronous="NORMAL",
+        mmap_bytes=int(mmap_bytes),
+        wal_autocheckpoint=1000 if eff_upper == "WAL" else 0,
+    )
 
 
 def get_engine() -> Engine:
     """Lazy singleton engine — automatically rebinds if database.url changes."""
-    global _engine, _engine_url, _SessionLocal
+    global _engine, _engine_url, _SessionLocal, _LAST_APP_DB_TUNING_REPORT
     settings = get_settings()
     url = settings.database.url
 
@@ -60,12 +151,31 @@ def get_engine() -> Engine:
             # across requests over Docker VirtioFS bind mounts.
             kwargs["poolclass"] = NullPool
         _engine = create_engine(url, **kwargs)
-        if is_sqlite and not is_memory and raw_path:
-            journal_mode = resolve_sqlite_journal_mode(Path(raw_path))
+        if is_sqlite and is_memory:
+            _LAST_APP_DB_TUNING_REPORT = SqliteTuningReport(
+                db_path=":memory:",
+                filesystem_type="memory",
+                requested_journal_mode="MEMORY",
+                journal_mode="MEMORY",
+                effective_journal_mode="MEMORY",
+                wal_enabled=False,
+                fallback_degraded=False,
+                busy_timeout_ms=30000,
+                synchronous="NORMAL",
+                mmap_bytes=0,
+                wal_autocheckpoint=0,
+            )
+        elif is_sqlite and not is_memory and raw_path:
+            db_path_obj = Path(raw_path)
+            journal_mode = resolve_sqlite_journal_mode(db_path_obj)
 
             @event.listens_for(_engine, "connect")
             def _set_sqlite_pragma(dbapi_connection, _connection_record) -> None:
-                apply_sqlite_connection_pragmas(dbapi_connection, journal_mode)
+                _apply_and_capture_app_db_pragmas(
+                    dbapi_connection,
+                    db_path_obj,
+                    journal_mode,
+                )
 
             try:
                 with _engine.connect():

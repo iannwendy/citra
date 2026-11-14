@@ -375,8 +375,8 @@ def test_finding3_recover_orphaned_reanalysis_restores_completed_without_touchin
 # ============================================================================
 
 
-def test_finding4_report_cache_version_bumped_to_v20() -> None:
-    assert integrity_pipeline._REPORT_CACHE_VERSION == "report-v20"
+def test_finding4_report_cache_version_bumped_to_v21() -> None:
+    assert integrity_pipeline._REPORT_CACHE_VERSION == "report-v21"
 
 
 # ============================================================================

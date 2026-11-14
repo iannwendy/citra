@@ -83,11 +83,11 @@ def test_fresh_db_create_all_then_run_migrations_is_idempotent(tmp_path) -> None
         Base.metadata.create_all(bind=engine)
         applied_first = run_migrations(engine)
         assert applied_first == [m.version for m in MIGRATIONS]
-        assert LATEST_SCHEMA_VERSION == "0010"
+        assert LATEST_SCHEMA_VERSION == "0011"
 
         status = get_migration_status(engine)
         assert status.is_up_to_date is True
-        assert status.current_version == "0010"
+        assert status.current_version == "0011"
         assert status.pending_versions == ()
         assert status.checksum_verified is True
         assert verify_migrations(engine) is True
@@ -141,7 +141,7 @@ def test_legacy_database_upgrades_to_latest_and_backfills_data(tmp_path) -> None
         )
 
     applied = run_migrations(engine)
-    assert len(applied) == 10
+    assert len(applied) == 11
 
     with engine.connect() as conn:
         admin_tier = conn.execute(text("SELECT plan_tier FROM users WHERE id = 1")).scalar_one()
@@ -185,11 +185,11 @@ def test_downgrade_and_reupgrade_roundtrip_on_sqlite(tmp_path) -> None:
         run_migrations(engine)
 
         reverted = downgrade_migrations(engine, "0006", create_backup=True, backup_dir=tmp_path)
-        assert reverted == ["0010", "0009", "0008", "0007"]
+        assert reverted == ["0011", "0010", "0009", "0008", "0007"]
 
         status = get_migration_status(engine)
         assert status.current_version == "0006"
-        assert status.pending_versions == ("0007", "0008", "0009", "0010")
+        assert status.pending_versions == ("0007", "0008", "0009", "0010", "0011")
 
         inspector = inspect(engine)
         user_cols = {c["name"] for c in inspector.get_columns("users")}
@@ -197,9 +197,9 @@ def test_downgrade_and_reupgrade_roundtrip_on_sqlite(tmp_path) -> None:
         assert "google_id" not in user_cols
         assert "plan_tier" in user_cols
 
-        # Re-apply pending migrations back to 0010
+        # Re-apply pending migrations back to 0011
         reapplied = run_migrations(engine)
-        assert reapplied == ["0007", "0008", "0009", "0010"]
+        assert reapplied == ["0007", "0008", "0009", "0010", "0011"]
         user_cols_after = {c["name"] for c in inspector.get_columns("users")}
         assert {"privacy_consented_at", "google_id", "plan_tier"}.issubset(user_cols_after)
     finally:
@@ -260,16 +260,16 @@ def test_migrations_cli_status_verify_history_upgrade_downgrade(
         assert migrations_cli_main(["upgrade"]) == 0
         assert migrations_cli_main(["status"]) == 0
         out = capsys.readouterr().out
-        assert "0010" in out and "up_to_date=True" in out
+        assert "0011" in out and "up_to_date=True" in out
 
         assert migrations_cli_main(["verify"]) == 0
         assert migrations_cli_main(["history"]) == 0
         assert migrations_cli_main(["downgrade", "--to", "0008", "--no-backup"]) == 0
-        assert migrations_cli_main(["upgrade", "--to", "0010"]) == 0
+        assert migrations_cli_main(["upgrade", "--to", "0011"]) == 0
 
         with engine.begin() as conn:
             conn.execute(
-                text("UPDATE schema_migrations SET checksum = 'bad' WHERE version = '0010'")
+                text("UPDATE schema_migrations SET checksum = 'bad' WHERE version = '0011'")
             )
         assert migrations_cli_main(["verify"]) == 1
         assert "checksum_verified=False" in capsys.readouterr().out
@@ -285,7 +285,7 @@ def test_session_inline_migrations_delegates_to_versioned_runner(tmp_path) -> No
 
     status = get_migration_status(engine)
     assert status.is_up_to_date is True
-    assert status.current_version == "0010"
+    assert status.current_version == "0011"
 
     for symbol in (
         "SchemaMigrationRecord",
@@ -300,14 +300,14 @@ def test_session_inline_migrations_delegates_to_versioned_runner(tmp_path) -> No
 
 
 def test_full_chain_0009_to_0000_downgrade_and_stepped_reupgrade(tmp_path) -> None:
-    """Verify rolling back ALL 10 migrations (0010 -> 0000) and stepped re-upgrade (0000 -> 0004 -> 0010)."""
+    """Verify rolling back ALL 11 migrations (0011 -> 0000) and stepped re-upgrade (0000 -> 0004 -> 0011)."""
     engine = create_engine(f"sqlite:///{tmp_path / 'full_chain.db'}")
     try:
         Base.metadata.create_all(bind=engine)
         run_migrations(engine)
 
-        # No-op downgrade when already at 0010
-        assert downgrade_migrations(engine, "0010", create_backup=False) == []
+        # No-op downgrade when already at 0011
+        assert downgrade_migrations(engine, "0011", create_backup=False) == []
 
         # Roll back all the way to 0000
         reverted = downgrade_migrations(engine, "0000", create_backup=False)
@@ -316,16 +316,57 @@ def test_full_chain_0009_to_0000_downgrade_and_stepped_reupgrade(tmp_path) -> No
         status_zero = get_migration_status(engine)
         assert status_zero.current_version is None
         assert status_zero.is_up_to_date is False
-        assert len(status_zero.pending_versions) == 10
+        assert len(status_zero.pending_versions) == 11
 
-        # Stepped upgrade to 0004 first, then to 0010
+        # Stepped upgrade to 0004 first, then to 0011
         applied_partial = run_migrations(engine, target_version="0004")
         assert applied_partial == ["0001", "0002", "0003", "0004"]
         assert get_migration_status(engine).current_version == "0004"
 
         applied_rest = run_migrations(engine)
-        assert applied_rest == ["0005", "0006", "0007", "0008", "0009", "0010"]
+        assert applied_rest == ["0005", "0006", "0007", "0008", "0009", "0010", "0011"]
         assert get_migration_status(engine).is_up_to_date is True
+    finally:
+        engine.dispose()
+
+
+def test_migration_0011_citations_composite_columns_upgrade_and_downgrade(tmp_path) -> None:
+    """Verify migration 0011 adds and cleanly rolls back numeric_index, sub_index, composite_label."""
+    engine = create_engine(f"sqlite:///{tmp_path / 'mig0011.db'}")
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql(
+                "CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username VARCHAR(50) NOT NULL, password_hash VARCHAR(255) NOT NULL, role VARCHAR(20) DEFAULT 'user', created_at DATETIME, updated_at DATETIME)"
+            )
+            conn.exec_driver_sql(
+                "CREATE TABLE essays (id INTEGER PRIMARY KEY AUTOINCREMENT, filename VARCHAR NOT NULL, num_pages INTEGER DEFAULT 0, uploaded_at DATETIME, user_id INTEGER, style_profile_json TEXT, cis_json TEXT)"
+            )
+            conn.exec_driver_sql(
+                "CREATE TABLE citations (id INTEGER PRIMARY KEY AUTOINCREMENT, essay_id INTEGER NOT NULL, raw_text TEXT NOT NULL, citation_type VARCHAR, style VARCHAR, authors TEXT, year VARCHAR, title TEXT, venue VARCHAR, doi VARCHAR, url TEXT, page_num INTEGER, confidence FLOAT)"
+            )
+            conn.exec_driver_sql(
+                "CREATE TABLE verdicts (id INTEGER PRIMARY KEY AUTOINCREMENT, essay_id INTEGER NOT NULL, citation_raw TEXT NOT NULL, label VARCHAR NOT NULL, confidence FLOAT, reasoning TEXT, triggered_rules TEXT, mismatched_fields TEXT, features TEXT, validated_at DATETIME, mapping_status VARCHAR, mapping_confidence FLOAT, style_penalty FLOAT, domain_exception INTEGER, is_overridden INTEGER, override_note TEXT, overridden_by VARCHAR)"
+            )
+            conn.exec_driver_sql(
+                "CREATE TABLE audit_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, verdict_id INTEGER NOT NULL, original_label VARCHAR NOT NULL, new_label VARCHAR NOT NULL, user VARCHAR NOT NULL, note TEXT, logged_at DATETIME)"
+            )
+            conn.exec_driver_sql(
+                "CREATE TABLE promo_redemptions (id INTEGER PRIMARY KEY AUTOINCREMENT, promo_code_id INTEGER NOT NULL, user_id INTEGER NOT NULL, transaction_id INTEGER NOT NULL, code VARCHAR(6) NOT NULL, discount_usd FLOAT NOT NULL, redeemed_at DATETIME)"
+            )
+
+        run_migrations(engine, target_version="0010")
+        cols_before = {c["name"] for c in inspect(engine).get_columns("citations")}
+        assert {"numeric_index", "sub_index", "composite_label"}.isdisjoint(cols_before)
+
+        applied = run_migrations(engine, target_version="0011")
+        assert applied == ["0011"]
+        cols_after = {c["name"] for c in inspect(engine).get_columns("citations")}
+        assert {"numeric_index", "sub_index", "composite_label"}.issubset(cols_after)
+
+        reverted = downgrade_migrations(engine, "0010", create_backup=False)
+        assert reverted == ["0011"]
+        cols_reverted = {c["name"] for c in inspect(engine).get_columns("citations")}
+        assert {"numeric_index", "sub_index", "composite_label"}.isdisjoint(cols_reverted)
     finally:
         engine.dispose()
 

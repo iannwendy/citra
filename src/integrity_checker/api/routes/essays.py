@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import json
 import os
+import re
 import tempfile
 import time
 from collections.abc import AsyncIterator
@@ -30,6 +31,7 @@ from sqlalchemy.orm import Session
 from integrity_checker.api.deps import get_current_user, get_db, get_pipeline, require_admin
 from integrity_checker.api.job_recovery import QUOTA_LEDGER_LOCK, refund_upload_quota_once
 from integrity_checker.api.progress import (
+    compute_sqlite_fifo_queue_position,
     get_pipeline_admission_controller,
     get_tracker,
     refresh_live_snapshot_elapsed,
@@ -690,6 +692,8 @@ def get_essay_status(
     worker_mode = _get_worker_mode()
     tracker = get_tracker()
     state = None if worker_mode == "web_only" else tracker.get(essay_id)
+    raw_qc = getattr(essay, "quota_charged", True)
+    quota_charged_bool = True if raw_qc is None else bool(raw_qc)
 
     if state is not None:
         # Auto-retry at most once if a prior background run failed solely due to transient sqlite I/O error
@@ -711,20 +715,31 @@ def get_essay_status(
                 get_pipeline(),
                 False,
             )
-            return resumed_state.to_snapshot()
-        return state.to_snapshot()
+            resumed_snap = dict(resumed_state.to_snapshot())
+            resumed_snap["quota_charged"] = quota_charged_bool
+            return resumed_snap
+        live_snap = dict(state.to_snapshot())
+        if live_snap.get("status") == "queued" and live_snap.get("queue_position") is None:
+            live_snap["queue_position"] = compute_sqlite_fifo_queue_position(db, essay_id)
+        live_snap["quota_charged"] = quota_charged_bool
+        return live_snap
 
     # No tracker entry — fall back to DB state (queued job, verdicts/CIS, or persisted snapshot)
     persisted_snap = tracker.load_persisted_snapshot(essay_id, essay)
     if getattr(essay, "job_status", None) == "queued":
         if persisted_snap is not None and persisted_snap.get("status") == "queued":
-            return refresh_live_snapshot_elapsed(persisted_snap)
+            snap = dict(refresh_live_snapshot_elapsed(persisted_snap))
+            if snap.get("queue_position") is None:
+                snap["queue_position"] = compute_sqlite_fifo_queue_position(db, essay_id)
+            snap["quota_charged"] = quota_charged_bool
+            return snap
+        q_pos = compute_sqlite_fifo_queue_position(db, essay_id)
         return {
             "status": "queued",
             "step": "queued",
             "step_index": 0,
             "total_steps": 8,
-            "message": "Queued for analysis...",
+            "message": f"Queued for analysis (position #{q_pos})...",
             "citations_found": 0,
             "references_found": 0,
             "linked": 0,
@@ -732,7 +747,8 @@ def get_essay_status(
             "elapsed_seconds": 0.0,
             "finished_at": None,
             "error": None,
-            "queue_position": None,
+            "queue_position": q_pos,
+            "quota_charged": quota_charged_bool,
         }
 
     if getattr(essay, "job_status", None) == "processing":
@@ -740,7 +756,9 @@ def get_essay_status(
             "processing",
             "queued",
         ):
-            return refresh_live_snapshot_elapsed(persisted_snap)
+            snap = dict(refresh_live_snapshot_elapsed(persisted_snap))
+            snap["quota_charged"] = quota_charged_bool
+            return snap
         return {
             "status": "processing",
             "step": "parsing",
@@ -755,6 +773,7 @@ def get_essay_status(
             "finished_at": None,
             "error": None,
             "queue_position": None,
+            "quota_charged": quota_charged_bool,
         }
 
     verdicts = repo.get_verdicts(essay_id)
@@ -788,6 +807,7 @@ def get_essay_status(
             "finished_at": (persisted_snap or {}).get("finished_at"),
             "error": None,
             "queue_position": None,
+            "quota_charged": quota_charged_bool,
             "document_diagnostics": doc_diag,
         }
 
@@ -811,6 +831,7 @@ def get_essay_status(
             "finished_at": (persisted_snap or {}).get("finished_at"),
             "error": fail_err,
             "queue_position": None,
+            "quota_charged": quota_charged_bool,
         }
 
     if persisted_snap is not None and persisted_snap.get("status") in (
@@ -818,7 +839,11 @@ def get_essay_status(
         "processing",
         "queued",
     ):
-        return refresh_live_snapshot_elapsed(persisted_snap)
+        snap = dict(refresh_live_snapshot_elapsed(persisted_snap))
+        if snap.get("status") == "queued" and snap.get("queue_position") is None:
+            snap["queue_position"] = compute_sqlite_fifo_queue_position(db, essay_id)
+        snap["quota_charged"] = quota_charged_bool
+        return snap
 
     # Server restarted before background analysis finished: auto-resume at most once
     # if the uploaded PDF is persisted on disk.
@@ -838,16 +863,25 @@ def get_essay_status(
             get_pipeline(),
             False,
         )
-        return resumed_state.to_snapshot()
+        resumed_snap = dict(resumed_state.to_snapshot())
+        resumed_snap["quota_charged"] = quota_charged_bool
+        return resumed_snap
 
     # No tracker and no verdicts — either queued or server restarted mid-run
     is_queued = getattr(essay, "job_status", None) == "queued"
+    fallback_q_pos = (
+        compute_sqlite_fifo_queue_position(db, essay_id) if is_queued else None
+    )
     return {
         "status": "queued" if is_queued else "processing",
         "step": "queued" if is_queued else "parsing",
         "step_index": 0,
         "total_steps": 8,
-        "message": "Queued for analysis..." if is_queued else "Processing...",
+        "message": (
+            f"Queued for analysis (position #{fallback_q_pos})..."
+            if is_queued
+            else "Processing..."
+        ),
         "citations_found": 0,
         "references_found": 0,
         "linked": 0,
@@ -855,7 +889,8 @@ def get_essay_status(
         "elapsed_seconds": 0.0,
         "finished_at": None,
         "error": None,
-        "queue_position": None,
+        "queue_position": fallback_q_pos,
+        "quota_charged": quota_charged_bool,
     }
 
 
@@ -1064,6 +1099,7 @@ def _serialize_essay_summary(
             verified_academic = sum(1 for v in academic if v.label == "verified")
             cis_score = round((verified_academic / len(academic)) * 100.0, 1)
 
+    raw_qc = getattr(e, "quota_charged", True)
     return {
         "id": e.id,
         "filename": e.filename,
@@ -1075,6 +1111,10 @@ def _serialize_essay_summary(
         "num_citations": num_citations,
         "num_verdicts": num_verdicts,
         "num_verified": num_verified,
+        "job_status": getattr(e, "job_status", None) or "completed",
+        "job_error": getattr(e, "job_error", None),
+        "job_attempt_count": int(getattr(e, "job_attempt_count", 0) or 0),
+        "quota_charged": True if raw_qc is None else bool(raw_qc),
     }
 
 
@@ -1354,6 +1394,10 @@ def get_shared_essay_report(
 
     verdicts = sorted(repo.get_verdicts(essay.id), key=lambda v: v.id or 0)
     citations = repo.get_citations(essay.id)
+    cit_by_raw: dict[str, Any] = {}
+    for c_rec in citations:
+        if getattr(c_rec, "raw_text", None) and c_rec.raw_text not in cit_by_raw:
+            cit_by_raw[c_rec.raw_text] = c_rec
     in_text_count = sum(1 for c in citations if c.citation_type in {"in_text", "numeric"})
     num_citations = in_text_count or len(verdicts)
 
@@ -1371,20 +1415,59 @@ def get_shared_essay_report(
             verdict_counts[lbl] += 1
         try:
             features_dict = json.loads(v.features or "{}")
+            if not isinstance(features_dict, dict):
+                features_dict = {}
         except Exception:
             features_dict = {}
         try:
             triggered_rules = json.loads(v.triggered_rules or "[]")
+            if not isinstance(triggered_rules, list):
+                triggered_rules = []
         except Exception:
             triggered_rules = []
         try:
             mismatched_fields = json.loads(v.mismatched_fields or "[]")
+            if not isinstance(mismatched_fields, list):
+                mismatched_fields = []
         except Exception:
             mismatched_fields = []
         matched_sources = features_dict.get("matched_sources", [])
         if not isinstance(matched_sources, list):
             matched_sources = []
         matched_source = matched_sources[0] if matched_sources else None
+        matched_cit_rec = cit_by_raw.get(v.citation_raw)
+        cited_url = (
+            features_dict.get("cited_url")
+            or features_dict.get("checked_url")
+            or (getattr(matched_cit_rec, "url", None) if matched_cit_rec is not None else None)
+        )
+        numeric_index = (
+            features_dict["numeric_index"]
+            if features_dict.get("numeric_index") is not None
+            else (
+                getattr(matched_cit_rec, "numeric_index", None)
+                if matched_cit_rec is not None
+                else None
+            )
+        )
+        sub_index = (
+            features_dict["sub_index"]
+            if features_dict.get("sub_index") is not None
+            else (
+                getattr(matched_cit_rec, "sub_index", None)
+                if matched_cit_rec is not None
+                else None
+            )
+        )
+        composite_label = (
+            features_dict["composite_label"]
+            if features_dict.get("composite_label") is not None
+            else (
+                getattr(matched_cit_rec, "composite_label", None)
+                if matched_cit_rec is not None
+                else None
+            )
+        )
         ref_id = f"ref-{idx:04d}"
         public_verdicts.append({
             "reference_id": ref_id,
@@ -1400,6 +1483,21 @@ def get_shared_essay_report(
             "mismatched_fields": mismatched_fields,
             "matched_source": matched_source,
             "matched_sources": matched_sources,
+            "features": features_dict,
+            "url_status": features_dict.get("url_status"),
+            "url_status_code": features_dict.get("url_status_code"),
+            "archive_url": features_dict.get("archive_url"),
+            "cited_url": cited_url,
+            "is_retracted": bool(
+                features_dict.get("is_retracted", False)
+                or ("R-RETRACTED-PAPER" in triggered_rules)
+            ),
+            "html_meta": features_dict.get("html_meta"),
+            "html_meta_title_sim": features_dict.get("html_meta_title_sim"),
+            "numeric_index": numeric_index,
+            "sub_index": sub_index,
+            "composite_label": composite_label,
+            "citation_link": features_dict.get("citation_link"),
         })
 
     style_profile_dict = None
@@ -1498,12 +1596,17 @@ def get_essay(
     if not repo.can_user_access_essay(current_user, essay):
         raise HTTPException(status_code=403, detail="Access denied")
 
+    raw_qc = getattr(essay, "quota_charged", True)
     return {
         "id": essay.id,
         "filename": essay.filename,
         "num_pages": essay.num_pages,
         "uploaded_at": essay.uploaded_at.isoformat() if essay.uploaded_at else None,
         "user_id": essay.user_id,
+        "job_status": getattr(essay, "job_status", None) or "completed",
+        "job_error": getattr(essay, "job_error", None),
+        "job_attempt_count": int(getattr(essay, "job_attempt_count", 0) or 0),
+        "quota_charged": True if raw_qc is None else bool(raw_qc),
     }
 
 
@@ -2401,6 +2504,11 @@ async def verify_sandbox_citations_instant(
                     else "Khớp hai chiều hoàn hảo giữa In-text citation và Reference entry."
                 )
 
+            url_val = str(it.get("url") or "").strip() or None
+            num_idx_raw = it.get("numeric_index")
+            num_idx_val = int(num_idx_raw) if isinstance(num_idx_raw, int) else None
+            sub_idx_val = str(it.get("sub_index") or "").strip() or None
+            comp_lbl_val = str(it.get("composite_label") or "").strip() or None
             cit = Citation(
                 raw_text=ref_line,
                 citation_type=CitationType.REFERENCE_LIST,
@@ -2410,6 +2518,10 @@ async def verify_sandbox_citations_instant(
                 title=str(it.get("title") or "").strip() or None,
                 venue=str(it.get("venue") or "").strip() or None,
                 doi=doi_val,
+                url=url_val,
+                numeric_index=num_idx_val,
+                sub_index=sub_idx_val,
+                composite_label=comp_lbl_val,
                 page_num=1,
                 context=str(it.get("in_text_context") or claim_context or "").strip() or None,
                 mapping_status=l1_status,
@@ -2528,8 +2640,19 @@ async def verify_sandbox_citations_instant(
                 except Exception:
                     pass
             try:
-                return await asyncio.wait_for(pipeline.orchestrator.retrieve(c), timeout=5.0)
+                return await asyncio.wait_for(pipeline.orchestrator.retrieve(c), timeout=25.0)
             except TimeoutError:
+                u_st, u_code, u_arch, u_meta = None, None, None, None
+                if getattr(c, "url", None) or (
+                    c.raw_text and re.search(r"https?://", c.raw_text, re.IGNORECASE)
+                ):
+                    try:
+                        u_st, u_code, u_arch, u_meta = await asyncio.wait_for(
+                            pipeline.orchestrator._validate_citation_url_with_meta(c),
+                            timeout=8.0,
+                        )
+                    except Exception:
+                        pass
                 return SourceResult(
                     citation_raw=c.raw_text,
                     candidates=[],
@@ -2539,6 +2662,10 @@ async def verify_sandbox_citations_instant(
                         "crossref": "No results for query",
                         "openalex": "No results for query",
                     },
+                    url_status=u_st,
+                    url_status_code=u_code,
+                    archive_url=u_arch,
+                    html_meta=u_meta,
                 )
 
     source_results = await asyncio.gather(*(_retrieve_one(c) for c in parsed_citations))
@@ -2557,18 +2684,179 @@ async def verify_sandbox_citations_instant(
         )
         l1_info = layer1_statuses[idx - 1] if idx - 1 < len(layer1_statuses) else {"status": "matched", "note": ""}
         best = source.best_candidate()
-        matched_src = None
-        if best:
-            matched_src = {
-                "source_name": best.source_name,
-                "title": best.title,
-                "authors": best.authors,
-                "year": best.year,
-                "venue": best.venue,
-                "doi": best.doi,
-                "url": best.url,
-                "abstract": best.abstract,
+        vf = getattr(verdict, "features", None)
+
+        def _serialize_cand(cand: Any) -> dict[str, Any]:
+            raw_authors = getattr(cand, "authors", None) or []
+            cand_authors: list[str] = []
+            for a in raw_authors:
+                if isinstance(a, str):
+                    cand_authors.append(a)
+                elif hasattr(a, "last_name"):
+                    parts = [getattr(a, "last_name", ""), getattr(a, "first_name", "")]
+                    cand_authors.append(" ".join(p for p in parts if p))
+                else:
+                    cand_authors.append(str(a))
+            m_fields: list[str] = []
+            if getattr(cand, "doi", None):
+                m_fields.append("doi")
+            if getattr(cand, "title", None):
+                m_fields.append("title")
+            if cand_authors:
+                m_fields.append("authors")
+            if getattr(cand, "year", None):
+                m_fields.append("year")
+            if getattr(cand, "venue", None):
+                m_fields.append("venue")
+            src_name = getattr(cand, "source_name", "unknown")
+            return {
+                "source": src_name,
+                "source_name": src_name,
+                "matched_fields": m_fields,
+                "checked_at": datetime.now(UTC).isoformat(),
+                "title": getattr(cand, "title", None),
+                "authors": cand_authors,
+                "year": str(getattr(cand, "year", "")) if getattr(cand, "year", None) else None,
+                "venue": getattr(cand, "venue", None),
+                "doi": getattr(cand, "doi", None),
+                "url": getattr(cand, "url", None),
+                "abstract": getattr(cand, "abstract", None),
+                "confidence": float(getattr(cand, "confidence", 0.0) or 0.0),
+                "external_ids": dict(getattr(cand, "external_ids", None) or {}),
             }
+
+        ordered_found: list[Any] = []
+        if best is not None:
+            ordered_found.append(best)
+        for cand_item in getattr(source, "candidates", None) or []:
+            if getattr(cand_item, "found", False) and cand_item is not best:
+                ordered_found.append(cand_item)
+
+        matched_sources_list = [_serialize_cand(c_item) for c_item in ordered_found]
+        matched_src = matched_sources_list[0] if matched_sources_list else None
+
+        feat_html_meta = getattr(vf, "html_meta", None) if vf is not None else None
+        src_html_meta = getattr(source, "html_meta", None)
+        html_meta_dict: dict[str, Any] | None = None
+        if isinstance(feat_html_meta, dict):
+            if not bool(feat_html_meta.get("is_soft_404", False)):
+                html_meta_dict = {
+                    "page_title": feat_html_meta.get("page_title"),
+                    "citation_title": feat_html_meta.get("citation_title"),
+                    "citation_authors": list(feat_html_meta.get("citation_authors") or []),
+                    "published_year": feat_html_meta.get("published_year"),
+                    "site_name": feat_html_meta.get("site_name"),
+                    "citation_doi": feat_html_meta.get("citation_doi"),
+                    "canonical_url": feat_html_meta.get("canonical_url"),
+                }
+        elif feat_html_meta is not None and not bool(getattr(feat_html_meta, "is_soft_404", False)):
+            html_meta_dict = {
+                "page_title": getattr(feat_html_meta, "page_title", None),
+                "citation_title": getattr(feat_html_meta, "citation_title", None),
+                "citation_authors": list(getattr(feat_html_meta, "citation_authors", None) or []),
+                "published_year": getattr(feat_html_meta, "published_year", None),
+                "site_name": getattr(feat_html_meta, "site_name", None),
+                "citation_doi": getattr(feat_html_meta, "citation_doi", None),
+                "canonical_url": getattr(feat_html_meta, "canonical_url", None),
+            }
+        elif src_html_meta is not None and not bool(getattr(src_html_meta, "is_soft_404", False)):
+            html_meta_dict = {
+                "page_title": getattr(src_html_meta, "page_title", None),
+                "citation_title": getattr(src_html_meta, "citation_title", None),
+                "citation_authors": list(getattr(src_html_meta, "citation_authors", None) or []),
+                "published_year": getattr(src_html_meta, "published_year", None),
+                "site_name": getattr(src_html_meta, "site_name", None),
+                "citation_doi": getattr(src_html_meta, "citation_doi", None),
+                "canonical_url": getattr(src_html_meta, "canonical_url", None),
+            }
+
+        if not matched_sources_list and html_meta_dict is not None:
+            has_web_meta = any(
+                html_meta_dict.get(k)
+                for k in (
+                    "citation_title",
+                    "page_title",
+                    "citation_authors",
+                    "published_year",
+                    "site_name",
+                    "citation_doi",
+                )
+            )
+            if has_web_meta:
+                url_stat = getattr(source, "url_status", None)
+                arch_url = getattr(source, "archive_url", None)
+                is_wayback_meta = url_stat in ("archived_alive", "archived_only") or bool(
+                    arch_url and url_stat not in ("alive", "restricted_alive")
+                )
+                synth_name = (
+                    "wayback_html_meta" if is_wayback_meta else "web_html_meta"
+                )
+                web_title = html_meta_dict.get("citation_title") or html_meta_dict.get("page_title")
+                web_authors = list(html_meta_dict.get("citation_authors") or [])
+                web_year = (
+                    str(html_meta_dict["published_year"])
+                    if html_meta_dict.get("published_year")
+                    else None
+                )
+                web_venue = html_meta_dict.get("site_name")
+                web_doi = html_meta_dict.get("citation_doi")
+                web_url = html_meta_dict.get("canonical_url") or arch_url or getattr(citation, "url", None)
+                web_m_fields: list[str] = []
+                if web_doi:
+                    web_m_fields.append("doi")
+                if web_title:
+                    web_m_fields.append("title")
+                if web_authors:
+                    web_m_fields.append("authors")
+                if web_year:
+                    web_m_fields.append("year")
+                if web_venue:
+                    web_m_fields.append("venue")
+                web_entry = {
+                    "source": synth_name,
+                    "source_name": synth_name,
+                    "matched_fields": web_m_fields,
+                    "checked_at": datetime.now(UTC).isoformat(),
+                    "title": web_title,
+                    "authors": web_authors,
+                    "year": web_year,
+                    "venue": web_venue,
+                    "doi": web_doi,
+                    "url": web_url,
+                    "abstract": None,
+                    "confidence": round(float(verdict.confidence or 0.0), 3),
+                    "external_ids": {},
+                }
+                matched_sources_list = [web_entry]
+                if matched_src is None:
+                    matched_src = web_entry
+
+        trig_rules = list(verdict.triggered_rules or [])
+        is_retracted_flag = bool(
+            getattr(verdict, "is_retracted", False)
+            or getattr(source, "is_retracted", False)
+            or ("R-RETRACTED-PAPER" in trig_rules)
+        )
+        has_scholarly_cand = (
+            bool(getattr(vf, "has_scholarly_candidate", bool(best is not None)))
+            if vf is not None
+            else bool(best is not None)
+        )
+        features_payload = {
+            "title_sim_fuzzy": float(getattr(vf, "title_sim_fuzzy", 0.0) or 0.0) if vf is not None else 0.0,
+            "title_sim_semantic": float(getattr(vf, "title_sim_semantic", 0.0) or 0.0) if vf is not None else 0.0,
+            "author_jaccard": float(getattr(vf, "author_jaccard", 0.0) or 0.0) if vf is not None else 0.0,
+            "year_distance": int(getattr(vf, "year_distance", 0) or 0) if vf is not None else 0,
+            "doi_exact_match": bool(getattr(vf, "doi_exact_match", False)) if vf is not None else False,
+            "venue_sim": float(getattr(vf, "venue_sim", 0.0) or 0.0) if vf is not None else 0.0,
+            "cross_lingual_detected": bool(getattr(vf, "cross_lingual_detected", False)) if vf is not None else False,
+            "bridged_concepts": list(getattr(vf, "bridged_concepts", None) or []) if vf is not None else [],
+            "cross_lingual_title_detected": bool(getattr(vf, "cross_lingual_title_detected", False)) if vf is not None else False,
+            "cross_lingual_title_sim": float(getattr(vf, "cross_lingual_title_sim", 0.0) or 0.0) if vf is not None else 0.0,
+            "html_meta_title_sim": getattr(vf, "html_meta_title_sim", None) if vf is not None else None,
+            "has_scholarly_candidate": has_scholarly_cand,
+        }
+
         v_dict = {
             "index": idx,
             "citation_raw": citation.raw_text,
@@ -2577,15 +2865,25 @@ async def verify_sandbox_citations_instant(
             "cited_year": citation.year,
             "cited_venue": citation.venue,
             "cited_doi": citation.doi,
+            "cited_url": getattr(citation, "url", None),
+            "numeric_index": getattr(citation, "numeric_index", None),
+            "sub_index": getattr(citation, "sub_index", None),
+            "composite_label": getattr(citation, "composite_label", None),
             "label": verdict.label.value if hasattr(verdict.label, "value") else str(verdict.label),
             "confidence": round(float(verdict.confidence or 0.0), 3),
             "mapping_status": l1_info["status"],
             "mapping_note": l1_info["note"],
             "reasoning": verdict.reasoning,
-            "triggered_rules": list(verdict.triggered_rules or []),
+            "triggered_rules": trig_rules,
             "mismatched_fields": list(verdict.mismatched_fields or []),
+            "url_status": getattr(source, "url_status", None),
+            "url_status_code": getattr(source, "url_status_code", None),
+            "archive_url": getattr(source, "archive_url", None),
+            "is_retracted": is_retracted_flag,
+            "html_meta": html_meta_dict,
+            "features": features_payload,
             "matched_source": matched_src,
-            "matched_sources": [matched_src] if matched_src else [],
+            "matched_sources": matched_sources_list,
             "sources_succeeded": list(source.sources_succeeded or []),
             "used_local_db": used_local,
         }
@@ -2602,15 +2900,20 @@ async def verify_sandbox_citations_instant(
     verified_cnt = sum(1 for v in verdict_items if v["label"] == "verified")
     meta_err_cnt = sum(1 for v in verdict_items if v["label"] == "metadata_error")
     halluc_cnt = sum(1 for v in verdict_items if v["label"] == "suspected_hallucination")
+    resource_cnt = sum(1 for v in verdict_items if v["label"] == "resource")
+    unresolved_cnt = sum(1 for v in verdict_items if v["label"] == "unresolved")
     l1_issue_cnt = sum(1 for v in verdict_items if v["mapping_status"] != "matched")
 
     return {
         "elapsed_seconds": elapsed,
         "total": len(verdict_items),
         "summary": {
+            "total": len(verdict_items),
             "verified": verified_cnt,
             "metadata_error": meta_err_cnt,
             "suspected_hallucination": halluc_cnt,
+            "resource": resource_cnt,
+            "unresolved": unresolved_cnt,
             "layer1_linking_issues": l1_issue_cnt,
         },
         "results": verdict_items,

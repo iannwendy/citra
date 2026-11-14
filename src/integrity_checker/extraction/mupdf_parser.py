@@ -466,8 +466,9 @@ class MuPdfParser(BasePDFParser):
             metadata["total_extractable_chars"] = total_extractable_chars
             metadata["avg_chars_per_page"] = round(avg_chars_per_page, 1)
             metadata["scanned_ratio"] = round(scanned_ratio, 3)
-            metadata["ocr_pages_recovered"] = ocr_pages_recovered
+            metadata["ocr_pages_recovered"] = [p + 1 for p in ocr_pages_recovered]
             metadata["legacy_encoding_detected"] = dominant_legacy_enc
+            metadata["legacy_encoding_pages_count"] = sum(legacy_enc_counts.values())
             metadata["warning_code"] = (
                 "SCANNED_PDF_DETECTED" if is_scanned_pdf else None
             )

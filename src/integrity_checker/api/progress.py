@@ -53,14 +53,20 @@ class ProgressState:
     error: str | None = None
     retry_count: int = 0
     queue_position: int | None = None
+    document_diagnostics: dict[str, Any] | None = None
 
     def to_snapshot(self) -> dict[str, Any]:
         """JSON-friendly snapshot for the API."""
         out = asdict(self)
+        out["document_diagnostics"] = self.document_diagnostics
         out["elapsed_seconds"] = (
             (self.finished_at or time.time()) - self.started_at
         )
         return out
+
+    def to_dict(self) -> dict[str, Any]:
+        """Alias for `to_snapshot()` returning JSON-ready progress dictionary."""
+        return self.to_snapshot()
 
 
 MAX_AUTO_RETRIES = 1
@@ -282,6 +288,7 @@ class ProgressTracker:
                 or state.queue_position != prev_qpos
                 or "finished_at" in fields
                 or "error" in fields
+                or "document_diagnostics" in fields
             ):
                 should_persist = True
         if notify_snapshot is not None:
@@ -317,14 +324,19 @@ class ProgressTracker:
             self._states.pop(essay_id, None)
             self._retry_counts.pop(essay_id, None)
 
-    def load_db_fallback_snapshot(self, essay_id: int) -> dict[str, Any] | None:
+    def load_db_fallback_snapshot(
+        self,
+        essay_id: int,
+        db: Any | None = None,
+    ) -> dict[str, Any] | None:
         """Reconstruct progress snapshot from SQLite for multi-worker / restart resilience."""
         try:
             from integrity_checker.db.models import EssayRecord
             from integrity_checker.db.repository import Repository
             from integrity_checker.db.session import get_session
 
-            session = get_session()
+            owns_session = db is None
+            session = get_session() if owns_session else db
             try:
                 essay = session.get(EssayRecord, essay_id)
                 if essay is None:
@@ -332,16 +344,25 @@ class ProgressTracker:
 
                 persisted_snap = self.load_persisted_snapshot(essay_id, essay)
                 job_status = getattr(essay, "job_status", None)
+                raw_qc = getattr(essay, "quota_charged", True)
+                quota_charged_bool = True if raw_qc is None else bool(raw_qc)
 
                 if job_status == "queued":
                     if persisted_snap is not None and persisted_snap.get("status") == "queued":
-                        return refresh_live_snapshot_elapsed(persisted_snap)
+                        snap = dict(refresh_live_snapshot_elapsed(persisted_snap))
+                        if snap.get("queue_position") is None:
+                            snap["queue_position"] = compute_sqlite_fifo_queue_position(
+                                session, essay_id
+                            )
+                        snap.setdefault("document_diagnostics", None)
+                        return snap
+                    q_pos = compute_sqlite_fifo_queue_position(session, essay_id)
                     return {
                         "status": "queued",
                         "step": "queued",
                         "step_index": 0,
                         "total_steps": len(STEP_KEYS),
-                        "message": "Queued for analysis...",
+                        "message": f"Queued for analysis (position #{q_pos})...",
                         "citations_found": 0,
                         "references_found": 0,
                         "linked": 0,
@@ -349,7 +370,8 @@ class ProgressTracker:
                         "elapsed_seconds": 0.0,
                         "finished_at": None,
                         "error": None,
-                        "queue_position": None,
+                        "queue_position": q_pos,
+                        "document_diagnostics": None,
                     }
 
                 if job_status == "failed":
@@ -372,6 +394,8 @@ class ProgressTracker:
                         "finished_at": (persisted_snap or {}).get("finished_at"),
                         "error": fail_err,
                         "queue_position": None,
+                        "quota_charged": quota_charged_bool,
+                        "document_diagnostics": (persisted_snap or {}).get("document_diagnostics"),
                     }
 
                 if job_status == "processing":
@@ -458,7 +482,8 @@ class ProgressTracker:
                     "queue_position": None,
                 }
             finally:
-                session.close()
+                if owns_session:
+                    session.close()
         except Exception:
             return None
 
@@ -753,6 +778,28 @@ DeadlineQueueManager = PipelineAdmissionController
 # Module-level singletons — backend is single-process for MVP
 _tracker = ProgressTracker()
 _admission_controller = PipelineAdmissionController()
+
+
+def compute_sqlite_fifo_queue_position(session: Any, essay_id: int) -> int:
+    """Compute 1-based FIFO queue position among SQLite essays with `job_status == 'queued'`."""
+    from sqlalchemy import func
+
+    from integrity_checker.db.models import EssayRecord
+
+    cnt = (
+        session.query(func.count(EssayRecord.id))
+        .filter(
+            EssayRecord.job_status == "queued",
+            EssayRecord.id <= int(essay_id),
+        )
+        .scalar()
+    )
+    return max(1, int(cnt or 0))
+
+
+def load_db_fallback_snapshot(essay_id: int, db: Any | None = None) -> dict[str, Any] | None:
+    """Module-level helper delegating to `_tracker.load_db_fallback_snapshot(essay_id, db)`."""
+    return _tracker.load_db_fallback_snapshot(essay_id, db=db)
 
 
 def get_tracker() -> ProgressTracker:

@@ -248,9 +248,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <span>
                 {isSingleCheckInFlight
                   ? activeSingleCheck?.status === 'queued'
-                    ? currentLang === 'vi'
-                      ? 'Hàng đợi'
-                      : 'Queued'
+                    ? activeSingleCheck.queuePosition != null
+                      ? currentLang === 'vi'
+                        ? `Hàng đợi #${activeSingleCheck.queuePosition}`
+                        : `Queued #${activeSingleCheck.queuePosition}`
+                      : currentLang === 'vi'
+                        ? 'Hàng đợi'
+                        : 'Queued'
                     : `${activeSingleCheck?.progress ?? 0}%`
                   : `${batchStats.completed}/${batchStats.total}`}
               </span>
@@ -366,9 +370,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                               <Loader2 className="h-2.5 w-2.5 animate-spin" />
                               <span>
                                 {activeSingleCheck?.status === 'queued'
-                                  ? currentLang === 'vi'
-                                    ? 'Chờ'
-                                    : 'Queue'
+                                  ? activeSingleCheck.queuePosition != null
+                                    ? currentLang === 'vi'
+                                      ? `Hàng đợi #${activeSingleCheck.queuePosition}`
+                                      : `Queued #${activeSingleCheck.queuePosition}`
+                                    : currentLang === 'vi'
+                                      ? 'Hàng đợi'
+                                      : 'Queued'
                                   : `${activeSingleCheck?.progress ?? 0}%`}
                               </span>
                             </span>

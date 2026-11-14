@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next"
+import type { Verdict } from "@/api/client"
 import { cn } from "@/lib/utils"
 import { FileCode, CheckCircle, XCircle, AlertTriangle } from "lucide-react"
 import { Card } from "@/components/ui/card"
@@ -30,6 +31,7 @@ interface Rule extends RuleDefinition {
 interface RuleInspectorProps {
   triggeredRules: string[]
   verdictLabel?: string
+  features?: Verdict["features"]
   className?: string
 }
 
@@ -871,7 +873,7 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
     description: "Verified Vietnamese technical standard or regulation against the TCVN/QCVN registry",
     descriptionVi: "Đã xác minh Tiêu chuẩn hoặc Quy chuẩn Kỹ thuật Quốc gia đối chiếu với danh mục TCVN/QCVN chuẩn",
     conditions: [
-      { field: "source", operator: "=", value: "vn_tech_standard" },
+      { field: "source", operator: "=", value: "tech_standard" },
       { field: "standard_code_match", operator: "=", value: "true" },
     ],
     conclusion: "VERIFIED",
@@ -883,7 +885,7 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
     description: "Verified canonical Vietnamese university textbook or monograph against the curated textbook registry",
     descriptionVi: "Đã xác minh giáo trình đại học hoặc sách chuyên khảo tiếng Việt đối chiếu với danh mục chuẩn",
     conditions: [
-      { field: "source", operator: "=", value: "vn_textbook_registry" },
+      { field: "source", operator: "=", value: "tech_standard" },
       { field: "title_sim_fuzzy", operator: ">=", value: "0.88" },
     ],
     conclusion: "VERIFIED",
@@ -955,10 +957,48 @@ function getVerdictColorClass(conclusion: string): {
 export function RuleInspector({
   triggeredRules,
   verdictLabel,
+  features,
   className
 }: RuleInspectorProps) {
   const { i18n } = useTranslation()
   const isVi = i18n.language?.startsWith("vi")
+
+  const featurePills: string[] = []
+  if (features) {
+    if (features.title_sim_fuzzy !== undefined) {
+      featurePills.push(`title_sim_fuzzy=${features.title_sim_fuzzy.toFixed(2)}`)
+    }
+    if (features.title_sim_semantic !== undefined && features.title_sim_semantic > 0) {
+      featurePills.push(`title_sim_semantic=${features.title_sim_semantic.toFixed(2)}`)
+    }
+    if (features.author_jaccard !== undefined) {
+      featurePills.push(`author_jaccard=${features.author_jaccard.toFixed(2)}`)
+    }
+    if (
+      features.year_distance !== undefined &&
+      features.year_distance < 900 &&
+      features.has_scholarly_candidate !== false
+    ) {
+      featurePills.push(`year_distance=${features.year_distance}`)
+    }
+    if (features.html_meta_title_sim !== undefined && features.html_meta_title_sim !== null) {
+      featurePills.push(`html_meta_title_sim=${features.html_meta_title_sim.toFixed(2)}`)
+    }
+    if (
+      features.cross_lingual_title_detected ||
+      (features.cross_lingual_title_sim !== undefined && features.cross_lingual_title_sim > 0)
+    ) {
+      featurePills.push(
+        `cross_lingual_title_sim=${(features.cross_lingual_title_sim ?? 0).toFixed(2)}`
+      )
+    }
+    if (features.cross_lingual_detected) {
+      featurePills.push("cross_lingual=VI↔EN")
+    }
+    if (features.doi_exact_match !== undefined) {
+      featurePills.push(`doi_exact_match=${String(features.doi_exact_match)}`)
+    }
+  }
 
   const rules: Rule[] = triggeredRules.map((ruleId) => {
     const definition = RULE_DEFINITIONS[ruleId]
@@ -998,6 +1038,25 @@ export function RuleInspector({
           {isVi ? `Luật được kích hoạt (${rules.length})` : `Triggered Rules (${rules.length})`}
         </h4>
       </div>
+
+      {featurePills.length > 0 && (
+        <div
+          data-testid="rule-inspector-live-features"
+          className="flex flex-wrap items-center gap-1.5 p-2 rounded-lg bg-slate-100/80 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800"
+        >
+          <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mr-1">
+            {isVi ? "Đặc trưng thực tế:" : "Observed Features:"}
+          </span>
+          {featurePills.map((pill) => (
+            <span
+              key={pill}
+              className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-[10px] text-slate-700 dark:text-slate-300"
+            >
+              {pill}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="space-y-2">
         {rules.map((rule) => {

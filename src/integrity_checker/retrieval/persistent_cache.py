@@ -257,20 +257,45 @@ def _deserialize_candidate(data: dict) -> SourceCandidate:
     return cand
 
 
-def _serialize_source_result(result: SourceResult) -> dict:
-    html_meta = getattr(result, "html_meta", None)
-    html_meta_dict = (
-        {
-            "page_title": html_meta.page_title,
-            "citation_title": html_meta.citation_title,
-            "citation_authors": list(html_meta.citation_authors or []),
-            "citation_doi": html_meta.citation_doi,
-            "published_year": html_meta.published_year,
-            "is_soft_404": bool(html_meta.is_soft_404),
-        }
-        if html_meta is not None
-        else None
+def _serialize_html_meta(html_meta: object | None) -> dict | None:
+    if html_meta is None:
+        return None
+    if hasattr(html_meta, "to_dict"):
+        return html_meta.to_dict()  # type: ignore[no-any-return]
+    return {
+        "page_title": getattr(html_meta, "page_title", None),
+        "citation_title": getattr(html_meta, "citation_title", None),
+        "citation_authors": list(getattr(html_meta, "citation_authors", None) or []),
+        "citation_doi": getattr(html_meta, "citation_doi", None),
+        "published_year": getattr(html_meta, "published_year", None),
+        "site_name": getattr(html_meta, "site_name", None),
+        "canonical_url": getattr(html_meta, "canonical_url", None),
+        "is_soft_404": bool(getattr(html_meta, "is_soft_404", False)),
+    }
+
+
+def _deserialize_html_meta(raw_html_meta: object) -> object | None:
+    from integrity_checker.retrieval.html_meta_verifier import HtmlPageMeta
+
+    if not isinstance(raw_html_meta, dict):
+        return None
+    parsed = HtmlPageMeta.from_dict(raw_html_meta)
+    if parsed is not None:
+        return parsed
+    return HtmlPageMeta(
+        page_title=raw_html_meta.get("page_title"),
+        citation_title=raw_html_meta.get("citation_title"),
+        citation_authors=list(raw_html_meta.get("citation_authors") or []),
+        citation_doi=raw_html_meta.get("citation_doi"),
+        published_year=raw_html_meta.get("published_year"),
+        site_name=raw_html_meta.get("site_name"),
+        canonical_url=raw_html_meta.get("canonical_url"),
+        is_soft_404=bool(raw_html_meta.get("is_soft_404", False)),
     )
+
+
+def _serialize_source_result(result: SourceResult) -> dict:
+    html_meta_dict = _serialize_html_meta(getattr(result, "html_meta", None))
     return {
         "citation_raw": result.citation_raw,
         "candidates": [_serialize_candidate(c) for c in (result.candidates or [])],
@@ -287,22 +312,8 @@ def _serialize_source_result(result: SourceResult) -> dict:
 
 
 def _deserialize_source_result(data: dict) -> SourceResult:
-    from integrity_checker.retrieval.html_meta_verifier import HtmlPageMeta
-
     candidates = [_deserialize_candidate(item) for item in (data.get("candidates") or [])]
-    raw_html_meta = data.get("html_meta")
-    html_meta = (
-        HtmlPageMeta(
-            page_title=raw_html_meta.get("page_title"),
-            citation_title=raw_html_meta.get("citation_title"),
-            citation_authors=list(raw_html_meta.get("citation_authors") or []),
-            citation_doi=raw_html_meta.get("citation_doi"),
-            published_year=raw_html_meta.get("published_year"),
-            is_soft_404=bool(raw_html_meta.get("is_soft_404", False)),
-        )
-        if isinstance(raw_html_meta, dict)
-        else None
-    )
+    html_meta = _deserialize_html_meta(data.get("html_meta"))
     return SourceResult(
         citation_raw=str(data.get("citation_raw") or ""),
         candidates=candidates,
@@ -314,7 +325,7 @@ def _deserialize_source_result(data: dict) -> SourceResult:
         url_status_code=data.get("url_status_code"),
         archive_url=data.get("archive_url"),
         is_retracted=bool(data.get("is_retracted", False)),
-        html_meta=html_meta,
+        html_meta=html_meta,  # type: ignore[arg-type]
     )
 
 
@@ -444,7 +455,7 @@ class PersistentVerificationCache:
     @staticmethod
     def _primary_source_label(result: SourceResult) -> str:
         if result.sources_succeeded:
-            return str(result.sources_succeeded[0])[:20]
+            return str(result.sources_succeeded[0])[:64]
         if result.url_status is not None:
             return "url_check"
         return "clean_miss"

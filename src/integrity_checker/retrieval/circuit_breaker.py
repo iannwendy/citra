@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import math
 import re
 import threading
 import time
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections import deque
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
 _HTTP_5XX_RE = re.compile(
     r"\b(?:http[\s/_-]*)?5\d{2}\b|\b5xx\b|service unavailable|bad gateway|"
     r"gateway timeout|internal server error",
+    re.IGNORECASE,
+)
+_HTTP_CODE_RE = re.compile(
+    r"(?:http[\s/_:-]*|status[\s/_:-]*|\()([45]\d{2})\b|\b(429|5\d{2})\b",
     re.IGNORECASE,
 )
 
@@ -41,6 +47,13 @@ class _SourceCircuit:
     open_until: float = 0.0
     probe_in_flight: bool = False
     probe_started_at: float = 0.0
+    last_error: str | None = None
+    last_status_code: int | None = None
+    last_failure_at: float | None = None
+    latency_samples: deque[float] = field(default_factory=lambda: deque(maxlen=100))
+
+
+CircuitBreakerEntry = _SourceCircuit
 
 
 class CircuitBreakerRegistry:
@@ -71,6 +84,14 @@ class CircuitBreakerRegistry:
             entry = _SourceCircuit()
             self._circuits[source_name] = entry
         return entry
+
+    def register_sources(self, source_names: Iterable[str]) -> None:
+        """Pre-register upstream source keys in CLOSED state without mutating existing entries."""
+        with self._lock:
+            for raw_name in source_names:
+                name = str(raw_name or "").strip()
+                if name:
+                    self._get_or_create(name)
 
     def _update_ema(self, entry: _SourceCircuit, latency_ms: float) -> None:
         sample = max(0.0, float(latency_ms))
@@ -128,7 +149,9 @@ class CircuitBreakerRegistry:
             entry = self._get_or_create(source_name)
             entry.total_calls += 1
             entry.success_count += 1
-            self._update_ema(entry, latency_ms)
+            sample = max(0.0, float(latency_ms))
+            self._update_ema(entry, sample)
+            entry.latency_samples.append(sample)
             entry.consecutive_failures = 0
             entry.probe_in_flight = False
             entry.probe_started_at = 0.0
@@ -140,36 +163,52 @@ class CircuitBreakerRegistry:
         self,
         source_name: str,
         reason: str,
-        latency_ms: float = 0.0,
+        latency_ms: float | None = None,
     ) -> None:
         """Record an upstream infrastructure failure and trip to OPEN when threshold reached."""
         with self._lock:
+            now = float(self._now_fn())
             entry = self._get_or_create(source_name)
             entry.total_calls += 1
             entry.consecutive_failures += 1
 
-            r = (reason or "").lower()
-            if "timeout" in r or "timed out" in r:
-                entry.timeout_count += 1
-            elif (
+            raw_reason = str(reason or "")
+            entry.last_error = raw_reason[:240] or None
+            entry.last_failure_at = now
+
+            r = raw_reason.lower()
+            is_rate_limit = (
                 "429" in r
                 or "rate limit" in r
                 or "rate-limit" in r
                 or "too many requests" in r
-            ):
+            )
+            if "timeout" in r or "timed out" in r:
+                entry.timeout_count += 1
+            elif is_rate_limit:
                 entry.http_429_count += 1
             elif _HTTP_5XX_RE.search(r):
                 entry.http_5xx_count += 1
 
-            if latency_ms > 0:
-                self._update_ema(entry, latency_ms)
+            code_match = _HTTP_CODE_RE.search(raw_reason)
+            if code_match:
+                entry.last_status_code = int(code_match.group(1) or code_match.group(2))
+            elif is_rate_limit:
+                entry.last_status_code = 429
+            else:
+                entry.last_status_code = None
+
+            if latency_ms is not None and latency_ms >= 0:
+                sample = float(latency_ms)
+                self._update_ema(entry, sample)
+                entry.latency_samples.append(sample)
 
             if (
                 entry.state == CircuitState.HALF_OPEN
                 or entry.consecutive_failures >= self._failure_threshold
             ):
                 entry.state = CircuitState.OPEN
-                entry.open_until = float(self._now_fn()) + self._recovery_timeout_seconds
+                entry.open_until = now + self._recovery_timeout_seconds
                 entry.probe_in_flight = False
                 entry.probe_started_at = 0.0
 
@@ -189,16 +228,37 @@ class CircuitBreakerRegistry:
                     if effective_state == CircuitState.OPEN
                     else 0.0
                 )
+                open_remaining = round(rem, 2)
+                avg_val = round(entry.ema_latency_ms, 2) if entry.has_latency_sample else None
+                if entry.latency_samples:
+                    sorted_samples = sorted(entry.latency_samples)
+                    p95_idx = min(
+                        len(sorted_samples) - 1,
+                        max(0, math.ceil(0.95 * len(sorted_samples)) - 1),
+                    )
+                    p95_val: float | None = round(sorted_samples[p95_idx], 2)
+                else:
+                    p95_val = None
+                failures = max(0, entry.total_calls - entry.success_count)
                 out[source_name] = {
                     "state": effective_state.value,
                     "consecutive_failures": entry.consecutive_failures,
                     "total_calls": entry.total_calls,
                     "success_count": entry.success_count,
+                    "failure_count": failures,
+                    "total_failures": failures,
                     "timeout_count": entry.timeout_count,
                     "http_429_count": entry.http_429_count,
                     "http_5xx_count": entry.http_5xx_count,
                     "ema_latency_ms": round(entry.ema_latency_ms, 2),
-                    "open_remaining_seconds": round(rem, 2),
+                    "avg_latency_ms": avg_val,
+                    "p95_latency_ms": p95_val,
+                    "has_latency_sample": bool(entry.has_latency_sample),
+                    "open_remaining_seconds": open_remaining,
+                    "cooldown_remaining_s": open_remaining,
+                    "last_error": entry.last_error,
+                    "last_status_code": entry.last_status_code,
+                    "last_failure_at": entry.last_failure_at,
                 }
             return out
 
@@ -231,6 +291,7 @@ def reset_circuit_breaker_registry() -> None:
 
 
 __all__ = [
+    "CircuitBreakerEntry",
     "CircuitBreakerRegistry",
     "CircuitState",
     "get_circuit_breaker_registry",

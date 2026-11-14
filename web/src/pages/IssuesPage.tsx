@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { type Verdict, type ValidationLabel } from '@/api/client';
 import { VerdictBadge } from '@/components/VerdictBadge';
 import {
+  extractObservedWebMeta,
+  getCitationMarkerLabel,
   getSourceDisplayName,
   getVerdictExplanation,
   isUrlResource,
@@ -24,6 +26,7 @@ import {
   CheckCircle,
   Scale,
   Lock,
+  Globe,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -108,15 +111,19 @@ function SourceIcon({ source }: { source: string }) {
   if (lower.includes('tech_standard') || lower.includes('rfc') || lower.includes('github') || lower.includes('npm')) return <span className="text-[11px] font-mono font-bold">TS</span>;
   if (lower.includes('wikidata') || lower.includes('opencitations')) return <span className="text-[11px] font-mono font-bold">WD</span>;
   if (lower.includes('doi_ra')) return <span className="text-[11px] font-mono font-bold">RA</span>;
+  if (lower.includes('vn_legal')) return <span className="text-[11px] font-mono font-bold">VL</span>;
+  if (lower.includes('web_html') || lower.includes('wayback_html')) return <Globe className="h-3.5 w-3.5" />;
   return <Database className="h-3.5 w-3.5" />;
 }
 
 function IssueCard({
   verdict,
+  index,
   lang,
   canViewDeep,
 }: {
   verdict: Verdict;
+  index?: number;
   lang: 'vi' | 'en';
   /** Pro/Ultra plans, teachers and admins (`view_logic_trace` capability). */
   canViewDeep: boolean;
@@ -125,19 +132,55 @@ function IssueCard({
   const severity = getSeverity(verdict.label);
   const config = severityConfig[severity];
 
-  const rawPrefixMatch = verdict.citation_raw.match(/^\[(\d+)\]\s*/);
-  const refIdMatch = verdict.citation_link?.reference_id?.match(/^ref-0*(\d+)$/);
-  const citationNum =
-    rawPrefixMatch?.[1] ||
-    refIdMatch?.[1] ||
-    verdict.citation_id.replace(/[^0-9]/g, '') ||
-    verdict.citation_id;
-  const displayCitationRaw = rawPrefixMatch
-    ? verdict.citation_raw.slice(rawPrefixMatch[0].length)
-    : verdict.citation_raw;
+  const resolvedMarker = getCitationMarkerLabel(verdict);
+  const citationMarker =
+    resolvedMarker !== '[?]'
+      ? resolvedMarker
+      : `[${verdict.citation_id.replace(/^v/i, '') || (index !== undefined ? index + 1 : '?')}]`;
+  const displayCitationRaw =
+    verdict.citation_raw.replace(/^\s*\[\s*\d+[a-z]?\s*\]\s*/i, '') ||
+    verdict.citation_raw;
+
+  const observedWeb = extractObservedWebMeta(verdict);
+  const rawUrlStatus = verdict.url_status ?? verdict.features?.url_status;
+  const hasArchiveFallback =
+    Boolean(verdict.archive_url || verdict.features?.archive_url) ||
+    (verdict.triggered_rules ?? []).includes('R-WAYBACK-ARCHIVED');
+  const urlStatus =
+    rawUrlStatus === 'archived_alive' ||
+    (hasArchiveFallback &&
+      rawUrlStatus !== 'alive' &&
+      rawUrlStatus !== 'restricted_alive')
+      ? 'archived_alive'
+      : rawUrlStatus === 'alive' ||
+          rawUrlStatus === 'restricted_alive' ||
+          rawUrlStatus === 'dead_link' ||
+          rawUrlStatus === 'fake_domain'
+        ? rawUrlStatus
+        : undefined;
+  const urlStatusCode =
+    verdict.url_status_code ?? verdict.features?.url_status_code;
+  const isUrlContentMismatch = (verdict.triggered_rules ?? []).includes(
+    'R-URL-CONTENT-MISMATCH',
+  );
 
   function getIssueDescription(v: Verdict): string {
+    if ((v.triggered_rules ?? []).includes('R-URL-CONTENT-MISMATCH')) {
+      if (observedWeb?.title) {
+        return lang === 'vi'
+          ? `Nội dung trang web thực tế («${observedWeb.title}») không khớp với tiêu đề tài liệu trích dẫn.`
+          : `Observed web page title (“${observedWeb.title}”) does not match the claimed citation title.`;
+      }
+      return lang === 'vi'
+        ? 'Nội dung/tiêu đề trang web tại đường dẫn URL không khớp với tài liệu được trích dẫn.'
+        : 'Cited web page title/metadata does not match the claimed citation title.';
+    }
     if (isUrlResource(v)) {
+      if (observedWeb?.title) {
+        return lang === 'vi'
+          ? `Tài nguyên Web trực tuyến: «${observedWeb.title}»${observedWeb.venue ? ` (${observedWeb.venue})` : ''}. Không tính vào điểm CIS.`
+          : `Web resource: “${observedWeb.title}”${observedWeb.venue ? ` (${observedWeb.venue})` : ''}. Excluded from CIS scoring.`;
+      }
       return lang === 'vi'
         ? `Tài nguyên URL: ${v.citation_raw}. Không tính vào điểm CIS.`
         : `URL resource: ${v.citation_raw}. Excluded from CIS scoring.`;
@@ -196,7 +239,7 @@ function IssueCard({
         ? 'Không đủ dữ liệu định danh (DOI/Tác giả/Tiêu đề) để xác minh tự động.'
         : 'Unable to verify due to insufficient data.';
     }
-    return getVerdictExplanation(v);
+    return getVerdictExplanation(v, lang);
   }
 
   const sourceResults = verdict.matched_sources || [];
@@ -209,13 +252,43 @@ function IssueCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200">
-              [{citationNum}]
+              {citationMarker}
             </span>
             <VerdictBadge
               verdict={isUrlResource(verdict) ? 'resource' : verdict.label}
               triggeredRules={verdict.triggered_rules}
               size="sm"
             />
+            {urlStatus && (
+              <span
+                data-testid="issue-url-status-badge"
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold border ${
+                  isUrlContentMismatch
+                    ? 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                    : urlStatus === 'alive'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                      : urlStatus === 'restricted_alive'
+                        ? 'bg-sky-50 dark:bg-sky-950/70 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                        : urlStatus === 'archived_alive'
+                          ? 'bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+                          : 'bg-red-50 dark:bg-red-950/70 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
+                }`}
+              >
+                {isUrlContentMismatch
+                  ? `⚠ HTTP ${urlStatusCode ?? 200} · ${lang === 'vi' ? 'Sai nội dung trang' : 'Wrong Page'}`
+                  : urlStatus === 'alive'
+                    ? `✓ HTTP ${urlStatusCode ?? 200} OK`
+                    : urlStatus === 'restricted_alive'
+                      ? `🔒 HTTP ${urlStatusCode ?? 403} OK`
+                      : urlStatus === 'archived_alive'
+                        ? lang === 'vi'
+                          ? '🏛️ Bản lưu Wayback'
+                          : '🏛️ Wayback Archived'
+                        : urlStatus === 'dead_link'
+                          ? `✕ HTTP ${urlStatusCode ?? 404} Dead`
+                          : '✕ Fake URL'}
+              </span>
+            )}
             {canViewDeep && (
               <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
                 Conf: <strong>{Math.round(verdict.confidence * 100)}%</strong>
@@ -228,6 +301,44 @@ function IssueCard({
           <p className={`text-xs font-medium break-words [overflow-wrap:anywhere] ${config.textColor}`}>
             {getIssueDescription(verdict)}
           </p>
+          {observedWeb &&
+            (observedWeb.title ||
+              observedWeb.venue ||
+              observedWeb.authors?.length ||
+              observedWeb.year) && (
+              <div
+                data-testid="issue-observed-web-meta"
+                className="mt-2 px-3 py-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800 text-xs space-y-0.5"
+              >
+                <div className="font-mono text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  {observedWeb.isArchived
+                    ? lang === 'vi'
+                      ? 'Metadata Bản lưu Wayback Machine'
+                      : 'Wayback Machine Archived Metadata'
+                    : lang === 'vi'
+                      ? 'Metadata Trang Web Trực tiếp (HTML)'
+                      : 'Live Web Page Metadata (HTML)'}
+                </div>
+                {observedWeb.title && (
+                  <div className="font-medium text-slate-800 dark:text-slate-200 break-words">
+                    {observedWeb.title}
+                  </div>
+                )}
+                {(observedWeb.authors?.length ||
+                  observedWeb.year ||
+                  observedWeb.venue) && (
+                  <div className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                    {[
+                      observedWeb.authors?.join(', '),
+                      observedWeb.year,
+                      observedWeb.venue,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </div>
+                )}
+              </div>
+            )}
         </div>
         <button
           onClick={() => setExpanded(!expanded)}
@@ -271,7 +382,7 @@ function IssueCard({
                   {lang === 'vi' ? 'Giải thích Suy diễn' : 'What this means'}
                 </h4>
                 <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300">
-                  {getVerdictExplanation(verdict)}
+                  {getVerdictExplanation(verdict, lang)}
                 </p>
               </div>
             </div>
@@ -330,7 +441,17 @@ function IssueCard({
                   >
                     <span className="flex items-center gap-2 font-medium text-slate-700 dark:text-slate-300">
                       <SourceIcon source={source.source} />
-                      <span>{getSourceDisplayName(source.source)}</span>
+                      <span>
+                        {source.source?.toLowerCase() === 'vn_legal_registry' &&
+                        lang === 'en'
+                          ? 'VN Legal Registry'
+                          : getSourceDisplayName(source.source, lang, {
+                              triggered_rules: verdict.triggered_rules,
+                              external_ids: source.external_ids,
+                              venue: source.venue,
+                              title: source.title,
+                            })}
+                      </span>
                     </span>
                     <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
                       MATCH
@@ -421,8 +542,8 @@ function SeveritySection({
 
       {isOpen && (
         <div className="space-y-2.5 pl-1">
-          {verdicts.map((verdict) => (
-            <IssueCard key={verdict.citation_id} verdict={verdict} lang={lang} canViewDeep={canViewDeep} />
+          {verdicts.map((verdict, idx) => (
+            <IssueCard key={verdict.citation_id} verdict={verdict} index={idx} lang={lang} canViewDeep={canViewDeep} />
           ))}
         </div>
       )}

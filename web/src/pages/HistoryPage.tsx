@@ -246,10 +246,25 @@ export function HistoryPage() {
           </div>
         ) : (
           <div className="t-skel-reveal p-4 sm:p-5 space-y-3">
-            {filteredItems.map((essay, idx) => (
+            {filteredItems.map((essay, idx) => {
+              const jobStatus = (essay.job_status || 'completed').toLowerCase();
+              const isQueued = jobStatus === 'queued';
+              const isProcessing = jobStatus === 'processing';
+              const isInProgress = isQueued || isProcessing;
+              const isFailed = jobStatus === 'failed';
+              const targetHref =
+                isInProgress || isFailed
+                  ? `/verification/processing/${essay.id}`
+                  : `/verification/report/${essay.id}`;
+              const cisDisplay =
+                !isFailed && !isInProgress && typeof essay.cis_score === 'number'
+                  ? `${Math.round(essay.cis_score)}/100`
+                  : '—';
+
+              return (
               <Link
                 key={essay.id}
-                to={`/verification/report/${essay.id}`}
+                to={targetHref}
                 data-testid="essay-item"
                 className="group block p-4 sm:p-5 rounded-2xl bg-slate-50/60 dark:bg-slate-950/60 border border-slate-200/90 dark:border-slate-800 hover:bg-white dark:hover:bg-slate-900 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-sm transition-all duration-200 overflow-hidden"
               >
@@ -257,7 +272,7 @@ export function HistoryPage() {
                   <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 w-full">
                     <FileFormatIcon filename={essay.filename} size="lg" />
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
                         <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0">
                           #{idx + 1}
                         </span>
@@ -267,6 +282,42 @@ export function HistoryPage() {
                         >
                           {essay.filename}
                         </p>
+                        {isQueued && (
+                          <span
+                            data-testid={`history-job-status-${essay.id}`}
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80 shrink-0"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            {lang === 'vi' ? 'Hàng đợi' : 'Queued'}
+                          </span>
+                        )}
+                        {isProcessing && (
+                          <span
+                            data-testid={`history-job-status-${essay.id}`}
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 shrink-0"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                            {lang === 'vi' ? 'Đang xử lý' : 'Processing'}
+                          </span>
+                        )}
+                        {isFailed && (
+                          <span
+                            data-testid={`history-job-status-${essay.id}`}
+                            title={essay.job_error || undefined}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/80 shrink-0"
+                          >
+                            <AlertTriangle className="h-3 w-3" />
+                            {lang === 'vi' ? 'Thất bại' : 'Failed'}
+                          </span>
+                        )}
+                        {isFailed && essay.quota_charged === false && (
+                          <span
+                            data-testid={`history-job-refund-${essay.id}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 shrink-0"
+                          >
+                            {lang === 'vi' ? 'Hoàn lượt' : 'Credit Refunded'}
+                          </span>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs font-mono text-slate-500 dark:text-slate-400 mt-1.5">
                         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-300">
@@ -275,6 +326,12 @@ export function HistoryPage() {
                           {lang !== 'vi' && essay.num_pages === 1
                             ? 'page'
                             : t('history.pages')}
+                        </span>
+                        <span
+                          data-testid={`history-essay-cis-${essay.id}`}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-semibold"
+                        >
+                          CIS: {cisDisplay}
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5 text-slate-400" />
@@ -324,7 +381,15 @@ export function HistoryPage() {
 
                   <div className="flex items-center justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/60 dark:border-slate-800/60">
                     <span className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold border border-indigo-200/80 dark:border-indigo-800/80 bg-indigo-50/80 dark:bg-indigo-950/80 rounded-xl text-indigo-700 dark:text-indigo-300 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-colors">
-                      {t('dashboard.viewReport')}
+                      {isInProgress
+                        ? lang === 'vi'
+                          ? 'Xem tiến trình'
+                          : 'Live Progress'
+                        : isFailed
+                          ? lang === 'vi'
+                            ? 'Chi tiết lỗi'
+                            : 'View Error'
+                          : t('dashboard.viewReport')}
                     </span>
                     <button
                       onClickCapture={(e) => {
@@ -347,7 +412,8 @@ export function HistoryPage() {
                   </div>
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
         )}
 

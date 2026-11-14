@@ -153,14 +153,13 @@ def test_migration_0010_upgrades_from_0009_backfills_job_status_and_downgrades_w
                 "(2, 'orphaned_crash.pdf', 8, NULL)"
             )
 
-        assert LATEST_SCHEMA_VERSION == "0010"
-        applied_0010 = run_migrations(engine)
+        assert LATEST_SCHEMA_VERSION >= "0010"
+        applied_0010 = run_migrations(engine, target_version="0010")
         assert applied_0010 == ["0010"]
         assert verify_migrations(engine) is True
 
         status_up = get_migration_status(engine)
         assert status_up.current_version == "0010"
-        assert status_up.is_up_to_date is True
         assert status_up.checksum_verified is True
 
         inspector = inspect(engine)
@@ -194,7 +193,7 @@ def test_migration_0010_upgrades_from_0009_backfills_job_status_and_downgrades_w
 
         status_down = get_migration_status(engine)
         assert status_down.current_version == "0009"
-        assert status_down.pending_versions == ("0010",)
+        assert "0010" in status_down.pending_versions
         assert status_down.checksum_verified is True
 
         inspector_after = inspect(engine)

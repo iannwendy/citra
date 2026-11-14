@@ -16,8 +16,15 @@ import { OverrideControls } from '@/components/OverrideControls';
 import { CitationGraphView, EvidenceGraph } from '@/components/CitationGraph';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { BibliographyRemediationModal } from '@/components/BibliographyRemediationModal';
+import { RULE_DEFINITIONS } from '@/components/RuleInspector';
 import { useEssayReport, useOverrideVerdict } from '@/hooks/useEssayReport';
-import { isUrlResource } from '@/lib/verdictExplanation';
+import {
+  extractObservedWebMeta,
+  getCitationMarkerLabel,
+  getSourceDisplayName,
+  isLegalStatuteVerdict,
+  isUrlResource,
+} from '@/lib/verdictExplanation';
 import { SYMBOLIC_RULES_COUNT } from '@/lib/productFacts';
 import { useRole } from '@/hooks/useRole';
 import {
@@ -34,6 +41,7 @@ import {
   GitBranch,
   Lock,
   Sparkles,
+  FileText,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -448,83 +456,353 @@ const RULE_CATALOG: Record<
     condition: 'IF sources_succeeded == 0 AND sources_failed > 0 THEN UNRESOLVED',
     status: 'warning',
   },
+  'R-VN-STANDARD-VERIFIED': {
+    nameEn: 'Vietnamese National Technical Standard / Regulation (TCVN/QCVN) Verified',
+    nameVi: 'Xác thực Tiêu chuẩn / Quy chuẩn Kỹ thuật Quốc gia Việt Nam (TCVN / QCVN)',
+    condition: 'IF source == "tech_standard" AND standard_code IN ("TCVN", "QCVN") THEN VERIFIED',
+    status: 'passed',
+  },
+  'R-VN-TEXTBOOK-VERIFIED': {
+    nameEn: 'Vietnamese University Textbook / Monograph Registry Verified',
+    nameVi: 'Xác thực Danh mục Giáo trình / Sách chuyên khảo Đại học Việt Nam',
+    condition: 'IF source == "tech_standard" AND textbook_registry_hit == TRUE AND title_sim >= 0.85 THEN VERIFIED',
+    status: 'passed',
+  },
+  'R-VN-LEGAL-FABRICATED': {
+    nameEn: 'Fabricated Vietnamese Statutory Number or Issuing Authority',
+    nameVi: 'Số hiệu hoặc Cơ quan ban hành Văn bản Pháp luật VN không tồn tại / bịa đặt',
+    condition: 'IF statute_code_fabricated == TRUE OR authority_invalid == TRUE THEN SUSPECTED_HALLUCINATION',
+    status: 'failed',
+  },
+  'R-LEGAL-STATUTE-VERIFIED': {
+    nameEn: 'Official Legal Statute / Regulatory Document Verified',
+    nameVi: 'Xác thực Văn bản Quy phạm Pháp luật chính thức',
+    condition: 'IF legal_registry_match == TRUE THEN VERIFIED',
+    status: 'passed',
+  },
+  'R-LEGAL-STATUTE-ERROR': {
+    nameEn: 'Legal Statute Metadata Discrepancy or Superseded Regulation',
+    nameVi: 'Sai lệch Metadata hoặc hiệu lực Văn bản Quy phạm Pháp luật',
+    condition: 'IF legal_metadata_conflict == TRUE THEN METADATA_ERROR',
+    status: 'warning',
+  },
+  'R-RATE-LIMITED-ABSTAIN': {
+    nameEn: 'Scholarly API Rate-Limit Abstention (HTTP 429 Guard)',
+    nameVi: 'Từ chối phán quyết tạm thời do giới hạn băng thông API (HTTP 429)',
+    condition: 'IF http_429_rate_limited == TRUE AND candidates == 0 THEN UNRESOLVED',
+    status: 'warning',
+  },
+  'R-VENUE-MISMATCH': {
+    nameEn: 'Publication Venue / Journal Discrepancy',
+    nameVi: 'Sai lệch Nơi công bố (Tạp chí / Hội nghị)',
+    condition: 'IF title_sim >= 0.85 AND venue_sim < 0.40 THEN METADATA_ERROR',
+    status: 'warning',
+  },
+  'R-TITLE-MISMATCH': {
+    nameEn: 'Cited Title Discrepancy on Matched Author-Year Work',
+    nameVi: 'Sai lệch Tiêu đề trên công trình khớp Tác giả & Năm',
+    condition: 'IF author_jaccard >= 0.70 AND year_distance == 0 AND title_sim < 0.75 THEN METADATA_ERROR',
+    status: 'warning',
+  },
+  'R-YEAR-MISMATCH': {
+    nameEn: 'Publication Year Discrepancy Against Canonical Record',
+    nameVi: 'Sai lệch Năm xuất bản so với bản ghi chuẩn',
+    condition: 'IF title_sim >= 0.85 AND year_distance >= 1 THEN METADATA_ERROR',
+    status: 'warning',
+  },
+  'R-DOI-METADATA-MISMATCH': {
+    nameEn: 'Resolved DOI Metadata Discrepancy',
+    nameVi: 'Mã DOI hợp lệ nhưng sai lệch Metadata công trình',
+    condition: 'IF doi_exact_match == TRUE AND (title_sim < 0.80 OR year_distance > 1) THEN METADATA_ERROR',
+    status: 'warning',
+  },
+  'R-DOI-CONFLICT': {
+    nameEn: 'Cross-Registry DOI Metadata Conflict',
+    nameVi: 'Xung đột Metadata của mã DOI giữa các CSDL',
+    condition: 'IF doi_resolved == TRUE AND cross_source_conflict == TRUE THEN METADATA_ERROR',
+    status: 'warning',
+  },
+  'R-CHIMERIC-DOI-MISMATCH': {
+    nameEn: 'Chimeric / Spliced DOI Resolves to Different Publication',
+    nameVi: 'Trích dẫn ghép nối (Chimeric): DOI trỏ tới một công trình hoàn toàn khác',
+    condition: 'IF doi_resolved == TRUE AND title_sim_fuzzy < 0.35 AND author_jaccard < 0.25 THEN METADATA_ERROR',
+    status: 'failed',
+  },
+  'R-LOCAL_DB_METADATA_ERROR': {
+    nameEn: 'Local Scholarly Library Match with Metadata Discrepancy',
+    nameVi: 'Khớp CSDL học thuật nội bộ nhưng sai lệch trường Metadata',
+    condition: 'IF local_fts5_hit == TRUE AND (year_distance > 0 OR author_jaccard < 0.60) THEN METADATA_ERROR',
+    status: 'warning',
+  },
+  'R-NON-SCHOLARLY-RESOURCE': {
+    nameEn: 'Non-Scholarly Web Resource or Technical Documentation',
+    nameVi: 'Tài nguyên Web phi học thuật hoặc Tài liệu kỹ thuật trực tuyến',
+    condition: 'IF is_web_documentation == TRUE AND has_scholarly_venue == FALSE THEN RESOURCE',
+    status: 'passed',
+  },
+  'R-UNINDEXED-BOOK-OR-SOURCE': {
+    nameEn: 'Unindexed Regional Monograph, Thesis, or Print Source',
+    nameVi: 'Sách chuyên khảo, Luận văn hoặc Nguồn bản in địa phương chưa lập chỉ mục số',
+    condition: 'IF print_monograph_pattern == TRUE AND live_candidates == 0 THEN UNRESOLVED',
+    status: 'warning',
+  },
+  'R-SOFTWARE-PACKAGE-VERIFIED': {
+    nameEn: 'Software Package Release Metadata Verified (PyPI / NPM / CRAN)',
+    nameVi: 'Xác thực Metadata Gói phần mềm trên PyPI / NPM / CRAN',
+    condition: 'IF source == "tech_standard" AND package_registry_match == TRUE THEN VERIFIED',
+    status: 'passed',
+  },
+  'R-WIKIDATA-STANDARD-VERIFIED': {
+    nameEn: 'Technical Standard or Manual Verified via Wikidata Knowledge Graph',
+    nameVi: 'Xác thực Tiêu chuẩn kỹ thuật / Cẩm nang qua Wikidata Knowledge Graph',
+    condition: 'IF source == "wikidata_opencitations" AND standard_entity_match == TRUE THEN VERIFIED',
+    status: 'passed',
+  },
+  'R-OPENCITATIONS-VERIFIED': {
+    nameEn: 'Citation Provenance Verified via OpenCitations COCI Index',
+    nameVi: 'Xác thực phả hệ trích dẫn qua chỉ mục OpenCitations COCI',
+    condition: 'IF opencitations_coci_hit == TRUE AND doi_exact_match == TRUE THEN VERIFIED',
+    status: 'passed',
+  },
+  'R-API_EXHAUSTED': {
+    nameEn: 'External API Quota Exhausted (Cache-Adjusted Confidence)',
+    nameVi: 'Hết hạn mức API bên ngoài (Điều chỉnh độ tin cậy từ bộ nhớ đệm)',
+    condition: 'IF external_api_quota_exhausted == TRUE THEN ADJUST_CONFIDENCE',
+    status: 'warning',
+  },
 };
 
-function parseRawCitationMeta(rawText: string): MetadataFields {
-  const cleaned = rawText.replace(/^\s*\[\d+\]\s*/, '').trim();
+function stripUrlAccessBoilerplate(text: string): string {
+  return text
+    .replace(
+      /\s*(?:\[Online\]\.?\s*)?(?:Available(?:\s+online)?\s+at|Available|Retrieved(?:\s+[^:]*?)?\s+from|Accessed(?:\s+on)?|Truy\s+cập(?:\s+(?:tại|ngày))?|Nguồn)\s*:?\s*<?https?:\/\/\S+>?.*$/gi,
+      '',
+    )
+    .replace(/\s*<https?:\/\/[^>]+>/gi, '')
+    .replace(/\b(?:https?:\/\/\S+|doi:\s*\S+|10\.\d{4,9}\/\S+)/gi, '')
+    .replace(
+      /\s*(?:\[?\s*(?:Accessed|Retrieved|Truy\s+cập)[^.\]]*\]?|\(?\s*(?:accessed|truy\s+cập)[^.)]*\)?)\s*$/gi,
+      '',
+    )
+    .replace(/\s*(?:Available\s+at|Retrieved\s+from|Truy\s+cập\s+tại|Available)\s*:?\s*$/gi, '')
+    .replace(/\s*\[Online\]\.?\s*$/gi, '')
+    .trim();
+}
+
+function parseRawCitationMeta(
+  rawText: string,
+  options?: { missingAuthors?: boolean },
+): MetadataFields {
+  const cleaned = rawText
+    .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\)|\d+[a-z]\.)\s*/i, '')
+    .replace(/^\s*\(\s*[a-z]\s*\)\s*/i, '')
+    .trim();
 
   // Extract DOI if present
   const doiMatch = cleaned.match(/\b(10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+)\b/);
   const doi = doiMatch ? doiMatch[1].replace(/[.,;]+$/, '') : '—';
 
+  const urlMatch = cleaned.match(/\bhttps?:\/\/[^\s<>")'\]]+/i);
+  const rawUrl = urlMatch
+    ? urlMatch[0].replace(/[.,;:)'"\u2019\u201d>]+$/, '')
+    : '';
+  const url = rawUrl || (doi !== '—' ? `https://doi.org/${doi}` : '—');
+
+  // If the entire citation is just a bare URL
+  if (/^<?https?:\/\/\S+>?$/i.test(cleaned)) {
+    return {
+      title: rawUrl || cleaned,
+      authors: '—',
+      year: '—',
+      venue: '—',
+      doi,
+      url,
+    };
+  }
+
+  const withoutUrls = stripUrlAccessBoilerplate(cleaned);
+
   // Extract Year
-  const yearMatch = cleaned.match(/\b(19\d{2}|20\d{2})[a-z]?\b/);
+  const yearMatch = (withoutUrls || cleaned).match(/\b(19\d{2}|20\d{2})[a-z]?\b/);
   const year = yearMatch ? yearMatch[1] : '—';
 
   // Try quotes for title: "Title" or “Title”
-  const quoteMatch = cleaned.match(/[“"]([^”"]{8,220})[”"]/);
+  const quoteMatch = (withoutUrls || cleaned).match(/[“"]([^”"]{8,220})[”"]/);
   let title = quoteMatch ? quoteMatch[1].replace(/[.,]+$/, '').trim() : '';
 
-  // Try APA style: Authors (Year). Title. Venue.
   let authors = '';
   let venue = '';
 
-  const apaMatch = cleaned.match(/^(.+?)\s*\((?:19|20)\d{2}[a-z]?\)\.\s*([^.]+)\.\s*(.*)$/);
-  if (apaMatch) {
-    authors = apaMatch[1].trim().replace(/[.,]+$/, '');
-    if (!title) title = apaMatch[2].trim();
-    venue = apaMatch[3]
-      .replace(/\b(?:https?:\/\/\S+|doi:\s*\S+|10\.\d{4,9}\/\S+)/gi, '')
-      .trim()
-      .replace(/[.,]+$/, '');
-  } else {
-    // IEEE or general style: Authors, "Title," Venue, Year. OR Authors. Title. Venue, Year.
-    const segments = cleaned
+  if (options?.missingAuthors) {
+    // Do NOT hallucinate authors from a bare title when R-INCOMPLETE-METADATA explicitly flags missing authors
+    const segments = (withoutUrls || cleaned)
       .split(/\.\s+/)
       .map((s) => s.trim())
       .filter(Boolean);
+    if (!title) {
+      title = (segments[0] || withoutUrls || cleaned)
+        .replace(/\(\s*(?:19|20)\d{2}[a-z]?\s*\)/g, '')
+        .replace(/^[“"]|[”".,]+$/g, '')
+        .trim();
+    }
     if (segments.length >= 2) {
-      authors = segments[0].replace(/^\[\d+\]\s*/, '').trim();
-      if (!title) {
-        title = segments[1].replace(/^[“"]|[”"]$/g, '').trim();
-      }
-      if (segments.length >= 3) {
-        venue = segments
-          .slice(2)
-          .join('. ')
-          .replace(/\b(?:https?:\/\/\S+|doi:\s*\S+|10\.\d{4,9}\/\S+)/gi, '')
-          .trim();
-      }
+      venue = stripUrlAccessBoilerplate(segments.slice(1).join('. '))
+        .replace(/\b(?:19|20)\d{2}[a-z]?\b/g, '')
+        .replace(/^[,.;:()\s]+|[,.;:()\s]+$/g, '')
+        .trim();
+    }
+  } else {
+    // Try APA style: Authors (Year). Title. Venue.
+    const apaMatch = (withoutUrls || cleaned).match(
+      /^(.+?)\s*\((?:19|20)\d{2}[a-z]?\)\.\s*([^.]+)(?:\.\s*(.*))?$/,
+    );
+    if (apaMatch) {
+      authors = apaMatch[1].trim().replace(/[.,]+$/, '');
+      if (!title) title = stripUrlAccessBoilerplate(apaMatch[2]).replace(/[.,]+$/, '').trim();
+      venue = stripUrlAccessBoilerplate(apaMatch[3] || '')
+        .replace(/[.,]+$/, '')
+        .trim();
     } else {
-      const commaParts = cleaned.split(/,\s+/);
-      if (commaParts.length >= 2) {
-        authors = commaParts[0].trim();
-        if (!title) title = commaParts.slice(1).join(', ').slice(0, 140);
+      // IEEE or general style: Authors, "Title," Venue, Year. OR Authors. Title. Venue, Year.
+      const segments = (withoutUrls || cleaned)
+        .split(/\.\s+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (segments.length >= 2) {
+        authors = segments[0]
+          .replace(/^(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\))\s*/i, '')
+          .trim();
+        if (!title) {
+          title = stripUrlAccessBoilerplate(segments[1])
+            .replace(/^[“"]|[”".,]+$/g, '')
+            .trim();
+        }
+        if (segments.length >= 3) {
+          venue = stripUrlAccessBoilerplate(segments.slice(2).join('. ')).trim();
+        }
       } else {
-        title = cleaned.slice(0, 140);
+        const commaParts = (withoutUrls || cleaned).split(/,\s+/);
+        if (commaParts.length >= 2) {
+          authors = commaParts[0].trim();
+          if (!title) {
+            title = stripUrlAccessBoilerplate(commaParts.slice(1).join(', '))
+              .replace(/[.,]+$/, '')
+              .slice(0, 140);
+          }
+        } else {
+          title = (withoutUrls || cleaned).replace(/[.,]+$/, '').slice(0, 140);
+        }
       }
     }
   }
 
-  const cleanVenue = venue
+  const cleanVenue = stripUrlAccessBoilerplate(venue)
     .replace(/^(?:,\s*)?(?:[^.()]*?\)\.\s*)+/, '')
-    .replace(/^[,.;:)\s]+/, '')
+    .replace(/^[,.;:)\s]+|[,.;:(\s]+$/g, '')
     .trim();
 
-  const urlMatch = cleaned.match(/\bhttps?:\/\/[^\s<>")'\]]+/i);
-  const rawUrl = urlMatch
-    ? urlMatch[0].replace(/[.,;:)'"\u2019\u201d]+$/, '')
-    : '';
-  const url = rawUrl || (doi !== '—' ? `https://doi.org/${doi}` : '—');
-
   return {
-    title: title || cleaned.slice(0, 120) || '—',
+    title: title || (withoutUrls || cleaned).slice(0, 120) || '—',
     authors: authors || '—',
     year: year || '—',
-    venue: cleanVenue || venue || '—',
+    venue: cleanVenue || '—',
     doi,
     url,
   };
+}
+
+function normalizeWebText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/\bhuffington\s+post\b/g, 'huffpost')
+    .replace(/\bcomprehensive\s+r\s+archive\s+network\b/g, 'cran')
+    .replace(/\bmozilla\s+developer\s+network\b/g, 'mdn')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function computeWebTextSim(a: string, b: string): number {
+  if (!a || !b || a === '—' || b === '—') return 0;
+  const na = normalizeWebText(a);
+  const nb = normalizeWebText(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1.0;
+  if (na.length >= 4 && nb.length >= 4 && (na.includes(nb) || nb.includes(na))) {
+    return 0.88;
+  }
+  const stopWords = new Set(['the', 'of', 'and', 'in', 'on', 'at', 'for', 'to', 'a', 'an']);
+  const tokA = na.split(' ').filter((t) => t.length >= 2 && !stopWords.has(t));
+  const tokB = nb.split(' ').filter((t) => t.length >= 2 && !stopWords.has(t));
+  if (tokA.length === 0 || tokB.length === 0) return 0;
+  const setA = new Set(tokA);
+  const setB = new Set(tokB);
+  let overlap = 0;
+  for (const t of setA) {
+    if (setB.has(t)) overlap += 1;
+  }
+  const containment = overlap / Math.min(setA.size, setB.size);
+  const jaccard = overlap / (setA.size + setB.size - overlap);
+  const tokenScore = 0.65 * containment + 0.35 * jaccard;
+
+  // Handle publisher/site rebrands & acronyms (e.g. "The Huffington Post" <-> "HuffPost",
+  // "World Health Organization" <-> "WHO")
+  if (tokA.length <= 5 && tokB.length <= 5) {
+    const initialsA = tokA.map((t) => t[0]).join('');
+    const initialsB = tokB.map((t) => t[0]).join('');
+    const compactA = tokA.join('');
+    const compactB = tokB.join('');
+    if (
+      (initialsA.length >= 2 && initialsA === compactB) ||
+      (initialsB.length >= 2 && initialsB === compactA)
+    ) {
+      return Math.max(tokenScore, 0.9);
+    }
+    if (compactA.length >= 5 && compactB.length >= 5) {
+      const makeBigrams = (s: string) => {
+        const bg = new Set<string>();
+        for (let i = 0; i < s.length - 1; i += 1) {
+          bg.add(s.slice(i, i + 2));
+        }
+        return bg;
+      };
+      const bgA = makeBigrams(compactA);
+      const bgB = makeBigrams(compactB);
+      let bgOverlap = 0;
+      for (const g of bgA) {
+        if (bgB.has(g)) bgOverlap += 1;
+      }
+      const bgContainment = bgOverlap / Math.min(bgA.size, bgB.size);
+      const bgDice = (2 * bgOverlap) / (bgA.size + bgB.size);
+      if (bgContainment >= 0.8 && bgDice >= 0.55) {
+        return Math.max(tokenScore, 0.65 * bgContainment + 0.35 * bgDice);
+      }
+    }
+  }
+  return tokenScore;
+}
+
+function computeWebAuthorSim(citedAuthors: string, obsAuthors: string): number {
+  if (!citedAuthors || !obsAuthors || citedAuthors === '—' || obsAuthors === '—') return 0;
+  const stop = new Set(['et', 'al', 'and', 'va', 'the', 'team', 'contributors']);
+  const tokA = normalizeWebText(citedAuthors)
+    .split(' ')
+    .filter((t) => t.length >= 2 && !stop.has(t));
+  const tokB = normalizeWebText(obsAuthors)
+    .split(' ')
+    .filter((t) => t.length >= 2 && !stop.has(t));
+  if (tokA.length === 0 || tokB.length === 0) return 0;
+  const setA = new Set(tokA);
+  const setB = new Set(tokB);
+  let overlap = 0;
+  for (const t of setA) {
+    if (setB.has(t)) overlap += 1;
+  }
+  if (overlap === 0) return 0;
+  return overlap / Math.min(setA.size, setB.size);
 }
 
 function normalizeAuthorDisplay(name: string): string {
@@ -564,7 +842,9 @@ function formatShortInText(
       ? `${shortAuthor}${suffix} (${year})`
       : `${shortAuthor}${suffix}`;
   }
-  const stripped = rawText.replace(/^\s*\[\d+\]\s*/, '').trim();
+  const stripped = rawText
+    .replace(/^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*[a-z]\s*\))\s*/i, '')
+    .trim();
   return (stripped || rawText).slice(0, 42);
 }
 
@@ -666,11 +946,11 @@ function resolveVerdictUrlStatus(verdict: Verdict): {
   const rawStatus = verdict.url_status ?? verdict.features?.url_status ?? null;
   const rawCode =
     verdict.url_status_code ?? verdict.features?.url_status_code ?? null;
-  if (rawStatus) {
+  if (rawStatus && rawStatus !== 'unchecked') {
     return { status: rawStatus, code: rawCode };
   }
   const rules = verdict.triggered_rules ?? [];
-  if (rules.includes('R-WAYBACK-ARCHIVED')) {
+  if (rules.includes('R-WAYBACK-ARCHIVED') || Boolean(verdict.archive_url)) {
     return { status: 'archived_alive', code: rawCode ?? 404 };
   }
   if (rules.includes('R-FAKE-URL')) {
@@ -688,9 +968,27 @@ function getLinkBadgeVisuals(
 ): LinkBadgeInfo | null {
   const { status, code } = resolveVerdictUrlStatus(verdict);
   if (!status) return null;
+  const isUrlContentMismatch = (verdict.triggered_rules ?? []).includes(
+    'R-URL-CONTENT-MISMATCH',
+  );
 
   switch (status) {
     case 'alive':
+      if (isUrlContentMismatch) {
+        return {
+          status,
+          text:
+            lang === 'vi'
+              ? `⚠ HTTP ${code || 200} · Sai nội dung trang`
+              : `⚠ HTTP ${code || 200} · Wrong Page`,
+          badgeClass:
+            'bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800 font-semibold',
+          title:
+            lang === 'vi'
+              ? `HTTP ${code || 200} phản hồi thành công nhưng trỏ tới trang web có tiêu đề khác với tài liệu trích dẫn`
+              : `HTTP ${code || 200} resolved to a different page title than claimed in the citation`,
+        };
+      }
       return {
         status,
         text: `✓ HTTP ${code || 200} OK`,
@@ -728,7 +1026,7 @@ function getLinkBadgeVisuals(
         status,
         text: `✕ HTTP ${code || 404} DEAD`,
         badgeClass:
-          'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/70 dark:text-red-300 dark:border-emerald-800 font-semibold',
+          'bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800 font-semibold',
         title:
           lang === 'vi'
             ? `Liên kết URL bị hỏng hoặc không tồn tại (HTTP ${code || 404} / DNS Error)`
@@ -748,58 +1046,41 @@ function getLinkBadgeVisuals(
   }
 }
 
+function formatEssaySourceDisplay(
+  sourceKey: string,
+  lang: 'vi' | 'en',
+  verdict: Verdict,
+  ms?: Verdict['matched_sources'][number],
+): string {
+  const lower = (sourceKey || '').toLowerCase();
+  if (lower === 'vn_legal_registry' && lang === 'en') {
+    return 'VN Legal Registry';
+  }
+  return getSourceDisplayName(sourceKey, lang, {
+    triggered_rules: verdict.triggered_rules,
+    external_ids: ms?.external_ids,
+    venue: ms?.venue,
+    title: ms?.title,
+  });
+}
+
 function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
-  const isLegalStatute = (verdict.triggered_rules ?? []).some((r) =>
-    r.includes('LEGAL')
-  );
-  if (isLegalStatute && verdict.reasoning) {
+  const isLegalStatute = isLegalStatuteVerdict(verdict);
+  const hasViChars =
+    /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(
+      verdict.reasoning || '',
+    );
+  if (
+    isLegalStatute &&
+    verdict.reasoning &&
+    ((lang === 'vi' && hasViChars) || (lang === 'en' && !hasViChars))
+  ) {
     return verdict.override_note
       ? lang === 'vi'
         ? `[Ghi đè bởi Giảng viên: ${verdict.override_note}] — ${verdict.reasoning}`
         : `[Teacher Override: ${verdict.override_note}] — ${verdict.reasoning}`
       : verdict.reasoning;
   }
-
-  const sourceMapVi: Record<string, string> = {
-    local_db: 'Thư viện học thuật nội bộ (ACL / SQLite FTS5)',
-    known_papers: 'CSDL công trình kinh điển (Known Papers)',
-    vn_legal_registry: 'Hệ thống Văn bản Quy phạm Pháp luật Việt Nam',
-    crossref: 'Crossref',
-    openalex: 'OpenAlex',
-    dblp: 'DBLP',
-    arxiv: 'arXiv',
-    openlibrary: 'OpenLibrary / Google Books',
-    europepmc: 'Europe PMC (PubMed)',
-    datacite: 'DataCite (Zenodo / Figshare / OSF)',
-    doi_ra: 'Global DOI Registration Agency (JaLC / CNKI / mEDRA)',
-    doaj: 'DOAJ (Directory of Open Access Journals)',
-    openaire_hal: 'OpenAIRE Graph / HAL Open Science',
-    ncbi_biorxiv: 'NCBI Entrez / bioRxiv / medRxiv',
-    huggingface: 'Hugging Face Hub',
-    tech_standard: 'IETF RFC / PyPI / NPM / GitHub',
-    wikidata_opencitations: 'Wikidata Knowledge Graph / OpenCitations',
-    serpapi: 'Google Scholar',
-  };
-  const sourceMapEn: Record<string, string> = {
-    local_db: 'the local scholarly index (ACL / SQLite FTS5)',
-    known_papers: 'the canonical Known Papers index',
-    vn_legal_registry: 'the Vietnamese Legal Statute Registry',
-    crossref: 'Crossref',
-    openalex: 'OpenAlex',
-    dblp: 'DBLP',
-    arxiv: 'arXiv',
-    openlibrary: 'OpenLibrary / Google Books',
-    europepmc: 'Europe PMC (PubMed)',
-    datacite: 'DataCite (Zenodo / Figshare / OSF)',
-    doi_ra: 'Global DOI Registration Agency (JaLC / CNKI / mEDRA)',
-    doaj: 'DOAJ (Directory of Open Access Journals)',
-    openaire_hal: 'OpenAIRE Graph / HAL Open Science',
-    ncbi_biorxiv: 'NCBI Entrez / bioRxiv / medRxiv',
-    huggingface: 'Hugging Face Hub',
-    tech_standard: 'IETF RFC / PyPI / NPM / GitHub',
-    wikidata_opencitations: 'Wikidata Knowledge Graph / OpenCitations',
-    serpapi: 'Google Scholar',
-  };
 
   const fieldMapVi: Record<string, string> = {
     title: 'tiêu đề',
@@ -824,19 +1105,48 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
     retracted_paper: 'retraction status (Retracted)',
   };
 
+  const allNonWebSources = (verdict.matched_sources ?? []).filter((s) => {
+    const low = (s.source || '').toLowerCase();
+    return low !== 'web_html_meta' && low !== 'wayback_html_meta';
+  });
+  const topSource = allNonWebSources[0];
+  const isCuratedPrimary =
+    Boolean(topSource) &&
+    ([
+      'tech_standard',
+      'vn_tech_standard',
+      'vn_textbook_registry',
+      'vn_legal_registry',
+    ].includes((topSource.source || '').toLowerCase()) ||
+      (verdict.triggered_rules ?? []).some((r) =>
+        [
+          'R-VN-STANDARD-VERIFIED',
+          'R-VN-TEXTBOOK-VERIFIED',
+          'R-VN-LEGAL-VERIFIED',
+        ].includes(r),
+      ));
+  const effectiveSourcesList = isCuratedPrimary && topSource
+    ? [topSource]
+    : allNonWebSources.length > 0
+      ? allNonWebSources
+      : (verdict.matched_sources ?? []);
+
   const sources = [
     ...new Set(
-      (verdict.matched_sources ?? []).map((s) =>
-        lang === 'vi'
-          ? sourceMapVi[s.source.toLowerCase()] ?? s.source
-          : sourceMapEn[s.source.toLowerCase()] ?? s.source
-      )
+      effectiveSourcesList.map((s) =>
+        formatEssaySourceDisplay(s.source, lang, verdict, s),
+      ),
     ),
   ];
 
+  const primaryFieldSource =
+    topSource && (topSource.matched_fields?.length ?? 0) > 0
+      ? [topSource]
+      : effectiveSourcesList;
+
   const matchedFields = [
     ...new Set(
-      (verdict.matched_sources ?? []).flatMap((s) =>
+      primaryFieldSource.flatMap((s) =>
         (s.matched_fields ?? []).map((f) =>
           lang === 'vi'
             ? fieldMapVi[f.toLowerCase()] ?? f
@@ -874,14 +1184,27 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
   ).toLowerCase() || null;
 
   const { status: urlStatus, code: urlCode } = resolveVerdictUrlStatus(verdict);
+  const isUrlContentMismatch = (verdict.triggered_rules ?? []).includes(
+    'R-URL-CONTENT-MISMATCH',
+  );
+  const observedWeb = extractObservedWebMeta(verdict);
 
-  const titleSim = verdict.features?.title_sim_fuzzy;
-  const authorSim = verdict.features?.author_jaccard;
+  const hasScholarlyCandidate = verdict.features?.has_scholarly_candidate !== false;
+  const titleSim = hasScholarlyCandidate
+    ? verdict.features?.title_sim_fuzzy
+    : undefined;
+  const authorSim = hasScholarlyCandidate
+    ? verdict.features?.author_jaccard
+    : undefined;
+  const htmlMetaSim = verdict.features?.html_meta_title_sim;
 
   if (lang === 'vi') {
     const telemetryParts: string[] = [];
     if (titleSim !== undefined) {
       telemetryParts.push(`độ tương đồng tiêu đề = ${titleSim.toFixed(2)}`);
+    }
+    if (typeof htmlMetaSim === 'number') {
+      telemetryParts.push(`khớp tiêu đề trang HTML = ${htmlMetaSim.toFixed(2)}`);
     }
     if (authorSim !== undefined) {
       telemetryParts.push(`tác giả = ${authorSim.toFixed(2)}`);
@@ -898,7 +1221,11 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
       );
     }
     if (urlStatus === 'alive') {
-      telemetryParts.push(`kiểm tra liên kết = HTTP ${urlCode || 200} OK`);
+      telemetryParts.push(
+        isUrlContentMismatch
+          ? `kiểm tra liên kết = HTTP ${urlCode || 200} (sai nội dung trang)`
+          : `kiểm tra liên kết = HTTP ${urlCode || 200} OK`,
+      );
     } else if (urlStatus === 'restricted_alive') {
       telemetryParts.push(
         `kiểm tra liên kết = HTTP ${urlCode || 403} (tường lửa nhà xuất bản — liên kết sống)`
@@ -925,7 +1252,15 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
 
     let mainText = '';
     if (verdict.label === 'resource') {
-      mainText = `Phát hiện tài nguyên Web / API phi học thuật (${verdict.citation_raw}). Mục này được phân loại là đường dẫn tài nguyên tham khảo và không tính điểm phạt vào chỉ số CIS.${telemetrySuffix}`;
+      if (isLegalStatute) {
+        const legalSrc =
+          sources[0] || 'Cơ sở dữ liệu văn bản quy phạm pháp luật Việt Nam';
+        mainText = `Văn bản quy phạm pháp luật đã được đối chiếu và xác thực qua ${legalSrc}. Mục này không tính điểm phạt vào chỉ số CIS.${telemetrySuffix}`;
+      } else if (observedWeb?.title) {
+        mainText = `Tài nguyên Web trực tuyến hợp lệ: đã trích xuất metadata trang HTML («${observedWeb.title}»${observedWeb.venue ? ` · ${observedWeb.venue}` : ''}). Mục này được phân loại là tài nguyên tham khảo trực tuyến và không tính điểm phạt vào chỉ số CIS.${telemetrySuffix}`;
+      } else {
+        mainText = `Phát hiện tài nguyên Web / API phi học thuật (${verdict.citation_raw}). Mục này được phân loại là đường dẫn tài nguyên tham khảo và không tính điểm phạt vào chỉ số CIS.${telemetrySuffix}`;
+      }
     } else if (verdict.mapping_status === 'missing_reference') {
       mainText =
         'Trích dẫn xuất hiện trong phần nội dung bài viết nhưng bị khuyết mục tương ứng trong danh mục tài liệu tham khảo cuối bài.';
@@ -944,7 +1279,12 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
           : '';
       mainText = `Trích dẫn khớp chính xác với công trình trong ${srcStr}. Các trường thông tin (${fldStr}) hoàn toàn nhất quán với bản ghi gốc.${brokenLinkNoteVi}${telemetrySuffix}`;
     } else if (verdict.label === 'metadata_error') {
-      if ((verdict.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')) {
+      if (isUrlContentMismatch) {
+        const obsTitleNoteVi = observedWeb?.title
+          ? ` Trang web thực tế tại URL có tiêu đề: «${observedWeb.title}»${observedWeb.venue ? ` (${observedWeb.venue})` : ''}.`
+          : '';
+        mainText = `Đường dẫn URL phản hồi hợp lệ (HTTP ${urlCode || 200}), nhưng nội dung/tiêu đề trang web không khớp với tiêu đề tài liệu được trích dẫn.${obsTitleNoteVi} Vui lòng kiểm tra lại liên kết URL hoặc cập nhật đúng tiêu đề trang đích.${telemetrySuffix}`;
+      } else if ((verdict.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')) {
         const missingStrVi =
           mismatchedFields.length > 0
             ? ` (thiếu ${mismatchedFields.join(', ')})`
@@ -987,6 +1327,9 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
   if (titleSim !== undefined) {
     telemetryPartsEn.push(`title similarity = ${titleSim.toFixed(2)}`);
   }
+  if (typeof htmlMetaSim === 'number') {
+    telemetryPartsEn.push(`HTML page title similarity = ${htmlMetaSim.toFixed(2)}`);
+  }
   if (authorSim !== undefined) {
     telemetryPartsEn.push(`author similarity = ${authorSim.toFixed(2)}`);
   }
@@ -996,7 +1339,11 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
     );
   }
   if (urlStatus === 'alive') {
-    telemetryPartsEn.push(`link check = HTTP ${urlCode || 200} OK`);
+    telemetryPartsEn.push(
+      isUrlContentMismatch
+        ? `link check = HTTP ${urlCode || 200} (wrong page content)`
+        : `link check = HTTP ${urlCode || 200} OK`,
+    );
   } else if (urlStatus === 'restricted_alive') {
     telemetryPartsEn.push(
       `link check = HTTP ${urlCode || 403} (publisher paywall — link alive)`
@@ -1021,7 +1368,14 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
 
   let mainTextEn = '';
   if (verdict.label === 'resource') {
-    mainTextEn = `Non-scholarly Web / API resource detected (${verdict.citation_raw}). Classified as a web resource and excluded from the CIS penalty calculation.${telemetrySuffixEn}`;
+    if (isLegalStatute) {
+      const legalSrcEn = sources[0] || 'VN Legal Registry';
+      mainTextEn = `Official statutory / legal document verified against ${legalSrcEn}. Excluded from the CIS penalty calculation.${telemetrySuffixEn}`;
+    } else if (observedWeb?.title) {
+      mainTextEn = `Verified live web resource: extracted HTML metadata (“${observedWeb.title}”${observedWeb.venue ? ` · ${observedWeb.venue}` : ''}). Classified as a web resource and excluded from the CIS penalty calculation.${telemetrySuffixEn}`;
+    } else {
+      mainTextEn = `Non-scholarly Web / API resource detected (${verdict.citation_raw}). Classified as a web resource and excluded from the CIS penalty calculation.${telemetrySuffixEn}`;
+    }
   } else if (verdict.mapping_status === 'missing_reference') {
     mainTextEn =
       'This in-text citation does not have a corresponding entry in the bibliography section.';
@@ -1038,7 +1392,12 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
         : '';
     mainTextEn = `The citation matches a canonical publication in ${srcStr}. Verified fields (${fldStr}) are consistent with the source record.${brokenLinkNoteEn}${telemetrySuffixEn}`;
   } else if (verdict.label === 'metadata_error') {
-    if ((verdict.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')) {
+    if (isUrlContentMismatch) {
+      const obsTitleNoteEn = observedWeb?.title
+        ? ` The actual web page at this URL is titled “${observedWeb.title}”${observedWeb.venue ? ` (${observedWeb.venue})` : ''}.`
+        : '';
+      mainTextEn = `The cited URL is reachable (HTTP ${urlCode || 200}), but the web page title and metadata do not match the claimed citation title.${obsTitleNoteEn} Please verify that the URL points to the intended resource.${telemetrySuffixEn}`;
+    } else if ((verdict.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')) {
       const missingStrEn =
         mismatchedFields.length > 0
           ? ` (missing ${mismatchedFields.join(', ')})`
@@ -1084,18 +1443,36 @@ function enrichVerdictItem(
   const verdict: Verdict = isUrlResource(rawVerdict)
     ? { ...rawVerdict, label: 'resource' }
     : rawVerdict;
-  const rawBracketMatch = (verdict.citation_raw ?? '').match(/^\s*\[(\d+)\]/);
-  const refIdNumMatch = verdict.citation_link?.reference_id?.match(/^ref-0*(\d+)$/);
-  const marker = `[${rawBracketMatch?.[1] || refIdNumMatch?.[1] || index + 1}]`;
-  const parsedFallback = parseRawCitationMeta(verdict.citation_raw);
+  const marker = getCitationMarkerLabel(verdict, index);
+
+  const mismatchedFieldsSet = new Set(
+    (verdict.mismatched_fields ?? []).map((f) => f.toLowerCase())
+  );
+  const isIncompleteMeta = (verdict.triggered_rules ?? []).includes(
+    'R-INCOMPLETE-METADATA',
+  );
+  const isUrlContentMismatch = (verdict.triggered_rules ?? []).includes(
+    'R-URL-CONTENT-MISMATCH',
+  );
+  const isLegalRule = isLegalStatuteVerdict(verdict);
+  const missingAuthorsFlag =
+    isIncompleteMeta &&
+    (mismatchedFieldsSet.has('authors') || mismatchedFieldsSet.has('author'));
+
+  const parsedFallback = parseRawCitationMeta(verdict.citation_raw, {
+    missingAuthors: missingAuthorsFlag,
+  });
 
   // Find corresponding Reference entry if available
   const refId = verdict.citation_link?.reference_id;
   let matchedRef: Citation | undefined;
   if (refId) {
-    const idxNum = parseInt(refId.replace(/^ref-/, ''), 10);
-    if (!Number.isNaN(idxNum) && idxNum >= 1 && idxNum <= references.length) {
-      matchedRef = references[idxNum - 1];
+    matchedRef = references.find((r) => r.reference_id === refId);
+    if (!matchedRef && /^ref-0*\d+$/.test(refId)) {
+      const idxNum = parseInt(refId.replace(/^ref-/, ''), 10);
+      if (!Number.isNaN(idxNum) && idxNum >= 1 && idxNum <= references.length) {
+        matchedRef = references[idxNum - 1];
+      }
     }
   }
   if (!matchedRef) {
@@ -1121,19 +1498,26 @@ function enrichVerdictItem(
   const citedDoi = matchedRef?.doi || parsedFallback.doi || '—';
   const citedUrl =
     matchedRef?.url ||
+    verdict.cited_url ||
     verdict.features?.checked_url ||
     parsedFallback.url ||
     (citedDoi !== '—' ? `https://doi.org/${citedDoi}` : '—');
 
+  const cleanedMatchedVenue = matchedRef?.venue
+    ? stripUrlAccessBoilerplate(matchedRef.venue) || matchedRef.venue
+    : '';
+
   const citedMeta: MetadataFields = {
     title: matchedRef?.title || parsedFallback.title || verdict.citation_raw,
     authors:
-      (matchedRef?.authors && matchedRef.authors.length > 0
-        ? matchedRef.authors.map(normalizeAuthorDisplay).join(', ')
-        : normalizeAuthorDisplay(parsedFallback.authors)) || '—',
+      missingAuthorsFlag && (!matchedRef?.authors || matchedRef.authors.length === 0)
+        ? '—'
+        : (matchedRef?.authors && matchedRef.authors.length > 0
+            ? matchedRef.authors.map(normalizeAuthorDisplay).join(', ')
+            : normalizeAuthorDisplay(parsedFallback.authors)) || '—',
     year:
       (matchedRef?.year ? String(matchedRef.year) : parsedFallback.year) || '—',
-    venue: matchedRef?.venue || parsedFallback.venue || '—',
+    venue: cleanedMatchedVenue || parsedFallback.venue || '—',
     doi: citedDoi,
     url: citedUrl,
   };
@@ -1152,18 +1536,24 @@ function enrichVerdictItem(
     1;
   const pageLabel = `p. ${pageNum}`;
 
-  // Determine Canonical Retrieved Metadata from matched_sources[0]
-  const bestSource =
-    verdict.matched_sources && verdict.matched_sources.length > 0
-      ? verdict.matched_sources[0]
-      : null;
+  // Separate scholarly/legal/standard sources from web_html_meta / wayback_html_meta
+  const nonWebSources = (verdict.matched_sources ?? []).filter((s) => {
+    const low = (s.source || '').toLowerCase();
+    return low !== 'web_html_meta' && low !== 'wayback_html_meta';
+  });
+  const bestSource = nonWebSources.length > 0 ? nonWebSources[0] : null;
+  const observedWeb = extractObservedWebMeta(verdict);
 
   const matchedFieldsSet = new Set(
     (bestSource?.matched_fields ?? []).map((f) => f.toLowerCase())
   );
-  const mismatchedFieldsSet = new Set(
-    (verdict.mismatched_fields ?? []).map((f) => f.toLowerCase())
-  );
+
+  const validYearDistance =
+    verdict.features?.year_distance !== undefined &&
+    verdict.features.year_distance < 900 &&
+    verdict.features?.has_scholarly_candidate !== false
+      ? verdict.features.year_distance
+      : undefined;
 
   // Parse actual year from reasoning if year was mismatched and not explicitly in bestSource
   let inferredActualYear: string | null = null;
@@ -1177,77 +1567,121 @@ function enrichVerdictItem(
   }
   if (
     !inferredActualYear &&
-    verdict.features?.year_distance &&
-    verdict.features.year_distance > 0 &&
+    validYearDistance !== undefined &&
+    validYearDistance > 0 &&
     citedMeta.year !== '—'
   ) {
     const citedYrNum = parseInt(citedMeta.year, 10);
     if (!Number.isNaN(citedYrNum)) {
-      inferredActualYear = `${citedYrNum - Math.round(verdict.features.year_distance)} (Δ=${verdict.features.year_distance}y)`;
+      inferredActualYear = `${citedYrNum - Math.round(validYearDistance)} (Δ=${validYearDistance}y)`;
     }
   }
 
-  const isLegalRule = (verdict.triggered_rules ?? []).some((r) =>
-    r.includes('LEGAL')
-  );
   const hasCanonicalRecord =
     Boolean(bestSource) &&
     verdict.label !== 'suspected_hallucination' &&
-    (verdict.label !== 'resource' || isLegalRule) &&
     (bestSource?.confidence ?? verdict.confidence) >= 0.25;
 
-  const retrievedMeta: MetadataFields | null = hasCanonicalRecord && bestSource
-    ? {
-        title:
-          bestSource.title ||
-          (matchedFieldsSet.has('title') && !mismatchedFieldsSet.has('title')
-            ? citedMeta.title
+  const isWebResourceMode =
+    verdict.label === 'resource' && !isLegalRule && !hasCanonicalRecord;
+  const useObservedWebMeta =
+    !hasCanonicalRecord &&
+    Boolean(observedWeb) &&
+    (isWebResourceMode || isUrlContentMismatch);
+
+  const undeclaredWebText =
+    lang === 'vi'
+      ? 'Trang web không khai báo thẻ này'
+      : 'Not declared in page metadata';
+
+  let retrievedMeta: MetadataFields | null = null;
+  if (hasCanonicalRecord && bestSource) {
+    const isVerifiedLike =
+      verdict.label === 'verified' || (isLegalRule && verdict.label === 'resource');
+    const sourceDisplay = formatEssaySourceDisplay(
+      bestSource.source,
+      lang,
+      verdict,
+      bestSource,
+    );
+    retrievedMeta = {
+      title:
+        bestSource.title ||
+        ((matchedFieldsSet.has('title') || isVerifiedLike) &&
+        !mismatchedFieldsSet.has('title')
+          ? citedMeta.title
+          : '—'),
+      authors:
+        bestSource.authors && bestSource.authors.length > 0
+          ? bestSource.authors.join(', ')
+          : matchedFieldsSet.has('authors') && !mismatchedFieldsSet.has('authors')
+            ? citedMeta.authors
+            : mismatchedFieldsSet.has('authors') || mismatchedFieldsSet.has('author')
+              ? lang === 'vi'
+                ? 'Khác danh sách tác giả gốc'
+                : 'Author list discrepancy in source'
+              : citedMeta.authors !== '—' && isVerifiedLike
+                ? citedMeta.authors
+                : '—',
+      year: bestSource.year
+        ? String(bestSource.year)
+        : mismatchedFieldsSet.has('year')
+          ? inferredActualYear ||
+            (lang === 'vi' ? 'Lệch năm xuất bản' : 'Year mismatch in source')
+          : matchedFieldsSet.has('year') || isVerifiedLike
+            ? citedMeta.year
+            : '—',
+      venue:
+        bestSource.venue ||
+        ((matchedFieldsSet.has('venue') || isVerifiedLike) &&
+        !mismatchedFieldsSet.has('venue')
+          ? citedMeta.venue !== '—'
+            ? citedMeta.venue
+            : sourceDisplay
+          : bestSource.source
+            ? sourceDisplay
             : '—'),
-        authors:
-          bestSource.authors && bestSource.authors.length > 0
-            ? bestSource.authors.join(', ')
-            : matchedFieldsSet.has('authors') && !mismatchedFieldsSet.has('authors')
-              ? citedMeta.authors
-              : mismatchedFieldsSet.has('authors')
-                ? lang === 'vi'
-                  ? 'Khác danh sách tác giả gốc'
-                  : 'Author list discrepancy in source'
-                : citedMeta.authors !== '—' && verdict.label === 'verified'
-                  ? citedMeta.authors
-                  : '—',
-        year: bestSource.year
-          ? String(bestSource.year)
-          : mismatchedFieldsSet.has('year')
-            ? inferredActualYear ||
-              (lang === 'vi' ? 'Lệch năm xuất bản' : 'Year mismatch in source')
-            : matchedFieldsSet.has('year') || verdict.label === 'verified'
-              ? citedMeta.year
-              : '—',
-        venue:
-          bestSource.venue ||
-          (matchedFieldsSet.has('venue') && !mismatchedFieldsSet.has('venue')
-            ? citedMeta.venue !== '—'
-              ? citedMeta.venue
-              : `Indexed in ${bestSource.source}`
-            : bestSource.source
-              ? `Indexed in ${bestSource.source}`
-              : '—'),
-        doi:
-          bestSource.doi ||
-          (Boolean(verdict.features?.doi_exact_match) || matchedFieldsSet.has('doi')
-            ? citedMeta.doi
+      doi:
+        bestSource.doi ||
+        (Boolean(verdict.features?.doi_exact_match) || matchedFieldsSet.has('doi')
+          ? citedMeta.doi
+          : '—'),
+      url:
+        bestSource.url ||
+        (bestSource.doi
+          ? bestSource.doi.startsWith('http')
+            ? bestSource.doi
+            : `https://doi.org/${bestSource.doi}`
+          : citedMeta.url !== '—' && isVerifiedLike
+            ? citedMeta.url
             : '—'),
-        url:
-          bestSource.url ||
-          (bestSource.doi
-            ? bestSource.doi.startsWith('http')
-              ? bestSource.doi
-              : `https://doi.org/${bestSource.doi}`
-            : citedMeta.url !== '—' && verdict.label === 'verified'
-              ? citedMeta.url
-              : '—'),
-      }
-    : null;
+    };
+  } else if (isLegalRule && verdict.label === 'resource' && mismatchedFieldsSet.size === 0) {
+    // Format-verified statutory citation without external matched_sources row
+    retrievedMeta = {
+      title: citedMeta.title,
+      authors: citedMeta.authors,
+      year: citedMeta.year,
+      venue:
+        citedMeta.venue !== '—'
+          ? citedMeta.venue
+          : formatEssaySourceDisplay('vn_legal_registry', lang, verdict),
+      doi: citedMeta.doi,
+      url: citedMeta.url,
+    };
+  } else if (useObservedWebMeta && observedWeb) {
+    retrievedMeta = {
+      title: observedWeb.title || undeclaredWebText,
+      authors:
+        observedWeb.authors && observedWeb.authors.length > 0
+          ? observedWeb.authors.join(', ')
+          : undeclaredWebText,
+      year: observedWeb.year ? String(observedWeb.year) : undeclaredWebText,
+      venue: observedWeb.venue || undeclaredWebText,
+      doi: observedWeb.doi || '—',
+      url: observedWeb.url || (citedMeta.url !== '—' ? citedMeta.url : '—'),
+    };
+  }
 
   // Compute field-by-field status
   const hasExplicitTitleSim =
@@ -1262,8 +1696,156 @@ function enrichVerdictItem(
     verdict.features?.author_jaccard ??
     (matchedFieldsSet.has('authors') ? 1 : 0);
 
+  const computeWebFieldStatus = (
+    field: 'title' | 'authors' | 'year' | 'venue' | 'doi',
+  ): { status: FieldStatus; label?: string } => {
+    if (!observedWeb) {
+      if (field === 'doi' && citedMeta.doi === '—') {
+        return {
+          status: 'missing',
+          label: lang === 'vi' ? '— Thiếu' : '— Missing',
+        };
+      }
+      return {
+        status: 'missing',
+        label: lang === 'vi' ? 'Tài nguyên Web' : 'Web Resource',
+      };
+    }
+
+    if (field === 'title') {
+      if (isUrlContentMismatch) {
+        return { status: 'mismatch', label: lang === 'vi' ? 'Lệch' : 'Diff' };
+      }
+      if (!observedWeb.title) {
+        return { status: 'missing', label: 'Web' };
+      }
+      if (/^https?:\/\//i.test(citedMeta.title.trim())) {
+        return { status: 'match', label: lang === 'vi' ? 'Khớp' : 'Match' };
+      }
+      const tokenSim = computeWebTextSim(citedMeta.title, observedWeb.title);
+      const bestSim =
+        typeof verdict.features?.html_meta_title_sim === 'number'
+          ? Math.max(tokenSim, verdict.features.html_meta_title_sim)
+          : tokenSim;
+      if (bestSim >= 0.65) {
+        return { status: 'match', label: lang === 'vi' ? 'Khớp' : 'Match' };
+      }
+      if (bestSim >= 0.3) {
+        return {
+          status: 'partial',
+          label: lang === 'vi' ? 'Khớp phần' : 'Partial',
+        };
+      }
+      return { status: 'mismatch', label: lang === 'vi' ? 'Lệch' : 'Diff' };
+    }
+
+    if (field === 'authors') {
+      if (!observedWeb.authors || observedWeb.authors.length === 0) {
+        return { status: 'missing', label: 'Web' };
+      }
+      if (citedMeta.authors === '—') {
+        return {
+          status: 'partial',
+          label: lang === 'vi' ? 'Đã trích xuất' : 'Retrieved',
+        };
+      }
+      const aSim = computeWebAuthorSim(
+        citedMeta.authors,
+        observedWeb.authors.join(', '),
+      );
+      if (aSim >= 0.65) {
+        return { status: 'match', label: lang === 'vi' ? 'Khớp' : 'Match' };
+      }
+      if (aSim >= 0.3) {
+        return {
+          status: 'partial',
+          label: lang === 'vi' ? 'Khớp phần' : 'Partial',
+        };
+      }
+      return { status: 'mismatch', label: lang === 'vi' ? 'Lệch' : 'Diff' };
+    }
+
+    if (field === 'year') {
+      if (!observedWeb.year) {
+        return { status: 'missing', label: 'Web' };
+      }
+      if (citedMeta.year === '—') {
+        return {
+          status: 'partial',
+          label: lang === 'vi' ? 'Đã trích xuất' : 'Retrieved',
+        };
+      }
+      const citedYr = parseInt(citedMeta.year, 10);
+      const obsYr = parseInt(String(observedWeb.year), 10);
+      if (
+        !Number.isNaN(citedYr) &&
+        !Number.isNaN(obsYr) &&
+        Math.abs(citedYr - obsYr) <= 1
+      ) {
+        return { status: 'match', label: lang === 'vi' ? 'Khớp' : 'Match' };
+      }
+      return { status: 'mismatch', label: lang === 'vi' ? 'Lệch' : 'Diff' };
+    }
+
+    if (field === 'venue') {
+      if (!observedWeb.venue) {
+        return { status: 'missing', label: 'Web' };
+      }
+      if (citedMeta.venue === '—') {
+        return {
+          status: 'partial',
+          label: lang === 'vi' ? 'Đã trích xuất' : 'Retrieved',
+        };
+      }
+      const vSim = computeWebTextSim(citedMeta.venue, observedWeb.venue);
+      if (vSim >= 0.65) {
+        return { status: 'match', label: lang === 'vi' ? 'Khớp' : 'Match' };
+      }
+      if (vSim >= 0.3) {
+        return {
+          status: 'partial',
+          label: lang === 'vi' ? 'Khớp phần' : 'Partial',
+        };
+      }
+      return { status: 'mismatch', label: lang === 'vi' ? 'Lệch' : 'Diff' };
+    }
+
+    // field === 'doi'
+    if (!observedWeb.doi) {
+      return { status: 'missing', label: 'Web' };
+    }
+    if (citedMeta.doi === '—') {
+      return {
+        status: 'partial',
+        label: lang === 'vi' ? 'Đã trích xuất' : 'Retrieved',
+      };
+    }
+    return citedMeta.doi.toLowerCase() === observedWeb.doi.toLowerCase()
+      ? { status: 'match', label: lang === 'vi' ? 'Khớp' : 'Match' }
+      : { status: 'mismatch', label: lang === 'vi' ? 'Lệch' : 'Diff' };
+  };
+
+  const hasLegalMismatch = (verdict.triggered_rules ?? []).includes(
+    'R-VN-LEGAL-MISMATCH',
+  );
+
   const computeTitleStatus = (): { status: FieldStatus; label?: string } => {
+    if (isUrlContentMismatch) {
+      return { status: 'mismatch', label: lang === 'vi' ? 'Lệch' : 'Diff' };
+    }
+    if (isWebResourceMode || useObservedWebMeta) {
+      return computeWebFieldStatus('title');
+    }
+    if (!retrievedMeta && isIncompleteMeta) {
+      if (mismatchedFieldsSet.has('title') || citedMeta.title === '—') {
+        return { status: 'partial', label: lang === 'vi' ? 'Thiếu' : 'Missing' };
+      }
+      return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
+    }
     if (!retrievedMeta) return { status: 'mismatch', label: 'Diff' };
+    if (isLegalRule && verdict.label === 'resource' && !mismatchedFieldsSet.has('title')) {
+      return { status: 'match', label: '100% Match' };
+    }
     if (mismatchedFieldsSet.has('title')) {
       if (titleSim >= 0.5) {
         return { status: 'partial', label: `${Math.round(titleSim * 100)}% Sim` };
@@ -1289,9 +1871,31 @@ function enrichVerdictItem(
   };
 
   const computeAuthorsStatus = (): { status: FieldStatus; label?: string } => {
+    if (isWebResourceMode || useObservedWebMeta) {
+      return computeWebFieldStatus('authors');
+    }
+    if (!retrievedMeta && isIncompleteMeta) {
+      if (
+        mismatchedFieldsSet.has('authors') ||
+        mismatchedFieldsSet.has('author') ||
+        citedMeta.authors === '—'
+      ) {
+        return { status: 'partial', label: lang === 'vi' ? 'Thiếu' : 'Missing' };
+      }
+      return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
+    }
     if (citedMeta.authors === '—') return { status: 'missing' };
     if (!retrievedMeta) return { status: 'mismatch', label: 'Diff' };
-    if (mismatchedFieldsSet.has('authors')) {
+    if (
+      isLegalRule &&
+      verdict.label === 'resource' &&
+      !mismatchedFieldsSet.has('authors') &&
+      !mismatchedFieldsSet.has('author') &&
+      !hasLegalMismatch
+    ) {
+      return { status: 'match', label: '100% Match' };
+    }
+    if (mismatchedFieldsSet.has('authors') || mismatchedFieldsSet.has('author')) {
       return authorSim >= 0.45
         ? { status: 'partial', label: `${Math.round(authorSim * 100)}% Sim` }
         : { status: 'mismatch', label: 'Diff' };
@@ -1313,27 +1917,54 @@ function enrichVerdictItem(
   };
 
   const computeYearStatus = (): { status: FieldStatus; label?: string } => {
+    if (isWebResourceMode || useObservedWebMeta) {
+      return computeWebFieldStatus('year');
+    }
+    if (!retrievedMeta && isIncompleteMeta) {
+      if (mismatchedFieldsSet.has('year') || citedMeta.year === '—') {
+        return { status: 'partial', label: lang === 'vi' ? 'Thiếu' : 'Missing' };
+      }
+      return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
+    }
     if (citedMeta.year === '—') return { status: 'missing' };
     if (!retrievedMeta) return { status: 'mismatch', label: 'Diff' };
     if (
       mismatchedFieldsSet.has('year') ||
-      (verdict.features?.year_distance !== undefined &&
-        verdict.features.year_distance > 0)
+      (validYearDistance !== undefined && validYearDistance > 0)
     ) {
       return { status: 'mismatch', label: 'Diff' };
     }
-    if (matchedFieldsSet.has('year') || verdict.label === 'verified') {
+    if (
+      matchedFieldsSet.has('year') ||
+      verdict.label === 'verified' ||
+      (isLegalRule && verdict.label === 'resource' && !hasLegalMismatch)
+    ) {
       return { status: 'match', label: '100% Match' };
     }
     return { status: 'partial', label: 'Checked' };
   };
 
   const computeVenueStatus = (): { status: FieldStatus; label?: string } => {
+    if (isWebResourceMode || useObservedWebMeta) {
+      return computeWebFieldStatus('venue');
+    }
+    if (!retrievedMeta && isIncompleteMeta) {
+      if (mismatchedFieldsSet.has('venue') || citedMeta.venue === '—') {
+        return { status: 'partial', label: lang === 'vi' ? 'Thiếu' : 'Missing' };
+      }
+      return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
+    }
     if (citedMeta.venue === '—' && (!retrievedMeta || retrievedMeta.venue === '—')) {
+      return { status: 'missing' };
+    }
+    if (citedMeta.venue === '—' && isIncompleteMeta) {
       return { status: 'missing' };
     }
     if (!retrievedMeta) return { status: 'mismatch', label: 'Diff' };
     if (mismatchedFieldsSet.has('venue')) return { status: 'mismatch', label: 'Diff' };
+    if (isLegalRule && verdict.label === 'resource' && !hasLegalMismatch) {
+      return { status: 'match', label: '100% Match' };
+    }
     if (citedMeta.venue === '—') return { status: 'missing' };
     if (matchedFieldsSet.has('venue') || verdict.label === 'verified') {
       return { status: 'match', label: '100% Match' };
@@ -1342,17 +1973,29 @@ function enrichVerdictItem(
   };
 
   const computeDoiStatus = (): { status: FieldStatus; label?: string } => {
+    if (isWebResourceMode || useObservedWebMeta) {
+      return computeWebFieldStatus('doi');
+    }
+    if (!retrievedMeta && isIncompleteMeta) {
+      if (mismatchedFieldsSet.has('doi')) {
+        return { status: 'partial', label: lang === 'vi' ? 'Thiếu' : 'Missing' };
+      }
+      if (citedMeta.doi === '—') {
+        return { status: 'missing' };
+      }
+      return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
+    }
     if (citedMeta.doi === '—' && (!retrievedMeta || retrievedMeta.doi === '—')) {
       return { status: 'missing' };
     }
     if (!retrievedMeta) return { status: 'mismatch', label: 'Diff' };
     if (mismatchedFieldsSet.has('doi')) return { status: 'mismatch', label: 'Diff' };
     if (
-      Boolean(verdict.features?.doi_exact_match) ||
-      matchedFieldsSet.has('doi') ||
-      (citedMeta.doi !== '—' &&
-        retrievedMeta.doi !== '—' &&
-        citedMeta.doi.toLowerCase() === retrievedMeta.doi.toLowerCase())
+      citedMeta.doi !== '—' &&
+      (Boolean(verdict.features?.doi_exact_match) ||
+        matchedFieldsSet.has('doi') ||
+        (retrievedMeta.doi !== '—' &&
+          citedMeta.doi.toLowerCase() === retrievedMeta.doi.toLowerCase()))
     ) {
       return { status: 'match', label: '100% Match' };
     }
@@ -1365,6 +2008,12 @@ function enrichVerdictItem(
   const { status: urlStatus, code: urlCode } = resolveVerdictUrlStatus(verdict);
 
   const computeUrlStatus = (): { status: FieldStatus; label?: string } => {
+    if (isUrlContentMismatch) {
+      return {
+        status: 'partial',
+        label: lang === 'vi' ? 'Sai nội dung trang' : 'Wrong Page',
+      };
+    }
     if (urlStatus === 'alive') {
       return { status: 'match', label: `HTTP ${urlCode || 200} OK` };
     }
@@ -1385,6 +2034,9 @@ function enrichVerdictItem(
     }
     if (citedMeta.url === '—' && (!retrievedMeta || retrievedMeta.url === '—')) {
       return { status: 'missing' };
+    }
+    if (!retrievedMeta && isIncompleteMeta && citedMeta.url !== '—') {
+      return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
     }
     if (
       citedMeta.url !== '—' &&
@@ -1410,10 +2062,18 @@ function enrichVerdictItem(
   let contextAfter = ' ...”';
 
   const pos = rawContext.indexOf(highlightTarget);
+  const markerPos =
+    pos === -1 && marker && marker !== '[?]'
+      ? rawContext.indexOf(marker)
+      : -1;
   if (pos !== -1) {
     contextBefore = '“' + rawContext.slice(0, pos);
     contextHighlight = highlightTarget;
     contextAfter = rawContext.slice(pos + highlightTarget.length) + '”';
+  } else if (markerPos !== -1) {
+    contextBefore = '“' + rawContext.slice(0, markerPos);
+    contextHighlight = marker;
+    contextAfter = rawContext.slice(markerPos + marker.length) + '”';
   } else {
     contextBefore = `“${rawContext} `;
     contextHighlight = marker;
@@ -1427,13 +2087,17 @@ function enrichVerdictItem(
   const triggeredCodes =
     verdict.triggered_rules && verdict.triggered_rules.length > 0
       ? verdict.triggered_rules
-      : verdict.label === 'verified'
-        ? ['R-WELL-LINKED']
-        : verdict.label === 'metadata_error'
-          ? ['R-KNOWN-AUTHOR-TITLE-MISMATCH']
-          : verdict.label === 'suspected_hallucination'
-            ? ['R-NO-CANDIDATE']
-            : ['R-WEAK-EVIDENCE'];
+      : verdict.label === 'resource'
+        ? isLegalRule
+          ? ['R-VN-LEGAL-FORMAT']
+          : ['R-URL-RESOURCE']
+        : verdict.label === 'verified'
+          ? ['R-WELL-LINKED']
+          : verdict.label === 'metadata_error'
+            ? ['R-KNOWN-AUTHOR-TITLE-MISMATCH']
+            : verdict.label === 'suspected_hallucination'
+              ? ['R-NO-CANDIDATE']
+              : ['R-WEAK-EVIDENCE'];
 
   const rules: SymbolicRuleDisplay[] = triggeredCodes.map((code) => {
     const cleanCode = code.trim();
@@ -1446,8 +2110,27 @@ function enrichVerdictItem(
         status: meta.status,
       };
     }
+    const inspectorDef = RULE_DEFINITIONS[cleanCode];
+    if (inspectorDef) {
+      const concl = inspectorDef.conclusion.toLowerCase();
+      const statusFromOutcome: 'passed' | 'warning' | 'failed' =
+        concl.includes('verified') || concl.includes('resource')
+          ? 'passed'
+          : concl.includes('hallucination')
+            ? 'failed'
+            : 'warning';
+      const condText = inspectorDef.conditions
+        .map((c) => `${c.field} ${c.operator} ${c.value}`)
+        .join(' AND ');
+      return {
+        code: cleanCode,
+        name: lang === 'vi' ? inspectorDef.nameVi : inspectorDef.name,
+        condition: `IF ${condText} THEN ${inspectorDef.conclusion}`,
+        status: statusFromOutcome,
+      };
+    }
     const fallbackStatus: 'passed' | 'warning' | 'failed' =
-      verdict.label === 'verified'
+      verdict.label === 'verified' || verdict.label === 'resource'
         ? 'passed'
         : verdict.label === 'metadata_error'
           ? 'warning'
@@ -1458,7 +2141,7 @@ function enrichVerdictItem(
         lang === 'vi'
           ? `Quy tắc kiểm định ${cleanCode}`
           : `Symbolic Verification Rule ${cleanCode}`,
-      condition: `IF rule_triggered("${cleanCode}") == TRUE THEN ${verdict.label.toUpperCase()}`,
+      condition: `IF ${cleanCode} THEN ${verdict.label.toUpperCase()}`,
       status: fallbackStatus,
     };
   });
@@ -1494,8 +2177,12 @@ function enrichVerdictItem(
       usedSourceIndices.add(foundIdx);
       const ms = verdict.matched_sources[foundIdx];
       const conf = ms.confidence ?? verdict.confidence;
+      const contextualLabel =
+        engine.key === 'tech_standard'
+          ? formatEssaySourceDisplay(ms.source, lang, verdict, ms)
+          : engine.label;
       return {
-        name: engine.label,
+        name: contextualLabel,
         status: conf >= 0.7 ? 'matched' : 'partial',
         score: conf.toFixed(2),
         matchedFields: ms.matched_fields ?? [],
@@ -1512,13 +2199,22 @@ function enrichVerdictItem(
     };
   });
 
-  // Append any additional custom matched sources not covered above
+  // Append any additional custom matched sources (vn_legal_registry, web_html_meta, wayback_html_meta, etc.)
+  let hasWebHtmlSourceCard = false;
   (verdict.matched_sources ?? []).forEach((ms, idx) => {
     if (!usedSourceIndices.has(idx)) {
+      const low = (ms.source || '').toLowerCase();
+      if (low === 'web_html_meta' || low === 'wayback_html_meta') {
+        hasWebHtmlSourceCard = true;
+      }
       const conf = ms.confidence ?? verdict.confidence;
       sources.unshift({
-        name: ms.source,
-        status: conf >= 0.7 ? 'matched' : 'partial',
+        name: formatEssaySourceDisplay(ms.source, lang, verdict, ms),
+        status: isUrlContentMismatch
+          ? 'partial'
+          : conf >= 0.7
+            ? 'matched'
+            : 'partial',
         score: conf.toFixed(2),
         matchedFields: ms.matched_fields ?? [],
         url: ms.url ?? undefined,
@@ -1526,6 +2222,30 @@ function enrichVerdictItem(
       });
     }
   });
+
+  if (!hasWebHtmlSourceCard && observedWeb) {
+    const webSourceKey = observedWeb.isArchived
+      ? 'wayback_html_meta'
+      : 'web_html_meta';
+    const extractedFields: string[] = [];
+    if (observedWeb.title) extractedFields.push('title');
+    if (observedWeb.authors?.length) extractedFields.push('authors');
+    if (observedWeb.year) extractedFields.push('year');
+    if (observedWeb.venue) extractedFields.push('venue');
+    if (observedWeb.doi) extractedFields.push('doi');
+    sources.unshift({
+      name: formatEssaySourceDisplay(webSourceKey, lang, verdict),
+      status: isUrlContentMismatch ? 'partial' : 'matched',
+      score: (
+        typeof verdict.features?.html_meta_title_sim === 'number'
+          ? verdict.features.html_meta_title_sim
+          : verdict.confidence
+      ).toFixed(2),
+      matchedFields: extractedFields,
+      url: observedWeb.url ?? undefined,
+      doi: observedWeb.doi ?? undefined,
+    });
+  }
 
   const verdictVisual = getVerdictBadgeVisuals(
     verdict.label,
@@ -1743,8 +2463,14 @@ export function EssayPage() {
     if (simMatch) return `Tương đồng ${simMatch[1]}%`;
     const mapVi: Record<string, string> = {
       '100% Match': 'Khớp 100%',
+      Match: 'Khớp',
       Partial: 'Khớp một phần',
       Diff: 'Sai lệch',
+      Missing: 'Thiếu',
+      '— Missing': '— Thiếu',
+      Provided: 'Đã ghi',
+      'Web Resource': 'Tài nguyên Web',
+      'Wrong Page': 'Sai nội dung trang',
       Checked: 'Đã kiểm tra',
       Indexed: 'Đã lập chỉ mục',
       Retrieved: 'Đã truy xuất',
@@ -1764,35 +2490,87 @@ export function EssayPage() {
     switch (fieldInfo.status) {
       case 'match':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-            <Check className="h-3 w-3" />{' '}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold whitespace-nowrap shrink-0 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            <Check className="h-3 w-3 shrink-0" />{' '}
             {localizeFieldBadgeLabel(fieldInfo.label, '100% Match')}
           </span>
         );
       case 'partial':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-            <AlertTriangle className="h-3 w-3" />{' '}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold whitespace-nowrap shrink-0 bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+            <AlertTriangle className="h-3 w-3 shrink-0" />{' '}
             {localizeFieldBadgeLabel(fieldInfo.label, 'Partial')}
           </span>
         );
       case 'mismatch':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-200 dark:border-red-800">
-            <XCircle className="h-3 w-3" />{' '}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold whitespace-nowrap shrink-0 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 border border-red-200 dark:border-red-800">
+            <XCircle className="h-3 w-3 shrink-0" />{' '}
             {localizeFieldBadgeLabel(fieldInfo.label, 'Diff')}
           </span>
         );
-      case 'missing':
+      case 'missing': {
+        const displayMissing = fieldInfo.label
+          ? localizeFieldBadgeLabel(fieldInfo.label)
+          : lang === 'vi'
+            ? '— Khuyết thông tin'
+            : '— Missing';
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-            {lang === 'vi' ? '— Khuyết thông tin' : '— Missing'}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold whitespace-nowrap shrink-0 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+            {displayMissing}
           </span>
         );
+      }
     }
   };
 
   if (errorMessage) {
+    const statusCode = (error as { status?: number } | null)?.status;
+    const isPipelineJobFailed =
+      essayId !== null &&
+      (statusCode === 409 ||
+        /409|failed|thất bại|analysis failed|pipeline/i.test(errorMessage));
+
+    if (isPipelineJobFailed) {
+      return (
+        <div
+          data-testid="essay-failed-analysis-card"
+          className="rounded-2xl border border-red-200 dark:border-red-900/70 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-sm max-w-2xl mx-auto my-8"
+        >
+          <div className="flex items-start gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-red-50 dark:bg-red-950/70 border border-red-200 dark:border-red-800 flex items-center justify-center shrink-0">
+              <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+            </div>
+            <div className="space-y-3 flex-1 min-w-0">
+              <h2 className="font-display text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">
+                {lang === 'vi'
+                  ? 'Phân tích tài liệu không thành công'
+                  : 'Manuscript Analysis Failed'}
+              </h2>
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed break-words">
+                {errorMessage}
+              </p>
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <Link
+                  to="/upload"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-mono font-semibold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+                >
+                  <ArrowUpRight className="h-4 w-4" />
+                  {lang === 'vi' ? 'Tải lên lại' : 'Upload Again'}
+                </Link>
+                <Link
+                  to="/history"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-mono font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors"
+                >
+                  {lang === 'vi' ? 'Quay lại Lịch sử' : 'Back to History'}
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <Alert variant="destructive" className="card p-6">
         <AlertCircle className="h-5 w-5" />
@@ -1885,6 +2663,42 @@ export function EssayPage() {
         numCitations={report.num_citations}
         styleName={report.style_profile?.style}
       />
+
+      {/* Legacy Vietnamese Encoding (TCVN3/VNI) & Page-Selective OCR Recovery Diagnostics */}
+      {(Boolean(docDiag?.legacy_encoding_detected) ||
+        (docDiag?.ocr_pages_recovered?.length ?? 0) > 0) && (
+        <div
+          data-testid="essay-doc-diagnostics-banner"
+          className="flex flex-wrap items-center gap-2.5"
+        >
+          {docDiag?.legacy_encoding_detected && (
+            <div
+              data-testid="legacy-encoding-diagnostic-pill"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-200"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <span>
+                {lang === 'vi'
+                  ? `Đã tự động chuyển mã bảng mã tiếng Việt cũ (${String(docDiag.legacy_encoding_detected).toUpperCase()} → Unicode NFC)`
+                  : `Auto-transcoded legacy Vietnamese encoding (${String(docDiag.legacy_encoding_detected).toUpperCase()} → Unicode NFC)`}
+              </span>
+            </div>
+          )}
+          {(docDiag?.ocr_pages_recovered?.length ?? 0) > 0 && (
+            <div
+              data-testid="ocr-recovery-diagnostic-pill"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
+            >
+              <FileText className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>
+                {lang === 'vi'
+                  ? `Đã khôi phục văn bản bằng OCR (Tesseract vie+eng) tại trang: ${docDiag!.ocr_pages_recovered!.join(', ')}`
+                  : `Recovered text via Tesseract OCR (vie+eng) on page(s): ${docDiag!.ocr_pages_recovered!.join(', ')}`}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* P3 Feature #4: Scanned / Image-Only PDF Diagnostic Guardrail Banner */}
       {isScannedPdfDetected && (
@@ -2418,8 +3232,9 @@ export function EssayPage() {
                     {filteredItems.map((cit) => {
                       const isSelected =
                         activeItem?.verdict.citation_id === cit.verdict.citation_id;
-                      const isFlaggedRed =
-                        cit.verdict.label === 'suspected_hallucination' ||
+                      const isHallucination =
+                        cit.verdict.label === 'suspected_hallucination';
+                      const isMetadataError =
                         cit.verdict.label === 'metadata_error';
                       return (
                         <button
@@ -2440,18 +3255,22 @@ export function EssayPage() {
                             <div className="flex items-center gap-2 min-w-0">
                               <span
                                 className={`font-mono text-xs font-bold px-2 py-0.5 rounded shrink-0 bg-slate-100 dark:bg-slate-800 ${
-                                  isFlaggedRed
+                                  isHallucination
                                     ? 'text-red-600 dark:text-red-400'
-                                    : 'text-slate-800 dark:text-slate-200'
+                                    : isMetadataError
+                                      ? 'text-amber-700 dark:text-amber-400'
+                                      : 'text-slate-800 dark:text-slate-200'
                                 }`}
                               >
                                 {cit.marker}
                               </span>
                               <span
                                 className={`font-semibold text-sm truncate ${
-                                  isFlaggedRed
+                                  isHallucination
                                     ? 'text-red-600 dark:text-red-400'
-                                    : 'text-slate-900 dark:text-white'
+                                    : isMetadataError
+                                      ? 'text-amber-700 dark:text-amber-400'
+                                      : 'text-slate-900 dark:text-white'
                                 }`}
                               >
                                 {cit.inText}
@@ -2464,9 +3283,11 @@ export function EssayPage() {
 
                           <p
                             className={`text-xs line-clamp-1 mb-2.5 font-serif italic break-words [overflow-wrap:anywhere] ${
-                              isFlaggedRed
+                              isHallucination
                                 ? 'text-red-600 dark:text-red-400 font-medium'
-                                : 'text-slate-600 dark:text-slate-400'
+                                : isMetadataError
+                                  ? 'text-amber-700 dark:text-amber-400 font-medium'
+                                  : 'text-slate-600 dark:text-slate-400'
                             }`}
                           >
                             &ldquo;{cit.citedMeta.title}&rdquo;
@@ -2515,10 +3336,11 @@ export function EssayPage() {
                       <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400 mb-1.5">
                         <span
                           className={
-                            activeItem.verdict.label === 'suspected_hallucination' ||
-                            activeItem.verdict.label === 'metadata_error'
+                            activeItem.verdict.label === 'suspected_hallucination'
                               ? 'text-red-600 dark:text-red-400 font-bold'
-                              : undefined
+                              : activeItem.verdict.label === 'metadata_error'
+                                ? 'text-amber-700 dark:text-amber-400 font-bold'
+                                : undefined
                           }
                         >
                           {lang === 'vi'
@@ -2527,16 +3349,32 @@ export function EssayPage() {
                               ? `IN-TEXT CONTEXT (${activeItem.pageLabel})`
                               : `MANUSCRIPT CONTEXT (${activeItem.pageLabel})`}
                         </span>
-                        {canViewDeepTrace && <span>GROBID TEI-XML</span>}
+                        {canViewDeepTrace && (
+                          <span>
+                            {(() => {
+                              const parserUsed = (docDiag?.parser_used || '').toLowerCase();
+                              const fnameLow = (report.filename || '').toLowerCase();
+                              if (parserUsed === 'docx' || fnameLow.endsWith('.docx')) {
+                                return 'WORD DOCX · OPENXML';
+                              }
+                              if (fnameLow.endsWith('.bib')) return 'BIBTEX PARSER';
+                              if (fnameLow.endsWith('.ris')) return 'RIS PARSER';
+                              if (fnameLow.endsWith('.txt')) return 'PLAIN TEXT';
+                              if (parserUsed === 'mupdf') return 'PYMUPDF PARSER';
+                              return 'GROBID TEI-XML';
+                            })()}
+                          </span>
+                        )}
                       </div>
                       <p className="document-content text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed line-clamp-4 break-words [overflow-wrap:anywhere]">
                         {activeItem.contextBefore}
                         <mark
                           className={`bg-transparent font-bold ${
-                            activeItem.verdict.label === 'suspected_hallucination' ||
-                            activeItem.verdict.label === 'metadata_error'
+                            activeItem.verdict.label === 'suspected_hallucination'
                               ? 'text-red-600 dark:text-red-400'
-                              : 'text-indigo-600 dark:text-indigo-400'
+                              : activeItem.verdict.label === 'metadata_error'
+                                ? 'text-amber-700 dark:text-amber-400'
+                                : 'text-indigo-600 dark:text-indigo-400'
                           }`}
                         >
                           {activeItem.contextHighlight}
@@ -2571,10 +3409,11 @@ export function EssayPage() {
                           )}
                           <span
                             className={`font-mono text-xs font-bold ${
-                              activeItem.verdict.label === 'suspected_hallucination' ||
-                              activeItem.verdict.label === 'metadata_error'
+                              activeItem.verdict.label === 'suspected_hallucination'
                                 ? 'text-red-600 dark:text-red-400'
-                                : 'text-indigo-600 dark:text-indigo-400'
+                                : activeItem.verdict.label === 'metadata_error'
+                                  ? 'text-amber-700 dark:text-amber-400'
+                                  : 'text-indigo-600 dark:text-indigo-400'
                             }`}
                           >
                             {activeItem.marker}
@@ -2587,10 +3426,11 @@ export function EssayPage() {
                         </div>
                         <h3
                           className={`font-display text-lg sm:text-xl font-bold leading-snug break-words [overflow-wrap:anywhere] ${
-                            activeItem.verdict.label === 'suspected_hallucination' ||
-                            activeItem.verdict.label === 'metadata_error'
+                            activeItem.verdict.label === 'suspected_hallucination'
                               ? 'text-red-600 dark:text-red-400'
-                              : 'text-slate-900 dark:text-white'
+                              : activeItem.verdict.label === 'metadata_error'
+                                ? 'text-amber-700 dark:text-amber-400'
+                                : 'text-slate-900 dark:text-white'
                           }`}
                         >
                           <SoftTextSwap text={activeItem.citedMeta.title} />
@@ -2626,18 +3466,20 @@ export function EssayPage() {
                       <div className="my-4 p-3.5 rounded-xl border flex items-start gap-3 bg-slate-50 dark:bg-slate-900 border-slate-200/80 dark:border-slate-800">
                         <Scale
                           className={`h-4 w-4 shrink-0 mt-0.5 ${
-                            activeItem.verdict.label === 'suspected_hallucination' ||
-                            activeItem.verdict.label === 'metadata_error'
+                            activeItem.verdict.label === 'suspected_hallucination'
                               ? 'text-red-600 dark:text-red-400'
-                              : 'text-indigo-600 dark:text-indigo-400'
+                              : activeItem.verdict.label === 'metadata_error'
+                                ? 'text-amber-700 dark:text-amber-400'
+                                : 'text-indigo-600 dark:text-indigo-400'
                           }`}
                         />
                         <div
                           className={`text-xs sm:text-sm leading-relaxed ${
-                            activeItem.verdict.label === 'suspected_hallucination' ||
-                            activeItem.verdict.label === 'metadata_error'
+                            activeItem.verdict.label === 'suspected_hallucination'
                               ? 'text-red-600 dark:text-red-400'
-                              : 'text-slate-700 dark:text-slate-300'
+                              : activeItem.verdict.label === 'metadata_error'
+                                ? 'text-amber-700 dark:text-amber-400'
+                                : 'text-slate-700 dark:text-slate-300'
                           }`}
                         >
                           <span className="font-semibold text-slate-900 dark:text-white mr-1.5">
@@ -2763,7 +3605,7 @@ export function EssayPage() {
                           <table className="w-full block sm:table sm:table-fixed lg:block xl:table xl:table-fixed text-left border-collapse">
                             <thead className="hidden sm:table-header-group lg:hidden xl:table-header-group">
                               <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-[11px] font-mono uppercase text-slate-500 dark:text-slate-400">
-                                <th className="py-2.5 px-3 w-[92px]">
+                                <th className="py-2.5 px-3 w-[88px]">
                                   {lang === 'vi' ? 'Trường' : 'Field'}
                                 </th>
                                 <th className="py-2.5 px-3">
@@ -2774,7 +3616,7 @@ export function EssayPage() {
                                     ? 'Bản ghi chuẩn truy xuất'
                                     : 'Canonical Retrieved'}
                                 </th>
-                                <th className="py-2.5 px-3 w-[132px] text-right">
+                                <th className="py-2.5 px-3 w-[168px] text-right">
                                   {lang === 'vi' ? 'Trạng thái' : 'Status'}
                                 </th>
                               </tr>
@@ -2845,28 +3687,77 @@ export function EssayPage() {
                                       ) : key === 'url' &&
                                         activeItem.retrievedMeta.url !== '—' &&
                                         /^https?:\/\//i.test(activeItem.retrievedMeta.url) ? (
-                                        <a
-                                          href={activeItem.retrievedMeta.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline break-all"
-                                        >
-                                          <span>{activeItem.retrievedMeta.url}</span>
-                                          <ExternalLink className="h-3 w-3 shrink-0" />
-                                        </a>
+                                        <div className="space-y-1">
+                                          <a
+                                            href={activeItem.retrievedMeta.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline break-all"
+                                          >
+                                            <span>{activeItem.retrievedMeta.url}</span>
+                                            <ExternalLink className="h-3 w-3 shrink-0" />
+                                          </a>
+                                          {(activeItem.verdict.triggered_rules ?? []).includes(
+                                            'R-URL-CONTENT-MISMATCH',
+                                          ) && (
+                                            <span className="block text-[11px] font-sans text-amber-700 dark:text-amber-400 font-medium">
+                                              {lang === 'vi'
+                                                ? 'HTTP 200 hoạt động nhưng trỏ tới tiêu đề trang web khác'
+                                                : 'HTTP 200 resolved to a different page title'}
+                                            </span>
+                                          )}
+                                        </div>
+                                      ) : activeItem.retrievedMeta[key] ===
+                                          'Trang web không khai báo thẻ này' ||
+                                        activeItem.retrievedMeta[key] ===
+                                          'Not declared in page metadata' ? (
+                                        <span className="text-slate-500 dark:text-slate-400 italic">
+                                          <SoftTextSwap text={activeItem.retrievedMeta[key]} />
+                                        </span>
                                       ) : (
                                         <SoftTextSwap text={activeItem.retrievedMeta[key]} />
                                       )
                                     ) : key === 'url' && activeItem.linkBadge ? (
                                       <span
                                         className={
-                                          activeItem.linkBadge.status === 'alive' ||
-                                          activeItem.linkBadge.status === 'restricted_alive'
-                                            ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
-                                            : 'text-red-500 dark:text-red-400 font-semibold'
+                                          (activeItem.verdict.triggered_rules ?? []).includes(
+                                            'R-URL-CONTENT-MISMATCH',
+                                          )
+                                            ? 'text-amber-700 dark:text-amber-400 font-semibold'
+                                            : activeItem.linkBadge.status === 'alive' ||
+                                                activeItem.linkBadge.status === 'restricted_alive'
+                                              ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
+                                              : 'text-red-500 dark:text-red-400 font-semibold'
                                         }
                                       >
                                         {activeItem.linkBadge.title}
+                                      </span>
+                                    ) : activeItem.verdict.label === 'resource' &&
+                                      !isLegalStatuteVerdict(activeItem.verdict) ? (
+                                      key === 'doi' && activeItem.citedMeta.doi === '—' ? (
+                                        <span className="text-slate-500 dark:text-slate-400">—</span>
+                                      ) : (activeItem.verdict.url_status ??
+                                          activeItem.verdict.features?.url_status) ===
+                                        'restricted_alive' ? (
+                                        <span className="text-slate-600 dark:text-slate-300">
+                                          {lang === 'vi'
+                                            ? 'Tài nguyên web hợp lệ (tường lửa/chặn bot — không đọc được thẻ HTML)'
+                                            : 'Verified web resource (bot-protected — HTML meta unavailable)'}
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-600 dark:text-slate-300">
+                                          {lang === 'vi'
+                                            ? 'Tài nguyên web trực tiếp (không có thẻ metadata HTML)'
+                                            : 'Direct web resource (no HTML metadata tags)'}
+                                        </span>
+                                      )
+                                    ) : (activeItem.verdict.triggered_rules ?? []).includes(
+                                        'R-INCOMPLETE-METADATA',
+                                      ) ? (
+                                      <span className="text-amber-700 dark:text-amber-400 italic">
+                                        {lang === 'vi'
+                                          ? 'Chưa đủ thông tin quy cách để tra cứu bản ghi chuẩn'
+                                          : 'Insufficient citation metadata for canonical lookup'}
                                       </span>
                                     ) : (
                                       <span className="text-red-500 dark:text-red-400 italic">
@@ -2964,17 +3855,41 @@ export function EssayPage() {
                                     {activeItem.verdict.features.title_sim_semantic.toFixed(2)}
                                   </span>
                                 )}
+                              {typeof activeItem.verdict.features?.html_meta_title_sim ===
+                                'number' && (
+                                <span>
+                                  html_meta_title_sim=
+                                  {activeItem.verdict.features.html_meta_title_sim.toFixed(2)}
+                                </span>
+                              )}
                               {activeItem.verdict.features?.author_jaccard !== undefined && (
                                 <span>
                                   author_jaccard=
                                   {activeItem.verdict.features.author_jaccard.toFixed(2)}
                                 </span>
                               )}
-                              {activeItem.verdict.features?.year_distance !== undefined && (
-                                <span>
-                                  year_dist={activeItem.verdict.features.year_distance}
-                                </span>
+                              {activeItem.verdict.features?.year_distance !== undefined &&
+                                activeItem.verdict.features.year_distance < 900 &&
+                                activeItem.verdict.features?.has_scholarly_candidate !==
+                                  false && (
+                                  <span>
+                                    year_dist={activeItem.verdict.features.year_distance}
+                                  </span>
+                                )}
+                              {(activeItem.verdict.features?.cross_lingual_detected ||
+                                activeItem.verdict.features?.cross_lingual_title_detected) && (
+                                <span>cross_lingual_detected=true</span>
                               )}
+                              {typeof activeItem.verdict.features?.cross_lingual_title_sim ===
+                                'number' &&
+                                activeItem.verdict.features.cross_lingual_title_sim > 0 && (
+                                  <span>
+                                    cross_lingual_title_sim=
+                                    {activeItem.verdict.features.cross_lingual_title_sim.toFixed(
+                                      2,
+                                    )}
+                                  </span>
+                                )}
                               {activeItem.verdict.features?.venue_sim !== undefined &&
                                 activeItem.verdict.features.venue_sim > 0 && (
                                   <span>
@@ -3009,10 +3924,14 @@ export function EssayPage() {
                               {activeItem.linkBadge && (
                                 <span
                                   className={
-                                    activeItem.linkBadge.status === 'alive' ||
-                                    activeItem.linkBadge.status === 'restricted_alive'
-                                      ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
-                                      : 'text-red-600 dark:text-red-400 font-semibold'
+                                    (activeItem.verdict.triggered_rules ?? []).includes(
+                                      'R-URL-CONTENT-MISMATCH',
+                                    )
+                                      ? 'text-amber-700 dark:text-amber-400 font-semibold'
+                                      : activeItem.linkBadge.status === 'alive' ||
+                                          activeItem.linkBadge.status === 'restricted_alive'
+                                        ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
+                                        : 'text-red-600 dark:text-red-400 font-semibold'
                                   }
                                 >
                                   link_status={activeItem.linkBadge.text}

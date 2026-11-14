@@ -12,6 +12,12 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CardResize, IconSwap, TextMorph } from '@/components/ui/transitions';
 import {
+  extractObservedWebMeta,
+  getCitationMarkerLabel,
+  getSourceDisplayName,
+  isLegalStatuteVerdict,
+} from '@/lib/verdictExplanation';
+import {
   Sparkles,
   Shuffle,
   FileText,
@@ -24,6 +30,7 @@ import {
   Wand2,
   Loader2,
   Link2,
+  Scale,
   BookOpen,
   Copy,
   Check,
@@ -923,6 +930,32 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                   <span className="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 font-semibold">
                     🚨 {lang === 'vi' ? 'Nghi bịa đặt' : 'Hallucination'}: {instantResult.summary.suspected_hallucination}
                   </span>
+                  {(() => {
+                    const resItems = (instantResult.results ?? []).filter(
+                      (item) => item.label === 'resource',
+                    );
+                    const legalCount = resItems.filter((item) =>
+                      isLegalStatuteVerdict(item),
+                    ).length;
+                    const webCount = Math.max(
+                      0,
+                      (instantResult.summary.resource ?? resItems.length) - legalCount,
+                    );
+                    return (
+                      <>
+                        {webCount > 0 && (
+                          <span className="px-2.5 py-1 rounded-lg bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 font-semibold">
+                            ↗ {lang === 'vi' ? 'Tài nguyên Web' : 'URL Resource'}: {webCount}
+                          </span>
+                        )}
+                        {legalCount > 0 && (
+                          <span className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold">
+                            ⚖ {lang === 'vi' ? 'Văn bản Pháp luật' : 'Legal Statute'}: {legalCount}
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
                   <span className="px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950 text-violet-700 dark:text-violet-300 font-semibold">
                     🔗 {lang === 'vi' ? 'Lỗi liên kết Layer-1 In-text ↔ Ref' : 'Layer-1 In-text ↔ Ref Issues'}: {instantResult.summary.layer1_linking_issues}
                   </span>
@@ -961,28 +994,79 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
               </div>
 
               <div className="grid grid-cols-1 gap-2 max-h-80 overflow-y-auto pr-1">
-                {(instantResult.results ?? []).map((r) => {
+                {(instantResult.results ?? []).map((r, rIdx) => {
                   const isVer = r.label === 'verified';
+                  const isRes = r.label === 'resource';
+                  const isLegalRes = isRes && isLegalStatuteVerdict(r);
                   const isHalluc = r.label === 'suspected_hallucination';
-                  const hasL1Issue = r.mapping_status !== 'matched';
+                  const isUrlMismatch = (r.triggered_rules ?? []).includes(
+                    'R-URL-CONTENT-MISMATCH',
+                  );
+                  const hasL1Issue = Boolean(
+                    r.mapping_status && r.mapping_status !== 'matched',
+                  );
+                  const observedWeb = extractObservedWebMeta(r);
+                  const primarySource =
+                    r.matched_source ??
+                    (r.matched_sources && r.matched_sources.length > 0
+                      ? r.matched_sources[0]
+                      : null);
+                  const rawUrlStatus = r.url_status ?? r.features?.url_status;
+                  const hasArchiveFallback =
+                    Boolean(r.archive_url || r.features?.archive_url) ||
+                    (r.triggered_rules ?? []).includes('R-WAYBACK-ARCHIVED');
+                  const urlStatus =
+                    rawUrlStatus === 'archived_alive' ||
+                    (hasArchiveFallback &&
+                      rawUrlStatus !== 'alive' &&
+                      rawUrlStatus !== 'restricted_alive')
+                      ? 'archived_alive'
+                      : rawUrlStatus === 'alive' ||
+                          rawUrlStatus === 'restricted_alive' ||
+                          rawUrlStatus === 'dead_link' ||
+                          rawUrlStatus === 'fake_domain'
+                        ? rawUrlStatus
+                        : null;
+                  const urlCode = r.url_status_code ?? r.features?.url_status_code;
+                  const markerDisplay =
+                    r.composite_label || r.sub_index
+                      ? getCitationMarkerLabel(r, rIdx)
+                      : `#${r.index}`;
+
                   return (
                     <div
-                      key={r.index}
-                      className={`p-3 rounded-xl border text-xs space-y-1 ${
+                      key={`${r.index}-${rIdx}`}
+                      data-testid={`sandbox-result-card-${r.index}`}
+                      data-verdict-label={r.label}
+                      className={`p-3 rounded-xl border text-xs space-y-1.5 ${
                         isHalluc
                           ? 'bg-red-50/70 dark:bg-red-950/30 border-red-200 dark:border-red-800'
-                          : !isVer || hasL1Issue
-                            ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
-                            : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
+                          : isRes && !hasL1Issue
+                            ? 'bg-sky-50/60 dark:bg-sky-950/25 border-sky-200 dark:border-sky-800'
+                            : !isVer || hasL1Issue
+                              ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
+                              : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
                       }`}
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-2 font-mono font-bold">
-                          <span>#{r.index}</span>
+                          <span>{markerDisplay}</span>
                           {isVer ? (
                             <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
                               <CheckCircle2 className="h-3.5 w-3.5" /> VERIFIED
                             </span>
+                          ) : isRes ? (
+                            isLegalRes ? (
+                              <span className="inline-flex items-center gap-1 text-indigo-700 dark:text-indigo-300">
+                                <Scale className="h-3.5 w-3.5" />{' '}
+                                {lang === 'vi' ? 'VĂN BẢN PHÁP LUẬT' : 'LEGAL STATUTE'}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300">
+                                <Link2 className="h-3.5 w-3.5" />{' '}
+                                {lang === 'vi' ? 'TÀI NGUYÊN WEB' : 'URL RESOURCE'}
+                              </span>
+                            )
                           ) : isHalluc ? (
                             <span className="inline-flex items-center gap-1 text-red-700 dark:text-red-300">
                               <XCircle className="h-3.5 w-3.5" /> SUSPECTED HALLUCINATION
@@ -992,6 +1076,33 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                               <AlertTriangle className="h-3.5 w-3.5" /> {r.label.toUpperCase()}
                             </span>
                           )}
+                          {urlStatus && (
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] border ${
+                                isUrlMismatch
+                                  ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
+                                  : urlStatus === 'alive' || urlStatus === 'restricted_alive'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
+                                    : urlStatus === 'archived_alive'
+                                      ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
+                                      : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800'
+                              }`}
+                            >
+                              {isUrlMismatch
+                                ? lang === 'vi'
+                                  ? `⚠ HTTP ${urlCode || 200} · Sai nội dung trang`
+                                  : `⚠ HTTP ${urlCode || 200} · Wrong Page`
+                                : urlStatus === 'alive'
+                                  ? `✓ HTTP ${urlCode || 200} OK`
+                                  : urlStatus === 'restricted_alive'
+                                    ? `🔒 HTTP ${urlCode || 403} OK`
+                                    : urlStatus === 'archived_alive'
+                                      ? '🏛️ WAYBACK ARCHIVED'
+                                      : urlStatus === 'dead_link'
+                                        ? `✕ HTTP ${urlCode || 404} DEAD`
+                                        : '✕ FAKE URL'}
+                            </span>
+                          )}
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] ${
                               hasL1Issue
@@ -999,7 +1110,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                                 : 'bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                             }`}
                           >
-                            Layer 1: {r.mapping_status.toUpperCase()}
+                            Layer 1: {(r.mapping_status || 'matched').toUpperCase()}
                           </span>
                         </div>
                         <span className="font-mono text-[11px] text-slate-500">
@@ -1009,6 +1120,53 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                       <p className="font-mono text-[11px] text-slate-800 dark:text-slate-200 break-words [overflow-wrap:anywhere]">
                         {r.citation_raw}
                       </p>
+                      {(observedWeb || (isRes && primarySource)) && (
+                        <div
+                          data-testid={`sandbox-observed-meta-${r.index}`}
+                          className={`px-2.5 py-1.5 rounded-lg border font-mono text-[11px] space-y-0.5 ${
+                            isUrlMismatch
+                              ? 'bg-amber-100/70 dark:bg-amber-950/50 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200'
+                              : 'bg-white/80 dark:bg-slate-900/70 border-sky-200/80 dark:border-sky-800/70 text-slate-700 dark:text-slate-200'
+                          }`}
+                        >
+                          {isUrlMismatch && observedWeb?.title ? (
+                            <div className="font-semibold">
+                              {lang === 'vi'
+                                ? `⚠ Tiêu đề trang đích thực tế: "${observedWeb.title}"`
+                                : `⚠ Observed web page title: "${observedWeb.title}"`}
+                            </div>
+                          ) : (observedWeb?.title || primarySource?.title) ? (
+                            <div className="font-semibold">
+                              {lang === 'vi' ? 'Metadata trích xuất: ' : 'Extracted metadata: '}
+                              {observedWeb?.title || primarySource?.title}
+                            </div>
+                          ) : null}
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                            {[
+                              (observedWeb?.authors?.length
+                                ? observedWeb.authors.join(', ')
+                                : primarySource?.authors?.join(', ')) || null,
+                              observedWeb?.year || primarySource?.year || null,
+                              observedWeb?.venue || primarySource?.venue || null,
+                              primarySource?.source
+                                ? getSourceDisplayName(primarySource.source, lang, {
+                                    triggered_rules: r.triggered_rules,
+                                    external_ids: primarySource.external_ids,
+                                    venue: primarySource.venue,
+                                    title: primarySource.title,
+                                  })
+                                : observedWeb
+                                  ? getSourceDisplayName(
+                                      observedWeb.isArchived ? 'wayback_html_meta' : 'web_html_meta',
+                                      lang,
+                                    )
+                                  : null,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </div>
+                        </div>
+                      )}
                       <p className="text-[11px] text-slate-600 dark:text-slate-400 break-words [overflow-wrap:anywhere]">
                         {r.reasoning} {r.mapping_note ? ` • ${r.mapping_note}` : ''}
                       </p>

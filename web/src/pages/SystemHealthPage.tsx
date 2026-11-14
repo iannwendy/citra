@@ -13,6 +13,7 @@ import {
   GraduationCap,
   Trash2,
   Clock,
+  HardDrive,
 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
@@ -34,8 +35,10 @@ const CACHE_STAT_LABELS: Record<string, { en: string; vi: string }> = {
   avg_hit_count: { en: 'Avg Hits / Entry', vi: 'Trung bình trúng / mục' },
   local_papers_count: { en: 'Local Corpus Papers', vi: 'Bài báo kho cục bộ' },
   local_queries_count: { en: 'Local Corpus Queries', vi: 'Truy vấn kho cục bộ' },
+  local_hits_count: { en: 'Local Corpus Hits', vi: 'Lượt trúng kho cục bộ' },
   local_hit_rate_percent: { en: 'Local Hit Rate (%)', vi: 'Tỷ lệ trúng cục bộ (%)' },
   persistent_entries: { en: 'Persistent SQLite Entries', vi: 'Mục lưu đệm SQLite bền vững' },
+  expired_entries: { en: 'Expired Cache Entries', vi: 'Mục lưu đệm đã hết hạn' },
   persistent_hits: { en: 'Persistent SQLite Hits', vi: 'Lượt trúng đệm SQLite bền vững' },
   hit_rate_percent: { en: 'Cache Hit Rate (%)', vi: 'Tỷ lệ trúng đệm (%)' },
 };
@@ -59,11 +62,18 @@ const UPSTREAM_PROVIDER_LABELS: Record<string, string | { en: string; vi: string
   ncbi_biorxiv: 'NCBI / bioRxiv',
   huggingface: 'Hugging Face',
   tech_standard: 'Tech Standards',
+  vn_tech_standard: { en: 'VN Tech Standards (TCVN/QCVN)', vi: 'Tiêu chuẩn Kỹ thuật VN (TCVN/QCVN)' },
+  vn_textbook_registry: { en: 'VN Textbook Registry', vi: 'Danh mục Giáo trình ĐH VN' },
+  vn_legal_registry: { en: 'VN Legal Registry (VBQPPL)', vi: 'Cơ sở dữ liệu Pháp luật VN' },
+  web_html_meta: { en: 'Web HTML Metadata', vi: 'Siêu dữ liệu HTML Web' },
+  wayback_html_meta: { en: 'Wayback Machine Archive', vi: 'Lưu trữ Wayback Machine' },
   wikidata_opencitations: 'Wikidata / OpenCitations',
   wikidata_opencitatio: 'Wikidata / OpenCitations',
   url_check: { en: 'URL Check', vi: 'Kiểm chứng URL' },
   clean_miss: { en: 'Verified Clean Miss', vi: 'Không có bản ghi (Đã xác thực)' },
   serpapi: 'SerpAPI (Google Scholar)',
+  acl: 'ACL Anthology',
+  coreapi: 'CORE',
   vn_registry: 'VN Academic Registry',
   html_head: 'HTML Meta Verifier',
   local_db: 'Local Corpus DB',
@@ -84,6 +94,34 @@ function formatProviderName(key: string, lang: 'en' | 'vi' = 'en'): string {
 function formatMetricNumber(val: number): string {
   if (!Number.isFinite(val)) return '0';
   return String(Number(val.toFixed(1)));
+}
+
+function formatSqliteSyncMode(raw: unknown): string {
+  if (raw === 0 || raw === '0') return 'OFF';
+  if (raw === 1 || raw === '1') return 'NORMAL';
+  if (raw === 2 || raw === '2') return 'FULL';
+  if (raw === 3 || raw === '3') return 'EXTRA';
+  if (typeof raw === 'string' && raw.trim()) return raw.trim().toUpperCase();
+  return 'NORMAL';
+}
+
+function formatLocalPapersDbMode(localDb: Record<string, unknown> | null | undefined): string {
+  if (!localDb || typeof localDb !== 'object') return 'N/A';
+  if (localDb.available === false) return 'UNAVAILABLE';
+  if (typeof localDb.mode === 'string' && localDb.mode.trim()) {
+    return localDb.mode.trim().toUpperCase();
+  }
+  if (localDb.read_only === true || localDb.query_only === true || localDb.query_only === 1) {
+    const jm =
+      typeof localDb.journal_mode === 'string' && localDb.journal_mode.trim()
+        ? ` · ${localDb.journal_mode.trim().toUpperCase()}`
+        : '';
+    return `READ-ONLY${jm}`;
+  }
+  if (typeof localDb.journal_mode === 'string' && localDb.journal_mode.trim()) {
+    return localDb.journal_mode.trim().toUpperCase();
+  }
+  return 'CONNECTED';
 }
 
 function getCircuitVisuals(
@@ -255,6 +293,7 @@ export function SystemHealthPage() {
         : lang === 'vi'
           ? `SỰ CỐ (${String(data.status).toUpperCase()})${degradedList ? `: ${degradedList}` : ''}`
           : `OUTAGE (${String(data.status).toUpperCase()})${degradedList ? `: ${degradedList}` : ''}`;
+
   const rawCacheStats = data.cache_stats ?? {};
   const cacheEntries: Array<[string, unknown]> = Object.entries(rawCacheStats).filter(
     ([, v]) => v === null || ['string', 'number', 'boolean'].includes(typeof v),
@@ -279,14 +318,35 @@ export function SystemHealthPage() {
       Math.max(0, rawCacheStats.total_hits - rawCacheStats.local_queries_count),
     ]);
   }
-  const cacheBySourceEntries: Array<[string, number]> =
+
+  const hasBySourceObject = Boolean(
     rawCacheStats.by_source &&
-    typeof rawCacheStats.by_source === 'object' &&
-    !Array.isArray(rawCacheStats.by_source)
-      ? Object.entries(rawCacheStats.by_source as Record<string, unknown>)
+      typeof rawCacheStats.by_source === 'object' &&
+      !Array.isArray(rawCacheStats.by_source),
+  );
+  const cacheBySourceEntries: Array<[string, number]> = hasBySourceObject
+    ? Object.entries(rawCacheStats.by_source as Record<string, unknown>)
+        .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] > 0)
+        .sort((a, b) => b[1] - a[1])
+    : [];
+
+  const localCorpusBySourceEntries: Array<[string, number]> =
+    rawCacheStats.local_corpus_by_source &&
+    typeof rawCacheStats.local_corpus_by_source === 'object' &&
+    !Array.isArray(rawCacheStats.local_corpus_by_source)
+      ? Object.entries(rawCacheStats.local_corpus_by_source as Record<string, unknown>)
           .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] > 0)
           .sort((a, b) => b[1] - a[1])
       : [];
+
+  const appSqliteWal =
+    data.sqlite_wal?.app_db && typeof data.sqlite_wal.app_db === 'object'
+      ? data.sqlite_wal.app_db
+      : null;
+  const localPapersSqliteWal =
+    data.sqlite_wal?.local_papers_db && typeof data.sqlite_wal.local_papers_db === 'object'
+      ? data.sqlite_wal.local_papers_db
+      : null;
 
   const upstreamEntries: Array<[string, UpstreamSourceHealth]> = Object.entries(
     data.upstream_sources ?? {},
@@ -356,6 +416,41 @@ export function SystemHealthPage() {
             {lang === 'vi' ? 'Xóa bộ nhớ đệm' : 'Clear cache'}
           </Button>
         </div>
+
+        {/* SQLite Engine WAL Diagnostics Bar */}
+        {appSqliteWal && (
+          <div
+            data-testid="sqlite-wal-telemetry"
+            className="mt-4 pt-3.5 border-t border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center gap-2 text-[11px] font-mono"
+          >
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold">
+              <HardDrive className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
+              {lang === 'vi' ? 'SQLite Engine' : 'SQLite Engine'}
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/60 border border-emerald-200/70 dark:border-emerald-800/70 text-emerald-800 dark:text-emerald-200">
+              <span className="text-slate-500 dark:text-slate-400">journal_mode:</span>
+              <span className="font-bold">
+                {String(appSqliteWal.journal_mode ?? 'WAL').toUpperCase()}
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200">
+              <span className="text-slate-500 dark:text-slate-400">synchronous:</span>
+              <span className="font-bold">{formatSqliteSyncMode(appSqliteWal.synchronous)}</span>
+            </span>
+            {(appSqliteWal.busy_timeout_ms != null || appSqliteWal.busy_timeout != null) && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200">
+                <span className="text-slate-500 dark:text-slate-400">busy_timeout:</span>
+                <span className="font-bold tabular-nums">
+                  {`${String(appSqliteWal.busy_timeout_ms ?? appSqliteWal.busy_timeout)} ms`}
+                </span>
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/50 border border-indigo-200/70 dark:border-indigo-800/70 text-indigo-800 dark:text-indigo-200">
+              <span className="text-slate-500 dark:text-slate-400">local_papers.db:</span>
+              <span className="font-bold">{formatLocalPapersDbMode(localPapersSqliteWal)}</span>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 6 Architectural Metric Cards */}
@@ -496,10 +591,10 @@ export function SystemHealthPage() {
                 label === 'verified'
                   ? 'bg-emerald-500'
                   : label === 'metadata_error'
-                  ? 'bg-amber-500'
-                  : label === 'suspected_hallucination'
-                  ? 'bg-rose-500'
-                  : 'bg-indigo-500';
+                    ? 'bg-amber-500'
+                    : label === 'suspected_hallucination'
+                      ? 'bg-rose-500'
+                      : 'bg-indigo-500';
               return (
                 <div
                   key={label}
@@ -527,6 +622,7 @@ export function SystemHealthPage() {
           </div>
         </div>
       </div>
+
       {/* Scholarly Upstream Providers & Circuit Breakers (Subsystem B4) */}
       <div
         data-testid="upstream-sources-panel"
@@ -617,10 +713,32 @@ export function SystemHealthPage() {
                     const timeoutCount = Number(info.timeout_count ?? 0);
                     const http5xxCount = Number(info.http_5xx_count ?? 0);
                     const consecutiveFailures = Number(info.consecutive_failures ?? 0);
-                    const emaLatencyMs = Number(info.ema_latency_ms ?? 0);
-                    const openRemainingSeconds = Number(info.open_remaining_seconds ?? 0);
+                    const hasLatencySample =
+                      totalCalls > 0 && info.has_latency_sample !== false;
+                    const primaryLatencyMs = Number(
+                      info.avg_latency_ms ?? info.ema_latency_ms ?? 0,
+                    );
+                    const p95LatencyMs =
+                      info.p95_latency_ms != null && Number.isFinite(Number(info.p95_latency_ms))
+                        ? Number(info.p95_latency_ms)
+                        : null;
+                    const openRemainingSeconds = Number(
+                      info.open_remaining_seconds ?? info.cooldown_remaining_s ?? 0,
+                    );
                     const successRatePct =
                       totalCalls > 0 ? Math.round((successCount / totalCalls) * 100) : null;
+                    const lastErrorText =
+                      typeof info.last_error === 'string' && info.last_error.trim().length > 0
+                        ? info.last_error.trim()
+                        : null;
+                    const showLastError =
+                      lastErrorText !== null &&
+                      (normalizedState !== 'closed' ||
+                        consecutiveFailures > 0 ||
+                        totalCalls > successCount ||
+                        (info.failure_count ?? 0) > 0 ||
+                        (info.total_failures ?? 0) > 0);
+
                     return (
                       <tr
                         key={sourceKey}
@@ -663,16 +781,48 @@ export function SystemHealthPage() {
                               </span>
                             )}
                           </div>
+                          {showLastError && lastErrorText && (
+                            <p
+                              data-testid={`upstream-last-error-${sourceKey}`}
+                              title={lastErrorText}
+                              className="mt-1 max-w-[260px] truncate text-[10px] font-mono text-rose-600 dark:text-rose-400"
+                            >
+                              {lastErrorText}
+                            </p>
+                          )}
                         </td>
-                        <td className="py-3 px-3.5 align-middle font-mono tabular-nums text-slate-800 dark:text-slate-200">
-                          {`${formatMetricNumber(emaLatencyMs)} ms`}
+                        <td
+                          data-testid={`upstream-latency-${sourceKey}`}
+                          className="py-3 px-3.5 align-middle font-mono tabular-nums text-slate-800 dark:text-slate-200"
+                        >
+                          {hasLatencySample ? (
+                            <div className="flex flex-col">
+                              <span>{`${formatMetricNumber(primaryLatencyMs)} ms`}</span>
+                              {p95LatencyMs !== null && (
+                                <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                                  {`p95: ${formatMetricNumber(p95LatencyMs)} ms`}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 dark:text-slate-500">—</span>
+                          )}
                         </td>
-                        <td className="py-3 px-3.5 align-middle font-mono tabular-nums text-slate-800 dark:text-slate-200">
-                          <span>{`${successCount} / ${totalCalls}`}</span>
-                          {successRatePct !== null && (
-                            <span className="ml-1.5 text-[11px] text-slate-400">
-                              {`(${successRatePct}%)`}
-                            </span>
+                        <td
+                          data-testid={`upstream-success-${sourceKey}`}
+                          className="py-3 px-3.5 align-middle font-mono tabular-nums text-slate-800 dark:text-slate-200"
+                        >
+                          {totalCalls === 0 ? (
+                            <span className="text-slate-400 dark:text-slate-500">—</span>
+                          ) : (
+                            <>
+                              <span>{`${successCount} / ${totalCalls}`}</span>
+                              {successRatePct !== null && (
+                                <span className="ml-1.5 text-[11px] text-slate-400">
+                                  {`(${successRatePct}%)`}
+                                </span>
+                              )}
+                            </>
                           )}
                         </td>
                         <td className="py-3 px-3.5 align-middle">
@@ -718,13 +868,24 @@ export function SystemHealthPage() {
           data-testid="cache-stats"
           className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-4 sm:p-6"
         >
-          <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-white mb-3">
-            {lang === 'vi' ? 'Thống kê bộ nhớ đệm' : 'Cache statistics'}
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-white">
+              {lang === 'vi' ? 'Thống kê bộ nhớ đệm' : 'Cache statistics'}
+            </h2>
+            {typeof rawCacheStats.local_papers_count === 'number' &&
+              rawCacheStats.local_papers_count > 0 && (
+                <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  {lang === 'vi'
+                    ? 'Tách biệt Bộ nhớ đệm kiểm chứng động & Kho học thuật cục bộ tĩnh'
+                    : 'Dynamic Verification Cache vs. Static Local Scholarly Corpus'}
+                </span>
+              )}
+          </div>
           <dl className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {cacheEntries.map(([key, value]) => (
               <div
                 key={key}
+                data-testid={`cache-stat-${key}`}
                 className="p-3 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800"
               >
                 <dt className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
@@ -736,16 +897,58 @@ export function SystemHealthPage() {
               </div>
             ))}
           </dl>
-          {cacheBySourceEntries.length > 0 && (
-            <div className="mt-4 pt-3.5 border-t border-slate-200/80 dark:border-slate-800">
+          {hasBySourceObject && (
+            <div
+              data-testid="cache-by-source-section"
+              className="mt-4 pt-3.5 border-t border-slate-200/80 dark:border-slate-800"
+            >
               <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mb-2">
                 {lang === 'vi' ? 'Phân bổ lưu đệm theo nguồn' : 'Cached Entries by Source'}
               </p>
+              {cacheBySourceEntries.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {cacheBySourceEntries.map(([sourceKey, count]) => (
+                    <span
+                      key={sourceKey}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-200"
+                    >
+                      <span className="font-semibold">{formatProviderName(sourceKey, lang)}</span>
+                      <span className="text-indigo-600 dark:text-indigo-400 font-bold tabular-nums">
+                        {count}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span
+                  data-testid="cache-by-source-zero"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-dashed border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-500 dark:text-slate-400"
+                >
+                  <span className="font-bold tabular-nums">0</span>
+                  <span>
+                    {lang === 'vi'
+                      ? 'mục lưu đệm tra cứu động'
+                      : 'dynamic cached entries'}
+                  </span>
+                </span>
+              )}
+            </div>
+          )}
+          {localCorpusBySourceEntries.length > 0 && (
+            <div
+              data-testid="local-corpus-by-source-section"
+              className="mt-4 pt-3.5 border-t border-slate-200/80 dark:border-slate-800"
+            >
+              <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mb-2">
+                {lang === 'vi'
+                  ? 'Kho tri thức học thuật cục bộ (Tĩnh — Không bị xóa khi dọn đệm)'
+                  : 'Static Local Scholarly Corpus (Preserved across cache clears)'}
+              </p>
               <div className="flex flex-wrap gap-2">
-                {cacheBySourceEntries.map(([sourceKey, count]) => (
+                {localCorpusBySourceEntries.map(([sourceKey, count]) => (
                   <span
                     key={sourceKey}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-200"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-800/60 text-xs font-mono text-slate-700 dark:text-slate-200"
                   >
                     <span className="font-semibold">{formatProviderName(sourceKey, lang)}</span>
                     <span className="text-indigo-600 dark:text-indigo-400 font-bold tabular-nums">

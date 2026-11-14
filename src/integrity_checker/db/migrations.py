@@ -714,6 +714,29 @@ def _downgrade_0010(conn: Connection, op: Operations) -> None:
     )
 
 
+def _upgrade_0011(conn: Connection, op: Operations) -> None:
+    if _table_exists(conn, "citations"):
+        _add_column_if_missing(
+            conn, op, "citations", sa.Column("numeric_index", sa.Integer(), nullable=True)
+        )
+        _add_column_if_missing(
+            conn, op, "citations", sa.Column("sub_index", sa.String(16), nullable=True)
+        )
+        _add_column_if_missing(
+            conn, op, "citations", sa.Column("composite_label", sa.String(32), nullable=True)
+        )
+
+
+def _downgrade_0011(conn: Connection, op: Operations) -> None:
+    if _table_exists(conn, "citations"):
+        _drop_columns_safe(
+            conn,
+            op,
+            "citations",
+            ("composite_label", "sub_index", "numeric_index"),
+        )
+
+
 MIGRATIONS: tuple[MigrationStep, ...] = (
     MigrationStep(
         version="0001",
@@ -784,6 +807,13 @@ MIGRATIONS: tuple[MigrationStep, ...] = (
         description="Add job_status, job_attempt_count, job_heartbeat_at, job_error, and quota_charged columns to essays",
         upgrade=_upgrade_0010,
         downgrade=_downgrade_0010,
+    ),
+    MigrationStep(
+        version="0011",
+        name="v3_69_citations_composite_columns",
+        description="Add numeric_index, sub_index, and composite_label columns to citations",
+        upgrade=_upgrade_0011,
+        downgrade=_downgrade_0011,
     ),
 )
 

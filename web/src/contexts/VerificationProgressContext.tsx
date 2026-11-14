@@ -51,10 +51,11 @@ export const TOTAL_PIPELINE_STEPS = 8;
 export function computeSingleCheckProgress(snap: Pick<EssayStatus, 'status' | 'step' | 'step_index'>): number {
   if (snap.status === 'queued') return 0;
   if (snap.status === 'completed') return 100;
-  const backendIndex = Math.min(
-    STEP_KEY_TO_INDEX[snap.step] ?? snap.step_index ?? 0,
-    TOTAL_PIPELINE_STEPS - 1,
-  );
+  const rawIndex =
+    typeof snap.step_index === 'number' && Number.isFinite(snap.step_index)
+      ? snap.step_index
+      : (STEP_KEY_TO_INDEX[snap.step] ?? 0);
+  const backendIndex = Math.max(0, Math.min(rawIndex, TOTAL_PIPELINE_STEPS - 1));
   return Math.round((backendIndex / TOTAL_PIPELINE_STEPS) * 100);
 }
 
@@ -428,34 +429,47 @@ export function VerificationProgressProvider({
         return;
       }
 
+      const pollController = new AbortController();
+      batchStreamControllersRef.current.add(pollController);
       let attempts = 0;
       const maxAttempts = 150;
-      while (attempts < maxAttempts && batchGenRef.current === myGen) {
-        await new Promise((resolve) => setTimeout(resolve, batchTiming.pollIntervalMs));
-        if (batchGenRef.current !== myGen) return;
-        attempts++;
+      try {
+        while (attempts < maxAttempts && batchGenRef.current === myGen) {
+          await new Promise((resolve) => setTimeout(resolve, batchTiming.pollIntervalMs));
+          if (batchGenRef.current !== myGen || pollController.signal.aborted) return;
+          attempts++;
 
-        try {
-          const status = await api.getEssayStatus(essayId);
-          if (batchGenRef.current !== myGen) return;
-          if (status.status === 'completed') {
-            setBatchFilePatch(itemId, { status: 'completed', progress: 100, error: undefined });
-            return;
-          }
-          if (status.status === 'failed') {
-            setBatchFilePatch(itemId, {
-              status: 'failed',
-              error: status.error || 'Processing failed',
+          try {
+            const status = await api.getEssayStatus(essayId, {
+              signal: pollController.signal,
             });
-            return;
+            if (batchGenRef.current !== myGen) return;
+            if (status.status === 'completed') {
+              setBatchFilePatch(itemId, { status: 'completed', progress: 100, error: undefined });
+              return;
+            }
+            if (status.status === 'failed') {
+              setBatchFilePatch(itemId, {
+                status: 'failed',
+                error: status.error || 'Processing failed',
+              });
+              return;
+            }
+            const rawIdx =
+              typeof status.step_index === 'number' && Number.isFinite(status.step_index)
+                ? status.step_index
+                : (STEP_KEY_TO_INDEX[status.step] ?? 0);
+            const progress = Math.round(
+              (rawIdx / Math.max(1, status.total_steps)) * 100,
+            );
+            setBatchFilePatch(itemId, { status: 'processing', progress });
+          } catch (err) {
+            if (err instanceof DOMException && err.name === 'AbortError') return;
+            // Transient poll error — continue polling
           }
-          const progress = Math.round(
-            (status.step_index / Math.max(1, status.total_steps)) * 100,
-          );
-          setBatchFilePatch(itemId, { status: 'processing', progress });
-        } catch {
-          // Transient poll error — continue polling
         }
+      } finally {
+        batchStreamControllersRef.current.delete(pollController);
       }
 
       if (attempts >= maxAttempts && batchGenRef.current === myGen) {
@@ -779,6 +793,8 @@ export function VerificationProgressProvider({
         );
       } else if (snap.status === 'failed') {
         if (timer) clearInterval(timer);
+        void queryClient.invalidateQueries({ queryKey: ['essays'] });
+        void refreshUser();
         toast.error(
           t('upload.toastFailedTitle'),
           snap.error || t('upload.uploadFailed'),
@@ -843,6 +859,7 @@ export function VerificationProgressProvider({
     syncSingleCheckFromStatus,
     acknowledgeSingleCheck,
     onNavigate,
+    refreshUser,
     t,
     toast,
   ]);

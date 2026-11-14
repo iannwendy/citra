@@ -25,11 +25,15 @@ export const SOURCE_CONFIG: Record<string, SourceConfig> = {
   europepmc: { color: 'text-green-600 dark:text-green-400', bgColor: 'bg-green-50 dark:bg-green-950', label: 'Europe PMC' },
   huggingface: { color: 'text-yellow-600 dark:text-yellow-400', bgColor: 'bg-yellow-50 dark:bg-yellow-950', label: 'Hugging Face Hub' },
   tech_standard: { color: 'text-slate-600 dark:text-slate-400', bgColor: 'bg-slate-50 dark:bg-slate-950', label: 'IETF RFC / PyPI / NPM / GitHub' },
+  vn_tech_standard: { color: 'text-emerald-700 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-950', label: 'VN National Standards (TCVN / QCVN)' },
+  vn_textbook_registry: { color: 'text-amber-700 dark:text-amber-400', bgColor: 'bg-amber-50 dark:bg-amber-950', label: 'VN University Textbook Registry' },
   wikidata_opencitations: { color: 'text-fuchsia-600 dark:text-fuchsia-400', bgColor: 'bg-fuchsia-50 dark:bg-fuchsia-950', label: 'Wikidata / OpenCitations' },
   serpapi: { color: 'text-sky-600 dark:text-sky-400', bgColor: 'bg-sky-50 dark:bg-sky-950', label: 'Google Scholar' },
   local_db: { color: 'text-indigo-600 dark:text-indigo-400', bgColor: 'bg-indigo-50 dark:bg-indigo-950', label: 'Local Database' },
   known_papers: { color: 'text-cyan-600 dark:text-cyan-400', bgColor: 'bg-cyan-50 dark:bg-cyan-950', label: 'Known Papers' },
   vn_legal_registry: { color: 'text-red-600 dark:text-red-400', bgColor: 'bg-red-50 dark:bg-red-950', label: 'VN Legal Registry' },
+  web_html_meta: { color: 'text-sky-600 dark:text-sky-400', bgColor: 'bg-sky-50 dark:bg-sky-950', label: 'Live Web Page Metadata (HTML)' },
+  wayback_html_meta: { color: 'text-amber-600 dark:text-amber-400', bgColor: 'bg-amber-50 dark:bg-amber-950', label: 'Wayback Machine Archived Metadata' },
 };
 
 export interface GraphNode {

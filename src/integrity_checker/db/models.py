@@ -154,8 +154,8 @@ class CitationCache(Base):
     __tablename__ = "citation_cache"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    cache_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    cache_key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
     raw_response: Mapped[str] = mapped_column(Text, nullable=False)
     matched_fields: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
@@ -243,6 +243,11 @@ class CitationRecord(Base):
     # Document Inspector can show the sentence the citation sits in.
     # Nullable: older rows (and citations with no extractable context) stay NULL.
     context: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # NEW v3.69 — composite sub-reference indexing (e.g. [14] a) b) c) -> 14a, 14b, 14c)
+    numeric_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sub_index: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    composite_label: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     essay: Mapped[EssayRecord] = relationship(back_populates="citations")
 

@@ -42,12 +42,16 @@ class TextPreprocessor:
         rf"({_LOWER_CHARS})\s*\n\s*(?!{_PARTICLES}\b)({_LOWER_CHARS})"
     )
 
-    def normalize(self, text: str) -> str:
+    def __init__(self) -> None:
+        self.last_detected_encoding: str | None = None
+
+    def normalize(self, text: str, metadata: dict | None = None) -> str:
         """Pipeline normalize đầy đủ."""
         if not text:
+            self.last_detected_encoding = None
             return ""
         text = self._fix_ligatures(text)
-        text = self._normalize_unicode(text)
+        text = self._normalize_unicode(text, metadata=metadata)
         text = self._fix_broken_lines(text)
         text = self._collapse_whitespace(text)
         return text.strip()
@@ -69,10 +73,16 @@ class TextPreprocessor:
     }
     _LATEX_ACCENT_RE = re.compile(r"([\u00b4\u00a8\u02c6\u02dc\u02c7\u02d8\u02d9\u02dd])\s*([A-Za-z])")
 
-    def _normalize_unicode(self, text: str) -> str:
+    def _normalize_unicode(self, text: str, metadata: dict | None = None) -> str:
         # Decode legacy Vietnamese encodings (TCVN3 / VNI-Windows) before LaTeX spacing
         # accents so TCVN3 bytes such as '¨' (ă in "V¨n") and '´' are never misread.
-        text, _ = VietnameseLegacyTranscoder.normalize_legacy_vietnamese(text)
+        text, detected_enc = VietnameseLegacyTranscoder.normalize_legacy_vietnamese(text)
+        self.last_detected_encoding = detected_enc
+        if detected_enc and isinstance(metadata, dict):
+            if not metadata.get("legacy_encoding_detected"):
+                metadata["legacy_encoding_detected"] = detected_enc
+            if not metadata.get("legacy_encoding_pages_count"):
+                metadata["legacy_encoding_pages_count"] = 1
         # Convert LaTeX Type1 spacing accents preceding a letter (e.g. "Kir´aly", "K¨uhn")
         text = self._LATEX_ACCENT_RE.sub(
             lambda m: m.group(2) + self._LATEX_SPACING_ACCENTS[m.group(1)], text

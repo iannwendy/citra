@@ -198,6 +198,56 @@ class NeuroSymbolicChecker:
             return None
         return self.feature_calculator.compute(citation, source, citation_context)
 
+    def _build_html_meta_dict(
+        self,
+        source: SourceResult | None,
+        cited_url: str | None = None,
+        *,
+        citation: Citation | None = None,
+        semantic_sim: float = 0.0,
+    ) -> tuple[dict | None, float | None]:
+        """Serialize non-soft-404 ``html_meta`` and compute title similarity against ``citation.title``."""
+        hm = getattr(source, "html_meta", None) if source is not None else None
+        if hm is None or getattr(hm, "is_soft_404", False):
+            return None, None
+        hm_dict = hm.to_dict() if hasattr(hm, "to_dict") else dict(hm)
+        if not any(
+            hm_dict.get(k)
+            for k in (
+                "page_title",
+                "citation_title",
+                "citation_authors",
+                "citation_doi",
+                "published_year",
+                "site_name",
+                "canonical_url",
+            )
+        ):
+            return None, None
+        if cited_url and not hm_dict.get("canonical_url"):
+            pass
+
+        title_sim: float | None = None
+        html_title = getattr(hm, "citation_title", None) or getattr(hm, "page_title", None)
+        if citation is not None and citation.title and html_title:
+            from integrity_checker.retrieval.html_meta_verifier import (
+                _single_title_pair_similarity,
+                compute_url_title_match_score,
+            )
+
+            lex_sim = compute_url_title_match_score(citation.title, hm)
+            if lex_sim is None:
+                cit_t_clean = str(citation.title).strip()
+                if (
+                    len(cit_t_clean) >= 4
+                    and "http://" not in cit_t_clean.lower()
+                    and "https://" not in cit_t_clean.lower()
+                ):
+                    lex_sim = _single_title_pair_similarity(cit_t_clean, str(html_title))
+            if lex_sim is not None:
+                title_sim = round(max(float(lex_sim), float(semantic_sim or 0.0)), 4)
+        return hm_dict, title_sim
+
     def check(
         self,
         citation: Citation,
@@ -285,6 +335,12 @@ class NeuroSymbolicChecker:
             getattr(source, "html_meta", None),
             getattr(self.feature_calculator, "semantic", None),
         )
+        hm_dict_early, hm_title_sim_early = self._build_html_meta_dict(
+            source,
+            effective_url_check or citation.url,
+            citation=citation,
+            semantic_sim=url_semantic_sim,
+        )
         has_url_mismatch_early, _, _ = self.rules.check_url_content_mismatch(
             citation_title=citation.title,
             citation_raw=raw_text,
@@ -346,7 +402,11 @@ class NeuroSymbolicChecker:
                 label=ValidationLabel.RESOURCE,
                 confidence=conf,
                 matched_source=source,
-                features=MatchFeatures(),
+                features=MatchFeatures(
+                    has_scholarly_candidate=False,
+                    html_meta=hm_dict_early,
+                    html_meta_title_sim=hm_title_sim_early,
+                ),
                 reasoning=f"URL/Reference link detected{note}: {raw_text[:60]}... (not an academic citation)",
                 triggered_rules=res_rules,
                 mismatched_fields=[],
@@ -384,7 +444,11 @@ class NeuroSymbolicChecker:
                         label=ValidationLabel.RESOURCE,
                         confidence=conf,
                         matched_source=source,
-                        features=MatchFeatures(),
+                        features=MatchFeatures(
+                            has_scholarly_candidate=False,
+                            html_meta=hm_dict_early,
+                            html_meta_title_sim=hm_title_sim_early,
+                        ),
                         reasoning=f"Web resource/API citation detected{note}: {raw_text[:60]}... (not an academic paper)",
                         triggered_rules=res_rules,
                         mismatched_fields=[],
@@ -400,7 +464,8 @@ class NeuroSymbolicChecker:
                 extracted_venue=citation.venue,
             )
             is_fabricated_legal = "R-VN-LEGAL-FABRICATED" in (legal_res.triggered_rules or [])
-            if (legal_res.canonical_name or legal_res.canonical_code) and not is_fabricated_legal:
+            has_statute_entry = bool(legal_res.canonical_name or legal_res.canonical_code)
+            if has_statute_entry and not is_fabricated_legal:
                 canon_year = None
                 if legal_res.canonical_code:
                     ym = re.search(r"\b(19\d{2}|20\d{2})\b", legal_res.canonical_code)
@@ -435,12 +500,65 @@ class NeuroSymbolicChecker:
                     source.sources_queried.insert(0, "vn_legal_registry")
                 if "vn_legal_registry" not in source.sources_succeeded:
                     source.sources_succeeded.insert(0, "vn_legal_registry")
-            legal_features = MatchFeatures(
-                title_sim_fuzzy=0.10 if is_fabricated_legal else (0.95 if "title" not in legal_res.mismatched_fields else 0.50),
-                author_jaccard=0.95 if "authors" not in legal_res.mismatched_fields else 0.40,
-                year_distance=0 if "year" not in legal_res.mismatched_fields else 1,
-                source_consensus=0 if is_fabricated_legal else (1 if (legal_res.canonical_name or legal_res.canonical_code) else 0),
-            )
+            elif legal_res.is_valid and not any(
+                getattr(c, "found", False) for c in (source.candidates or [])
+            ):
+                generic_legal_cand = SourceCandidate(
+                    source_name="vn_legal_registry",
+                    found=True,
+                    title=citation.title or raw_text[:180],
+                    authors=(
+                        [legal_res.canonical_authority]
+                        if legal_res.canonical_authority
+                        else list(citation.authors or [])
+                    ),
+                    year=str(citation.year) if citation.year else None,
+                    venue=citation.venue or "Văn bản quy phạm pháp luật Việt Nam",
+                    score=0.85,
+                    confidence=0.85,
+                    cached=True,
+                )
+                source.candidates.insert(0, generic_legal_cand)
+                if "vn_legal_registry" not in source.sources_queried:
+                    source.sources_queried.insert(0, "vn_legal_registry")
+                if "vn_legal_registry" not in source.sources_succeeded:
+                    source.sources_succeeded.insert(0, "vn_legal_registry")
+
+            has_legal_cand = any(getattr(c, "found", False) for c in (source.candidates or []))
+            if is_fabricated_legal:
+                legal_features = MatchFeatures(
+                    title_sim_fuzzy=0.10,
+                    author_jaccard=0.0,
+                    year_distance=999,
+                    source_consensus=0,
+                    has_scholarly_candidate=False,
+                    html_meta=hm_dict_early,
+                    html_meta_title_sim=hm_title_sim_early,
+                )
+            elif legal_res.is_valid:
+                legal_features = MatchFeatures(
+                    title_sim_fuzzy=1.0,
+                    author_jaccard=1.0,
+                    year_distance=0,
+                    source_consensus=1,
+                    has_scholarly_candidate=True,
+                    html_meta=hm_dict_early,
+                    html_meta_title_sim=hm_title_sim_early,
+                )
+            else:
+                legal_features = MatchFeatures(
+                    title_sim_fuzzy=(
+                        1.0 if "title" not in legal_res.mismatched_fields else 0.50
+                    ),
+                    author_jaccard=(
+                        1.0 if "authors" not in legal_res.mismatched_fields else 0.40
+                    ),
+                    year_distance=0 if "year" not in legal_res.mismatched_fields else 1,
+                    source_consensus=1 if has_legal_cand else 0,
+                    has_scholarly_candidate=has_legal_cand,
+                    html_meta=hm_dict_early,
+                    html_meta_title_sim=hm_title_sim_early,
+                )
             if not legal_res.is_valid:
                 return CitationVerdict(
                     citation=citation,
@@ -507,7 +625,13 @@ class NeuroSymbolicChecker:
                 label=ValidationLabel.RESOURCE,
                 confidence=0.95 if url_stat != "archived_alive" else 0.90,
                 matched_source=source,
-                features=MatchFeatures(),
+                features=MatchFeatures(
+                    has_scholarly_candidate=any(
+                        bool(getattr(c, "found", False)) for c in (source.candidates or [])
+                    ),
+                    html_meta=hm_dict_early,
+                    html_meta_title_sim=hm_title_sim_early,
+                ),
                 reasoning=f"Web/documentation resource detected{http_note}: {raw_text[:70]}... (non-scholarly URL resource)",
                 triggered_rules=res_rules,
                 mismatched_fields=[],
@@ -643,8 +767,12 @@ class NeuroSymbolicChecker:
                             url_status_code=source.url_status_code,
                             archive_url=getattr(source, "archive_url", None),
                             is_retracted=getattr(source, "is_retracted", False),
+                            html_meta=getattr(source, "html_meta", None),
                         )
                         features = self.feature_calculator.compute(citation, enhanced_source, citation_context)
+                        features.html_meta = hm_dict_early
+                        features.html_meta_title_sim = hm_title_sim_early
+                        features.has_scholarly_candidate = True
                         is_cross_lingual_kp = (
                             bool(getattr(features, "cross_lingual_title_detected", False))
                             and float(getattr(features, "cross_lingual_title_sim", 0.0) or 0.0) >= 0.58
@@ -713,8 +841,12 @@ class NeuroSymbolicChecker:
                         url_status_code=source.url_status_code,
                         archive_url=getattr(source, "archive_url", None),
                         is_retracted=getattr(source, "is_retracted", False),
+                        html_meta=getattr(source, "html_meta", None),
                     )
                     features = self.feature_calculator.compute(citation, enhanced_source, citation_context)
+                    features.html_meta = hm_dict_early
+                    features.html_meta_title_sim = hm_title_sim_early
+                    features.has_scholarly_candidate = True
                     known_rules = ["R-KNOWN-PAPER"]
                     if (
                         self.enable_content_alignment
@@ -767,8 +899,12 @@ class NeuroSymbolicChecker:
                     url_status_code=source.url_status_code,
                     archive_url=getattr(source, "archive_url", None),
                     is_retracted=getattr(source, "is_retracted", False),
+                    html_meta=getattr(source, "html_meta", None),
                 )
                 features = self.feature_calculator.compute(citation, enhanced_source, citation_context)
+                features.html_meta = hm_dict_early
+                features.html_meta_title_sim = hm_title_sim_early
+                features.has_scholarly_candidate = True
                 known_rules = ["R-KNOWN-PAPER"]
                 if (
                     self.enable_content_alignment
@@ -815,6 +951,12 @@ class NeuroSymbolicChecker:
             if precomputed_features is not None
             else self.feature_calculator.compute(citation, source, citation_context)
         )
+        features.html_meta = hm_dict_early
+        features.html_meta_title_sim = hm_title_sim_early
+        has_found_scholarly_cand = any(
+            bool(getattr(c, "found", False)) for c in (source.candidates or [])
+        )
+        features.has_scholarly_candidate = has_found_scholarly_cand
 
         # Apply symbolic rules với content alignment features
         effective_citation_doi = citation.doi
@@ -841,6 +983,11 @@ class NeuroSymbolicChecker:
             citation_title=citation.title,
             citation_type=citation.citation_type,
         )
+        if outcome.triggered_rules in (
+            ["R-INCOMPLETE-METADATA"],
+            ["R-URL-CONTENT-MISMATCH"],
+        ):
+            features.has_scholarly_candidate = False
         if (
             not citation.doi
             and has_html_doi_candidate
@@ -849,6 +996,7 @@ class NeuroSymbolicChecker:
             and not has_url_mismatch_early
             and not is_scholarly_paper_url
         ):
+            features.has_scholarly_candidate = False
             return CitationVerdict(
                 citation=citation,
                 label=ValidationLabel.RESOURCE,
@@ -935,12 +1083,13 @@ class NeuroSymbolicChecker:
                 " [Link check: Cited URL is dead/unreachable, but scholarly record exists in academic registries.]"
             )
 
+        archive_url = getattr(source, "archive_url", None)
+        if archive_url and not verdict.archive_url:
+            verdict.archive_url = archive_url
+
         if getattr(source, "url_status", None) == "archived_alive":
             if "R-WAYBACK-ARCHIVED" not in verdict.triggered_rules:
                 verdict.triggered_rules.append("R-WAYBACK-ARCHIVED")
-            archive_url = getattr(source, "archive_url", None)
-            if archive_url:
-                verdict.archive_url = archive_url
             if archive_url and "[Web Archive:" not in verdict.reasoning and "Wayback Machine" not in verdict.reasoning:
                 verdict.reasoning += (
                     f" [Web Archive: Original URL experienced link rot, verified via Wayback Machine snapshot: {archive_url}]"

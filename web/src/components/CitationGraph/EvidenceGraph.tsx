@@ -17,6 +17,7 @@ import type { Verdict } from '@/api/client';
 import {
   getFieldDisplayName,
   getRuleDisplayName,
+  getSourceDisplayName,
   getVerdictExplanation,
 } from '@/lib/verdictExplanation';
 import { EvidenceGraphNode } from './EvidenceGraphNode';
@@ -34,6 +35,9 @@ interface CandidateInfo {
   matched: boolean;
   fields?: string[];
   url?: string;
+  external_ids?: Record<string, string>;
+  venue?: string | null;
+  title?: string | null;
 }
 
 const CORE_EXTERNAL_DBS = [
@@ -53,8 +57,12 @@ const EXTERNAL_DBS = [
   'ncbi_biorxiv',
   'huggingface',
   'tech_standard',
+  'vn_tech_standard',
+  'vn_textbook_registry',
   'wikidata_opencitations',
   'serpapi',
+  'web_html_meta',
+  'wayback_html_meta',
 ];
 const SOURCE_FLOW_ORDER = [
   'local_db',
@@ -73,8 +81,12 @@ const SOURCE_FLOW_ORDER = [
   'europepmc',
   'huggingface',
   'tech_standard',
+  'vn_tech_standard',
+  'vn_textbook_registry',
   'wikidata_opencitations',
   'serpapi',
+  'web_html_meta',
+  'wayback_html_meta',
 ];
 
 /**
@@ -99,6 +111,9 @@ export function buildEvidenceGraph(
       matched: matchedFields.length > 0,
       fields: matchedFields,
       url: source.url ?? undefined,
+      external_ids: source.external_ids,
+      venue: source.venue,
+      title: source.title,
     };
     if (sourcesByDatabase[dbKey]) {
       sourcesByDatabase[dbKey].push(entry);
@@ -146,22 +161,55 @@ export function buildEvidenceGraph(
         detail: `RapidFuzz=${fuzzyPct}% · Sentence-BERT=${semPct}%`,
       });
     }
-    if (f.author_jaccard !== undefined || f.year_distance !== undefined) {
+    const validYearDist =
+      f.year_distance !== undefined &&
+      f.year_distance < 900 &&
+      f.has_scholarly_candidate !== false
+        ? f.year_distance
+        : null;
+    if (f.author_jaccard !== undefined || validYearDist !== null) {
       const authPct = Math.round((f.author_jaccard ?? 0) * 100);
-      const yrDist = f.year_distance ?? 0;
       similarityChildren.push({
         id: 'sim-meta',
-        label: isVi ? 'Đối chiếu tác giả & năm xuất bản' : 'Author & Publication Year Alignment',
+        label: isVi
+          ? validYearDist !== null
+            ? 'Đối chiếu tác giả & năm xuất bản'
+            : 'Đối chiếu tác giả'
+          : validYearDist !== null
+            ? 'Author & Publication Year Alignment'
+            : 'Author Alignment',
         type: 'similarity',
         status:
-          (f.author_jaccard ?? 0) >= 0.65 && yrDist <= 1
+          (f.author_jaccard ?? 0) >= 0.65 && (validYearDist === null || validYearDist <= 1)
             ? 'success'
             : (f.author_jaccard ?? 0) >= 0.4
               ? 'warning'
               : 'error',
-        detail: isVi
-          ? `Tác giả Jaccard=${authPct}% · Lệch năm Δ=${yrDist} năm`
-          : `Author Jaccard=${authPct}% · Year Δ=${yrDist} yr(s)`,
+        detail:
+          validYearDist !== null
+            ? isVi
+              ? `Tác giả Jaccard=${authPct}% · Lệch năm Δ=${validYearDist} năm`
+              : `Author Jaccard=${authPct}% · Year Δ=${validYearDist} yr(s)`
+            : isVi
+              ? `Tác giả Jaccard=${authPct}%`
+              : `Author Jaccard=${authPct}%`,
+      });
+    }
+    if (f.html_meta_title_sim !== undefined && f.html_meta_title_sim !== null) {
+      const htmlSimPct = Math.round(f.html_meta_title_sim * 100);
+      similarityChildren.push({
+        id: 'sim-html-meta-title',
+        label: isVi
+          ? `Đối sánh tiêu đề Metadata trang Web (${htmlSimPct}%)`
+          : `Live Web HTML Metadata Title Match (${htmlSimPct}%)`,
+        type: 'similarity',
+        status:
+          f.html_meta_title_sim >= 0.65
+            ? 'success'
+            : f.html_meta_title_sim >= 0.25
+              ? 'warning'
+              : 'error',
+        detail: `html_meta_title_sim=${f.html_meta_title_sim.toFixed(2)} (${htmlSimPct}%)`,
       });
     }
     if (
@@ -190,7 +238,10 @@ export function buildEvidenceGraph(
             : `Context-to-Source semantic alignment score: ${alignPct}%`,
       });
     }
-    if (f.cross_lingual_title_detected) {
+    if (
+      f.cross_lingual_title_detected ||
+      (f.cross_lingual_title_sim !== undefined && f.cross_lingual_title_sim > 0)
+    ) {
       const crossTitlePct = Math.round((f.cross_lingual_title_sim ?? 0) * 100);
       similarityChildren.push({
         id: 'sim-cross-lingual-title',
@@ -276,9 +327,26 @@ export function buildEvidenceGraph(
               const cleanedFields = (c.fields || [])
                 .map((fld) => getFieldDisplayName(fld, resolvedLang).replace(/^the\s+/i, ''))
                 .join(', ');
+              const contextualName = getSourceDisplayName(db, resolvedLang, {
+                triggered_rules: verdict.triggered_rules,
+                external_ids: c.external_ids,
+                venue: c.venue,
+                title: c.title,
+              });
+              const candidateLabel =
+                db === 'vn_legal_registry' && !isVi
+                  ? 'VN Legal Registry'
+                  : db === 'tech_standard' ||
+                      db === 'vn_tech_standard' ||
+                      db === 'vn_textbook_registry' ||
+                      db === 'web_html_meta' ||
+                      db === 'wayback_html_meta' ||
+                      isVi
+                    ? contextualName
+                    : config.label;
               return {
                 id: `${db}-${idx}`,
-                label: config.label,
+                label: candidateLabel,
                 type: 'candidate' as const,
                 status: (c.matched ? 'success' : 'no_match') as GraphNode['status'],
                 detail: c.matched
