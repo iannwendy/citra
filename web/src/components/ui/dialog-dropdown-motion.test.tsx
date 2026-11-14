@@ -20,6 +20,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { CitraMotionProvider } from './motion-primitives';
 import { LandingPage } from '@/pages/LandingPage';
+import { PricingPage } from '@/pages/PricingPage';
 
 describe('Task 4: Asymmetric Overlays & SolvaHeader Exit Animations', () => {
   beforeEach(() => {
@@ -142,5 +143,58 @@ describe('Task 4: Asymmetric Overlays & SolvaHeader Exit Animations', () => {
       vi.advanceTimersByTime(160);
     });
     expect(container.querySelector('.t-dropdown')).toBeNull();
+  });
+
+  it('closes SolvaHeader and PricingSolvaHeader Platform dropdown smoothly on Escape keydown', () => {
+    vi.useFakeTimers();
+
+    const { container, unmount } = render(
+      <MemoryRouter>
+        <ThemeProvider>
+          <CitraMotionProvider>
+            <AuthProvider>
+              <LandingPage />
+            </AuthProvider>
+          </CitraMotionProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    const landingTrigger = screen.getAllByRole('button', { name: /Platform|Nền tảng/i })[0];
+    fireEvent.click(landingTrigger);
+    expect(container.querySelector('.t-dropdown.is-open')).not.toBeNull();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(container.querySelector('.t-dropdown.is-closing')).not.toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(160);
+    });
+    expect(container.querySelector('.t-dropdown')).toBeNull();
+    unmount();
+
+    const pricingRender = render(
+      <MemoryRouter initialEntries={['/pricing']}>
+        <ThemeProvider>
+          <CitraMotionProvider>
+            <AuthProvider>
+              <PricingPage />
+            </AuthProvider>
+          </CitraMotionProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+
+    const pricingTrigger = screen.getAllByRole('button', { name: /Platform|Nền tảng/i })[0];
+    fireEvent.click(pricingTrigger);
+    expect(pricingRender.container.querySelector('.t-dropdown.is-open')).not.toBeNull();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(pricingRender.container.querySelector('.t-dropdown.is-closing')).not.toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(160);
+    });
+    expect(pricingRender.container.querySelector('.t-dropdown')).toBeNull();
   });
 });

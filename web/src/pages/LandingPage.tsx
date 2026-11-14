@@ -485,11 +485,21 @@ function SolvaHeader({
   }, []);
 
   useEffect(() => {
-    if (!dropdownOpen) return;
+    if (!dropdownOpen && !mobileMenuOpen) return;
     const closeOnScroll = () => setDropdownOpen(false);
+    const closeOnKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDropdownOpen(false);
+        setMobileMenuOpen(false);
+      }
+    };
     window.addEventListener('scroll', closeOnScroll, { passive: true });
-    return () => window.removeEventListener('scroll', closeOnScroll);
-  }, [dropdownOpen]);
+    window.addEventListener('keydown', closeOnKeyDown);
+    return () => {
+      window.removeEventListener('scroll', closeOnScroll);
+      window.removeEventListener('keydown', closeOnKeyDown);
+    };
+  }, [dropdownOpen, mobileMenuOpen]);
 
   const dropdownItems =
     lang === 'vi'

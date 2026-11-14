@@ -45,12 +45,63 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
     await benchTabs.nth(2).click();
     await expect(benchTabs.nth(2)).toHaveAttribute('data-pill-active', 'true');
 
-    // 4. Verify Platform nav dropdown (#05 Dropdown + #21 SymmetricChevron)
+    // 4. Verify Platform nav dropdown (#05 Dropdown + #21 SymmetricChevron) smooth .is-open -> .is-closing exit
     const navTrigger = page.getByRole('button', { name: /Platform|Nền tảng/i }).first();
     await expect(navTrigger).toBeVisible();
     await navTrigger.click();
     const dropdownMenu = page.locator('.t-dropdown.is-open').first();
     await expect(dropdownMenu).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.t-dropdown')).toHaveCount(0, { timeout: 2000 });
+
+    // 5. Verify Interactive Debugger (#interactive-demo): Auto-Tour progress bar, hover pause, and per-digit NumberPopIn
+    const demoSection = page.locator('#interactive-demo');
+    await demoSection.scrollIntoViewIfNeeded();
+    const autoTourBar = demoSection.getByTestId('debugger-autotour-progress');
+    await expect(autoTourBar).toBeVisible();
+    await expect(autoTourBar).toHaveAttribute('data-paused', 'false');
+
+    await demoSection.getByTestId('debugger-bezel').hover();
+    await expect(autoTourBar).toHaveAttribute('data-paused', 'true');
+
+    await demoSection.getByRole('option').first().click();
+    await expect(autoTourBar).toHaveCount(0);
+    const activeConf = demoSection.getByTestId('debugger-active-confidence');
+    await expect(activeConf).toHaveText('99%');
+
+    // 6. Verify 4-Stage Pipeline (#how-it-works): .t-tabs-pill real geometry + causal DirectionalStageSlide
+    const pipelineSection = page.locator('#how-it-works');
+    await pipelineSection.scrollIntoViewIfNeeded();
+    const pipelinePill = pipelineSection.getByTestId('pipeline-tabs-pill');
+    await expect(pipelinePill).toBeVisible();
+    const pillBox = await pipelinePill.boundingBox();
+    expect(pillBox?.width ?? 0).toBeGreaterThan(40);
+    expect(pillBox?.height ?? 0).toBeGreaterThan(24);
+
+    const stageTabs = pipelineSection.getByRole('tab');
+    await expect(stageTabs).toHaveCount(4);
+    await stageTabs.nth(2).click();
+    await expect(pipelineSection.getByTestId('pipeline-stage-slide')).toHaveAttribute(
+      'data-direction',
+      '1',
+    );
+    await stageTabs.nth(0).click();
+    await expect(pipelineSection.getByTestId('pipeline-stage-slide')).toHaveAttribute(
+      'data-direction',
+      '-1',
+    );
+
+    // 7. Verify Landing #taxonomy TactileToggle (#27) + per-digit NumberPopIn (#02)
+    const landingToggle = page.getByTestId('landing-billing-toggle');
+    await landingToggle.scrollIntoViewIfNeeded();
+    await expect(page.getByTestId('landing-price-pro')).toHaveText('$20');
+    await expect(page.getByTestId('landing-price-ultra')).toHaveText('$200');
+    await landingToggle.click();
+    await expect(page.getByTestId('landing-price-pro')).toHaveText('$16');
+    await expect(page.getByTestId('landing-price-ultra')).toHaveText('$160');
+    await expect(
+      page.getByTestId('landing-price-pro').locator('.t-digit').first(),
+    ).toHaveAttribute('data-same', '');
   });
 
   test('2. Pricing Page: Sliding Billing Toggle (#16), SoftTextSwap (#34), and 3D CardHoverTilt (#19)', async ({
@@ -65,8 +116,12 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
 
     await toggleAnnual.click();
     await expect(toggleAnnual).toHaveAttribute('data-pill-active', 'true');
+    await expect(page.getByTestId('pro-price-display')).toHaveText('$16');
+    await expect(page.getByTestId('ultra-price-display')).toHaveText('$160');
     await toggleMonthly.click();
     await expect(toggleMonthly).toHaveAttribute('data-pill-active', 'true');
+    await expect(page.getByTestId('pro-price-display')).toHaveText('$20');
+    await expect(page.getByTestId('ultra-price-display')).toHaveText('$200');
 
     // Verify Pro card is wrapped in CardHoverTilt (.t-tilt)
     const proCard = page.getByTestId('plan-card-pro');
@@ -115,8 +170,13 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
     await page.goto('/dashboard');
     await waitForAuth(page);
 
-    // StatCards use NumberPopIn (.t-digit-group)
+    // StatCards use NumberPopIn (.t-digit-group) & Sidebar renders shared layoutId active indicator
     await expect(page.locator('.t-digit-group').first()).toBeVisible();
+    const sidebarIndicator = page.getByTestId('sidebar-active-indicator');
+    await expect(sidebarIndicator).toBeVisible();
+    await expect(
+      page.locator('aside a[href="/upload"]'),
+    ).toHaveAttribute('data-view-transition', 'true');
 
     // Search input uses .t-clear-input
     const searchInput = page.getByPlaceholder(/search documents/i);
@@ -296,6 +356,18 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
     await expect(matrix).toBeVisible();
     await expect(matrix).toHaveAttribute('data-variant', 'scan');
     await expect(matrix.locator('i')).toHaveCount(16);
+
+    // Verify #29 ReasoningStream (.t-reason + vertical mask-image fade) on ProcessingPage
+    const reasoningStream = page.getByTestId('processing-reasoning-stream');
+    await expect(reasoningStream).toBeVisible();
+    await expect(reasoningStream).toContainText('[01/08] GROBID TEI-XML');
+    const viewportMask = await reasoningStream
+      .locator('.t-reason-viewport')
+      .evaluate((el) => {
+        const s = getComputedStyle(el);
+        return s.maskImage || s.webkitMaskImage || '';
+      });
+    expect(viewportMask).toContain('linear-gradient');
 
     const readLoaderMetrics = () =>
       page.evaluate(() => {

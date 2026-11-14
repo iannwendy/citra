@@ -26,6 +26,7 @@ describe('Task 2: Core transitions.dev Primitives (#02, #27, #29, #08)', () => {
       );
       const priceEl = screen.getByTestId('price-num');
       expect(priceEl.textContent).toBe('$20');
+      expect(screen.getByText('$20')).toBeDefined();
 
       const initialSlots = container.querySelectorAll('.t-digit-slot');
       expect(initialSlots.length).toBe(3);
@@ -33,15 +34,17 @@ describe('Task 2: Core transitions.dev Primitives (#02, #27, #29, #08)', () => {
       // Update from $20 -> $16
       rerender(<NumberPopIn value="$16" data-testid="price-num" />);
 
-      // CRITICAL INVARIANT: textContent must immediately be "$16" (never "$1260" or "$20$16")
+      // CRITICAL INVARIANT: textContent AND Testing Library getByText must immediately resolve "$16"
       expect(priceEl.textContent).toBe('$16');
+      expect(screen.getByText('$16')).toBeDefined();
 
       const slots = container.querySelectorAll('.t-digit-slot');
       expect(slots.length).toBe(3);
 
-      // Slot 0 ('$') did not change -> marked data-same and has NO .t-digit-old
+      // Slot 0 ('$') did not change -> marked data-same, renders glyph via data-char ::before, and has NO .t-digit-old
       const dollarDigit = slots[0].querySelector('.t-digit');
-      expect(dollarDigit?.textContent).toBe('$');
+      expect(dollarDigit?.getAttribute('data-char')).toBe('$');
+      expect(dollarDigit?.textContent).toBe('');
       expect(dollarDigit?.hasAttribute('data-same')).toBe(true);
       expect(slots[0].querySelector('.t-digit-old')).toBeNull();
 

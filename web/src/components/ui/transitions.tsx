@@ -228,8 +228,9 @@ export function NumberPopIn({
       data-testid={testId}
       className={cn('t-digit-group', animating && 'is-animating', className)}
     >
+      <span className="sr-only">{str}</span>
       {slots.map((slot, idx) => (
-        <span key={idx} className="t-digit-slot">
+        <span key={idx} className="t-digit-slot" aria-hidden="true">
           {slot.oldCh !== null && !slot.isSame && (
             <span
               className="t-digit-old"
@@ -240,11 +241,11 @@ export function NumberPopIn({
           )}
           <span
             className="t-digit"
+            data-char={slot.newCh}
             data-same={slot.isSame ? '' : undefined}
             data-stagger={!slot.isSame ? slot.stagger : undefined}
-          >
-            {slot.newCh}
-          </span>
+            aria-hidden="true"
+          />
         </span>
       ))}
     </span>

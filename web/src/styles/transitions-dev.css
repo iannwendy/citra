@@ -364,6 +364,9 @@
   display: inline-block;
   will-change: transform, opacity, filter;
 }
+.t-digit::before {
+  content: attr(data-char);
+}
 .t-digit-group.is-animating .t-digit {
   animation: t-digit-in var(--digit-dur) linear both;
   animation-delay: calc(var(--digit-stagger) * var(--digit-i, 0) + var(--digit-enter-delay));
