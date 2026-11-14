@@ -6,6 +6,7 @@ import { router } from './router';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { CitraMotionProvider } from './components/ui/motion-primitives';
 import { VerificationProgressProvider } from './contexts/VerificationProgressContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { queryClient } from '@/lib/queryClient';
@@ -50,17 +51,19 @@ globalWithRoot.__citraReactRoot.render(
     <ErrorBoundary fallback={<GlobalErrorFallback />}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <ToastProvider position="bottom-right" maxToasts={5}>
-            <AuthProvider>
-              <VerificationProgressProvider
-                onNavigate={(path) => {
-                  void router.navigate(path);
-                }}
-              >
-                <RouterProvider router={router} future={{ v7_startTransition: true }} />
-              </VerificationProgressProvider>
-            </AuthProvider>
-          </ToastProvider>
+          <CitraMotionProvider>
+            <ToastProvider position="bottom-right" maxToasts={5}>
+              <AuthProvider>
+                <VerificationProgressProvider
+                  onNavigate={(path) => {
+                    void router.navigate(path);
+                  }}
+                >
+                  <RouterProvider router={router} future={{ v7_startTransition: true }} />
+                </VerificationProgressProvider>
+              </AuthProvider>
+            </ToastProvider>
+          </CitraMotionProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </ErrorBoundary>

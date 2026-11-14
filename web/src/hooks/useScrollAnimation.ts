@@ -4,6 +4,8 @@ interface UseScrollAnimationOptions {
   threshold?: number;
   rootMargin?: string;
   once?: boolean;
+  staggerMs?: number;
+  maxTotalStaggerMs?: number;
 }
 
 export function useScrollAnimation<T extends HTMLElement = HTMLDivElement>(
@@ -41,11 +43,22 @@ export function useScrollAnimation<T extends HTMLElement = HTMLDivElement>(
   return { ref, isVisible };
 }
 
-// Hook for staggered animation delays
+/**
+ * Staggered list entrance hook aligned with `transitions-polish`:
+ * - Default step is 45ms (30–55ms range).
+ * - Total stagger sequence is capped at <= 270ms (< 300ms rule) so longer lists never lag.
+ * - Cleans up pending timers on unmount.
+ */
 export function useStaggeredAnimation<T extends HTMLElement = HTMLDivElement>(
   itemCount: number,
-  _options: UseScrollAnimationOptions = {}
+  options: UseScrollAnimationOptions = {}
 ) {
+  const {
+    threshold = 0.1,
+    rootMargin = '0px 0px -50px 0px',
+    staggerMs = 45,
+    maxTotalStaggerMs = 270,
+  } = options;
   const containerRef = useRef<T>(null);
   const [visibleItems, setVisibleItems] = useState<Set<number>>(new Set());
 
@@ -53,29 +66,47 @@ export function useStaggeredAnimation<T extends HTMLElement = HTMLDivElement>(
     const container = containerRef.current;
     if (!container) return;
 
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const reduced =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             const items = container.querySelectorAll('[data-stagger-item]');
-            items.forEach((item, index) => {
-              setTimeout(() => {
-                setVisibleItems((prev) => new Set([...prev, index]));
-              }, index * 100); // 100ms stagger delay
-            });
+            const total = items.length;
+            if (reduced || total === 0) {
+              setVisibleItems(new Set(Array.from({ length: total }, (_, i) => i)));
+            } else {
+              const effectiveStep =
+                total > 1
+                  ? Math.min(staggerMs, maxTotalStaggerMs / (total - 1))
+                  : 0;
+              items.forEach((_item, index) => {
+                const delay = Math.round(index * effectiveStep);
+                const id = setTimeout(() => {
+                  setVisibleItems((prev) => new Set([...prev, index]));
+                }, delay);
+                timers.push(id);
+              });
+            }
             observer.unobserve(container);
           }
         });
       },
-      { threshold: 0.1, rootMargin: '0px 0px -50px 0px' }
+      { threshold, rootMargin }
     );
 
     observer.observe(container);
 
     return () => {
       observer.disconnect();
+      timers.forEach((id) => clearTimeout(id));
     };
-  }, [itemCount]);
+  }, [itemCount, threshold, rootMargin, staggerMs, maxTotalStaggerMs]);
 
   return { containerRef, visibleItems };
 }
