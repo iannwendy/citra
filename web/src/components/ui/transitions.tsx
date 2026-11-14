@@ -6,6 +6,7 @@ import React, {
   useCallback,
 } from 'react';
 import { cn } from '@/lib/utils';
+import { runUIGeneration } from '@/lib/uiGenerationEngine';
 import {
   m,
   AnimatePresence,
@@ -1581,7 +1582,8 @@ export function DirectionalStageSlide({
 
 /* ==========================================================================
    transitions-ui-generation (<UIGenerationReveal>)
-   Dotted wireframe + laser scanline + agent step tag overlay on mount/view
+   Real DOM-measuring blueprint wireframe + dot-matrix ripple + reticle +
+   horizontal scanline wipe ported from transitions.dev/ui-generation
    ========================================================================== */
 export function UIGenerationReveal({
   children,
@@ -1590,7 +1592,7 @@ export function UIGenerationReveal({
     'AGENT.GEN // CALIBRATING S-BERT',
     'INSPECTOR READY · 120FPS',
   ],
-  durationMs = 1350,
+  durationMs = 1450,
   replayKey,
   className,
 }: {
@@ -1600,7 +1602,12 @@ export function UIGenerationReveal({
   replayKey?: string | number;
   className?: string;
 }) {
-  const [phase, setPhase] = useState<'active' | 'done'>('active');
+  const targetRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [phase, setPhase] = useState<'active' | 'done'>(() =>
+    prefersReducedMotion() ? 'done' : 'active',
+  );
   const [stepIdx, setStepIdx] = useState(0);
 
   useEffect(() => {
@@ -1608,62 +1615,46 @@ export function UIGenerationReveal({
       setPhase('done');
       return;
     }
+
+    const targetEl = targetRef.current;
+    const svgEl = svgRef.current;
+    if (!targetEl || !svgEl) {
+      setPhase('done');
+      return;
+    }
+
     setPhase('active');
     setStepIdx(0);
 
-    const stepInterval = Math.max(
-      220,
-      Math.floor(durationMs / Math.max(1, steps.length)),
-    );
-    const t1 = setTimeout(() => {
-      if (steps.length > 1) setStepIdx(1);
-    }, stepInterval);
-    const t2 = setTimeout(() => {
-      if (steps.length > 2) setStepIdx(steps.length - 1);
-    }, stepInterval * 2);
-    const tDone = setTimeout(() => {
-      setPhase('done');
-    }, durationMs);
+    const run = runUIGeneration(targetEl, svgEl, canvasRef.current, {
+      durationMs,
+      stepsCount: steps.length,
+      onStepChange: (idx) => setStepIdx(idx),
+      onFinish: () => setPhase('done'),
+    });
 
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(tDone);
+      run.cancel();
     };
   }, [replayKey, durationMs, steps.length]);
 
   return (
     <div className={cn('t-gen-wrap', className)} data-t-generate="skeleton">
-      {children}
+      <div ref={targetRef} className="t-gen-target">
+        {children}
+      </div>
       <div
         className="t-gen"
         data-phase={phase}
         aria-hidden="true"
       >
-        <svg className="t-gen-svg" preserveAspectRatio="none">
-          <rect
-            className="t-gen-wire"
-            x="2"
-            y="2"
-            width="calc(100% - 4px)"
-            height="calc(100% - 4px)"
-            rx="12"
-            ry="12"
-          />
-          <line
-            className="t-gen-wire"
-            x1="12"
-            y1="44"
-            x2="calc(100% - 12px)"
-            y2="44"
-          />
-        </svg>
-        <div key={String(replayKey ?? 'init')} className="t-gen-scanline" />
-        <span className="t-gen-handle" style={{ top: 4, left: 4 }} />
-        <span className="t-gen-handle" style={{ top: 4, right: 4 }} />
-        <span className="t-gen-handle" style={{ bottom: 4, left: 4 }} />
-        <span className="t-gen-handle" style={{ bottom: 4, right: 4 }} />
-        {steps.length > 0 && (
+        <div
+          ref={canvasRef}
+          className="t-gen-canvas"
+          style={{ opacity: phase === 'done' ? 0 : 1 }}
+        />
+        <svg ref={svgRef} className="t-gen-svg" preserveAspectRatio="none" />
+        {steps.length > 0 && phase !== 'done' && (
           <div className="t-gen-tag">
             <span className="t-gen-tag-dot" />
             <span>{steps[Math.min(stepIdx, steps.length - 1)]}</span>

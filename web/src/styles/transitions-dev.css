@@ -1277,28 +1277,36 @@
 
 /* ==========================================================================
    transitions-ui-generation (.t-gen wireframe + scanline + agent step reveal)
+   Calibrated to Solva Warm Editorial Light (#FBFAF6) & Dark (#1A1814) tokens
    ========================================================================== */
 :root {
-  --gen-line: #9a9a9a;
-  --gen-strong: #6c6c6c;
-  --gen-ink: rgba(13, 13, 13, 0.28);
-  --gen-surface: #ffffff;
-  --gen-text: #0d0d0d;
-  --gen-muted: #78746c;
+  --gen-canvas: #FBFAF6;
+  --gen-line: #8C887E;
+  --gen-strong: #1C1A15;
+  --gen-ink: rgba(28, 26, 21, 0.24);
+  --gen-surface: #FFFFFF;
+  --gen-text: #1C1A15;
+  --gen-muted: #56524A;
   --gen-dot: 2px;
-  --gen-font: var(--font-mono);
+  --gen-font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 .dark {
-  --gen-line: #6f6f6f;
-  --gen-strong: #a3a3a3;
-  --gen-ink: rgba(245, 245, 245, 0.26);
-  --gen-surface: #181818;
-  --gen-text: #f2f2f2;
-  --gen-muted: #9c9689;
+  --gen-canvas: #1A1814;
+  --gen-line: #7A756B;
+  --gen-strong: #FBFAF6;
+  --gen-ink: rgba(251, 250, 246, 0.24);
+  --gen-surface: #1E1C17;
+  --gen-text: #FBFAF6;
+  --gen-muted: #A8A296;
 }
 
 .t-gen-wrap {
   position: relative;
+  overflow: hidden;
+}
+.t-gen-target {
+  position: relative;
+  width: 100%;
 }
 .t-gen {
   position: absolute;
@@ -1307,17 +1315,33 @@
   pointer-events: none;
   border-radius: inherit;
   overflow: hidden;
-  transition: opacity 350ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .t-gen[data-phase="done"] {
   opacity: 0;
+}
+.t-gen-canvas {
+  position: absolute;
+  inset: 0;
+  background-color: var(--gen-canvas);
+  border-radius: inherit;
+  will-change: clip-path, opacity;
 }
 .t-gen-svg {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  overflow: visible;
+  overflow: hidden;
+}
+.t-gen-dot {
+  fill: var(--gen-ink);
+}
+.t-gen-dot.is-lit {
+  fill: var(--gen-strong);
+}
+.t-gen-wireframe {
+  stroke-width: var(--gen-dot);
 }
 .t-gen-wire {
   fill: none;
@@ -1325,71 +1349,53 @@
   stroke-width: var(--gen-dot);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-dasharray: 0 5.5;
-  animation: t-gen-wire-flow 1400ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-@keyframes t-gen-wire-flow {
-  from {
-    opacity: 0.95;
-    stroke-dashoffset: 44;
-  }
-  to {
-    opacity: 0.35;
-    stroke-dashoffset: 0;
-  }
+.t-gen-guide {
+  fill: none;
+  stroke: var(--gen-line);
+  stroke-width: 1.5;
+  stroke-linecap: round;
 }
-.t-gen-scanline {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    var(--gen-strong) 20%,
-    #10b981 50%,
-    var(--gen-strong) 80%,
-    transparent 100%
-  );
-  box-shadow: 0 0 18px rgba(16, 185, 129, 0.38);
-  transform: translate3d(-10%, 0, 0);
-  animation: t-gen-scan-sweep 1350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  will-change: transform, opacity;
+.t-gen-guide--dashed,
+.t-gen-guide--scan {
+  stroke-dasharray: 0 5;
 }
-@keyframes t-gen-scan-sweep {
-  0% {
-    left: 0%;
-    opacity: 0;
-  }
-  12% {
-    opacity: 0.95;
-  }
-  85% {
-    opacity: 0.85;
-  }
-  100% {
-    left: 100%;
-    opacity: 0;
-  }
+.t-gen-guide--scan {
+  stroke: #10b981;
+  stroke-width: 2;
+}
+.t-gen-head {
+  fill: var(--gen-strong);
 }
 .t-gen-handle {
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  background: var(--gen-surface);
-  border: 1.25px solid var(--gen-strong);
-  border-radius: 1.5px;
-  animation: t-gen-handle-pop 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  fill: var(--gen-surface);
+  stroke: var(--gen-strong);
+  stroke-width: 1.1;
 }
-@keyframes t-gen-handle-pop {
-  from {
-    opacity: 0;
-    transform: scale(0.4);
-  }
-  to {
-    opacity: 0.9;
-    transform: scale(1);
-  }
+.t-gen-reticle {
+  fill: none;
+  stroke: var(--gen-strong);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+}
+.t-gen-glow-stop {
+  stop-color: #10b981;
+}
+.t-gen-label {
+  font-family: var(--gen-font);
+  font-size: 9px;
+  fill: var(--gen-line);
+  letter-spacing: 0.03em;
+}
+.t-gen-label--small {
+  font-size: 7.5px;
+  fill: var(--gen-strong);
+}
+.t-gen-label--tag {
+  font-size: 7.5px;
+  fill: var(--gen-strong);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 .t-gen-tag {
   position: absolute;
@@ -1400,8 +1406,8 @@
   gap: 6px;
   padding: 2px 7px;
   border-radius: 9999px;
-  background: color-mix(in srgb, var(--gen-surface) 88%, transparent);
-  border: 1px solid color-mix(in srgb, var(--gen-line) 40%, transparent);
+  background: color-mix(in srgb, var(--gen-surface) 90%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gen-line) 42%, transparent);
   font-family: var(--gen-font);
   font-size: 9.5px;
   line-height: 14px;
