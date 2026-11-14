@@ -1295,32 +1295,28 @@ export function VerificationProgressProvider({
 
   const retryFailedBatchFiles = useCallback(() => {
     if (batchQueueState.isProcessing) return;
-    const retryableIds = new Set(
-      batchFilesRef.current
-        .filter((f) => f.status === 'failed' && (f.essayId != null || f.file != null))
-        .map((f) => f.id),
-    );
-    if (retryableIds.size === 0) return;
-
-    const toRun: BatchFileItem[] = [];
-    updateBatchFiles((prev) =>
-      prev.map((f) => {
-        if (!retryableIds.has(f.id)) return f;
-        const reset: BatchFileItem = {
+    const resetById = new Map<string, BatchFileItem>();
+    for (const f of batchFilesRef.current) {
+      if (f.status === 'failed' && (f.essayId != null || f.file != null)) {
+        resetById.set(f.id, {
           ...f,
           status: 'pending',
           progress: 0,
           queuePosition: null,
           quotaCharged: undefined,
           error: undefined,
-        };
-        toRun.push(reset);
-        return reset;
-      }),
+        });
+      }
+    }
+    if (resetById.size === 0) return;
+
+    const toRun = Array.from(resetById.values());
+    updateBatchFiles((prev) =>
+      prev.map((f) => resetById.get(f.id) ?? f),
     );
     setBatchQueueState((prev) => ({ ...prev, hasAutoNavigated: false }));
     const otherPending = batchFilesRef.current.filter(
-      (f) => !retryableIds.has(f.id) && f.status === 'pending',
+      (f) => !resetById.has(f.id) && f.status === 'pending',
     );
     void startBatchQueue([...toRun, ...otherPending]);
   }, [batchQueueState.isProcessing, startBatchQueue, updateBatchFiles]);
