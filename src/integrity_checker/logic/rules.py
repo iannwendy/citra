@@ -709,12 +709,21 @@ def _is_fake_author_name(
                 and raw_stripped
                 and not year_match
             ):
-                m_lead = re.match(rf"^{re.escape(a_words[0])}(.*)$", raw_stripped, re.IGNORECASE)
+                m_lead = re.match(rf"^(?i:{re.escape(a_words[0])})(.*)$", raw_stripped)
                 if m_lead:
                     rest = m_lead.group(1)
                     has_author_delim = bool(
                         re.match(
-                            r"^(?:\s*[,.;:]|\s+[A-ZÀ-Ỹ]\.|\s+et\s+al\b|\s*(?:&|and)\s+[A-ZÀ-Ỹ])",
+                            r"^(?:"
+                            r"\s*\.\s+[A-ZÀ-Ỹ]|"
+                            r"\s*,\s*[A-ZÀ-Ỹ]\.|"
+                            r"\s+[A-ZÀ-Ỹ]\.|"
+                            r"\s+(?i:et\s+al\b|(?:và\s+)?cộng\s+sự\b)|"
+                            r"\s*(?:,\s*)?&\s+[A-ZÀ-Ỹ]|"
+                            r"\s*(?:,\s*)?and\s+[A-ZÀ-Ỹ][a-zà-ỹA-ZÀ-Ỹ'\u2019\-]*\s*,\s*[A-ZÀ-Ỹ]\.|"
+                            r"\s*(?:,\s*)?and\s+(?:[A-ZÀ-Ỹ]\.\s*)+[A-ZÀ-Ỹ]|"
+                            r"\s*;\s*[A-ZÀ-Ỹ][a-zà-ỹA-ZÀ-Ỹ'\u2019\-]*\s*,\s*[A-ZÀ-Ỹ]\."
+                            r")",
                             rest,
                         )
                     )

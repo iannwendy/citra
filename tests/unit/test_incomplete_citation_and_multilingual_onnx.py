@@ -1159,3 +1159,95 @@ class TestTask8FixRound1Regressions:
         for line in content.splitlines():
             if "paraphrase-multilingual-MiniLM-L12-v2" in line:
                 assert "||" not in line, f"Silent fallback '||' found in Dockerfile pre-bake: {line}"
+
+
+class TestTask8FixRound2Regressions:
+    """Regression suite for Fix Round 2 case-sensitive `author_cue_re` and `and [A-ZÀ-Ỹ]` guards."""
+
+    def test_bare_titles_with_and_or_comma_clause_remain_incomplete_metadata_error(self) -> None:
+        rules = SymbolicRules()
+        zero_features = MatchFeatures()
+
+        bare_title_cases = [
+            ("[2] Design and analysis of wireless sensors", ["Design"]),
+            ("[2] Research and innovation in computer science", ["Research"]),
+            ("[2] Making, a practical guide to computer science", ["Making"]),
+            ("[2] Design and Implementation of Wireless Sensors", ["Design"]),
+            ("[2] Design and implementation of mobile robots", ["Design"]),
+            ("[2] Unknown and Uncertain Systems in Robotics", ["Unknown"]),
+        ]
+        for raw, sp_authors in bare_title_cases:
+            comp = assess_bibliographic_completeness(
+                citation_raw=raw,
+                citation_authors=sp_authors,
+                citation_year=None,
+                citation_venue=None,
+                citation_type=CitationType.REFERENCE_LIST,
+            )
+            assert comp.has_real_authors is False, f"Expected has_real_authors=False on {raw}: {comp}"
+            assert comp.is_incomplete is True, f"Expected is_incomplete=True on {raw}: {comp}"
+            assert "authors" in comp.missing_fields, f"Expected 'authors' in missing_fields on {raw}: {comp}"
+
+            outcome = rules.evaluate(
+                zero_features,
+                SourceResult(
+                    citation_raw=raw,
+                    candidates=[],
+                    sources_queried=["crossref", "openalex", "semantic_scholar"],
+                    sources_succeeded=["crossref", "openalex", "semantic_scholar"],
+                ),
+                citation_raw=raw,
+                citation_authors=sp_authors,
+                citation_type=CitationType.REFERENCE_LIST,
+            )
+            assert outcome.label == ValidationLabel.METADATA_ERROR, f"Failed on {raw}: {outcome}"
+            assert outcome.triggered_rules == ["R-INCOMPLETE-METADATA"], f"Failed on {raw}: {outcome}"
+            assert "R-FAKE-AUTHOR" not in outcome.triggered_rules
+
+    def test_real_single_surname_cues_and_explicit_fake_personas_preserved(self) -> None:
+        rules = SymbolicRules()
+        zero_features = MatchFeatures()
+
+        # Real single-word surnames with uppercase initials, ampersands, years, or `et al.` remain real authors
+        real_author_cases = [
+            ("An et al. (2023). Quantum Neural Transformers. Cell, 186, 112-129.", ["An"], "2023"),
+            ("Tài (2023). Nghiên cứu mạng lượng tử tự hành.", ["Tài"], "2023"),
+            ("An & Lee (2023). Quantum Neural Transformers.", ["An"], "2023"),
+            ("An and Lee (2023). Quantum Neural Transformers.", ["An"], "2023"),
+            ("An and J. Lee. Quantum Neural Transformers.", ["An"], None),
+            ("An, H. (2023). Quantum Neural Transformers.", ["An"], "2023"),
+            ("An, H. Quantum Neural Transformers.", ["An"], None),
+            ("An; Lee, K. Quantum Neural Transformers.", ["An"], None),
+        ]
+        for raw, authors, yr in real_author_cases:
+            comp = assess_bibliographic_completeness(
+                citation_raw=raw,
+                citation_authors=authors,
+                citation_year=yr,
+                citation_type=CitationType.REFERENCE_LIST,
+            )
+            assert comp.has_real_authors is True, f"Expected has_real_authors=True on {raw}: {comp}"
+
+        # Explicit fake personas with `and` or year-less `. Title` still trigger R-FAKE-AUTHOR (0.95)
+        fake_cases = [
+            ("John Doe and Jane Roe. Quantum Gravity.", ["John Doe", "Jane Roe"], None),
+            ("Unknown Author (2023). Fake Title.", ["Unknown Author"], "2023"),
+            ("Anonymous Researcher. Fake Study.", ["Anonymous Researcher"], None),
+        ]
+        for raw, f_authors, yr in fake_cases:
+            outcome = rules.evaluate(
+                zero_features,
+                SourceResult(
+                    citation_raw=raw,
+                    candidates=[],
+                    sources_queried=["crossref", "openalex"],
+                    sources_succeeded=["crossref", "openalex"],
+                ),
+                citation_raw=raw,
+                citation_authors=f_authors,
+                citation_year=yr,
+                citation_type=CitationType.REFERENCE_LIST,
+            )
+            assert outcome.label == ValidationLabel.SUSPECTED_HALLUCINATION, f"Failed on {raw}: {outcome}"
+            assert "R-FAKE-AUTHOR" in outcome.triggered_rules, f"Failed on {raw}: {outcome}"
+            assert outcome.confidence == pytest.approx(0.95)

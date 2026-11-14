@@ -328,22 +328,23 @@ def _is_real_author_entry(author_item: Any, raw_after_marker: str) -> bool:
             return False
 
         # Evaluate explicit author cues in `raw_after_marker` (`et al.`, `và cộng sự`, `(Year)`,
-        # `, Initial.`, `& Author`, `; Author`) BEFORE rejecting tokens in
-        # `_SPURIOUS_SINGLE_WORD_AUTHOR_TOKENS` so real surnames ("An", "On", "In", "Tài",
-        # "Chương", "Hướng", "Phát", etc.) are preserved when used as authors.
+        # `, Initial.`, `& Author`, `and Author (Year)` / `and J. Author`, `; Author, I.`) BEFORE
+        # rejecting tokens in `_SPURIOUS_SINGLE_WORD_AUTHOR_TOKENS` so real surnames ("An", "On",
+        # "In", "Tài", "Chương", "Hướng", "Phát", etc.) are preserved when used as authors.
+        # NOTE: Do NOT use global `re.IGNORECASE` so `[A-ZÀ-Ỹ]` stays strictly uppercase.
         author_cue_re = re.compile(
-            rf"\b{re.escape(word_tokens[0])}"
+            rf"\b(?i:{re.escape(word_tokens[0])})"
             r"(?:"
-            r"\s*,\s*[A-ZÀ-Ỹ](?:\.|\b)|"
+            r"\s*,\s*[A-ZÀ-Ỹ]\.|"
             r"\s+[A-ZÀ-Ỹ]\.|"
             r"\s*\(\s*(?:18|19|20)\d{2}\b|"
             r"\s*,\s*(?:18|19|20)\d{2}\b|"
-            r"\s+et\s+al\b|"
-            r"\s+(?:và\s+)?cộng\s+sự\b|"
-            r"\s*(?:,\s*)?(?:&|and)\s+[A-ZÀ-Ỹ]|"
-            r"\s*;\s*[A-ZÀ-Ỹ]"
-            r")",
-            re.IGNORECASE,
+            r"\s+(?i:et\s+al\b|(?:và\s+)?cộng\s+sự\b)|"
+            r"\s*(?:,\s*)?&\s+[A-ZÀ-Ỹ]|"
+            r"\s*(?:,\s*)?and\s+[A-ZÀ-Ỹ][a-zà-ỹA-ZÀ-Ỹ'\u2019\-]*\s*(?:,\s*[A-ZÀ-Ỹ]\.|\(\s*(?:18|19|20)\d{2}\b)|"
+            r"\s*(?:,\s*)?and\s+(?:[A-ZÀ-Ỹ]\.\s*)+[A-ZÀ-Ỹ]|"
+            r"\s*;\s*[A-ZÀ-Ỹ][a-zà-ỹA-ZÀ-Ỹ'\u2019\-]*\s*,\s*[A-ZÀ-Ỹ]\."
+            r")"
         )
         has_author_punctuation_or_cue = bool(
             raw_after_marker and author_cue_re.search(raw_after_marker)
@@ -356,14 +357,16 @@ def _is_real_author_entry(author_item: Any, raw_after_marker: str) -> bool:
 
         # First-word bare-title slice guard: if this single initial-less word is the very first
         # word of `citation_raw` (after `[N]`/`N.`) and is immediately followed by lowercase prose
-        # words rather than `,`, `.`, initials, `(Year)`, or `et al.`, it is a title token.
+        # words rather than `. Title`, `, Initial.`, `(Year)`, or `et al.`, it is a title token.
         if raw_after_marker:
             m_first = re.match(r"^([A-Za-zÀ-ỹ'\u2019\-]+)(.*)$", raw_after_marker)
             if m_first and m_first.group(1).lower() == token_lower:
                 rest = m_first.group(2)
-                has_prefix_delim = bool(re.match(r"^\s*[,.;:]", rest))
-                if not has_prefix_delim and re.match(r"^\s+[a-zà-ỹ]", rest):
-                    first_rest_word = re.findall(r"^\s+([a-zà-ỹ]+)", rest)
+                has_prefix_delim = bool(
+                    re.match(r"^\s*(?:\.\s+[A-ZÀ-Ỹ]|,\s*[A-ZÀ-Ỹ]|;)", rest)
+                )
+                if not has_prefix_delim and re.match(r"^\s*,?\s+[a-zà-ỹ]", rest):
+                    first_rest_word = re.findall(r"^\s*,?\s+([a-zà-ỹ]+)", rest)
                     if not first_rest_word or first_rest_word[0] not in _NAME_PARTICLES:
                         return False
 
