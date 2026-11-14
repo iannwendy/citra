@@ -6,18 +6,32 @@ import React, {
   useCallback,
 } from 'react';
 import { cn } from '@/lib/utils';
+import {
+  m,
+  AnimatePresence,
+  TRANSITION_ENTER,
+  TRANSITION_EXIT,
+} from './motion-primitives';
 
 const useIsomorphicLayoutEffect =
   typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 function prefersReducedMotion(): boolean {
-  if (typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test') {
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  ) {
     return true;
   }
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return false;
+  if (
+    typeof import.meta !== 'undefined' &&
+    import.meta.env?.MODE === 'test' &&
+    !(globalThis as { __CITRA_ENABLE_TEST_MOTION__?: boolean }).__CITRA_ENABLE_TEST_MOTION__
+  ) {
+    return true;
   }
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return false;
 }
 
 /* ==========================================================================
@@ -74,8 +88,92 @@ export function CardResize({
 
 /* ==========================================================================
    #02 Number pop-in (<NumberPopIn>)
-   3D drum digit pop-in for counters, prices, and stat cards
+   3D drum per-character pop-in for counters, prices, and stat cards.
+   Unchanged prefix/suffix/digits stay stationary via [data-same];
+   outgoing characters render via CSS ::before { content: attr(data-char) }
+   so element.textContent remains 100% pure at every frame.
    ========================================================================== */
+interface DigitSlotDiff {
+  newCh: string;
+  oldCh: string | null;
+  isSame: boolean;
+  stagger?: '1' | '2';
+}
+
+function diffNumberSlots(prevStr: string | null, nextStr: string): DigitSlotDiff[] {
+  const nextChars = Array.from(nextStr);
+  if (prevStr === null || prevStr === nextStr) {
+    return nextChars.map((newCh) => ({
+      newCh,
+      oldCh: null,
+      isSame: true,
+    }));
+  }
+
+  const prevChars = Array.from(prevStr);
+
+  // Preserve shared leading non-digit prefix (e.g. "$") and trailing non-digit suffix (e.g. "%", "ms")
+  let prefixLen = 0;
+  while (
+    prefixLen < prevChars.length &&
+    prefixLen < nextChars.length &&
+    prevChars[prefixLen] === nextChars[prefixLen] &&
+    !/\d/.test(nextChars[prefixLen])
+  ) {
+    prefixLen++;
+  }
+
+  let suffixLen = 0;
+  while (
+    suffixLen < prevChars.length - prefixLen &&
+    suffixLen < nextChars.length - prefixLen &&
+    prevChars[prevChars.length - 1 - suffixLen] ===
+      nextChars[nextChars.length - 1 - suffixLen] &&
+    !/\d/.test(nextChars[nextChars.length - 1 - suffixLen])
+  ) {
+    suffixLen++;
+  }
+
+  const prevMid = prevChars.slice(prefixLen, prevChars.length - suffixLen);
+  const nextMid = nextChars.slice(prefixLen, nextChars.length - suffixLen);
+
+  const slots: DigitSlotDiff[] = [];
+
+  for (let i = 0; i < prefixLen; i++) {
+    slots.push({ newCh: nextChars[i], oldCh: null, isSame: true });
+  }
+
+  for (let i = 0; i < nextMid.length; i++) {
+    const prevIdx = i - (nextMid.length - prevMid.length);
+    const oldCh = prevIdx >= 0 ? prevMid[prevIdx] : null;
+    const newCh = nextMid[i];
+    const isSame = oldCh === newCh;
+    slots.push({
+      newCh,
+      oldCh: isSame ? null : oldCh,
+      isSame,
+    });
+  }
+
+  for (let i = nextChars.length - suffixLen; i < nextChars.length; i++) {
+    slots.push({ newCh: nextChars[i], oldCh: null, isSame: true });
+  }
+
+  const changedIndices: number[] = [];
+  slots.forEach((slot, idx) => {
+    if (!slot.isSame) changedIndices.push(idx);
+  });
+
+  if (changedIndices.length === 2) {
+    slots[changedIndices[1]].stagger = '1';
+  } else if (changedIndices.length >= 3) {
+    slots[changedIndices[changedIndices.length - 2]].stagger = '1';
+    slots[changedIndices[changedIndices.length - 1]].stagger = '2';
+  }
+
+  return slots;
+}
+
 export function NumberPopIn({
   value,
   className,
@@ -113,12 +211,14 @@ export function NumberPopIn({
     const timer = setTimeout(() => {
       setOldStr(null);
       setAnimating(false);
-    }, 360);
+    }, 700);
     return () => {
       cancelAnimationFrame(raf);
       clearTimeout(timer);
     };
   }, [str]);
+
+  const slots = diffNumberSlots(oldStr, str);
 
   return (
     <span
@@ -127,14 +227,25 @@ export function NumberPopIn({
       data-testid={testId}
       className={cn('t-digit-group', animating && 'is-animating', className)}
     >
-      <span className="t-digit-slot">
-        {oldStr !== null && (
-          <span className="t-digit-old" aria-hidden="true">
-            {oldStr}
+      {slots.map((slot, idx) => (
+        <span key={idx} className="t-digit-slot">
+          {slot.oldCh !== null && !slot.isSame && (
+            <span
+              className="t-digit-old"
+              data-char={slot.oldCh}
+              data-stagger={slot.stagger}
+              aria-hidden="true"
+            />
+          )}
+          <span
+            className="t-digit"
+            data-same={slot.isSame ? '' : undefined}
+            data-stagger={!slot.isSame ? slot.stagger : undefined}
+          >
+            {slot.newCh}
           </span>
-        )}
-        <span className="t-digit">{str}</span>
-      </span>
+        </span>
+      ))}
     </span>
   );
 }
@@ -1211,6 +1322,261 @@ export function useSlidingPill<T extends HTMLElement = HTMLDivElement>(
   }, [measure]);
 
   return { containerRef, pillStyle };
+}
+
+/* ==========================================================================
+   #27 Tactile switch toggle (<TactileToggle>)
+   Spring thumb travel (--toggle-ease) activated after initial render (.is-init)
+   so pre-checked switches never bounce on mount
+   ========================================================================== */
+export function TactileToggle({
+  checked,
+  onChange,
+  disabled = false,
+  className,
+  id,
+  'aria-label': ariaLabel,
+  'aria-labelledby': ariaLabelledBy,
+  'data-testid': testId,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+  className?: string;
+  id?: string;
+  'aria-label'?: string;
+  'aria-labelledby'?: string;
+  'data-testid'?: string;
+}) {
+  const [initialized, setInitialized] = useState(false);
+  const prevCheckedRef = useRef(checked);
+
+  useEffect(() => {
+    if (prevCheckedRef.current !== checked) {
+      prevCheckedRef.current = checked;
+      setInitialized(true);
+    }
+  }, [checked]);
+
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
+      data-testid={testId}
+      disabled={disabled}
+      onClick={() => {
+        if (disabled) return;
+        setInitialized(true);
+        onChange(!checked);
+      }}
+      className={cn(
+        't-toggle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 disabled:cursor-not-allowed disabled:opacity-50',
+        initialized && 'is-init',
+        className,
+      )}
+    >
+      <span className="t-toggle-thumb" aria-hidden="true" />
+    </button>
+  );
+}
+
+/* ==========================================================================
+   #29 Reasoning stream (<ReasoningStream>)
+   Scrolling agent/pipeline telemetry viewport with top/bottom mask-image fades
+   and seamless compositor translateY stepping
+   ========================================================================== */
+export function ReasoningStream({
+  lines,
+  visibleLines = 3,
+  lineHeightPx = 22,
+  stepMs = 400,
+  className,
+  lineClassName,
+  'data-testid': testId,
+}: {
+  lines: string[];
+  visibleLines?: number;
+  lineHeightPx?: number;
+  stepMs?: number;
+  className?: string;
+  lineClassName?: string;
+  'data-testid'?: string;
+}) {
+  const safeLines = lines.length > 0 ? lines : [''];
+  const tailWindow = safeLines.slice(-visibleLines);
+  const [windowItems, setWindowItems] = useState<string[]>(tailWindow);
+  const [stepping, setStepping] = useState(false);
+  const [resetting, setResetting] = useState(true);
+  const prevLastRef = useRef<string>(safeLines[safeLines.length - 1]);
+  const prevLenRef = useRef<number>(safeLines.length);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const latest = safeLines[safeLines.length - 1];
+    const grew =
+      safeLines.length > prevLenRef.current || latest !== prevLastRef.current;
+    prevLenRef.current = safeLines.length;
+    prevLastRef.current = latest;
+
+    const latestSlice = safeLines.slice(-visibleLines);
+
+    if (!grew || prefersReducedMotion() || safeLines.length <= 1) {
+      setWindowItems(latestSlice);
+      setStepping(false);
+      setResetting(true);
+      return;
+    }
+
+    const withOutgoing = safeLines.slice(-(visibleLines + 1));
+    if (withOutgoing.length <= latestSlice.length) {
+      setWindowItems(latestSlice);
+      setStepping(false);
+      setResetting(true);
+      return;
+    }
+
+    setWindowItems(withOutgoing);
+    setStepping(false);
+    setResetting(true);
+
+    const raf = requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        void scrollRef.current.offsetHeight;
+      }
+      setResetting(false);
+      setStepping(true);
+    });
+
+    const timer = setTimeout(() => {
+      setResetting(true);
+      setStepping(false);
+      setWindowItems(safeLines.slice(-visibleLines));
+    }, stepMs);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+    };
+  }, [safeLines.join('\n'), visibleLines, stepMs]);
+
+  return (
+    <div
+      role="log"
+      aria-live="polite"
+      aria-relevant="additions text"
+      data-testid={testId}
+      style={
+        {
+          '--reason-lines': visibleLines,
+          '--reason-line-h': `${lineHeightPx}px`,
+          '--reason-step': `${stepMs}ms`,
+        } as React.CSSProperties
+      }
+      className={cn('t-reason', className)}
+    >
+      <div className="t-reason-viewport">
+        <div
+          ref={scrollRef}
+          className={cn('t-reason-scroll', resetting && 'is-reset')}
+          style={{
+            transform: stepping
+              ? `translate3d(0, -${lineHeightPx}px, 0)`
+              : 'translate3d(0, 0, 0)',
+          }}
+        >
+          {windowItems.map((line, idx) => {
+            const isLatest = idx === windowItems.length - 1;
+            return (
+              <div
+                key={`${idx}-${line}`}
+                data-latest={isLatest ? 'true' : 'false'}
+                className={cn('t-reason-line', lineClassName)}
+              >
+                {line}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================================
+   #08 Enhanced Directional stage slide (<DirectionalStageSlide>)
+   Causal horizontal slide (+distancePx when advancing, -distancePx when stepping back)
+   using LazyMotion + AnimatePresence inside an overflow-x: clip viewport
+   ========================================================================== */
+export function DirectionalStageSlide({
+  stageKey,
+  direction,
+  distancePx = 14,
+  children,
+  className,
+  'data-testid': testId,
+}: {
+  stageKey: string | number;
+  direction?: 1 | -1;
+  distancePx?: number;
+  children: React.ReactNode;
+  className?: string;
+  'data-testid'?: string;
+}) {
+  const [track, setTrack] = useState<{
+    current: string | number;
+    dir: 1 | -1;
+  }>({
+    current: stageKey,
+    dir: direction ?? 1,
+  });
+
+  let activeDir: 1 | -1 = direction ?? track.dir;
+  if (stageKey !== track.current) {
+    if (direction !== undefined) {
+      activeDir = direction;
+    } else if (typeof stageKey === 'number' && typeof track.current === 'number') {
+      activeDir = stageKey >= track.current ? 1 : -1;
+    } else {
+      activeDir = String(stageKey) >= String(track.current) ? 1 : -1;
+    }
+    setTrack({ current: stageKey, dir: activeDir });
+  }
+
+  if (prefersReducedMotion()) {
+    return (
+      <div
+        data-testid={testId}
+        data-direction={activeDir}
+        className={cn('t-stage-slide-viewport', className)}
+      >
+        <div key={stageKey}>{children}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-testid={testId}
+      data-direction={activeDir}
+      className={cn('t-stage-slide-viewport', className)}
+    >
+      <AnimatePresence mode="popLayout" initial={false} custom={activeDir}>
+        <m.div
+          key={stageKey}
+          custom={activeDir}
+          initial={{ opacity: 0, x: activeDir * distancePx }}
+          animate={{ opacity: 1, x: 0, transition: TRANSITION_ENTER }}
+          exit={{ opacity: 0, x: -activeDir * Math.round(distancePx * 0.7), transition: TRANSITION_EXIT }}
+        >
+          {children}
+        </m.div>
+      </AnimatePresence>
+    </div>
+  );
 }
 
 /* ==========================================================================

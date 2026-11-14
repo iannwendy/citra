@@ -357,6 +357,9 @@
   text-align: center;
   pointer-events: none;
 }
+.t-digit-old::before {
+  content: attr(data-char);
+}
 .t-digit {
   display: inline-block;
   will-change: transform, opacity, filter;
@@ -535,6 +538,14 @@
     transform var(--panel-open-dur) var(--panel-ease),
     opacity   var(--panel-open-dur) var(--panel-ease),
     filter    var(--panel-open-dur) var(--panel-ease);
+}
+
+/* ==========================================================================
+   #08 Page side-by-side / Directional stage slide (.t-stage-slide-viewport)
+   ========================================================================== */
+.t-stage-slide-viewport {
+  position: relative;
+  overflow-x: clip;
 }
 
 /* ==========================================================================
@@ -926,11 +937,59 @@
 }
 
 /* ==========================================================================
-   #27 Toggle (.t-toggle-thumb)
+   #27 Toggle (.t-toggle, .t-toggle-thumb)
    ========================================================================== */
+.t-toggle {
+  --toggle-w: 44px;
+  --toggle-h: 24px;
+  --toggle-pad: 2px;
+  --toggle-thumb-size: calc(var(--toggle-h) - var(--toggle-pad) * 2);
+  --toggle-travel: calc(var(--toggle-w) - var(--toggle-thumb-size) - var(--toggle-pad) * 2);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: var(--toggle-w);
+  height: var(--toggle-h);
+  padding: var(--toggle-pad);
+  border-radius: 9999px;
+  background-color: var(--solva-surface-alt, #ECE9E0);
+  border: 1px solid var(--solva-border, #E7E3D9);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background-color 200ms var(--ease-smooth-out),
+    border-color 200ms var(--ease-smooth-out);
+}
+.dark .t-toggle {
+  background-color: var(--solva-surface-alt, #29261F);
+  border-color: var(--solva-border, #332F26);
+}
+.t-toggle[aria-checked="true"] {
+  background-color: #10b981;
+  border-color: #059669;
+}
 .t-toggle-thumb {
-  transition: transform var(--toggle-dur) var(--toggle-ease);
+  width: var(--toggle-thumb-size);
+  height: var(--toggle-thumb-size);
+  border-radius: 9999px;
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18), 0 1px 1px rgba(0, 0, 0, 0.08);
+  transform: translate3d(0, 0, 0);
+  transition: none;
   will-change: transform;
+  pointer-events: none;
+}
+.t-toggle.is-init .t-toggle-thumb {
+  transition: transform var(--toggle-dur) var(--toggle-ease);
+}
+.t-toggle[aria-checked="true"] .t-toggle-thumb {
+  transform: translate3d(var(--toggle-travel), 0, 0);
+}
+.t-toggle:active .t-toggle-thumb {
+  transform: translate3d(0, 0, 0) scaleX(1.08);
+}
+.t-toggle[aria-checked="true"]:active .t-toggle-thumb {
+  transform: translate3d(var(--toggle-travel), 0, 0) scaleX(1.08);
 }
 
 /* ==========================================================================
@@ -989,6 +1048,58 @@
   transform: translateY(var(--think-distance));
   filter: blur(var(--think-blur));
   opacity: 0;
+}
+
+/* ==========================================================================
+   #29 Reasoning stream (.t-reason, .t-reason-viewport, .t-reason-scroll)
+   ========================================================================== */
+.t-reason {
+  --reason-line-h: 22px;
+  --reason-fade: 14px;
+  position: relative;
+  width: 100%;
+}
+.t-reason-viewport {
+  position: relative;
+  height: calc(var(--reason-lines, 3) * var(--reason-line-h, 22px));
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0px,
+    #000 var(--reason-fade, 14px),
+    #000 calc(100% - var(--reason-fade, 14px)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0px,
+    #000 var(--reason-fade, 14px),
+    #000 calc(100% - var(--reason-fade, 14px)),
+    transparent 100%
+  );
+}
+.t-reason-scroll {
+  transform: translate3d(0, 0, 0);
+  transition: transform var(--reason-step) var(--reason-ease);
+  will-change: transform;
+}
+.t-reason-scroll.is-reset {
+  transition: none !important;
+}
+.t-reason-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--reason-line-h, 22px);
+  line-height: var(--reason-line-h, 22px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.62;
+  transition: opacity 220ms var(--ease-smooth-out), color 220ms var(--ease-smooth-out);
+}
+.t-reason-line[data-latest="true"] {
+  opacity: 1;
 }
 
 /* ==========================================================================
@@ -1355,9 +1466,12 @@
   .t-learn-arm,
   .t-check,
   .t-check svg path,
+  .t-toggle,
   .t-toggle-thumb,
   .t-think-text,
   .t-think-text::before,
+  .t-reason-scroll,
+  .t-reason-line,
   .t-stream-w,
   .t-matrix i,
   .t-morph-swap,
