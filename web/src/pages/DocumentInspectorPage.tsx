@@ -364,7 +364,11 @@ function CitationPopup({
                 {t('inspector.verification')}
               </label>
               <div className="mt-1.5">
-                <VerdictBadge verdict={citation.label} size="sm" />
+                <VerdictBadge
+                  verdict={citation.label}
+                  triggeredRules={verdict?.triggered_rules}
+                  size="sm"
+                />
               </div>
             </div>
             <div>

@@ -149,7 +149,7 @@ _ISO4_PURE_STEM_RE = re.compile(
     r"(?:bio|geo|nano)?eng|"
     r"(?:bio|nano)?technol|"
     r"(?:bio|nano|tele|vet)?med|"
-    r"manage?|convers|resour|biorefin|sustain|env(?:iron)?|planet|clim|conserv|biodivers|pollut|bioenerg|hydroelectr|"
+    r"manage?|convers|resour|biorefin|sustain|env(?:iron)?|clim|conserv|biodivers|pollut|bioenerg|hydroelectr|"
     r"transduct|deliv|transl|ther(?:ap)?|chemother|immunother|diag|progn|prev|clin|surg|anesthesiol|emerg|"
     r"pharm(?:acol|aceut|acokinet)?|toxicol|ecotoxicol|mutagen|carcinog|"
     r"pathol|oncol|canc|neurol|neurosci|neurosurg|cardiol|vasc|hematol|pulm|respir|thorac|gastroenterol|hepatol|"
@@ -162,30 +162,20 @@ _ISO4_PURE_STEM_RE = re.compile(
     r"(?:bio|macro|supra)?mol|(?:bio|electro|immuno|micro|radio|thermo)?anal|"
     r"(?:bio|in|metallo)?org|organomet|anorg|allg|"
     r"quant|kinet|thermodyn|calorim|heterocycl|aliphat|aromat|fluor|pept|carbohydr|glycosci|nucleos|nucleot|"
-    r"microelectron|optoelectron|electron|semicond|supercond|dielectr|ferroelectr|piezoelectr|spintron|"
+    r"microelectron|optoelectron|semicond|supercond|dielectr|ferroelectr|piezoelectr|spintron|"
     r"luminesc|fluoresc|spectrosc|spectrom|chromatogr|electrophor|microsc|tomogr|crystallogr|"
-    r"metall|miner|ceram|corros|tribol|lubr|adhes|concr|rheol|"
+    r"metall|ceram|corros|tribol|lubr|adhes|concr|rheol|"
     r"metrol|instrum|meas|sens|actuat|mechatron|aerosp|automat|veh|hydraul|therm|propuls|nucl|radiat|isot|"
     r"ecol|geol|geotech|paleontol|stratigr|sedimentol|seismol|hydrol|limnol|oceanogr|meteorol|climatol|atmos|astron|"
     r"sci|lett|rev|res|dev|innov|exp|theor|comput|simulat|optim|imag|recognit|intell|mach|"
     r"appl|ind|manuf|constr|archit|transp|logist|struct|syst|autom|acoust|vib|fract|fatig|aerodyn|hydrodyn|turbul|transf|refrig|cryog|"
     r"alg|geom|topol|calc|equat|probab|stoch|combinat|numer|approxim|cybernet|cryptol|softw|parall|distrib|multimed|"
     r"sociol|anthropol|archaeol|demogr|geogr|econ|econometr|financ|admin|strateg|entrep|polit|publ|diplom|jurisp|legis|criminol|educ|pedagog|curric|hist|philos|libr|"
-    r"interf|sep|purif|hazard|dis|discov|funct|healthc|annu|acc|coord|memb|antioxid|cryst|des|simul|cognit|"
+    r"interf|sep|purif|dis|discov|funct|healthc|annu|acc|coord|memb|antioxid|cryst|des|simul|cognit|"
     r"theranost|regener|transfus|palliat|marit|aviat|auton|decis|reliab|"
     r"soc|assoc|acad|inst|found|univ|dept|sect|ser|suppl|ed|pt|"
     r"trans|commun|comm|proc|ann|acta|zeit|monogr|symp|conf|cong|worksh|acct|"
     r"natl|int|eur|am|amer|jpn|aust|russ|brit|br|ger|fr|ital|kor|helv|scand|gazz|roy|inf"
-    r")$",
-    flags=re.IGNORECASE,
-)
-
-_ISO4_CONTEXT_STEM_RE = re.compile(
-    r"^(?:"
-    r"target|process|bioprocess|photon|plasmon|robot|taxon|mineral|petrol|organ|linguist|"
-    r"coat|surf|arch|bull|bus|account|dent|ferment|span|front|cent|chin|can|mar|pol|vet|bot|"
-    r"batt|vac|discuss|react|interact|inform|infect|refract|diffract|combust|convect|opt|math|stat|"
-    r"stud|prog|adv|curr|opin|perspect|rep|rec|mem|lit|fed|div|oper|rel|saf|renew|clean|prod|maint|signal"
     r")$",
     flags=re.IGNORECASE,
 )
@@ -204,34 +194,18 @@ _ISO4_ORTHO_SUFFIX_RE = re.compile(
     flags=re.IGNORECASE,
 )
 
-_SINGLE_WORD_UNABBREV_VENUES: frozenset[str] = frozenset(
-    {"chem", "stat", "cell", "gut", "eye", "age", "lab", "air"}
-)
-
 
 def _is_iso4_abbreviated_stem(stem: str, right_clean: str | None = None) -> bool:
     """Return True if ``stem`` is an LTWA/CASSI abbreviated stem in a Title-Case clause."""
     s = (stem or "").strip().rstrip(".")
     if not s:
         return False
+    if right_clean is not None and " " not in right_clean and not right_clean.endswith("."):
+        return False
     if _ISO4_PURE_STEM_RE.fullmatch(s):
         return True
     if len(s) >= 4 and _ISO4_ORTHO_SUFFIX_RE.search(s):
         return True
-    if _ISO4_CONTEXT_STEM_RE.fullmatch(s):
-        if right_clean is None or "." in right_clean:
-            return True
-        right_parts = right_clean.split()
-        right_last = right_parts[-1].rstrip(".") if right_parts else ""
-        if (
-            right_last
-            and not (len(right_parts) == 1 and right_last.lower() in _SINGLE_WORD_UNABBREV_VENUES)
-            and (
-                bool(_ISO4_PURE_STEM_RE.fullmatch(right_last))
-                or (len(right_last) >= 4 and bool(_ISO4_ORTHO_SUFFIX_RE.search(right_last)))
-            )
-        ):
-            return True
     return False
 
 _COMMA_VENUE_SUBTITLE_RE = re.compile(
@@ -800,6 +774,13 @@ class ACSFormat:
             return True
 
         # Title-Case-only clauses (zero lowercase-leading words):
+        if (
+            right_clean is not None
+            and re.search(r"\bEarth\s+Planet\.?$", clause, flags=re.IGNORECASE)
+            and re.match(r"^Sci\b", right_clean, flags=re.IGNORECASE)
+        ):
+            return False
+
         last_bare = tokens[-1].rstrip(".")
         if not last_bare:
             return False
@@ -963,6 +944,23 @@ class ACSFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation
 
+    @classmethod
+    def _split_acs_title_and_venue(
+        cls, raw_title: str, venue: str, venue_dot: str = ""
+    ) -> tuple[str, str]:
+        """Split ACS ``(raw_title, venue)`` at the rightmost true sentence-ending period."""
+        venue_with_dot = f"{venue}{venue_dot}"
+        combined_mid = f"{raw_title}. {venue_with_dot}".strip() if raw_title else venue_with_dot.strip()
+        for m_dot in reversed(list(re.finditer(r"\.\s+", combined_mid))):
+            left = combined_mid[: m_dot.start()].strip()
+            left_with_dot = combined_mid[: m_dot.start() + 1].strip()
+            right = combined_mid[m_dot.end() :].strip()
+            if not left or not right or not re.match(r"^[A-Z]", right) or len(right) > 85:
+                continue
+            if cls._is_unquoted_title_split(left_with_dot, right):
+                return left.rstrip("."), right
+        return "", combined_mid
+
     def _parse_article_entry(
         self, match: re.Match, text: str
     ) -> Citation | None:
@@ -971,9 +969,10 @@ class ACSFormat:
         if not authors_str or self._has_incomplete_author_segment(authors_str):
             return None
         venue = match.group('venue').strip()
-        venue_with_dot = f"{venue}{match.groupdict().get('venue_dot') or ''}"
+        venue_dot = match.groupdict().get('venue_dot') or ''
         raw_title = (match.groupdict().get('title') or '').strip()
-        if raw_title and not self._is_unquoted_title_split(f"{raw_title}.", venue_with_dot):
+        raw_title, venue = self._split_acs_title_and_venue(raw_title, venue, venue_dot)
+        if not raw_title:
             return None
         parsed_authors = self._parse_authors(authors_str)
         if not parsed_authors:
@@ -1035,11 +1034,9 @@ class ACSFormat:
         if not authors_str or self._has_incomplete_author_segment(authors_str):
             return None
         venue = match.group('venue').strip()
-        venue_with_dot = f"{venue}{match.groupdict().get('venue_dot') or ''}"
+        venue_dot = match.groupdict().get('venue_dot') or ''
         raw_title = (match.groupdict().get('title') or '').strip()
-        if raw_title and not self._is_unquoted_title_split(f"{raw_title}.", venue_with_dot):
-            venue = f"{raw_title}. {venue}"
-            raw_title = ""
+        raw_title, venue = self._split_acs_title_and_venue(raw_title, venue, venue_dot)
         parsed_authors = self._parse_authors(authors_str)
         if not parsed_authors:
             return None
@@ -1128,11 +1125,9 @@ class ACSFormat:
 
         # Extract venue and optional title without splitting ISO-4 journal stems
         venue = match.group('venue').strip()
-        venue_with_dot = f"{venue}{match.groupdict().get('venue_dot') or ''}"
+        venue_dot = match.groupdict().get('venue_dot') or ''
         raw_title = (match.groupdict().get('title') or '').strip()
-        if raw_title and not self._is_unquoted_title_split(f"{raw_title}.", venue_with_dot):
-            venue = f"{raw_title}. {venue}"
-            raw_title = ""
+        raw_title, venue = self._split_acs_title_and_venue(raw_title, venue, venue_dot)
         citation.venue = venue
 
         has_sub_prefix = bool(

@@ -20,6 +20,7 @@ export type VerdictType =
 
 interface VerdictBadgeProps {
   verdict: VerdictType | string;
+  triggeredRules?: string[];
   size?: 'sm' | 'md' | 'lg';
   showIcon?: boolean;
   className?: string;
@@ -201,14 +202,34 @@ const verdictLabelKey: Record<string, string> = {
 
 export function VerdictBadge({
   verdict,
+  triggeredRules,
   size = 'md',
   showIcon = true,
   className = ''
 }: VerdictBadgeProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isVi = i18n.language?.startsWith('vi');
+  const isIncompleteMeta =
+    (verdict === 'METADATA_ERROR' || verdict === 'metadata_error') &&
+    Boolean(triggeredRules?.includes('R-INCOMPLETE-METADATA'));
   const config = verdictConfig[verdict] || verdictConfig.UNVERIFIABLE;
   const labelKey = verdictLabelKey[verdict];
-  const labelText = labelKey ? t(labelKey) : config.label;
+  const labelText = isIncompleteMeta
+    ? t(
+        'verdict.incompleteReference',
+        isVi ? 'Thiếu quy cách trích dẫn' : 'Incomplete Reference',
+      )
+    : labelKey
+      ? t(labelKey)
+      : config.label;
+  const descriptionText = isIncompleteMeta
+    ? t(
+        'verdict.incompleteReferenceDesc',
+        isVi
+          ? 'Mục tham khảo thiếu các trường bắt buộc (tác giả, năm xuất bản hoặc nơi công bố) chứ không phải nguồn do AI bịa đặt.'
+          : 'Citation lacks required bibliographic fields (author, publication year, or academic venue) rather than being fabricated.',
+      )
+    : config.description;
 
   return (
     <span
@@ -218,7 +239,7 @@ export function VerdictBadge({
         ${sizeClasses[size]}
         ${className}
       `}
-      title={config.description}
+      title={descriptionText}
     >
       {showIcon && (
         <span className={config.iconColor}>

@@ -598,6 +598,7 @@ function VerdictTrace({
           </Badge>
           <VerdictBadge
             verdict={isUrlResource(verdict) ? 'resource' : verdict.label}
+            triggeredRules={verdict.triggered_rules}
             size="sm"
           />
           <ChevronRight

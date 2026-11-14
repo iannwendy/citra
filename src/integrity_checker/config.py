@@ -389,7 +389,8 @@ class MatchingConfig(BaseModel):
     year_tolerance: int = 1
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     multilingual_embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-    enable_multilingual_encoder: bool = False
+    enable_multilingual_encoder: bool = True
+    onnx_quantized: bool = True
     cross_lingual_sim_boost: float = 0.08
     fuzzy: FuzzyConfig = Field(default_factory=FuzzyConfig)
 
@@ -587,6 +588,17 @@ class Settings(BaseSettings):
                         setattr(self.retrieval, attr_name, parsed)
                 except ValueError:
                     pass
+        for env_key, attr_name in (
+            ("MATCHING_ENABLE_MULTILINGUAL_ENCODER", "enable_multilingual_encoder"),
+            ("MATCHING_ONNX_QUANTIZED", "onnx_quantized"),
+        ):
+            raw_bool = os.getenv(env_key)
+            if raw_bool and raw_bool.strip():
+                norm_bool = raw_bool.strip().lower()
+                if norm_bool in {"1", "true", "yes", "on"}:
+                    setattr(self.matching, attr_name, True)
+                elif norm_bool in {"0", "false", "no", "off"}:
+                    setattr(self.matching, attr_name, False)
 
         is_explicit_prod = self.app.env.strip().lower() in ("production", "prod", "live")
         if is_test_runtime():

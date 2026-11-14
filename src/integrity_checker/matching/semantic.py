@@ -19,6 +19,7 @@ Module này cung cấp Neural layer toàn diện cho hệ thống Neuro-Symbolic
 
 from __future__ import annotations
 
+import platform
 import re
 import threading
 from collections import OrderedDict
@@ -171,8 +172,9 @@ class SemanticMatcher:
             "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         )
         self.enable_multilingual_encoder = bool(
-            getattr(settings, "enable_multilingual_encoder", False)
+            getattr(settings, "enable_multilingual_encoder", True)
         )
+        self.onnx_quantized = bool(getattr(settings, "onnx_quantized", True))
         self.cross_lingual_sim_boost = float(
             getattr(settings, "cross_lingual_sim_boost", 0.08)
         )
@@ -226,28 +228,97 @@ class SemanticMatcher:
                 self._model = self._model_cache[self.model_name]
         return self._model
 
+    @staticmethod
+    def _select_quantized_onnx_file(machine_arch: str | None = None) -> str:
+        """Select CPU-architecture-matched INT8 quantized ONNX file for multilingual MiniLM."""
+        arch = (machine_arch or platform.machine() or "").strip().lower()
+        if arch in {"arm64", "aarch64"} or arch.startswith(("arm64", "aarch64")):
+            return "onnx/model_qint8_arm64.onnx"
+        if arch in {"x86_64", "amd64", "x64"}:
+            return "onnx/model_qint8_avx2.onnx"
+        return "onnx/model_qint8_avx2.onnx"
+
+    def _load_multilingual_encoder(self):
+        """Load quantized ONNX INT8 multilingual encoder first when `onnx_quantized=True`,
+        falling back cleanly to local/cached PyTorch multilingual weights, then to `_get_model()`.
+        """
+        from sentence_transformers import SentenceTransformer  # type: ignore
+
+        if self.onnx_quantized:
+            onnx_file = self._select_quantized_onnx_file()
+            onnx_kwargs = {"file_name": onnx_file}
+            try:
+                return SentenceTransformer(
+                    self.multilingual_model_name,
+                    backend="onnx",
+                    model_kwargs=onnx_kwargs,
+                    local_files_only=True,
+                )
+            except (ImportError, ModuleNotFoundError) as exc:
+                logger.info(
+                    f"ONNX runtime/optimum unavailable ({exc}); falling back to PyTorch multilingual encoder."
+                )
+            except Exception as exc:  # noqa: BLE001
+                err_msg = str(exc)
+                if "optimum" in err_msg.lower() or "onnxruntime" in err_msg.lower() or "onnx backend" in err_msg.lower():
+                    logger.info(
+                        f"ONNX backend unavailable ({exc}); falling back to PyTorch multilingual encoder."
+                    )
+                else:
+                    try:
+                        return SentenceTransformer(
+                            self.multilingual_model_name,
+                            backend="onnx",
+                            model_kwargs=onnx_kwargs,
+                        )
+                    except Exception as retry_exc:  # noqa: BLE001
+                        logger.info(
+                            f"Quantized ONNX file '{onnx_file}' unavailable ({exc} / {retry_exc}); "
+                            f"falling back to PyTorch multilingual encoder."
+                        )
+
+        try:
+            return self._load_sentence_transformer(self.multilingual_model_name)
+        except Exception as exc:  # noqa: BLE001
+            logger.info(
+                f"Multilingual encoder unavailable ({exc}); falling back to default encoder '{self.model_name}'."
+            )
+            return self._get_model()
+
     def _get_multilingual_model(self):
-        """Lazy Dual-Encoder (Phương án A): trả về multilingual encoder nếu được bật hoặc đã nạp trong cache,
-        ngược lại fallback tức thì về encoder mặc định.
+        """Lazy Dual-Encoder (Subsystem A3): returns quantized ONNX INT8 / PyTorch multilingual encoder
+        on demand when enabled or cached, falling back cleanly to `_get_model()`.
         """
         if self._multilingual_model is not None:
             return self._multilingual_model
-        if self.multilingual_model_name in self._model_cache:
+        cache_key = (
+            f"{self.multilingual_model_name}::onnx"
+            if self.onnx_quantized
+            else self.multilingual_model_name
+        )
+        if cache_key in self._model_cache:
+            self._multilingual_model = self._model_cache[cache_key]
+            return self._multilingual_model
+        if self.multilingual_model_name in self._model_cache and not self.onnx_quantized:
             self._multilingual_model = self._model_cache[self.multilingual_model_name]
             return self._multilingual_model
         if not self.enable_multilingual_encoder:
             return self._get_model()
         with self._instance_lock:
-            if self.multilingual_model_name not in self._model_cache:
+            if cache_key not in self._model_cache:
                 try:
-                    logger.info(f"Loading multilingual sentence-transformers: {self.multilingual_model_name}")
-                    self._model_cache[self.multilingual_model_name] = self._load_sentence_transformer(
-                        self.multilingual_model_name
+                    logger.info(
+                        f"Loading multilingual encoder: {self.multilingual_model_name} "
+                        f"(onnx_quantized={self.onnx_quantized})"
                     )
+                    loaded = self._load_multilingual_encoder()
+                    if loaded is None:
+                        return self._get_model()
+                    self._model_cache[cache_key] = loaded
                 except Exception as e:  # noqa: BLE001
-                    logger.warning(f"Multilingual encoder fallback to default model: {e}")
+                    logger.info(f"Multilingual encoder fallback to default model: {e}")
                     return self._get_model()
-            self._multilingual_model = self._model_cache[self.multilingual_model_name]
+            self._multilingual_model = self._model_cache[cache_key]
         return self._multilingual_model
 
     def _encode(self, model: object, texts: object, **kwargs: object):
@@ -283,7 +354,12 @@ class SemanticMatcher:
                             enc_kwargs = dict(kwargs)
                             enc_kwargs.setdefault("show_progress_bar", False)
                             new_embs = model.encode(missing_unique, **enc_kwargs)  # type: ignore[attr-defined]
-                            if not isinstance(new_embs, torch.Tensor) or len(new_embs) != len(missing_unique):
+                            if not isinstance(new_embs, torch.Tensor):
+                                try:
+                                    new_embs = torch.as_tensor(new_embs)
+                                except Exception:  # noqa: BLE001
+                                    return new_embs
+                            if len(new_embs) != len(missing_unique):
                                 return new_embs
                             for idx, t in enumerate(missing_unique):
                                 cache_key = (model_id, t)
@@ -709,11 +785,19 @@ class SemanticMatcher:
                     source_abstract,
                 )
             )
+            src_combined_str = f"{source_title or ''} {source_abstract or ''}".strip()
+            ctx_is_vn = is_vietnamese_text(focal_sentence or raw_context_clean, min_diacritics=2)
+            src_is_vn = is_vietnamese_text(src_combined_str, min_diacritics=2)
+            if ctx_is_vn != src_is_vn and src_combined_str:
+                is_cross_lingual = True
+
             concept_overlap_score = 0.0
             if is_cross_lingual:
+                vn_side = (focal_sentence or raw_context_clean) if ctx_is_vn else src_combined_str
+                en_side = src_combined_str if ctx_is_vn else (focal_sentence or raw_context_clean)
                 concept_overlap_score, overlap_pairs = compute_cross_lingual_concept_overlap(
-                    focal_sentence or raw_context_clean,
-                    f"{source_title or ''} {source_abstract or ''}",
+                    vn_side,
+                    en_side,
                 )
                 for pair in overlap_pairs:
                     if pair not in bridged_concepts:
@@ -899,6 +983,119 @@ class SemanticMatcher:
                     min(0.95, final_sim + self.cross_lingual_sim_boost),
                 )
                 final_sim = calibrated_xl
+
+            # Hybrid Cross-Lingual Dense Fusion (Subsystem A3):
+            # Fuse `sim_bridged_en` (`final_sim`) with `sim_dense_multi` computed directly on the
+            # original cross-lingual text pair using the quantized ONNX INT8 / multilingual encoder.
+            if is_cross_lingual and use_batch:
+                multi_model = self._get_multilingual_model()
+                if multi_model is not None and multi_model is not model:
+                    try:
+                        multi_texts = [cited_context_trunc, source_title_trunc]
+                        m_has_abs = bool(source_abstract and source_abstract.strip())
+                        m_abs_sents: list[str] = []
+                        if m_has_abs and source_abstract:
+                            if len(source_abstract) > 512:
+                                m_trunc_abs = (
+                                    source_abstract[:300].strip()
+                                    + " ... "
+                                    + source_abstract[-200:].strip()
+                                )
+                            else:
+                                m_trunc_abs = self._truncate_text(source_abstract, max_length=512)
+                            multi_texts.append(m_trunc_abs)
+                            m_extracted = self._extract_sentences(source_abstract)
+                            if len(m_extracted) >= 1:
+                                m_abs_sents = m_extracted[:25]
+                                multi_texts.extend(m_abs_sents)
+
+                        m_focal_idx: int | None = None
+                        if focal_sentence and focal_sentence != cited_context_trunc:
+                            m_focal_idx = len(multi_texts)
+                            multi_texts.append(self._truncate_text(focal_sentence, max_length=384))
+
+                        m_embs = self._encode(
+                            multi_model,
+                            multi_texts,
+                            convert_to_tensor=True,
+                            normalize_embeddings=True,
+                            show_progress_bar=False,
+                        )
+                        if len(m_embs) == len(multi_texts):
+                            m_q_embs = [m_embs[0]]
+                            if m_focal_idx is not None:
+                                m_q_embs.append(m_embs[m_focal_idx])
+
+                            def _max_multi_cos(target_emb: Any) -> float:
+                                return max(
+                                    max(0.0, min(1.0, float((q_e @ target_emb).item())))
+                                    for q_e in m_q_embs
+                                )
+
+                            m_title_sim = _max_multi_cos(m_embs[1])
+                            m_best_ev_sent = source_title_trunc
+                            m_best_ev_score = m_title_sim
+                            m_abstract_sim = 0.0
+                            if m_has_abs:
+                                m_whole_abs_sim = _max_multi_cos(m_embs[2])
+                                m_best_ev_score = max(m_title_sim, m_whole_abs_sim)
+                                if m_abs_sents:
+                                    m_sent_sims = [
+                                        _max_multi_cos(m_embs[3 + idx])
+                                        for idx in range(len(m_abs_sents))
+                                    ]
+                                    m_best_idx = max(
+                                        range(len(m_sent_sims)), key=lambda i: m_sent_sims[i]
+                                    )
+                                    m_max_sent_sim = m_sent_sims[m_best_idx]
+                                    m_best_ev_sent = m_abs_sents[m_best_idx]
+                                    m_best_ev_score = m_max_sent_sim
+                                    m_abstract_sim = max(
+                                        m_whole_abs_sim,
+                                        0.65 * m_max_sent_sim + 0.35 * m_whole_abs_sim,
+                                    )
+                                else:
+                                    m_abstract_sim = m_whole_abs_sim
+                                    m_best_ev_sent = self._truncate_text(
+                                        source_abstract or "", max_length=280
+                                    )
+
+                            m_scores = [m_title_sim]
+                            m_weights = [0.3]
+                            if m_abstract_sim > 0:
+                                m_scores.append(m_abstract_sim)
+                                m_weights.append(0.5)
+                            if body_sim > 0:
+                                m_scores.append(body_sim)
+                                m_weights.append(0.2)
+                            m_tot_w = sum(m_weights)
+                            m_weighted = sum(
+                                s * (w / m_tot_w) for s, w in zip(m_scores, m_weights, strict=False)
+                            )
+                            if m_abstract_sim >= self.ALIGNMENT_THRESHOLD_HIGH:
+                                sim_dense_multi = max(
+                                    m_weighted, m_abstract_sim * 0.92, m_best_ev_score * 0.90
+                                )
+                            elif m_best_ev_score >= 0.65 and m_abstract_sim > 0:
+                                sim_dense_multi = max(m_weighted, m_best_ev_score * 0.88)
+                            else:
+                                sim_dense_multi = m_weighted
+
+                            if concept_overlap_score > 0.0 and sim_dense_multi >= 0.25:
+                                sim_dense_multi = max(
+                                    sim_dense_multi,
+                                    min(0.95, 0.60 * sim_dense_multi + 0.40 * concept_overlap_score),
+                                    min(0.95, sim_dense_multi + self.cross_lingual_sim_boost),
+                                )
+
+                            if m_best_ev_score > best_evidence_score and m_best_ev_sent:
+                                best_evidence_sentence = m_best_ev_sent
+                                best_evidence_score = m_best_ev_score
+                            title_sim = max(title_sim, m_title_sim)
+                            abstract_sim = max(abstract_sim, m_abstract_sim)
+                            final_sim = max(final_sim, sim_dense_multi)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.debug(f"Multilingual dense alignment skipped: {exc}")
 
             confidence, is_aligned = self._determine_alignment(final_sim)
             stance_label = self.check_claim_stance(

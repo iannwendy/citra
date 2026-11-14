@@ -839,6 +839,7 @@ class NeuroSymbolicChecker:
             citation_raw=citation.raw_text,
             citation_venue=citation.venue,
             citation_title=citation.title,
+            citation_type=citation.citation_type,
         )
         if (
             not citation.doi

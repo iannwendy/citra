@@ -329,8 +329,10 @@
     "resource": "URL Resource",
     "likelyVerified": "Likely Verified",
     "sourceMismatch": "Source Mismatch",
+    "incompleteReference": "Incomplete Reference",
     "verifiedDesc": "Citation verified successfully through academic databases. The reference exists and metadata matches.",
     "metadataErrorDesc": "Citation found but metadata (author, title, year, venue) doesn't match the database record.",
+    "incompleteReferenceDesc": "Citation lacks required bibliographic fields (author, publication year, or academic venue) rather than being fabricated.",
     "suspectedHallucinationDesc": "Citation appears to be fabricated or doesn't exist in any academic database. This may indicate an integrity issue.",
     "unresolvedDesc": "Insufficient evidence to determine citation validity. Manual review recommended.",
     "resourceDesc": "Citation is a URL/web resource. Not verified through academic databases."

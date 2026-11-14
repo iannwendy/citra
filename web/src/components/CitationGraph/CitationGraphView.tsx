@@ -253,6 +253,7 @@ export function CitationGraphView({
                         {viewMode !== 'integrity' && (
                           <VerdictBadge
                             verdict={isUrlResource(v) ? 'resource' : v.label}
+                            triggeredRules={v.triggered_rules}
                             size="sm"
                           />
                         )}

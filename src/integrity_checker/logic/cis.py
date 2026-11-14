@@ -198,15 +198,30 @@ class CISCalculator:
         n = len(academic_verdicts)
 
         verified = sum(1 for v in academic_verdicts if v.label == ValidationLabel.VERIFIED)
-        meta_err = sum(1 for v in academic_verdicts if v.label == ValidationLabel.METADATA_ERROR)
+        incomplete_meta_err = sum(
+            1
+            for v in academic_verdicts
+            if v.label == ValidationLabel.METADATA_ERROR
+            and "R-INCOMPLETE-METADATA" in (v.triggered_rules or [])
+        )
+        other_meta_err = sum(
+            1
+            for v in academic_verdicts
+            if v.label == ValidationLabel.METADATA_ERROR
+            and "R-INCOMPLETE-METADATA" not in (v.triggered_rules or [])
+        )
         halluc = sum(1 for v in academic_verdicts if v.label == ValidationLabel.SUSPECTED_HALLUCINATION)
         n_academic = n
 
         # 1. Verified ratio — tỉ lệ academic citations được verify
         verified_ratio = verified / n_academic if n_academic > 0 else 0.0
 
-        # 2. Metadata accuracy = 1 - (METADATA_ERROR + SUSPECTED) / academic citations
-        metadata_accuracy = max(0.0, 1.0 - (meta_err + halluc) / n_academic) if n_academic > 0 else 0.0
+        # 2. Metadata accuracy: R-INCOMPLETE-METADATA receives 0.25 credit (0.75 penalty)
+        #    compared to 0.00 credit (1.00 penalty) for SUSPECTED_HALLUCINATION / hard mismatches.
+        effective_meta_penalty = other_meta_err + 0.75 * incomplete_meta_err + halluc
+        metadata_accuracy = (
+            max(0.0, 1.0 - effective_meta_penalty / n_academic) if n_academic > 0 else 0.0
+        )
 
         # 3. In-text ↔ bib consistency — TÍNH TỪ CitationLinker (không còn stub)
         # 2 strategies (ưu tiên linking_result nếu có):

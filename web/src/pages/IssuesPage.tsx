@@ -148,6 +148,28 @@ function IssueCard({
         : 'No matching publication was found in any scholarly database.';
     }
     if (v.label === 'metadata_error') {
+      if ((v.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')) {
+        if (v.mismatched_fields.length > 0) {
+          const fieldViMap: Record<string, string> = {
+            author: 'tác giả',
+            authors: 'tác giả',
+            year: 'năm xuất bản',
+            title: 'tiêu đề',
+            venue: 'nơi công bố',
+            doi: 'DOI',
+          };
+          const localizedFields =
+            lang === 'vi'
+              ? v.mismatched_fields.map((f) => fieldViMap[f.toLowerCase()] || f)
+              : v.mismatched_fields;
+          return lang === 'vi'
+            ? `Thiếu quy cách trích dẫn (thiếu ${localizedFields.join(', ')})`
+            : `Incomplete bibliographic reference (missing ${v.mismatched_fields.join(', ')})`;
+        }
+        return lang === 'vi'
+          ? 'Thiếu quy cách trích dẫn (thiếu tác giả, năm xuất bản hoặc nơi công bố).'
+          : 'Incomplete bibliographic reference (missing author, year, or venue).';
+      }
       if (v.mismatched_fields.length > 0) {
         const fieldViMap: Record<string, string> = {
           author: 'tác giả',
@@ -191,6 +213,7 @@ function IssueCard({
             </span>
             <VerdictBadge
               verdict={isUrlResource(verdict) ? 'resource' : verdict.label}
+              triggeredRules={verdict.triggered_rules}
               size="sm"
             />
             {canViewDeep && (

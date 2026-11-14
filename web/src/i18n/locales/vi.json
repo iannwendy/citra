@@ -329,8 +329,10 @@
     "resource": "Liên kết Web",
     "likelyVerified": "Có thể đã xác minh",
     "sourceMismatch": "Nguồn không khớp",
+    "incompleteReference": "Thiếu quy cách trích dẫn",
     "verifiedDesc": "Trích dẫn đã được xác minh thành công qua cơ sở dữ liệu học thuật. Tài liệu tham khảo tồn tại và khớp metadata.",
     "metadataErrorDesc": "Tìm thấy ấn phẩm nhưng metadata (tác giả, tiêu đề, năm, nơi xuất bản) không khớp với bản ghi cơ sở dữ liệu.",
+    "incompleteReferenceDesc": "Mục tham khảo thiếu các trường bắt buộc (tác giả, năm xuất bản hoặc nơi công bố) chứ không phải nguồn do AI bịa đặt.",
     "suspectedHallucinationDesc": "Trích dẫn có dấu hiệu bịa đặt hoặc không tồn tại trong bất kỳ cơ sở dữ liệu học thuật nào.",
     "unresolvedDesc": "Không đủ bằng chứng để kết luận tính hợp lệ của trích dẫn. Khuyến nghị kiểm tra thủ công.",
     "resourceDesc": "Trích dẫn là liên kết URL/tài nguyên web, không xác minh qua cơ sở dữ liệu học thuật."

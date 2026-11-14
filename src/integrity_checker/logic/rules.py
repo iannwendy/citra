@@ -21,10 +21,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
+from integrity_checker.logic.completeness import assess_bibliographic_completeness
 from integrity_checker.matching.fuzzy import FuzzyMatcher
 from integrity_checker.matching.venue_normalizer import VenueNormalizer
 from integrity_checker.models.source import SourceResult
@@ -82,7 +83,7 @@ _ISO4_PURE_STEM_RE = re.compile(
     r"(?:bio|geo|nano)?eng|"
     r"(?:bio|nano)?technol|"
     r"(?:bio|nano|tele|vet)?med|"
-    r"manage?|convers|resour|biorefin|sustain|env(?:iron)?|planet|clim|conserv|biodivers|pollut|bioenerg|hydroelectr|"
+    r"manage?|convers|resour|biorefin|sustain|env(?:iron)?|clim|conserv|biodivers|pollut|bioenerg|hydroelectr|"
     r"transduct|deliv|transl|ther(?:ap)?|chemother|immunother|diag|progn|prev|clin|surg|anesthesiol|emerg|"
     r"pharm(?:acol|aceut|acokinet)?|toxicol|ecotoxicol|mutagen|carcinog|"
     r"pathol|oncol|canc|neurol|neurosci|neurosurg|cardiol|vasc|hematol|pulm|respir|thorac|gastroenterol|hepatol|"
@@ -95,30 +96,20 @@ _ISO4_PURE_STEM_RE = re.compile(
     r"(?:bio|macro|supra)?mol|(?:bio|electro|immuno|micro|radio|thermo)?anal|"
     r"(?:bio|in|metallo)?org|organomet|anorg|allg|"
     r"quant|kinet|thermodyn|calorim|heterocycl|aliphat|aromat|fluor|pept|carbohydr|glycosci|nucleos|nucleot|"
-    r"microelectron|optoelectron|electron|semicond|supercond|dielectr|ferroelectr|piezoelectr|spintron|"
+    r"microelectron|optoelectron|semicond|supercond|dielectr|ferroelectr|piezoelectr|spintron|"
     r"luminesc|fluoresc|spectrosc|spectrom|chromatogr|electrophor|microsc|tomogr|crystallogr|"
-    r"metall|miner|ceram|corros|tribol|lubr|adhes|concr|rheol|"
+    r"metall|ceram|corros|tribol|lubr|adhes|concr|rheol|"
     r"metrol|instrum|meas|sens|actuat|mechatron|aerosp|automat|veh|hydraul|therm|propuls|nucl|radiat|isot|"
     r"ecol|geol|geotech|paleontol|stratigr|sedimentol|seismol|hydrol|limnol|oceanogr|meteorol|climatol|atmos|astron|"
     r"sci|lett|rev|res|dev|innov|exp|theor|comput|simulat|optim|imag|recognit|intell|mach|"
     r"appl|ind|manuf|constr|archit|transp|logist|struct|syst|autom|acoust|vib|fract|fatig|aerodyn|hydrodyn|turbul|transf|refrig|cryog|"
     r"alg|geom|topol|calc|equat|probab|stoch|combinat|numer|approxim|cybernet|cryptol|softw|parall|distrib|multimed|"
     r"sociol|anthropol|archaeol|demogr|geogr|econ|econometr|financ|admin|strateg|entrep|polit|publ|diplom|jurisp|legis|criminol|educ|pedagog|curric|hist|philos|libr|"
-    r"interf|sep|purif|hazard|dis|discov|funct|healthc|annu|acc|coord|memb|antioxid|cryst|des|simul|cognit|"
+    r"interf|sep|purif|dis|discov|funct|healthc|annu|acc|coord|memb|antioxid|cryst|des|simul|cognit|"
     r"theranost|regener|transfus|palliat|marit|aviat|auton|decis|reliab|"
     r"soc|assoc|acad|inst|found|univ|dept|sect|ser|suppl|ed|pt|"
     r"trans|commun|comm|proc|ann|acta|zeit|monogr|symp|conf|cong|worksh|acct|"
     r"natl|int|eur|am|amer|jpn|aust|russ|brit|br|ger|fr|ital|kor|helv|scand|gazz|roy|inf"
-    r")$",
-    flags=re.IGNORECASE,
-)
-
-_ISO4_CONTEXT_STEM_RE = re.compile(
-    r"^(?:"
-    r"target|process|bioprocess|photon|plasmon|robot|taxon|mineral|petrol|organ|linguist|"
-    r"coat|surf|arch|bull|bus|account|dent|ferment|span|front|cent|chin|can|mar|pol|vet|bot|"
-    r"batt|vac|discuss|react|interact|inform|infect|refract|diffract|combust|convect|opt|math|stat|"
-    r"stud|prog|adv|curr|opin|perspect|rep|rec|mem|lit|fed|div|oper|rel|saf|renew|clean|prod|maint|signal"
     r")$",
     flags=re.IGNORECASE,
 )
@@ -137,34 +128,18 @@ _ISO4_ORTHO_SUFFIX_RE = re.compile(
     flags=re.IGNORECASE,
 )
 
-_SINGLE_WORD_UNABBREV_VENUES: frozenset[str] = frozenset(
-    {"chem", "stat", "cell", "gut", "eye", "age", "lab", "air"}
-)
-
 
 def _is_iso4_abbreviated_stem(stem: str, right_clean: str | None = None) -> bool:
     """Return True if ``stem`` is an LTWA/CASSI abbreviated stem in a Title-Case clause."""
     s = (stem or "").strip().rstrip(".")
     if not s:
         return False
+    if right_clean is not None and " " not in right_clean and not right_clean.endswith("."):
+        return False
     if _ISO4_PURE_STEM_RE.fullmatch(s):
         return True
     if len(s) >= 4 and _ISO4_ORTHO_SUFFIX_RE.search(s):
         return True
-    if _ISO4_CONTEXT_STEM_RE.fullmatch(s):
-        if right_clean is None or "." in right_clean:
-            return True
-        right_parts = right_clean.split()
-        right_last = right_parts[-1].rstrip(".") if right_parts else ""
-        if (
-            right_last
-            and not (len(right_parts) == 1 and right_last.lower() in _SINGLE_WORD_UNABBREV_VENUES)
-            and (
-                bool(_ISO4_PURE_STEM_RE.fullmatch(right_last))
-                or (len(right_last) >= 4 and bool(_ISO4_ORTHO_SUFFIX_RE.search(right_last)))
-            )
-        ):
-            return True
     return False
 
 
@@ -211,6 +186,13 @@ def _is_unquoted_title_clause_before_dot(left_full: str, right: str | None = Non
     ):
         return True
 
+    if (
+        right_clean is not None
+        and re.search(r"\bEarth\s+Planet\.?$", clause, flags=re.IGNORECASE)
+        and re.match(r"^Sci\b", right_clean, flags=re.IGNORECASE)
+    ):
+        return False
+
     last_bare = tokens[-1].rstrip(".")
     if not last_bare:
         return False
@@ -239,11 +221,15 @@ def _is_unquoted_title_clause_before_dot(left_full: str, right: str | None = Non
     return len(unabbrev_prior) >= 1
 
 
-def _has_sentence_period_in_venue(venue: str | None) -> bool:
+def _has_sentence_period_in_venue(
+    venue: str | None, citation_raw: str | None = None
+) -> bool:
     """Return True if ``venue`` structurally contains an unquoted sentence/title before ``. ``."""
     v = (venue or "").strip()
     if not v or ". " not in v:
         return False
+    if not v.endswith(".") and citation_raw and f"{v}." in citation_raw:
+        v = f"{v}."
     for m_dot in re.finditer(r"\.\s+(?=[A-Z])", v):
         left_with_dot = v[: m_dot.start() + 1].strip()
         right = v[m_dot.end() :].strip()
@@ -1123,11 +1109,12 @@ class SymbolicRules:
         api_exhausted: bool = False,
         used_local_db: bool = False,
         # NEW v1.3: Citation info for METADATA_ERROR detection
-        citation_authors: list[str] | None = None,
-        citation_year: str | None = None,
+        citation_authors: list[Any] | None = None,
+        citation_year: str | int | None = None,
         citation_raw: str | None = None,
         citation_venue: str | None = None,
         citation_title: str | None = None,
+        citation_type: Any = None,
     ) -> RuleOutcome:
         """Apply symbolic rules and enforce retraction / clear venue conflict post-conditions."""
         outcome = self._apply_core(
@@ -1144,9 +1131,15 @@ class SymbolicRules:
             citation_raw=citation_raw,
             citation_venue=citation_venue,
             citation_title=citation_title,
+            citation_type=citation_type,
         )
         best_cand = source.best_candidate() if source and source.candidates else None
-        if citation_venue and best_cand and best_cand.venue:
+        if (
+            citation_venue
+            and best_cand
+            and best_cand.venue
+            and "R-INCOMPLETE-METADATA" not in outcome.triggered_rules
+        ):
             _non_venue_pat = re.compile(
                 r"\b(?:arxiv|corr|preprint|biorxiv|medrxiv|ssrn|hal|zenodo|openreview|"
                 r"researchgate|sciencedirect|springer|elsevier|wiley|taylor|francis|"
@@ -1210,6 +1203,8 @@ class SymbolicRules:
                 )
         return outcome
 
+    evaluate = apply
+
     def _apply_core(
         self,
         features: MatchFeatures,
@@ -1222,11 +1217,12 @@ class SymbolicRules:
         api_exhausted: bool = False,
         used_local_db: bool = False,
         # NEW v1.3: Citation info for METADATA_ERROR detection
-        citation_authors: list[str] | None = None,
-        citation_year: str | None = None,
+        citation_authors: list[Any] | None = None,
+        citation_year: str | int | None = None,
         citation_raw: str | None = None,
         citation_venue: str | None = None,
         citation_title: str | None = None,
+        citation_type: Any = None,
     ) -> RuleOutcome:
         """Apply rules theo thứ tự ưu tiên:
             0. FAKE-URL → SUSPECTED_HALLUCINATION (high priority, pre-flight)
@@ -1416,6 +1412,18 @@ class SymbolicRules:
                 if extracted_u.lower().startswith(("http://", "https://")) and "doi.org/" not in extracted_u.lower():
                     citation_url = extracted_u
 
+        completeness = assess_bibliographic_completeness(
+            citation_raw=citation_raw or getattr(source, "citation_raw", None),
+            citation_authors=citation_authors,
+            citation_year=citation_year,
+            citation_venue=citation_venue,
+            citation_doi=citation_doi,
+            citation_url=citation_url,
+            url_status=url_status,
+            citation_type=citation_type,
+            citation_title=citation_title,
+        )
+
         if not source.candidates or not source.best_candidate():
             if url_status == "dead_link" and not is_known_author:
                 status_detail = f"HTTP {url_status_code}" if url_status_code else "unreachable/DNS error"
@@ -1509,6 +1517,43 @@ class SymbolicRules:
                     if s not in _NON_LIVE_SOURCES
                 ]
 
+            rate_limited_sources = [
+                s
+                for s, err in (source.sources_failed or {}).items()
+                if any(
+                    marker in (err or "").lower()
+                    for marker in ("429", "rate limit", "backoff")
+                )
+            ]
+
+            if (
+                completeness.is_incomplete
+                and (len(clean_empty_sources) >= 1 or len(verified_sources) >= 1)
+                and not rate_limited_sources
+                and not (citation_doi and str(citation_doi).strip())
+                and not is_known_author
+            ):
+                is_non_journal_inc, _ = _is_non_journal_or_unindexed_source(
+                    citation_raw or source.citation_raw,
+                    citation_url=citation_url,
+                    citation_doi=citation_doi,
+                    citation_authors=citation_authors,
+                )
+                if not is_non_journal_inc:
+                    missing_f = list(completeness.missing_fields or ["authors", "year", "venue"])
+                    return RuleOutcome(
+                        label=ValidationLabel.METADATA_ERROR,
+                        confidence=max(0.0, 0.80 - style_penalty),
+                        reasoning=(
+                            f"Incomplete bibliographic reference missing {', '.join(missing_f)} "
+                            f"and lacking any resolvable identifier (DOI/URL/ISBN/arXiv). "
+                            f"Classified as formatting/completeness error rather than AI hallucination."
+                        ),
+                        triggered_rules=["R-INCOMPLETE-METADATA"],
+                        mismatched_fields=missing_f,
+                        style_penalty=style_penalty,
+                    )
+
             has_substantive_meta = _has_substantive_citation_metadata(
                 citation_raw,
                 source.citation_raw,
@@ -1577,15 +1622,6 @@ class SymbolicRules:
                     mismatched_fields=["title"],
                     style_penalty=style_penalty,
                 )
-
-            rate_limited_sources = [
-                s
-                for s, err in (source.sources_failed or {}).items()
-                if any(
-                    marker in (err or "").lower()
-                    for marker in ("429", "rate limit", "backoff")
-                )
-            ]
 
             if source.sources_failed and not source.sources_succeeded:
                 rules_out = ["R-FAIL-ALL"]
@@ -1667,7 +1703,7 @@ class SymbolicRules:
         _norm_cit_venue = (citation_venue or "").strip().rstrip(".,;").lower()
         is_titleless_journal_ref = (
             bool(_norm_cit_venue)
-            and not _has_sentence_period_in_venue(citation_venue)
+            and not _has_sentence_period_in_venue(citation_venue, _eff_raw)
             and not _raw_has_unparsed_title_before_venue(_eff_raw, citation_venue)
             and (not _norm_cit_title or _norm_cit_title == _norm_cit_venue)
         )
@@ -2669,6 +2705,36 @@ class SymbolicRules:
                 mismatched_fields=[],
                 style_penalty=0.0,
             )
+
+        # --- Rule 4f (Subsystem A1): Incomplete bibliography entry with noisy low-similarity hit (<0.78) ---
+        if (
+            completeness.is_incomplete
+            and title_sim < 0.78
+            and not doi_match
+            and not has_doi_conflict
+            and _has_live_source(source, verified_sources)
+            and not is_known_author
+        ):
+            is_non_journal_inc, _ = _is_non_journal_or_unindexed_source(
+                citation_raw or source.citation_raw,
+                citation_url=citation_url,
+                citation_doi=citation_doi,
+                citation_authors=citation_authors,
+            )
+            if not is_non_journal_inc:
+                missing_f = list(completeness.missing_fields or ["authors", "year", "venue"])
+                return RuleOutcome(
+                    label=ValidationLabel.METADATA_ERROR,
+                    confidence=max(0.0, 0.80 - style_penalty),
+                    reasoning=(
+                        f"Incomplete bibliographic reference missing {', '.join(missing_f)}; "
+                        f"weak candidate match (title_sim={title_sim:.2f} < 0.78) reflects missing "
+                        f"citation metadata rather than a fabricated academic source."
+                    ),
+                    triggered_rules=["R-INCOMPLETE-METADATA"],
+                    mismatched_fields=missing_f,
+                    style_penalty=style_penalty,
+                )
 
         # --- Rule 5: Border zone -> UNRESOLVED (abstention) ---
         is_semantic_only_noise = bool(

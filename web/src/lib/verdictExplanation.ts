@@ -126,6 +126,12 @@ const RULE_LABELS: Record<string, string> = {
   'R-CROSS-LINGUAL-TITLE-MATCH': 'Translated title matches original publication semantically — original foreign-language title must be preserved per TDTU citation rules',
   'R-CONTENT-MISMATCH': 'The citation content does not match the publication',
   'R-STYLE-INCONSISTENT': 'The citation format differs from the document style',
+  'R-INCOMPLETE-METADATA': 'Incomplete bibliographic reference — missing required author, year, or publication venue',
+  'R-URL-CONTENT-MISMATCH': 'Cited web page title/metadata does not match the claimed citation title',
+  'R-VN-STANDARD-VERIFIED': 'Vietnamese national technical standard or regulation (TCVN/QCVN) verified',
+  'R-VN-TEXTBOOK-VERIFIED': 'Canonical Vietnamese university textbook or monograph verified',
+  'R-YEAR-MISMATCH': 'Publication year in the citation differs from the canonical registry record',
+  'R-DOI-METADATA-MISMATCH': 'Cited DOI differs from the canonical DOI of the matched publication',
 };
 
 const RULE_LABELS_VI: Record<string, string> = {
@@ -196,6 +202,12 @@ const RULE_LABELS_VI: Record<string, string> = {
   'R-CROSS-LINGUAL-TITLE-MATCH': 'Tiêu đề dịch tiếng Việt khớp ngữ nghĩa với ấn phẩm gốc — cần giữ nguyên tiêu đề tiếng nước ngoài theo quy định trích dẫn TDTU',
   'R-CONTENT-MISMATCH': 'Nội dung khẳng định trong bài không khớp với nội dung thực tế của ấn phẩm được trích dẫn',
   'R-STYLE-INCONSISTENT': 'Định dạng trích dẫn không đồng nhất với chuẩn trích dẫn chung của tài liệu',
+  'R-INCOMPLETE-METADATA': 'Thiếu quy cách trích dẫn — thiếu tác giả, năm xuất bản hoặc nơi công bố',
+  'R-URL-CONTENT-MISMATCH': 'Tiêu đề hoặc metadata của trang URL không khớp với tiêu đề trích dẫn',
+  'R-VN-STANDARD-VERIFIED': 'Đã xác minh Tiêu chuẩn / Quy chuẩn Kỹ thuật Quốc gia Việt Nam (TCVN/QCVN)',
+  'R-VN-TEXTBOOK-VERIFIED': 'Đã xác minh giáo trình đại học hoặc sách chuyên khảo chuẩn tại Việt Nam',
+  'R-YEAR-MISMATCH': 'Năm xuất bản trong trích dẫn sai lệch so với bản ghi học thuật chính thức',
+  'R-DOI-METADATA-MISMATCH': 'Mã DOI trích dẫn sai lệch so với mã DOI chính thức của ấn phẩm',
 };
 
 export function getSourceDisplayName(source: string, lang?: 'en' | 'vi'): string {
@@ -334,6 +346,22 @@ export function getVerdictExplanation(verdict: Verdict, lang?: 'en' | 'vi'): str
         return `Tìm thấy ấn phẩm khớp trên ${sources.join(' và ')}. Thông tin ${matchedFields} nhất quán với trích dẫn.${linkNoteVi}${retractionNoteVi}`;
 
       case 'metadata_error':
+        if ((verdict.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')) {
+          const missingDetail =
+            (verdict.mismatched_fields ?? []).length > 0 ? ` (thiếu ${fields})` : '';
+          return (
+            `Thiếu quy cách trích dẫn${missingDetail}: mục tham khảo chưa đủ thông tin định danh học thuật (tác giả, năm xuất bản, nơi công bố hoặc DOI/URL). Đây là lỗi trình bày trích dẫn của người viết chứ không phải nguồn bịa đặt — vui lòng bổ sung đầy đủ thông tin.` +
+            linkNoteVi +
+            retractionNoteVi
+          );
+        }
+        if ((verdict.triggered_rules ?? []).includes('R-URL-CONTENT-MISMATCH')) {
+          return (
+            `Nội dung hoặc tiêu đề thực tế của trang URL đính kèm không khớp với tiêu đề tài liệu được trích dẫn. Vui lòng kiểm tra lại đường dẫn hoặc tiêu đề trích dẫn.` +
+            linkNoteVi +
+            retractionNoteVi
+          );
+        }
         if (
           (verdict.triggered_rules ?? []).includes('R-CROSS-LINGUAL-TITLE-MATCH') ||
           verdict.features?.cross_lingual_title_detected
@@ -416,6 +444,22 @@ export function getVerdictExplanation(verdict: Verdict, lang?: 'en' | 'vi'): str
       return `We found a matching publication in ${sources.join(' and ')}. ${matchedFields} are consistent with the citation.${linkNote}${retractionNote}`;
 
     case 'metadata_error':
+      if ((verdict.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')) {
+        const missingDetail =
+          (verdict.mismatched_fields ?? []).length > 0 ? ` (missing ${fields})` : '';
+        return (
+          `Incomplete bibliographic reference${missingDetail}: this entry lacks required scholarly identifiers (author, publication year, academic venue, or DOI/URL). This indicates incomplete formatting rather than a fabricated source — please complete the citation details.` +
+          linkNote +
+          retractionNote
+        );
+      }
+      if ((verdict.triggered_rules ?? []).includes('R-URL-CONTENT-MISMATCH')) {
+        return (
+          `The live web page title or metadata at the cited URL does not match the claimed citation title. Please verify the link or citation title.` +
+          linkNote +
+          retractionNote
+        );
+      }
       if (
         (verdict.triggered_rules ?? []).includes('R-CROSS-LINGUAL-TITLE-MATCH') ||
         verdict.features?.cross_lingual_title_detected

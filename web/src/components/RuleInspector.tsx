@@ -839,6 +839,79 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
     ],
     conclusion: "VERIFIED",
   },
+  "R-INCOMPLETE-METADATA": {
+    id: "R-INCOMPLETE-METADATA",
+    name: "Incomplete Bibliographic Reference",
+    nameVi: "Thiếu quy cách trích dẫn học thuật",
+    description: "Reference entry lacks required bibliographic fields (author, publication year, academic venue, or identifier) rather than being fabricated",
+    descriptionVi: "Mục tài liệu tham khảo thiếu các trường bắt buộc (tác giả, năm xuất bản, nơi công bố hoặc mã định danh) chứ không phải nguồn bịa đặt",
+    conditions: [
+      { field: "is_incomplete", operator: "=", value: "true" },
+      { field: "has_resolvable_id", operator: "=", value: "false" },
+      { field: "title_sim_max", operator: "<", value: "0.78" },
+    ],
+    conclusion: "METADATA_ERROR",
+  },
+  "R-URL-CONTENT-MISMATCH": {
+    id: "R-URL-CONTENT-MISMATCH",
+    name: "Cited URL Page Title / Metadata Mismatch",
+    nameVi: "Nội dung trang URL không khớp tiêu đề trích dẫn",
+    description: "Live HTML title or citation metadata at the cited URL does not match the claimed title",
+    descriptionVi: "Tiêu đề HTML hoặc metadata học thuật trên trang URL đính kèm không khớp với tiêu đề được trích dẫn",
+    conditions: [
+      { field: "url_status", operator: "=", value: "alive" },
+      { field: "html_meta_title_sim", operator: "<", value: "0.20" },
+    ],
+    conclusion: "METADATA_ERROR",
+  },
+  "R-VN-STANDARD-VERIFIED": {
+    id: "R-VN-STANDARD-VERIFIED",
+    name: "Vietnamese National Technical Standard Verified (TCVN/QCVN)",
+    nameVi: "Xác minh Tiêu chuẩn / Quy chuẩn Kỹ thuật Quốc gia (TCVN/QCVN)",
+    description: "Verified Vietnamese technical standard or regulation against the TCVN/QCVN registry",
+    descriptionVi: "Đã xác minh Tiêu chuẩn hoặc Quy chuẩn Kỹ thuật Quốc gia đối chiếu với danh mục TCVN/QCVN chuẩn",
+    conditions: [
+      { field: "source", operator: "=", value: "vn_tech_standard" },
+      { field: "standard_code_match", operator: "=", value: "true" },
+    ],
+    conclusion: "VERIFIED",
+  },
+  "R-VN-TEXTBOOK-VERIFIED": {
+    id: "R-VN-TEXTBOOK-VERIFIED",
+    name: "Vietnamese University Textbook Verified",
+    nameVi: "Xác minh Giáo trình Đại học Việt Nam chuẩn",
+    description: "Verified canonical Vietnamese university textbook or monograph against the curated textbook registry",
+    descriptionVi: "Đã xác minh giáo trình đại học hoặc sách chuyên khảo tiếng Việt đối chiếu với danh mục chuẩn",
+    conditions: [
+      { field: "source", operator: "=", value: "vn_textbook_registry" },
+      { field: "title_sim_fuzzy", operator: ">=", value: "0.88" },
+    ],
+    conclusion: "VERIFIED",
+  },
+  "R-YEAR-MISMATCH": {
+    id: "R-YEAR-MISMATCH",
+    name: "Publication Year Discrepancy",
+    nameVi: "Sai lệch năm xuất bản",
+    description: "Matched publication found, but the cited publication year differs from the canonical registry record",
+    descriptionVi: "Tìm thấy ấn phẩm tương ứng nhưng năm xuất bản trích dẫn không khớp với bản ghi học thuật chính thức",
+    conditions: [
+      { field: "title_sim_fuzzy", operator: ">=", value: "0.85" },
+      { field: "year_match", operator: "=", value: "false" },
+    ],
+    conclusion: "METADATA_ERROR",
+  },
+  "R-DOI-METADATA-MISMATCH": {
+    id: "R-DOI-METADATA-MISMATCH",
+    name: "Cited DOI Differs From Canonical Record DOI",
+    nameVi: "Mã DOI trích dẫn sai lệch với bản ghi gốc",
+    description: "Publication title and authors match, but the cited DOI differs from the canonical registry DOI",
+    descriptionVi: "Tiêu đề và tác giả khớp với ấn phẩm thực nhưng mã DOI trích dẫn khác với mã DOI chính thức",
+    conditions: [
+      { field: "title_sim_fuzzy", operator: ">=", value: "0.85" },
+      { field: "doi_exact_match", operator: "=", value: "false" },
+    ],
+    conclusion: "METADATA_ERROR",
+  },
 }
 
 function getVerdictColorClass(conclusion: string): {

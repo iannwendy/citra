@@ -26,6 +26,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir "onnxruntime>=1.18,<2.0" "optimum[onnxruntime]>=1.20,<2.0" && \
     mkdir -p /opt/mupdf-libs && \
     cp -a /usr/lib/*-linux-gnu/libmupdf* \
           /usr/lib/*-linux-gnu/libfreetype* \
@@ -87,9 +88,10 @@ RUN mkdir -p data/essays data/essays/uploads data/avatars data/ground_truth data
              /home/appuser/.cache/huggingface /home/appuser/.cache/transformers && \
     chown -R appuser:appgroup /app data/ /home/appuser/.cache
 
-# Pre-download Sentence-BERT model (all-MiniLM-L6-v2) trước khi copy source để giữ Docker layer cache
+# Pre-download Sentence-BERT models (all-MiniLM-L6-v2 + quantized ONNX INT8 multilingual encoder)
 USER appuser
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+RUN python -c "import platform; from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2'); arch = platform.machine().lower(); fn = 'onnx/model_qint8_arm64.onnx' if arch in ('arm64', 'aarch64') else 'onnx/model_qint8_avx2.onnx'; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2', backend='onnx', model_kwargs={'file_name': fn})" || \
+    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
 
 # Copy source (chỉ invalidate layer nhẹ cuối cùng khi code thay đổi)
 USER root
