@@ -331,6 +331,7 @@ export interface SandboxInstantVerifyResponse {
     metadata_error: number;
     suspected_hallucination: number;
     layer1_linking_issues: number;
+    incomplete_metadata?: number;
   };
   results: SandboxInstantVerdictItem[];
   remediation?: RemediatedBibliographyResponse;
@@ -466,6 +467,7 @@ export interface EssayStats {
   suspected_hallucination: number;
   unresolved: number;
   resource: number;
+  incomplete_metadata?: number;
 }
 
 // --- Phase 6.1: Cryptographic Shareable Verification Links & Public Audit Receipt ---
@@ -520,6 +522,7 @@ export interface SharedEssayReport {
     suspected_hallucination: number;
     unresolved: number;
     resource: number;
+    incomplete_metadata?: number;
   };
   verdicts: SharedVerdictItem[];
 }
@@ -531,6 +534,9 @@ export interface CacheStats {
   by_source: Record<string, number>;
   total_hits: number;
   avg_hit_count: number;
+  local_papers_count?: number;
+  local_queries_count?: number;
+  local_hit_rate_percent?: number;
 }
 
 export interface CacheClearResponse {
@@ -1103,6 +1109,20 @@ export interface PendingVerdict {
   validated_at: string;
 }
 
+export type CircuitBreakerState = 'closed' | 'open' | 'half_open';
+
+export interface UpstreamSourceHealth {
+  state: CircuitBreakerState;
+  consecutive_failures: number;
+  total_calls: number;
+  success_count: number;
+  timeout_count: number;
+  http_429_count: number;
+  http_5xx_count: number;
+  ema_latency_ms: number;
+  open_remaining_seconds: number;
+}
+
 export interface SystemHealth {
   status: string;
   totals: {
@@ -1112,6 +1132,7 @@ export interface SystemHealth {
     students: number;
     essays: number;
     verdicts: number;
+    incomplete_metadata?: number;
   };
   verdict_label_counts: Record<string, number>;
   cache_stats: Record<string, unknown>;
@@ -1119,6 +1140,8 @@ export interface SystemHealth {
   services?: Record<string, string | { status?: string; detail?: string }>;
   parser_mode?: string;
   grobid_available?: boolean;
+  /** Per-provider circuit breaker & upstream API telemetry (Subsystem B4). */
+  upstream_sources?: Record<string, UpstreamSourceHealth>;
 }
 
 export interface AuditLogEntry {

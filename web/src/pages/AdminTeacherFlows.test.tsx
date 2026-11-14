@@ -236,6 +236,185 @@ describe('SystemHealthPage', () => {
     expect(statsPanel.textContent).not.toContain('local_papers_count');
     expect(screen.getByText('10 bản ghi tổng cộng')).toBeDefined();
   });
+
+  it('renders per-provider circuit breaker states, cooldown, EMA latency, HTTP 429, timeout/5xx, and persistent cache telemetry in EN', async () => {
+    vi.spyOn(api, 'getSystemHealth').mockResolvedValue(
+      health({
+        cache_stats: {
+          total: 128145,
+          total_hits: 410,
+          avg_hit_count: 3.1,
+          local_papers_count: 128000,
+          local_queries_count: 50,
+          local_hit_rate_percent: 88.2,
+          by_source: { openalex: 95, crossref: 50, arxiv: 0 },
+        },
+        upstream_sources: {
+          openalex: {
+            state: 'closed',
+            consecutive_failures: 0,
+            total_calls: 120,
+            success_count: 118,
+            timeout_count: 1,
+            http_429_count: 0,
+            http_5xx_count: 1,
+            ema_latency_ms: 142.5,
+            open_remaining_seconds: 0,
+          },
+          crossref: {
+            state: 'open',
+            consecutive_failures: 4,
+            total_calls: 45,
+            success_count: 38,
+            timeout_count: 2,
+            http_429_count: 5,
+            http_5xx_count: 1,
+            ema_latency_ms: 860.2,
+            open_remaining_seconds: 32.5,
+          },
+          semanticscholar: {
+            state: 'half_open',
+            consecutive_failures: 4,
+            total_calls: 20,
+            success_count: 15,
+            timeout_count: 3,
+            http_429_count: 2,
+            http_5xx_count: 0,
+            ema_latency_ms: 512,
+            open_remaining_seconds: 0,
+          },
+        },
+      }),
+    );
+
+    renderWithProviders(<SystemHealthPage />);
+
+    const panel = await screen.findByTestId('upstream-sources-panel');
+    expect(panel.textContent).toContain('Scholarly Upstream Providers & Circuit Breakers');
+    const table = screen.getByTestId('upstream-circuit-table');
+    expect(table).toBeDefined();
+
+    const openalexBadge = screen.getByTestId('circuit-badge-openalex');
+    expect(openalexBadge.getAttribute('data-state')).toBe('closed');
+    expect(openalexBadge.textContent).toContain('CLOSED');
+
+    const crossrefBadge = screen.getByTestId('circuit-badge-crossref');
+    expect(crossrefBadge.getAttribute('data-state')).toBe('open');
+    expect(crossrefBadge.textContent).toContain('OPEN');
+    expect(screen.getByTestId('circuit-cooldown-crossref').textContent).toContain('32.5s');
+
+    const s2Badge = screen.getByTestId('circuit-badge-semanticscholar');
+    expect(s2Badge.getAttribute('data-state')).toBe('half_open');
+    expect(s2Badge.textContent).toContain('HALF_OPEN');
+
+    const openalexRow = screen.getByTestId('upstream-row-openalex');
+    expect(openalexRow.textContent).toContain('OpenAlex');
+    expect(openalexRow.textContent).toContain('142.5 ms');
+    expect(openalexRow.textContent).toContain('118 / 120');
+
+    const crossrefRow = screen.getByTestId('upstream-row-crossref');
+    expect(crossrefRow.textContent).toContain('Crossref');
+    expect(crossrefRow.textContent).toContain('860.2 ms');
+    expect(crossrefRow.textContent).toContain('38 / 45');
+    expect(screen.getByTestId('upstream-429-crossref').textContent).toContain('5');
+    expect(crossrefRow.textContent).toContain('Timeouts: 2');
+    expect(crossrefRow.textContent).toContain('5xx: 1');
+
+    const s2Row = screen.getByTestId('upstream-row-semanticscholar');
+    expect(s2Row.textContent).toContain('Semantic Scholar');
+    expect(s2Row.textContent).toContain('512 ms');
+    expect(s2Row.textContent).toContain('15 / 20');
+
+    expect(screen.getByTestId('health-status-pill').textContent).toContain('ALL SERVICES HEALTHY');
+
+    const cacheStats = screen.getByTestId('cache-stats');
+    expect(cacheStats.textContent).toContain('Persistent SQLite Entries');
+    expect(cacheStats.textContent).toContain('145');
+    expect(cacheStats.textContent).toContain('Persistent SQLite Hits');
+    expect(cacheStats.textContent).toContain('360');
+    expect(cacheStats.textContent).toContain('OpenAlex');
+    expect(cacheStats.textContent).toContain('95');
+  });
+
+  it('localizes upstream circuit breaker table, cooldown, and persistent cache breakdown in VI', async () => {
+    await i18n.changeLanguage('vi');
+    vi.spyOn(api, 'getSystemHealth').mockResolvedValue(
+      health({
+        cache_stats: {
+          total: 128040,
+          total_hits: 125,
+          local_papers_count: 128000,
+          local_queries_count: 25,
+          by_source: { openalex: 28, ncbi_biorxiv: 12 },
+        },
+        upstream_sources: {
+          openalex: {
+            state: 'closed',
+            consecutive_failures: 0,
+            total_calls: 30,
+            success_count: 30,
+            timeout_count: 0,
+            http_429_count: 0,
+            http_5xx_count: 0,
+            ema_latency_ms: 95,
+            open_remaining_seconds: 0,
+          },
+          crossref: {
+            state: 'open',
+            consecutive_failures: 5,
+            total_calls: 12,
+            success_count: 7,
+            timeout_count: 3,
+            http_429_count: 2,
+            http_5xx_count: 0,
+            ema_latency_ms: 910.4,
+            open_remaining_seconds: 18.4,
+          },
+          arxiv: {
+            state: 'half_open',
+            consecutive_failures: 4,
+            total_calls: 9,
+            success_count: 5,
+            timeout_count: 2,
+            http_429_count: 1,
+            http_5xx_count: 1,
+            ema_latency_ms: 420,
+            open_remaining_seconds: 0,
+          },
+        },
+      }),
+    );
+
+    renderWithProviders(<SystemHealthPage />);
+
+    const panel = await screen.findByTestId('upstream-sources-panel');
+    expect(panel.textContent).toContain('Nguồn Học Thuật & Ngắt Mạch Tự Động');
+    expect(panel.textContent).toContain('Ổn định');
+    expect(panel.textContent).toContain('Ngắt mạch');
+    expect(panel.textContent).toContain('Thăm dò');
+    expect(screen.getByTestId('circuit-cooldown-crossref').textContent).toContain('18.4s');
+
+    const cacheStats = screen.getByTestId('cache-stats');
+    expect(cacheStats.textContent).toContain('Mục lưu đệm SQLite bền vững');
+    expect(cacheStats.textContent).toContain('40');
+    expect(cacheStats.textContent).toContain('Lượt trúng đệm SQLite bền vững');
+    expect(cacheStats.textContent).toContain('100');
+    expect(cacheStats.textContent).toContain('NCBI / bioRxiv');
+    expect(cacheStats.textContent).not.toContain('ncbi_biorxiv');
+  });
+
+  it('handles absent or empty upstream_sources gracefully without rendering the circuit table', async () => {
+    vi.spyOn(api, 'getSystemHealth').mockResolvedValue(health({ upstream_sources: {} }));
+    const { unmount } = renderWithProviders(<SystemHealthPage />);
+    expect(await screen.findByTestId('upstream-sources-empty')).toBeDefined();
+    expect(screen.queryByTestId('upstream-circuit-table')).toBeNull();
+    unmount();
+
+    vi.spyOn(api, 'getSystemHealth').mockResolvedValue(health());
+    renderWithProviders(<SystemHealthPage />);
+    expect(await screen.findByTestId('upstream-sources-empty')).toBeDefined();
+    expect(screen.queryByTestId('upstream-circuit-table')).toBeNull();
+  });
 });
 
 describe('Multi-format & Telemetry Accuracy (BUG-03 & BUG-09)', () => {

@@ -12,11 +12,12 @@ import {
   UserCheck,
   GraduationCap,
   Trash2,
+  Clock,
 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Button } from '@/components/ui/button';
-import { api, type SystemHealth } from '@/api/client';
+import { api, type CircuitBreakerState, type SystemHealth, type UpstreamSourceHealth } from '@/api/client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -34,7 +35,101 @@ const CACHE_STAT_LABELS: Record<string, { en: string; vi: string }> = {
   local_papers_count: { en: 'Local Corpus Papers', vi: 'Bài báo kho cục bộ' },
   local_queries_count: { en: 'Local Corpus Queries', vi: 'Truy vấn kho cục bộ' },
   local_hit_rate_percent: { en: 'Local Hit Rate (%)', vi: 'Tỷ lệ trúng cục bộ (%)' },
+  persistent_entries: { en: 'Persistent SQLite Entries', vi: 'Mục lưu đệm SQLite bền vững' },
+  persistent_hits: { en: 'Persistent SQLite Hits', vi: 'Lượt trúng đệm SQLite bền vững' },
+  hit_rate_percent: { en: 'Cache Hit Rate (%)', vi: 'Tỷ lệ trúng đệm (%)' },
 };
+
+const UPSTREAM_PROVIDER_LABELS: Record<string, string> = {
+  openalex: 'OpenAlex',
+  crossref: 'Crossref',
+  semanticscholar: 'Semantic Scholar',
+  semantic_scholar: 'Semantic Scholar',
+  arxiv: 'arXiv',
+  europepmc: 'Europe PMC',
+  europe_pmc: 'Europe PMC',
+  dblp: 'DBLP',
+  openlibrary: 'Open Library',
+  open_library: 'Open Library',
+  pubmed: 'PubMed',
+  datacite: 'DataCite',
+  doi_ra: 'DOI Registration Agency',
+  doaj: 'DOAJ',
+  openaire_hal: 'OpenAIRE / HAL',
+  ncbi_biorxiv: 'NCBI / bioRxiv',
+  huggingface: 'Hugging Face',
+  tech_standard: 'Tech Standards',
+  wikidata_opencitations: 'Wikidata / OpenCitations',
+  serpapi: 'SerpAPI (Google Scholar)',
+  vn_registry: 'VN Academic Registry',
+  html_head: 'HTML Meta Verifier',
+  local_db: 'Local Corpus DB',
+  known_papers: 'Curated Known Papers',
+};
+
+function formatProviderName(key: string): string {
+  const normalized = key.trim().toLowerCase();
+  if (UPSTREAM_PROVIDER_LABELS[normalized]) {
+    return UPSTREAM_PROVIDER_LABELS[normalized];
+  }
+  return key
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+function formatMetricNumber(val: number): string {
+  if (!Number.isFinite(val)) return '0';
+  return String(Number(val.toFixed(1)));
+}
+
+function getCircuitVisuals(
+  state: CircuitBreakerState,
+  lang: 'en' | 'vi',
+): {
+  canonical: 'CLOSED' | 'HALF_OPEN' | 'OPEN';
+  caption: string;
+  tooltip: string;
+  pillClass: string;
+  dotClass: string;
+} {
+  if (state === 'open') {
+    return {
+      canonical: 'OPEN',
+      caption: lang === 'vi' ? 'Ngắt mạch' : 'Tripped',
+      tooltip:
+        lang === 'vi'
+          ? 'Mạch đang mở do lỗi hạ tầng liên tiếp — tạm ngưng gọi API cho tới khi hết thời gian chờ'
+          : 'Circuit open after consecutive infrastructure failures — fast-failing until cooldown expires',
+      pillClass:
+        'bg-rose-50 dark:bg-rose-950/70 border-rose-200/80 dark:border-rose-800/70 text-rose-700 dark:text-rose-300',
+      dotClass: 'bg-rose-500 animate-pulse',
+    };
+  }
+  if (state === 'half_open') {
+    return {
+      canonical: 'HALF_OPEN',
+      caption: lang === 'vi' ? 'Thăm dò' : 'Probing',
+      tooltip:
+        lang === 'vi'
+          ? 'Mạch bán mở — cho phép 1 yêu cầu thăm dò để kiểm tra khả năng phục hồi của nguồn'
+          : 'Half-open recovery state — allowing a single probe request to verify upstream health',
+      pillClass:
+        'bg-amber-50 dark:bg-amber-950/70 border-amber-200/80 dark:border-amber-800/70 text-amber-700 dark:text-amber-300',
+      dotClass: 'bg-amber-500 animate-pulse',
+    };
+  }
+  return {
+    canonical: 'CLOSED',
+    caption: lang === 'vi' ? 'Ổn định' : 'Healthy',
+    tooltip:
+      lang === 'vi'
+        ? 'Mạch đóng — nguồn học thuật phản hồi bình thường'
+        : 'Circuit closed — upstream scholarly API operating normally',
+    pillClass:
+      'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-200/80 dark:border-emerald-800/70 text-emerald-700 dark:text-emerald-300',
+    dotClass: 'bg-emerald-500',
+  };
+}
 
 function formatCacheStatLabel(key: string, lang: 'en' | 'vi'): string {
   const mapped = CACHE_STAT_LABELS[key];
@@ -156,9 +251,54 @@ export function SystemHealthPage() {
         : lang === 'vi'
           ? `SỰ CỐ (${String(data.status).toUpperCase()})${degradedList ? `: ${degradedList}` : ''}`
           : `OUTAGE (${String(data.status).toUpperCase()})${degradedList ? `: ${degradedList}` : ''}`;
-  const cacheEntries = Object.entries(data.cache_stats ?? {}).filter(
+  const rawCacheStats = data.cache_stats ?? {};
+  const cacheEntries: Array<[string, unknown]> = Object.entries(rawCacheStats).filter(
     ([, v]) => v === null || ['string', 'number', 'boolean'].includes(typeof v),
   );
+  if (
+    typeof rawCacheStats.total === 'number' &&
+    typeof rawCacheStats.local_papers_count === 'number' &&
+    !('persistent_entries' in rawCacheStats)
+  ) {
+    cacheEntries.push([
+      'persistent_entries',
+      Math.max(0, rawCacheStats.total - rawCacheStats.local_papers_count),
+    ]);
+  }
+  if (
+    typeof rawCacheStats.total_hits === 'number' &&
+    typeof rawCacheStats.local_queries_count === 'number' &&
+    !('persistent_hits' in rawCacheStats)
+  ) {
+    cacheEntries.push([
+      'persistent_hits',
+      Math.max(0, rawCacheStats.total_hits - rawCacheStats.local_queries_count),
+    ]);
+  }
+  const cacheBySourceEntries: Array<[string, number]> =
+    rawCacheStats.by_source &&
+    typeof rawCacheStats.by_source === 'object' &&
+    !Array.isArray(rawCacheStats.by_source)
+      ? Object.entries(rawCacheStats.by_source as Record<string, unknown>)
+          .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && entry[1] > 0)
+          .sort((a, b) => b[1] - a[1])
+      : [];
+
+  const upstreamEntries: Array<[string, UpstreamSourceHealth]> = Object.entries(
+    data.upstream_sources ?? {},
+  )
+    .filter((entry): entry is [string, UpstreamSourceHealth] =>
+      Boolean(entry[1] && typeof entry[1] === 'object'),
+    )
+    .sort(([a], [b]) => a.localeCompare(b));
+  const openCircuitsCount = upstreamEntries.filter(
+    ([, s]) => String(s.state ?? '').toLowerCase() === 'open',
+  ).length;
+  const halfOpenCircuitsCount = upstreamEntries.filter(
+    ([, s]) => String(s.state ?? '').toLowerCase() === 'half_open',
+  ).length;
+  const closedCircuitsCount =
+    upstreamEntries.length - openCircuitsCount - halfOpenCircuitsCount;
 
   return (
     <div className="space-y-6 pb-10">
@@ -383,6 +523,192 @@ export function SystemHealthPage() {
           </div>
         </div>
       </div>
+      {/* Scholarly Upstream Providers & Circuit Breakers (Subsystem B4) */}
+      <div
+        data-testid="upstream-sources-panel"
+        className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
+            </div>
+            <Separator orientation="vertical" className="h-4" />
+            <Terminal className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-200 truncate">
+              telemetry_upstream_circuits.json
+            </span>
+          </div>
+          <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+            {upstreamEntries.length === 0
+              ? lang === 'vi'
+                ? '0 mạch ghi nhận'
+                : '0 active circuits'
+              : lang === 'vi'
+                ? `${closedCircuitsCount} đóng · ${halfOpenCircuitsCount} thăm dò · ${openCircuitsCount} ngắt`
+                : `${closedCircuitsCount} closed · ${halfOpenCircuitsCount} half-open · ${openCircuitsCount} open`}
+          </span>
+        </div>
+
+        <div className="p-4 sm:p-6">
+          <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-white">
+            {lang === 'vi'
+              ? 'Nguồn Học Thuật & Ngắt Mạch Tự Động'
+              : 'Scholarly Upstream Providers & Circuit Breakers'}
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 mb-4">
+            {lang === 'vi'
+              ? 'Trạng thái ngắt mạch 3 pha theo thời gian thực, độ trễ trung bình trượt (EMA) và thống kê giới hạn tốc độ từng nguồn học thuật.'
+              : 'Real-time 3-state circuit breaker status, exponential moving average (EMA) latency, and rate-limit telemetry per scholarly API.'}
+          </p>
+
+          {upstreamEntries.length === 0 ? (
+            <div
+              data-testid="upstream-sources-empty"
+              className="p-4 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-dashed border-slate-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400"
+            >
+              {lang === 'vi'
+                ? 'Chưa ghi nhận lượt gọi API học thuật nào trên tiến trình hiện tại. Độ trễ và trạng thái ngắt mạch từng nguồn sẽ tự động hiển thị ngay khi có truy vấn.'
+                : 'No upstream scholarly API calls recorded in this worker process yet. Per-provider latency and circuit states appear automatically once lookups run.'}
+            </div>
+          ) : (
+            <div className="w-full overflow-x-auto rounded-xl border border-slate-200/80 dark:border-slate-800">
+              <table
+                data-testid="upstream-circuit-table"
+                className="w-full min-w-[640px] text-left border-collapse text-xs"
+              >
+                <thead>
+                  <tr className="bg-slate-50/90 dark:bg-slate-800/60 border-b border-slate-200/80 dark:border-slate-800 text-[11px] font-mono uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    <th className="py-2.5 px-3.5 font-semibold">
+                      {lang === 'vi' ? 'Nguồn học thuật' : 'Provider'}
+                    </th>
+                    <th className="py-2.5 px-3.5 font-semibold">
+                      {lang === 'vi' ? 'Trạng thái mạch' : 'Circuit State'}
+                    </th>
+                    <th className="py-2.5 px-3.5 font-semibold">
+                      {lang === 'vi' ? 'Độ trễ EMA' : 'EMA Latency'}
+                    </th>
+                    <th className="py-2.5 px-3.5 font-semibold">
+                      {lang === 'vi' ? 'Thành công / Gọi' : 'Success / Calls'}
+                    </th>
+                    <th className="py-2.5 px-3.5 font-semibold">
+                      {lang === 'vi' ? 'Lỗi 429' : 'HTTP 429'}
+                    </th>
+                    <th className="py-2.5 px-3.5 font-semibold">
+                      {lang === 'vi' ? 'Quá hạn & 5xx' : 'Timeouts & 5xx'}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200/70 dark:divide-slate-800">
+                  {upstreamEntries.map(([sourceKey, info]) => {
+                    const rawState = String(info.state ?? 'closed').toLowerCase();
+                    const normalizedState: CircuitBreakerState =
+                      rawState === 'open' || rawState === 'half_open' ? rawState : 'closed';
+                    const visuals = getCircuitVisuals(normalizedState, lang);
+                    const totalCalls = Number(info.total_calls ?? 0);
+                    const successCount = Number(info.success_count ?? 0);
+                    const http429Count = Number(info.http_429_count ?? 0);
+                    const timeoutCount = Number(info.timeout_count ?? 0);
+                    const http5xxCount = Number(info.http_5xx_count ?? 0);
+                    const consecutiveFailures = Number(info.consecutive_failures ?? 0);
+                    const emaLatencyMs = Number(info.ema_latency_ms ?? 0);
+                    const openRemainingSeconds = Number(info.open_remaining_seconds ?? 0);
+                    const successRatePct =
+                      totalCalls > 0 ? Math.round((successCount / totalCalls) * 100) : null;
+                    return (
+                      <tr
+                        key={sourceKey}
+                        data-testid={`upstream-row-${sourceKey}`}
+                        className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30 transition-colors"
+                      >
+                        <td className="py-3 px-3.5 align-middle">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-semibold text-slate-900 dark:text-slate-100">
+                              {formatProviderName(sourceKey)}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                              {sourceKey}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3.5 align-middle">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span
+                              data-testid={`circuit-badge-${sourceKey}`}
+                              data-state={normalizedState}
+                              title={visuals.tooltip}
+                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-mono font-semibold ${visuals.pillClass}`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${visuals.dotClass}`} />
+                              {visuals.canonical}
+                            </span>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                              {visuals.caption}
+                            </span>
+                            {normalizedState === 'open' && openRemainingSeconds > 0 && (
+                              <span
+                                data-testid={`circuit-cooldown-${sourceKey}`}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/60 border border-rose-200/70 dark:border-rose-800/70 text-[10px] font-mono text-rose-700 dark:text-rose-300"
+                              >
+                                <Clock className="h-3 w-3" />
+                                {lang === 'vi'
+                                  ? `Thử lại sau ${formatMetricNumber(openRemainingSeconds)}s`
+                                  : `Retry in ${formatMetricNumber(openRemainingSeconds)}s`}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3.5 align-middle font-mono tabular-nums text-slate-800 dark:text-slate-200">
+                          {`${formatMetricNumber(emaLatencyMs)} ms`}
+                        </td>
+                        <td className="py-3 px-3.5 align-middle font-mono tabular-nums text-slate-800 dark:text-slate-200">
+                          <span>{`${successCount} / ${totalCalls}`}</span>
+                          {successRatePct !== null && (
+                            <span className="ml-1.5 text-[11px] text-slate-400">
+                              {`(${successRatePct}%)`}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3.5 align-middle">
+                          <span
+                            data-testid={`upstream-429-${sourceKey}`}
+                            className={`inline-flex items-center px-2 py-0.5 rounded font-mono tabular-nums font-semibold ${
+                              http429Count > 0
+                                ? 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/70'
+                                : 'text-slate-500 dark:text-slate-400'
+                            }`}
+                          >
+                            {http429Count}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3.5 align-middle font-mono tabular-nums text-slate-700 dark:text-slate-300">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span>
+                              {lang === 'vi'
+                                ? `Quá hạn: ${timeoutCount} · 5xx: ${http5xxCount}`
+                                : `Timeouts: ${timeoutCount} · 5xx: ${http5xxCount}`}
+                            </span>
+                            {consecutiveFailures > 0 && (
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-rose-600 dark:text-rose-400">
+                                {lang === 'vi'
+                                  ? `Liên tiếp: ${consecutiveFailures}`
+                                  : `Streak: ${consecutiveFailures}`}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
       {cacheEntries.length > 0 && (
         <div
           data-testid="cache-stats"
@@ -406,6 +732,26 @@ export function SystemHealthPage() {
               </div>
             ))}
           </dl>
+          {cacheBySourceEntries.length > 0 && (
+            <div className="mt-4 pt-3.5 border-t border-slate-200/80 dark:border-slate-800">
+              <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mb-2">
+                {lang === 'vi' ? 'Phân bổ lưu đệm theo nguồn' : 'Cached Entries by Source'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {cacheBySourceEntries.map(([sourceKey, count]) => (
+                  <span
+                    key={sourceKey}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-200"
+                  >
+                    <span className="font-semibold">{formatProviderName(sourceKey)}</span>
+                    <span className="text-indigo-600 dark:text-indigo-400 font-bold tabular-nums">
+                      {count}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
