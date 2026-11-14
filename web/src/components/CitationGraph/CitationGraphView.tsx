@@ -23,7 +23,7 @@ import {
   type CitationGraphStats,
 } from '../graph/CitationGraphControls';
 import { EvidenceGraph } from './EvidenceGraph';
-import { isUrlResource } from '@/lib/verdictExplanation';
+import { getCitationMarkerLabel, isUrlResource } from '@/lib/verdictExplanation';
 
 interface CitationGraphViewProps {
   verdicts: Verdict[];
@@ -84,25 +84,46 @@ export function CitationGraphView({
     verdicts[0]?.citation_id ?? null,
   );
 
+  const indexedVerdicts = useMemo(() => {
+    return verdicts.map((v, idx) => ({
+      verdict: v,
+      originalIndex: idx,
+      marker: getCitationMarkerLabel(v, idx),
+      effectiveLabel: (isUrlResource(v) ? 'resource' : v.label) as ValidationLabel,
+    }));
+  }, [verdicts]);
+
   const filtered = useMemo(() => {
-    return verdicts.filter((v) => {
+    return indexedVerdicts.filter(({ verdict: v, marker, effectiveLabel }) => {
       if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        if (!v.citation_raw?.toLowerCase().includes(query)) {
-          return false;
+        const query = searchQuery.trim().toLowerCase();
+        if (query) {
+          const matchesRaw = v.citation_raw?.toLowerCase().includes(query) ?? false;
+          const matchesMarker =
+            marker.toLowerCase().includes(query) ||
+            Boolean(
+              v.composite_label &&
+                v.composite_label
+                  .toLowerCase()
+                  .includes(query.replace(/^\[|\]$/g, '')),
+            );
+          if (!matchesRaw && !matchesMarker) {
+            return false;
+          }
         }
       }
       const statusOk =
         statusFilters.size === 0 || statusFilters.has(v.mapping_status);
-      const labelOk = labelFilters.size === 0 || labelFilters.has(v.label);
+      const labelOk =
+        labelFilters.size === 0 || labelFilters.has(effectiveLabel);
       return statusOk && labelOk;
     });
-  }, [verdicts, searchQuery, statusFilters, labelFilters]);
+  }, [indexedVerdicts, searchQuery, statusFilters, labelFilters]);
 
   const activeVerdict = useMemo(() => {
     return (
-      filtered.find((v) => v.citation_id === activeId) ||
-      filtered[0] ||
+      filtered.find((item) => item.verdict.citation_id === activeId)?.verdict ||
+      filtered[0]?.verdict ||
       verdicts[0] ||
       null
     );
@@ -139,22 +160,29 @@ export function CitationGraphView({
   }
 
   const stats = useMemo(() => {
-    const total = verdicts.length;
+    const total = indexedVerdicts.length;
     const integrityCounts: Partial<Record<CitationMappingStatus, number>> = {};
     const sourceCounts: Partial<Record<ValidationLabel, number>> = {};
     let overridden = 0;
     let domainExc = 0;
 
-    for (const v of verdicts) {
+    for (const { verdict: v, effectiveLabel } of indexedVerdicts) {
       integrityCounts[v.mapping_status] =
         (integrityCounts[v.mapping_status] ?? 0) + 1;
-      sourceCounts[v.label] = (sourceCounts[v.label] ?? 0) + 1;
+      sourceCounts[effectiveLabel] = (sourceCounts[effectiveLabel] ?? 0) + 1;
       if (v.is_overridden) overridden++;
       if (v.domain_exception) domainExc++;
     }
 
     return { total, integrityCounts, sourceCounts, overridden, domainExc };
-  }, [verdicts]);
+  }, [indexedVerdicts]);
+
+  const resourceCount = stats.sourceCounts.resource ?? 0;
+  const scholarlyDenom =
+    stats.total > resourceCount ? Math.max(1, stats.total - resourceCount) : 0;
+  const l2VerifiedCount = stats.sourceCounts.verified ?? 0;
+  const l2VerifiedPct =
+    scholarlyDenom > 0 ? Math.round((l2VerifiedCount / scholarlyDenom) * 100) : null;
 
   const hasFilters =
     statusFilters.size > 0 || labelFilters.size > 0 || searchQuery.length > 0;
@@ -192,10 +220,16 @@ export function CitationGraphView({
                 {isVi ? 'Tầng 1 Liên kết:' : 'L1 Linked:'} {stats.integrityCounts.matched ?? 0}/{stats.total}
               </span>
             </span>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800">
+            <span
+              data-testid="graph-l2-verified-pill"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800"
+            >
               <Database className="h-3 w-3 shrink-0" />
               <span>
-                {isVi ? 'Tầng 2 Xác minh:' : 'L2 Verified:'} {stats.sourceCounts.verified ?? 0}/{stats.total}
+                {isVi ? 'Tầng 2 Xác minh:' : 'L2 Verified:'}{' '}
+                {scholarlyDenom > 0
+                  ? `${l2VerifiedCount}/${scholarlyDenom} (${l2VerifiedPct}%)`
+                  : `${l2VerifiedCount}/0`}
               </span>
             </span>
           </div>
@@ -227,8 +261,14 @@ export function CitationGraphView({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start w-full min-w-0">
           {/* Left Column: Interactive Citation Node Stream (5 cols on desktop) */}
           <div className="lg:col-span-5 space-y-2.5 lg:max-h-[680px] lg:overflow-y-auto lg:pr-1 w-full min-w-0">
-            {filtered.map((v, i) => {
+            {filtered.map(({ verdict: v, marker, effectiveLabel }, i) => {
               const isSelected = activeVerdict?.citation_id === v.citation_id;
+              const isIncompleteRef = (v.triggered_rules ?? []).includes(
+                'R-INCOMPLETE-METADATA',
+              );
+              const cleanedRawText =
+                v.citation_raw?.replace(/^\s*\[\s*\d+[a-z]?\s*\]\s*/i, '') ||
+                v.citation_raw;
               return (
                 <div key={v.citation_id ?? i} className="w-full min-w-0 space-y-2">
                   <div
@@ -247,15 +287,29 @@ export function CitationGraphView({
                     {/* Top Row: Badges on left, Telemetry pills on right */}
                     <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
                       <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                        <span
+                          data-testid="graph-sidebar-marker"
+                          className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 shrink-0"
+                        >
+                          {marker}
+                        </span>
                         {viewMode !== 'source' && (
                           <MappingStatusBadge status={v.mapping_status} size="sm" />
                         )}
                         {viewMode !== 'integrity' && (
                           <VerdictBadge
-                            verdict={isUrlResource(v) ? 'resource' : v.label}
+                            verdict={effectiveLabel}
                             triggeredRules={v.triggered_rules}
                             size="sm"
                           />
+                        )}
+                        {isIncompleteRef && (
+                          <span
+                            data-testid="graph-incomplete-ref-badge"
+                            className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800"
+                          >
+                            {isVi ? 'Thiếu quy cách' : 'Incomplete Ref'}
+                          </span>
                         )}
                         {v.is_overridden && (
                           <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
@@ -287,7 +341,7 @@ export function CitationGraphView({
                         className="text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 font-serif leading-relaxed break-words [overflow-wrap:anywhere] line-clamp-2 flex-1 min-w-0"
                         title={v.citation_raw}
                       >
-                        {v.citation_raw}
+                        {cleanedRawText}
                       </p>
 
                       {onOverride && (

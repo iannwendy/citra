@@ -14,6 +14,7 @@ import {
   Trash2,
   Clock,
   HardDrive,
+  RotateCcw,
 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
@@ -41,6 +42,12 @@ const CACHE_STAT_LABELS: Record<string, { en: string; vi: string }> = {
   expired_entries: { en: 'Expired Cache Entries', vi: 'Mục lưu đệm đã hết hạn' },
   persistent_hits: { en: 'Persistent SQLite Hits', vi: 'Lượt trúng đệm SQLite bền vững' },
   hit_rate_percent: { en: 'Cache Hit Rate (%)', vi: 'Tỷ lệ trúng đệm (%)' },
+  session_hits: { en: 'Session Cache Hits (B1)', vi: 'Lượt trúng phiên RAM (B1)' },
+  session_misses: { en: 'Session Cache Misses (B1)', vi: 'Lượt trượt phiên RAM (B1)' },
+  session_hit_rate_percent: { en: 'Session Hit Rate (%)', vi: 'Tỷ lệ trúng phiên RAM (%)' },
+  wave0_entries: { en: 'Wave-0 Prefetch Entries', vi: 'Mục tiền nạp Wave-0' },
+  negative_cache_entries: { en: 'Negative Cache Entries', vi: 'Mục đệm âm (Không tồn tại)' },
+  singleflight_coalesced: { en: 'Singleflight Coalesced', vi: 'Truy vấn gộp Singleflight' },
 };
 
 const UPSTREAM_PROVIDER_LABELS: Record<string, string | { en: string; vi: string }> = {
@@ -211,6 +218,7 @@ export function SystemHealthPage() {
   const [error, setError] = useState('');
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [resettingBreaker, setResettingBreaker] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api
@@ -222,6 +230,34 @@ export function SystemHealthPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const handleResetBreaker = async (source?: string) => {
+    const key = source ?? '__all__';
+    setResettingBreaker(key);
+    try {
+      if (typeof api.resetCircuitBreaker === 'function') {
+        await api.resetCircuitBreaker(source);
+      }
+      toast.success(
+        lang === 'vi' ? 'Đã đặt lại ngắt mạch' : 'Circuit breaker reset',
+        source
+          ? lang === 'vi'
+            ? `Đã khôi phục mạch cho ${formatProviderName(source, lang)}.`
+            : `Reset circuit breaker for ${formatProviderName(source, lang)}.`
+          : lang === 'vi'
+            ? 'Đã khôi phục tất cả các mạch đang mở.'
+            : 'All tripped circuit breakers have been reset.',
+      );
+      load();
+    } catch (e) {
+      toast.error(
+        lang === 'vi' ? 'Không thể đặt lại ngắt mạch' : 'Failed to reset circuit breaker',
+        e instanceof Error ? e.message : String(e),
+      );
+    } finally {
+      setResettingBreaker(null);
+    }
+  };
 
   const handleClearCache = async () => {
     setConfirmClearOpen(false);
@@ -295,28 +331,50 @@ export function SystemHealthPage() {
           : `OUTAGE (${String(data.status).toUpperCase()})${degradedList ? `: ${degradedList}` : ''}`;
 
   const rawCacheStats = data.cache_stats ?? {};
+  const hasSeparatedCorpusMetrics =
+    'persistent_entries' in rawCacheStats || 'local_papers_count' in rawCacheStats;
+  const dynamicCacheEntries = Number(
+    rawCacheStats.persistent_entries ??
+      (typeof rawCacheStats.total === 'number' &&
+      typeof rawCacheStats.local_papers_count === 'number'
+        ? Math.max(0, rawCacheStats.total - rawCacheStats.local_papers_count)
+        : rawCacheStats.total ?? 0),
+  );
+  const localCorpusPapers = Number(rawCacheStats.local_papers_count ?? 0);
+  const persistentHits =
+    rawCacheStats.persistent_hits != null
+      ? Number(rawCacheStats.persistent_hits)
+      : typeof rawCacheStats.total_hits === 'number' &&
+          typeof rawCacheStats.local_queries_count === 'number'
+        ? Math.max(0, rawCacheStats.total_hits - rawCacheStats.local_queries_count)
+        : Number(rawCacheStats.total_hits ?? 0);
+
+  const hasB1SessionTelemetry =
+    rawCacheStats.session_hit_rate_percent != null ||
+    rawCacheStats.wave0_entries != null ||
+    rawCacheStats.singleflight_coalesced != null ||
+    rawCacheStats.negative_cache_entries != null ||
+    rawCacheStats.session_hits != null ||
+    rawCacheStats.session_misses != null;
+
   const cacheEntries: Array<[string, unknown]> = Object.entries(rawCacheStats).filter(
-    ([, v]) => v === null || ['string', 'number', 'boolean'].includes(typeof v),
+    ([k, v]) =>
+      (k !== 'total' || !hasSeparatedCorpusMetrics) &&
+      (v === null || ['string', 'number', 'boolean'].includes(typeof v)),
   );
   if (
     typeof rawCacheStats.total === 'number' &&
     typeof rawCacheStats.local_papers_count === 'number' &&
     !('persistent_entries' in rawCacheStats)
   ) {
-    cacheEntries.push([
-      'persistent_entries',
-      Math.max(0, rawCacheStats.total - rawCacheStats.local_papers_count),
-    ]);
+    cacheEntries.push(['persistent_entries', dynamicCacheEntries]);
   }
   if (
     typeof rawCacheStats.total_hits === 'number' &&
     typeof rawCacheStats.local_queries_count === 'number' &&
     !('persistent_hits' in rawCacheStats)
   ) {
-    cacheEntries.push([
-      'persistent_hits',
-      Math.max(0, rawCacheStats.total_hits - rawCacheStats.local_queries_count),
-    ]);
+    cacheEntries.push(['persistent_hits', persistentHits]);
   }
 
   const hasBySourceObject = Boolean(
@@ -641,15 +699,37 @@ export function SystemHealthPage() {
               telemetry_upstream_circuits.json
             </span>
           </div>
-          <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-            {upstreamEntries.length === 0
-              ? lang === 'vi'
-                ? '0 mạch ghi nhận'
-                : '0 active circuits'
-              : lang === 'vi'
-                ? `${closedCircuitsCount} đóng · ${halfOpenCircuitsCount} thăm dò · ${openCircuitsCount} ngắt`
-                : `${closedCircuitsCount} closed · ${halfOpenCircuitsCount} half-open · ${openCircuitsCount} open`}
-          </span>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+              {upstreamEntries.length === 0
+                ? lang === 'vi'
+                  ? '0 mạch ghi nhận'
+                  : '0 active circuits'
+                : lang === 'vi'
+                  ? `${closedCircuitsCount} đóng · ${halfOpenCircuitsCount} thăm dò · ${openCircuitsCount} ngắt`
+                  : `${closedCircuitsCount} closed · ${halfOpenCircuitsCount} half-open · ${openCircuitsCount} open`}
+            </span>
+            {openCircuitsCount + halfOpenCircuitsCount > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="reset-all-breakers-btn"
+                disabled={resettingBreaker !== null}
+                onClick={() => void handleResetBreaker()}
+                className="h-7 px-2.5 rounded-lg text-[11px] font-mono font-semibold border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/60"
+              >
+                {resettingBreaker === '__all__' ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-3 w-3" />
+                )}
+                <span>
+                  {lang === 'vi' ? 'Đặt lại tất cả mạch' : 'Reset All Breakers'}
+                </span>
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="p-4 sm:p-6">
@@ -780,6 +860,22 @@ export function SystemHealthPage() {
                                   : `Retry in ${formatMetricNumber(openRemainingSeconds)}s`}
                               </span>
                             )}
+                            {(normalizedState === 'open' || normalizedState === 'half_open') && (
+                              <button
+                                type="button"
+                                data-testid={`reset-breaker-${sourceKey}`}
+                                disabled={resettingBreaker !== null}
+                                onClick={() => void handleResetBreaker(sourceKey)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-[10px] font-mono font-semibold text-slate-700 dark:text-slate-200 transition-colors disabled:opacity-50 cursor-pointer"
+                              >
+                                {resettingBreaker === sourceKey ? (
+                                  <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="h-2.5 w-2.5" />
+                                )}
+                                <span>{lang === 'vi' ? 'Đặt lại' : 'Reset'}</span>
+                              </button>
+                            )}
                           </div>
                           {showLastError && lastErrorText && (
                             <p
@@ -881,6 +977,97 @@ export function SystemHealthPage() {
                 </span>
               )}
           </div>
+          {hasSeparatedCorpusMetrics && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+              <div
+                data-testid="dynamic-citation-cache-card"
+                className="p-3.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/70"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-emerald-900 dark:text-emerald-200">
+                    {lang === 'vi' ? 'Bộ nhớ đệm Trích dẫn Động' : 'Dynamic Citation Cache'}
+                  </span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/70 text-emerald-800 dark:text-emerald-200">
+                    SQLite R/W
+                  </span>
+                </div>
+                <p
+                  data-testid="dynamic-cache-entries-value"
+                  className="mt-1 text-2xl font-bold font-mono tabular-nums text-emerald-700 dark:text-emerald-300"
+                >
+                  {dynamicCacheEntries.toLocaleString('en-US')}
+                </p>
+                <p className="mt-0.5 text-[11px] font-mono text-emerald-800/80 dark:text-emerald-300/80">
+                  {lang === 'vi'
+                    ? `${persistentHits.toLocaleString('en-US')} lượt trúng bền vững`
+                    : `${persistentHits.toLocaleString('en-US')} persistent hits`}
+                </p>
+              </div>
+
+              <div
+                data-testid="static-local-corpus-card"
+                className="p-3.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/70"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-indigo-900 dark:text-indigo-200">
+                    {lang === 'vi' ? 'Kho Học thuật Cục bộ Tĩnh' : 'Static Local Corpus'}
+                  </span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/70 text-indigo-800 dark:text-indigo-200">
+                    READ-ONLY
+                  </span>
+                </div>
+                <p
+                  data-testid="static-local-corpus-value"
+                  className="mt-1 text-2xl font-bold font-mono tabular-nums text-indigo-700 dark:text-indigo-300"
+                >
+                  {localCorpusPapers.toLocaleString('en-US')}
+                </p>
+                <p className="mt-0.5 text-[11px] font-mono text-indigo-800/80 dark:text-indigo-300/80">
+                  {lang === 'vi'
+                    ? 'Không bị xóa khi dọn bộ nhớ đệm'
+                    : 'Preserved across cache clears'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {hasB1SessionTelemetry && (
+            <div
+              data-testid="b1-session-cache-panel"
+              className="mb-4 p-3 rounded-xl bg-violet-50/60 dark:bg-violet-950/25 border border-violet-200/80 dark:border-violet-800/70 flex flex-wrap items-center justify-between gap-2 text-xs font-mono"
+            >
+              <span className="font-semibold text-violet-900 dark:text-violet-200">
+                {lang === 'vi'
+                  ? 'Bộ nhớ đệm phiên RAM (B1 Singleflight)'
+                  : 'B1 In-Memory Session Cache'}
+              </span>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-violet-800 dark:text-violet-300">
+                {rawCacheStats.session_hit_rate_percent != null && (
+                  <span data-testid="b1-session-hit-rate">
+                    {lang === 'vi' ? 'Tỷ lệ trúng' : 'Hit Rate'}:{' '}
+                    <strong>{formatMetricNumber(Number(rawCacheStats.session_hit_rate_percent))}%</strong>
+                  </span>
+                )}
+                {rawCacheStats.wave0_entries != null && (
+                  <span data-testid="b1-wave0-entries">
+                    Wave-0: <strong>{Number(rawCacheStats.wave0_entries)}</strong>
+                  </span>
+                )}
+                {rawCacheStats.singleflight_coalesced != null && (
+                  <span data-testid="b1-singleflight-coalesced">
+                    Singleflight: <strong>{Number(rawCacheStats.singleflight_coalesced)}</strong>
+                  </span>
+                )}
+                {rawCacheStats.negative_cache_entries != null && (
+                  <span data-testid="b1-negative-entries">
+                    {lang === 'vi' ? 'Đệm âm' : 'Neg Cache'}:{' '}
+                    <strong>{Number(rawCacheStats.negative_cache_entries)}</strong>
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
           <dl className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {cacheEntries.map(([key, value]) => (
               <div

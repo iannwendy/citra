@@ -66,6 +66,8 @@ interface InlineCitation {
   stanceLabel?: string;
   evidenceSentence?: string;
   contextSource?: string;
+  isCrossLingual?: boolean;
+  crossLingualSim?: number;
 }
 
 function ContextWithHighlight({
@@ -218,6 +220,24 @@ function buildInlineCitations(
       stanceLabel: v.features?.stance_label || undefined,
       evidenceSentence: v.features?.best_evidence_sentence || undefined,
       contextSource: v.features?.context_source || undefined,
+      isCrossLingual:
+        Boolean(v.features?.cross_lingual_detected) ||
+        Boolean(v.features?.cross_lingual_title_detected) ||
+        (v.features?.cross_lingual_title_sim ?? 0) >= 0.5 ||
+        (v.triggered_rules ?? []).some(
+          (r) => r === 'R-CROSS-LINGUAL-ALIGNMENT' || r === 'R-CROSS-LINGUAL-TITLE-MATCH',
+        ),
+      crossLingualSim:
+        v.features &&
+        (v.features.title_sim_fuzzy !== undefined ||
+          v.features.title_sim_semantic !== undefined ||
+          v.features.cross_lingual_title_sim !== undefined)
+          ? Math.max(
+              v.features.title_sim_fuzzy ?? 0,
+              v.features.title_sim_semantic ?? 0,
+              v.features.cross_lingual_title_sim ?? 0,
+            )
+          : undefined,
     };
   });
 
@@ -489,9 +509,50 @@ function CitationPopup({
                 </div>
               </div>
 
-              {verdict.features &&
-                ((verdict.features.content_alignment_score ?? 0) > 0 ||
-                  Boolean(verdict.features.best_evidence_sentence)) && (
+              {(() => {
+                const f = verdict.features as
+                  | (NonNullable<Verdict['features']> & {
+                      cross_lingual_bridged_concepts?: string[];
+                      cross_lingual_alignment?: boolean | number;
+                    })
+                  | undefined;
+                if (!f) return null;
+                const hasAnyTitleSim =
+                  f.title_sim_fuzzy !== undefined ||
+                  f.title_sim_semantic !== undefined ||
+                  f.cross_lingual_title_sim !== undefined;
+                const bestTitleSim = hasAnyTitleSim
+                  ? Math.max(
+                      f.title_sim_fuzzy ?? 0,
+                      f.title_sim_semantic ?? 0,
+                      f.cross_lingual_title_sim ?? 0,
+                    )
+                  : 0;
+                const bridgedConcepts = f.cross_lingual_bridged_concepts?.length
+                  ? f.cross_lingual_bridged_concepts
+                  : (f.bridged_concepts ?? []);
+                const isCrossLingual =
+                  bridgedConcepts.length > 0 ||
+                  Boolean(f.cross_lingual_detected) ||
+                  Boolean(f.cross_lingual_alignment) ||
+                  Boolean(f.cross_lingual_title_detected) ||
+                  (f.cross_lingual_title_sim ?? 0) >= 0.5 ||
+                  (verdict.triggered_rules ?? []).some(
+                    (r) =>
+                      r === 'R-CROSS-LINGUAL-ALIGNMENT' ||
+                      r === 'R-CROSS-LINGUAL-TITLE-MATCH',
+                  );
+                const alignScore = f.content_alignment_score ?? 0;
+                if (
+                  alignScore <= 0 &&
+                  !f.best_evidence_sentence &&
+                  !isCrossLingual
+                ) {
+                  return null;
+                }
+                const displayScore =
+                  alignScore > 0 ? alignScore : bestTitleSim;
+                return (
                   <div className="rounded-xl border border-indigo-200/80 dark:border-indigo-900/70 bg-indigo-50/40 dark:bg-indigo-950/25 p-3.5 space-y-2.5">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wider">
@@ -499,56 +560,60 @@ function CitationPopup({
                         {t('inspector.neuralSemanticMatch')}
                       </span>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {verdict.features.citation_intent && (
+                        {f.citation_intent && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-100/90 text-indigo-700 dark:bg-indigo-900/80 dark:text-indigo-300">
                             <Sparkles className="h-2.5 w-2.5" />
-                            {verdict.features.citation_intent}
+                            {f.citation_intent}
                           </span>
                         )}
-                        {verdict.features.stance_label && (
+                        {f.stance_label && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-100/80 text-emerald-700 dark:bg-emerald-900/70 dark:text-emerald-300">
-                            {verdict.features.stance_label}
+                            {f.stance_label}
                           </span>
                         )}
-                        {verdict.features.cross_lingual_detected && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-teal-100/80 text-teal-800 dark:bg-teal-900/70 dark:text-teal-300">
-                            VI↔EN Bridge
+                        {isCrossLingual && (
+                          <span
+                            data-testid="inspector-cross-lingual-pill"
+                            className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-teal-100/80 text-teal-800 dark:bg-teal-900/70 dark:text-teal-300"
+                          >
+                            VI↔EN ONNX
+                            {bestTitleSim > 0 ? ` · ${Math.round(bestTitleSim * 100)}%` : ''}
                           </span>
                         )}
-                        {(verdict.features.content_alignment_score ?? 0) > 0 && (
+                        {displayScore > 0 && (
                           <span className="text-[11px] font-mono font-bold text-indigo-700 dark:text-indigo-300">
-                            {Math.round((verdict.features.content_alignment_score ?? 0) * 100)}%
+                            {Math.round(displayScore * 100)}%
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {verdict.features.bridged_concepts &&
-                      verdict.features.bridged_concepts.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {verdict.features.bridged_concepts.slice(0, 5).map((bc, bIdx) => (
-                            <span
-                              key={`${bc}-${bIdx}`}
-                              className="inline-flex items-center px-1.5 py-0.5 rounded bg-teal-50 dark:bg-teal-950/60 border border-teal-200/80 dark:border-teal-800 text-[10px] font-mono text-teal-800 dark:text-teal-300"
-                            >
-                              {bc}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                    {bridgedConcepts.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {bridgedConcepts.slice(0, 5).map((bc, bIdx) => (
+                          <span
+                            key={`${bc}-${bIdx}`}
+                            className="inline-flex items-center px-1.5 py-0.5 rounded bg-teal-50 dark:bg-teal-950/60 border border-teal-200/80 dark:border-teal-800 text-[10px] font-mono text-teal-800 dark:text-teal-300"
+                          >
+                            {bc}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
-                    {verdict.features.best_evidence_sentence && (
+                    {f.best_evidence_sentence && (
                       <div className="rounded-lg bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 p-2.5">
                         <span className="block text-[10px] font-mono font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-1">
                           {t('inspector.matchedAbstractEvidence')}
                         </span>
                         <p className="text-xs font-serif text-slate-700 dark:text-slate-300 leading-relaxed">
-                          “{verdict.features.best_evidence_sentence}”
+                          “{f.best_evidence_sentence}”
                         </p>
                       </div>
                     )}
                   </div>
-                )}
+                );
+              })()}
 
               {verdict.mismatched_fields.length > 0 && (
                 <div>
@@ -1192,6 +1257,17 @@ export function DocumentInspectorPage() {
                             status={citation.mapping_status as any}
                             size="sm"
                           />
+                          {citation.isCrossLingual && (
+                            <span
+                              data-testid={`inspector-list-cross-lingual-${index}`}
+                              className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-teal-50 dark:bg-teal-950/70 text-teal-800 dark:text-teal-300 border border-teal-200/80 dark:border-teal-800"
+                            >
+                              VI↔EN ONNX
+                              {citation.crossLingualSim && citation.crossLingualSim > 0
+                                ? ` · ${Math.round(citation.crossLingualSim * 100)}%`
+                                : ''}
+                            </span>
+                          )}
                           {citation.alignmentScore !== undefined &&
                             citation.alignmentScore > 0 && (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800">

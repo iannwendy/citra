@@ -69,7 +69,11 @@ export function DashboardPage() {
   const { isUser, isTeacher, isAdmin, has, canBatchUpload } = useRole();
   const canViewTrace = has('view_logic_trace');
   const { data: essays = [], isLoading, error, refetch, isFetching } = useEssays();
-  const { data: stats = DEFAULT_STATS } = useDashboardStats();
+  const {
+    data: stats = DEFAULT_STATS,
+    incompleteMetadataCount,
+    refetchStats,
+  } = useDashboardStats();
   const deleteMutation = useDeleteEssay();
   const [searchQuery, setSearchQuery] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
@@ -207,7 +211,10 @@ export function DashboardPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => refetch()}
+            onClick={() => {
+              void refetch();
+              void refetchStats();
+            }}
             disabled={isFetching}
             aria-label="Refresh essays list"
             title={t('common.refresh')}
@@ -243,9 +250,21 @@ export function DashboardPage() {
               <p className={`text-2xl sm:text-3xl font-bold font-mono tabular-nums tracking-tight ${card.color}`}>
                 <NumberPopIn value={card.value} />
               </p>
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 mt-1">
-                {card.label}
-              </p>
+              <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  {card.label}
+                </p>
+                {card.idx === '02' && incompleteMetadataCount > 0 && (
+                  <span
+                    data-testid="dashboard-incomplete-ref-chip"
+                    className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/70"
+                  >
+                    {lang === 'vi'
+                      ? `${incompleteMetadataCount} thiếu thông tin`
+                      : `${incompleteMetadataCount} Incomplete Ref`}
+                  </span>
+                )}
+              </div>
               {!isUser && (
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {card.sub}
@@ -544,7 +563,7 @@ export function DashboardPage() {
                               className="hidden xl:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium whitespace-nowrap shrink-0 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-violet-300 dark:hover:border-violet-700 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
                             >
                               <GitBranch className="h-3.5 w-3.5 shrink-0" />
-                              <span>Trace</span>
+                              <span>{lang === 'vi' ? 'Truy vết' : 'Trace'}</span>
                             </Link>
                           ) : (
                             <Link
@@ -558,7 +577,7 @@ export function DashboardPage() {
                               className="hidden xl:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium whitespace-nowrap shrink-0 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
                             >
                               <Lock className="h-3.5 w-3.5 shrink-0" />
-                              <span>Trace</span>
+                              <span>{lang === 'vi' ? 'Truy vết' : 'Trace'}</span>
                             </Link>
                           )}
                         </>

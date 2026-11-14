@@ -26,6 +26,7 @@ export interface DashboardStats {
   total_citations: number;
   avg_cis_score: number | null;
   verified_rate: number;
+  incomplete_metadata?: number;
 }
 
 /**
@@ -110,28 +111,52 @@ export async function loadDashboardStats(essays: EssaySummary[]): Promise<Dashbo
   const local = await loadClientSideStats(essays);
   if (!remote) return local;
 
-  const labelTotal =
+  const hasExplicitVerdictBreakdown =
+    typeof remote.metadata_error === 'number' ||
+    typeof remote.suspected_hallucination === 'number' ||
+    typeof remote.unresolved === 'number' ||
+    typeof remote.incomplete_metadata === 'number';
+  const scholarlyVerdictTotal =
     (remote.verified ?? 0) +
     (remote.metadata_error ?? 0) +
     (remote.suspected_hallucination ?? 0) +
     (remote.unresolved ?? 0) +
-    (remote.resource ?? 0);
+    (remote.incomplete_metadata ?? 0);
+  const scholarlyTotal = hasExplicitVerdictBreakdown
+    ? scholarlyVerdictTotal
+    : Math.max(0, remote.total_citations - (remote.resource ?? 0));
+  const verifiedRate =
+    scholarlyTotal > 0
+      ? Math.floor((((remote.verified ?? 0) * 100) / scholarlyTotal) + 1e-9)
+      : 0;
+
   return {
     total_documents: remote.total_essays,
     total_citations: remote.total_citations,
     avg_cis_score: local.avg_cis_score,
-    verified_rate: labelTotal > 0 ? Math.round(((remote.verified ?? 0) / labelTotal) * 100) : 0,
+    verified_rate: verifiedRate,
+    ...(typeof remote.incomplete_metadata === 'number'
+      ? { incomplete_metadata: remote.incomplete_metadata }
+      : {}),
   };
 }
 
 export function useDashboardStats() {
   const { data: essays = [] } = useEssays();
-  return useQuery({
-    queryKey: ['dashboard-stats', essays.map((e) => e.id).join(',')],
+  const essayStateKey = essays
+    .map((e) => `${e.id}:${e.job_status ?? ''}:${e.cis_score ?? ''}`)
+    .join(',');
+  const query = useQuery({
+    queryKey: ['dashboard-stats', essayStateKey],
     queryFn: () => loadDashboardStats(essays),
     enabled: essays.length > 0,
     staleTime: 30_000,
   });
+  return {
+    ...query,
+    incompleteMetadataCount: query.data?.incomplete_metadata ?? 0,
+    refetchStats: query.refetch,
+  };
 }
 
 export type { EssaySummary };

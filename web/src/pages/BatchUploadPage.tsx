@@ -63,6 +63,8 @@ function getStatusIcon(status: BatchFileStatus) {
   switch (status) {
     case 'pending':
       return <Clock className="h-4 w-4 text-slate-400" />;
+    case 'queued':
+      return <Clock className="h-4 w-4 text-amber-500 animate-pulse" />;
     case 'uploading':
     case 'processing':
       return <MatrixDotLoader variant="scan" className="text-indigo-500" />;
@@ -75,10 +77,12 @@ function getStatusIcon(status: BatchFileStatus) {
 
 function getStatusVariant(
   status: BatchFileStatus,
-): 'muted' | 'default' | 'verified' | 'destructive' {
+): 'muted' | 'secondary' | 'default' | 'verified' | 'destructive' {
   switch (status) {
     case 'pending':
       return 'muted';
+    case 'queued':
+      return 'secondary';
     case 'uploading':
     case 'processing':
       return 'default';
@@ -93,10 +97,20 @@ function getStatusText(
   status: BatchFileStatus,
   progress: number,
   t: TFunction,
+  lang: 'en' | 'vi',
+  queuePosition?: number | null,
 ): string {
   switch (status) {
     case 'pending':
       return t('batchUpload.pending');
+    case 'queued':
+      return queuePosition != null
+        ? lang === 'vi'
+          ? `Đang xếp hàng (#${queuePosition})`
+          : `Queued (#${queuePosition})`
+        : lang === 'vi'
+          ? 'Đang xếp hàng'
+          : 'Queued';
     case 'uploading':
       return t('batchUpload.uploading');
     case 'processing':
@@ -124,6 +138,7 @@ export function BatchUploadPage() {
     removeBatchFile,
     clearBatchFiles,
     retryBatchFile,
+    retryFailedBatchFiles,
     startBatchQueue,
     markBatchAutoNavigated,
     registerBatchPageMount,
@@ -408,20 +423,54 @@ export function BatchUploadPage() {
       {isBatchActive && (
         <div
           data-testid="batch-background-active-banner"
-          className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/85 dark:bg-indigo-950/45 px-4 py-3 flex items-center gap-3 text-xs text-indigo-900 dark:text-indigo-200 shadow-2xs"
+          className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/85 dark:bg-indigo-950/45 px-4 py-3 space-y-2 text-xs text-indigo-900 dark:text-indigo-200 shadow-2xs"
         >
-          <Loader2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0" />
-          <p className="font-medium break-words [overflow-wrap:anywhere]">
-            {t('batchUpload.backgroundActiveBanner')}
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <Loader2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0" />
+              <p className="font-medium break-words [overflow-wrap:anywhere]">
+                {t('batchUpload.backgroundActiveBanner')}
+              </p>
+            </div>
+            <span className="font-mono text-[11px] font-semibold shrink-0">
+              {stats.completed}/{files.length}
+              {stats.queued > 0
+                ? lang === 'vi'
+                  ? ` · ${stats.queued} xếp hàng`
+                  : ` · ${stats.queued} queued`
+                : ''}
+            </span>
+          </div>
+          <div data-testid="batch-overall-progress">
+            <Progress
+              value={
+                files.length > 0
+                  ? Math.round(
+                      files.reduce(
+                        (sum, f) =>
+                          sum +
+                          (f.status === 'completed' || f.status === 'failed'
+                            ? 100
+                            : f.status === 'processing' ||
+                                f.status === 'uploading'
+                              ? Math.max(5, f.progress || 0)
+                              : 0),
+                        0,
+                      ) / files.length,
+                    )
+                  : 0
+              }
+            />
+          </div>
         </div>
       )}
 
-      {/* Completed-in-Background Notice when User Returns After Batch Settled */}
+      {/* Completed-in-Background Notice when User Returns After All-Succeeded Batch */}
       {!isBatchActive &&
         queueState.hasAutoNavigated &&
         stats.completed > 0 &&
-        stats.pending === 0 && (
+        stats.pending === 0 &&
+        stats.failed === 0 && (
           <div
             data-testid="batch-background-completed-notice"
             className="rounded-2xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/85 dark:bg-emerald-950/35 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-emerald-950 dark:text-emerald-200 shadow-2xs"
@@ -445,6 +494,49 @@ export function BatchUploadPage() {
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </Button>
+          </div>
+        )}
+
+      {/* Mixed-Outcome Summary Banner when Batch Finishes with Both Completed & Failed Items */}
+      {!isBatchActive &&
+        stats.pending === 0 &&
+        stats.processing === 0 &&
+        stats.completed > 0 &&
+        stats.failed > 0 && (
+          <div
+            data-testid="batch-mixed-outcome-banner"
+            className="rounded-2xl border border-amber-300/90 dark:border-amber-800/80 bg-amber-50/85 dark:bg-amber-950/35 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-950 dark:text-amber-200 shadow-2xs"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span className="font-semibold break-words [overflow-wrap:anywhere]">
+                {lang === 'vi'
+                  ? `${stats.completed} hoàn tất, ${stats.failed} thất bại (đã tự động hoàn lượt)`
+                  : `${stats.completed} completed, ${stats.failed} failed (credits automatically refunded)`}
+              </span>
+            </div>
+            {files.some(
+              (f) => f.status === 'failed' && Boolean(f.file || f.essayId != null),
+            ) && (
+              <Button
+                type="button"
+                size="sm"
+                data-testid="batch-retry-failed-btn"
+                onClick={() => {
+                  if (navigateTimerRef.current) {
+                    clearTimeout(navigateTimerRef.current);
+                    navigateTimerRef.current = null;
+                  }
+                  retryFailedBatchFiles();
+                }}
+                className="h-8 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shrink-0 w-full sm:w-auto"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>
+                  {lang === 'vi' ? 'Thử lại tệp lỗi' : 'Retry Failed'}
+                </span>
+              </Button>
+            )}
           </div>
         )}
 
@@ -649,18 +741,66 @@ export function BatchUploadPage() {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0 ml-auto sm:ml-0">
+                    <div className="flex flex-wrap items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
                       {getStatusIcon(fileItem.status)}
                       <Badge
                         variant={getStatusVariant(fileItem.status)}
-                        className="font-mono text-[11px]"
+                        className={`font-mono text-[11px] ${
+                          fileItem.status === 'queued'
+                            ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
+                            : ''
+                        }`}
                       >
-                        {getStatusText(fileItem.status, fileItem.progress, t)}
+                        {getStatusText(
+                          fileItem.status,
+                          fileItem.progress,
+                          t,
+                          lang,
+                          fileItem.queuePosition,
+                        )}
                       </Badge>
+
+                      {fileItem.status === 'failed' &&
+                        fileItem.quotaCharged === false && (
+                          <span
+                            data-testid={`batch-refund-badge-${fileItem.id}`}
+                            className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/70"
+                          >
+                            {lang === 'vi' ? 'Đã hoàn lượt' : 'Credit Refunded'}
+                          </span>
+                        )}
+
+                      {fileItem.status === 'completed' &&
+                        (fileItem.documentDiagnostics?.ocr_pages_recovered
+                          ?.length ?? 0) > 0 && (
+                          <span
+                            data-testid={`batch-ocr-chip-${fileItem.id}`}
+                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800/70"
+                          >
+                            OCR:{' '}
+                            {
+                              fileItem.documentDiagnostics!.ocr_pages_recovered!
+                                .length
+                            }
+                            p
+                          </span>
+                        )}
+
+                      {fileItem.status === 'completed' &&
+                        fileItem.documentDiagnostics
+                          ?.legacy_encoding_detected && (
+                          <span
+                            data-testid={`batch-encoding-chip-${fileItem.id}`}
+                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-violet-50 text-violet-700 border border-violet-200 dark:bg-violet-950/50 dark:text-violet-300 dark:border-violet-800/70"
+                          >
+                            TCVN3/VNI -&gt; Unicode
+                          </span>
+                        )}
                     </div>
 
                     {(fileItem.status === 'processing' ||
-                      fileItem.status === 'uploading') && (
+                      fileItem.status === 'uploading' ||
+                      fileItem.status === 'queued') && (
                       <div className="w-full sm:w-24 shrink-0">
                         <Progress value={fileItem.progress} />
                       </div>

@@ -188,24 +188,65 @@ export function OverrideControls({
 
   if (!has('override_verdict')) return null;
 
+  const isVi = i18n.language?.startsWith('vi');
+  const overriddenBy =
+    verdict.overridden_by || verdict.override_record?.overridden_by || null;
+  const overrideNote =
+    verdict.override_note || verdict.override_record?.reason || null;
+  const overriddenAt =
+    verdict.overridden_at || verdict.override_record?.overridden_at || null;
+
+  const attributionLabel = overriddenBy
+    ? isVi
+      ? `bởi ${overriddenBy}`
+      : `by ${overriddenBy}`
+    : null;
+
+  const tooltipText = verdict.is_overridden
+    ? [
+        t('override.overriddenBtn'),
+        attributionLabel,
+        overrideNote ? `"${overrideNote}"` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : t('override.overrideBtn');
+
   return (
     <>
       <button
+        type="button"
         onClick={() => setOpen(true)}
         className={cn(
           verdict.is_overridden
-            ? 'flex items-center gap-1 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors'
+            ? 'flex items-center flex-wrap gap-1 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors'
             : 'flex items-center gap-1 px-2.5 py-1.5 text-xs border rounded-lg hover:bg-muted transition-colors',
           className
         )}
-        title={t('override.overrideBtn')}
-        aria-label={t('override.overrideBtn')}
+        title={tooltipText}
+        aria-label={tooltipText}
       >
-        <RefreshCw className="h-3 w-3" />
+        <RefreshCw className="h-3 w-3 shrink-0" />
         <span>{verdict.is_overridden ? t('override.overriddenBtn') : t('override.overrideBtn')}</span>
-        {verdict.is_overridden && verdict.override_record && (
-          <span className="text-muted-foreground ml-1">
-            ({new Date(verdict.override_record.overridden_at).toLocaleString(i18n.language || 'vi-VN')})
+        {verdict.is_overridden && attributionLabel && (
+          <span
+            data-testid="override-attribution"
+            className="font-mono text-[11px] px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-800 dark:text-amber-200"
+          >
+            {attributionLabel}
+          </span>
+        )}
+        {verdict.is_overridden && !attributionLabel && overrideNote && (
+          <span
+            data-testid="override-note-badge"
+            className="max-w-[140px] truncate text-[11px] opacity-85"
+          >
+            · {overrideNote}
+          </span>
+        )}
+        {verdict.is_overridden && overriddenAt && (
+          <span className="text-muted-foreground ml-0.5 text-[11px]">
+            ({new Date(overriddenAt).toLocaleString(i18n.language || 'vi-VN')})
           </span>
         )}
       </button>

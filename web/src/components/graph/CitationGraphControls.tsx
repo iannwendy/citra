@@ -33,6 +33,7 @@ export const LABEL_FILTERS: {
   { value: 'metadata_error', label: 'Meta Error', labelVi: 'Sai Metadata', dotColor: 'bg-amber-500' },
   { value: 'suspected_hallucination', label: 'Suspected', labelVi: 'Nghi vấn', dotColor: 'bg-red-500' },
   { value: 'unresolved', label: 'Unresolved', labelVi: 'Chưa xác minh', dotColor: 'bg-slate-400' },
+  { value: 'resource', label: 'URL / Legal Resource', labelVi: 'Nguồn Web & Pháp quy', dotColor: 'bg-violet-500' },
 ];
 
 export type ViewMode = 'integrity' | 'source' | 'combined';
@@ -203,6 +204,7 @@ export function CitationGraphControls({
               <button
                 key={`label-${f.value}`}
                 type="button"
+                data-testid={`graph-label-filter-${f.value}`}
                 onClick={() => onToggleLabel(f.value)}
                 aria-pressed={active}
                 className={cn(

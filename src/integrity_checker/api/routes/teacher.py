@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import UTC
+import json
+import re
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -73,6 +76,8 @@ class ClassAnalyticsResponse(BaseModel):
     join_code: str | None = None
     total_students: int
     total_essays: int
+    failed_essays: int = 0
+    queued_essays: int = 0
     avg_cis: float
     recency_5yr_ratio: float
     cis_distribution: dict[str, int]
@@ -100,6 +105,11 @@ class ClassEssaySummary(BaseModel):
     user_id: int | None
     username: str | None
     num_pages: int
+    job_status: str = "completed"
+    job_error: str | None = None
+    job_attempt_count: int = 0
+    quota_charged: bool = True
+    cis_score: float | None = None
 
 
 class TeacherDashboardResponse(BaseModel):
@@ -124,6 +134,90 @@ class PendingVerdictItem(BaseModel):
     confidence: float
     reasoning: str
     validated_at: str
+    triggered_rules: list[str] = Field(default_factory=list)
+    mismatched_fields: list[str] = Field(default_factory=list)
+    composite_label: str | None = None
+    numeric_index: int | None = None
+    sub_index: str | None = None
+    url_status: str | None = None
+    url_status_code: int | None = None
+    archive_url: str | None = None
+    cited_url: str | None = None
+    html_meta: dict | None = None
+    is_retracted: bool = False
+    matched_sources: list[dict] = Field(default_factory=list)
+    features: dict[str, Any] = Field(default_factory=dict)
+
+
+_TEACHER_URL_RE = re.compile(r"https?://[^\s\]\)\,;\"'>]+", re.IGNORECASE)
+
+
+def _parse_str_list(val: Any) -> list[str]:
+    if not val:
+        return []
+    if isinstance(val, list):
+        return [str(x).strip() for x in val if str(x).strip()]
+    if isinstance(val, str):
+        s = val.strip()
+        if not s:
+            return []
+        if s.startswith("["):
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, list):
+                    return [str(x).strip() for x in parsed if str(x).strip()]
+            except (json.JSONDecodeError, TypeError):
+                return []
+        return [x.strip() for x in s.split(",") if x.strip()]
+    return []
+
+
+def _parse_verdict_features(v: Any) -> dict[str, Any]:
+    raw = getattr(v, "features", None)
+    if raw is None:
+        raw = getattr(v, "features_json", None)
+    if not raw:
+        return {}
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    return {}
+
+
+def _extract_verdict_matched_sources(v: Any, features: dict[str, Any]) -> list[dict]:
+    raw_ms = getattr(v, "matched_sources_json", None)
+    if raw_ms:
+        if isinstance(raw_ms, list):
+            return [m for m in raw_ms if isinstance(m, dict)]
+        if isinstance(raw_ms, str):
+            try:
+                parsed = json.loads(raw_ms)
+                if isinstance(parsed, list):
+                    return [m for m in parsed if isinstance(m, dict)]
+            except (json.JSONDecodeError, TypeError):
+                pass
+    feat_ms = features.get("matched_sources")
+    if isinstance(feat_ms, list):
+        return [m for m in feat_ms if isinstance(m, dict)]
+    return []
+
+
+def _extract_cis_score_from_json(cis_json: str | None) -> float | None:
+    if not cis_json:
+        return None
+    try:
+        parsed = json.loads(cis_json)
+        if isinstance(parsed, dict) and parsed.get("score") is not None:
+            return float(parsed["score"])
+    except (ValueError, TypeError):
+        return None
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +518,7 @@ def list_class_essays(
     out: list[ClassEssaySummary] = []
     for essay in essays:
         student = students_by_id.get(essay.user_id) if essay.user_id else None
+        raw_qc = getattr(essay, "quota_charged", None)
         out.append(
             ClassEssaySummary(
                 id=essay.id,
@@ -432,6 +527,11 @@ def list_class_essays(
                 user_id=essay.user_id,
                 username=student.username if student else None,
                 num_pages=essay.num_pages,
+                job_status=getattr(essay, "job_status", None) or "completed",
+                job_error=getattr(essay, "job_error", None),
+                job_attempt_count=int(getattr(essay, "job_attempt_count", 0) or 0),
+                quota_charged=True if raw_qc is None else bool(raw_qc),
+                cis_score=_extract_cis_score_from_json(getattr(essay, "cis_json", None)),
             )
         )
     return out
@@ -516,17 +616,54 @@ def list_pending_reviews(
             if essay and essay.user_id
             else None
         )
+        rules = _parse_str_list(getattr(v, "triggered_rules", None))
+        mismatched = _parse_str_list(getattr(v, "mismatched_fields", None))
+        features = _parse_verdict_features(v)
+        matched_sources = _extract_verdict_matched_sources(v, features)
+        raw_cit = v.citation_raw or ""
+
+        num_idx = features.get("numeric_index")
+        sub_idx = features.get("sub_index")
+        comp_lbl = features.get("composite_label")
+        if comp_lbl is None and num_idx is not None and sub_idx:
+            comp_lbl = f"{num_idx}{sub_idx}"
+
+        cited_url = features.get("cited_url") or features.get("url")
+        if not cited_url and raw_cit:
+            url_m = _TEACHER_URL_RE.search(raw_cit)
+            if url_m:
+                cited_url = url_m.group(0).rstrip(".,;)]>\"'")
+
+        html_meta_raw = features.get("html_meta")
+        html_meta = html_meta_raw if isinstance(html_meta_raw, dict) else None
+        is_retracted = bool(
+            features.get("is_retracted", False) or ("R-RETRACTED-PAPER" in rules)
+        )
+
         out.append(
             PendingVerdictItem(
                 verdict_id=v.id,
                 essay_id=v.essay_id,
                 filename=essay.filename if essay else "",
                 student_username=student.username if student else None,
-                citation_raw=v.citation_raw or "",
+                citation_raw=raw_cit,
                 label=v.label,
                 confidence=v.confidence,
                 reasoning=v.reasoning or "",
                 validated_at=v.validated_at.isoformat() if v.validated_at else "",
+                triggered_rules=rules,
+                mismatched_fields=mismatched,
+                composite_label=comp_lbl,
+                numeric_index=num_idx,
+                sub_index=sub_idx,
+                url_status=features.get("url_status"),
+                url_status_code=features.get("url_status_code"),
+                archive_url=features.get("archive_url"),
+                cited_url=cited_url,
+                html_meta=html_meta,
+                is_retracted=is_retracted,
+                matched_sources=matched_sources,
+                features=features,
             )
         )
     return out
@@ -551,7 +688,8 @@ def export_class_csv(
     """Stream a CSV of all (essay, verdict) pairs in the class.
 
     Columns: ``filename, student, verdict_id, label, confidence,
-    validated_at, is_overridden``. Essays with no verdicts still produce
+    validated_at, is_overridden, job_status, composite_label,
+    triggered_rules, citation_raw``. Essays with no verdicts still produce
     one row with empty verdict fields, so the data-row count equals
     ``len(essays)`` and the total line count equals ``len(essays) + 1``
     (header).
@@ -577,11 +715,16 @@ def export_class_csv(
             "confidence",
             "validated_at",
             "is_overridden",
+            "job_status",
+            "composite_label",
+            "triggered_rules",
+            "citation_raw",
         ]
     )
     for essay in essays:
         student = students_by_id.get(essay.user_id) if essay.user_id else None
         student_name = student.username if student else ""
+        e_job_status = getattr(essay, "job_status", None) or "completed"
         verdicts = verdicts_by_essay.get(essay.id, [])
         if not verdicts:
             # Essay with no verdicts still gets a row so the teacher sees
@@ -590,9 +733,14 @@ def export_class_csv(
                 _sanitize_csv_cell(essay.filename),
                 _sanitize_csv_cell(student_name),
                 "", "", "", "", "",
+                _sanitize_csv_cell(e_job_status),
+                "", "", "",
             ])
             continue
         for v in verdicts:
+            v_features = _parse_verdict_features(v)
+            comp_lbl = str(v_features.get("composite_label") or "")
+            rules_str = "; ".join(_parse_str_list(getattr(v, "triggered_rules", None)))
             writer.writerow(
                 [
                     _sanitize_csv_cell(essay.filename),
@@ -602,6 +750,10 @@ def export_class_csv(
                     v.confidence,
                     v.validated_at.isoformat() if v.validated_at else "",
                     "yes" if v.is_overridden else "no",
+                    _sanitize_csv_cell(e_job_status),
+                    _sanitize_csv_cell(comp_lbl),
+                    _sanitize_csv_cell(rules_str),
+                    _sanitize_csv_cell(v.citation_raw or ""),
                 ]
             )
     buf.seek(0)
@@ -623,10 +775,6 @@ def get_class_analytics(
     """Compute cohort integrity analytics, 5-year recency ratio, top triggered rules,
     and shared hallucination detection across all manuscripts in a class.
     """
-    import json
-    import re
-    from datetime import datetime
-
     repo = Repository(db)
     cls = repo.get_class(class_id)
     if not cls:
@@ -643,14 +791,17 @@ def get_class_analytics(
     )
     verdicts_by_essay = repo.get_verdicts_by_essay_ids([e.id for e in essays])
 
+    failed_essays = 0
+    queued_essays = 0
     cis_scores: list[float] = []
     cis_dist = {"excellent": 0, "good": 0, "fair": 0, "poor": 0}
     verdict_breakdown = {
         "verified": 0,
         "metadata_error": 0,
         "suspected_hallucination": 0,
-        "unverified": 0,
+        "unresolved": 0,
         "resource": 0,
+        "incomplete_metadata": 0,
     }
     rule_counts: dict[str, int] = {}
     current_year = datetime.now(UTC).year
@@ -664,20 +815,21 @@ def get_class_analytics(
         student_obj = students_by_id.get(essay.user_id) if essay.user_id else None
         student_name = student_obj.username if student_obj else f"user_{essay.user_id or 'anon'}"
 
-        # CIS score extraction
+        e_job_status = (getattr(essay, "job_status", None) or "completed").strip().lower()
+        if e_job_status == "failed":
+            failed_essays += 1
+        elif e_job_status in ("queued", "processing"):
+            queued_essays += 1
+
+        # CIS score extraction (exclude non-completed essays with cis_json is None from avg_cis)
         e_cis: float | None = None
-        if essay.cis_json:
-            try:
-                parsed_cis = json.loads(essay.cis_json)
-                if isinstance(parsed_cis, dict) and parsed_cis.get("score") is not None:
-                    e_cis = float(parsed_cis["score"])
-            except Exception:
-                e_cis = None
-        if e_cis is None and verdicts:
-            acad = [v for v in verdicts if v.label != "resource"]
-            if acad:
-                ver_cnt = sum(1 for v in acad if v.label == "verified" or v.is_overridden)
-                e_cis = round((ver_cnt / len(acad)) * 100.0, 1)
+        if not (e_job_status in ("failed", "queued", "processing") and getattr(essay, "cis_json", None) is None):
+            e_cis = _extract_cis_score_from_json(getattr(essay, "cis_json", None))
+            if e_cis is None and verdicts:
+                acad = [v for v in verdicts if v.label != "resource"]
+                if acad:
+                    ver_cnt = sum(1 for v in acad if v.label == "verified" or v.is_overridden)
+                    e_cis = round((ver_cnt / len(acad)) * 100.0, 1)
 
         if e_cis is not None:
             cis_scores.append(e_cis)
@@ -691,7 +843,8 @@ def get_class_analytics(
                 cis_dist["poor"] += 1
 
         for v in verdicts:
-            lbl = "verified" if v.is_overridden else (v.label or "unverified")
+            raw_lbl = "verified" if v.is_overridden else (v.label or "unresolved").strip().lower()
+            lbl = "unresolved" if raw_lbl == "unverified" else raw_lbl
             verdict_breakdown[lbl] = verdict_breakdown.get(lbl, 0) + 1
 
             # Extract year for 5-year recency ratio
@@ -702,20 +855,25 @@ def get_class_analytics(
                     years_found.append(yr)
 
             # Triggered rules
-            try:
-                rules = json.loads(v.triggered_rules) if v.triggered_rules else []
-                if isinstance(rules, list):
-                    for r in rules:
-                        r_str = str(r).strip()
-                        if r_str:
-                            rule_counts[r_str] = rule_counts.get(r_str, 0) + 1
-            except Exception:
-                pass
+            rules = _parse_str_list(getattr(v, "triggered_rules", None))
+            for r_str in rules:
+                rule_counts[r_str] = rule_counts.get(r_str, 0) + 1
+            if not v.is_overridden and "R-INCOMPLETE-METADATA" in rules:
+                verdict_breakdown["incomplete_metadata"] += 1
 
             # Flagged citations for shared hallucination detector
-            if lbl in ("suspected_hallucination", "metadata_error", "unverified"):
+            if lbl in ("suspected_hallucination", "metadata_error", "unresolved", "unverified"):
                 raw_clean = " ".join((v.citation_raw or "").split()).strip()
-                norm_key = re.sub(r"^\[\d+\]\s*", "", raw_clean.lower())[:160]
+                norm_key = raw_clean.lower()
+                norm_key = re.sub(r"^\[\s*\d+[a-z]?\s*\]\s*", "", norm_key, flags=re.IGNORECASE)
+                norm_key = re.sub(r"^\d+[a-z]?[.)]\s*", "", norm_key, flags=re.IGNORECASE)
+                norm_key = re.sub(
+                    r"^(?:\(\s*[a-z]\s*\)|[a-z][.)])\s*",
+                    "",
+                    norm_key,
+                    flags=re.IGNORECASE,
+                )
+                norm_key = norm_key[:160]
                 if len(norm_key) >= 12:
                     grp = flagged_groups.setdefault(
                         norm_key,
@@ -771,6 +929,8 @@ def get_class_analytics(
         join_code=cls.join_code,
         total_students=student_count,
         total_essays=len(essays),
+        failed_essays=failed_essays,
+        queued_essays=queued_essays,
         avg_cis=avg_cis,
         recency_5yr_ratio=recency_ratio,
         cis_distribution=cis_dist,

@@ -53,11 +53,13 @@ class ProgressState:
     error: str | None = None
     retry_count: int = 0
     queue_position: int | None = None
+    quota_charged: bool = True
     document_diagnostics: dict[str, Any] | None = None
 
     def to_snapshot(self) -> dict[str, Any]:
         """JSON-friendly snapshot for the API."""
         out = asdict(self)
+        out["quota_charged"] = bool(self.quota_charged)
         out["document_diagnostics"] = self.document_diagnostics
         out["elapsed_seconds"] = (
             (self.finished_at or time.time()) - self.started_at
@@ -288,6 +290,7 @@ class ProgressTracker:
                 or state.queue_position != prev_qpos
                 or "finished_at" in fields
                 or "error" in fields
+                or "quota_charged" in fields
                 or "document_diagnostics" in fields
             ):
                 should_persist = True
@@ -297,27 +300,41 @@ class ProgressTracker:
             self._persist_snapshot(essay_id, notify_snapshot)
         return state
 
-    def complete(self, essay_id: int) -> ProgressState | None:
+    def complete(
+        self,
+        essay_id: int,
+        document_diagnostics: dict[str, Any] | None = None,
+    ) -> ProgressState | None:
         """Mark complete; keep state around briefly so frontend can read it."""
-        return self.update(
-            essay_id,
-            status="completed",
-            step="done",
-            step_index=len(STEP_KEYS) - 1,
-            message="Analysis complete",
-            queue_position=None,
-            finished_at=time.time(),
-        )
+        fields: dict[str, Any] = {
+            "status": "completed",
+            "step": "done",
+            "step_index": len(STEP_KEYS) - 1,
+            "message": "Analysis complete",
+            "queue_position": None,
+            "finished_at": time.time(),
+        }
+        if document_diagnostics is not None:
+            fields["document_diagnostics"] = document_diagnostics
+        return self.update(essay_id, **fields)
 
-    def fail(self, essay_id: int, error: str) -> ProgressState | None:
-        return self.update(
-            essay_id,
-            status="failed",
-            error=error,
-            message=f"Failed: {error}",
-            queue_position=None,
-            finished_at=time.time(),
-        )
+    def fail(
+        self,
+        essay_id: int,
+        error: str,
+        *,
+        quota_charged: bool | None = None,
+    ) -> ProgressState | None:
+        fields: dict[str, Any] = {
+            "status": "failed",
+            "error": error,
+            "message": f"Failed: {error}",
+            "queue_position": None,
+            "finished_at": time.time(),
+        }
+        if quota_charged is not None:
+            fields["quota_charged"] = bool(quota_charged)
+        return self.update(essay_id, **fields)
 
     def clear(self, essay_id: int) -> None:
         with self._lock:
@@ -354,6 +371,7 @@ class ProgressTracker:
                             snap["queue_position"] = compute_sqlite_fifo_queue_position(
                                 session, essay_id
                             )
+                        snap.setdefault("quota_charged", quota_charged_bool)
                         snap.setdefault("document_diagnostics", None)
                         return snap
                     q_pos = compute_sqlite_fifo_queue_position(session, essay_id)
@@ -371,6 +389,7 @@ class ProgressTracker:
                         "finished_at": None,
                         "error": None,
                         "queue_position": q_pos,
+                        "quota_charged": quota_charged_bool,
                         "document_diagnostics": None,
                     }
 
@@ -403,7 +422,10 @@ class ProgressTracker:
                         "processing",
                         "queued",
                     ):
-                        return refresh_live_snapshot_elapsed(persisted_snap)
+                        snap = dict(refresh_live_snapshot_elapsed(persisted_snap))
+                        snap.setdefault("quota_charged", quota_charged_bool)
+                        snap.setdefault("document_diagnostics", None)
+                        return snap
                     return {
                         "status": "processing",
                         "step": STEP_KEYS[0],
@@ -418,6 +440,8 @@ class ProgressTracker:
                         "finished_at": None,
                         "error": None,
                         "queue_position": None,
+                        "quota_charged": quota_charged_bool,
+                        "document_diagnostics": None,
                     }
 
                 repo = Repository(session)
@@ -436,6 +460,8 @@ class ProgressTracker:
                                 doc_diag = sp_parsed.get("document_diagnostics")
                         except Exception:
                             doc_diag = None
+                    if doc_diag is None and persisted_snap is not None:
+                        doc_diag = persisted_snap.get("document_diagnostics")
                     return {
                         "status": "completed",
                         "step": "done",
@@ -456,6 +482,7 @@ class ProgressTracker:
                         "finished_at": (persisted_snap or {}).get("finished_at"),
                         "error": None,
                         "queue_position": None,
+                        "quota_charged": quota_charged_bool,
                         "document_diagnostics": doc_diag,
                     }
 
@@ -464,7 +491,10 @@ class ProgressTracker:
                     "processing",
                     "queued",
                 ):
-                    return refresh_live_snapshot_elapsed(persisted_snap)
+                    snap = dict(refresh_live_snapshot_elapsed(persisted_snap))
+                    snap.setdefault("quota_charged", quota_charged_bool)
+                    snap.setdefault("document_diagnostics", None)
+                    return snap
 
                 return {
                     "status": "processing",
@@ -480,6 +510,8 @@ class ProgressTracker:
                     "finished_at": None,
                     "error": None,
                     "queue_position": None,
+                    "quota_charged": quota_charged_bool,
+                    "document_diagnostics": None,
                 }
             finally:
                 if owns_session:
@@ -589,7 +621,17 @@ class PipelineAdmissionController:
         self._explicit_max = max_concurrent
         self._lock = Lock()
         self._active_count: int = 0
+        self._active_essays: set[int] = set()
         self._waiters: deque[_QueuedEssayWaiter] = deque()
+
+    def is_inflight(self, essay_id: int) -> bool:
+        """Return True if essay_id is actively executing or waiting in the FIFO queue."""
+        with self._lock:
+            if essay_id in self._active_essays:
+                return True
+            return any(
+                w.essay_id == essay_id and not w.cancelled for w in self._waiters
+            )
 
     @property
     def max_concurrent(self) -> int:
@@ -666,11 +708,13 @@ class PipelineAdmissionController:
             self._apply_position_updates(pos_updates)
         return bool(to_wake)
 
-    def _release_slot(self) -> None:
+    def _release_slot(self, finished_essay_id: int | None = None) -> None:
         limit = self.max_concurrent
         promoted: list[_QueuedEssayWaiter] = []
         pos_updates: list[tuple[int, ProgressTracker, int]] = []
         with self._lock:
+            if finished_essay_id is not None:
+                self._active_essays.discard(finished_essay_id)
             self._active_count = max(0, self._active_count - 1)
             while self._active_count < limit and self._waiters:
                 candidate = self._waiters.popleft()
@@ -678,6 +722,7 @@ class PipelineAdmissionController:
                     continue
                 candidate.admitted = True
                 self._active_count += 1
+                self._active_essays.add(candidate.essay_id)
                 promoted.append(candidate)
             pos_updates = self._collect_position_updates_unlocked()
 
@@ -685,7 +730,7 @@ class PipelineAdmissionController:
             try:
                 w.loop.call_soon_threadsafe(w.event.set)
             except RuntimeError:
-                self._release_slot()
+                self._release_slot(w.essay_id)
         if pos_updates:
             self._apply_position_updates(pos_updates)
 
@@ -707,6 +752,7 @@ class PipelineAdmissionController:
         with self._lock:
             if self._active_count < limit and not self._waiters:
                 self._active_count += 1
+                self._active_essays.add(essay_id)
                 admitted_now = True
             else:
                 waiter = _QueuedEssayWaiter(
@@ -747,7 +793,7 @@ class PipelineAdmissionController:
                 if pos_updates:
                     self._apply_position_updates(pos_updates)
                 if was_admitted:
-                    self._release_slot()
+                    self._release_slot(essay_id)
                 raise
 
             if waiter.cancelled or not waiter.admitted:
@@ -769,7 +815,7 @@ class PipelineAdmissionController:
         try:
             yield True
         finally:
-            self._release_slot()
+            self._release_slot(essay_id)
 
 
 # Canonical thesis/NFR alias for PipelineAdmissionController

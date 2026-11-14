@@ -355,6 +355,19 @@ export function UploadPage() {
                 <Badge variant="secondary" className="font-mono text-[10px]">
                   ID #{activeSingleCheck.essayId} · {activeSingleCheck.progress}%
                 </Badge>
+                {activeSingleCheck.status === 'queued' && (
+                  <Badge
+                    data-testid="active-single-queue-badge"
+                    variant="outline"
+                    className="font-mono text-[10px] bg-amber-100/80 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800"
+                  >
+                    {activeSingleCheck.queuePosition != null
+                      ? `#${activeSingleCheck.queuePosition}`
+                      : lang === 'vi'
+                        ? 'Đang xếp hàng'
+                        : 'Queued'}
+                  </Badge>
+                )}
               </div>
               <p className="mt-0.5 text-indigo-800/90 dark:text-indigo-300/90 break-words [overflow-wrap:anywhere]">
                 {t('upload.activeBackgroundDesc', { filename: activeSingleCheck.filename })}
@@ -395,11 +408,22 @@ export function UploadPage() {
                 <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
               )}
               <div className="min-w-0">
-                <p className="font-bold font-display text-sm break-words [overflow-wrap:anywhere]">
-                  {activeSingleCheck.status === 'completed'
-                    ? t('upload.recentCompletedTitle', { filename: activeSingleCheck.filename })
-                    : t('upload.recentFailedTitle', { filename: activeSingleCheck.filename })}
-                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-bold font-display text-sm break-words [overflow-wrap:anywhere]">
+                    {activeSingleCheck.status === 'completed'
+                      ? t('upload.recentCompletedTitle', { filename: activeSingleCheck.filename })
+                      : t('upload.recentFailedTitle', { filename: activeSingleCheck.filename })}
+                  </p>
+                  {activeSingleCheck.status === 'failed' &&
+                    activeSingleCheck.quotaCharged === false && (
+                      <span
+                        data-testid="recent-single-refund-badge"
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/70"
+                      >
+                        {lang === 'vi' ? 'Đã hoàn lượt' : 'Credit Refunded'}
+                      </span>
+                    )}
+                </div>
                 <p className="text-xs opacity-90 mt-0.5 break-words [overflow-wrap:anywhere]">
                   {activeSingleCheck.status === 'completed'
                     ? t('upload.recentCompletedDesc')
@@ -420,10 +444,20 @@ export function UploadPage() {
                   }`}
                 >
                   <Link
-                    to={`/verification/report/${activeSingleCheck.essayId}`}
+                    to={
+                      activeSingleCheck.status === 'completed'
+                        ? `/verification/report/${activeSingleCheck.essayId}`
+                        : `/verification/processing/${activeSingleCheck.essayId}`
+                    }
                     onClick={() => acknowledgeSingleCheck(activeSingleCheck.essayId ?? undefined)}
                   >
-                    <span>{t('upload.openReport')}</span>
+                    <span>
+                      {activeSingleCheck.status === 'completed'
+                        ? t('upload.openReport')
+                        : lang === 'vi'
+                          ? 'Xem chi tiết & Thử lại'
+                          : 'View Error & Retry'}
+                    </span>
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </Button>

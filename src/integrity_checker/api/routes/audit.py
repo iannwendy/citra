@@ -44,3 +44,14 @@ def list_audit(
         }
         for r in rows
     ]
+
+
+@router.get("/stats")
+def get_audit_stats(
+    user: str | None = Query(None),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, int]:
+    """Return accurate SQL total_events and unique_actors counts across all audit_logs."""
+    del admin
+    return Repository(db).get_audit_stats(user_filter=user)

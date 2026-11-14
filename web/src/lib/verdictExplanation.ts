@@ -53,6 +53,7 @@ const FIELD_LABELS: Record<string, string> = {
   doi: 'the DOI',
   venue: 'the venue',
   url: 'the link',
+  content: 'the cited claim content',
   retracted: 'the retraction status (RETRACTED PAPER)',
   retracted_paper: 'the retraction status (RETRACTED PAPER)',
 };
@@ -65,6 +66,7 @@ const FIELD_LABELS_VI: Record<string, string> = {
   doi: 'mã DOI',
   venue: 'nơi công bố (venue)',
   url: 'đường dẫn liên kết',
+  content: 'nội dung trích dẫn',
   retracted: 'trạng thái rút bài (BÀI BÁO ĐÃ BỊ RÚT)',
   retracted_paper: 'trạng thái rút bài (BÀI BÁO ĐÃ BỊ RÚT)',
 };
@@ -143,6 +145,7 @@ const RULE_LABELS: Record<string, string> = {
   'R-VN-TEXTBOOK-VERIFIED': 'Canonical Vietnamese university textbook or monograph verified',
   'R-YEAR-MISMATCH': 'Publication year in the citation differs from the canonical registry record',
   'R-DOI-METADATA-MISMATCH': 'Cited DOI differs from the canonical DOI of the matched publication',
+  'R-DOI-CONFLICT': 'Conflicting DOI identifiers returned across scholarly registries',
 };
 
 const RULE_LABELS_VI: Record<string, string> = {
@@ -219,6 +222,7 @@ const RULE_LABELS_VI: Record<string, string> = {
   'R-VN-TEXTBOOK-VERIFIED': 'Đã xác minh giáo trình đại học hoặc sách chuyên khảo chuẩn tại Việt Nam',
   'R-YEAR-MISMATCH': 'Năm xuất bản trong trích dẫn sai lệch so với bản ghi học thuật chính thức',
   'R-DOI-METADATA-MISMATCH': 'Mã DOI trích dẫn sai lệch so với mã DOI chính thức của ấn phẩm',
+  'R-DOI-CONFLICT': 'Các cơ sở dữ liệu học thuật trả về mã DOI mâu thuẫn nhau',
 };
 
 export function getSourceDisplayName(
@@ -558,9 +562,22 @@ export function getVerdictExplanation(verdict: Verdict, lang?: 'en' | 'vi'): str
           (verdict.triggered_rules ?? []).includes('R-CROSS-LINGUAL-TITLE-MATCH') ||
           verdict.features?.cross_lingual_title_detected
         ) {
+          const viRe =
+            /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i;
+          const isViCited = viRe.test(verdict.citation_raw ?? '');
+          const matchedCanonTitle = verdict.matched_sources?.[0]?.title ?? '';
+          const isEnToVi = !isViCited && viRe.test(matchedCanonTitle);
           const crossSimPct = verdict.features?.cross_lingual_title_sim
-            ? ` (độ khớp ngữ nghĩa Việt↔Anh ${Math.round(verdict.features.cross_lingual_title_sim * 100)}%)`
+            ? ` (độ khớp ngữ nghĩa ${isEnToVi ? 'Anh↔Việt' : 'Việt↔Anh'} ${Math.round(verdict.features.cross_lingual_title_sim * 100)}%)`
             : '';
+          if (isEnToVi) {
+            return (
+              `Tiêu đề dịch tiếng Anh khớp ngữ nghĩa với ấn phẩm tiếng Việt gốc${crossSimPct}, ` +
+              `nhưng quy định trích dẫn học thuật yêu cầu giữ nguyên tiêu đề gốc theo đúng ngôn ngữ xuất bản.` +
+              linkNoteVi +
+              retractionNoteVi
+            );
+          }
           return (
             `Tiêu đề dịch tiếng Việt khớp ngữ nghĩa với ấn phẩm tiếng Anh gốc${crossSimPct}, ` +
             `nhưng quy định trích dẫn học thuật TDTU yêu cầu giữ nguyên tiêu đề gốc bằng tiếng nước ngoài (có thể kèm [bản dịch tiếng Việt] trong ngoặc vuông).` +
@@ -669,9 +686,22 @@ export function getVerdictExplanation(verdict: Verdict, lang?: 'en' | 'vi'): str
         (verdict.triggered_rules ?? []).includes('R-CROSS-LINGUAL-TITLE-MATCH') ||
         verdict.features?.cross_lingual_title_detected
       ) {
+        const viReEn =
+          /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i;
+        const isViCitedEn = viReEn.test(verdict.citation_raw ?? '');
+        const matchedCanonTitleEn = verdict.matched_sources?.[0]?.title ?? '';
+        const isEnToViEn = !isViCitedEn && viReEn.test(matchedCanonTitleEn);
         const crossSimPct = verdict.features?.cross_lingual_title_sim
-          ? ` (${Math.round(verdict.features.cross_lingual_title_sim * 100)}% VI↔EN semantic match)`
+          ? ` (${Math.round(verdict.features.cross_lingual_title_sim * 100)}% ${isEnToViEn ? 'EN↔VI' : 'VI↔EN'} semantic match)`
           : '';
+        if (isEnToViEn) {
+          return (
+            `The English translated title semantically matches the original Vietnamese publication${crossSimPct}, ` +
+            `but academic citation rules require preserving the original publication title as published.` +
+            linkNote +
+            retractionNote
+          );
+        }
         return (
           `The Vietnamese translated title semantically matches the English publication${crossSimPct}, ` +
           `but TDTU academic citation rules require preserving the original foreign-language title (optionally followed by [Vietnamese translation] in brackets).` +

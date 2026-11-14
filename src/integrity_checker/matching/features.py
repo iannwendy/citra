@@ -170,10 +170,26 @@ class FeatureCalculator:
         cross_lingual_title_detected = False
         cross_lingual_title_sim = 0.0
         title_bridged_concepts: list[str] = []
-        if fuzzy_sim < 0.65 and hasattr(self.semantic, "cross_lingual_title_similarity"):
-            is_xl_t, xl_t_sim, xl_t_concepts = self.semantic.cross_lingual_title_similarity(
+        if fuzzy_sim < 0.65 and self.semantic is not None and hasattr(self.semantic, "cross_lingual_title_similarity"):
+            xl_t_raw = self.semantic.cross_lingual_title_similarity(
                 c_primary, cand_primary
             )
+            if isinstance(xl_t_raw, tuple):
+                is_xl_t = bool(xl_t_raw[0]) if len(xl_t_raw) >= 1 else False
+                xl_t_sim = float(xl_t_raw[1] or 0.0) if len(xl_t_raw) >= 2 else 0.0
+                xl_t_concepts = list(xl_t_raw[2] or []) if len(xl_t_raw) >= 3 else []
+            elif isinstance(xl_t_raw, (int, float)):
+                from integrity_checker.matching.vn_en_academic_bridge import is_vietnamese_text
+
+                is_xl_t = bool(
+                    c_primary
+                    and cand_primary
+                    and is_vietnamese_text(c_primary) != is_vietnamese_text(cand_primary)
+                )
+                xl_t_sim = float(xl_t_raw)
+                xl_t_concepts = []
+            else:
+                is_xl_t, xl_t_sim, xl_t_concepts = False, 0.0, []
             if is_xl_t and xl_t_sim >= 0.55:
                 cross_lingual_title_detected = True
                 cross_lingual_title_sim = xl_t_sim
@@ -291,7 +307,13 @@ class FeatureCalculator:
         context_source = str(getattr(citation, "_context_source", "") or "")
         occurrence_alignments: list[dict] = []
 
-        if self.enable_content_alignment and citation_context:
+        effective_ctx = (
+            citation_context
+            if citation_context is not None
+            else getattr(citation, "context", None)
+        )
+        if self.enable_content_alignment and effective_ctx:
+            citation_context = effective_ctx
             # Resolve abstract across all agreeing candidates if best.abstract is missing
             resolved_abstract = getattr(best, "abstract", None)
             if not resolved_abstract:
@@ -416,7 +438,27 @@ class FeatureCalculator:
             if not context_source:
                 context_source = "in_text_citation"
 
-        return MatchFeatures(
+        is_arxiv_vs_pub_doi = bool(
+            citation.doi
+            and best.doi
+            and (
+                "10.48550/arxiv" in str(citation.doi).lower()
+                or "10.48550/arxiv" in str(best.doi).lower()
+            )
+            and fuzzy_sim >= 0.85
+            and author_sim >= 0.35
+        )
+        has_doi_conflict_flag = bool(
+            citation.doi
+            and str(citation.doi).strip()
+            and best.doi
+            and str(best.doi).strip()
+            and not doi_match
+            and not is_arxiv_vs_pub_doi
+            and (fuzzy_sim >= 0.65 or (fuzzy_sim >= 0.55 and author_sim >= 0.50))
+        )
+
+        result_features = MatchFeatures(
             title_sim_fuzzy=fuzzy_sim,
             title_sim_semantic=semantic_sim,
             author_jaccard=author_sim,
@@ -441,6 +483,8 @@ class FeatureCalculator:
             context_source=context_source,
             occurrence_alignments=occurrence_alignments,
         )
+        result_features.has_doi_conflict = has_doi_conflict_flag  # type: ignore[attr-defined]
+        return result_features
 
     @staticmethod
     def _year_distance(y1: str | int | None, y2: str | int | None) -> int:
@@ -523,34 +567,107 @@ class FeatureCalculator:
         if len(valid) == 1:
             return valid[0]
 
+        from integrity_checker.matching.vn_en_academic_bridge import (
+            compute_cross_lingual_concept_overlap,
+            is_vietnamese_text,
+        )
+
         c_title = (citation.title or citation.raw_text or "").lower().strip()
+        c_primary, _ = self._strip_medium_tags_and_extract_alt_titles(
+            citation.title or citation.raw_text or ""
+        )
         is_raw = not bool(citation.title)
-        cit_is_choice = "10.5860/choice" in (citation.doi or "").lower() or "choice reviews" in (citation.venue or "").lower()
+        cit_is_choice = (
+            "10.5860/choice" in (citation.doi or "").lower()
+            or "choice reviews" in (citation.venue or "").lower()
+        )
         has_et_al = self._citation_has_et_al(citation, cited_authors)
 
-        def _score_cand(cand: SourceCandidate) -> float:
+        prelim: list[tuple[SourceCandidate, float, float, float, int, str]] = []
+        for cand in valid:
             doi_bonus = 2.0 if self._doi_matches(citation.doi, cand.doi) else 0.0
             cand_title = (cand.title or "").lower().strip()
+            cand_primary, _ = self._strip_medium_tags_and_extract_alt_titles(cand.title or "")
             t_sim = self._compute_title_similarity(c_title, cand_title, is_raw_fallback=is_raw)
             a_sim = author_match_score(cited_authors, list(cand.authors or []), has_et_al=has_et_al)
             y_dist = self._year_distance(citation.year, cand.year)
-            if t_sim < 0.55 and a_sim >= 0.60 and y_dist <= 1 and c_title and cand_title:
-                from integrity_checker.matching.vn_en_academic_bridge import (
-                    compute_cross_lingual_concept_overlap,
-                    is_vietnamese_text,
-                )
+            prelim.append((cand, doi_bonus, t_sim, a_sim, y_dist, cand_primary))
 
-                if is_vietnamese_text(c_title) != is_vietnamese_text(cand_title):
-                    xl_ov, _ = compute_cross_lingual_concept_overlap(
-                        c_title if is_vietnamese_text(c_title) else cand_title,
-                        cand_title if is_vietnamese_text(c_title) else c_title,
-                    )
+        has_strong_monolingual = any(item[2] >= 0.70 for item in prelim)
+        has_any_author_match = bool(cited_authors) and any(item[3] >= 0.50 for item in prelim)
+
+        if len(prelim) <= 6:
+            onnx_xl_eligible_ids = {id(item[0]) for item in prelim}
+        else:
+            ranked_for_xl = sorted(
+                prelim,
+                key=lambda item: (
+                    item[1],
+                    item[3],
+                    1 if item[4] <= 1 else 0,
+                    -min(item[4], 999),
+                    item[2],
+                    item[0].confidence or 0.0,
+                ),
+                reverse=True,
+            )
+            onnx_xl_eligible_ids = {id(item[0]) for item in ranked_for_xl[:5]}
+
+        best_cand = prelim[0][0]
+        best_score = float("-inf")
+        c_is_vn = is_vietnamese_text(c_primary) if c_primary else False
+
+        for cand, doi_bonus, t_sim, a_sim, y_dist, cand_primary in prelim:
+            if (
+                t_sim < 0.70
+                and c_primary
+                and cand_primary
+                and c_is_vn != is_vietnamese_text(cand_primary)
+            ):
+                xl_ov, _ = compute_cross_lingual_concept_overlap(c_primary, cand_primary)
+                if (not has_strong_monolingual and (not has_any_author_match or a_sim >= 0.35)) and (
+                    (a_sim >= 0.60 and y_dist <= 1)
+                    or (len(c_primary) >= 12 and len(cand_primary) >= 12 and xl_ov >= 0.50)
+                ):
                     t_sim = max(t_sim, xl_ov * 0.85)
-            y_bonus = 0.2 if y_dist <= 1 else 0.0
-            review_penalty = -0.5 if (not cit_is_choice and self._is_book_review_candidate(cand)) else 0.0
-            return doi_bonus + t_sim * 1.0 + a_sim * 0.5 + y_bonus + review_penalty + (cand.confidence or 0.0) * 0.05
+                if (
+                    xl_ov < 0.50
+                    and self.semantic is not None
+                    and hasattr(self.semantic, "cross_lingual_title_similarity")
+                    and len(c_primary) >= 12
+                    and len(cand_primary) >= 12
+                    and id(cand) in onnx_xl_eligible_ids
+                ):
+                    xl_res = self.semantic.cross_lingual_title_similarity(
+                        c_primary, cand_primary
+                    )
+                    if isinstance(xl_res, tuple):
+                        onnx_xl_sim = (
+                            float(xl_res[1]) if (len(xl_res) >= 2 and xl_res[0]) else 0.0
+                        )
+                    elif isinstance(xl_res, (int, float)):
+                        onnx_xl_sim = float(xl_res)
+                    else:
+                        onnx_xl_sim = 0.0
+                    t_sim = max(t_sim, onnx_xl_sim)
 
-        best = max(valid, key=_score_cand)
+            y_bonus = 0.2 if y_dist <= 1 else 0.0
+            review_penalty = (
+                -0.5 if (not cit_is_choice and self._is_book_review_candidate(cand)) else 0.0
+            )
+            score = (
+                doi_bonus
+                + t_sim * 1.0
+                + a_sim * 0.5
+                + y_bonus
+                + review_penalty
+                + (cand.confidence or 0.0) * 0.05
+            )
+            if score > best_score:
+                best_score = score
+                best_cand = cand
+
+        best = best_cand
         # Ensure source.best_candidate() and source.candidates[0] (serialized as matched_sources[0] for the UI)
         # point to this exact selected best candidate without mutating best.confidence
         source._selected_best = best  # type: ignore[attr-defined]

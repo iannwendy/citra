@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from typing import Any
+
+from fastapi import APIRouter, Body, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -82,4 +84,24 @@ def get_system_health(
             "app_db": get_app_db_tuning_report(),
             "local_papers_db": get_local_papers_tuning_report(),
         },
+    }
+
+
+@router.post("/circuit-breakers/reset")
+def reset_circuit_breakers(
+    payload: dict[str, Any] | None = Body(default=None),
+    admin: User = Depends(require_admin),
+) -> dict[str, Any]:
+    """Reset a single named upstream circuit breaker or all tracked breakers back to CLOSED."""
+    del admin
+    registry = ensure_enabled_sources_registered(
+        get_circuit_breaker_registry(),
+        get_settings(),
+    )
+    raw_source = payload.get("source") if isinstance(payload, dict) else None
+    source_name = str(raw_source).strip() if raw_source else None
+    reset_sources = registry.reset(source=source_name)
+    return {
+        "status": "ok",
+        "reset_sources": reset_sources,
     }

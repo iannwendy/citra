@@ -135,7 +135,7 @@ export function AccountManagementPage() {
               </span>
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/70 dark:border-emerald-800/70 text-[11px] font-mono text-emerald-700 dark:text-emerald-300">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                RBAC ENFORCED
+                {lang === 'vi' ? 'BẢO MẬT PHÂN QUYỀN RBAC' : 'RBAC ENFORCED'}
               </span>
             </div>
 
@@ -455,7 +455,7 @@ export function AccountManagementPage() {
                       <button
                         onClick={() => handleEdit(u)}
                         className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors"
-                        title="Edit user"
+                        title={lang === 'vi' ? 'Chỉnh sửa người dùng' : 'Edit user'}
                       >
                         <UserCog className="h-4 w-4" />
                       </button>
@@ -466,7 +466,9 @@ export function AccountManagementPage() {
                         title={
                           u.id === currentUser?.id
                             ? t('admin.cannotDeleteSelf')
-                            : 'Delete user'
+                            : lang === 'vi'
+                              ? 'Xóa người dùng'
+                              : 'Delete user'
                         }
                       >
                         <X className="h-4 w-4" />

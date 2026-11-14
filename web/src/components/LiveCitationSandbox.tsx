@@ -5,8 +5,13 @@ import {
   api,
   type SandboxAclPaperItem,
   type SandboxInstantVerifyResponse,
+  type ValidationLabel,
+  type Verdict,
 } from '@/api/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
+import { UpgradeModal } from '@/components/UpgradeModal';
+import { VerdictBadge } from '@/components/VerdictBadge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +26,7 @@ import {
   extractObservedWebMeta,
   getCitationMarkerLabel,
   getSourceDisplayName,
+  getVerdictExplanation,
   isLegalStatuteVerdict,
 } from '@/lib/verdictExplanation';
 import {
@@ -48,9 +54,14 @@ interface LiveCitationSandboxProps {
 
 export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps) {
   const { i18n } = useTranslation();
-  const lang: 'vi' | 'en' = langProp ?? (i18n.language?.startsWith('vi') ? 'vi' : 'en');
+  const i18nLang: 'vi' | 'en' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang: 'vi' | 'en' = langProp ?? i18nLang;
+  const isVi = lang === 'vi';
+  const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
+
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   const [mode, setMode] = useState<'acl_studio' | 'raw_paste'>('acl_studio');
   const [sampleCount, setSampleCount] = useState<number>(12);
@@ -283,6 +294,14 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
 
   const handleGenerateAndVerifyPdf = async () => {
     if (items.length === 0) return;
+    if (
+      user?.quota &&
+      user.quota.monthly_uploads_limit > 0 &&
+      user.quota.monthly_uploads_remaining <= 0
+    ) {
+      setUpgradeOpen(true);
+      return;
+    }
     setGeneratingPdf(true);
     try {
       const res = await api.generateSandboxPdfManuscript({
@@ -291,6 +310,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
         items,
         run_verification: true,
       });
+      void refreshUser();
       toast.success(
         lang === 'vi'
           ? `Đã tổng hợp bản thảo PDF (${res.num_pages} trang · ${res.in_text_count} trích dẫn trong bài · ${res.references_count} tài liệu tham khảo) và kích hoạt Pipeline kiểm chứng!`
@@ -298,6 +318,12 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
       );
       navigate(`/verification/processing/${res.essay_id}`);
     } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e ?? '');
+      if (/402|MONTHLY_QUOTA_EXCEEDED/i.test(errMsg)) {
+        setGeneratingPdf(false);
+        setUpgradeOpen(true);
+        return;
+      }
       toast.error(
         e instanceof Error
           ? e.message
@@ -932,36 +958,94 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                   <Badge className="bg-indigo-600 text-white">
                     ⚡ {instantResult.elapsed_seconds}s
                   </Badge>
-                  <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold">
-                    ✓ {lang === 'vi' ? 'Hợp lệ' : 'Verified'}: {instantResult.summary.verified}
-                  </span>
-                  <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-semibold">
-                    ⚠ {lang === 'vi' ? 'Sai lệch Metadata' : 'Metadata Error'}: {instantResult.summary.metadata_error}
-                  </span>
-                  <span className="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 font-semibold">
-                    🚨 {lang === 'vi' ? 'Nghi bịa đặt' : 'Hallucination'}: {instantResult.summary.suspected_hallucination}
-                  </span>
                   {(() => {
-                    const resItems = (instantResult.results ?? []).filter(
+                    const resultsList = instantResult.results ?? [];
+                    const summaryMap = (instantResult.summary ?? {}) as Record<
+                      string,
+                      number | undefined
+                    >;
+                    const verifiedCount = summaryMap.verified ?? 0;
+                    const hallucCount = summaryMap.suspected_hallucination ?? 0;
+                    const unresolvedCount =
+                      summaryMap.unresolved ??
+                      resultsList.filter((item) => item.label === 'unresolved').length;
+                    const resItems = resultsList.filter(
                       (item) => item.label === 'resource',
                     );
+                    const resourceTotal = summaryMap.resource ?? resItems.length;
                     const legalCount = resItems.filter((item) =>
                       isLegalStatuteVerdict(item),
                     ).length;
-                    const webCount = Math.max(
-                      0,
-                      (instantResult.summary.resource ?? resItems.length) - legalCount,
-                    );
+                    const webCount = Math.max(0, resourceTotal - legalCount);
+                    const incompleteFromResults = resultsList.filter(
+                      (item) =>
+                        item.label === 'metadata_error' &&
+                        (item.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA'),
+                    ).length;
+                    const incompleteCount =
+                      summaryMap.incomplete_metadata ?? incompleteFromResults;
+                    const rawMetaErr = summaryMap.metadata_error ?? 0;
+                    const totalExpected = instantResult.total ?? resultsList.length;
+                    const sumIfSeparate =
+                      verifiedCount +
+                      rawMetaErr +
+                      incompleteCount +
+                      hallucCount +
+                      unresolvedCount +
+                      resourceTotal;
+                    const metadataErrorCount =
+                      incompleteCount > 0 &&
+                      (summaryMap.incomplete_metadata === undefined ||
+                        (totalExpected > 0 && sumIfSeparate > totalExpected))
+                        ? Math.max(0, rawMetaErr - incompleteCount)
+                        : rawMetaErr;
+
                     return (
                       <>
+                        <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold">
+                          ✓ {lang === 'vi' ? 'Hợp lệ' : 'Verified'}: {verifiedCount}
+                        </span>
+                        <span className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-semibold">
+                          ⚠ {lang === 'vi' ? 'Sai lệch Metadata' : 'Metadata Error'}:{' '}
+                          {metadataErrorCount}
+                        </span>
+                        {incompleteCount > 0 && (
+                          <span
+                            data-testid="sandbox-summary-incomplete"
+                            className="px-2.5 py-1 rounded-lg bg-amber-100/80 dark:bg-amber-950/80 text-amber-800 dark:text-amber-200 font-semibold"
+                          >
+                            📝 {lang === 'vi' ? 'Thiếu quy cách' : 'Incomplete Ref'}:{' '}
+                            {incompleteCount}
+                          </span>
+                        )}
+                        <span className="px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 font-semibold">
+                          🚨 {lang === 'vi' ? 'Nghi bịa đặt' : 'Hallucination'}:{' '}
+                          {hallucCount}
+                        </span>
+                        {unresolvedCount > 0 && (
+                          <span
+                            data-testid="sandbox-summary-unresolved"
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold"
+                          >
+                            ? {lang === 'vi' ? 'Chờ rà soát' : 'Unresolved'}:{' '}
+                            {unresolvedCount}
+                          </span>
+                        )}
                         {webCount > 0 && (
-                          <span className="px-2.5 py-1 rounded-lg bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 font-semibold">
+                          <span
+                            data-testid="sandbox-summary-resource"
+                            className="px-2.5 py-1 rounded-lg bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 font-semibold"
+                          >
                             ↗ {lang === 'vi' ? 'Tài nguyên Web' : 'URL Resource'}: {webCount}
                           </span>
                         )}
                         {legalCount > 0 && (
-                          <span className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold">
-                            ⚖ {lang === 'vi' ? 'Văn bản Pháp luật' : 'Legal Statute'}: {legalCount}
+                          <span
+                            data-testid="sandbox-summary-legal"
+                            className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-semibold"
+                          >
+                            ⚖ {lang === 'vi' ? 'Văn bản Pháp luật' : 'Legal Statute'}:{' '}
+                            {legalCount}
                           </span>
                         )}
                       </>
@@ -1010,18 +1094,61 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                   const isRes = r.label === 'resource';
                   const isLegalRes = isRes && isLegalStatuteVerdict(r);
                   const isHalluc = r.label === 'suspected_hallucination';
+                  const isIncomplete =
+                    r.label === 'metadata_error' &&
+                    (r.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA');
+                  const isRetracted =
+                    Boolean(r.is_retracted || r.features?.is_retracted) ||
+                    (r.triggered_rules ?? []).includes('R-RETRACTED-PAPER');
                   const isUrlMismatch = (r.triggered_rules ?? []).includes(
                     'R-URL-CONTENT-MISMATCH',
                   );
                   const hasL1Issue = Boolean(
                     r.mapping_status && r.mapping_status !== 'matched',
                   );
-                  const observedWeb = extractObservedWebMeta(r);
+                  const rawHtmlMeta = (r.html_meta ?? r.features?.html_meta ?? null) as
+                    | Record<string, unknown>
+                    | null;
+                  const fallbackHtmlTitle =
+                    [
+                      rawHtmlMeta?.page_title,
+                      rawHtmlMeta?.citation_title,
+                      rawHtmlMeta?.og_title,
+                      rawHtmlMeta?.dc_title,
+                      rawHtmlMeta?.title,
+                      rawHtmlMeta?.observed_title,
+                    ]
+                      .find((val): val is string => typeof val === 'string' && val.trim().length > 0)
+                      ?.trim() ?? null;
+                  const extractedWeb = extractObservedWebMeta(r);
+                  const observedWeb =
+                    extractedWeb?.title
+                      ? extractedWeb
+                      : fallbackHtmlTitle
+                        ? {
+                            title: fallbackHtmlTitle,
+                            venue:
+                              extractedWeb?.venue ??
+                              (typeof rawHtmlMeta?.site_name === 'string'
+                                ? rawHtmlMeta.site_name
+                                : null),
+                            authors: extractedWeb?.authors ?? [],
+                            year: extractedWeb?.year ?? null,
+                            isArchived:
+                              extractedWeb?.isArchived ??
+                              r.url_status === 'archived_alive',
+                          }
+                        : extractedWeb;
+                  const nonWebSources = (r.matched_sources ?? []).filter(
+                    (s) => s.source !== 'web_html_meta' && s.source !== 'wayback_html_meta',
+                  );
                   const primarySource =
-                    r.matched_source ??
-                    (r.matched_sources && r.matched_sources.length > 0
-                      ? r.matched_sources[0]
-                      : null);
+                    (r.matched_source &&
+                    r.matched_source.source !== 'web_html_meta' &&
+                    r.matched_source.source !== 'wayback_html_meta'
+                      ? r.matched_source
+                      : null) ??
+                    (nonWebSources.length > 0 ? nonWebSources[0] : null);
                   const rawUrlStatus = r.url_status ?? r.features?.url_status;
                   const hasArchiveFallback =
                     Boolean(r.archive_url || r.features?.archive_url) ||
@@ -1035,14 +1162,45 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                       : rawUrlStatus === 'alive' ||
                           rawUrlStatus === 'restricted_alive' ||
                           rawUrlStatus === 'dead_link' ||
-                          rawUrlStatus === 'fake_domain'
+                          rawUrlStatus === 'fake_domain' ||
+                          rawUrlStatus === 'unchecked'
                         ? rawUrlStatus
                         : null;
                   const urlCode = r.url_status_code ?? r.features?.url_status_code;
                   const markerDisplay =
-                    r.composite_label || r.sub_index
-                      ? getCitationMarkerLabel(r, rIdx)
+                    r.composite_label || r.sub_index || r.numeric_index != null
+                      ? getCitationMarkerLabel(r, r.index ? r.index - 1 : rIdx)
                       : `#${r.index}`;
+
+                  const verdictForExplain: Verdict = {
+                    citation_id: `sandbox-${r.index}`,
+                    citation_raw: r.citation_raw,
+                    mapping_status: (r.mapping_status ||
+                      'matched') as Verdict['mapping_status'],
+                    mapping_confidence: 1,
+                    label: r.label as ValidationLabel,
+                    confidence: r.confidence ?? 1,
+                    reasoning: r.reasoning || '',
+                    triggered_rules: r.triggered_rules ?? [],
+                    mismatched_fields: r.mismatched_fields ?? [],
+                    matched_sources:
+                      r.matched_sources ?? (r.matched_source ? [r.matched_source] : []),
+                    url_status: r.url_status ?? r.features?.url_status ?? null,
+                    url_status_code:
+                      r.url_status_code ?? r.features?.url_status_code ?? null,
+                    archive_url: r.archive_url ?? r.features?.archive_url ?? null,
+                    cited_url: r.cited_url ?? null,
+                    html_meta: r.html_meta ?? r.features?.html_meta ?? null,
+                    is_retracted: isRetracted,
+                    composite_label: r.composite_label ?? null,
+                    numeric_index: r.numeric_index ?? null,
+                    sub_index: r.sub_index ?? null,
+                    features: r.features,
+                    is_overridden: false,
+                  };
+                  const explanationText = isVi
+                    ? getVerdictExplanation(verdictForExplain, 'vi') || r.reasoning
+                    : r.reasoning || getVerdictExplanation(verdictForExplain, 'en');
 
                   return (
                     <div
@@ -1050,7 +1208,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                       data-testid={`sandbox-result-card-${r.index}`}
                       data-verdict-label={r.label}
                       className={`p-3 rounded-xl border text-xs space-y-1.5 ${
-                        isHalluc
+                        isHalluc || isRetracted
                           ? 'bg-red-50/70 dark:bg-red-950/30 border-red-200 dark:border-red-800'
                           : isRes && !hasL1Issue
                             ? 'bg-sky-50/60 dark:bg-sky-950/25 border-sky-200 dark:border-sky-800'
@@ -1062,56 +1220,91 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-2 font-mono font-bold">
                           <span>{markerDisplay}</span>
-                          {isVer ? (
+                          {i18nLang === lang && !isRes ? (
+                            <VerdictBadge
+                              verdict={r.label as ValidationLabel}
+                              triggeredRules={r.triggered_rules}
+                              size="sm"
+                            />
+                          ) : isVer ? (
                             <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
-                              <CheckCircle2 className="h-3.5 w-3.5" /> VERIFIED
+                              <CheckCircle2 className="h-3.5 w-3.5" />{' '}
+                              {isVi ? 'Đã xác minh' : 'VERIFIED'}
                             </span>
                           ) : isRes ? (
                             isLegalRes ? (
                               <span className="inline-flex items-center gap-1 text-indigo-700 dark:text-indigo-300">
                                 <Scale className="h-3.5 w-3.5" />{' '}
-                                {lang === 'vi' ? 'VĂN BẢN PHÁP LUẬT' : 'LEGAL STATUTE'}
+                                {isVi ? 'Văn bản Pháp luật' : 'VN Legal Statute'}
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300">
                                 <Link2 className="h-3.5 w-3.5" />{' '}
-                                {lang === 'vi' ? 'TÀI NGUYÊN WEB' : 'URL RESOURCE'}
+                                {isVi ? 'Tài nguyên Web' : 'URL RESOURCE'}
                               </span>
                             )
+                          ) : isIncomplete ? (
+                            <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+                              <AlertTriangle className="h-3.5 w-3.5" />{' '}
+                              {isVi ? 'Thiếu quy cách trích dẫn' : 'Incomplete Reference'}
+                            </span>
                           ) : isHalluc ? (
                             <span className="inline-flex items-center gap-1 text-red-700 dark:text-red-300">
-                              <XCircle className="h-3.5 w-3.5" /> SUSPECTED HALLUCINATION
+                              <XCircle className="h-3.5 w-3.5" />{' '}
+                              {isVi ? 'Nghi vấn Ảo giác AI' : 'SUSPECTED HALLUCINATION'}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
-                              <AlertTriangle className="h-3.5 w-3.5" /> {r.label.toUpperCase()}
+                              <AlertTriangle className="h-3.5 w-3.5" />{' '}
+                              {isVi && r.label === 'unresolved'
+                                ? 'Chờ rà soát'
+                                : isVi && r.label === 'metadata_error'
+                                  ? 'Sai lệch Metadata'
+                                  : r.label.toUpperCase()}
+                            </span>
+                          )}
+                          {isRetracted && (
+                            <span
+                              data-testid={`sandbox-retracted-pill-${r.index}`}
+                              className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white border border-red-700"
+                            >
+                              {isVi ? '🚨 ĐÃ RÚT BÀI' : '🚨 RETRACTED'}
                             </span>
                           )}
                           {urlStatus && (
                             <span
+                              data-testid={`sandbox-url-status-${r.index}`}
                               className={`px-2 py-0.5 rounded text-[10px] border ${
                                 isUrlMismatch
                                   ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
-                                  : urlStatus === 'alive' || urlStatus === 'restricted_alive'
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
-                                    : urlStatus === 'archived_alive'
-                                      ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
-                                      : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800'
+                                  : urlStatus === 'unchecked'
+                                    ? 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                                    : urlStatus === 'alive' || urlStatus === 'restricted_alive'
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800'
+                                      : urlStatus === 'archived_alive'
+                                        ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800'
+                                        : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800'
                               }`}
                             >
                               {isUrlMismatch
                                 ? lang === 'vi'
                                   ? `⚠ HTTP ${urlCode || 200} · Sai nội dung trang`
                                   : `⚠ HTTP ${urlCode || 200} · Wrong Page`
-                                : urlStatus === 'alive'
-                                  ? `✓ HTTP ${urlCode || 200} OK`
-                                  : urlStatus === 'restricted_alive'
-                                    ? `🔒 HTTP ${urlCode || 403} OK`
-                                    : urlStatus === 'archived_alive'
-                                      ? '🏛️ WAYBACK ARCHIVED'
-                                      : urlStatus === 'dead_link'
-                                        ? `✕ HTTP ${urlCode || 404} DEAD`
-                                        : '✕ FAKE URL'}
+                                : urlStatus === 'unchecked'
+                                  ? lang === 'vi'
+                                    ? 'Chưa cần mở URL (Đã khớp học thuật)'
+                                    : 'URL Unchecked (Scholarly Match)'
+                                  : urlStatus === 'alive'
+                                    ? `✓ HTTP ${urlCode || 200} OK`
+                                    : urlStatus === 'restricted_alive'
+                                      ? `🔒 HTTP ${urlCode || 403} OK`
+                                      : urlStatus === 'archived_alive'
+                                        ? lang === 'vi'
+                                          ? '🏛️ BẢN LƯU WAYBACK'
+                                          : '🏛️ WAYBACK ARCHIVED'
+                                        : urlStatus === 'dead_link'
+                                          ? `✕ HTTP ${urlCode || 404} DEAD`
+                                          : '✕ FAKE URL'}
                             </span>
                           )}
                           <span
@@ -1131,7 +1324,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                       <p className="font-mono text-[11px] text-slate-800 dark:text-slate-200 break-words [overflow-wrap:anywhere]">
                         {r.citation_raw}
                       </p>
-                      {(observedWeb || (isRes && primarySource)) && (
+                      {(observedWeb || primarySource) && (
                         <div
                           data-testid={`sandbox-observed-meta-${r.index}`}
                           className={`px-2.5 py-1.5 rounded-lg border font-mono text-[11px] space-y-0.5 ${
@@ -1148,7 +1341,13 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                             </div>
                           ) : (observedWeb?.title || primarySource?.title) ? (
                             <div className="font-semibold">
-                              {lang === 'vi' ? 'Metadata trích xuất: ' : 'Extracted metadata: '}
+                              {observedWeb?.title
+                                ? lang === 'vi'
+                                  ? 'Metadata trích xuất: '
+                                  : 'Extracted metadata: '
+                                : lang === 'vi'
+                                  ? 'Bản ghi chuẩn đối chiếu: '
+                                  : 'Canonical match: '}
                               {observedWeb?.title || primarySource?.title}
                             </div>
                           ) : null}
@@ -1179,7 +1378,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                         </div>
                       )}
                       <p className="text-[11px] text-slate-600 dark:text-slate-400 break-words [overflow-wrap:anywhere]">
-                        {r.reasoning} {r.mapping_note ? ` • ${r.mapping_note}` : ''}
+                        {explanationText} {r.mapping_note ? ` • ${r.mapping_note}` : ''}
                       </p>
                     </div>
                   );
@@ -1190,6 +1389,16 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
           </AnimatePresence>
         </CardResize>
       </div>
+
+      <UpgradeModal
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        featureName={
+          isVi
+            ? 'Tổng hợp & Kiểm chứng Bản thảo PDF Sandbox'
+            : 'Sandbox Full PDF Verification'
+        }
+      />
     </Card>
   );
 }

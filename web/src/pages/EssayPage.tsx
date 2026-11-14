@@ -85,6 +85,77 @@ interface SourceRetrievalItem {
   matchedFields: string[];
   url?: string;
   doi?: string;
+  notRouted?: boolean;
+}
+
+type CrossLingualFeaturesExt = NonNullable<Verdict['features']> & {
+  cross_lingual_bridged_concepts?: string[];
+  cross_lingual_alignment?: boolean | number;
+  semantic_similarity?: number;
+  cross_lingual_direction?: string;
+};
+
+const VI_DIACRITIC_RE =
+  /[ăâđêôơưáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/i;
+
+function detectCrossLingualDirection(
+  citedSample: string,
+  canonicalSample: string,
+  explicitDir?: string,
+): 'VI → EN' | 'EN → VI' | 'VI ↔ EN' {
+  if (explicitDir) {
+    const up = explicitDir.toUpperCase();
+    if (up.includes('VI') && up.includes('EN')) {
+      if (up.indexOf('VI') < up.indexOf('EN') && (up.includes('->') || up.includes('→') || up.includes('_TO_'))) {
+        return 'VI → EN';
+      }
+      if (up.indexOf('EN') < up.indexOf('VI') && (up.includes('->') || up.includes('→') || up.includes('_TO_'))) {
+        return 'EN → VI';
+      }
+    }
+  }
+  const citedHasVi = VI_DIACRITIC_RE.test(citedSample);
+  const canonicalHasVi = VI_DIACRITIC_RE.test(canonicalSample);
+  if (citedHasVi && !canonicalHasVi && canonicalSample.trim().length > 0) {
+    return 'VI → EN';
+  }
+  if (!citedHasVi && canonicalHasVi && citedSample.trim().length > 0) {
+    return 'EN → VI';
+  }
+  return 'VI ↔ EN';
+}
+
+function formatRevisionVerdictLabel(
+  rawLabel: string | null | undefined,
+  lang: 'vi' | 'en',
+): string {
+  const norm = (rawLabel || '').trim().toLowerCase();
+  switch (norm) {
+    case 'verified':
+      return lang === 'vi' ? 'Đã xác thực' : 'Verified';
+    case 'metadata_error':
+      return lang === 'vi' ? 'Lỗi Metadata' : 'Metadata Error';
+    case 'suspected_hallucination':
+      return lang === 'vi' ? 'Nghi vấn Bịa đặt' : 'Suspected Hallucination';
+    case 'unresolved':
+      return lang === 'vi' ? 'Chưa xác minh' : 'Unresolved';
+    case 'resource':
+      return lang === 'vi' ? 'Tài nguyên Web / Pháp quy' : 'URL / Legal Resource';
+    case 'removed':
+    case 'deleted':
+      return lang === 'vi' ? 'Đã gỡ bỏ' : 'Removed';
+    case 'added':
+    case 'new':
+      return lang === 'vi' ? 'Mới thêm' : 'Added';
+    case '':
+    case 'none':
+      return '—';
+    default:
+      return norm
+        .split('_')
+        .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : ''))
+        .join(' ');
+  }
 }
 
 interface LinkBadgeInfo {
@@ -525,7 +596,7 @@ const RULE_CATALOG: Record<
   'R-CHIMERIC-DOI-MISMATCH': {
     nameEn: 'Chimeric / Spliced DOI Resolves to Different Publication',
     nameVi: 'Trích dẫn ghép nối (Chimeric): DOI trỏ tới một công trình hoàn toàn khác',
-    condition: 'IF doi_resolved == TRUE AND title_sim_fuzzy < 0.35 AND author_jaccard < 0.25 THEN METADATA_ERROR',
+    condition: 'IF doi_resolved == TRUE AND title_sim_fuzzy < 0.35 AND author_jaccard < 0.25 THEN SUSPECTED_HALLUCINATION',
     status: 'failed',
   },
   'R-LOCAL_DB_METADATA_ERROR': {
@@ -1190,9 +1261,18 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
   const observedWeb = extractObservedWebMeta(verdict);
 
   const hasScholarlyCandidate = verdict.features?.has_scholarly_candidate !== false;
-  const titleSim = hasScholarlyCandidate
-    ? verdict.features?.title_sim_fuzzy
-    : undefined;
+  const hasAnyTitleSim =
+    verdict.features?.title_sim_fuzzy !== undefined ||
+    verdict.features?.title_sim_semantic !== undefined ||
+    verdict.features?.cross_lingual_title_sim !== undefined;
+  const titleSim =
+    hasScholarlyCandidate && hasAnyTitleSim
+      ? Math.max(
+          verdict.features?.title_sim_fuzzy ?? 0,
+          verdict.features?.title_sim_semantic ?? 0,
+          verdict.features?.cross_lingual_title_sim ?? 0,
+        )
+      : undefined;
   const authorSim = hasScholarlyCandidate
     ? verdict.features?.author_jaccard
     : undefined;
@@ -1686,12 +1766,18 @@ function enrichVerdictItem(
   // Compute field-by-field status
   const hasExplicitTitleSim =
     verdict.features?.title_sim_fuzzy !== undefined ||
-    verdict.features?.title_sim_semantic !== undefined;
+    verdict.features?.title_sim_semantic !== undefined ||
+    verdict.features?.cross_lingual_title_sim !== undefined;
   const hasExplicitAuthorSim = verdict.features?.author_jaccard !== undefined;
+  const explicitTitleSim = hasExplicitTitleSim
+    ? Math.max(
+        verdict.features?.title_sim_fuzzy ?? 0,
+        verdict.features?.title_sim_semantic ?? 0,
+        verdict.features?.cross_lingual_title_sim ?? 0,
+      )
+    : null;
   const titleSim =
-    verdict.features?.title_sim_fuzzy ??
-    verdict.features?.title_sim_semantic ??
-    (matchedFieldsSet.has('title') ? 1 : 0);
+    explicitTitleSim ?? (matchedFieldsSet.has('title') ? 1 : 0);
   const authorSim =
     verdict.features?.author_jaccard ??
     (matchedFieldsSet.has('authors') ? 1 : 0);
@@ -2147,8 +2233,18 @@ function enrichVerdictItem(
   });
 
   // Build Federated Sources List (combining actual matched_sources with the standard scholarly engines)
+  const isNonScholarlyResourceUnrouted =
+    (isWebResourceMode || isLegalRule || verdict.label === 'resource') &&
+    verdict.features?.has_scholarly_candidate === false;
   const standardEngines = [
-    { key: 'local', label: 'Local ACL / Known Papers (SQLite FTS5)', matchTokens: ['local', 'known', 'acl'] },
+    {
+      key: 'local',
+      label:
+        lang === 'vi'
+          ? 'CSDL ACL / Bài báo Kinh điển Nội bộ (SQLite FTS5)'
+          : 'Local ACL / Known Papers (SQLite FTS5)',
+      matchTokens: ['local', 'known', 'acl'],
+    },
     { key: 'crossref', label: 'Crossref REST API', matchTokens: ['crossref'] },
     { key: 'openalex', label: 'OpenAlex Scholarly Graph', matchTokens: ['openalex'] },
     { key: 'datacite', label: 'DataCite (Zenodo / Figshare / OSF)', matchTokens: ['datacite', 'zenodo', 'figshare'] },
@@ -2191,11 +2287,27 @@ function enrichVerdictItem(
       };
     }
 
+    if (
+      engine.key === 'local' &&
+      ((verdict.features?.source_used ?? '').toLowerCase().includes('local') ||
+        (verdict.features?.agreed_sources ?? []).some((s) =>
+          String(s).toLowerCase().includes('local'),
+        ))
+    ) {
+      return {
+        name: engine.label,
+        status: verdict.confidence >= 0.7 ? 'matched' : 'partial',
+        score: verdict.confidence.toFixed(2),
+        matchedFields: [],
+      };
+    }
+
     return {
       name: engine.label,
       status: 'not_found',
       score: '0.00',
       matchedFields: [],
+      notRouted: isNonScholarlyResourceUnrouted,
     };
   });
 
@@ -2638,8 +2750,9 @@ export function EssayPage() {
   );
   const shouldShowRevisionDiff = Boolean(
     !isSandboxManuscript &&
-      activeRevisionDiff?.has_previous_revision &&
-      (customRevisionDiff !== null || activeRevisionDiff.is_same_manuscript_family !== false),
+      (activeRevisionDiff?.has_previous_revision ||
+        Boolean((activeRevisionDiff as { has_previous?: boolean } | null)?.has_previous)) &&
+      (customRevisionDiff !== null || activeRevisionDiff?.is_same_manuscript_family !== false),
   );
   const sameFamilyRevisions = (activeRevisionDiff?.available_revisions ?? []).filter(
     (rev) => rev.is_same_stem !== false && !/acl_sandbox/i.test(rev.filename),
@@ -2813,9 +2926,11 @@ export function EssayPage() {
                   <span
                     data-testid="revision-cis-delta-badge"
                     className={`px-2 py-0.5 rounded-md text-xs font-mono font-bold ${
-                      (activeRevisionDiff.cis_delta ?? 0) >= 0
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                      (activeRevisionDiff.cis_delta ?? 0) > 0
+                        ? 'text-emerald-700 bg-emerald-500/10 dark:text-emerald-300 dark:bg-emerald-950'
+                        : (activeRevisionDiff.cis_delta ?? 0) < 0
+                          ? 'text-rose-700 bg-rose-500/10 dark:text-rose-300 dark:bg-rose-950'
+                          : 'text-slate-600 bg-slate-500/10 dark:text-slate-300 dark:bg-slate-800'
                     }`}
                   >
                     {(activeRevisionDiff.cis_delta ?? 0) >= 0
@@ -2833,25 +2948,118 @@ export function EssayPage() {
                   </span>
                 </div>
 
-                {/* Metadata Error Before -> After */}
+                {/* Verdict Count Before -> After with Correct Error Polarity */}
                 {activeRevisionDiff.counts_before && activeRevisionDiff.counts_after && (
                   <>
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-300">
-                      <span>{lang === 'vi' ? 'Lỗi Metadata:' : 'Metadata Errors:'}</span>
-                      <strong>{activeRevisionDiff.counts_before.metadata_error}</strong>
-                      <span>→</span>
-                      <strong className="text-emerald-600 dark:text-emerald-400">
-                        {activeRevisionDiff.counts_after.metadata_error}
-                      </strong>
-                    </div>
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-300">
-                      <span>{lang === 'vi' ? 'Nghi vấn Bịa đặt:' : 'Hallucinations:'}</span>
-                      <strong>{activeRevisionDiff.counts_before.suspected_hallucination}</strong>
-                      <span>→</span>
-                      <strong className="text-emerald-600 dark:text-emerald-400">
-                        {activeRevisionDiff.counts_after.suspected_hallucination}
-                      </strong>
-                    </div>
+                    {(() => {
+                      const beforeVerified = activeRevisionDiff.counts_before.verified ?? 0;
+                      const afterVerified = activeRevisionDiff.counts_after.verified ?? 0;
+                      const deltaVerified = afterVerified - beforeVerified;
+                      const beforeMeta = activeRevisionDiff.counts_before.metadata_error ?? 0;
+                      const afterMeta = activeRevisionDiff.counts_after.metadata_error ?? 0;
+                      const deltaMeta = afterMeta - beforeMeta;
+                      const beforeHallu = activeRevisionDiff.counts_before.suspected_hallucination ?? 0;
+                      const afterHallu = activeRevisionDiff.counts_after.suspected_hallucination ?? 0;
+                      const deltaHallu = afterHallu - beforeHallu;
+                      const beforeUnres = activeRevisionDiff.counts_before.unresolved ?? 0;
+                      const afterUnres = activeRevisionDiff.counts_after.unresolved ?? 0;
+                      const deltaUnres = afterUnres - beforeUnres;
+
+                      const getErrorDeltaBadgeClass = (delta: number) =>
+                        delta < 0
+                          ? 'text-emerald-700 bg-emerald-500/10 dark:text-emerald-300'
+                          : delta > 0
+                            ? 'text-rose-700 bg-rose-500/10 dark:text-rose-300'
+                            : 'text-slate-600 bg-slate-500/10 dark:text-slate-400';
+
+                      const getErrorAfterTextClass = (delta: number) =>
+                        delta < 0
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : delta > 0
+                            ? 'text-rose-700 dark:text-rose-400'
+                            : 'text-slate-700 dark:text-slate-300';
+
+                      const getVerifiedDeltaBadgeClass = (delta: number) =>
+                        delta > 0
+                          ? 'text-emerald-700 bg-emerald-500/10 dark:text-emerald-300'
+                          : delta < 0
+                            ? 'text-rose-700 bg-rose-500/10 dark:text-rose-300'
+                            : 'text-slate-600 bg-slate-500/10 dark:text-slate-400';
+
+                      const formatSignedDelta = (delta: number) =>
+                        delta > 0 ? `+${delta}` : `${delta}`;
+
+                      return (
+                        <>
+                          {deltaVerified !== 0 && (
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-300">
+                              <span>{lang === 'vi' ? 'Đã xác thực:' : 'Verified:'}</span>
+                              <strong>{beforeVerified}</strong>
+                              <span>→</span>
+                              <strong
+                                className={
+                                  deltaVerified > 0
+                                    ? 'text-emerald-700 dark:text-emerald-400'
+                                    : 'text-rose-700 dark:text-rose-400'
+                                }
+                              >
+                                {afterVerified}
+                              </strong>
+                              <span
+                                data-testid="revision-delta-verified"
+                                className={`px-1.5 py-0.5 rounded font-bold text-[11px] ${getVerifiedDeltaBadgeClass(deltaVerified)}`}
+                              >
+                                {formatSignedDelta(deltaVerified)}
+                              </span>
+                            </div>
+                          )}
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-300">
+                            <span>{lang === 'vi' ? 'Lỗi Metadata:' : 'Metadata Errors:'}</span>
+                            <strong>{beforeMeta}</strong>
+                            <span>→</span>
+                            <strong className={getErrorAfterTextClass(deltaMeta)}>
+                              {afterMeta}
+                            </strong>
+                            <span
+                              data-testid="revision-delta-metadata_error"
+                              className={`px-1.5 py-0.5 rounded font-bold text-[11px] ${getErrorDeltaBadgeClass(deltaMeta)}`}
+                            >
+                              {formatSignedDelta(deltaMeta)}
+                            </span>
+                          </div>
+                          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-300">
+                            <span>{lang === 'vi' ? 'Nghi vấn Bịa đặt:' : 'Hallucinations:'}</span>
+                            <strong>{beforeHallu}</strong>
+                            <span>→</span>
+                            <strong className={getErrorAfterTextClass(deltaHallu)}>
+                              {afterHallu}
+                            </strong>
+                            <span
+                              data-testid="revision-delta-suspected_hallucination"
+                              className={`px-1.5 py-0.5 rounded font-bold text-[11px] ${getErrorDeltaBadgeClass(deltaHallu)}`}
+                            >
+                              {formatSignedDelta(deltaHallu)}
+                            </span>
+                          </div>
+                          {(beforeUnres > 0 || afterUnres > 0) && (
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-300">
+                              <span>{lang === 'vi' ? 'Chưa xác minh:' : 'Unresolved:'}</span>
+                              <strong>{beforeUnres}</strong>
+                              <span>→</span>
+                              <strong className={getErrorAfterTextClass(deltaUnres)}>
+                                {afterUnres}
+                              </strong>
+                              <span
+                                data-testid="revision-delta-unresolved"
+                                className={`px-1.5 py-0.5 rounded font-bold text-[11px] ${getErrorDeltaBadgeClass(deltaUnres)}`}
+                              >
+                                {formatSignedDelta(deltaUnres)}
+                              </span>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </>
                 )}
               </div>
@@ -2895,25 +3103,45 @@ export function EssayPage() {
               {activeRevisionDiff.citation_changes && activeRevisionDiff.citation_changes.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-64 overflow-y-auto pr-1">
                   {activeRevisionDiff.citation_changes.map((chg, idx) => {
+                    const extChg = chg as typeof chg & {
+                      composite_label?: string | null;
+                    };
+                    const rawComposite = (extChg.composite_label || '').trim();
+                    const compositeBadge = rawComposite
+                      ? rawComposite.startsWith('[')
+                        ? rawComposite
+                        : `[${rawComposite}]`
+                      : null;
                     const isGood =
                       chg.transition === 'fixed' ||
                       chg.transition === 'removed_hallucination' ||
-                      chg.transition === 'fixed_and_reformatted';
+                      chg.transition === 'fixed_and_reformatted' ||
+                      (chg.after_label === 'verified' && chg.before_label !== 'verified');
+                    const isRegression =
+                      !isGood &&
+                      (chg.after_label === 'suspected_hallucination' ||
+                        chg.transition === 'regressed' ||
+                        chg.transition === 'new_hallucination');
                     return (
                       <div
                         key={idx}
+                        data-testid={`revision-change-item-${idx}`}
                         className={`p-3 rounded-xl border text-xs flex flex-col gap-1 ${
                           isGood
                             ? 'bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/70'
-                            : 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/70'
+                            : isRegression
+                              ? 'bg-rose-50/70 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/70'
+                              : 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/70'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2 font-mono font-bold">
+                        <div className="flex items-center justify-between gap-2 font-mono font-bold flex-wrap">
                           <span
                             className={
                               isGood
                                 ? 'text-emerald-700 dark:text-emerald-300'
-                                : 'text-amber-700 dark:text-amber-300'
+                                : isRegression
+                                  ? 'text-rose-700 dark:text-rose-300'
+                                  : 'text-amber-700 dark:text-amber-300'
                             }
                           >
                             {chg.transition === 'removed_hallucination'
@@ -2924,16 +3152,32 @@ export function EssayPage() {
                                 ? lang === 'vi'
                                   ? '✓ ĐÃ SỬA LỖI THÀNH CÔNG'
                                   : '✓ REPAIRED TO VERIFIED'
-                                : lang === 'vi'
-                                  ? '⚠ CẦN KIỂM TRA THÊM'
-                                  : '⚠ REQUIRES ATTENTION'}
+                                : isRegression
+                                  ? lang === 'vi'
+                                    ? '✕ PHÁT SINH LỖI / BỊA ĐẶT'
+                                    : '✕ REGRESSION DETECTED'
+                                  : lang === 'vi'
+                                    ? '⚠ CẦN KIỂM TRA THÊM'
+                                    : '⚠ REQUIRES ATTENTION'}
                           </span>
                           <span className="text-[10px] px-2 py-0.5 rounded bg-white/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                            {chg.before_label.toUpperCase()} → {chg.after_label.toUpperCase()}
+                            {formatRevisionVerdictLabel(chg.before_label, lang)} →{' '}
+                            {formatRevisionVerdictLabel(chg.after_label, lang)}
                           </span>
                         </div>
                         <p className="text-slate-700 dark:text-slate-300 line-clamp-2 font-mono text-[11px]">
-                          {chg.citation_raw}
+                          {compositeBadge && (
+                            <span
+                              data-testid="revision-change-composite-marker"
+                              className="inline-block font-bold text-indigo-700 dark:text-indigo-300 mr-1.5"
+                            >
+                              {compositeBadge}
+                            </span>
+                          )}
+                          {compositeBadge &&
+                          chg.citation_raw.trim().startsWith(compositeBadge)
+                            ? chg.citation_raw.trim().slice(compositeBadge.length).trim()
+                            : chg.citation_raw}
                         </p>
                       </div>
                     );
@@ -3488,27 +3732,95 @@ export function EssayPage() {
                               : 'Neuro-Symbolic Reasoning:'}
                           </span>
                           <StreamingText text={activeItem.explanationText} />
-                          {Array.isArray(activeItem.verdict.features?.bridged_concepts) &&
-                            activeItem.verdict.features.bridged_concepts.length > 0 && (
+                          {(() => {
+                            const f = activeItem.verdict.features as CrossLingualFeaturesExt | undefined;
+                            const bridgedConcepts = Array.isArray(f?.cross_lingual_bridged_concepts) &&
+                              f.cross_lingual_bridged_concepts.length > 0
+                              ? f.cross_lingual_bridged_concepts
+                              : Array.isArray(f?.bridged_concepts)
+                                ? f.bridged_concepts
+                                : [];
+                            const hasCrossLingualRule = (activeItem.verdict.triggered_rules ?? []).some(
+                              (r) => r === 'R-CROSS-LINGUAL-ALIGNMENT' || r === 'R-CROSS-LINGUAL-TITLE-MATCH',
+                            );
+                            const shouldRenderCrossLingual =
+                              bridgedConcepts.length > 0 ||
+                              Boolean(f?.cross_lingual_detected) ||
+                              Boolean(f?.cross_lingual_alignment) ||
+                              Boolean(f?.cross_lingual_title_detected) ||
+                              (f?.cross_lingual_title_sim ?? 0) >= 0.50 ||
+                              hasCrossLingualRule;
+                            if (!shouldRenderCrossLingual) return null;
+
+                            const citedSample = `${activeItem.citedMeta.title} ${activeItem.verdict.context || ''} ${activeItem.verdict.citation_raw || ''}`;
+                            const canonicalSample =
+                              activeItem.retrievedMeta?.title ||
+                              activeItem.verdict.matched_sources?.[0]?.title ||
+                              '';
+                            const direction = detectCrossLingualDirection(
+                              citedSample,
+                              canonicalSample,
+                              f?.cross_lingual_direction,
+                            );
+                            const onnxSim = Math.max(
+                              f?.cross_lingual_title_sim ?? 0,
+                              f?.title_sim_semantic ?? 0,
+                              f?.semantic_similarity ?? 0,
+                              f?.content_alignment_score ?? 0,
+                            );
+                            const onnxPct = onnxSim > 0 ? Math.round(onnxSim * 100) : null;
+
+                            return (
                               <div
                                 data-testid="essay-bridged-concepts"
                                 className="mt-2 pt-2 border-t border-slate-200/70 dark:border-slate-800 flex flex-wrap items-center gap-1.5"
                               >
-                                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                                  VI ↔ EN Concept Bridge:
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 dark:bg-indigo-950/80 dark:text-indigo-200 dark:border-indigo-800">
+                                  {direction}
                                 </span>
-                                {activeItem.verdict.features.bridged_concepts
-                                  .slice(0, 5)
-                                  .map((pair, idx) => (
-                                    <span
-                                      key={idx}
-                                      className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800/70"
-                                    >
-                                      {pair}
+                                {bridgedConcepts.length > 0 ? (
+                                  <>
+                                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                                      {lang === 'vi'
+                                        ? 'Cầu nối Khái niệm Học thuật:'
+                                        : 'Academic Concept Bridge:'}
                                     </span>
-                                  ))}
+                                    {bridgedConcepts.slice(0, 5).map((pair, idx) => (
+                                      <span
+                                        key={idx}
+                                        className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800/70"
+                                      >
+                                        {pair}
+                                      </span>
+                                    ))}
+                                    {onnxPct !== null && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-teal-50 text-teal-700 border border-teal-200 dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-800/70">
+                                        ONNX INT8 · {onnxPct}%
+                                      </span>
+                                    )}
+                                  </>
+                                ) : (
+                                  <div
+                                    data-testid="essay-onnx-cross-lingual-badge"
+                                    className="flex flex-wrap items-center gap-1.5"
+                                  >
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-teal-50 text-teal-800 border border-teal-200 dark:bg-teal-950/70 dark:text-teal-200 dark:border-teal-800">
+                                      {lang === 'vi'
+                                        ? 'Đối sánh ngữ nghĩa đa ngôn ngữ ONNX INT8 (paraphrase-multilingual-MiniLM-L12-v2)'
+                                        : 'Multilingual ONNX INT8 Embedding Match (paraphrase-multilingual-MiniLM-L12-v2)'}
+                                    </span>
+                                    {onnxPct !== null && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800/70">
+                                        {lang === 'vi'
+                                          ? `Tương đồng đa ngôn ngữ: ${onnxPct}%`
+                                          : `Cross-Lingual Sim: ${onnxPct}%`}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                            )}
+                            );
+                          })()}
                         </div>
                       </div>
                     )}
@@ -3945,70 +4257,108 @@ export function EssayPage() {
                       {/* TAB 3: Multi-Source Federation */}
                       <TabsContent value="sources" className="mt-4">
                         <div className="grid sm:grid-cols-2 gap-3">
-                          {activeItem.sources.map((src) => (
-                            <div
-                              key={src.name}
-                              className={`p-3.5 rounded-xl border flex items-center justify-between gap-2 ${
-                                src.status === 'matched'
-                                  ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/70'
-                                  : src.status === 'partial'
-                                    ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/70'
-                                    : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800'
-                              }`}
-                            >
-                              <div className="min-w-0">
-                                <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
-                                  {src.name}
-                                </p>
-                                <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
-                                  Sim: {src.score}
-                                  {src.matchedFields.length > 0 &&
-                                    ` · Fields: ${src.matchedFields.join(', ')}`}
-                                </p>
-                                {(() => {
-                                  const rawUrl =
-                                    src.url ||
-                                    (src.doi?.startsWith('http')
-                                      ? src.doi
-                                      : src.doi
-                                        ? `https://doi.org/${encodeURIComponent(src.doi)}`
-                                        : '');
-                                  const safeUrl = /^https?:\/\//i.test(rawUrl)
-                                    ? rawUrl
-                                    : null;
-                                  if (!safeUrl) return null;
-                                  return (
-                                    <a
-                                      href={safeUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 text-[11px] font-mono text-indigo-600 dark:text-indigo-400 hover:underline mt-1"
-                                    >
-                                      <span>
-                                        {lang === 'vi' ? 'Mở bản ghi nguồn' : 'Open Source Record'}
-                                      </span>
-                                      <ExternalLink className="h-3 w-3" />
-                                    </a>
-                                  );
-                                })()}
-                              </div>
-                              <span
-                                className={`text-[11px] font-mono font-semibold px-2 py-0.5 rounded shrink-0 ${
+                          {activeItem.sources.map((src) => {
+                            const localizeFieldToken = (f: string) => {
+                              if (lang !== 'vi') return f;
+                              const low = f.toLowerCase();
+                              if (low === 'title') return 'tiêu đề';
+                              if (low === 'authors' || low === 'author') return 'tác giả';
+                              if (low === 'year') return 'năm';
+                              if (low === 'venue') return 'nơi công bố';
+                              return f;
+                            };
+                            const joinedFields = src.matchedFields
+                              .map(localizeFieldToken)
+                              .join(', ');
+                            const subtitleText =
+                              src.status === 'matched'
+                                ? lang === 'vi'
+                                  ? `Đã khớp · Tương đồng: ${src.score}${joinedFields ? ` · Trường khớp: ${joinedFields}` : ''}`
+                                  : `Matched · Sim: ${src.score}${joinedFields ? ` · Fields: ${joinedFields}` : ''}`
+                                : src.status === 'partial'
+                                  ? lang === 'vi'
+                                    ? `Đã truy vấn · Tương đồng: ${src.score}${joinedFields ? ` · Trường khớp: ${joinedFields}` : ''}`
+                                    : `Queried · Sim: ${src.score}${joinedFields ? ` · Fields: ${joinedFields}` : ''}`
+                                  : src.notRouted
+                                    ? lang === 'vi'
+                                      ? 'Không định tuyến · Tài nguyên phi học thuật'
+                                      : 'Not Routed · Non-scholarly resource'
+                                    : lang === 'vi'
+                                      ? `Đã truy vấn · Tương đồng: ${src.score}`
+                                      : `Queried · Sim: ${src.score}`;
+                            return (
+                              <div
+                                key={src.name}
+                                className={`p-3.5 rounded-xl border flex items-center justify-between gap-2 ${
                                   src.status === 'matched'
-                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                                    ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/70'
                                     : src.status === 'partial'
-                                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
-                                      : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                      ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/70'
+                                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800'
                                 }`}
                               >
-                                {src.status === 'matched'
-                                  ? 'MATCH'
-                                  : src.status === 'partial'
-                                    ? 'CANDIDATE'
-                                    : 'NO HIT'}
-                              </span>
-                            </div>
-                          ))}
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
+                                    {src.name}
+                                  </p>
+                                  <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
+                                    {subtitleText}
+                                  </p>
+                                  {(() => {
+                                    const rawUrl =
+                                      src.url ||
+                                      (src.doi?.startsWith('http')
+                                        ? src.doi
+                                        : src.doi
+                                          ? `https://doi.org/${encodeURIComponent(src.doi)}`
+                                          : '');
+                                    const safeUrl = /^https?:\/\//i.test(rawUrl)
+                                      ? rawUrl
+                                      : null;
+                                    if (!safeUrl) return null;
+                                    return (
+                                      <a
+                                        href={safeUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-[11px] font-mono text-indigo-600 dark:text-indigo-400 hover:underline mt-1"
+                                      >
+                                        <span>
+                                          {lang === 'vi' ? 'Mở bản ghi nguồn' : 'Open Source Record'}
+                                        </span>
+                                        <ExternalLink className="h-3 w-3" />
+                                      </a>
+                                    );
+                                  })()}
+                                </div>
+                                <span
+                                  className={`text-[11px] font-mono font-semibold px-2 py-0.5 rounded shrink-0 ${
+                                    src.status === 'matched'
+                                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                                      : src.status === 'partial'
+                                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+                                        : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                                  }`}
+                                >
+                                  {src.status === 'matched'
+                                    ? lang === 'vi'
+                                      ? 'KHỚP'
+                                      : 'MATCH'
+                                    : src.status === 'partial'
+                                      ? lang === 'vi'
+                                        ? 'ỨNG VIÊN'
+                                        : 'CANDIDATE'
+                                      : src.notRouted
+                                        ? lang === 'vi'
+                                          ? 'KHÔNG ĐỊNH TUYẾN'
+                                          : 'NOT ROUTED'
+                                        : lang === 'vi'
+                                          ? 'KHÔNG KHỚP'
+                                          : 'NO HIT'}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                       </TabsContent>
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 from io import BytesIO
-from typing import Any
+from typing import Any, Literal
 
 from defusedxml.ElementTree import fromstring as safe_fromstring
 from docx import Document
@@ -95,6 +95,7 @@ def export_report_to_docx(
     linking_summary: dict[str, int] | None = None,
     style_profile: dict | None = None,
     cis_weights: dict[str, float] | None = None,
+    document_diagnostics: dict[str, Any] | None = None,
 ) -> bytes:
     """Generate a DOCX report from analysis results.
 
@@ -247,22 +248,61 @@ def export_report_to_docx(
             rc[0].text = k.replace("_", " ").title()
             rc[1].text = str(v_cnt)
 
+    resolved_diag = document_diagnostics
+    if not resolved_diag and isinstance(style_profile, dict) and isinstance(style_profile.get("document_diagnostics"), dict):
+        resolved_diag = style_profile.get("document_diagnostics")
+    if isinstance(resolved_diag, dict):
+        diag_notes: list[str] = []
+        parser_used = resolved_diag.get("parser_used") or resolved_diag.get("parser_mode")
+        if parser_used:
+            diag_notes.append(f"Parser Used: {parser_used}")
+        ocr_pages = resolved_diag.get("ocr_pages_recovered") or []
+        if ocr_pages:
+            diag_notes.append(
+                f"Selective OCR Recovered Pages: {', '.join(str(p) for p in ocr_pages)} ({len(ocr_pages)} page(s))"
+            )
+        leg_enc = resolved_diag.get("legacy_encoding_detected")
+        leg_cnt = int(resolved_diag.get("legacy_encoding_pages_count") or 0)
+        if leg_enc:
+            diag_notes.append(
+                f"Legacy Encoding Transcoded: {leg_enc}"
+                + (f" ({leg_cnt} page(s) converted to Unicode)" if leg_cnt else "")
+            )
+        if resolved_diag.get("is_scanned_pdf"):
+            warn_msg = resolved_diag.get("warning_message") or "Scanned/image-only PDF detected."
+            diag_notes.append(f"Scanned PDF Warning: {warn_msg}")
+        if diag_notes:
+            doc.add_heading("Document & Parser Diagnostics", level=2)
+            for note in diag_notes:
+                p_diag = doc.add_paragraph(style="List Bullet")
+                p_diag.add_run(note)
+
     # Summary Statistics
     doc.add_heading("Summary Statistics", level=1)
 
-    stats_table = doc.add_table(rows=8, cols=2)
-    stats_table.style = "Table Grid"
+    num_incomplete = sum(
+        1
+        for v in verdicts
+        if "R-INCOMPLETE-METADATA" in (v.get("triggered_rules") or [])
+    )
 
     stats_data = [
         ("Total Citations", str(num_citations)),
         ("Verified", f"{num_verified} ({num_verified * 100 / max(num_citations, 1):.1f}%)"),
         ("Metadata Error", f"{num_metadata_error} ({num_metadata_error * 100 / max(num_citations, 1):.1f}%)"),
+        (
+            "  └─ Incomplete Metadata (R-INCOMPLETE-METADATA)",
+            f"{num_incomplete} ({num_incomplete * 100 / max(num_citations, 1):.1f}%)",
+        ),
         ("Suspected Hallucination", f"{num_suspected} ({num_suspected * 100 / max(num_citations, 1):.1f}%)"),
         ("Unresolved", f"{num_unresolved} ({num_unresolved * 100 / max(num_citations, 1):.1f}%)"),
         ("URL/Resource", f"{num_resource} ({num_resource * 100 / max(num_citations, 1):.1f}%)"),
         ("", ""),
         ("Citation Integrity Score", f"{cis_score:.2f}%"),
     ]
+
+    stats_table = doc.add_table(rows=len(stats_data), cols=2)
+    stats_table.style = "Table Grid"
 
     for i, (label, value) in enumerate(stats_data):
         row = stats_table.rows[i]
@@ -297,21 +337,42 @@ def export_report_to_docx(
         # Data rows
         for v in verdicts:
             row_cells = table.add_row().cells
+            feats = v.get("features") if isinstance(v.get("features"), dict) else {}
             raw_cit = str(v.get("citation_raw", "") or "")
+            comp_lbl = v.get("composite_label") or feats.get("composite_label")
+            if comp_lbl and f"[{comp_lbl}]" not in raw_cit:
+                raw_cit = f"[{comp_lbl}] {raw_cit}"
+
             mismatched = v.get("mismatched_fields") or []
             rules = v.get("triggered_rules") or []
-            lbl_lower = str(v.get("label", "") or "").lower()
-            details_suffix = ""
-            if rules or mismatched:
-                parts = []
-                if rules:
-                    parts.append(f"Rules: {', '.join(str(r) for r in rules)}")
-                if mismatched:
-                    parts.append(f"Mismatched: {', '.join(str(m) for m in mismatched)}")
-                details_suffix = f"\n[{' | '.join(parts)}]"
+            raw_lbl_lower = str(v.get("label", "") or "").lower()
+            lbl_lower = "unresolved" if raw_lbl_lower in ("", "unverified") else raw_lbl_lower
+
+            url_status = v.get("url_status") or feats.get("url_status")
+            archive_url = v.get("archive_url") or feats.get("archive_url")
+            html_meta = v.get("html_meta") if isinstance(v.get("html_meta"), dict) else feats.get("html_meta")
+            obs_title = html_meta.get("title") if isinstance(html_meta, dict) else None
+
+            parts: list[str] = []
+            if rules:
+                parts.append(f"Rules: {', '.join(str(r) for r in rules)}")
+            if mismatched:
+                parts.append(f"Mismatched: {', '.join(str(m) for m in mismatched)}")
+            if url_status:
+                parts.append(f"URL Status: {url_status}")
+            if archive_url:
+                parts.append(f"Archive: {archive_url}")
+            if obs_title:
+                parts.append(f"Observed Web Title: {obs_title[:80]}")
+            details_suffix = f"\n[{' | '.join(parts)}]" if parts else ""
+
+            display_lbl = lbl_lower.upper()
+            if lbl_lower == "metadata_error" and "R-INCOMPLETE-METADATA" in rules:
+                display_lbl = "METADATA_ERROR (INCOMPLETE)"
+
             row_cells[0].text = raw_cit + details_suffix
             row_cells[1].text = str(v.get("mapping_status") or v.get("citation_type", "unknown"))
-            row_cells[2].text = str(v.get("label", "UNKNOWN")).upper()
+            row_cells[2].text = display_lbl
             row_cells[3].text = f"{float(v.get('confidence', 0) or 0):.2f}"
 
             if lbl_lower == "suspected_hallucination":
@@ -321,14 +382,29 @@ def export_report_to_docx(
                             run.font.color.rgb = RGBColor(220, 38, 38)
                             run.font.bold = True
             elif lbl_lower == "metadata_error":
+                err_color = (
+                    RGBColor(180, 83, 9)
+                    if "R-INCOMPLETE-METADATA" in rules
+                    else RGBColor(220, 38, 38)
+                )
                 for cell in row_cells:
                     for paragraph in cell.paragraphs:
                         for run in paragraph.runs:
-                            run.font.color.rgb = RGBColor(220, 38, 38)
+                            run.font.color.rgb = err_color
                 for paragraph in row_cells[2].paragraphs:
                     for run in paragraph.runs:
                         run.font.bold = True
-            elif lbl_lower in ("verified", "resource"):
+            elif lbl_lower == "unresolved":
+                for paragraph in row_cells[2].paragraphs:
+                    for run in paragraph.runs:
+                        run.font.color.rgb = RGBColor(180, 83, 9)
+                        run.font.bold = True
+            elif lbl_lower == "resource":
+                for paragraph in row_cells[2].paragraphs:
+                    for run in paragraph.runs:
+                        run.font.color.rgb = RGBColor(3, 105, 161)
+                        run.font.bold = True
+            elif lbl_lower == "verified":
                 for paragraph in row_cells[2].paragraphs:
                     for run in paragraph.runs:
                         run.font.color.rgb = RGBColor(22, 163, 74)
@@ -341,18 +417,33 @@ def export_report_to_docx(
             if v.get("reasoning")
             or v.get("triggered_rules")
             or v.get("mismatched_fields")
+            or v.get("url_status")
+            or v.get("archive_url")
+            or v.get("html_meta")
             or (v.get("features") or {}).get("best_evidence_sentence")
+            or (v.get("features") or {}).get("url_status")
+            or (v.get("features") or {}).get("archive_url")
+            or (v.get("features") or {}).get("html_meta")
         ]
         if detailed_items:
             doc.add_heading("Neuro-Symbolic Diagnostic Trace & Evidence", level=1)
             for idx, v in enumerate(detailed_items, 1):
                 p = doc.add_paragraph()
-                lbl_str = str(v.get("label", "UNKNOWN")).upper()
-                lbl_lower = lbl_str.lower()
-                r_num = p.add_run(f"[{idx}] {v.get('citation_raw', '')}\n")
+                feats = v.get("features") if isinstance(v.get("features"), dict) else {}
+                raw_lbl_str = str(v.get("label", "UNRESOLVED") or "UNRESOLVED")
+                lbl_lower = "unresolved" if raw_lbl_str.lower() in ("", "unverified") else raw_lbl_str.lower()
+                lbl_str = lbl_lower.upper()
+                comp_lbl = v.get("composite_label") or feats.get("composite_label")
+                marker_str = str(comp_lbl) if comp_lbl else str(idx)
+                r_num = p.add_run(f"[{marker_str}] {v.get('citation_raw', '')}\n")
                 r_num.bold = True
                 if lbl_lower in ("suspected_hallucination", "metadata_error"):
                     r_num.font.color.rgb = RGBColor(220, 38, 38)
+                elif lbl_lower == "unresolved":
+                    r_num.font.color.rgb = RGBColor(180, 83, 9)
+                elif lbl_lower == "resource":
+                    r_num.font.color.rgb = RGBColor(3, 105, 161)
+
                 map_str = str(v.get("mapping_status", "matched"))
                 r_verdict = p.add_run(
                     f"Verdict: {lbl_str} (Confidence: {float(v.get('confidence', 0) or 0):.2f}) | Layer-1 Mapping: {map_str}\n"
@@ -360,6 +451,13 @@ def export_report_to_docx(
                 if lbl_lower in ("suspected_hallucination", "metadata_error"):
                     r_verdict.font.color.rgb = RGBColor(220, 38, 38)
                     r_verdict.bold = True
+                elif lbl_lower == "unresolved":
+                    r_verdict.font.color.rgb = RGBColor(180, 83, 9)
+                    r_verdict.bold = True
+                elif lbl_lower == "resource":
+                    r_verdict.font.color.rgb = RGBColor(3, 105, 161)
+                    r_verdict.bold = True
+
                 rules = v.get("triggered_rules") or []
                 if rules:
                     p.add_run(f"Triggered Symbolic Rules: {', '.join(str(r) for r in rules)}\n")
@@ -369,7 +467,17 @@ def export_report_to_docx(
                     r_mm.font.color.rgb = RGBColor(185, 28, 28)
                 if v.get("reasoning"):
                     p.add_run(f"Diagnostic Reasoning: {v.get('reasoning')}\n")
-                feats = v.get("features") if isinstance(v.get("features"), dict) else {}
+
+                url_status = v.get("url_status") or feats.get("url_status")
+                archive_url = v.get("archive_url") or feats.get("archive_url")
+                html_meta = v.get("html_meta") if isinstance(v.get("html_meta"), dict) else feats.get("html_meta")
+                if url_status:
+                    p.add_run(f"URL Liveness Status: {url_status}\n")
+                if archive_url:
+                    p.add_run(f"Wayback Archive URL: {archive_url}\n")
+                if isinstance(html_meta, dict) and html_meta.get("title"):
+                    p.add_run(f"Observed Web Page Title (HTML Meta): \"{html_meta.get('title')}\"\n")
+
                 ev_sent = feats.get("best_evidence_sentence")
                 if ev_sent:
                     p.add_run(f"SBERT Best Evidence Sentence: \"{ev_sent}\"\n")
@@ -406,17 +514,27 @@ def export_report_to_docx(
                 for e in rem_entries:
                     p_rem = doc.add_paragraph()
                     e_lbl = str(e.get("label", "")).lower()
+                    e_status = str(e.get("remediation_status", "")).lower()
+                    e_rules = e.get("triggered_rules") or []
+                    disp_idx = e.get("display_index") or e.get("composite_label") or e.get("index")
                     if e.get("is_hallucination") or e_lbl == "suspected_hallucination":
                         r_warn = p_rem.add_run(
-                            f"[{e['index']}] [CẢNH BÁO ĐỎ — SUSPECTED HALLUCINATION / NGUỒN BỊA ĐẶT: CẦN LOẠI BỎ]\n"
+                            f"[{disp_idx}] [CẢNH BÁO ĐỎ — SUSPECTED HALLUCINATION / NGUỒN BỊA ĐẶT: CẦN LOẠI BỎ]\n"
                         )
                         r_warn.bold = True
                         r_warn.font.color.rgb = RGBColor(220, 38, 38)
                         r_orig = p_rem.add_run(f"Original in Manuscript: {e.get('original_raw', '')}\n")
                         r_orig.font.color.rgb = RGBColor(220, 38, 38)
-                    elif e.get("is_error") or e_lbl == "metadata_error":
+                    elif "R-INCOMPLETE-METADATA" in e_rules and not e.get("was_modified"):
+                        r_inc = p_rem.add_run(
+                            f"[{disp_idx}] [INCOMPLETE METADATA — MANUAL COMPLETION REQUIRED]\n"
+                        )
+                        r_inc.bold = True
+                        r_inc.font.color.rgb = RGBColor(180, 83, 9)
+                        p_rem.add_run(f"Original in Manuscript: {e.get('original_raw', '')}\n")
+                    elif (e.get("is_error") or e_lbl == "metadata_error") and e.get("was_modified"):
                         r_fix = p_rem.add_run(
-                            f"[{e['index']}] [METADATA ERROR AUTO-REPAIRED — Repaired fields: {', '.join(e.get('diff_fields') or ['metadata'])}]\n"
+                            f"[{disp_idx}] [METADATA ERROR AUTO-REPAIRED — Repaired fields: {', '.join(e.get('diff_fields') or ['metadata'])}]\n"
                         )
                         r_fix.bold = True
                         r_fix.font.color.rgb = RGBColor(185, 28, 28)
@@ -427,8 +545,18 @@ def export_report_to_docx(
                         r_after.font.color.rgb = RGBColor(22, 163, 74)
                         r_bib = p_rem.add_run(f"BibTeX:\n{e.get('bibtex', '')}")
                         r_bib.font.size = Pt(8.5)
+                    elif e_lbl in ("unresolved", "unverified") or e_status == "manual_review":
+                        r_unres = p_rem.add_run(f"[{disp_idx}] [UNRESOLVED — MANUAL CHECK]\n")
+                        r_unres.bold = True
+                        r_unres.font.color.rgb = RGBColor(180, 83, 9)
+                        p_rem.add_run(f"{e.get('original_raw') or e.get('apa', '')}\n")
+                    elif e_lbl == "resource" or e_status == "resource":
+                        r_res = p_rem.add_run(f"[{disp_idx}] [WEB / STATUTORY RESOURCE]\n")
+                        r_res.bold = True
+                        r_res.font.color.rgb = RGBColor(3, 105, 161)
+                        p_rem.add_run(f"{e.get('apa', '')}\n")
                     else:
-                        r_ok = p_rem.add_run(f"[{e['index']}] [VERIFIED & STANDARDIZED]\n")
+                        r_ok = p_rem.add_run(f"[{disp_idx}] [VERIFIED & STANDARDIZED]\n")
                         r_ok.bold = True
                         r_ok.font.color.rgb = RGBColor(22, 163, 74)
                         p_rem.add_run(f"{e.get('apa', '')}\n")
@@ -448,10 +576,10 @@ def export_report_to_docx(
 
     legend_data = [
         ("VERIFIED", "Citation verified successfully through academic databases"),
-        ("METADATA_ERROR", "Citation found but metadata (author, title, year) doesn't match"),
+        ("METADATA_ERROR", "Citation found but metadata (author, title, year) doesn't match or is incomplete"),
         ("SUSPECTED_HALLUCINATION", "Citation appears to be fabricated or non-existent"),
         ("UNRESOLVED", "Insufficient evidence to determine citation validity"),
-        ("RESOURCE", "Citation is a URL/web resource (not academic paper)"),
+        ("RESOURCE", "Citation is a URL/web or statutory resource (not academic paper)"),
         ("", ""),
     ]
 
@@ -467,6 +595,10 @@ def export_report_to_docx(
             row.cells[0].paragraphs[0].runs[0].font.color.rgb = RGBColor(234, 179, 8)
         elif label == "SUSPECTED_HALLUCINATION":
             row.cells[0].paragraphs[0].runs[0].font.color.rgb = RGBColor(239, 68, 68)
+        elif label == "UNRESOLVED":
+            row.cells[0].paragraphs[0].runs[0].font.color.rgb = RGBColor(180, 83, 9)
+        elif label == "RESOURCE":
+            row.cells[0].paragraphs[0].runs[0].font.color.rgb = RGBColor(3, 105, 161)
 
     # Disclaimer
     doc.add_paragraph()
@@ -486,28 +618,93 @@ def export_report_to_docx(
     return buffer.getvalue()
 
 
+def _strip_docx_entry_prefix(text: str) -> str:
+    s = " ".join((text or "").split()).strip()
+    s = re.sub(r"^\s*(?:\[\s*\d+[a-z]?\s*\]|\d+[a-z]?[\.\)])\s*", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"^\s*(?:\([a-z]\)|[a-z]\))\s*", "", s, flags=re.IGNORECASE)
+    return s.strip()
+
+
+def _entry_matches_docx_paragraph(
+    entry: dict[str, Any],
+    p_text: str,
+    p_lower: str,
+    para_num_idx: int | None,
+    para_has_composite_markers: bool,
+) -> bool:
+    orig_raw = str(entry.get("original_raw") or "").strip()
+    clean_orig = _strip_docx_entry_prefix(orig_raw)
+    canon_title = str((entry.get("canonical_metadata") or {}).get("title") or "").strip()
+    cited_title = str((entry.get("cited") or {}).get("title") or "").strip()
+
+    if orig_raw and len(orig_raw) >= 15 and orig_raw[:42].lower() in p_lower:
+        return True
+    if clean_orig and len(clean_orig) >= 12 and clean_orig[:38].lower() in p_lower:
+        return True
+    if cited_title and len(cited_title) >= 15 and cited_title.lower() in p_lower:
+        return True
+    if canon_title and len(canon_title) >= 15 and canon_title.lower() in p_lower:
+        return True
+
+    if para_has_composite_markers and para_num_idx is not None:
+        e_num = entry.get("numeric_index")
+        e_comp = str(entry.get("composite_label") or "")
+        if e_num == para_num_idx or (
+            e_comp and re.match(rf"^{para_num_idx}[a-z]$", e_comp, flags=re.IGNORECASE)
+        ):
+            return True
+    return False
+
+
+def _entry_status_badge_and_table_label(entry: dict[str, Any]) -> tuple[str, str]:
+    """Return (inline_badge, table_status_label) honestly distinguishing all verdict states."""
+    e_lbl = str(entry.get("label") or "").lower()
+    e_status = str(entry.get("remediation_status") or "").lower()
+    e_rules = entry.get("triggered_rules") or []
+
+    if entry.get("is_hallucination") or e_lbl == "suspected_hallucination":
+        return ("[REMOVE — SUSPECTED HALLUCINATION]", "HALLUCINATION (REMOVE)")
+    if entry.get("was_modified"):
+        return ("", "AUTO-HEALED")
+    if "R-INCOMPLETE-METADATA" in e_rules:
+        return (
+            "[INCOMPLETE METADATA — MANUAL COMPLETION REQUIRED]",
+            "[INCOMPLETE METADATA — MANUAL COMPLETION REQUIRED]",
+        )
+    if e_lbl in ("unresolved", "unverified") or e_status == "manual_review":
+        return ("[UNRESOLVED — MANUAL CHECK]", "[UNRESOLVED — MANUAL CHECK]")
+    if e_lbl == "resource" or e_status == "resource":
+        return ("[WEB / STATUTORY RESOURCE]", "[WEB / STATUTORY RESOURCE]")
+    return ("[VERIFIED & STANDARDIZED]", "VERIFIED")
+
+
 def export_auto_healed_docx(
     essay_filename: str,
     verdicts: list[dict[str, Any]],
-    style: str = "apa",
+    style: Literal["apa", "ieee", "tdtu"] | str = "apa",
     original_docx_path: str | None = None,
 ) -> bytes:
     """Export an Auto-Healed Word (.docx) manuscript or standardized bibliography package.
 
-    If ``original_docx_path`` points to an existing ``.docx`` file on disk, heals
-    ``METADATA_ERROR`` bibliography paragraphs in-place, flags ``SUSPECTED_HALLUCINATION``
-    paragraphs in red, and appends a structured Before -> After Change Log table.
-    Otherwise (e.g. for ``.pdf`` uploads), generates a clean Word ``.docx`` containing
-    the ready-to-paste Auto-Healed Bibliography, Before -> After Change Log table,
-    and BibTeX appendix.
+    Supports ``apa``, ``ieee``, and ``tdtu`` bibliography styles. Preserves all sibling
+    sub-entries inside composite bibliography paragraphs (e.g. ``[14] (a) Ref A; (b) Ref B``)
+    in a single pass without wiping siblings.
     """
     from pathlib import Path
 
     from integrity_checker.export.bibliography_formatter import build_remediated_bibliography
 
-    norm_style = "ieee" if (style or "").strip().lower() == "ieee" else "apa"
+    s_low = (style or "apa").strip().lower()
+    norm_style = s_low if s_low in ("apa", "ieee", "tdtu") else "apa"
     rem_data = build_remediated_bibliography(essay_id=0, verdicts=verdicts, style=norm_style)
     entries: list[dict[str, Any]] = rem_data.get("entries") or []
+
+    def _select_style_text(e: dict[str, Any]) -> str:
+        if norm_style == "tdtu":
+            return str(e.get("tdtu") or e.get("remediated_text") or "")
+        if norm_style == "ieee":
+            return str(e.get("ieee") or e.get("remediated_text") or "")
+        return str(e.get("apa") or e.get("remediated_text") or "")
 
     in_place_healed_count = 0
     used_original_docx = False
@@ -539,23 +736,101 @@ def export_auto_healed_docx(
         r_sub.italic = True
         r_sub.font.color.rgb = RGBColor(100, 116, 139)
     else:
-        # Heal matching paragraphs in-place in the original .docx
+        processed_entry_idxs: set[int] = set()
         for para in doc.paragraphs:
             p_text = (para.text or "").strip()
-            if len(p_text) < 15:
+            if len(p_text) < 12:
                 continue
             p_lower = p_text.lower()
-            for entry in entries:
-                orig_raw = str(entry.get("original_raw") or "").strip()
-                cited_title = str((entry.get("cited") or {}).get("title") or "").strip()
-                matched = False
-                if orig_raw and len(orig_raw) >= 18 and orig_raw[:45].lower() in p_lower or cited_title and len(cited_title) >= 18 and cited_title.lower() in p_lower:
-                    matched = True
-                if not matched:
-                    continue
+            m_lead_num = re.match(r"^\s*(?:\[\s*(\d+)\s*\]|(\d+)[\.\)])", p_text)
+            para_num_idx = int(m_lead_num.group(1) or m_lead_num.group(2)) if m_lead_num else None
+            para_has_composite = bool(
+                re.search(r"\([a-z]\)", p_text, flags=re.IGNORECASE)
+                and (";" in p_text or re.search(r"\([b-z]\)", p_text, flags=re.IGNORECASE))
+            )
 
-                healed_text = str(entry.get(norm_style) or entry.get("formatted") or "")
-                if entry.get("is_hallucination"):
+            matching: list[tuple[int, dict[str, Any]]] = []
+            for e_idx, entry in enumerate(entries):
+                if e_idx in processed_entry_idxs:
+                    continue
+                if _entry_matches_docx_paragraph(
+                    entry, p_text, p_lower, para_num_idx, para_has_composite
+                ):
+                    matching.append((e_idx, entry))
+
+            if not matching:
+                continue
+
+            for e_idx, _ in matching:
+                processed_entry_idxs.add(e_idx)
+
+            if len(matching) >= 2:
+                # Composite paragraph containing multiple sibling sub-entries (e.g. [14] (a) ...; (b) ...)
+                any_actionable = any(
+                    sub_e.get("is_hallucination")
+                    or sub_e.get("was_modified")
+                    or "R-INCOMPLETE-METADATA" in (sub_e.get("triggered_rules") or [])
+                    or sub_e.get("remediation_status") == "manual_review"
+                    or str(sub_e.get("label") or "").lower() in ("unresolved", "unverified")
+                    for _, sub_e in matching
+                )
+                if any_actionable:
+                    para.clear()
+                    for pos, (_, sub_e) in enumerate(matching):
+                        if pos > 0:
+                            para.add_run("; ")
+                        comp_lbl = sub_e.get("composite_label") or sub_e.get("display_index") or str(sub_e.get("index", ""))
+                        sub_let = sub_e.get("sub_index")
+                        if not sub_let and isinstance(comp_lbl, str):
+                            m_sl = re.fullmatch(r"\d+([a-z])", comp_lbl, flags=re.IGNORECASE)
+                            if m_sl:
+                                sub_let = m_sl.group(1).lower()
+                        sub_prefix = (
+                            f"[{comp_lbl}] ({sub_let}) "
+                            if sub_let
+                            else f"[{comp_lbl}] "
+                        )
+                        styled_text = _select_style_text(sub_e)
+                        body_styled = _strip_docx_entry_prefix(styled_text) or styled_text
+                        clean_orig = _strip_docx_entry_prefix(str(sub_e.get("original_raw") or ""))
+                        sub_rules = sub_e.get("triggered_rules") or []
+                        sub_lbl = str(sub_e.get("label") or "").lower()
+
+                        if sub_e.get("is_hallucination") or sub_lbl == "suspected_hallucination":
+                            r_flag = para.add_run(
+                                f"{sub_prefix}[CẢNH BÁO ĐỎ CITRA — NGHI VẤN NGUỒN BỊA ĐẶT / HALLUCINATION (CẦN XÓA)]: {clean_orig}"
+                            )
+                            r_flag.bold = True
+                            r_flag.font.color.rgb = RGBColor(220, 38, 38)
+                        elif sub_e.get("was_modified"):
+                            r_healed = para.add_run(f"{sub_prefix}{body_styled}")
+                            r_healed.font.color.rgb = RGBColor(21, 128, 61)
+                            r_tag = para.add_run(
+                                f" [Auto-Healed by CITRA: {', '.join(sub_e.get('diff_fields') or ['metadata'])}]"
+                            )
+                            r_tag.bold = True
+                            r_tag.font.size = Pt(9)
+                            r_tag.font.color.rgb = RGBColor(22, 163, 74)
+                        elif "R-INCOMPLETE-METADATA" in sub_rules:
+                            r_inc = para.add_run(
+                                f"{sub_prefix}{clean_orig} [INCOMPLETE METADATA — MANUAL COMPLETION REQUIRED]"
+                            )
+                            r_inc.bold = True
+                            r_inc.font.color.rgb = RGBColor(180, 83, 9)
+                        elif sub_lbl in ("unresolved", "unverified") or sub_e.get("remediation_status") == "manual_review":
+                            r_unres = para.add_run(
+                                f"{sub_prefix}{clean_orig} [UNRESOLVED — MANUAL CHECK]"
+                            )
+                            r_unres.font.color.rgb = RGBColor(180, 83, 9)
+                        else:
+                            para.add_run(f"{sub_prefix}{body_styled or clean_orig}")
+                    in_place_healed_count += 1
+            else:
+                entry = matching[0][1]
+                healed_text = _select_style_text(entry)
+                e_rules = entry.get("triggered_rules") or []
+                e_lbl = str(entry.get("label") or "").lower()
+                if entry.get("is_hallucination") or e_lbl == "suspected_hallucination":
                     para.clear()
                     r_flag = para.add_run(
                         f"[CẢNH BÁO ĐỎ CITRA — NGHI VẤN NGUỒN BỊA ĐẶT / HALLUCINATION (CẦN XÓA)]: {p_text}"
@@ -563,7 +838,7 @@ def export_auto_healed_docx(
                     r_flag.bold = True
                     r_flag.font.color.rgb = RGBColor(220, 38, 38)
                     in_place_healed_count += 1
-                elif entry.get("is_error") and healed_text:
+                elif entry.get("was_modified") and healed_text:
                     para.clear()
                     r_healed = para.add_run(healed_text)
                     r_healed.font.color.rgb = RGBColor(21, 128, 61)
@@ -574,25 +849,52 @@ def export_auto_healed_docx(
                     r_tag.font.size = Pt(9)
                     r_tag.font.color.rgb = RGBColor(22, 163, 74)
                     in_place_healed_count += 1
-                break
+                elif "R-INCOMPLETE-METADATA" in e_rules:
+                    r_tag = para.add_run("  [INCOMPLETE METADATA — MANUAL COMPLETION REQUIRED]")
+                    r_tag.bold = True
+                    r_tag.font.size = Pt(9)
+                    r_tag.font.color.rgb = RGBColor(180, 83, 9)
+                    in_place_healed_count += 1
 
         doc.add_page_break()
         doc.add_heading("CITRA Auto-Remediation Appendix & Change Log", level=1)
 
-    # Summary KPI paragraph
-    total_cnt = int(rem_data.get("total_entries", len(entries)))
-    repaired_cnt = int(rem_data.get("remediated_count", rem_data.get("repaired_count", 0)))
-    hallucinated_cnt = int(rem_data.get("hallucination_count", rem_data.get("hallucinated_count", 0)))
-    verified_cnt = max(0, total_cnt - repaired_cnt - hallucinated_cnt)
+    # Summary KPI paragraph (honest breakdown across all states)
+    total_cnt = len(entries)
+    repaired_cnt = sum(1 for e in entries if e.get("was_modified"))
+    hallucinated_cnt = sum(1 for e in entries if e.get("is_hallucination"))
+    manual_cnt = sum(
+        1
+        for e in entries
+        if not e.get("was_modified")
+        and not e.get("is_hallucination")
+        and (
+            e.get("remediation_status") == "manual_review"
+            or str(e.get("label") or "").lower() in ("unresolved", "unverified", "metadata_error")
+        )
+    )
+    resource_cnt = sum(1 for e in entries if str(e.get("label") or "").lower() == "resource")
+    verified_cnt = sum(
+        1
+        for e in entries
+        if str(e.get("label") or "").lower() == "verified" and not e.get("was_modified")
+    )
+
+    kpi_parts = [
+        f"{total_cnt} Total References",
+        f"{verified_cnt} Verified",
+        f"{repaired_cnt} Auto-Healed",
+        f"{hallucinated_cnt} Flagged Hallucinations",
+    ]
+    if manual_cnt:
+        kpi_parts.append(f"{manual_cnt} Manual Review Required")
+    if resource_cnt:
+        kpi_parts.append(f"{resource_cnt} Web/Statutory Resources")
+    if used_original_docx:
+        kpi_parts.append(f"{in_place_healed_count} Paragraphs Healed In-Place")
 
     kpi_p = doc.add_paragraph()
-    kpi_run = kpi_p.add_run(
-        f"Summary: {total_cnt} Total References  •  "
-        f"{verified_cnt} Verified  •  "
-        f"{repaired_cnt} Auto-Healed Metadata Errors  •  "
-        f"{hallucinated_cnt} Flagged Hallucinations"
-        + (f"  •  {in_place_healed_count} Paragraphs Healed In-Place" if used_original_docx else "")
-    )
+    kpi_run = kpi_p.add_run("Summary: " + "  •  ".join(kpi_parts))
     kpi_run.bold = True
 
     # Section 1: Standardized Auto-Healed Reference List (Ready to Paste)
@@ -603,14 +905,20 @@ def export_auto_healed_docx(
     if entries:
         for e in entries:
             p_ref = doc.add_paragraph()
-            formatted_ref = str(e.get(norm_style) or e.get("formatted") or "")
-            if e.get("is_hallucination"):
+            formatted_ref = _select_style_text(e)
+            comp_lbl = e.get("composite_label")
+            if comp_lbl and norm_style != "ieee" and not formatted_ref.startswith(f"[{comp_lbl}]"):
+                formatted_ref = f"[{comp_lbl}] {formatted_ref}"
+            inline_badge, _ = _entry_status_badge_and_table_label(e)
+            e_lbl = str(e.get("label") or "").lower()
+
+            if e.get("is_hallucination") or e_lbl == "suspected_hallucination":
                 r_bad = p_ref.add_run(
                     f"[REMOVE — SUSPECTED HALLUCINATION] {e.get('original_raw') or formatted_ref}"
                 )
                 r_bad.bold = True
                 r_bad.font.color.rgb = RGBColor(220, 38, 38)
-            elif e.get("is_error"):
+            elif e.get("was_modified"):
                 r_good = p_ref.add_run(formatted_ref)
                 r_good.bold = True
                 r_good.font.color.rgb = RGBColor(21, 128, 61)
@@ -620,6 +928,17 @@ def export_auto_healed_docx(
                 r_note.italic = True
                 r_note.font.size = Pt(9)
                 r_note.font.color.rgb = RGBColor(21, 128, 61)
+            elif inline_badge == "[INCOMPLETE METADATA — MANUAL COMPLETION REQUIRED]":
+                r_inc = p_ref.add_run(f"{inline_badge} {e.get('original_raw') or formatted_ref}")
+                r_inc.bold = True
+                r_inc.font.color.rgb = RGBColor(180, 83, 9)
+            elif inline_badge == "[UNRESOLVED — MANUAL CHECK]":
+                r_unres = p_ref.add_run(f"{inline_badge} {e.get('original_raw') or formatted_ref}")
+                r_unres.bold = True
+                r_unres.font.color.rgb = RGBColor(180, 83, 9)
+            elif inline_badge == "[WEB / STATUTORY RESOURCE]":
+                r_res = p_ref.add_run(f"{inline_badge} {formatted_ref}")
+                r_res.font.color.rgb = RGBColor(3, 105, 161)
             else:
                 p_ref.add_run(formatted_ref)
     else:
@@ -645,22 +964,25 @@ def export_auto_healed_docx(
 
         for e in entries:
             row_cells = table.add_row().cells
-            row_cells[0].text = str(e.get("index", ""))
-            if e.get("is_hallucination"):
-                status_str = "HALLUCINATION (REMOVE)"
-            elif e.get("is_error"):
-                status_str = "AUTO-HEALED"
-            else:
-                status_str = "VERIFIED"
-            row_cells[1].text = status_str
+            disp_idx = e.get("display_index") or e.get("composite_label") or e.get("index", "")
+            row_cells[0].text = str(disp_idx)
+            inline_badge, table_status = _entry_status_badge_and_table_label(e)
+            row_cells[1].text = table_status
             diff_fields = e.get("diff_fields") or []
             row_cells[2].text = ", ".join(str(f) for f in diff_fields) if diff_fields else "—"
             row_cells[3].text = str(e.get("original_raw") or "")
-            row_cells[4].text = (
-                "[DO NOT CITE — UNVERIFIED / FABRICATED SOURCE]"
-                if e.get("is_hallucination")
-                else str(e.get(norm_style) or e.get("formatted") or "")
-            )
+            if e.get("is_hallucination"):
+                after_text = "[DO NOT CITE — UNVERIFIED / FABRICATED SOURCE]"
+            elif inline_badge in (
+                "[INCOMPLETE METADATA — MANUAL COMPLETION REQUIRED]",
+                "[UNRESOLVED — MANUAL CHECK]",
+            ):
+                after_text = f"{inline_badge} {e.get('original_raw') or ''}".strip()
+            elif inline_badge == "[WEB / STATUTORY RESOURCE]":
+                after_text = f"{inline_badge} {_select_style_text(e)}".strip()
+            else:
+                after_text = _select_style_text(e)
+            row_cells[4].text = after_text
     else:
         doc.add_paragraph("No remediation changes recorded.")
 

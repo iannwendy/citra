@@ -3,19 +3,25 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import io
 import json
 import os
+import re
 from datetime import UTC, datetime
 from html import escape
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
+from rapidfuzz import fuzz
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     Paragraph,
     SimpleDocTemplate,
@@ -29,7 +35,7 @@ from integrity_checker.api.deps import get_current_user, get_db
 from integrity_checker.api.progress import get_tracker
 from integrity_checker.billing.plans import get_user_plan_policy
 from integrity_checker.config import get_settings
-from integrity_checker.db.models import User
+from integrity_checker.db.models import AuditLog, User
 from integrity_checker.db.repository import Repository
 from integrity_checker.export.bibliography_formatter import build_remediated_bibliography
 from integrity_checker.export.docx_exporter import export_auto_healed_docx, export_report_to_docx
@@ -136,7 +142,13 @@ def get_report(
         return _pdf_response(essay.filename, essay, verdicts)
     if format == "docx":
         if auto_heal:
-            return _healed_docx_response(essay.filename, essay, verdicts, style=style)
+            norm_style = (style or "apa").strip().lower()
+            if norm_style not in {"apa", "ieee", "tdtu"}:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported bibliography style '{style}'. Allowed styles: apa, ieee, tdtu.",
+                )
+            return _healed_docx_response(essay.filename, essay, verdicts, style=norm_style)
         return _docx_response(essay.filename, essay, verdicts)
     raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
 
@@ -144,11 +156,18 @@ def get_report(
 @router.get("/{essay_id}/export-healed-docx")
 def export_healed_docx_endpoint(
     essay_id: int,
-    style: str = "apa",
+    style: str = Query("apa"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     """Download an Auto-Healed Word (.docx) with repaired references & Before->After Change Log."""
+    norm_style = (style or "apa").strip().lower()
+    if norm_style not in {"apa", "ieee", "tdtu"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported bibliography style '{style}'. Allowed styles: apa, ieee, tdtu.",
+        )
+
     repo = Repository(db)
     essay = repo.get_essay(essay_id)
     if not essay:
@@ -168,7 +187,7 @@ def export_healed_docx_endpoint(
         )
 
     verdicts = repo.get_verdicts(essay_id)
-    return _healed_docx_response(essay.filename, essay, verdicts, style=style)
+    return _healed_docx_response(essay.filename, essay, verdicts, style=norm_style)
 
 
 @router.get("/{essay_id}/revision-diff")
@@ -372,19 +391,108 @@ def _safe_content_disposition(filename: str, suffix: str) -> str:
     return f'attachment; filename="{safe_ascii}.{suffix}"'
 
 
+_CITED_URL_RE = re.compile(r"https?://[^\s\]\)\,;\"'>]+", re.IGNORECASE)
+_COMPOSITE_BRACKET_PREFIX_RE = re.compile(
+    r"^\s*(?:\[\s*\d+[a-z]?\s*\]|\d+[a-z]?[\.\)])\s*",
+    re.IGNORECASE,
+)
+_SUB_INDEX_PREFIX_RE = re.compile(
+    r"^\s*(?:\([a-z]\)|[a-z]\))\s*",
+    re.IGNORECASE,
+)
+_SIM_STOPWORDS = frozenset({
+    "the", "and", "for", "with", "from", "into", "doi", "http", "https",
+    "org", "www", "vol", "issue", "pages", "press", "proc", "proceedings",
+})
+
+
+def _load_verdict_features(v: Any) -> dict[str, Any]:
+    raw = getattr(v, "features", None)
+    if raw is None:
+        raw = getattr(v, "features_json", None)
+    if raw is None and isinstance(v, dict):
+        raw = v.get("features") or v.get("features_json")
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return {}
+
+
+def _load_verdict_rules(v: Any) -> list[str]:
+    raw = getattr(v, "triggered_rules", None)
+    if raw is None and isinstance(v, dict):
+        raw = v.get("triggered_rules")
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    if isinstance(raw, str):
+        s = raw.strip()
+        if not s:
+            return []
+        if s.startswith("["):
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, list):
+                    return [str(x).strip() for x in parsed if str(x).strip()]
+            except (json.JSONDecodeError, TypeError):
+                return []
+        return [x.strip() for x in s.split(",") if x.strip()]
+    return []
+
+
+def _extract_verdict_composite_label(v: Any) -> str | None:
+    direct = getattr(v, "composite_label", None)
+    if direct is None and isinstance(v, dict):
+        direct = v.get("composite_label")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    feats = _load_verdict_features(v)
+    comp = feats.get("composite_label")
+    if isinstance(comp, str) and comp.strip():
+        return comp.strip()
+    num_idx = getattr(v, "numeric_index", None)
+    if num_idx is None:
+        num_idx = feats.get("numeric_index")
+    sub_idx = getattr(v, "sub_index", None)
+    if sub_idx is None:
+        sub_idx = feats.get("sub_index")
+    if num_idx is not None and sub_idx:
+        return f"{num_idx}{sub_idx}"
+    return None
+
+
 def _csv_response(filename: str, verdicts: list) -> StreamingResponse:
     buf = io.StringIO()
     writer = csv.writer(buf)
-    # v1.2 CSV: include both integrity + source layers
+    # v1.2 CSV: include both integrity + source layers (+ trailing composite_label)
     writer.writerow([
         "citation_raw", "label", "confidence",
         "mapping_status", "mapping_confidence",
         "reasoning", "triggered_rules", "mismatched_fields",
-        "is_overridden", "style_penalty", "domain_exception"
+        "is_overridden", "style_penalty", "domain_exception",
+        "composite_label",
     ])
     for v in verdicts:
+        comp_lbl = _extract_verdict_composite_label(v)
+        raw_cit = v.citation_raw or ""
+        if (
+            comp_lbl
+            and raw_cit
+            and not raw_cit.startswith(_CSV_DANGEROUS_PREFIXES)
+            and not raw_cit.lstrip().startswith(f"[{comp_lbl}]")
+        ):
+            raw_cit_cell = f"[{comp_lbl}] {raw_cit}"
+        else:
+            raw_cit_cell = raw_cit
         writer.writerow([
-            _sanitize_csv_cell(v.citation_raw),
+            _sanitize_csv_cell(raw_cit_cell),
             _sanitize_csv_cell(v.label),
             f"{v.confidence:.4f}",
             _sanitize_csv_cell(v.mapping_status or "matched"),
@@ -395,6 +503,7 @@ def _csv_response(filename: str, verdicts: list) -> StreamingResponse:
             "1" if v.is_overridden else "0",
             f"{v.style_penalty:.4f}" if v.style_penalty else "",
             "1" if v.domain_exception else "0",
+            _sanitize_csv_cell(comp_lbl or ""),
         ])
     buf.seek(0)
     return StreamingResponse(
@@ -418,9 +527,6 @@ def _is_sandbox_manuscript(filename: str | None) -> bool:
 
 def _normalize_manuscript_stem(filename: str | None) -> str:
     """Normalize a filename to its base stem for automatic v1 -> v2 revision matching."""
-    import re
-    from pathlib import Path
-
     raw = Path(filename or "essay").stem.lower().strip()
     cleaned = re.sub(
         r"(?:[_\-\s]+(?:v\d+(?:\.\d+)?|rev\d*|version\d*|draft\d*|final|fixed|remediated|updated|corrected|revised|edited|healed|auto[_\-\s]*healed|clean|copy)|\s*\(\d+\))+$",
@@ -449,18 +555,112 @@ def _is_same_manuscript_family(stem_a: str, stem_b: str) -> bool:
     return False
 
 
-def _verdict_canonical_key(citation_raw: str | None) -> str:
-    """Build a stable matching key for comparing citations across manuscript revisions."""
-    import re
+def _strip_leading_citation_markers(raw_text: str) -> str:
+    """Strip leading [14a], 14., and (a) / a) markers from a bibliography entry."""
+    cleaned = _COMPOSITE_BRACKET_PREFIX_RE.sub("", raw_text or "")
+    cleaned = _SUB_INDEX_PREFIX_RE.sub("", cleaned)
+    return cleaned.strip()
 
-    text = (citation_raw or "").strip().lower()
+
+def _verdict_canonical_key(citation_or_verdict: Any) -> str:
+    """Build a Unicode-aware matching key for comparing citations across manuscript revisions."""
+    if isinstance(citation_or_verdict, str) or citation_or_verdict is None:
+        raw_str = citation_or_verdict or ""
+    elif isinstance(citation_or_verdict, dict):
+        raw_str = str(citation_or_verdict.get("citation_raw") or "")
+    else:
+        raw_str = str(getattr(citation_or_verdict, "citation_raw", "") or "")
+
+    text = _strip_leading_citation_markers(raw_str).lower()
     if not text:
         return ""
     doi_m = re.search(r"10\.\d{4,9}/[^\s,;)\]]+", text)
     if doi_m:
         return f"doi:{doi_m.group(0).rstrip('.')}"
-    words = re.findall(r"[a-z0-9]{3,}", text)
+    words = re.findall(r"[^\W_]{3,}", text, flags=re.UNICODE)
+    if not words:
+        words = re.findall(r"[^\W_]{2,}", text, flags=re.UNICODE)
     return " ".join(words[:14])
+
+
+def _normalize_for_revision_similarity(raw_text: str | None) -> tuple[str, set[str]]:
+    """Normalize a citation string (stripping prefixes, URLs, DOIs) for bipartite similarity matching."""
+    text = _strip_leading_citation_markers(raw_text or "").lower()
+    text = re.sub(r"https?://\S+", " ", text)
+    text = re.sub(r"(?:doi:\s*)?10\.\d{4,9}/\S+", " ", text)
+    tokens_all = re.findall(r"[^\W_]+", text, flags=re.UNICODE)
+    clean_str = " ".join(tokens_all)
+    substantive = {
+        tok
+        for tok in tokens_all
+        if len(tok) >= 3 and not tok.isdigit() and tok not in _SIM_STOPWORDS
+    }
+    return clean_str, substantive
+
+
+def _revision_citation_similarity(pv: Any, cv: Any) -> float:
+    """Compute similarity [0..1] between an unmatched v1 verdict and unmatched v2 verdict."""
+    p_raw = getattr(pv, "citation_raw", "") or ""
+    c_raw = getattr(cv, "citation_raw", "") or ""
+    p_clean, p_toks = _normalize_for_revision_similarity(p_raw)
+    c_clean, c_toks = _normalize_for_revision_similarity(c_raw)
+    if not p_clean or not c_clean:
+        return 0.0
+    min_tok_len = min(len(p_toks), len(c_toks))
+    if min_tok_len < 2:
+        return 0.0
+    overlap = len(p_toks & c_toks)
+    if overlap == 0:
+        return 0.0
+    union = len(p_toks | c_toks)
+    jacc = overlap / union if union else 0.0
+    containment = overlap / min_tok_len
+    tsr = fuzz.token_set_ratio(p_clean, c_clean) / 100.0
+    blended = 0.55 * tsr + 0.45 * containment
+    if containment >= 0.80 and overlap >= 3:
+        return max(jacc, blended, tsr)
+    return max(jacc, blended)
+
+
+def _build_verdict_key_map(v_list: list) -> dict[str, Any]:
+    """Index verdicts by canonical key without dropping composite siblings or duplicates."""
+    mapping: dict[str, Any] = {}
+    for v in v_list:
+        base_key = _verdict_canonical_key(v)
+        comp_lbl = _extract_verdict_composite_label(v)
+        if not base_key:
+            if comp_lbl:
+                base_key = f"comp:{comp_lbl.lower()}"
+            else:
+                continue
+        if base_key not in mapping:
+            mapping[base_key] = v
+            continue
+        # Collision in the same essay (e.g. composite siblings [14a] and [14b]):
+        # disambiguate both if they carry distinct composite_labels, else append #N.
+        existing_v = mapping[base_key]
+        existing_comp = _extract_verdict_composite_label(existing_v)
+        if existing_comp and comp_lbl and existing_comp.lower() != comp_lbl.lower():
+            rekey_existing = f"{base_key}#comp:{existing_comp.lower()}"
+            if rekey_existing not in mapping:
+                del mapping[base_key]
+                mapping[rekey_existing] = existing_v
+            cand_key = f"{base_key}#comp:{comp_lbl.lower()}"
+            if cand_key not in mapping:
+                mapping[cand_key] = v
+                continue
+        suffix = 2
+        while f"{base_key}#{suffix}" in mapping:
+            suffix += 1
+        mapping[f"{base_key}#{suffix}"] = v
+    return mapping
+
+
+def _normalize_verdict_label(v: Any) -> str:
+    lbl = str(getattr(v, "label", "") or "").strip().lower()
+    if lbl == "unverified":
+        return "unresolved"
+    return lbl
 
 
 def _extract_essay_cis_score(essay_row, verdicts_rows: list) -> float:
@@ -472,11 +672,23 @@ def _extract_essay_cis_score(essay_row, verdicts_rows: list) -> float:
                 return round(float(parsed["score"]), 1)
         except Exception:
             pass
-    academic = [v for v in verdicts_rows if getattr(v, "label", "") != "resource"]
+    academic = [v for v in verdicts_rows if _normalize_verdict_label(v) != "resource"]
     if not academic:
         return 0.0
-    ver = sum(1 for v in academic if getattr(v, "label", "") == "verified")
+    ver = sum(1 for v in academic if _normalize_verdict_label(v) == "verified")
     return round((ver / len(academic)) * 100.0, 1)
+
+
+def _is_eligible_revision_essay(cand: Any, *, is_explicit_target: bool = False) -> bool:
+    """Return False for failed/in-flight essays or incomplete DB rows with cis_json=None."""
+    if is_explicit_target:
+        return True
+    job_st = str(getattr(cand, "job_status", None) or "").strip().lower()
+    if job_st in {"failed", "queued", "processing"}:
+        return False
+    if getattr(cand, "cis_json", None) is None:
+        return False
+    return True
 
 
 def _compute_revision_diff(
@@ -506,10 +718,13 @@ def _compute_revision_diff(
     available_revisions: list[dict[str, Any]] = []
     chosen_prev = None
 
-    # Sort older/other essays by uploaded_at descending; only include revisions of the same manuscript
-    for cand in other_essays:
+    # Sort older/other essays by id descending; skip failed/in-flight/uncompleted essays
+    sorted_others = sorted(other_essays, key=lambda e: int(getattr(e, "id", 0) or 0), reverse=True)
+    for cand in sorted_others:
         is_explicit_target = compare_with_id is not None and cand.id == compare_with_id
         if not is_explicit_target and _is_sandbox_manuscript(getattr(cand, "filename", None)):
+            continue
+        if not _is_eligible_revision_essay(cand, is_explicit_target=is_explicit_target):
             continue
         cand_verdicts = repo.get_verdicts(cand.id)
         if not cand_verdicts and not getattr(cand, "cis_json", None):
@@ -536,10 +751,11 @@ def _compute_revision_diff(
         return None
 
     if chosen_prev is None:
-        # Only match the most recent older essay belonging to the same manuscript family
+        # Match the most recent completed older essay belonging to the same manuscript family
         prior_same_stem = [
-            e for e in other_essays
+            e for e in sorted_others
             if not _is_sandbox_manuscript(getattr(e, "filename", None))
+            and _is_eligible_revision_essay(e, is_explicit_target=False)
             and _is_same_manuscript_family(cur_stem, _normalize_manuscript_stem(e.filename))
             and e.id < essay.id
         ]
@@ -563,93 +779,151 @@ def _compute_revision_diff(
     cis_delta = round(cis_after - cis_before, 1)
 
     def _count_labels(v_list: list) -> dict[str, int]:
+        norm_labels = [_normalize_verdict_label(v) for v in v_list]
         return {
             "total": len(v_list),
-            "verified": sum(1 for v in v_list if getattr(v, "label", "") == "verified"),
-            "metadata_error": sum(1 for v in v_list if getattr(v, "label", "") == "metadata_error"),
-            "suspected_hallucination": sum(
-                1 for v in v_list if getattr(v, "label", "") == "suspected_hallucination"
+            "verified": sum(1 for lbl in norm_labels if lbl == "verified"),
+            "metadata_error": sum(1 for lbl in norm_labels if lbl == "metadata_error"),
+            "incomplete_metadata": sum(
+                1 for v in v_list if "R-INCOMPLETE-METADATA" in _load_verdict_rules(v)
             ),
-            "unresolved": sum(1 for v in v_list if getattr(v, "label", "") == "unresolved"),
+            "suspected_hallucination": sum(
+                1 for lbl in norm_labels if lbl == "suspected_hallucination"
+            ),
+            "unresolved": sum(1 for lbl in norm_labels if lbl == "unresolved"),
+            "resource": sum(1 for lbl in norm_labels if lbl == "resource"),
         }
 
     counts_before = _count_labels(prev_verdicts)
     counts_after = _count_labels(current_verdicts)
     counts_delta = {
         k: counts_after[k] - counts_before[k]
-        for k in ("total", "verified", "metadata_error", "suspected_hallucination", "unresolved")
+        for k in (
+            "total",
+            "verified",
+            "metadata_error",
+            "incomplete_metadata",
+            "suspected_hallucination",
+            "unresolved",
+            "resource",
+        )
     }
 
-    prev_by_key = {_verdict_canonical_key(v.citation_raw): v for v in prev_verdicts if _verdict_canonical_key(v.citation_raw)}
-    cur_by_key = {_verdict_canonical_key(v.citation_raw): v for v in current_verdicts if _verdict_canonical_key(v.citation_raw)}
+    prev_by_key = _build_verdict_key_map(prev_verdicts)
+    cur_by_key = _build_verdict_key_map(current_verdicts)
+
+    # Pass 1: exact canonical key matches
+    matched_pairs: list[tuple[Any, Any]] = []
+    matched_prev_keys: set[str] = set()
+    matched_cur_keys: set[str] = set()
+
+    for pk, pv in prev_by_key.items():
+        if pk in cur_by_key:
+            matched_pairs.append((pv, cur_by_key[pk]))
+            matched_prev_keys.add(pk)
+            matched_cur_keys.add(pk)
+
+    # Pass 2: greedy bipartite similarity fallback (>= 0.68) for repaired R-INCOMPLETE-METADATA / fixed DOIs
+    unmatched_prev_keys = [pk for pk in prev_by_key if pk not in matched_prev_keys]
+    unmatched_cur_keys = [ck for ck in cur_by_key if ck not in matched_cur_keys]
+    if unmatched_prev_keys and unmatched_cur_keys:
+        sim_candidates: list[tuple[float, str, str]] = []
+        for pk in unmatched_prev_keys:
+            pv = prev_by_key[pk]
+            for ck in unmatched_cur_keys:
+                cv = cur_by_key[ck]
+                sim = _revision_citation_similarity(pv, cv)
+                if sim >= 0.68:
+                    sim_candidates.append((sim, pk, ck))
+        sim_candidates.sort(key=lambda item: item[0], reverse=True)
+        for _sim, pk, ck in sim_candidates:
+            if pk in matched_prev_keys or ck in matched_cur_keys:
+                continue
+            matched_pairs.append((prev_by_key[pk], cur_by_key[ck]))
+            matched_prev_keys.add(pk)
+            matched_cur_keys.add(ck)
 
     resolved_issues: list[dict[str, Any]] = []
     persisting_issues: list[dict[str, Any]] = []
     new_issues: list[dict[str, Any]] = []
     citation_changes: list[dict[str, Any]] = []
 
+    non_issue_labels = {"verified", "resource"}
     issue_labels = {"metadata_error", "suspected_hallucination", "unresolved"}
 
-    for key, pv in prev_by_key.items():
-        p_lbl = str(getattr(pv, "label", "")).lower()
-        cv = cur_by_key.get(key)
-        if cv is not None:
-            c_lbl = str(getattr(cv, "label", "")).lower()
-            if p_lbl in issue_labels and c_lbl == "verified":
-                item = {
-                    "citation_raw": cv.citation_raw,
-                    "before_label": p_lbl,
-                    "after_label": c_lbl,
-                    "transition": "fixed",
-                }
-                resolved_issues.append(item)
-                citation_changes.append(item)
-            elif p_lbl in issue_labels and c_lbl in issue_labels:
-                item = {
-                    "citation_raw": cv.citation_raw,
-                    "before_label": p_lbl,
-                    "after_label": c_lbl,
-                    "transition": "unchanged_issue",
-                }
-                persisting_issues.append(item)
-                citation_changes.append(item)
-            elif p_lbl == "verified" and c_lbl in issue_labels:
-                item = {
-                    "citation_raw": cv.citation_raw,
-                    "before_label": p_lbl,
-                    "after_label": c_lbl,
-                    "transition": "regressed",
-                }
-                new_issues.append(item)
-                citation_changes.append(item)
-        else:
-            if p_lbl == "suspected_hallucination":
+    for pv, cv in matched_pairs:
+        p_lbl = _normalize_verdict_label(pv)
+        c_lbl = _normalize_verdict_label(cv)
+        comp_lbl = _extract_verdict_composite_label(cv) or _extract_verdict_composite_label(pv)
+        if p_lbl in issue_labels and c_lbl in non_issue_labels:
+            item = {
+                "citation_raw": cv.citation_raw,
+                "composite_label": comp_lbl,
+                "before_label": p_lbl,
+                "after_label": c_lbl,
+                "transition": "fixed",
+            }
+            resolved_issues.append(item)
+            citation_changes.append(item)
+        elif p_lbl in issue_labels and c_lbl in issue_labels:
+            item = {
+                "citation_raw": cv.citation_raw,
+                "composite_label": comp_lbl,
+                "before_label": p_lbl,
+                "after_label": c_lbl,
+                "transition": "unchanged_issue",
+            }
+            persisting_issues.append(item)
+            citation_changes.append(item)
+        elif p_lbl in non_issue_labels and c_lbl in issue_labels:
+            item = {
+                "citation_raw": cv.citation_raw,
+                "composite_label": comp_lbl,
+                "before_label": p_lbl,
+                "after_label": c_lbl,
+                "transition": "regressed",
+            }
+            new_issues.append(item)
+            citation_changes.append(item)
+
+    for pk, pv in prev_by_key.items():
+        if pk in matched_prev_keys:
+            continue
+        p_lbl = _normalize_verdict_label(pv)
+        comp_lbl = _extract_verdict_composite_label(pv)
+        if p_lbl == "suspected_hallucination":
+            item = {
+                "citation_raw": pv.citation_raw,
+                "composite_label": comp_lbl,
+                "before_label": p_lbl,
+                "after_label": "removed",
+                "transition": "removed_hallucination",
+            }
+            resolved_issues.append(item)
+            citation_changes.append(item)
+        elif p_lbl == "metadata_error":
+            already_resolved_meta = sum(
+                1 for r in resolved_issues if r["before_label"] == "metadata_error"
+            )
+            net_meta_drop = counts_before["metadata_error"] - counts_after["metadata_error"]
+            if net_meta_drop > already_resolved_meta:
                 item = {
                     "citation_raw": pv.citation_raw,
+                    "composite_label": comp_lbl,
                     "before_label": p_lbl,
-                    "after_label": "removed",
-                    "transition": "removed_hallucination",
+                    "after_label": "verified",
+                    "transition": "fixed_and_reformatted",
                 }
                 resolved_issues.append(item)
                 citation_changes.append(item)
-            elif p_lbl == "metadata_error":
-                # Likely repaired to a new canonical string if total metadata_error decreased
-                if counts_after["metadata_error"] < counts_before["metadata_error"]:
-                    item = {
-                        "citation_raw": pv.citation_raw,
-                        "before_label": p_lbl,
-                        "after_label": "verified",
-                        "transition": "fixed_and_reformatted",
-                    }
-                    resolved_issues.append(item)
-                    citation_changes.append(item)
 
-    for key, cv in cur_by_key.items():
-        if key not in prev_by_key:
-            c_lbl = str(getattr(cv, "label", "")).lower()
+    for ck, cv in cur_by_key.items():
+        if ck not in matched_cur_keys:
+            c_lbl = _normalize_verdict_label(cv)
             if c_lbl in issue_labels:
                 item = {
                     "citation_raw": cv.citation_raw,
+                    "composite_label": _extract_verdict_composite_label(cv),
                     "before_label": "none",
                     "after_label": c_lbl,
                     "transition": "new_issue",
@@ -804,6 +1078,44 @@ def _json_response(
                 if c_status in _non_matched_intext_statuses:
                     linking_summary[c_status] = linking_summary.get(c_status, 0) + 1
 
+    # Batch-load override audit logs when repository session is available
+    audit_overrides: dict[int, dict[str, Any]] = {}
+    overridden_ids = [
+        int(v.id)
+        for v in verdicts
+        if getattr(v, "is_overridden", False) and getattr(v, "id", None) is not None
+    ]
+    if overridden_ids and repo is not None and hasattr(repo, "session"):
+        try:
+            audit_rows = (
+                repo.session.query(AuditLog)
+                .filter(AuditLog.verdict_id.in_(overridden_ids))
+                .order_by(AuditLog.id.asc())
+                .all()
+            )
+            for row in audit_rows:
+                entry = audit_overrides.get(row.verdict_id)
+                if entry is None:
+                    audit_overrides[row.verdict_id] = {
+                        "original_label": row.original_label,
+                        "user": row.user,
+                        "note": row.note,
+                        "logged_at": row.logged_at,
+                    }
+                else:
+                    entry["user"] = row.user or entry.get("user")
+                    if row.note is not None:
+                        entry["note"] = row.note
+                    if row.logged_at is not None:
+                        entry["logged_at"] = row.logged_at
+        except Exception:  # noqa: BLE001
+            audit_overrides = {}
+
+    cit_url_by_raw: dict[str, str] = {}
+    for c in citations:
+        if getattr(c, "raw_text", None) and getattr(c, "url", None) and c.raw_text not in cit_url_by_raw:
+            cit_url_by_raw[c.raw_text] = str(c.url)
+
     for v in verdicts:
         status = v.mapping_status or "matched"
         linking_summary[status] = linking_summary.get(status, 0) + 1
@@ -811,7 +1123,7 @@ def _json_response(
         # Reconstruct matched_sources from the features JSON blob (written there by
         # repository.add_verdicts).  If absent (pre-fix rows), fall back to an
         # empty list so the UI never receives undefined.
-        features_dict = json.loads(v.features or "{}")
+        features_dict = _load_verdict_features(v)
         matched_sources = features_dict.get("matched_sources", [])
         fallback_num, fallback_sub, fallback_comp = cit_composite_by_raw.get(
             v.citation_raw, (None, None, None)
@@ -831,6 +1143,9 @@ def _json_response(
             if features_dict.get("composite_label") is not None
             else fallback_comp
         )
+        if v_comp_lbl is None and v_num_idx is not None and v_sub_idx:
+            v_comp_lbl = f"{v_num_idx}{v_sub_idx}"
+
         has_scholarly_cand = bool(features_dict.get("has_scholarly_candidate", True))
         features_dict.setdefault("has_scholarly_candidate", has_scholarly_cand)
         features_dict.setdefault("html_meta", None)
@@ -842,11 +1157,67 @@ def _json_response(
         if v_comp_lbl is not None and features_dict.get("composite_label") is None:
             features_dict["composite_label"] = v_comp_lbl
 
+        cited_url: str | None = None
+        for url_cand in (
+            features_dict.get("cited_url"),
+            features_dict.get("url"),
+            cit_url_by_raw.get(v.citation_raw or ""),
+        ):
+            if isinstance(url_cand, str) and url_cand.strip():
+                cited_url = url_cand.strip()
+                break
+        if cited_url is None and v.citation_raw:
+            url_m = _CITED_URL_RE.search(v.citation_raw)
+            if url_m:
+                cited_url = url_m.group(0).rstrip(".,;)]>\"'")
+
         if v.citation_raw and v.citation_raw not in verdict_meta_by_raw:
             verdict_meta_by_raw[v.citation_raw] = {
                 "html_meta": features_dict.get("html_meta"),
                 "html_meta_title_sim": features_dict.get("html_meta_title_sim"),
                 "has_scholarly_candidate": has_scholarly_cand,
+            }
+
+        triggered_rules_list = _load_verdict_rules(v)
+        is_ovr = bool(getattr(v, "is_overridden", False))
+        audit_info = audit_overrides.get(getattr(v, "id", -1))
+        ovr_note = getattr(v, "override_note", None)
+        if ovr_note is None:
+            ovr_note = getattr(v, "override_reason", None)
+        if ovr_note is None and audit_info:
+            ovr_note = audit_info.get("note")
+
+        ovr_by = getattr(v, "overridden_by", None)
+        if ovr_by is None and audit_info:
+            ovr_by = audit_info.get("user")
+
+        raw_ovr_at = (
+            getattr(v, "overridden_at", None)
+            or (audit_info.get("logged_at") if audit_info else None)
+            or features_dict.get("overridden_at")
+            or (getattr(v, "validated_at", None) if is_ovr else None)
+        )
+        if raw_ovr_at is not None and hasattr(raw_ovr_at, "isoformat"):
+            ovr_at = raw_ovr_at.isoformat()
+        elif raw_ovr_at is not None:
+            ovr_at = str(raw_ovr_at).strip() or None
+        else:
+            ovr_at = None
+
+        override_record: dict[str, Any] | None = None
+        if is_ovr:
+            orig_lbl = (
+                (audit_info or {}).get("original_label")
+                or features_dict.get("original_label")
+                or getattr(v, "original_label", None)
+                or v.label
+            )
+            override_record = {
+                "original_label": str(orig_lbl),
+                "overridden_label": str(v.label),
+                "reason": ovr_note or "",
+                "overridden_by": ovr_by or "",
+                "overridden_at": ovr_at,
             }
 
         verdict_list.append({
@@ -856,6 +1227,7 @@ def _json_response(
             "numeric_index": v_num_idx,
             "sub_index": v_sub_idx,
             "composite_label": v_comp_lbl,
+            "cited_url": cited_url,
             # NEW v1.16 — surrounding PDF text, so the Document Inspector can
             # show the sentence the citation appears in.
             "context": v.context,
@@ -869,8 +1241,10 @@ def _json_response(
             "label": v.label,
             "confidence": v.confidence,
             "reasoning": v.reasoning,
-            "triggered_rules": json.loads(v.triggered_rules or "[]"),
-            "mismatched_fields": json.loads(v.mismatched_fields or "[]"),
+            "triggered_rules": triggered_rules_list,
+            "mismatched_fields": json.loads(v.mismatched_fields or "[]")
+            if isinstance(v.mismatched_fields, str)
+            else list(v.mismatched_fields or []),
             "features": features_dict,
             "html_meta": features_dict.get("html_meta"),
             "html_meta_title_sim": features_dict.get("html_meta_title_sim"),
@@ -880,12 +1254,15 @@ def _json_response(
             "archive_url": features_dict.get("archive_url"),
             "is_retracted": bool(
                 features_dict.get("is_retracted", False)
-                or ("R-RETRACTED-PAPER" in json.loads(v.triggered_rules or "[]"))
+                or ("R-RETRACTED-PAPER" in triggered_rules_list)
             ),
             "matched_sources": matched_sources,
             # Override
-            "is_overridden": bool(v.is_overridden),
-            "override_note": v.override_note,
+            "is_overridden": is_ovr,
+            "override_note": ovr_note,
+            "overridden_by": ovr_by if is_ovr or ovr_by else None,
+            "overridden_at": ovr_at if is_ovr else None,
+            "override_record": override_record,
         })
 
     # Ưu tiên dùng CIS đầy đủ từ pipeline (lưu DB) — fallback về simple estimation
@@ -1060,10 +1437,97 @@ def _build_qr_seal_drawing(seed: str, size: float = 68.0) -> Any:
     return drawing
 
 
-def _generate_pdf_bytes(essay, verdicts: list) -> bytes:
-    """Generate PDF report bytes with tamper-evident Digital Verification Receipt & QR seal."""
+_PDF_UNICODE_FONTS_CACHE: tuple[str, str] | None = None
+
+
+def _register_unicode_pdf_fonts() -> tuple[str, str]:
+    """Idempotently register Unicode-capable TTF fonts (CitraSans / CitraSans-Bold) for ReportLab."""
+    global _PDF_UNICODE_FONTS_CACHE
+    registered = set(pdfmetrics.getRegisteredFontNames())
+    if (
+        _PDF_UNICODE_FONTS_CACHE is not None
+        and _PDF_UNICODE_FONTS_CACHE[0] in registered
+        and _PDF_UNICODE_FONTS_CACHE[1] in registered
+    ):
+        return _PDF_UNICODE_FONTS_CACHE
+
+    candidates: list[tuple[Path, Path, Path | None, Path | None]] = []
+
+    # 1. matplotlib bundled DejaVuSans (full Vietnamese & scholarly Unicode support)
+    try:
+        mpl_spec = importlib.util.find_spec("matplotlib")
+        if mpl_spec and mpl_spec.origin:
+            mpl_ttf = Path(mpl_spec.origin).resolve().parent / "mpl-data" / "fonts" / "ttf"
+            candidates.append(
+                (
+                    mpl_ttf / "DejaVuSans.ttf",
+                    mpl_ttf / "DejaVuSans-Bold.ttf",
+                    mpl_ttf / "DejaVuSans-Oblique.ttf",
+                    mpl_ttf / "DejaVuSans-BoldOblique.ttf",
+                )
+            )
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 2. System DejaVuSans (Docker / Linux)
+    dejavu_dir = Path("/usr/share/fonts/truetype/dejavu")
+    candidates.append(
+        (
+            dejavu_dir / "DejaVuSans.ttf",
+            dejavu_dir / "DejaVuSans-Bold.ttf",
+            dejavu_dir / "DejaVuSans-Oblique.ttf",
+            dejavu_dir / "DejaVuSans-BoldOblique.ttf",
+        )
+    )
+
+    # 3. macOS fallback TTFs
+    mac_supp = Path("/System/Library/Fonts/Supplemental")
+    candidates.append(
+        (
+            mac_supp / "Arial.ttf",
+            mac_supp / "Arial Bold.ttf",
+            mac_supp / "Arial Italic.ttf",
+            mac_supp / "Arial Bold Italic.ttf",
+        )
+    )
+    arial_uni = Path("/Library/Fonts/Arial Unicode.ttf")
+    candidates.append((arial_uni, arial_uni, None, None))
+
+    for reg_path, bold_path, ital_path, bold_ital_path in candidates:
+        if not (reg_path.is_file() and bold_path.is_file()):
+            continue
+        try:
+            pdfmetrics.registerFont(TTFont("CitraSans", str(reg_path)))
+            pdfmetrics.registerFont(TTFont("CitraSans-Bold", str(bold_path)))
+            italic_name = "CitraSans"
+            bold_italic_name = "CitraSans-Bold"
+            if ital_path is not None and ital_path.is_file():
+                pdfmetrics.registerFont(TTFont("CitraSans-Italic", str(ital_path)))
+                italic_name = "CitraSans-Italic"
+            if bold_ital_path is not None and bold_ital_path.is_file():
+                pdfmetrics.registerFont(TTFont("CitraSans-BoldItalic", str(bold_ital_path)))
+                bold_italic_name = "CitraSans-BoldItalic"
+            pdfmetrics.registerFontFamily(
+                "CitraSans",
+                normal="CitraSans",
+                bold="CitraSans-Bold",
+                italic=italic_name,
+                boldItalic=bold_italic_name,
+            )
+            _PDF_UNICODE_FONTS_CACHE = ("CitraSans", "CitraSans-Bold")
+            return _PDF_UNICODE_FONTS_CACHE
+        except Exception:  # noqa: BLE001
+            continue
+
+    _PDF_UNICODE_FONTS_CACHE = ("Helvetica", "Helvetica-Bold")
+    return _PDF_UNICODE_FONTS_CACHE
+
+
+def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) -> bytes:
+    """Generate PDF report bytes with Unicode TTF fonts, Digital Verification Receipt & QR seal."""
     from integrity_checker.api.routes.essays import create_essay_share_token
 
+    font_reg, font_bold = _register_unicode_pdf_fonts()
     buffer = io.BytesIO()
 
     doc = SimpleDocTemplate(
@@ -1079,24 +1543,37 @@ def _generate_pdf_bytes(essay, verdicts: list) -> bytes:
     title_style = ParagraphStyle(
         'CustomTitle',
         parent=styles['Heading1'],
+        fontName=font_bold,
         fontSize=16,
         spaceAfter=12,
     )
     heading_style = ParagraphStyle(
         'CustomHeading',
         parent=styles['Heading2'],
+        fontName=font_bold,
         fontSize=12,
         spaceAfter=6,
     )
     body_style = ParagraphStyle(
         'CustomBody',
         parent=styles['Normal'],
+        fontName=font_reg,
         fontSize=10,
+        spaceAfter=6,
+    )
+    diag_style = ParagraphStyle(
+        'DiagBody',
+        parent=styles['Normal'],
+        fontName=font_reg,
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor("#334155"),
         spaceAfter=6,
     )
     receipt_style = ParagraphStyle(
         'ReceiptBody',
         parent=styles['Normal'],
+        fontName=font_reg,
         fontSize=8.5,
         leading=11,
         spaceAfter=2,
@@ -1104,6 +1581,7 @@ def _generate_pdf_bytes(essay, verdicts: list) -> bytes:
     table_cell_style = ParagraphStyle(
         'TableCell',
         parent=styles['Normal'],
+        fontName=font_reg,
         fontSize=8,
         leading=9,
         spaceAfter=0,
@@ -1113,7 +1591,7 @@ def _generate_pdf_bytes(essay, verdicts: list) -> bytes:
         'TableHeader',
         parent=table_cell_style,
         textColor=colors.whitesmoke,
-        fontName='Helvetica-Bold',
+        fontName=font_bold,
     )
 
     elements: list[Any] = []
@@ -1127,7 +1605,7 @@ def _generate_pdf_bytes(essay, verdicts: list) -> bytes:
     utc_now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     elements.append(Paragraph(f"<b>File:</b> {escape(essay.filename or '')}", body_style))
     elements.append(Paragraph(f"<b>Essay ID:</b> {essay_id_val}", body_style))
-    elements.append(Paragraph(f"<b>Pages:</b> {essay.num_pages}", body_style))
+    elements.append(Paragraph(f"<b>Pages:</b> {getattr(essay, 'num_pages', 0)}", body_style))
     elements.append(Paragraph(f"<b>Generated:</b> {utc_now_str}", body_style))
 
     # Digital Verification Receipt & Vector QR Seal (Task 6.2)
@@ -1153,6 +1631,7 @@ def _generate_pdf_bytes(essay, verdicts: list) -> bytes:
     receipt_box.setStyle(
         TableStyle(
             [
+                ("FONTNAME", (0, 0), (-1, -1), font_reg),
                 ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
                 ("BOX", (0, 0), (-1, -1), 0.75, colors.HexColor("#6366f1")),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -1168,20 +1647,62 @@ def _generate_pdf_bytes(essay, verdicts: list) -> bytes:
     elements.append(receipt_box)
     elements.append(Spacer(1, 0.4 * cm))
 
+    # Document Diagnostics note (if present)
+    style_profile_dict = None
+    if getattr(essay, "style_profile_json", None):
+        try:
+            style_profile_dict = json.loads(essay.style_profile_json)
+        except (json.JSONDecodeError, TypeError):
+            style_profile_dict = None
+    diag = _extract_document_diagnostics(
+        essay, style_profile_dict, citations or [], verdicts
+    )
+    diag_notes: list[str] = []
+    if diag.get("parser_used"):
+        diag_notes.append(f"Parser: {diag['parser_used']}")
+    ocr_pages = diag.get("ocr_pages_recovered")
+    if ocr_pages:
+        ocr_count = len(ocr_pages) if isinstance(ocr_pages, list) else int(ocr_pages)
+        diag_notes.append(f"OCR Pages Recovered: {ocr_count}")
+    if diag.get("legacy_encoding_detected"):
+        enc_pages = diag.get("legacy_encoding_pages_count", 0)
+        diag_notes.append(
+            f"Legacy Encoding Transcoded: {diag['legacy_encoding_detected']}"
+            + (f" ({enc_pages} page(s))" if enc_pages else "")
+        )
+    if diag.get("warning_message"):
+        diag_notes.append(str(diag["warning_message"]))
+    if diag_notes:
+        elements.append(Paragraph("Document Diagnostics", heading_style))
+        elements.append(
+            Paragraph(escape(" | ".join(diag_notes)), diag_style)
+        )
+        elements.append(Spacer(1, 0.25 * cm))
+
     # Summary stats
     total = len(verdicts)
-    verified = sum(1 for v in verdicts if v.label == "verified")
-    metadata_error = sum(1 for v in verdicts if v.label == "metadata_error")
-    suspected = sum(1 for v in verdicts if v.label == "suspected_hallucination")
-    unresolved = sum(1 for v in verdicts if v.label == "unresolved")
+    verified = sum(1 for v in verdicts if _normalize_verdict_label(v) == "verified")
+    metadata_error = sum(1 for v in verdicts if _normalize_verdict_label(v) == "metadata_error")
+    incomplete_meta = sum(
+        1 for v in verdicts if "R-INCOMPLETE-METADATA" in _load_verdict_rules(v)
+    )
+    suspected = sum(
+        1 for v in verdicts if _normalize_verdict_label(v) == "suspected_hallucination"
+    )
+    unresolved = sum(1 for v in verdicts if _normalize_verdict_label(v) == "unresolved")
+    resource = sum(1 for v in verdicts if _normalize_verdict_label(v) == "resource")
 
-    matched = sum(1 for v in verdicts if v.mapping_status == "matched")
-    missing_ref = sum(1 for v in verdicts if v.mapping_status == "missing_reference")
-    mismatched = sum(1 for v in verdicts if v.mapping_status == "in_text_mismatch")
+    matched = sum(1 for v in verdicts if getattr(v, "mapping_status", None) == "matched")
+    missing_ref = sum(
+        1 for v in verdicts if getattr(v, "mapping_status", None) == "missing_reference"
+    )
+    mismatched = sum(
+        1 for v in verdicts if getattr(v, "mapping_status", None) == "in_text_mismatch"
+    )
 
     cis_score_val = None
     cis_comps: dict[str, float] = {}
-    if essay.cis_json:
+    if getattr(essay, "cis_json", None):
         try:
             parsed_cis = json.loads(essay.cis_json)
             if isinstance(parsed_cis, dict):
@@ -1215,26 +1736,34 @@ def _generate_pdf_bytes(essay, verdicts: list) -> bytes:
         ["--- Source Layer ---", "", ""],
         ["Verified", str(verified), f"{verified/total*100:.1f}%" if total > 0 else "0%"],
         ["Metadata Error", str(metadata_error), f"{metadata_error/total*100:.1f}%" if total > 0 else "0%"],
+        ["Incomplete Metadata", str(incomplete_meta), f"{incomplete_meta/total*100:.1f}%" if total > 0 else "0%"],
         ["Suspected Hallucination", str(suspected), f"{suspected/total*100:.1f}%" if total > 0 else "0%"],
         ["Unresolved", str(unresolved), f"{unresolved/total*100:.1f}%" if total > 0 else "0%"],
+        ["Resource", str(resource), f"{resource/total*100:.1f}%" if total > 0 else "0%"],
         ["--- Integrity Layer ---", "", ""],
         ["Matched", str(matched), f"{matched/total*100:.1f}%" if total > 0 else "0%"],
         ["Missing Reference", str(missing_ref), f"{missing_ref/total*100:.1f}%" if total > 0 else "0%"],
         ["In-Text Mismatch", str(mismatched), f"{mismatched/total*100:.1f}%" if total > 0 else "0%"],
     ]
 
-    summary_table = Table(summary_data, colWidths=[5 * cm, 3 * cm, 3 * cm])
-    summary_table.setStyle(TableStyle([
+    summary_styles: list[tuple] = [
+        ('FONTNAME', (0, 0), (-1, -1), font_reg),
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563eb')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 0), (-1, 0), font_bold),
         ('FONTSIZE', (0, 0), (-1, -1), 9),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#dcfce7')),  # Total
-        ('BACKGROUND', (0, 3), (-1, 3), colors.HexColor('#f3f4f6')),  # Separator
-        ('BACKGROUND', (0, 7), (-1, 7), colors.HexColor('#f3f4f6')),  # Separator
-    ]))
+        ('BACKGROUND', (0, 1), (-1, 1), colors.HexColor('#dcfce7')),
+    ]
+    for r_idx, row in enumerate(summary_data):
+        if row[0].startswith("---"):
+            summary_styles.append(
+                ('BACKGROUND', (0, r_idx), (-1, r_idx), colors.HexColor('#f3f4f6'))
+            )
+
+    summary_table = Table(summary_data, colWidths=[5 * cm, 3 * cm, 3 * cm])
+    summary_table.setStyle(TableStyle(summary_styles))
     elements.append(summary_table)
     elements.append(Spacer(1, 0.5 * cm))
 
@@ -1250,13 +1779,25 @@ def _generate_pdf_bytes(essay, verdicts: list) -> bytes:
     ]]
 
     for i, v in enumerate(verdicts, 1):
-        source_status = _format_label(v.label)
-        mapping_status = _format_mapping_status(v.mapping_status or "matched")
-        confidence = f"{v.confidence * 100:.0f}%"
+        comp_lbl = _extract_verdict_composite_label(v)
+        idx_display = f"[{comp_lbl}]" if comp_lbl else str(i)
+        raw_cit = v.citation_raw or ""
+        if comp_lbl and not raw_cit.lstrip().startswith(f"[{comp_lbl}]"):
+            cit_display = f"[{comp_lbl}] {raw_cit}"
+        else:
+            cit_display = raw_cit
+
+        v_rules = _load_verdict_rules(v)
+        if "R-INCOMPLETE-METADATA" in v_rules:
+            source_status = "Incomplete Metadata"
+        else:
+            source_status = _format_label(_normalize_verdict_label(v))
+        mapping_status = _format_mapping_status(getattr(v, "mapping_status", None) or "matched")
+        confidence = f"{(getattr(v, 'confidence', 0.0) or 0.0) * 100:.0f}%"
 
         verdict_data.append([
-            Paragraph(str(i), table_cell_style),
-            Paragraph(escape(v.citation_raw), table_cell_style),
+            Paragraph(escape(idx_display), table_cell_style),
+            Paragraph(escape(cit_display), table_cell_style),
             Paragraph(escape(source_status), table_cell_style),
             Paragraph(escape(mapping_status), table_cell_style),
             Paragraph(escape(confidence), table_cell_style),
@@ -1264,13 +1805,14 @@ def _generate_pdf_bytes(essay, verdicts: list) -> bytes:
 
     verdict_table = Table(
         verdict_data,
-        colWidths=[1 * cm, 6 * cm, 3 * cm, 3 * cm, 2 * cm],
+        colWidths=[1.3 * cm, 5.7 * cm, 3 * cm, 3 * cm, 2 * cm],
         repeatRows=1,
     )
     verdict_table_styles = [
+        ('FONTNAME', (0, 0), (-1, -1), font_reg),
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#374151')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, 0), (-1, 0), font_bold),
         ('FONTSIZE', (0, 0), (-1, -1), 8),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('ALIGN', (1, 1), (1, -1), 'LEFT'),  # Left align citation text
@@ -1279,8 +1821,8 @@ def _generate_pdf_bytes(essay, verdicts: list) -> bytes:
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
     ]
     for row_idx, v in enumerate(verdicts, 1):
-        raw_lbl = (v.label or "").lower()
-        status_label = _format_label(v.label)
+        raw_lbl = _normalize_verdict_label(v)
+        status_label = _format_label(raw_lbl)
         if raw_lbl in ("verified", "resource") or status_label in ("Verified", "Valid"):
             verdict_table_styles.append(('TEXTCOLOR', (2, row_idx), (2, row_idx), colors.HexColor('#15803d')))
         elif raw_lbl == "metadata_error" or status_label == "Metadata Error" or raw_lbl == "suspected_hallucination" or status_label in ("Suspected", "Suspected Hallucination"):
@@ -1308,22 +1850,20 @@ def _pdf_response(filename: str, essay, verdicts: list) -> StreamingResponse:
 
 def _docx_response(filename: str, essay, verdicts: list) -> StreamingResponse:
     """Generate DOCX report with 2-layer analysis."""
-    import json
-
     # Compute statistics
     total = len(verdicts)
-    verified = sum(1 for v in verdicts if v.label == "verified")
-    metadata_error = sum(1 for v in verdicts if v.label == "metadata_error")
-    suspected = sum(1 for v in verdicts if v.label == "suspected_hallucination")
-    unresolved = sum(1 for v in verdicts if v.label == "unresolved")
-    resource = sum(1 for v in verdicts if v.label == "resource")
+    verified = sum(1 for v in verdicts if _normalize_verdict_label(v) == "verified")
+    metadata_error = sum(1 for v in verdicts if _normalize_verdict_label(v) == "metadata_error")
+    suspected = sum(1 for v in verdicts if _normalize_verdict_label(v) == "suspected_hallucination")
+    unresolved = sum(1 for v in verdicts if _normalize_verdict_label(v) == "unresolved")
+    resource = sum(1 for v in verdicts if _normalize_verdict_label(v) == "resource")
 
     # Get CIS score from essay
     cis_score = 0.0
     cis_components = None
     cis_weights_used = None
     style_profile = None
-    if essay.cis_json:
+    if getattr(essay, "cis_json", None):
         try:
             cis_dict = json.loads(essay.cis_json)
             cis_score = cis_dict.get("score", 0.0)
@@ -1331,31 +1871,43 @@ def _docx_response(filename: str, essay, verdicts: list) -> StreamingResponse:
             cis_weights_used = cis_dict.get("weights_used")
         except (json.JSONDecodeError, TypeError):
             pass
-    if essay.style_profile_json:
+    if getattr(essay, "style_profile_json", None):
         try:
             style_profile = json.loads(essay.style_profile_json)
         except (json.JSONDecodeError, TypeError):
             pass
 
     linking_summary: dict[str, int] = {}
-    # Build verdict list
     verdict_list = []
     for v in verdicts:
-        features_dict = json.loads(v.features or "{}")
+        features_dict = _load_verdict_features(v)
+        comp_lbl = _extract_verdict_composite_label(v)
         m_status = v.mapping_status or "matched"
         linking_summary[m_status] = linking_summary.get(m_status, 0) + 1
         verdict_list.append({
             "citation_raw": v.citation_raw,
             "citation_type": getattr(v, "citation_type", None) or "reference_list",
+            "numeric_index": features_dict.get("numeric_index"),
+            "sub_index": features_dict.get("sub_index"),
+            "composite_label": comp_lbl,
             "mapping_status": m_status,
-            "label": v.label,
+            "label": _normalize_verdict_label(v),
             "confidence": v.confidence,
             "reasoning": v.reasoning,
-            "triggered_rules": json.loads(v.triggered_rules or "[]"),
-            "mismatched_fields": json.loads(v.mismatched_fields or "[]"),
+            "triggered_rules": _load_verdict_rules(v),
+            "mismatched_fields": json.loads(v.mismatched_fields or "[]")
+            if isinstance(v.mismatched_fields, str)
+            else list(v.mismatched_fields or []),
             "features": features_dict,
+            "url_status": features_dict.get("url_status"),
+            "url_status_code": features_dict.get("url_status_code"),
+            "archive_url": features_dict.get("archive_url"),
+            "html_meta": features_dict.get("html_meta"),
+            "html_meta_title_sim": features_dict.get("html_meta_title_sim"),
             "matched_sources": features_dict.get("matched_sources", []),
         })
+
+    doc_diag = _extract_document_diagnostics(essay, style_profile, [], verdicts)
 
     docx_bytes = export_report_to_docx(
         filename=filename,
@@ -1373,6 +1925,7 @@ def _docx_response(filename: str, essay, verdicts: list) -> StreamingResponse:
         linking_summary=linking_summary,
         style_profile=style_profile,
         cis_weights=cis_weights_used,
+        document_diagnostics=doc_diag,
     )
 
     return StreamingResponse(
@@ -1391,21 +1944,26 @@ def _healed_docx_response(
     style: str = "apa",
 ) -> StreamingResponse:
     """Generate an Auto-Healed Word (.docx) with repaired references & Before->After Change Log."""
-    from pathlib import Path
-
     verdict_list = []
     for v in verdicts:
-        features_dict = json.loads(v.features or "{}")
+        features_dict = _load_verdict_features(v)
+        comp_lbl = _extract_verdict_composite_label(v)
         verdict_list.append({
             "citation_raw": v.citation_raw,
             "citation_type": getattr(v, "citation_type", None) or "reference_list",
+            "numeric_index": features_dict.get("numeric_index"),
+            "sub_index": features_dict.get("sub_index"),
+            "composite_label": comp_lbl,
             "mapping_status": v.mapping_status or "matched",
-            "label": v.label,
+            "label": _normalize_verdict_label(v),
             "confidence": v.confidence,
             "reasoning": v.reasoning,
-            "triggered_rules": json.loads(v.triggered_rules or "[]"),
-            "mismatched_fields": json.loads(v.mismatched_fields or "[]"),
+            "triggered_rules": _load_verdict_rules(v),
+            "mismatched_fields": json.loads(v.mismatched_fields or "[]")
+            if isinstance(v.mismatched_fields, str)
+            else list(v.mismatched_fields or []),
             "features": features_dict,
+            "html_meta": features_dict.get("html_meta"),
             "matched_sources": features_dict.get("matched_sources", []),
         })
 

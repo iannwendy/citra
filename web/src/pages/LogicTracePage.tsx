@@ -133,12 +133,28 @@ function buildTraceSteps(verdict: Verdict, lang: 'vi' | 'en'): TraceStep[] {
   if (f?.html_meta_title_sim !== undefined && f.html_meta_title_sim !== null) {
     featureParts.push(`html_meta_title_sim=${f.html_meta_title_sim.toFixed(2)}`);
   }
-  if (f?.cross_lingual_detected) {
-    const bridged = f.bridged_concepts ?? [];
+  const extF = f as
+    | (NonNullable<Verdict['features']> & {
+        cross_lingual_bridged_concepts?: string[];
+        cross_lingual_alignment?: boolean | number;
+      })
+    | undefined;
+  const hasCrossLingualRuleInTrace = (verdict.triggered_rules ?? []).some(
+    (r) => r === 'R-CROSS-LINGUAL-ALIGNMENT' || r === 'R-CROSS-LINGUAL-TITLE-MATCH',
+  );
+  if (
+    f?.cross_lingual_detected ||
+    extF?.cross_lingual_alignment ||
+    f?.cross_lingual_title_detected ||
+    hasCrossLingualRuleInTrace
+  ) {
+    const bridged = extF?.cross_lingual_bridged_concepts?.length
+      ? extF.cross_lingual_bridged_concepts
+      : (f?.bridged_concepts ?? []);
     featureParts.push(
       bridged.length > 0
         ? `cross_lingual=VI↔EN (${bridged.slice(0, 2).join(', ')})`
-        : `cross_lingual=VI↔EN`
+        : `cross_lingual=VI↔EN (ONNX INT8)`
     );
   }
   if (
@@ -146,7 +162,9 @@ function buildTraceSteps(verdict: Verdict, lang: 'vi' | 'en'): TraceStep[] {
     (f?.cross_lingual_title_sim !== undefined && f.cross_lingual_title_sim > 0)
   ) {
     featureParts.push(
-      `cross_lingual_title_sim=${(f.cross_lingual_title_sim ?? 0).toFixed(2)}`
+      `cross_lingual_title_sim=${(f.cross_lingual_title_sim ?? 0).toFixed(2)}${
+        f?.cross_lingual_title_detected ? ' (detected)' : ''
+      }`
     );
   }
   if (urlStatus) {
@@ -282,8 +300,33 @@ function NeuralAlignmentPanel({
   const f = verdict.features;
   if (!f || isUrlResource(verdict) || verdict.label === 'resource') return null;
 
+  const extF = f as NonNullable<Verdict['features']> & {
+    cross_lingual_bridged_concepts?: string[];
+    cross_lingual_alignment?: boolean | number;
+    semantic_similarity?: number;
+  };
+  const bridgedConcepts = extF.cross_lingual_bridged_concepts?.length
+    ? extF.cross_lingual_bridged_concepts
+    : (f.bridged_concepts ?? []);
+  const hasCrossLingual =
+    bridgedConcepts.length > 0 ||
+    Boolean(f.cross_lingual_detected) ||
+    Boolean(extF.cross_lingual_alignment) ||
+    Boolean(f.cross_lingual_title_detected) ||
+    (f.cross_lingual_title_sim ?? 0) >= 0.5 ||
+    (verdict.triggered_rules ?? []).some(
+      (r) => r === 'R-CROSS-LINGUAL-ALIGNMENT' || r === 'R-CROSS-LINGUAL-TITLE-MATCH',
+    );
+
   const alignScore = f.content_alignment_score ?? 0;
-  const titleSim = f.title_sim_semantic || f.title_context_sim || f.title_sim_fuzzy || 0;
+  const crossTitleSim = f.cross_lingual_title_sim ?? 0;
+  const titleSim = Math.max(
+    f.title_sim_semantic ?? 0,
+    f.title_context_sim ?? 0,
+    f.title_sim_fuzzy ?? 0,
+    crossTitleSim,
+    extF.semantic_similarity ?? 0,
+  );
   const abstractSim = f.abstract_context_sim ?? 0;
   const evidenceSim = f.best_evidence_score ?? 0;
   const citedSentence = f.best_cited_sentence || verdict.context || '';
@@ -293,7 +336,7 @@ function NeuralAlignmentPanel({
   const contextSource = f.context_source || '';
   const occAlignments = f.occurrence_alignments ?? [];
 
-  if (alignScore <= 0 && titleSim <= 0 && !evidenceSentence) {
+  if (alignScore <= 0 && titleSim <= 0 && !evidenceSentence && !hasCrossLingual) {
     return null;
   }
 
@@ -373,10 +416,15 @@ function NeuralAlignmentPanel({
               {formatStanceLabel(stance)}
             </span>
           )}
-          {f.cross_lingual_detected && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold border bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/70 dark:text-teal-300 dark:border-teal-800">
+          {hasCrossLingual && (
+            <span
+              data-testid="trace-onnx-multilingual-badge"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold border bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/70 dark:text-teal-300 dark:border-teal-800"
+            >
               <Languages className="h-3 w-3" />
-              VI↔EN Semantic Bridge
+              {crossTitleSim > 0
+                ? `ONNX INT8 Multilingual · ${Math.round(crossTitleSim * 100)}%`
+                : 'ONNX INT8 Multilingual'}
             </span>
           )}
           {contextSource && (
@@ -430,30 +478,52 @@ function NeuralAlignmentPanel({
         })}
       </div>
 
-      {/* Side-by-side Cited Focal Sentence vs Best Abstract Evidence Sentence */}
-      {f.bridged_concepts && f.bridged_concepts.length > 0 && (
+      {/* Cross-Lingual Concept Bridge & Pure ONNX INT8 Multilingual Embedding Match */}
+      {hasCrossLingual && (
         <div
           data-testid="bridged-concepts-bar"
           className="rounded-lg border border-teal-200/80 dark:border-teal-900/60 bg-teal-50/50 dark:bg-teal-950/25 p-2.5"
         >
-          <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-teal-800 dark:text-teal-300 mb-1.5">
-            <Languages className="h-3.5 w-3.5 shrink-0" />
-            <span>
-              {lang === 'vi'
-                ? 'Cầu nối Khái niệm Học thuật Việt ↔ Anh (Cross-Lingual Concept Bridge)'
-                : 'VI ↔ EN Academic Concept Bridge'}
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {f.bridged_concepts.map((concept, cIdx) => (
-              <span
-                key={`${concept}-${cIdx}`}
-                className="inline-flex items-center px-2 py-0.5 rounded bg-white/90 dark:bg-slate-900/90 border border-teal-200 dark:border-teal-800 text-[11px] font-mono text-teal-900 dark:text-teal-200"
-              >
-                {concept}
+          <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-teal-800 dark:text-teal-300 mb-1.5">
+            <div className="flex items-center gap-1.5">
+              <Languages className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                {lang === 'vi'
+                  ? 'Đối sánh Đa ngôn ngữ Việt ↔ Anh (ONNX INT8 Multilingual)'
+                  : 'VI ↔ EN Cross-Lingual Semantic Alignment (ONNX INT8 Multilingual)'}
               </span>
-            ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {f.cross_lingual_title_detected && (
+                <span className="px-1.5 py-0.5 rounded bg-amber-100/90 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800">
+                  cross_lingual_title_detected=true
+                </span>
+              )}
+              {crossTitleSim > 0 && (
+                <span className="px-1.5 py-0.5 rounded bg-teal-100/90 dark:bg-teal-900/80 text-teal-900 dark:text-teal-200 border border-teal-300/70 dark:border-teal-700">
+                  cross_lingual_title_sim={crossTitleSim.toFixed(2)} ({Math.round(crossTitleSim * 100)}%)
+                </span>
+              )}
+            </div>
           </div>
+          {bridgedConcepts.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {bridgedConcepts.map((concept, cIdx) => (
+                <span
+                  key={`${concept}-${cIdx}`}
+                  className="inline-flex items-center px-2 py-0.5 rounded bg-white/90 dark:bg-slate-900/90 border border-teal-200 dark:border-teal-800 text-[11px] font-mono text-teal-900 dark:text-teal-200"
+                >
+                  {concept}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[11px] font-mono text-teal-900 dark:text-teal-200">
+              {lang === 'vi'
+                ? `Đối sánh vector nhúng đa ngôn ngữ ONNX INT8 (paraphrase-multilingual-MiniLM-L12-v2)${crossTitleSim > 0 ? ` · Tương đồng tiêu đề VI↔EN: ${Math.round(crossTitleSim * 100)}%` : ''}`
+                : `Multilingual ONNX INT8 Embedding Match (paraphrase-multilingual-MiniLM-L12-v2)${crossTitleSim > 0 ? ` · VI↔EN Title Sim: ${Math.round(crossTitleSim * 100)}%` : ''}`}
+            </p>
+          )}
         </div>
       )}
 

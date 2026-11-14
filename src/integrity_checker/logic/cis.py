@@ -111,6 +111,7 @@ class CISCalculator:
                 "R-DEAD-URL",
                 "R-BROKEN-LINK",
                 "R-DOI-CONFLICT",
+                "R-DOI-METADATA-MISMATCH",
                 "R-CHIMERIC-DOI-MISMATCH",
             }
             with_id = sum(1 for v in verdicts if v.citation.doi or v.citation.url)
@@ -251,6 +252,7 @@ class CISCalculator:
             "R-DEAD-URL",
             "R-BROKEN-LINK",
             "R-DOI-CONFLICT",
+            "R-DOI-METADATA-MISMATCH",
             "R-CHIMERIC-DOI-MISMATCH",
         }
         with_identifier = 0

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import i18nInstance from '@/i18n';
 import {
   ShieldCheck,
   AlertTriangle,
@@ -241,7 +242,7 @@ export function SharedReportPage() {
           setError(
             err instanceof Error
               ? err.message
-              : i18n.t('sharedReport.invalidOrExpiredDesc'),
+              : i18nInstance.t('sharedReport.invalidOrExpiredDesc'),
           );
         }
       } finally {
@@ -587,6 +588,74 @@ export function SharedReportPage() {
           </div>
         </section>
 
+        {/* Document Ingestion Diagnostics (OCR, Legacy TCVN3/VNI, Scanned PDF) */}
+        {(() => {
+          const docDiag = (
+            report as SharedEssayReport & {
+              document_diagnostics?: {
+                is_scanned_pdf?: boolean;
+                scanned_pages_count?: number;
+                avg_chars_per_page?: number;
+                legacy_encoding_detected?: string | null;
+                ocr_pages_recovered?: number[];
+                warning_message?: string | null;
+              } | null;
+            }
+          ).document_diagnostics;
+          if (!docDiag) return null;
+          const hasLegacy = Boolean(docDiag.legacy_encoding_detected);
+          const hasOcr = (docDiag.ocr_pages_recovered?.length ?? 0) > 0;
+          const hasScanned = Boolean(docDiag.is_scanned_pdf);
+          if (!hasLegacy && !hasOcr && !hasScanned) return null;
+          return (
+            <div
+              data-testid="shared-doc-diagnostics-banner"
+              className="flex flex-wrap items-center gap-2.5"
+            >
+              {hasLegacy && (
+                <div
+                  data-testid="shared-legacy-encoding-pill"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono bg-indigo-50/90 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-200"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span>
+                    {lang === 'vi'
+                      ? `Đã tự động chuyển mã bảng mã tiếng Việt cũ (${String(docDiag.legacy_encoding_detected).toUpperCase()} → Unicode NFC)`
+                      : `Auto-transcoded legacy Vietnamese encoding (${String(docDiag.legacy_encoding_detected).toUpperCase()} → Unicode NFC)`}
+                  </span>
+                </div>
+              )}
+              {hasOcr && (
+                <div
+                  data-testid="shared-ocr-recovery-pill"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
+                >
+                  <FileText className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>
+                    {lang === 'vi'
+                      ? `Đã khôi phục văn bản bằng OCR (Tesseract vie+eng) tại trang: ${docDiag.ocr_pages_recovered!.join(', ')}`
+                      : `Recovered text via Tesseract OCR (vie+eng) on page(s): ${docDiag.ocr_pages_recovered!.join(', ')}`}
+                  </span>
+                </div>
+              )}
+              {hasScanned && (
+                <div
+                  data-testid="shared-scanned-pdf-pill"
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-mono bg-amber-50/90 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span>
+                    {docDiag.warning_message ||
+                      (lang === 'vi'
+                        ? `Cảnh báo: Phát hiện PDF dạng ảnh quét (Thiếu lớp văn bản số hóa — ${docDiag.scanned_pages_count ?? report.num_pages}/${report.num_pages} trang)`
+                        : `Scanned / Image-Only PDF Detected (${docDiag.scanned_pages_count ?? report.num_pages}/${report.num_pages} pages missing digital text layer)`)}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* CIS Score & 5-Component Breakdown + Verdict Distribution */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <section className="lg:col-span-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xs">
@@ -810,6 +879,41 @@ export function SharedReportPage() {
                                         : '✕ Fake URL'}
                             </span>
                           )}
+                          {(() => {
+                            const extF = v.features as
+                              | (NonNullable<SharedVerdictItem['features']> & {
+                                  cross_lingual_detected?: boolean;
+                                  cross_lingual_alignment?: boolean | number;
+                                  cross_lingual_title_detected?: boolean;
+                                  cross_lingual_title_sim?: number;
+                                  title_sim_semantic?: number;
+                                })
+                              | undefined;
+                            const isCrossLingual =
+                              Boolean(extF?.cross_lingual_detected) ||
+                              Boolean(extF?.cross_lingual_alignment) ||
+                              Boolean(extF?.cross_lingual_title_detected) ||
+                              (extF?.cross_lingual_title_sim ?? 0) >= 0.5 ||
+                              (v.triggered_rules ?? []).some(
+                                (r) =>
+                                  r === 'R-CROSS-LINGUAL-ALIGNMENT' ||
+                                  r === 'R-CROSS-LINGUAL-TITLE-MATCH',
+                              );
+                            if (!isCrossLingual) return null;
+                            const crossSim = Math.max(
+                              extF?.cross_lingual_title_sim ?? 0,
+                              extF?.title_sim_semantic ?? 0,
+                            );
+                            return (
+                              <span
+                                data-testid={`shared-cross-lingual-badge-${idx}`}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-teal-50 dark:bg-teal-950/70 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800"
+                              >
+                                VI↔EN ONNX
+                                {crossSim > 0 ? ` · ${Math.round(crossSim * 100)}%` : ''}
+                              </span>
+                            );
+                          })()}
                           <span className="font-mono text-xs text-slate-500">
                             {(Number(v.confidence || 0) * 100).toFixed(0)}%{' '}
                             {t('essay.confidence')}

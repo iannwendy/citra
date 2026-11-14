@@ -28,6 +28,7 @@ import {
   type ClassEssay,
   type ClassAnalytics,
 } from '@/api/client';
+import { getRuleDisplayName } from '@/lib/verdictExplanation';
 import { useToast } from '@/contexts/ToastContext';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { AddStudentDialog } from '@/components/AddStudentDialog';
@@ -334,7 +335,7 @@ export function ClassDetailPage() {
           data-testid="cohort-analytics-panel"
         >
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
@@ -348,11 +349,147 @@ export function ClassDetailPage() {
                   : 'Cohort Integrity Analytics & Shared AI Hallucination Detector'}
               </h2>
             </div>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[10px] font-mono font-semibold text-indigo-700 dark:text-indigo-300">
-              <Sparkles className="h-3 w-3" />
-              CROSS-STUDENT ANOMALY ENGINE
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {(analytics.queued_essays ?? 0) > 0 && (
+                <span
+                  data-testid="cohort-queued-essays-pill"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/80 border border-amber-200/80 dark:border-amber-800/80 text-[10px] font-mono font-semibold text-amber-700 dark:text-amber-300"
+                >
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  {lang === 'vi'
+                    ? `${analytics.queued_essays} bài đang xử lý`
+                    : `${analytics.queued_essays} queued`}
+                </span>
+              )}
+              {(analytics.failed_essays ?? 0) > 0 && (
+                <span
+                  data-testid="cohort-failed-essays-pill"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/80 border border-rose-200/80 dark:border-rose-800/80 text-[10px] font-mono font-semibold text-rose-700 dark:text-rose-300"
+                >
+                  <AlertCircle className="h-3 w-3" />
+                  {lang === 'vi'
+                    ? `${analytics.failed_essays} bài lỗi xử lý`
+                    : `${analytics.failed_essays} failed`}
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[10px] font-mono font-semibold text-indigo-700 dark:text-indigo-300">
+                <Sparkles className="h-3 w-3" />
+                CROSS-STUDENT ANOMALY ENGINE
+              </span>
+            </div>
           </div>
+
+          {(() => {
+            const vb = analytics.verdict_breakdown ?? {};
+            const breakdownItems = [
+              {
+                key: 'verified',
+                count: vb.verified ?? 0,
+                label: lang === 'vi' ? 'Hợp lệ' : 'Verified',
+                barClass: 'bg-emerald-500',
+                pillClass:
+                  'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-200/80 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300',
+              },
+              {
+                key: 'metadata_error',
+                count: vb.metadata_error ?? 0,
+                label: lang === 'vi' ? 'Sai lệch Metadata' : 'Metadata Error',
+                barClass: 'bg-amber-500',
+                pillClass:
+                  'bg-amber-50 dark:bg-amber-950/70 border-amber-200/80 dark:border-amber-800/80 text-amber-700 dark:text-amber-300',
+              },
+              {
+                key: 'incomplete_metadata',
+                count: vb.incomplete_metadata ?? 0,
+                label:
+                  lang === 'vi'
+                    ? 'Thiếu quy cách trích dẫn'
+                    : 'Incomplete Reference',
+                barClass: 'bg-orange-400',
+                pillClass:
+                  'bg-orange-50 dark:bg-orange-950/70 border-orange-200/80 dark:border-orange-800/80 text-orange-700 dark:text-orange-300',
+              },
+              {
+                key: 'suspected_hallucination',
+                count: vb.suspected_hallucination ?? 0,
+                label: lang === 'vi' ? 'Nghi vấn ngụy tạo' : 'Suspected Hallucination',
+                barClass: 'bg-rose-500',
+                pillClass:
+                  'bg-rose-50 dark:bg-rose-950/70 border-rose-200/80 dark:border-rose-800/80 text-rose-700 dark:text-rose-300',
+              },
+              {
+                key: 'unresolved',
+                count: vb.unresolved ?? 0,
+                label: lang === 'vi' ? 'Chờ rà soát' : 'Unresolved',
+                barClass: 'bg-slate-400',
+                pillClass:
+                  'bg-slate-100 dark:bg-slate-800/90 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300',
+              },
+              {
+                key: 'resource',
+                count: vb.resource ?? 0,
+                label:
+                  lang === 'vi'
+                    ? 'Tài nguyên Web / Pháp luật'
+                    : 'Web / Legal Resource',
+                barClass: 'bg-sky-500',
+                pillClass:
+                  'bg-sky-50 dark:bg-sky-950/70 border-sky-200/80 dark:border-sky-800/80 text-sky-700 dark:text-sky-300',
+              },
+            ];
+            const totalVerdicts = breakdownItems.reduce((sum, item) => sum + item.count, 0);
+            const showBreakdown =
+              totalVerdicts > 0 || (analytics.total_essays ?? 0) > 0 || essays.length > 0;
+            if (!showBreakdown) return null;
+
+            return (
+              <div
+                data-testid="cohort-verdict-breakdown"
+                className="px-4 sm:px-5 pt-4 sm:pt-5"
+              >
+                <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] font-mono font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      {lang === 'vi'
+                        ? 'Phân bổ Phán quyết Trích dẫn Toàn Lớp'
+                        : 'Cohort Verdict Breakdown'}
+                    </p>
+                    <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                      {totalVerdicts}{' '}
+                      {lang === 'vi' ? 'trích dẫn đã phân loại' : 'verdicts classified'}
+                    </span>
+                  </div>
+                  {totalVerdicts > 0 && (
+                    <div className="h-2 w-full rounded-full bg-slate-200/70 dark:bg-slate-800 overflow-hidden flex">
+                      {breakdownItems
+                        .filter((item) => item.count > 0)
+                        .map((item) => (
+                          <div
+                            key={item.key}
+                            style={{ width: `${(item.count / totalVerdicts) * 100}%` }}
+                            title={`${item.label}: ${item.count}`}
+                            className={`${item.barClass} h-full transition-all`}
+                          />
+                        ))}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {breakdownItems.map((item) => (
+                      <span
+                        key={item.key}
+                        data-testid={`verdict-breakdown-pill-${item.key}`}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-mono ${item.pillClass}`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${item.barClass}`} />
+                        <span className="font-medium">{item.label}:</span>
+                        <span className="font-bold tabular-nums">{item.count}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-12 gap-5">
             {/* Left: CIS Distribution & Top Symbolic Rules */}
@@ -364,7 +501,7 @@ export function ClassDetailPage() {
                 <div className="grid grid-cols-4 gap-2 text-center">
                   <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                     <p className="text-lg font-mono font-bold text-emerald-700 dark:text-emerald-300">
-                      {analytics.cis_distribution.excellent ?? 0}
+                      {analytics.cis_distribution?.excellent ?? 0}
                     </p>
                     <p className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
                       ≥ 85 (A)
@@ -372,7 +509,7 @@ export function ClassDetailPage() {
                   </div>
                   <div className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
                     <p className="text-lg font-mono font-bold text-indigo-700 dark:text-indigo-300">
-                      {analytics.cis_distribution.good ?? 0}
+                      {analytics.cis_distribution?.good ?? 0}
                     </p>
                     <p className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400">
                       70–84 (B)
@@ -380,7 +517,7 @@ export function ClassDetailPage() {
                   </div>
                   <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
                     <p className="text-lg font-mono font-bold text-amber-700 dark:text-amber-300">
-                      {analytics.cis_distribution.fair ?? 0}
+                      {analytics.cis_distribution?.fair ?? 0}
                     </p>
                     <p className="text-[10px] font-mono text-amber-600 dark:text-amber-400">
                       50–69 (C)
@@ -388,7 +525,7 @@ export function ClassDetailPage() {
                   </div>
                   <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20">
                     <p className="text-lg font-mono font-bold text-rose-700 dark:text-rose-300">
-                      {analytics.cis_distribution.poor ?? 0}
+                      {analytics.cis_distribution?.poor ?? 0}
                     </p>
                     <p className="text-[10px] font-mono text-rose-600 dark:text-rose-400">
                       &lt; 50 (D)
@@ -403,22 +540,29 @@ export function ClassDetailPage() {
                     ? 'Luật Symbolic Kích hoạt Nhiều nhất'
                     : 'Most Triggered Symbolic Rules'}
                 </p>
-                {analytics.top_triggered_rules.length === 0 ? (
+                {(analytics.top_triggered_rules ?? []).length === 0 ? (
                   <p className="text-xs font-mono text-slate-400">
                     {lang === 'vi' ? 'Chưa có luật vi phạm nào được ghi nhận.' : 'No rule violations triggered yet.'}
                   </p>
                 ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    {analytics.top_triggered_rules.map((r) => (
-                      <span
+                  <div className="space-y-2">
+                    {(analytics.top_triggered_rules ?? []).map((r) => (
+                      <div
                         key={r.rule_id}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono"
+                        className="flex flex-col gap-0.5 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"
                       >
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400">
-                          {r.rule_id}
-                        </span>
-                        <span className="text-slate-400">×{r.count}</span>
-                      </span>
+                        <div className="flex items-center justify-between gap-2 text-xs font-mono">
+                          <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                            {r.rule_id}
+                          </span>
+                          <span className="text-slate-500 dark:text-slate-400 font-semibold">
+                            ×{r.count}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
+                          {getRuleDisplayName(r.rule_id, lang)}
+                        </p>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -436,12 +580,12 @@ export function ClassDetailPage() {
                       : 'Shared Hallucination & Flagged Citation Radar'}
                   </p>
                   <span className="text-[10px] font-mono text-slate-400">
-                    {analytics.shared_hallucinations.length}{' '}
+                    {(analytics.shared_hallucinations ?? []).length}{' '}
                     {lang === 'vi' ? 'cảnh báo' : 'flagged items'}
                   </span>
                 </div>
 
-                {analytics.shared_hallucinations.length === 0 ? (
+                {(analytics.shared_hallucinations ?? []).length === 0 ? (
                   <div className="py-8 text-center text-xs font-mono text-slate-400">
                     {lang === 'vi'
                       ? 'Không phát hiện trích dẫn ảo giác hoặc lỗi metadata nào trong lớp học.'
@@ -449,7 +593,7 @@ export function ClassDetailPage() {
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                    {analytics.shared_hallucinations.map((item, idx) => (
+                    {(analytics.shared_hallucinations ?? []).map((item, idx) => (
                       <div
                         key={idx}
                         className={`p-3 rounded-xl border text-xs ${
@@ -458,7 +602,7 @@ export function ClassDetailPage() {
                             : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
                           <span
                             className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold uppercase ${
                               item.label === 'suspected_hallucination'
@@ -479,6 +623,24 @@ export function ClassDetailPage() {
                         <p className="font-mono text-[11px] text-slate-800 dark:text-slate-200 line-clamp-2">
                           {item.citation_raw}
                         </p>
+                        {item.essay_ids && item.essay_ids.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-1.5 border-t border-slate-200/60 dark:border-slate-800/80">
+                            <span className="text-[10px] font-mono text-slate-400">
+                              {lang === 'vi' ? 'Báo cáo:' : 'Reports:'}
+                            </span>
+                            {item.essay_ids.map((eid) => (
+                              <Link
+                                key={eid}
+                                to={`/verification/report/${eid}`}
+                                data-testid={`shared-hallucination-essay-link-${eid}`}
+                                className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900/70 border border-indigo-200/80 dark:border-indigo-800/80 font-mono text-[10px] font-semibold text-indigo-700 dark:text-indigo-300 transition-colors"
+                              >
+                                #{eid}
+                                <ExternalLink className="h-2.5 w-2.5" />
+                              </Link>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -580,32 +742,94 @@ export function ClassDetailPage() {
               {t('teacher.noSubmissionsYet')}
             </p>
           ) : (
-            essays.map((e, idx) => (
-              <Link
-                key={e.id}
-                to={`/verification/report/${e.id}`}
-                className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 focus:outline-none focus:bg-slate-50 dark:focus:bg-slate-800/50 transition-colors group"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-xs font-mono text-slate-400 dark:text-slate-500">
-                    #{String(idx + 1).padStart(2, '0')}
-                  </span>
-                  <FileFormatIcon filename={e.filename} size="sm" />
-                  <div className="min-w-0">
-                    <p className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                      {e.filename}
-                    </p>
-                    <p className="text-xs font-mono text-slate-500 mt-0.5">
-                      {e.username ?? '—'} • {e.num_pages} {t('teacher.pages')} •{' '}
-                      {e.uploaded_at
-                        ? new Date(e.uploaded_at).toLocaleDateString()
-                        : ''}
-                    </p>
+            essays.map((e, idx) => {
+              const status = (e.job_status ?? 'completed').toLowerCase();
+              const isQueuedOrProcessing = status === 'queued' || status === 'processing';
+              const isFailed = status === 'failed';
+              const targetHref =
+                isQueuedOrProcessing || isFailed
+                  ? `/verification/processing/${e.id}`
+                  : `/verification/report/${e.id}`;
+
+              return (
+                <Link
+                  key={e.id}
+                  to={targetHref}
+                  data-testid={`class-essay-row-${e.id}`}
+                  title={isFailed && e.job_error ? e.job_error : undefined}
+                  className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 focus:outline-none focus:bg-slate-50 dark:focus:bg-slate-800/50 transition-colors group"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-xs font-mono text-slate-400 dark:text-slate-500">
+                      #{String(idx + 1).padStart(2, '0')}
+                    </span>
+                    <FileFormatIcon filename={e.filename} size="sm" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        {e.filename}
+                      </p>
+                      <p className="text-xs font-mono text-slate-500 mt-0.5">
+                        {e.username ?? '—'} • {e.num_pages} {t('teacher.pages')} •{' '}
+                        {e.uploaded_at
+                          ? new Date(e.uploaded_at).toLocaleDateString()
+                          : ''}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                <ExternalLink className="h-4 w-4 text-slate-400 group-hover:text-indigo-500 shrink-0 transition-colors" />
-              </Link>
-            ))
+
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {isQueuedOrProcessing ? (
+                      <>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/80 border border-amber-200/80 dark:border-amber-800/80 text-[11px] font-mono font-semibold text-amber-700 dark:text-amber-300">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          {status === 'queued'
+                            ? lang === 'vi'
+                              ? 'Đang chờ'
+                              : 'Queued'
+                            : lang === 'vi'
+                              ? 'Đang xử lý'
+                              : 'Processing'}
+                        </span>
+                        <span className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 font-medium">
+                          {lang === 'vi' ? 'Xem tiến độ' : 'View Progress'}
+                        </span>
+                      </>
+                    ) : isFailed ? (
+                      <>
+                        <span
+                          title={e.job_error ?? undefined}
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/80 border border-rose-200/80 dark:border-rose-800/80 text-[11px] font-mono font-semibold text-rose-700 dark:text-rose-300"
+                        >
+                          <AlertCircle className="h-3 w-3" />
+                          {lang === 'vi' ? 'Thất bại' : 'Failed'}
+                        </span>
+                        {e.quota_charged === false && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200/80 dark:border-emerald-800/80 text-[10px] font-mono font-semibold text-emerald-700 dark:text-emerald-300">
+                            {lang === 'vi' ? 'Đã hoàn lượt' : 'Credit Refunded'}
+                          </span>
+                        )}
+                        <span className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 font-medium">
+                          {lang === 'vi' ? 'Thử lại' : 'Retry'}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        {e.cis_score != null && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-bold text-indigo-700 dark:text-indigo-300 tabular-nums">
+                            CIS {Number(e.cis_score).toFixed(1)}%
+                          </span>
+                        )}
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200/80 dark:border-emerald-800/80 text-[10px] font-mono font-semibold text-emerald-700 dark:text-emerald-300">
+                          <Check className="h-3 w-3" />
+                          {lang === 'vi' ? 'Hoàn tất' : 'Completed'}
+                        </span>
+                      </>
+                    )}
+                    <ExternalLink className="h-4 w-4 text-slate-400 group-hover:text-indigo-500 shrink-0 transition-colors" />
+                  </div>
+                </Link>
+              );
+            })
           )}
         </div>
       </section>

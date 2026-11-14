@@ -35,7 +35,8 @@ interface HelpModalProps {
 }
 
 export function HelpModal({ isOpen, onClose }: HelpModalProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isVi = i18n.language?.startsWith('vi');
   const [activeSection, setActiveSection] = useState<string>('overview');
 
   // Handle Escape key to close modal
@@ -90,6 +91,18 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
       desc: t('verdict.metadataErrorDesc'),
       icon: AlertTriangle,
       accentBar: 'bg-amber-500',
+      iconBox:
+        'bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-1 ring-amber-500/20',
+    },
+    {
+      code: 'R-INCOMPLETE-METADATA',
+      badge: isVi ? 'Thiếu quy cách trích dẫn' : 'Incomplete Reference',
+      badgeVariant: 'metadata_error' as const,
+      desc: isVi
+        ? 'Mục tham khảo thiếu các trường định danh bắt buộc (tác giả, năm xuất bản hoặc nơi công bố). Đây là lỗi thiếu sót quy cách trình bày chứ không phải tài liệu do AI bịa đặt.'
+        : 'Citations missing required bibliographic fields (author, publication year, or venue) are formatting omissions rather than AI hallucinations.',
+      icon: FileText,
+      accentBar: 'bg-amber-400',
       iconBox:
         'bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-1 ring-amber-500/20',
     },
@@ -403,32 +416,41 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                   <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-3">
                     {t('help.cisDesc')}
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                     <div className="rounded-lg bg-white dark:bg-slate-900 p-2.5 border border-slate-200/80 dark:border-slate-800">
                       <div className="flex items-center justify-between text-[11px] font-mono font-semibold text-emerald-600 dark:text-emerald-400 mb-1">
-                        <span>80–100%</span>
+                        <span>85–100%</span>
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                       </div>
                       <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                        {t('essay.cisExcellent')}
+                        {isVi ? 'Xuất sắc' : 'Excellent'}
+                      </div>
+                    </div>
+                    <div className="rounded-lg bg-white dark:bg-slate-900 p-2.5 border border-slate-200/80 dark:border-slate-800">
+                      <div className="flex items-center justify-between text-[11px] font-mono font-semibold text-indigo-600 dark:text-indigo-400 mb-1">
+                        <span>70–84%</span>
+                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                      </div>
+                      <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                        {isVi ? 'Tốt' : 'Good'}
                       </div>
                     </div>
                     <div className="rounded-lg bg-white dark:bg-slate-900 p-2.5 border border-slate-200/80 dark:border-slate-800">
                       <div className="flex items-center justify-between text-[11px] font-mono font-semibold text-amber-600 dark:text-amber-400 mb-1">
-                        <span>50–79%</span>
+                        <span>50–69%</span>
                         <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                       </div>
                       <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                        {t('essay.cisFair')}
+                        {isVi ? 'Trung bình / Cần rà soát' : 'Fair / Needs Review'}
                       </div>
                     </div>
                     <div className="rounded-lg bg-white dark:bg-slate-900 p-2.5 border border-slate-200/80 dark:border-slate-800">
                       <div className="flex items-center justify-between text-[11px] font-mono font-semibold text-rose-600 dark:text-rose-400 mb-1">
-                        <span>0–49%</span>
+                        <span>&lt; 50%</span>
                         <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                       </div>
                       <div className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
-                        {t('essay.cisCritical')}
+                        {isVi ? 'Nghiêm trọng' : 'Critical'}
                       </div>
                     </div>
                   </div>

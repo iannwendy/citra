@@ -95,6 +95,7 @@ RUN python -c "import platform; from sentence_transformers import SentenceTransf
 
 # Copy source (chỉ invalidate layer nhẹ cuối cùng khi code thay đổi)
 USER root
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 COPY --chown=appuser:appgroup pyproject.toml README.md ./
 COPY --chown=appuser:appgroup src/ ./src/
 COPY --chown=appuser:appgroup scripts/ ./scripts/

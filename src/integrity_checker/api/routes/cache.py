@@ -23,13 +23,24 @@ class CacheStatsResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     total: int
+    dynamic_entries: int = 0
     by_source: dict
     total_hits: int
     avg_hit_count: float
+    persistent_entries: int = 0
+    persistent_hits: int = 0
+    expired_entries: int = 0
+    session_hits: int = 0
+    session_misses: int = 0
+    session_hit_rate_percent: float = 0.0
+    wave0_entries: int = 0
+    negative_cache_entries: int = 0
+    singleflight_coalesced: int = 0
     local_papers_count: int = 0
     local_queries_count: int = 0
     local_hits_count: int = 0
     local_hit_rate_percent: float = 0.0
+    local_corpus_by_source: dict[str, int] = {}
 
 
 class CacheClearResponse(BaseModel):

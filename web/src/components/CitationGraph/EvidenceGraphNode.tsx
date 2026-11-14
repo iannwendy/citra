@@ -22,7 +22,12 @@ interface EvidenceGraphNodeProps {
   expandedNodes?: Set<string>;
 }
 
-function getNodeStyles(status: GraphNode['status'], isRoot: boolean): string {
+function getNodeStyles(
+  status: GraphNode['status'],
+  isRoot: boolean,
+  nodeType?: GraphNode['type'],
+  verdictLabel?: GraphNode['verdictLabel'],
+): string {
   if (isRoot) {
     return 'border-indigo-300/90 bg-indigo-50/70 dark:border-indigo-800 dark:bg-indigo-950/60 shadow-2xs';
   }
@@ -36,11 +41,20 @@ function getNodeStyles(status: GraphNode['status'], isRoot: boolean): string {
     case 'no_match':
       return 'border-slate-200/80 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/50 opacity-75';
     default:
+      if (nodeType === 'verdict') {
+        return verdictLabel === 'resource'
+          ? 'border-violet-200/90 bg-violet-50/60 dark:border-violet-800/80 dark:bg-violet-950/40'
+          : 'border-slate-200/90 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-900/50';
+      }
       return 'border-indigo-200/90 bg-indigo-50/50 dark:border-indigo-800/80 dark:bg-indigo-950/40';
   }
 }
 
-function getDotColor(status: GraphNode['status']): string {
+function getDotColor(
+  status: GraphNode['status'],
+  nodeType?: GraphNode['type'],
+  verdictLabel?: GraphNode['verdictLabel'],
+): string {
   switch (status) {
     case 'success':
       return 'bg-emerald-500';
@@ -51,45 +65,77 @@ function getDotColor(status: GraphNode['status']): string {
     case 'no_match':
       return 'bg-slate-400 dark:bg-slate-600';
     default:
+      if (nodeType === 'verdict') {
+        return verdictLabel === 'resource' ? 'bg-violet-500' : 'bg-slate-400 dark:bg-slate-500';
+      }
       return 'bg-indigo-500';
   }
 }
 
-function getStatusPillStyles(status: GraphNode['status'], isVi = false): {
+function getStatusPillStyles(
+  node: GraphNode,
+  isVi = false,
+): {
   text: string;
   className: string;
 } {
-  switch (status) {
+  switch (node.status) {
     case 'success':
       return {
-        text: isVi ? 'ĐẠT' : 'PASS',
+        text: node.statusText ?? (isVi ? 'ĐẠT' : 'PASS'),
         className:
           'bg-emerald-100/90 text-emerald-800 border-emerald-300/80 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800',
       };
     case 'warning':
       return {
-        text: isVi ? 'CẢNH BÁO' : 'WARN',
+        text: node.statusText ?? (isVi ? 'CẢNH BÁO' : 'WARN'),
         className:
           'bg-amber-100/90 text-amber-800 border-amber-300/80 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800',
       };
     case 'error':
       return {
-        text: isVi ? 'LỖI' : 'FAIL',
+        text: node.statusText ?? (isVi ? 'LỖI' : 'FAIL'),
         className:
           'bg-red-100/90 text-red-800 border-red-300/80 dark:bg-red-950 dark:text-red-300 dark:border-red-800',
       };
     case 'no_match':
       return {
-        text: isVi ? 'KHÔNG KHỚP' : 'NO HIT',
+        text: node.statusText ?? (isVi ? 'KHÔNG KHỚP' : 'NO HIT'),
         className:
           'bg-slate-200/70 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700',
       };
-    default:
+    default: {
+      if (node.type === 'reference') {
+        return {
+          text: node.statusText ?? (isVi ? 'GỐC' : 'ROOT'),
+          className:
+            'bg-indigo-100/90 text-indigo-800 border-indigo-300/80 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800',
+        };
+      }
+      if (node.type === 'verdict') {
+        const isResource =
+          node.verdictLabel === 'resource' ||
+          (!node.verdictLabel &&
+            /resource|tài nguyên|pháp luật|statute/i.test(node.label));
+        if (isResource) {
+          return {
+            text: node.statusText ?? (isVi ? 'NGUỒN WEB' : 'RESOURCE'),
+            className:
+              'bg-violet-100/90 text-violet-800 border-violet-300/80 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-800',
+          };
+        }
+        return {
+          text: node.statusText ?? (isVi ? 'CHỜ DUYỆT' : 'REVIEW'),
+          className:
+            'bg-slate-200/80 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
+        };
+      }
       return {
-        text: isVi ? 'GỐC' : 'ROOT',
+        text: node.statusText ?? (isVi ? 'THÔNG TIN' : 'INFO'),
         className:
-          'bg-indigo-100/90 text-indigo-800 border-indigo-300/80 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800',
+          'bg-sky-100/80 text-sky-800 border-sky-300/80 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800',
       };
+    }
   }
 }
 
@@ -101,8 +147,11 @@ function getNodeIcon(node: GraphNode): React.ReactNode {
         <GitBranch className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
       );
     case 'source':
-      return <SourceIcon source={node.label} />;
+      return <SourceIcon source={node.sourceKey || node.label} />;
     case 'candidate':
+      if (node.sourceKey) {
+        return <SourceIcon source={node.sourceKey} />;
+      }
       return node.status === 'success' ? (
         <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
       ) : node.status === 'warning' ? (
@@ -119,7 +168,9 @@ function getNodeIcon(node: GraphNode): React.ReactNode {
         <Hash className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
       );
     case 'verdict': {
-      const normalizedKey = node.label.toLowerCase().replace(/\s+/g, '_');
+      const normalizedKey =
+        node.verdictLabel ??
+        (node.label.toLowerCase().replace(/\s+/g, '_') as keyof typeof VERDICT_CONFIG);
       const config =
         VERDICT_CONFIG[normalizedKey as keyof typeof VERDICT_CONFIG] ??
         VERDICT_CONFIG.unresolved;
@@ -148,7 +199,7 @@ export function EvidenceGraphNode({
     'url' in node.matchedSource
       ? (node.matchedSource as { url?: string }).url
       : undefined;
-  const statusPill = getStatusPillStyles(node.status, isVi);
+  const statusPill = getStatusPillStyles(node, isVi);
   const isRoot = level === 0;
 
   return (
@@ -176,6 +227,8 @@ export function EvidenceGraphNode({
             aria-hidden="true"
             className={`pointer-events-none absolute left-[19px] sm:left-[23px] top-[16px] w-2 h-2 rounded-full ring-2 ring-white dark:ring-slate-950 ${getDotColor(
               node.status,
+              node.type,
+              node.verdictLabel,
             )}`}
           />
         </>
@@ -185,7 +238,7 @@ export function EvidenceGraphNode({
       <div
         className={`w-full min-w-0 flex items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-all ${
           hasChildren ? 'cursor-pointer hover:shadow-xs' : 'cursor-default'
-        } ${getNodeStyles(node.status, isRoot)}`}
+        } ${getNodeStyles(node.status, isRoot, node.type, node.verdictLabel)}`}
         onClick={() => hasChildren && onExpand?.(node.id)}
       >
         <div className="pt-0.5 shrink-0">{getNodeIcon(node)}</div>

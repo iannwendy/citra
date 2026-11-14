@@ -376,6 +376,16 @@ async def _run_pipeline_task(
                         "disclaimer": getattr(cis_obj, "disclaimer", ""),
                     }
 
+            report_diagnostics: dict[str, Any] | None = (
+                style_profile_dict.get("document_diagnostics")
+                if isinstance(style_profile_dict, dict)
+                else None
+            )
+            if report_diagnostics is None:
+                raw_rep_diag = getattr(report, "document_diagnostics", None)
+                if isinstance(raw_rep_diag, dict):
+                    report_diagnostics = raw_rep_diag
+
             repo.update_essay_pipeline_output(
                 essay_id,
                 style_profile=style_profile_dict,
@@ -389,7 +399,7 @@ async def _run_pipeline_task(
         finally:
             session.close()
 
-        tracker.complete(essay_id)
+        tracker.complete(essay_id, document_diagnostics=report_diagnostics)
         logger.info(f"Pipeline complete for essay {essay_id}")
 
     except Exception as exc:
@@ -410,18 +420,25 @@ async def _run_pipeline_task(
             and _get_persisted_upload_path(essay_id).is_file()
             and tracker.can_auto_retry(essay_id)
         )
+        quota_charged_after_fail: bool = True
         if not eligible_for_in_process_retry:
             try:
                 err_session = get_session()
                 try:
-                    refund_upload_quota_once(err_session, essay_id, safe_err)
+                    refunded = refund_upload_quota_once(err_session, essay_id, safe_err)
+                    failed_row = err_session.get(EssayRecord, essay_id)
+                    quota_charged_after_fail = (
+                        False
+                        if refunded
+                        else bool(getattr(failed_row, "quota_charged", False))
+                    )
                 finally:
                     err_session.close()
             except Exception as refund_exc:
                 logger.warning(
                     f"Could not persist quota refund for failed essay {essay_id}: {refund_exc}"
                 )
-        tracker.fail(essay_id, safe_err)
+        tracker.fail(essay_id, safe_err, quota_charged=quota_charged_after_fail)
     finally:
         if cleanup_file:
             Path(tmp_path).unlink(missing_ok=True)  # noqa: ASYNC240 - tiny local unlink in cleanup
@@ -976,6 +993,25 @@ async def stream_essay_events(
     )
 
 
+def _is_essay_genuinely_inflight(essay: EssayRecord) -> bool:
+    """Return True if an essay is actively queued or processing.
+
+    In inline mode, if an in-memory ProgressState already exists for this essay
+    yet the admission controller neither holds an active slot nor a waiter for it,
+    the prior background task already exited without syncing DB state (e.g. mocked
+    in tests or cancelled early) and should be allowed to re-run.
+    """
+    status = getattr(essay, "job_status", None)
+    if status not in ("queued", "processing"):
+        return False
+    if _get_worker_mode() in {"web_only", "worker_only"}:
+        return True
+    eid = int(essay.id)
+    if get_pipeline_admission_controller().is_inflight(eid):
+        return True
+    return get_tracker().get(eid) is None
+
+
 @router.post("/{essay_id}/reanalyze")
 async def reanalyze_essay(
     essay_id: int,
@@ -992,6 +1028,9 @@ async def reanalyze_essay(
 
     if not repo.can_user_access_essay(current_user, essay):
         raise HTTPException(status_code=403, detail="Access denied")
+
+    if _is_essay_genuinely_inflight(essay):
+        return {"status": essay.job_status, "essay_id": essay.id}
 
     lower_fname = str(essay.filename or "").lower()
     if lower_fname.endswith(".docx"):
@@ -1015,6 +1054,70 @@ async def reanalyze_essay(
         else:
             raise HTTPException(status_code=404, detail="Persisted document file not found on disk")
 
+    needs_quota_reclaim = (
+        getattr(essay, "job_status", None) == "failed"
+        and not bool(getattr(essay, "quota_charged", True))
+        and getattr(essay, "cis_json", None) is None
+    )
+    if needs_quota_reclaim:
+        with _QUOTA_CLAIM_LOCK:
+            db.expire(current_user)
+            db.expire(essay)
+            db.commit()
+
+            fresh_essay = db.get(EssayRecord, essay_id)
+            if fresh_essay is None:
+                raise HTTPException(status_code=404, detail="Essay not found")
+            if _is_essay_genuinely_inflight(fresh_essay):
+                return {"status": fresh_essay.job_status, "essay_id": fresh_essay.id}
+
+            if (
+                getattr(fresh_essay, "job_status", None) == "failed"
+                and not bool(getattr(fresh_essay, "quota_charged", True))
+                and getattr(fresh_essay, "cis_json", None) is None
+            ):
+                fresh_user = db.get(User, current_user.id)
+                if fresh_user is None:
+                    raise HTTPException(status_code=401, detail="User not found")
+                if fresh_user.role != "admin":
+                    if ensure_user_quota_current(fresh_user):
+                        db.commit()
+                        db.refresh(fresh_user)
+                    policy = get_user_plan_policy(fresh_user)
+                    limit = int(policy.max_uploads_per_month)
+                    res = db.execute(
+                        update(User)
+                        .where(
+                            User.id == fresh_user.id,
+                            func.coalesce(User.monthly_uploads_used, 0) < limit,
+                        )
+                        .values(monthly_uploads_used=func.coalesce(User.monthly_uploads_used, 0) + 1)
+                        .execution_options(synchronize_session=False)
+                    )
+                    if (res.rowcount or 0) != 1:
+                        db.rollback()
+                        db.refresh(fresh_user)
+                        used_now = int(fresh_user.monthly_uploads_used or limit)
+                        msg = (
+                            f"Monthly upload quota reached ({used_now}/{limit} documents "
+                            f"on the {policy.name} plan). Please upgrade to Pro or Ultra to continue analyzing manuscripts."
+                        )
+                        raise HTTPException(
+                            status_code=402,
+                            detail={
+                                "code": "MONTHLY_QUOTA_EXCEEDED",
+                                "message": msg,
+                                "used": used_now,
+                                "limit": limit,
+                                "current_tier": policy.tier,
+                            },
+                        )
+                fresh_essay.quota_charged = 1
+                db.commit()
+                db.refresh(fresh_essay)
+                db.refresh(current_user)
+            essay = fresh_essay
+
     if _get_worker_mode() in {"web_only", "worker_only"}:
         _clear_persisted_progress_snapshot(essay)
         essay.job_status = "queued"
@@ -1022,7 +1125,7 @@ async def reanalyze_essay(
         essay.job_error = None
         db.commit()
         get_tracker().clear(essay_id)
-        return {"status": "queued", "essay_id": essay.id}
+        return {"status": essay.job_status, "essay_id": essay.id}
 
     peek_queued = (
         get_pipeline_admission_controller().peek_queue_position_if_saturated() is not None
@@ -1047,7 +1150,8 @@ async def reanalyze_essay(
             pipeline,
             False,
         )
-        return {"status": "completed", "essay_id": essay.id}
+        db.refresh(essay)
+        return {"status": essay.job_status or "completed", "essay_id": essay.id}
 
     background_tasks.add_task(
         _run_pipeline_task,
@@ -1057,7 +1161,7 @@ async def reanalyze_essay(
         pipeline,
         False,
     )
-    return {"status": "processing", "essay_id": essay.id}
+    return {"status": essay.job_status, "essay_id": essay.id}
 
 
 def _serialize_essay_summary(
@@ -1218,7 +1322,7 @@ def get_essay_stats(
 
     repo = Repository(db)
     if current_user.role == "admin":
-        grouped = repo.get_all_essays_deduped()
+        grouped = repo.get_all_essays_deduped(completed_only=True)
     elif current_user.role == "teacher":
         visible_ids = {current_user.id}
         for (student_id,) in (
@@ -1228,11 +1332,19 @@ def get_essay_stats(
             .all()
         ):
             visible_ids.add(student_id)
-        grouped = repo.get_all_essays_deduped(user_ids=list(visible_ids))
+        grouped = repo.get_all_essays_deduped(
+            user_ids=list(visible_ids), completed_only=True
+        )
     else:
-        grouped = repo.get_all_essays_deduped(user_id=current_user.id)
+        grouped = repo.get_all_essays_deduped(
+            user_id=current_user.id, completed_only=True
+        )
 
-    essay_ids = [e.id for e, _ in grouped]
+    essay_ids = [
+        e.id
+        for e, _ in grouped
+        if e.id is not None and (getattr(e, "job_status", None) or "completed") == "completed"
+    ]
     counts: dict[str, int] = {
         "verified": 0,
         "metadata_error": 0,
@@ -1245,6 +1357,7 @@ def get_essay_stats(
             "total_essays": 0,
             "total_citations": 0,
             **counts,
+            "incomplete_metadata": 0,
         }
 
     for label, cnt in (
@@ -1255,6 +1368,23 @@ def get_essay_stats(
     ):
         if label in counts:
             counts[str(label)] = int(cnt or 0)
+
+    incomplete_metadata_count = 0
+    for (raw_rules,) in (
+        db.query(VerdictRecord.triggered_rules)
+        .filter(
+            VerdictRecord.essay_id.in_(essay_ids),
+            VerdictRecord.triggered_rules.like("%R-INCOMPLETE-METADATA%"),
+        )
+        .all()
+    ):
+        try:
+            parsed_rules = json.loads(raw_rules or "[]")
+            if isinstance(parsed_rules, list) and "R-INCOMPLETE-METADATA" in parsed_rules:
+                incomplete_metadata_count += 1
+        except Exception:
+            if "R-INCOMPLETE-METADATA" in str(raw_rules or ""):
+                incomplete_metadata_count += 1
 
     total_verdicts = sum(counts.values())
     if total_verdicts > 0:
@@ -1271,6 +1401,7 @@ def get_essay_stats(
         "total_essays": len(essay_ids),
         "total_citations": total_citations,
         **counts,
+        "incomplete_metadata": incomplete_metadata_count,
     }
 
 
@@ -1407,11 +1538,12 @@ def get_shared_essay_report(
         "suspected_hallucination": 0,
         "unresolved": 0,
         "resource": 0,
+        "incomplete_metadata": 0,
     }
     public_verdicts: list[dict[str, Any]] = []
     for idx, v in enumerate(verdicts, start=1):
         lbl = str(v.label or "unresolved").lower()
-        if lbl in verdict_counts:
+        if lbl in verdict_counts and lbl != "incomplete_metadata":
             verdict_counts[lbl] += 1
         try:
             features_dict = json.loads(v.features or "{}")
@@ -1425,6 +1557,8 @@ def get_shared_essay_report(
                 triggered_rules = []
         except Exception:
             triggered_rules = []
+        if "R-INCOMPLETE-METADATA" in triggered_rules:
+            verdict_counts["incomplete_metadata"] += 1
         try:
             mismatched_fields = json.loads(v.mismatched_fields or "[]")
             if not isinstance(mismatched_fields, list):
@@ -1552,6 +1686,27 @@ def get_shared_essay_report(
             "identifier_validity": 0.0,
         }
 
+    document_diagnostics: dict[str, Any] | None = None
+    raw_diag_col = getattr(essay, "diagnostics_json", None)
+    if raw_diag_col:
+        if isinstance(raw_diag_col, dict):
+            document_diagnostics = raw_diag_col
+        elif isinstance(raw_diag_col, str):
+            try:
+                parsed_diag = json.loads(raw_diag_col)
+                if isinstance(parsed_diag, dict):
+                    document_diagnostics = parsed_diag
+            except Exception:
+                document_diagnostics = None
+    if document_diagnostics is None and isinstance(style_profile_dict, dict):
+        sp_diag = style_profile_dict.get("document_diagnostics")
+        if isinstance(sp_diag, dict):
+            document_diagnostics = sp_diag
+    if document_diagnostics is None and isinstance(cis_dict, dict):
+        cis_diag = cis_dict.get("document_diagnostics")
+        if isinstance(cis_diag, dict):
+            document_diagnostics = cis_diag
+
     created_iso = (
         essay.uploaded_at.isoformat()
         if essay.uploaded_at
@@ -1566,6 +1721,7 @@ def get_shared_essay_report(
         "num_citations": num_citations,
         "cis": cis_dict,
         "style_profile": style_profile_dict,
+        "document_diagnostics": document_diagnostics,
         "receipt_id": receipt_id,
         "share_token": share_token,
         "share_url": f"/verify/share/{share_token}",
@@ -2686,43 +2842,49 @@ async def verify_sandbox_citations_instant(
         best = source.best_candidate()
         vf = getattr(verdict, "features", None)
 
-        def _serialize_cand(cand: Any) -> dict[str, Any]:
-            raw_authors = getattr(cand, "authors", None) or []
-            cand_authors: list[str] = []
-            for a in raw_authors:
-                if isinstance(a, str):
-                    cand_authors.append(a)
-                elif hasattr(a, "last_name"):
-                    parts = [getattr(a, "last_name", ""), getattr(a, "first_name", "")]
-                    cand_authors.append(" ".join(p for p in parts if p))
-                else:
-                    cand_authors.append(str(a))
-            m_fields: list[str] = []
-            if getattr(cand, "doi", None):
-                m_fields.append("doi")
-            if getattr(cand, "title", None):
-                m_fields.append("title")
-            if cand_authors:
-                m_fields.append("authors")
-            if getattr(cand, "year", None):
-                m_fields.append("year")
-            if getattr(cand, "venue", None):
-                m_fields.append("venue")
-            src_name = getattr(cand, "source_name", "unknown")
+        from integrity_checker.pipeline.integrity_pipeline import (
+            _MAX_SERIALIZED_MATCHED_SOURCES,
+            _build_matched_fields,
+            _clean_public_external_ids,
+            _extract_agreed_sources,
+            _extract_corroborating_records,
+            _format_candidate_authors,
+        )
+
+        checked_at_iso = datetime.now(UTC).isoformat()
+        pristine_by_source: dict[str, Any] = {}
+        for p_cand in getattr(source, "_pristine_candidates", None) or []:
+            if getattr(p_cand, "found", False):
+                p_src = str(getattr(p_cand, "source_name", "") or "").strip()
+                if p_src and p_src not in pristine_by_source:
+                    pristine_by_source[p_src] = p_cand
+
+        def _serialize_cand(
+            cand: Any,
+            override_source: str | None = None,
+            checked_ts: str = checked_at_iso,
+        ) -> dict[str, Any]:
+            cand_authors = _format_candidate_authors(getattr(cand, "authors", None))
+            c_doi = getattr(cand, "doi", None)
+            c_title = getattr(cand, "title", None)
+            c_year = str(getattr(cand, "year", "")) if getattr(cand, "year", None) else None
+            c_venue = getattr(cand, "venue", None)
+            m_fields = _build_matched_fields(c_doi, c_title, cand_authors, c_year, c_venue)
+            src_name = override_source or getattr(cand, "source_name", "unknown")
             return {
                 "source": src_name,
                 "source_name": src_name,
                 "matched_fields": m_fields,
-                "checked_at": datetime.now(UTC).isoformat(),
-                "title": getattr(cand, "title", None),
+                "checked_at": checked_ts,
+                "title": c_title,
                 "authors": cand_authors,
-                "year": str(getattr(cand, "year", "")) if getattr(cand, "year", None) else None,
-                "venue": getattr(cand, "venue", None),
-                "doi": getattr(cand, "doi", None),
+                "year": c_year,
+                "venue": c_venue,
+                "doi": c_doi,
                 "url": getattr(cand, "url", None),
                 "abstract": getattr(cand, "abstract", None),
                 "confidence": float(getattr(cand, "confidence", 0.0) or 0.0),
-                "external_ids": dict(getattr(cand, "external_ids", None) or {}),
+                "external_ids": _clean_public_external_ids(getattr(cand, "external_ids", None)),
             }
 
         ordered_found: list[Any] = []
@@ -2732,24 +2894,90 @@ async def verify_sandbox_citations_instant(
             if getattr(cand_item, "found", False) and cand_item is not best:
                 ordered_found.append(cand_item)
 
-        matched_sources_list = [_serialize_cand(c_item) for c_item in ordered_found]
+        matched_sources_list: list[dict[str, Any]] = []
+        seen_sandbox_sources: set[str] = set()
+        for c_item in ordered_found:
+            if len(matched_sources_list) >= _MAX_SERIALIZED_MATCHED_SOURCES:
+                break
+            primary_entry = _serialize_cand(c_item)
+            matched_sources_list.append(primary_entry)
+            seen_sandbox_sources.add(str(primary_entry["source"]))
+
+            for corr in _extract_corroborating_records(c_item):
+                if len(matched_sources_list) >= _MAX_SERIALIZED_MATCHED_SOURCES:
+                    break
+                corr_src = str(corr.get("source_name") or corr.get("source") or "").strip()
+                if not corr_src or corr_src in seen_sandbox_sources:
+                    continue
+                c_authors = _format_candidate_authors(corr.get("authors")) or list(
+                    primary_entry["authors"]
+                )
+                c_title = corr.get("title") or primary_entry["title"]
+                c_raw_year = corr.get("year")
+                c_year = str(c_raw_year) if c_raw_year else primary_entry["year"]
+                c_venue = (
+                    corr.get("venue")
+                    if corr.get("venue") is not None
+                    else primary_entry["venue"]
+                )
+                c_doi = corr.get("doi") if corr.get("doi") is not None else primary_entry["doi"]
+                c_url = corr.get("url") if corr.get("url") is not None else primary_entry["url"]
+                c_conf_raw = corr.get(
+                    "confidence", corr.get("similarity", primary_entry["confidence"])
+                )
+                matched_sources_list.append({
+                    "source": corr_src,
+                    "source_name": corr_src,
+                    "matched_fields": corr.get("matched_fields")
+                    or _build_matched_fields(c_doi, c_title, c_authors, c_year, c_venue),
+                    "checked_at": checked_at_iso,
+                    "title": c_title,
+                    "authors": c_authors,
+                    "year": c_year,
+                    "venue": c_venue,
+                    "doi": c_doi,
+                    "url": c_url,
+                    "abstract": corr.get("abstract", primary_entry["abstract"]),
+                    "confidence": float(c_conf_raw or 0.0),
+                    "external_ids": _clean_public_external_ids(corr.get("external_ids")),
+                })
+                seen_sandbox_sources.add(corr_src)
+
+            for agreed_src in _extract_agreed_sources(c_item):
+                if len(matched_sources_list) >= _MAX_SERIALIZED_MATCHED_SOURCES:
+                    break
+                if not agreed_src or agreed_src in seen_sandbox_sources:
+                    continue
+                p_cand = pristine_by_source.get(agreed_src)
+                if p_cand is not None:
+                    matched_sources_list.append(_serialize_cand(p_cand, override_source=agreed_src))
+                else:
+                    synth = dict(primary_entry)
+                    synth["source"] = agreed_src
+                    synth["source_name"] = agreed_src
+                    synth["authors"] = list(primary_entry["authors"])
+                    synth["matched_fields"] = list(primary_entry["matched_fields"])
+                    synth["external_ids"] = dict(primary_entry["external_ids"])
+                    matched_sources_list.append(synth)
+                seen_sandbox_sources.add(agreed_src)
+
         matched_src = matched_sources_list[0] if matched_sources_list else None
 
         feat_html_meta = getattr(vf, "html_meta", None) if vf is not None else None
         src_html_meta = getattr(source, "html_meta", None)
         html_meta_dict: dict[str, Any] | None = None
         if isinstance(feat_html_meta, dict):
-            if not bool(feat_html_meta.get("is_soft_404", False)):
-                html_meta_dict = {
-                    "page_title": feat_html_meta.get("page_title"),
-                    "citation_title": feat_html_meta.get("citation_title"),
-                    "citation_authors": list(feat_html_meta.get("citation_authors") or []),
-                    "published_year": feat_html_meta.get("published_year"),
-                    "site_name": feat_html_meta.get("site_name"),
-                    "citation_doi": feat_html_meta.get("citation_doi"),
-                    "canonical_url": feat_html_meta.get("canonical_url"),
-                }
-        elif feat_html_meta is not None and not bool(getattr(feat_html_meta, "is_soft_404", False)):
+            html_meta_dict = {
+                "page_title": feat_html_meta.get("page_title"),
+                "citation_title": feat_html_meta.get("citation_title"),
+                "citation_authors": list(feat_html_meta.get("citation_authors") or []),
+                "published_year": feat_html_meta.get("published_year"),
+                "site_name": feat_html_meta.get("site_name"),
+                "citation_doi": feat_html_meta.get("citation_doi"),
+                "canonical_url": feat_html_meta.get("canonical_url"),
+                "is_soft_404": bool(feat_html_meta.get("is_soft_404", False)),
+            }
+        elif feat_html_meta is not None:
             html_meta_dict = {
                 "page_title": getattr(feat_html_meta, "page_title", None),
                 "citation_title": getattr(feat_html_meta, "citation_title", None),
@@ -2758,8 +2986,9 @@ async def verify_sandbox_citations_instant(
                 "site_name": getattr(feat_html_meta, "site_name", None),
                 "citation_doi": getattr(feat_html_meta, "citation_doi", None),
                 "canonical_url": getattr(feat_html_meta, "canonical_url", None),
+                "is_soft_404": bool(getattr(feat_html_meta, "is_soft_404", False)),
             }
-        elif src_html_meta is not None and not bool(getattr(src_html_meta, "is_soft_404", False)):
+        elif src_html_meta is not None:
             html_meta_dict = {
                 "page_title": getattr(src_html_meta, "page_title", None),
                 "citation_title": getattr(src_html_meta, "citation_title", None),
@@ -2768,9 +2997,14 @@ async def verify_sandbox_citations_instant(
                 "site_name": getattr(src_html_meta, "site_name", None),
                 "citation_doi": getattr(src_html_meta, "citation_doi", None),
                 "canonical_url": getattr(src_html_meta, "canonical_url", None),
+                "is_soft_404": bool(getattr(src_html_meta, "is_soft_404", False)),
             }
 
-        if not matched_sources_list and html_meta_dict is not None:
+        if (
+            not matched_sources_list
+            and html_meta_dict is not None
+            and not bool(html_meta_dict.get("is_soft_404", False))
+        ):
             has_web_meta = any(
                 html_meta_dict.get(k)
                 for k in (
@@ -2899,6 +3133,11 @@ async def verify_sandbox_citations_instant(
 
     verified_cnt = sum(1 for v in verdict_items if v["label"] == "verified")
     meta_err_cnt = sum(1 for v in verdict_items if v["label"] == "metadata_error")
+    incomplete_meta_cnt = sum(
+        1
+        for v in verdict_items
+        if "R-INCOMPLETE-METADATA" in (v.get("triggered_rules") or [])
+    )
     halluc_cnt = sum(1 for v in verdict_items if v["label"] == "suspected_hallucination")
     resource_cnt = sum(1 for v in verdict_items if v["label"] == "resource")
     unresolved_cnt = sum(1 for v in verdict_items if v["label"] == "unresolved")
@@ -2911,6 +3150,7 @@ async def verify_sandbox_citations_instant(
             "total": len(verdict_items),
             "verified": verified_cnt,
             "metadata_error": meta_err_cnt,
+            "incomplete_metadata": incomplete_meta_cnt,
             "suspected_hallucination": halluc_cnt,
             "resource": resource_cnt,
             "unresolved": unresolved_cnt,

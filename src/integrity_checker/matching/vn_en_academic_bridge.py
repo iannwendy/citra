@@ -419,6 +419,23 @@ def is_vietnamese_text(text: str, min_diacritics: int = 2) -> bool:
     return len(VN_DIACRITIC_RE.findall(text)) >= min_diacritics
 
 
+def detect_cross_lingual_direction(
+    context_text: str,
+    source_text: str,
+    min_diacritics: int = 2,
+) -> str:
+    """Xác định chiều xuyên ngôn ngữ giữa ngữ cảnh bài viết và tài liệu nguồn ('VI->EN', 'EN->VI', hoặc '')."""
+    if not context_text or not source_text:
+        return ""
+    ctx_is_vn = is_vietnamese_text(context_text, min_diacritics=min_diacritics)
+    src_is_vn = is_vietnamese_text(source_text, min_diacritics=min_diacritics)
+    if ctx_is_vn and not src_is_vn:
+        return "VI->EN"
+    if not ctx_is_vn and src_is_vn:
+        return "EN->VI"
+    return ""
+
+
 def _format_primary_en(en_equiv: str, max_words: int = 3) -> str:
     """Format a concise, deduplicated English concept label for UI display."""
     words: list[str] = []
@@ -527,16 +544,151 @@ def find_vn_cues_for_en_source(
     return list(_find_vn_cues_cached(source_title or "", source_abstract or ""))
 
 
+@lru_cache(maxsize=512)
+def _find_en_cues_cached(
+    source_title: str,
+    source_abstract: str,
+) -> tuple[str, ...]:
+    src_full = normalize_vn_spelling(f"{source_title} {source_abstract}").lower().strip()
+    if not src_full or not is_vietnamese_text(src_full, min_diacritics=2):
+        return ()
+
+    en_cues: list[str] = []
+    seen_cues: set[str] = set()
+    _stop = {"and", "for", "the", "with", "law", "data", "model", "system", "study"}
+    for vn_phrase, en_equiv in _get_sorted_bridge():
+        if vn_phrase in src_full:
+            primary = _format_primary_en(en_equiv, max_words=3).lower()
+            if primary and len(primary) >= 4 and primary not in seen_cues:
+                seen_cues.add(primary)
+                en_cues.append(primary)
+            for w in re.findall(r"[A-Za-z0-9-]{4,}", en_equiv):
+                wl = w.lower()
+                if wl not in _stop and wl not in seen_cues:
+                    seen_cues.add(wl)
+                    en_cues.append(wl)
+    return tuple(en_cues)
+
+
+def find_en_cues_for_vn_source(
+    source_title: str,
+    source_abstract: str | None = None,
+) -> list[str]:
+    """Ánh xạ các cụm khái niệm trong tài liệu nguồn tiếng Việt sang từ khóa tiếng Anh
+    (phục vụ Implicit Body Discovery chiều EN -> VI khi khóa luận tiếng Anh trích dẫn giáo trình/luật Việt Nam).
+    """
+    return list(_find_en_cues_cached(source_title or "", source_abstract or ""))
+
+
+def bridge_vn_source_to_en(vn_text: str) -> str:
+    """Bổ sung thuật ngữ tiếng Anh tương đương cho tiêu đề/tóm tắt nguồn tiếng Việt."""
+    if not vn_text or not is_vietnamese_text(vn_text, min_diacritics=2):
+        return vn_text or ""
+    norm_src = normalize_vn_spelling(vn_text).lower()
+    bridged_terms: list[str] = []
+    seen_en: set[str] = set()
+    for vn_phrase, en_equiv in _get_sorted_bridge():
+        if vn_phrase in norm_src and en_equiv not in seen_en:
+            seen_en.add(en_equiv)
+            bridged_terms.append(en_equiv)
+    if not bridged_terms:
+        return vn_text
+    return f"{vn_text} ({' '.join(bridged_terms)})"
+
+
+def bridge_en_to_vn(
+    cited_context: str,
+    source_title: str = "",
+    source_abstract: str | None = None,
+) -> tuple[bool, str, list[str]]:
+    """Phát hiện văn bản tiếng Anh trích dẫn nguồn tiếng Việt (EN -> VI) và tạo chuỗi bắc cầu ngữ nghĩa."""
+    if not cited_context:
+        return False, "", []
+    if is_vietnamese_text(cited_context, min_diacritics=2):
+        return False, "", []
+
+    src_text = f"{source_title or ''} {source_abstract or ''}".strip()
+    if not is_vietnamese_text(src_text, min_diacritics=2):
+        return False, "", []
+
+    ctx_lower = _URL_STRIP_RE.sub(" ", cited_context).lower()
+    ctx_words = set(re.findall(r"[a-z0-9]{3,}", ctx_lower))
+    norm_src = normalize_vn_spelling(src_text).lower()
+
+    source_anchored: list[tuple[str, str]] = []
+    context_only: list[tuple[str, str]] = []
+    seen_vn: set[str] = set()
+
+    for vn_phrase, en_equiv in _get_sorted_bridge():
+        if vn_phrase in seen_vn:
+            continue
+        primary_en = _format_primary_en(en_equiv)
+        en_words = [
+            w.lower()
+            for w in re.findall(r"[A-Za-z0-9-]{3,}", en_equiv)
+            if w.lower() not in {"and", "for", "the", "with", "law", "data", "model", "system", "study"}
+        ]
+        if not en_words:
+            continue
+        matched_en = [
+            ew for ew in en_words
+            if (ew in ctx_words if "-" not in ew else ew in ctx_lower)
+        ]
+        if not matched_en:
+            continue
+        if vn_phrase in norm_src:
+            seen_vn.add(vn_phrase)
+            source_anchored.append((vn_phrase, f"{primary_en} → {vn_phrase}"))
+        elif len(matched_en) >= 2 or any(len(mw) >= 7 for mw in matched_en):
+            seen_vn.add(vn_phrase)
+            context_only.append((vn_phrase, f"{primary_en} → {vn_phrase}"))
+
+    ordered = source_anchored + context_only[: max(0, 6 - len(source_anchored))]
+    if not ordered:
+        return True, cited_context, []
+
+    vn_terms = [vp for vp, _ in ordered]
+    concepts = [lbl for _, lbl in ordered]
+    return True, f"{cited_context} ({' '.join(vn_terms)})", concepts
+
+
+def bridge_cross_lingual_context(
+    cited_context: str,
+    source_title: str = "",
+    source_abstract: str | None = None,
+) -> tuple[bool, str, list[str], str]:
+    """Bắc cầu ngữ nghĩa hai chiều (VI -> EN và EN -> VI) giữa ngữ cảnh bài viết và tài liệu nguồn.
+
+    Returns:
+        Tuple (is_cross_lingual, bridged_context, bridged_concepts, direction).
+    """
+    src_text = f"{source_title or ''} {source_abstract or ''}".strip()
+    direction = detect_cross_lingual_direction(cited_context, src_text)
+    if direction == "VI->EN":
+        is_xl, bridged, concepts = bridge_vn_to_en(cited_context, source_title, source_abstract)
+        if is_xl:
+            return True, bridged, concepts, "VI->EN"
+        return True, cited_context, [], "VI->EN"
+    if direction == "EN->VI":
+        is_xl, bridged, concepts = bridge_en_to_vn(cited_context, source_title, source_abstract)
+        if is_xl:
+            return True, bridged, concepts, "EN->VI"
+        return True, cited_context, [], "EN->VI"
+    # Legacy fallback when source_title/abstract is empty and context is Vietnamese
+    is_xl, bridged, concepts = bridge_vn_to_en(cited_context, source_title, source_abstract)
+    return is_xl, bridged, concepts, ("VI->EN" if is_xl else "")
+
+
 def compute_cross_lingual_concept_overlap(
     vn_text: str,
     en_text: str,
 ) -> tuple[float, list[str]]:
-    """Tính mức độ chồng lấp khái niệm học thuật trực tiếp giữa văn bản tiếng Việt và văn bản tiếng Anh.
+    """Tính mức độ chồng lấp khái niệm học thuật hai chiều (VI ↔ EN) giữa hai văn bản.
 
-    Hàm này hoạt động độc lập và bổ trợ cho Dense Vector Embeddings: ngay cả khi mô hình nhúng
-    đơn ngữ bị suy giảm điểm số do khác ngôn ngữ, sự xuất hiện đồng thời của cặp khái niệm
-    chuyên ngành chuẩn hóa (ví dụ 'mất cân bằng dữ liệu' <-> 'imbalanced data / SMOTE')
-    cung cấp bằng chứng neo ngữ nghĩa (semantic anchor) đáng tin cậy.
+    Hỗ trợ tự động nhận diện chiều ngôn ngữ:
+    - Chiều thuận (VI → EN): văn bản tiếng Việt và tài liệu nguồn tiếng Anh.
+    - Chiều ngược (EN → VI): văn bản tiếng Anh và tài liệu nguồn tiếng Việt (ví dụ khóa luận tiếng Anh
+      trích dẫn giáo trình đại học hoặc văn bản pháp luật Việt Nam).
 
     Returns:
         Tuple (overlap_score [0.0..1.0], matched_concept_pairs).
@@ -544,8 +696,18 @@ def compute_cross_lingual_concept_overlap(
     if not vn_text or not en_text:
         return 0.0, []
 
-    norm_vn = normalize_vn_spelling(vn_text).lower()
-    norm_en = en_text.lower()
+    first_is_vn = is_vietnamese_text(vn_text, min_diacritics=2)
+    second_is_vn = is_vietnamese_text(en_text, min_diacritics=2)
+    is_en_to_vi = not first_is_vn and second_is_vn
+    if is_en_to_vi:
+        actual_vn = en_text
+        actual_en = vn_text
+    else:
+        actual_vn = vn_text
+        actual_en = en_text
+
+    norm_vn = normalize_vn_spelling(actual_vn).lower()
+    norm_en = actual_en.lower()
 
     matched_pairs: list[str] = []
     total_vn_concepts = 0
@@ -565,12 +727,16 @@ def compute_cross_lingual_concept_overlap(
             if hit_words:
                 matched_count += 1
                 primary_en = _format_primary_en(en_equiv)
-                pair_label = f"{vn_phrase} → {primary_en}"
+                pair_label = (
+                    f"{primary_en} → {vn_phrase}"
+                    if is_en_to_vi
+                    else f"{vn_phrase} → {primary_en}"
+                )
                 if pair_label not in matched_pairs:
                     matched_pairs.append(pair_label)
 
     # Also check shared technical acronyms / model names present in both texts (e.g., BERT, SMOTE, IoT, FDI, ESG, Qwen3)
-    vn_no_url = _URL_STRIP_RE.sub(" ", vn_text)
+    vn_no_url = _URL_STRIP_RE.sub(" ", actual_vn)
     en_no_url = _URL_STRIP_RE.sub(" ", norm_en)
     _roman_or_corp = {"ii", "iii", "iv", "vi", "vii", "viii", "ix", "xi", "xii", "plc", "inc", "ltd", "llc", "corp"}
     vn_en_acronyms = {
@@ -611,3 +777,7 @@ def compute_cross_lingual_concept_overlap(
         score = max(0.85, min(0.96, 0.78 + 0.18 * raw_ratio))
 
     return round(score, 4), matched_pairs
+
+
+compute_cross_lingual_context_overlap = compute_cross_lingual_concept_overlap
+bridge_vietnamese_context_to_english = bridge_vn_to_en

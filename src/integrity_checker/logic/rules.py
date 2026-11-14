@@ -859,10 +859,13 @@ class SymbolicRules:
             and features.title_sim_fuzzy >= 0.90
         )
         has_real_doi_conflict = bool(
-            citation_doi
-            and best.doi
-            and not features.doi_exact_match
-            and not is_arxiv_vs_pub_doi
+            getattr(features, "has_doi_conflict", False)
+            or (
+                citation_doi
+                and best.doi
+                and not features.doi_exact_match
+                and not is_arxiv_vs_pub_doi
+            )
         )
         if has_real_doi_conflict:
             return None
@@ -951,10 +954,13 @@ class SymbolicRules:
         )
 
         has_real_doi_conflict = bool(
-            citation_doi
-            and best.doi
-            and not features.doi_exact_match
-            and not is_arxiv_vs_pub_doi
+            getattr(features, "has_doi_conflict", False)
+            or (
+                citation_doi
+                and best.doi
+                and not features.doi_exact_match
+                and not is_arxiv_vs_pub_doi
+            )
         )
 
         # Good match: fuzzy title >= 0.90, title >= 0.95 AND (author >= 0.5 or exact DOI/arXiv + author >= 0.35) AND year match
@@ -1037,11 +1043,28 @@ class SymbolicRules:
             mismatched.append("author")
         if year_dist > self.year_tolerance and year_dist < 900:
             mismatched.append("year")
-        if citation_doi and best.doi and not doi_match:
+        is_arxiv_vs_pub_doi = bool(
+            citation_doi
+            and best.doi
+            and (
+                "10.48550/arxiv" in citation_doi.lower()
+                or "10.48550/arxiv" in best.doi.lower()
+            )
+            and title_sim_fuzzy >= 0.85
+        )
+        has_local_doi_conflict = bool(
+            getattr(features, "has_doi_conflict", False)
+            or (citation_doi and best.doi and not doi_match and not is_arxiv_vs_pub_doi)
+        )
+        if has_local_doi_conflict:
             mismatched.append("doi")
 
         if not mismatched:
             return None
+
+        local_rules = ["R-LOCAL_DB_METADATA_ERROR", "R-SINGLE-SOURCE-PARTIAL"]
+        if has_local_doi_conflict:
+            local_rules.append("R-DOI-CONFLICT")
 
         return RuleOutcome(
             label=ValidationLabel.METADATA_ERROR,
@@ -1051,7 +1074,7 @@ class SymbolicRules:
                 f"(title_sim={title_sim_fuzzy:.2f}, author_sim={author_sim:.2f}, DOI match={doi_match}) "
                 f"with metadata discrepancy in: {', '.join(mismatched)}."
             ),
-            triggered_rules=["R-LOCAL_DB_METADATA_ERROR", "R-SINGLE-SOURCE-PARTIAL"],
+            triggered_rules=local_rules,
             mismatched_fields=mismatched,
             style_penalty=style_penalty,
         )
@@ -1300,6 +1323,9 @@ class SymbolicRules:
                     " [RETRACTION WARNING: This publication has been officially RETRACTED in scholarly registries "
                     "(Retraction Watch / OpenAlex / Crossref).]"
                 )
+        if bool(getattr(features, "has_doi_conflict", False)):
+            if "R-DOI-CONFLICT" not in outcome.triggered_rules:
+                outcome.triggered_rules.append("R-DOI-CONFLICT")
         return outcome
 
     evaluate = apply
@@ -2155,7 +2181,10 @@ class SymbolicRules:
             and features.title_sim_fuzzy >= 0.85
             and author_sim >= 0.35
         )
-        has_doi_conflict = bool(citation_doi and best.doi and not doi_match and not is_arxiv_vs_pub_doi)
+        has_doi_conflict = bool(
+            getattr(features, "has_doi_conflict", False)
+            or (citation_doi and best.doi and not doi_match and not is_arxiv_vs_pub_doi)
+        )
         if (
             mapping_is_matched
             and features.title_sim_fuzzy >= 0.7
@@ -2408,6 +2437,8 @@ class SymbolicRules:
                 )
             if has_doi_conflict:
                 mismatched.append("doi")
+                if "R-DOI-CONFLICT" not in triggered_rules:
+                    triggered_rules.append("R-DOI-CONFLICT")
             if year_dist > self.year_tolerance:
                 mismatched.append("year")
             if author_sim < self.author_jaccard_verified:

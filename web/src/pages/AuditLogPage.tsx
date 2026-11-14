@@ -41,6 +41,10 @@ export function AuditLogPage() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
+  const [auditStats, setAuditStats] = useState<{
+    total_events: number;
+    unique_actors: number;
+  } | null>(null);
   const [userFilter, setUserFilter] = useState('');
   const debouncedUserFilter = useDebounce(userFilter.trim(), 300);
   const [offset, setOffset] = useState(0);
@@ -57,14 +61,35 @@ export function AuditLogPage() {
     setLoading(true);
     setError('');
     try {
+      const statsPromise =
+        typeof api.getAuditStats === 'function'
+          ? api
+              .getAuditStats(debouncedUserFilter || undefined)
+              .catch(() => null)
+          : Promise.resolve(null);
+
       // Fetch one extra row to know whether a next page exists.
-      const data = await api.listAuditLog({
-        limit: AUDIT_PAGE_SIZE + 1,
-        offset,
-        user: debouncedUserFilter || undefined,
-      });
+      const [data, statsRes] = await Promise.all([
+        api.listAuditLog({
+          limit: AUDIT_PAGE_SIZE + 1,
+          offset,
+          user: debouncedUserFilter || undefined,
+        }),
+        statsPromise,
+      ]);
       setHasNext(data.length > AUDIT_PAGE_SIZE);
       setEntries(data.slice(0, AUDIT_PAGE_SIZE));
+      if (statsRes && typeof statsRes.total_events === 'number') {
+        setAuditStats({
+          total_events: statsRes.total_events,
+          unique_actors:
+            typeof statsRes.unique_actors === 'number'
+              ? statsRes.unique_actors
+              : new Set(data.slice(0, AUDIT_PAGE_SIZE).map((e) => e.user)).size,
+        });
+      } else {
+        setAuditStats(null);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load audit log');
     } finally {
@@ -78,7 +103,9 @@ export function AuditLogPage() {
 
   const page = Math.floor(offset / AUDIT_PAGE_SIZE) + 1;
 
-  const uniqueActors = new Set(entries.map((e) => e.user)).size;
+  const totalEventsDisplay = auditStats?.total_events ?? entries.length;
+  const uniqueActorsDisplay =
+    auditStats?.unique_actors ?? new Set(entries.map((e) => e.user)).size;
 
   return (
     <div className="space-y-6 pb-10">
@@ -119,14 +146,17 @@ export function AuditLogPage() {
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {lang === 'vi' ? 'Sự kiện đã ghi' : 'Recorded Events'}
+              {lang === 'vi' ? 'Tổng sự kiện' : 'Total Events'}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
               01
             </span>
           </div>
-          <p className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100">
-            {entries.length}
+          <p
+            data-testid="audit-total-events"
+            className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100"
+          >
+            {totalEventsDisplay}
           </p>
         </Card>
 
@@ -139,22 +169,30 @@ export function AuditLogPage() {
               02
             </span>
           </div>
-          <p className="text-2xl font-bold font-mono tabular-nums text-indigo-600 dark:text-indigo-400">
-            {uniqueActors}
+          <p
+            data-testid="audit-unique-actors"
+            className="text-2xl font-bold font-mono tabular-nums text-indigo-600 dark:text-indigo-400"
+          >
+            {uniqueActorsDisplay}
           </p>
         </Card>
 
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              {lang === 'vi' ? 'Giới hạn truy vấn' : 'Query Window'}
+              {lang === 'vi' ? 'Kích thước trang' : 'Page Size'}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400">
               03
             </span>
           </div>
-          <p className="text-2xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
-            {lang === 'vi' ? 'TỐI ĐA 100' : 'LIMIT 100'}
+          <p
+            data-testid="audit-page-size"
+            className="text-2xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400"
+          >
+            {lang === 'vi'
+              ? `${AUDIT_PAGE_SIZE} / TRANG`
+              : `${AUDIT_PAGE_SIZE} / PAGE`}
           </p>
         </Card>
       </div>

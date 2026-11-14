@@ -20,6 +20,12 @@ from integrity_checker.logic.rules import SymbolicRules, _is_fake_url
 from integrity_checker.logic.vn_legal_verifier import verify_vn_legal_citation
 from integrity_checker.matching.author_matcher import author_match_score
 from integrity_checker.matching.features import FeatureCalculator
+from integrity_checker.matching.semantic import SemanticMatcher
+from integrity_checker.matching.vn_en_academic_bridge import (
+    compute_cross_lingual_context_overlap,
+    detect_cross_lingual_direction,
+    is_vietnamese_text,
+)
 from integrity_checker.models.citation import Citation, CitationType
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.models.validation import CitationVerdict, MatchFeatures, ValidationLabel
@@ -168,12 +174,130 @@ class NeuroSymbolicChecker:
         self.rules = rules or SymbolicRules()
         self.enable_content_alignment = enable_content_alignment
         self.enable_calibration = enable_calibration
+        self._semantic_override: object | None = None
         if hybrid_scorer is not None:
             self.hybrid_scorer = hybrid_scorer
         else:
             if NeuroSymbolicChecker._hybrid_scorer is None:
                 NeuroSymbolicChecker._hybrid_scorer = HybridMLScorer.load_default()
             self.hybrid_scorer = NeuroSymbolicChecker._hybrid_scorer
+
+    @property
+    def semantic(self):
+        if self._semantic_override is not None:
+            return self._semantic_override
+        return getattr(self.feature_calculator, "semantic", None)
+
+    @semantic.setter
+    def semantic(self, value: object | None) -> None:
+        self._semantic_override = value
+
+    def _evaluate_cross_lingual_context_alignment(
+        self,
+        citation: Citation,
+        source: SourceResult | None,
+        features: MatchFeatures,
+        citation_context: str | None = None,
+    ) -> str:
+        """Evaluate bidirectional VI <-> EN cross-lingual alignment (both lexicon bridge and
+        multilingual ONNX cosine similarity) across explicit citation.context, citation_context,
+        and implicit_body_discovery contexts, returning direction ('VI->EN', 'EN->VI', or '').
+        """
+        context_text = (
+            citation_context
+            or getattr(citation, "context", None)
+            or getattr(features, "best_cited_sentence", None)
+            or ""
+        ).strip()
+        best_cand = source.best_candidate() if source and source.candidates else None
+        cand_title = (best_cand.title if best_cand and best_cand.title else "") or ""
+        cand_abstract = (getattr(best_cand, "abstract", None) if best_cand else None) or ""
+        source_text = (
+            f"{cand_title}. {cand_abstract}".strip(". ")
+            if (cand_title or cand_abstract)
+            else (getattr(features, "best_evidence_sentence", "") or "").strip()
+        )
+
+        direction = ""
+        if context_text and source_text:
+            ctx_is_vn = is_vietnamese_text(context_text)
+            src_is_vn = is_vietnamese_text(source_text)
+            if ctx_is_vn != src_is_vn:
+                direction = "VI->EN" if ctx_is_vn else "EN->VI"
+            else:
+                direction = detect_cross_lingual_direction(
+                    context_text, source_text, min_diacritics=1
+                )
+
+        if not self.enable_content_alignment or not direction or not context_text or not source_text:
+            features._cross_lingual_direction = direction  # type: ignore[attr-defined]
+            return direction
+
+        if not getattr(features, "context_source", ""):
+            features.context_source = str(
+                getattr(citation, "_context_source", "") or "in_text_citation"
+            )
+
+        lex_ov, lex_pairs = compute_cross_lingual_context_overlap(context_text, source_text)
+        onnx_xl_sim = 0.0
+        onnx_concepts: list[str] = []
+        if self.semantic is not None and hasattr(self.semantic, "cross_lingual_title_similarity"):
+            xl_res = self.semantic.cross_lingual_title_similarity(context_text, source_text)
+            if isinstance(xl_res, tuple):
+                onnx_xl_sim = float(xl_res[1] or 0.0) if len(xl_res) >= 2 else 0.0
+                onnx_concepts = list(xl_res[2] or []) if len(xl_res) >= 3 else []
+            elif isinstance(xl_res, (int, float)):
+                onnx_xl_sim = float(xl_res)
+
+        features.cross_lingual_detected = True
+        merged_concepts = list(getattr(features, "bridged_concepts", None) or [])
+        for pair in list(lex_pairs) + onnx_concepts:
+            if pair and pair not in merged_concepts:
+                merged_concepts.append(pair)
+        features.bridged_concepts = merged_concepts
+
+        existing_stance = getattr(features, "stance_label", "") or ""
+        current_score = float(getattr(features, "content_alignment_score", 0.0) or 0.0)
+        probe_sim = max(current_score, onnx_xl_sim, lex_ov * 0.85)
+        computed_stance = SemanticMatcher.check_claim_stance(
+            context_text,
+            getattr(features, "best_evidence_sentence", "") or cand_title,
+            probe_sim,
+            has_abstract=bool(cand_abstract),
+            is_cross_lingual=True,
+            source_abstract=cand_abstract or None,
+        )
+        is_contradiction = (
+            existing_stance == "contradiction_risk"
+            or computed_stance == "contradiction_risk"
+        )
+        if is_contradiction:
+            features.stance_label = "contradiction_risk"
+            features.content_is_aligned = False
+        elif (
+            getattr(features, "content_is_aligned", False)
+            or onnx_xl_sim >= 0.50
+            or lex_ov >= 0.50
+        ):
+            rescued_score = max(
+                current_score,
+                onnx_xl_sim,
+                min(0.92, max(0.55, lex_ov * 0.85)) if lex_ov >= 0.50 else 0.0,
+            )
+            features.content_alignment_score = round(min(1.0, rescued_score), 4)
+            features.content_is_aligned = True
+            features.content_alignment_confidence = (
+                "high" if features.content_alignment_score >= 0.70 else "medium"
+            )
+            if not getattr(features, "best_cited_sentence", ""):
+                features.best_cited_sentence = context_text[:384]
+            if not getattr(features, "best_evidence_sentence", "") and cand_title:
+                features.best_evidence_sentence = cand_title
+            if not existing_stance or existing_stance == "neutral":
+                features.stance_label = computed_stance or "supported"
+
+        features._cross_lingual_direction = direction  # type: ignore[attr-defined]
+        return direction
 
     def prewarm_comparison_batch(
         self,
@@ -196,7 +320,17 @@ class NeuroSymbolicChecker:
         is_known, paper_info = RetrievalOrchestrator.is_known_paper(citation)
         if is_known and paper_info:
             return None
-        return self.feature_calculator.compute(citation, source, citation_context)
+        effective_context = (
+            citation_context
+            if citation_context is not None
+            else getattr(citation, "context", None)
+        )
+        computed = self.feature_calculator.compute(citation, source, effective_context)
+        if computed is not None:
+            self._evaluate_cross_lingual_context_alignment(
+                citation, source, computed, effective_context
+            )
+        return computed
 
     def _build_html_meta_dict(
         self,
@@ -277,6 +411,11 @@ class NeuroSymbolicChecker:
         # like "see https://github.com/foo/bar.") by stripping trailing
         # `.,;:)]"'` before matching the URL prefix.
         import re
+        effective_context = (
+            citation_context
+            if citation_context is not None
+            else getattr(citation, "context", None)
+        )
         raw_text = citation.raw_text or ""
         stripped_text = raw_text.strip()
         stripped_no_idx = re.sub(
@@ -559,6 +698,35 @@ class NeuroSymbolicChecker:
                     html_meta=hm_dict_early,
                     html_meta_title_sim=hm_title_sim_early,
                 )
+            legal_rules = list(legal_res.triggered_rules)
+            legal_reasoning = legal_res.reasoning
+            if self.enable_content_alignment and not is_fabricated_legal:
+                if precomputed_features is not None and getattr(
+                    precomputed_features, "context_source", ""
+                ):
+                    legal_features.context_source = precomputed_features.context_source
+                legal_ctx = effective_context or (
+                    getattr(precomputed_features, "best_cited_sentence", None)
+                    if precomputed_features is not None
+                    else None
+                )
+                if legal_ctx:
+                    self._evaluate_cross_lingual_context_alignment(
+                        citation, source, legal_features, legal_ctx
+                    )
+                    if (
+                        getattr(legal_features, "cross_lingual_detected", False)
+                        and getattr(legal_features, "content_is_aligned", False)
+                    ):
+                        if "R-CROSS-LINGUAL-ALIGNMENT" not in legal_rules:
+                            legal_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
+                        legal_reasoning = self._enhance_reasoning_with_neural(
+                            legal_res.reasoning,
+                            legal_features,
+                            legal_rules,
+                            source=source,
+                            citation_context=legal_ctx,
+                        )
             if not legal_res.is_valid:
                 return CitationVerdict(
                     citation=citation,
@@ -570,8 +738,8 @@ class NeuroSymbolicChecker:
                     confidence=0.92 if is_fabricated_legal else 0.90,
                     matched_source=source,
                     features=legal_features,
-                    reasoning=legal_res.reasoning,
-                    triggered_rules=legal_res.triggered_rules,
+                    reasoning=legal_reasoning,
+                    triggered_rules=legal_rules,
                     mismatched_fields=legal_res.mismatched_fields,
                 )
             return CitationVerdict(
@@ -580,8 +748,8 @@ class NeuroSymbolicChecker:
                 confidence=0.95,
                 matched_source=source,
                 features=legal_features,
-                reasoning=legal_res.reasoning,
-                triggered_rules=legal_res.triggered_rules,
+                reasoning=legal_reasoning,
+                triggered_rules=legal_rules,
                 mismatched_fields=[],
             )
 
@@ -769,7 +937,10 @@ class NeuroSymbolicChecker:
                             is_retracted=getattr(source, "is_retracted", False),
                             html_meta=getattr(source, "html_meta", None),
                         )
-                        features = self.feature_calculator.compute(citation, enhanced_source, citation_context)
+                        features = self.feature_calculator.compute(citation, enhanced_source, effective_context)
+                        self._evaluate_cross_lingual_context_alignment(
+                            citation, enhanced_source, features, effective_context
+                        )
                         features.html_meta = hm_dict_early
                         features.html_meta_title_sim = hm_title_sim_early
                         features.has_scholarly_candidate = True
@@ -813,6 +984,21 @@ class NeuroSymbolicChecker:
                                     f"Matched known publication, but foreign-language titles must be preserved in their "
                                     f"original language without translation."
                                 )
+                            if (
+                                self.enable_content_alignment
+                                and effective_context
+                                and getattr(features, "cross_lingual_detected", False)
+                                and getattr(features, "content_is_aligned", False)
+                                and "R-CROSS-LINGUAL-ALIGNMENT" not in kp_rules
+                            ):
+                                kp_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
+                                kp_reason = self._enhance_reasoning_with_neural(
+                                    kp_reason,
+                                    features,
+                                    kp_rules,
+                                    source=enhanced_source,
+                                    citation_context=effective_context,
+                                )
 
                             return self._apply_dead_link_exception(
                                 CitationVerdict(
@@ -843,20 +1029,23 @@ class NeuroSymbolicChecker:
                         is_retracted=getattr(source, "is_retracted", False),
                         html_meta=getattr(source, "html_meta", None),
                     )
-                    features = self.feature_calculator.compute(citation, enhanced_source, citation_context)
+                    features = self.feature_calculator.compute(citation, enhanced_source, effective_context)
+                    self._evaluate_cross_lingual_context_alignment(
+                        citation, enhanced_source, features, effective_context
+                    )
                     features.html_meta = hm_dict_early
                     features.html_meta_title_sim = hm_title_sim_early
                     features.has_scholarly_candidate = True
                     known_rules = ["R-KNOWN-PAPER"]
                     if (
                         self.enable_content_alignment
-                        and citation_context
+                        and effective_context
                         and getattr(features, "stance_label", "") == "contradiction_risk"
                     ):
                         known_rules.append("R-CONTENT-MISMATCH")
                     if (
                         self.enable_content_alignment
-                        and citation_context
+                        and effective_context
                         and getattr(features, "cross_lingual_detected", False)
                         and getattr(features, "content_is_aligned", False)
                     ):
@@ -879,7 +1068,11 @@ class NeuroSymbolicChecker:
                             matched_source=enhanced_source,
                             features=features,
                             reasoning=self._enhance_reasoning_with_neural(
-                                base_reason, features, known_rules
+                                base_reason,
+                                features,
+                                known_rules,
+                                source=enhanced_source,
+                                citation_context=effective_context,
                             ),
                             triggered_rules=known_rules,
                             mismatched_fields=[],
@@ -901,20 +1094,23 @@ class NeuroSymbolicChecker:
                     is_retracted=getattr(source, "is_retracted", False),
                     html_meta=getattr(source, "html_meta", None),
                 )
-                features = self.feature_calculator.compute(citation, enhanced_source, citation_context)
+                features = self.feature_calculator.compute(citation, enhanced_source, effective_context)
+                self._evaluate_cross_lingual_context_alignment(
+                    citation, enhanced_source, features, effective_context
+                )
                 features.html_meta = hm_dict_early
                 features.html_meta_title_sim = hm_title_sim_early
                 features.has_scholarly_candidate = True
                 known_rules = ["R-KNOWN-PAPER"]
                 if (
                     self.enable_content_alignment
-                    and citation_context
+                    and effective_context
                     and getattr(features, "stance_label", "") == "contradiction_risk"
                 ):
                     known_rules.append("R-CONTENT-MISMATCH")
                 if (
                     self.enable_content_alignment
-                    and citation_context
+                    and effective_context
                     and getattr(features, "cross_lingual_detected", False)
                     and getattr(features, "content_is_aligned", False)
                 ):
@@ -937,7 +1133,11 @@ class NeuroSymbolicChecker:
                         matched_source=enhanced_source,
                         features=features,
                         reasoning=self._enhance_reasoning_with_neural(
-                            base_reason, features, known_rules
+                            base_reason,
+                            features,
+                            known_rules,
+                            source=enhanced_source,
+                            citation_context=effective_context,
                         ),
                         triggered_rules=known_rules,
                         mismatched_fields=[],
@@ -949,7 +1149,10 @@ class NeuroSymbolicChecker:
         features = (
             precomputed_features
             if precomputed_features is not None
-            else self.feature_calculator.compute(citation, source, citation_context)
+            else self.feature_calculator.compute(citation, source, effective_context)
+        )
+        self._evaluate_cross_lingual_context_alignment(
+            citation, source, features, effective_context
         )
         features.html_meta = hm_dict_early
         features.html_meta_title_sim = hm_title_sim_early
@@ -1012,25 +1215,37 @@ class NeuroSymbolicChecker:
             )
 
         final_rules = list(outcome.triggered_rules)
+        has_active_ctx = bool(
+            effective_context
+            or getattr(features, "context_source", "") == "implicit_body_discovery"
+            or getattr(features, "best_cited_sentence", "")
+            or float(getattr(features, "content_alignment_score", 0.0) or 0.0) > 0.0
+        )
         if (
             self.enable_content_alignment
-            and citation_context
+            and has_active_ctx
             and getattr(features, "stance_label", "") == "contradiction_risk"
             and "R-CONTENT-MISMATCH" not in final_rules
         ):
             final_rules.append("R-CONTENT-MISMATCH")
         if (
             self.enable_content_alignment
-            and citation_context
+            and has_active_ctx
             and getattr(features, "cross_lingual_detected", False)
             and getattr(features, "content_is_aligned", False)
+            and outcome.label != ValidationLabel.SUSPECTED_HALLUCINATION
+            and outcome.triggered_rules != ["R-INCOMPLETE-METADATA"]
             and "R-CROSS-LINGUAL-ALIGNMENT" not in final_rules
         ):
             final_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
 
         # Enhance reasoning với content alignment info (Neural layer feedback)
         enhanced_reasoning = self._enhance_reasoning_with_neural(
-            outcome.reasoning, features, final_rules
+            outcome.reasoning,
+            features,
+            final_rules,
+            source=source,
+            citation_context=effective_context,
         )
 
         final_confidence = outcome.confidence
@@ -1118,11 +1333,53 @@ class NeuroSymbolicChecker:
                 )
         return verdict
 
+    def _resolve_cross_lingual_tag_direction(
+        self,
+        features: MatchFeatures,
+        source: SourceResult | None = None,
+        citation_context: str | None = None,
+    ) -> str:
+        """Resolve accurate cross-lingual diagnostic direction ('VI->EN' or 'EN->VI')."""
+        explicit_dir = getattr(features, "_cross_lingual_direction", "")
+        if explicit_dir in ("VI->EN", "EN->VI"):
+            return explicit_dir
+
+        ctx_probe = (
+            citation_context
+            or getattr(features, "best_cited_sentence", "")
+            or ""
+        ).strip()
+        best_cand = source.best_candidate() if source and source.candidates else None
+        src_probe = (
+            f"{(best_cand.title if best_cand and best_cand.title else '') or ''} "
+            f"{(getattr(best_cand, 'abstract', '') if best_cand else '') or ''}".strip()
+            or (getattr(features, "best_evidence_sentence", "") or "").strip()
+        )
+        if ctx_probe and src_probe:
+            inferred = detect_cross_lingual_direction(ctx_probe, src_probe, min_diacritics=1)
+            if inferred in ("VI->EN", "EN->VI"):
+                return inferred
+
+        for item in getattr(features, "bridged_concepts", None) or []:
+            sep = "→" if "→" in item else ("->" if "->" in item else "")
+            if sep:
+                left, right = item.split(sep, 1)
+                l_vn = is_vietnamese_text(left, min_diacritics=1)
+                r_vn = is_vietnamese_text(right, min_diacritics=1)
+                if not l_vn and r_vn:
+                    return "EN->VI"
+                if l_vn and not r_vn:
+                    return "VI->EN"
+
+        return "VI->EN"
+
     def _enhance_reasoning_with_neural(
         self,
         symbolic_reasoning: str,
         features: MatchFeatures,
         triggered_rules: list[str],
+        source: SourceResult | None = None,
+        citation_context: str | None = None,
     ) -> str:
         """Enhance symbolic reasoning với Neural content alignment & evidence info."""
         if not self.enable_content_alignment:
@@ -1143,11 +1400,14 @@ class NeuroSymbolicChecker:
             if ev_score and ev_score > 0:
                 alignment_info += f", evidence_sim={ev_score:.2f}"
             if getattr(features, "cross_lingual_detected", False):
+                xl_dir = self._resolve_cross_lingual_tag_direction(
+                    features, source=source, citation_context=citation_context
+                )
                 bridged = getattr(features, "bridged_concepts", None) or []
                 if bridged:
-                    alignment_info += f", cross_lingual=VI->EN ({'; '.join(bridged[:3])})"
+                    alignment_info += f", cross_lingual={xl_dir} ({'; '.join(bridged[:3])})"
                 else:
-                    alignment_info += ", cross_lingual=VI->EN"
+                    alignment_info += f", cross_lingual={xl_dir}"
 
             if stance == "contradiction_risk":
                 alignment_info += " - WARNING: citation claim may contradict or be off-topic from source"

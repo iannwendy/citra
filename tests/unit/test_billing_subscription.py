@@ -1287,6 +1287,7 @@ def test_essay_stats_contract_c2_audit_essay_id_and_atomic_promo_redemption() ->
         "suspected_hallucination": 0,
         "unresolved": 0,
         "resource": 0,
+        "incomplete_metadata": 0,
     }
 
     # 2. Seed an essay with verdicts for user and override one verdict to generate audit log

@@ -16,6 +16,7 @@ export interface RuleDefinition {
   nameVi: string
   description: string
   descriptionVi: string
+  category?: "verified" | "warning" | "error" | "info"
   conditions: {
     field: string
     operator: string
@@ -142,6 +143,19 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
     ],
     conclusion: "METADATA_ERROR",
   },
+  "R-DOI-CONFLICT": {
+    id: "R-DOI-CONFLICT",
+    name: "Cross-Registry DOI Conflict",
+    nameVi: "Xung đột mã DOI giữa các CSDL học thuật",
+    description: "Multiple scholarly registries returned conflicting canonical DOI identifiers for the matched publication",
+    descriptionVi: "Các cơ sở dữ liệu học thuật trả về mã định danh DOI chính thức mâu thuẫn nhau cho cùng ấn phẩm",
+    category: "warning",
+    conditions: [
+      { field: "distinct_canonical_dois", operator: ">", value: "1" },
+      { field: "title_sim_fuzzy", operator: ">=", value: "0.85" },
+    ],
+    conclusion: "METADATA_ERROR",
+  },
   "R-VENUE-MISMATCH": {
     id: "R-VENUE-MISMATCH",
     name: "Publication Venue Conflict",
@@ -260,11 +274,11 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
     id: "R-CROSS-LINGUAL-TITLE-MATCH",
     name: "Translated Title Match (TDTU Foreign-Title Rule)",
     nameVi: "Tiêu đề dịch tiếng Việt (Vi phạm quy tắc giữ nguyên tiêu đề gốc TDTU)",
-    description: "Vietnamese translated title semantically matches the English source, but TDTU citation rules require preserving the original foreign-language title",
-    descriptionVi: "Tiêu đề dịch tiếng Việt khớp ngữ nghĩa với bài báo gốc tiếng Anh, nhưng quy định TDTU yêu cầu giữ nguyên tiêu đề tiếng nước ngoài",
+    description: "Vietnamese translated title semantically matches the English source (>= 0.58 (lexicon + multilingual ONNX INT8)), but TDTU citation rules require preserving the original foreign-language title",
+    descriptionVi: "Tiêu đề dịch tiếng Việt khớp ngữ nghĩa với bài báo gốc tiếng Anh (>= 0.58 (lexicon + multilingual ONNX INT8)), nhưng quy định TDTU yêu cầu giữ nguyên tiêu đề tiếng nước ngoài",
     conditions: [
       { field: "cross_lingual_title_detected", operator: "=", value: "true" },
-      { field: "cross_lingual_title_sim", operator: ">=", value: "0.55" },
+      { field: "cross_lingual_title_sim", operator: ">=", value: "0.58 (lexicon + multilingual ONNX INT8)" },
     ],
     conclusion: "METADATA_ERROR",
   },

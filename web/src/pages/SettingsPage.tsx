@@ -614,7 +614,13 @@ export function SettingsPage(): JSX.Element {
                 </Badge>
                 {subscription?.billing_cycle && (
                   <Badge variant="outline" className="font-mono text-[11px] uppercase">
-                    {subscription.billing_cycle}
+                    {currentLang === 'vi'
+                      ? subscription.billing_cycle === 'annual'
+                        ? 'Hàng năm'
+                        : subscription.billing_cycle === 'monthly'
+                          ? 'Hàng tháng'
+                          : subscription.billing_cycle
+                      : subscription.billing_cycle}
                   </Badge>
                 )}
               </div>
@@ -726,10 +732,26 @@ export function SettingsPage(): JSX.Element {
                         variant={tx.status === 'succeeded' ? 'default' : 'secondary'}
                         className="font-mono text-[10px] uppercase"
                       >
-                        {tx.status}
+                        {currentLang === 'vi'
+                          ? tx.status === 'succeeded'
+                            ? 'Thành công'
+                            : tx.status === 'pending'
+                              ? 'Đang xử lý'
+                              : tx.status === 'failed'
+                                ? 'Thất bại'
+                                : tx.status
+                          : tx.status}
                       </Badge>
                       <span className="font-semibold text-slate-800 dark:text-slate-200">
-                        CITRA {tx.plan_name} ({tx.billing_cycle})
+                        CITRA {tx.plan_name} (
+                        {currentLang === 'vi'
+                          ? tx.billing_cycle === 'annual'
+                            ? 'năm'
+                            : tx.billing_cycle === 'monthly'
+                              ? 'tháng'
+                              : tx.billing_cycle
+                          : tx.billing_cycle}
+                        )
                       </span>
                       {tx.promo_code && (
                         <span className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[10px] font-mono font-semibold text-emerald-700 dark:text-emerald-300">

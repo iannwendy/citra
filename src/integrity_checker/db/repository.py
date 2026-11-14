@@ -554,6 +554,20 @@ class Repository:
             q = q.filter(AuditLog.user == user_filter)
         return q.order_by(AuditLog.logged_at.desc()).limit(limit).offset(offset).all()
 
+    def get_audit_stats(self, user_filter: str | None = None) -> dict[str, int]:
+        """Return fast SQL COUNT(*) and COUNT(DISTINCT user) over audit_logs."""
+        q = self.session.query(
+            func.count(AuditLog.id),
+            func.count(func.distinct(AuditLog.user)),
+        )
+        if user_filter:
+            q = q.filter(AuditLog.user == user_filter)
+        row = q.one()
+        return {
+            "total_events": int(row[0] or 0),
+            "unique_actors": int(row[1] or 0),
+        }
+
     def get_citations(self, essay_id: int) -> list[CitationRecord]:
         """Return extracted citations in insertion order."""
         return list(
@@ -1250,13 +1264,16 @@ class Repository:
     # -- Essay dedupe --
 
     @staticmethod
-    def _essay_quality(essay: EssayRecord, citation_counts: dict[int, int]) -> tuple[int, int, str, int]:
+    def _essay_quality(
+        essay: EssayRecord,
+        citation_counts: dict[int, int],
+    ) -> tuple[int, int, str, int]:
         """Rank key for keeping the best copy of a duplicated upload.
 
         Surfaces active ``queued``/``processing`` re-uploads immediately, keeps
         recent ``failed`` attempts on equal footing with completed uploads so a
-        newer failed upload is never silently hidden behind an older copy, and
-        still demotes abandoned empty ``completed`` rows without results.
+        newer failed upload is never silently hidden behind an older copy in
+        listing views, and still demotes abandoned empty ``completed`` rows.
         """
         uploaded = essay.uploaded_at.isoformat() if essay.uploaded_at else ""
         status_low = (getattr(essay, "job_status", None) or "completed").strip().lower()
@@ -1273,6 +1290,7 @@ class Repository:
         self,
         user_id: int | None = None,
         user_ids: list[int] | None = None,
+        completed_only: bool = False,
     ) -> list[tuple[EssayRecord, list[int]]]:
         """Group essays by filename (scoped per user), keeping the best copy.
 
@@ -1285,7 +1303,13 @@ class Repository:
             list of ``(canonical_essay, duplicate_ids)`` ordered by the
             canonical essay's ``uploaded_at`` descending.
         """
+        from sqlalchemy import or_
+
         query = self.session.query(EssayRecord)
+        if completed_only:
+            query = query.filter(
+                or_(EssayRecord.job_status == "completed", EssayRecord.job_status.is_(None))
+            )
         if user_ids is not None:
             if not user_ids:
                 return []
@@ -1480,14 +1504,60 @@ class Repository:
         except Exception:  # noqa: BLE001
             pass
 
+        session_hits = 0
+        session_misses = 0
+        session_hit_rate_percent = 0.0
+        wave0_entries = 0
+        negative_cache_entries = 0
+        singleflight_coalesced = 0
+        try:
+            from integrity_checker.api import deps
+            from integrity_checker.api.routes import essays as essays_mod
+
+            for candidate_pipeline in (
+                getattr(deps, "_pipeline_singleton", None),
+                getattr(essays_mod, "_pipeline", None),
+            ):
+                orch = (
+                    getattr(candidate_pipeline, "orchestrator", None)
+                    if candidate_pipeline is not None
+                    else None
+                )
+                stats_fn = getattr(orch, "get_runtime_cache_stats", None) if orch is not None else None
+                if callable(stats_fn):
+                    rt_stats = stats_fn()
+                    if isinstance(rt_stats, dict):
+                        session_hits = int(rt_stats.get("session_hits", 0) or 0)
+                        session_misses = int(rt_stats.get("session_misses", 0) or 0)
+                        session_hit_rate_percent = float(
+                            rt_stats.get("session_hit_rate_percent", 0.0) or 0.0
+                        )
+                        wave0_entries = int(rt_stats.get("wave0_entries", 0) or 0)
+                        negative_cache_entries = int(
+                            rt_stats.get("negative_cache_entries", 0) or 0
+                        )
+                        singleflight_coalesced = int(
+                            rt_stats.get("singleflight_coalesced", 0) or 0
+                        )
+                        break
+        except Exception:  # noqa: BLE001
+            pass
+
         return {
             "total": total + local_papers_count,
+            "dynamic_entries": total,
             "total_hits": persistent_hits + local_hits_count,
             "persistent_entries": persistent_entries,
             "expired_entries": expired_entries,
             "persistent_hits": persistent_hits,
             "avg_hit_count": round(persistent_hits / total, 2) if total > 0 else 0.0,
             "by_source": by_source,
+            "session_hits": session_hits,
+            "session_misses": session_misses,
+            "session_hit_rate_percent": session_hit_rate_percent,
+            "wave0_entries": wave0_entries,
+            "negative_cache_entries": negative_cache_entries,
+            "singleflight_coalesced": singleflight_coalesced,
             "local_papers_count": local_papers_count,
             "local_queries_count": local_queries_count,
             "local_hits_count": local_hits_count,
@@ -1745,6 +1815,13 @@ class Repository:
             .all()
         )
 
+    _PENDING_REVIEW_LABELS = (
+        "metadata_error",
+        "suspected_hallucination",
+        "unresolved",
+        "unverified",
+    )
+
     def count_pending_reviews_for_teacher(self, teacher_id: int) -> int:
         """Essays trong các class teacher phụ trách mà có verdicts chưa được override."""
         classes = self.list_classes_for_teacher(teacher_id)
@@ -1758,7 +1835,7 @@ class Repository:
             .filter(
                 VerdictRecord.essay_id.in_(essay_ids),
                 VerdictRecord.is_overridden == 0,
-                VerdictRecord.label.in_(["metadata_error", "suspected_hallucination"]),
+                VerdictRecord.label.in_(self._PENDING_REVIEW_LABELS),
             )
             .count()
         )
@@ -1776,7 +1853,7 @@ class Repository:
             .filter(
                 VerdictRecord.essay_id.in_(essay_ids),
                 VerdictRecord.is_overridden == 0,
-                VerdictRecord.label.in_(["metadata_error", "suspected_hallucination"]),
+                VerdictRecord.label.in_(self._PENDING_REVIEW_LABELS),
             )
             .count()
         )
@@ -1790,7 +1867,7 @@ class Repository:
             self.session.query(VerdictRecord)
             .filter(
                 VerdictRecord.essay_id.in_(essay_ids),
-                VerdictRecord.label.in_(["metadata_error", "suspected_hallucination"]),
+                VerdictRecord.label.in_(self._PENDING_REVIEW_LABELS),
                 VerdictRecord.is_overridden == 0,
             )
             .order_by(VerdictRecord.validated_at.desc())

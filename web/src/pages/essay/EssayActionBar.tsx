@@ -1,26 +1,35 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, FileSearch, Link2, GitBranch, Terminal, Lock } from 'lucide-react';
+import { AlertCircle, FileSearch, Link2, GitBranch, Terminal, Lock, Sparkles } from 'lucide-react';
 import { useRole } from '@/hooks/useRole';
 import { UpgradeModal } from '@/components/UpgradeModal';
+import { BibliographyRemediationModal } from '@/components/BibliographyRemediationModal';
 import { Button } from '@/components/ui/button';
 
 interface EssayActionBarProps {
   essayId: string;
+  filename?: string;
+  onOpenRemediation?: () => void;
 }
 
 /**
  * Quick navigation row beneath the report header. Links to companion pages
- * (Debugger Report, Issues, Document, Consistency, Logic Trace) using shadcn/ui Button.
+ * (Debugger Report, Issues, Document, Consistency, Logic Trace) + Remediation Engine using shadcn/ui Button.
  */
-export function EssayActionBar({ essayId }: EssayActionBarProps) {
+export function EssayActionBar({ essayId, filename, onOpenRemediation }: EssayActionBarProps) {
   const { t, i18n } = useTranslation();
   const { has, isUser } = useRole();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [lockedFeature, setLockedFeature] = useState<string>('');
+  const [remediationOpen, setRemediationOpen] = useState(false);
   const location = useLocation();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const isVi = lang === 'vi';
+  const remediationLabel = isVi ? 'Chuẩn hóa Tài liệu tham khảo' : 'Remediation Engine';
+  const remediationSubtitle = isVi
+    ? 'Tự động chuẩn hóa (APA / IEEE / TDTU)'
+    : 'Auto-Fix Style (APA / IEEE / TDTU)';
 
   const basePath = `/verification/report/${essayId}`;
   const currentPath = location.pathname;
@@ -175,7 +184,51 @@ export function EssayActionBar({ essayId }: EssayActionBarProps) {
             </span>
           </Button>
         )}
+
+        {has('view_logic_trace') ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            data-testid="actionbar-remediation-btn"
+            title={remediationSubtitle}
+            aria-label={`${remediationLabel} — ${remediationSubtitle}`}
+            onClick={() => (onOpenRemediation ? onOpenRemediation() : setRemediationOpen(true))}
+            className="h-8 rounded-xl text-xs font-medium shrink-0 whitespace-nowrap text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 cursor-pointer"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+            <span>{remediationLabel}</span>
+            <span className="hidden xl:inline text-[10px] font-mono text-slate-500 dark:text-slate-400">
+              · {remediationSubtitle}
+            </span>
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            data-testid="locked-remediation-btn"
+            title={remediationSubtitle}
+            aria-label={`${remediationLabel} — ${remediationSubtitle}`}
+            onClick={() => handleLockedClick(`${remediationLabel} — ${remediationSubtitle}`)}
+            className="h-8 rounded-xl text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer"
+          >
+            <Lock className="h-3.5 w-3.5 text-amber-500" />
+            <span>{remediationLabel}</span>
+            <span className="ml-1 px-1.5 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 text-[9px] font-mono font-bold">
+              PRO
+            </span>
+          </Button>
+        )}
       </div>
+
+      <BibliographyRemediationModal
+        open={remediationOpen}
+        essayId={Number(essayId) || 0}
+        filename={filename || `essay_${essayId}.pdf`}
+        lang={lang}
+        onClose={() => setRemediationOpen(false)}
+      />
 
       <UpgradeModal
         open={upgradeOpen}

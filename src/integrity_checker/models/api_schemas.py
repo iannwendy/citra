@@ -28,6 +28,10 @@ class VerdictSchema(BaseModel):
     citation_id: str | None = None
     citation_raw: str
     citation_type: str = "unknown"
+    numeric_index: int | None = None
+    sub_index: str | None = None
+    composite_label: str | None = None
+    cited_url: str | None = None
     label: str                                  # ValidationLabel value
     confidence: float
     reasoning: str
@@ -35,6 +39,8 @@ class VerdictSchema(BaseModel):
     mismatched_fields: list[str] = Field(default_factory=list)
     matched_sources: list[dict] = Field(default_factory=list)
     features: dict | None = None
+    html_meta: dict | None = None
+    html_meta_title_sim: float | None = None
     url_status: str | None = None
     url_status_code: int | None = None
     archive_url: str | None = None
@@ -45,6 +51,10 @@ class VerdictSchema(BaseModel):
     style_penalty: float | None = None
     domain_exception: bool = False
     is_overridden: bool = False
+    override_note: str | None = None
+    overridden_by: str | None = None
+    overridden_at: str | None = None
+    override_record: dict | None = None
 
 
 class CISSchema(BaseModel):

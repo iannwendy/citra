@@ -9,11 +9,27 @@ import {
   ShieldCheck,
   Filter,
   Loader2,
+  AlertTriangle,
 } from 'lucide-react';
-import { api, type PendingVerdict, type Class } from '@/api/client';
+import {
+  api,
+  type PendingVerdict,
+  type Class,
+  type ValidationLabel,
+  type Verdict,
+} from '@/api/client';
+import {
+  extractObservedWebMeta,
+  getCitationMarkerLabel,
+  getFieldDisplayName,
+  getRuleDisplayName,
+  getSourceDisplayName,
+  getVerdictExplanation,
+  isUrlResource,
+} from '@/lib/verdictExplanation';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
+import { VerdictBadge } from '@/components/VerdictBadge';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -74,9 +90,17 @@ export function PendingReviewsPage() {
   const hallucinationCount = reviews.filter(
     (r) => r.label === 'suspected_hallucination'
   ).length;
-  const metadataErrorCount = reviews.filter(
-    (r) => r.label === 'metadata_error'
+  const incompleteRefCount = reviews.filter(
+    (r) =>
+      r.label === 'metadata_error' &&
+      Boolean(r.triggered_rules?.includes('R-INCOMPLETE-METADATA'))
   ).length;
+  const metadataErrorCount = reviews.filter(
+    (r) =>
+      r.label === 'metadata_error' &&
+      !r.triggered_rules?.includes('R-INCOMPLETE-METADATA')
+  ).length;
+  const unresolvedCount = reviews.filter((r) => r.label === 'unresolved').length;
 
   return (
     <div className="space-y-6 pb-10">
@@ -136,7 +160,7 @@ export function PendingReviewsPage() {
       ) : (
         <>
           {/* Architectural Metric Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
             <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -176,6 +200,40 @@ export function PendingReviewsPage() {
               </div>
               <p className="text-2xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400">
                 {metadataErrorCount}
+              </p>
+            </Card>
+
+            <Card
+              data-testid="pending-kpi-incomplete"
+              className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-medium text-orange-600 dark:text-orange-400">
+                  {lang === 'vi' ? 'Thiếu quy cách' : 'Incomplete Ref'}
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-orange-50 dark:bg-orange-950/80 text-orange-600 dark:text-orange-400">
+                  04
+                </span>
+              </div>
+              <p className="text-2xl font-bold font-mono tabular-nums text-orange-600 dark:text-orange-400">
+                {incompleteRefCount}
+              </p>
+            </Card>
+
+            <Card
+              data-testid="pending-kpi-unresolved"
+              className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                  {lang === 'vi' ? 'Chờ rà soát' : 'Unresolved'}
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                  05
+                </span>
+              </div>
+              <p className="text-2xl font-bold font-mono tabular-nums text-slate-700 dark:text-slate-200">
+                {unresolvedCount}
               </p>
             </Card>
           </div>
@@ -233,52 +291,272 @@ export function PendingReviewsPage() {
                   {t('teacher.noPendingVerdicts')}
                 </p>
               ) : (
-                reviews.map((r, idx) => (
-                  <button
-                    key={r.verdict_id}
-                    onClick={() => navigate(`/verification/report/${r.essay_id}?citation=${r.verdict_id}`)}
-                    data-testid={`pending-review-row-${r.verdict_id}`}
-                    className="w-full text-left px-4 sm:px-5 py-3.5 sm:py-4 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 flex items-start gap-3 focus:outline-none focus:bg-slate-50 dark:focus:bg-slate-800/50 transition-colors group"
-                  >
-                    <span className="text-xs font-mono text-slate-400 dark:text-slate-500 pt-0.5 shrink-0">
-                      #{String(idx + 1).padStart(2, '0')}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <Badge
-                          variant={
-                            r.label === 'suspected_hallucination'
-                              ? 'hallucination'
-                              : 'metadata_error'
+                reviews.map((r, idx) => {
+                  const marker = getCitationMarkerLabel(r);
+                  const hasExplicitMarker = marker !== '[?]';
+                  const isRetracted =
+                    Boolean(r.is_retracted) ||
+                    Boolean(r.triggered_rules?.includes('R-RETRACTED-PAPER'));
+                  const rawHtmlMeta = (r.html_meta ?? null) as Record<
+                    string,
+                    unknown
+                  > | null;
+                  const fallbackHtmlTitle =
+                    [
+                      rawHtmlMeta?.page_title,
+                      rawHtmlMeta?.citation_title,
+                      rawHtmlMeta?.og_title,
+                      rawHtmlMeta?.dc_title,
+                      rawHtmlMeta?.title,
+                      rawHtmlMeta?.observed_title,
+                    ]
+                      .find((val): val is string => typeof val === 'string' && val.trim().length > 0)
+                      ?.trim() ?? null;
+                  const fallbackHtmlVenue =
+                    typeof rawHtmlMeta?.site_name === 'string' &&
+                    rawHtmlMeta.site_name.trim()
+                      ? rawHtmlMeta.site_name.trim()
+                      : null;
+                  const extractedWeb = extractObservedWebMeta(r);
+                  const observedWeb =
+                    extractedWeb?.title
+                      ? extractedWeb
+                      : fallbackHtmlTitle
+                        ? {
+                            title: fallbackHtmlTitle,
+                            venue: extractedWeb?.venue ?? fallbackHtmlVenue,
+                            authors: extractedWeb?.authors ?? [],
+                            year: extractedWeb?.year ?? null,
+                            isArchived:
+                              extractedWeb?.isArchived ??
+                              r.url_status === 'archived_alive',
                           }
-                          className="px-2 py-0.5 rounded text-xs font-mono"
-                        >
-                          {r.label}
-                        </Badge>
-                        <span className="text-xs font-mono text-slate-500">
-                          {r.student_username ?? '—'}
-                        </span>
+                        : extractedWeb;
+                  const isUrlMismatch = Boolean(
+                    r.triggered_rules?.includes('R-URL-CONTENT-MISMATCH')
+                  );
+                  const showObservedWeb =
+                    Boolean(observedWeb?.title) &&
+                    (isUrlMismatch ||
+                      isUrlResource({
+                        citation_raw: r.citation_raw ?? '',
+                        label: String(r.label),
+                        triggered_rules: r.triggered_rules,
+                      }) ||
+                      Boolean(r.html_meta));
+
+                  const nonWebSources = (r.matched_sources ?? []).filter((s) => {
+                    const low = (s.source || '').toLowerCase();
+                    return low !== 'web_html_meta' && low !== 'wayback_html_meta';
+                  });
+                  const sourceDisplayNames = [
+                    ...new Set(
+                      nonWebSources.map((s) =>
+                        getSourceDisplayName(s.source, lang, {
+                          triggered_rules: r.triggered_rules,
+                          external_ids: s.external_ids,
+                          venue: s.venue,
+                          title: s.title,
+                        })
+                      )
+                    ),
+                  ];
+
+                  const hasRichContext =
+                    Boolean(r.triggered_rules && r.triggered_rules.length > 0) ||
+                    Boolean(r.matched_sources && r.matched_sources.length > 0) ||
+                    Boolean(r.mismatched_fields && r.mismatched_fields.length > 0) ||
+                    Boolean(r.url_status) ||
+                    Boolean(r.html_meta) ||
+                    isRetracted;
+
+                  const verdictAdapter: Verdict = {
+                    citation_id: String(r.verdict_id),
+                    citation_raw: r.citation_raw ?? '',
+                    mapping_status: 'matched',
+                    mapping_confidence: 1,
+                    label: (r.label as ValidationLabel) || 'unresolved',
+                    confidence: r.confidence,
+                    reasoning: r.reasoning ?? '',
+                    triggered_rules: r.triggered_rules ?? [],
+                    mismatched_fields: r.mismatched_fields ?? [],
+                    matched_sources: r.matched_sources ?? [],
+                    url_status: r.url_status ?? null,
+                    url_status_code: r.url_status_code ?? null,
+                    archive_url: r.archive_url ?? null,
+                    cited_url: r.cited_url ?? null,
+                    html_meta: r.html_meta ?? null,
+                    is_retracted: r.is_retracted ?? false,
+                    numeric_index: r.numeric_index ?? null,
+                    sub_index: r.sub_index ?? null,
+                    composite_label: r.composite_label ?? null,
+                    features: r.features,
+                    is_overridden: false,
+                  };
+                  const explanationText = hasRichContext
+                    ? getVerdictExplanation(verdictAdapter, lang)
+                    : r.reasoning;
+
+                  const openReport = () =>
+                    navigate(`/verification/report/${r.essay_id}?citation=${r.verdict_id}`);
+
+                  return (
+                    <div
+                      key={r.verdict_id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={openReport}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openReport();
+                        }
+                      }}
+                      data-testid={`pending-review-row-${r.verdict_id}`}
+                      className="w-full text-left px-4 sm:px-5 py-3.5 sm:py-4 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 flex items-start gap-3 focus:outline-none focus:bg-slate-50 dark:focus:bg-slate-800/50 transition-colors group cursor-pointer"
+                    >
+                      <span className="text-xs font-mono text-slate-400 dark:text-slate-500 pt-0.5 shrink-0">
+                        #{String(idx + 1).padStart(2, '0')}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                          {hasExplicitMarker && (
+                            <span
+                              data-testid={`pending-marker-${r.verdict_id}`}
+                              className="px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/80 dark:border-indigo-800/80 text-indigo-700 dark:text-indigo-300 text-[11px] font-mono font-bold"
+                            >
+                              {marker}
+                            </span>
+                          )}
+                          <VerdictBadge
+                            verdict={r.label as ValidationLabel}
+                            triggeredRules={r.triggered_rules}
+                            size="sm"
+                          />
+                          {isRetracted && (
+                            <span
+                              data-testid={`pending-retracted-${r.verdict_id}`}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-mono font-bold"
+                            >
+                              <AlertTriangle className="h-3 w-3" />
+                              {lang === 'vi' ? 'ĐÃ RÚT BÀI (RETRACTED)' : 'RETRACTED'}
+                            </span>
+                          )}
+                          {r.url_status && (
+                            <span
+                              data-testid={`pending-url-status-${r.verdict_id}`}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold border ${
+                                r.url_status === 'alive' || r.url_status === 'restricted_alive'
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                                  : r.url_status === 'archived_alive'
+                                    ? 'bg-amber-50 dark:bg-amber-950/70 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+                                    : r.url_status === 'unchecked'
+                                      ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                                      : 'bg-rose-50 dark:bg-rose-950/70 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300'
+                              }`}
+                            >
+                              {r.url_status === 'alive'
+                                ? `✓ HTTP ${r.url_status_code || 200} OK`
+                                : r.url_status === 'restricted_alive'
+                                  ? `🔒 HTTP ${r.url_status_code || 403} OK`
+                                  : r.url_status === 'archived_alive'
+                                    ? r.archive_url ? (
+                                        <a
+                                          href={r.archive_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="underline hover:text-amber-950 dark:hover:text-amber-100"
+                                        >
+                                          {lang === 'vi' ? '🏛️ Bản lưu Wayback' : '🏛️ Wayback Archived'}
+                                        </a>
+                                      ) : lang === 'vi' ? (
+                                        '🏛️ Bản lưu Wayback'
+                                      ) : (
+                                        '🏛️ Wayback Archived'
+                                      )
+                                    : r.url_status === 'dead_link'
+                                      ? `✕ HTTP ${r.url_status_code || 404} ${lang === 'vi' ? 'Liên kết hỏng' : 'Dead Link'}`
+                                      : r.url_status === 'fake_domain'
+                                        ? `✕ ${lang === 'vi' ? 'Tên miền giả' : 'Fake Domain'}`
+                                        : lang === 'vi'
+                                          ? 'Chưa mở URL (Đã khớp học thuật)'
+                                          : 'URL Unchecked'}
+                            </span>
+                          )}
+                          <span className="text-xs font-mono text-slate-500">
+                            {r.student_username ?? '—'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileFormatIcon filename={r.filename} size="xs" />
+                          <p className="text-sm font-medium text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            {r.filename}
+                          </p>
+                        </div>
+
+                        {r.citation_raw && (
+                          <p className="text-xs font-serif text-slate-700 dark:text-slate-300 mt-1 line-clamp-2 break-words [overflow-wrap:anywhere]">
+                            &ldquo;{r.citation_raw}&rdquo;
+                          </p>
+                        )}
+
+                        {showObservedWeb && observedWeb?.title && (
+                          <div
+                            data-testid={`pending-observed-meta-${r.verdict_id}`}
+                            className="mt-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/80 text-[11px] font-mono text-amber-900 dark:text-amber-200"
+                          >
+                            {lang === 'vi'
+                              ? `Tiêu đề trang URL thực tế: "${observedWeb.title}"`
+                              : `Observed web page title: "${observedWeb.title}"`}
+                            {observedWeb.venue ? ` (${observedWeb.venue})` : ''}
+                          </div>
+                        )}
+
+                        {explanationText && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 line-clamp-3 leading-relaxed">
+                            {explanationText}
+                          </p>
+                        )}
+
+                        {((r.mismatched_fields && r.mismatched_fields.length > 0) ||
+                          (r.triggered_rules && r.triggered_rules.length > 0) ||
+                          sourceDisplayNames.length > 0) && (
+                          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                            {(r.mismatched_fields ?? []).map((field) => (
+                              <span
+                                key={field}
+                                className="px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 border border-amber-200/80 dark:border-amber-800/70 text-[10px] font-mono text-amber-800 dark:text-amber-300"
+                              >
+                                {lang === 'vi' ? 'Lệch: ' : 'Mismatch: '}
+                                {getFieldDisplayName(field, lang)}
+                              </span>
+                            ))}
+                            {(r.triggered_rules ?? []).map((ruleId) => (
+                              <span
+                                key={ruleId}
+                                title={getRuleDisplayName(ruleId, lang)}
+                                className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-mono font-semibold text-indigo-700 dark:text-indigo-300"
+                              >
+                                {ruleId}
+                              </span>
+                            ))}
+                            {sourceDisplayNames.map((srcName) => (
+                              <span
+                                key={srcName}
+                                className="px-2 py-0.5 rounded bg-emerald-50/80 dark:bg-emerald-950/50 border border-emerald-200/80 dark:border-emerald-800/70 text-[10px] font-mono text-emerald-700 dark:text-emerald-300"
+                              >
+                                {srcName}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FileFormatIcon filename={r.filename} size="xs" />
-                        <p className="text-sm font-medium text-slate-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                          {r.filename}
-                        </p>
-                      </div>
-                      {r.citation_raw && (
-                        <p className="text-xs font-serif text-slate-700 dark:text-slate-300 mt-1 line-clamp-2 break-words [overflow-wrap:anywhere]">
-                          &ldquo;{r.citation_raw}&rdquo;
-                        </p>
-                      )}
-                      {r.reasoning && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed">
-                          {r.reasoning}
-                        </p>
-                      )}
+                      <ExternalLink className="h-4 w-4 text-slate-400 group-hover:text-indigo-500 mt-1 shrink-0 transition-colors" />
                     </div>
-                    <ExternalLink className="h-4 w-4 text-slate-400 group-hover:text-indigo-500 mt-1 shrink-0 transition-colors" />
-                  </button>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

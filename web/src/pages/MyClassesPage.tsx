@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   GraduationCap,
@@ -158,22 +158,48 @@ export function MyClassesPage() {
             </p>
           </Card>
 
-          <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-            <div className="flex items-center justify-between mb-2">
-              <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/80 border border-rose-200/60 dark:border-rose-800/60">
-                <ClipboardCheck className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+          {dashboard.pending_reviews > 0 ? (
+            <Link
+              to="/teacher/reviews"
+              data-testid="needs-review-kpi-link"
+              className="block rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500 group"
+            >
+              <Card className="p-4 sm:p-5 h-full rounded-2xl bg-white dark:bg-slate-900 border border-rose-200/90 dark:border-rose-800/80 hover:border-rose-400 dark:hover:border-rose-600 shadow-2xs transition-colors">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/80 border border-rose-200/60 dark:border-rose-800/60">
+                    <ClipboardCheck className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400">
+                    04
+                    <ChevronRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                </div>
+                <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-rose-600 dark:text-rose-400">
+                  {dashboard.pending_reviews}
+                </p>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+                  {t('teacher.needsReview')}
+                </p>
+              </Card>
+            </Link>
+          ) : (
+            <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+              <div className="flex items-center justify-between mb-2">
+                <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/80 border border-rose-200/60 dark:border-rose-800/60">
+                  <ClipboardCheck className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400">
+                  04
+                </span>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400">
-                04
-              </span>
-            </div>
-            <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-rose-600 dark:text-rose-400">
-              {dashboard.pending_reviews}
-            </p>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">
-              {t('teacher.needsReview')}
-            </p>
-          </Card>
+              <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-rose-600 dark:text-rose-400">
+                {dashboard.pending_reviews}
+              </p>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">
+                {t('teacher.needsReview')}
+              </p>
+            </Card>
+          )}
         </div>
       )}
 
@@ -194,13 +220,13 @@ export function MyClassesPage() {
           </div>
           <span className="text-[11px] font-mono text-slate-400">
             {lang === 'vi'
-              ? `${dashboard?.classes.length ?? 0} lớp học`
-              : `${dashboard?.classes.length ?? 0} cohorts`}
+              ? `${dashboard?.classes?.length ?? 0} lớp học`
+              : `${dashboard?.classes?.length ?? 0} cohorts`}
           </span>
         </div>
 
         <div className="p-4 sm:p-5 space-y-3">
-          {dashboard?.classes.length === 0 ? (
+          {(dashboard?.classes?.length ?? 0) === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-8 sm:p-12 text-center">
               <p className="text-slate-700 dark:text-slate-300 font-medium">
                 {t('teacher.noClassesYet')}
@@ -208,7 +234,7 @@ export function MyClassesPage() {
               <p className="text-sm text-slate-500 mt-1">{t('teacher.noClassesHint')}</p>
             </div>
           ) : (
-            dashboard?.classes.map((c: Class, idx: number) => (
+            (dashboard?.classes ?? []).map((c: Class, idx: number) => (
               <button
                 key={c.id}
                 onClick={() => navigate(`/teacher/classes/${c.id}`)}

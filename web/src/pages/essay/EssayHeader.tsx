@@ -93,9 +93,13 @@ export function EssayHeader({
       openUpgrade('AUTO-HEALED DOCX');
       return;
     }
-    const targetStyle = (styleName || '').toLowerCase().includes('ieee') ? 'ieee' : 'apa';
+    const healedStyle = /ieee/i.test(styleName ?? '')
+      ? 'ieee'
+      : /tdtu/i.test(styleName ?? '')
+        ? 'tdtu'
+        : 'apa';
     void runDownload('healed', 'AUTO-HEALED DOCX', () =>
-      api.downloadAutoHealedDocx(essayId, targetStyle, filename),
+      api.downloadAutoHealedDocx(essayId, healedStyle, filename),
     );
   };
 

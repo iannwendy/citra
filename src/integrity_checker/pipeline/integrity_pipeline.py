@@ -898,6 +898,65 @@ class IntegrityPipeline:
             or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in retrieve_params.values())
         )
 
+        _source_display_names = {
+            "local_db": "ACL FTS5",
+            "known_papers": "Seminal",
+            "vn_legal": "VN Legal",
+            "crossref": "Crossref",
+            "openalex": "OpenAlex",
+            "datacite": "DataCite",
+            "doaj": "DOAJ",
+            "openaire_hal": "OpenAIRE/HAL",
+            "ncbi_biorxiv": "NCBI/bioRxiv",
+            "dblp": "DBLP",
+            "arxiv": "arXiv",
+            "openlibrary": "OpenLibrary",
+            "europepmc": "Europe PMC",
+            "huggingface": "Hugging Face",
+            "tech_standard": "RFC/PyPI/NPM/GitHub",
+            "wikidata_opencitations": "Wikidata/OpenCitations",
+            "doi_ra": "DOI RA",
+            "serpapi": "Google Scholar",
+        }
+        _cit_found_cnt = len(in_text_citations) or len(all_citations)
+        _ref_found_cnt = len(ref_citations) or len(unique_list)
+        _live_retrieved_sources: list[SourceResult] = []
+        _last_live_src_status: dict[str, str] = {}
+        _batch_emit_step = max(1, (len(unique_list) + 4) // 5)
+
+        def _maybe_emit_live_retrieving(*, force: bool = False) -> None:
+            nonlocal _last_live_src_status
+            if not _live_retrieved_sources:
+                return
+            partial_status, partial_hits = _summarize_sources_queried(_live_retrieved_sources)
+            if not partial_status or partial_status == _last_live_src_status:
+                return
+            done_n = len(_live_retrieved_sources)
+            total_n = max(1, len(unique_list))
+            badge_changed = any(
+                _last_live_src_status.get(k, "").split(":", 1)[0] != v.split(":", 1)[0]
+                for k, v in partial_status.items()
+            )
+            if not (
+                force
+                or badge_changed
+                or done_n % _batch_emit_step == 0
+                or done_n >= total_n
+            ):
+                return
+            _last_live_src_status = dict(partial_status)
+            _emit(
+                "retrieving",
+                4,
+                citations_found=_cit_found_cnt,
+                references_found=_ref_found_cnt,
+                sources_queried=dict(partial_status),
+                message=(
+                    f"Querying academic databases ({min(done_n, total_n)}/{total_n} papers)... "
+                    f"{sum(partial_hits.values())} hits across {len(partial_status)} databases"
+                ),
+            )
+
         prefetched_by_id: dict[int, SourceResult] = {}
         prefetch_fn = getattr(self.orchestrator, "prefetch_identifiers", None)
         if unique_list and inspect.iscoroutinefunction(prefetch_fn):
@@ -909,6 +968,9 @@ class IntegrityPipeline:
                         for k, v in maybe_prefetched.items()
                         if isinstance(k, int) and isinstance(v, SourceResult)
                     }
+            if prefetched_by_id:
+                _live_retrieved_sources.extend(prefetched_by_id.values())
+                _maybe_emit_live_retrieving(force=True)
 
         async def _bounded_retrieve(cit: Citation) -> SourceResult:
             pre_resolved = prefetched_by_id.get(id(cit))
@@ -918,10 +980,14 @@ class IntegrityPipeline:
                 token = _ALLOW_SERPAPI_OVERRIDE.set(allow_serpapi)
                 try:
                     if supports_allow_serpapi_kwarg and allow_serpapi is not None:
-                        return await self.orchestrator.retrieve(cit, allow_serpapi=allow_serpapi)
-                    return await self.orchestrator.retrieve(cit)
+                        res = await self.orchestrator.retrieve(cit, allow_serpapi=allow_serpapi)
+                    else:
+                        res = await self.orchestrator.retrieve(cit)
                 finally:
                     _ALLOW_SERPAPI_OVERRIDE.reset(token)
+            _live_retrieved_sources.append(res)
+            _maybe_emit_live_retrieving()
+            return res
 
         unique_sources = await asyncio.gather(
             *(_bounded_retrieve(c) for c in unique_list),
@@ -956,64 +1022,9 @@ class IntegrityPipeline:
 
         # Surface per-data-source outcomes to the UI. Sources_queried is built
         # from the union of all retrieved SourceResults — a source is "ok" if
-        # at least one citation got a hit, "failed" if every call failed,
-        # otherwise "pending".
-        _src_status: dict[str, str] = {}
-        _src_hits: dict[str, int] = {}
-        _src_fails: dict[str, int] = {}
-        _src_misses: dict[str, int] = {}
-        for src in unique_sources:
-            for name in getattr(src, "sources_succeeded", []):
-                _src_hits[name] = _src_hits.get(name, 0) + 1
-            for name, err in getattr(src, "sources_failed", {}).items():
-                err_l = (err or "").lower()
-                if any(
-                    m in err_l
-                    for m in (
-                        "no results",
-                        "no title match",
-                        "does not exist",
-                        "not found",
-                        "no matching",
-                        "empty title query",
-                        "empty search query",
-                        "skipped (rate-limit backoff active)",
-                    )
-                ):
-                    _src_misses[name] = _src_misses.get(name, 0) + 1
-                else:
-                    _src_fails[name] = _src_fails.get(name, 0) + 1
-        for name in set(list(_src_hits.keys()) + list(_src_fails.keys()) + list(_src_misses.keys())):
-            if _src_hits.get(name, 0) > 0 and _src_fails.get(name, 0) == 0:
-                _src_status[name] = "ok"
-            elif _src_hits.get(name, 0) > 0 and _src_fails.get(name, 0) > 0:
-                _src_status[name] = "partial"
-            elif _src_fails.get(name, 0) > 0:
-                _src_status[name] = f"failed:{_src_fails[name]}"
-            elif _src_misses.get(name, 0) > 0:
-                _src_status[name] = f"queried:{_src_misses[name]}"
-            else:
-                _src_status[name] = "pending"
-        _source_display_names = {
-            "local_db": "ACL FTS5",
-            "known_papers": "Seminal",
-            "vn_legal": "VN Legal",
-            "crossref": "Crossref",
-            "openalex": "OpenAlex",
-            "datacite": "DataCite",
-            "doaj": "DOAJ",
-            "openaire_hal": "OpenAIRE/HAL",
-            "ncbi_biorxiv": "NCBI/bioRxiv",
-            "dblp": "DBLP",
-            "arxiv": "arXiv",
-            "openlibrary": "OpenLibrary",
-            "europepmc": "Europe PMC",
-            "huggingface": "Hugging Face",
-            "tech_standard": "RFC/PyPI/NPM/GitHub",
-            "wikidata_opencitations": "Wikidata/OpenCitations",
-            "doi_ra": "DOI RA",
-            "serpapi": "Google Scholar",
-        }
+        # at least one citation got a hit, "rate_limited" / "circuit_open" when
+        # throttled or breaker-open, "failed:N" on infra errors, otherwise "queried:N".
+        _src_status, _src_hits = _summarize_sources_queried(unique_sources)
         _total_hits = sum(_src_hits.values())
         _hit_parts = [
             f"{_source_display_names.get(k, k)}: {v}"
@@ -2465,6 +2476,180 @@ def _deserialize_citation_link_list(data: Any) -> list[CitationLink]:
     return out
 
 
+_MAX_SERIALIZED_MATCHED_SOURCES = 8
+
+
+def _summarize_sources_queried(sources: Any) -> tuple[dict[str, str], dict[str, int]]:
+    """Aggregate per-provider status badges across a sequence of ``SourceResult`` objects.
+
+    Maps circuit-breaker skips to ``"circuit_open"`` and HTTP 429 / AIMD backoff skips
+    to ``"rate_limited"`` instead of ``"failed:N"`` so ``ProcessingPage`` displays accurate
+    throttling telemetry rather than false infrastructure failure badges.
+    """
+    src_status: dict[str, str] = {}
+    src_hits: dict[str, int] = {}
+    src_fails: dict[str, int] = {}
+    src_misses: dict[str, int] = {}
+    src_rate_limited: dict[str, int] = {}
+    src_circuit_open: dict[str, int] = {}
+
+    for src in sources or ():
+        for name in getattr(src, "sources_succeeded", None) or []:
+            src_hits[name] = src_hits.get(name, 0) + 1
+        for name, err in (getattr(src, "sources_failed", None) or {}).items():
+            err_l = (err or "").lower()
+            if (
+                "circuit-breaker" in err_l
+                or "circuit breaker" in err_l
+                or "circuit_open" in err_l
+            ):
+                src_circuit_open[name] = src_circuit_open.get(name, 0) + 1
+            elif (
+                "rate-limit" in err_l
+                or "rate limit" in err_l
+                or "429" in err_l
+                or "too many requests" in err_l
+            ):
+                src_rate_limited[name] = src_rate_limited.get(name, 0) + 1
+            elif any(
+                m in err_l
+                for m in (
+                    "no results",
+                    "no title match",
+                    "does not exist",
+                    "not found",
+                    "no matching",
+                    "empty title query",
+                    "empty search query",
+                    "empty bibliographic query",
+                )
+            ):
+                src_misses[name] = src_misses.get(name, 0) + 1
+            else:
+                src_fails[name] = src_fails.get(name, 0) + 1
+
+    all_names = (
+        set(src_hits)
+        | set(src_fails)
+        | set(src_misses)
+        | set(src_rate_limited)
+        | set(src_circuit_open)
+    )
+    for name in all_names:
+        hits = src_hits.get(name, 0)
+        fails = src_fails.get(name, 0)
+        rl = src_rate_limited.get(name, 0)
+        cb = src_circuit_open.get(name, 0)
+        misses = src_misses.get(name, 0)
+        if hits > 0 and fails == 0:
+            src_status[name] = "ok"
+        elif hits > 0 and fails > 0:
+            src_status[name] = "partial"
+        elif cb > 0 and fails == 0:
+            src_status[name] = "circuit_open"
+        elif rl > 0 and fails == 0:
+            src_status[name] = "rate_limited"
+        elif fails > 0:
+            src_status[name] = f"failed:{fails}"
+        elif misses > 0:
+            src_status[name] = f"queried:{misses}"
+        else:
+            src_status[name] = "pending"
+    return src_status, src_hits
+
+
+def _clean_public_external_ids(ext_ids: Any) -> dict[str, Any]:
+    """Return a shallow copy of ``external_ids`` excluding internal ``_*`` provenance keys."""
+    if not isinstance(ext_ids, dict):
+        return {}
+    return {
+        str(k): v
+        for k, v in ext_ids.items()
+        if not str(k).startswith("_")
+    }
+
+
+def _extract_corroborating_records(cand: Any) -> list[dict[str, Any]]:
+    """Extract corroborated per-source metadata snapshots attached during candidate deduplication."""
+    raw_corr = getattr(cand, "_corroborating_records", None)
+    if not raw_corr:
+        raw_data = getattr(cand, "raw_data", None)
+        if isinstance(raw_data, dict):
+            raw_corr = raw_data.get("_corroborating_records")
+    if not raw_corr:
+        ext_ids = getattr(cand, "external_ids", None)
+        if isinstance(ext_ids, dict):
+            raw_corr = ext_ids.get("_corroborating_records")
+    if isinstance(raw_corr, str):
+        try:
+            raw_corr = json.loads(raw_corr)
+        except Exception:
+            raw_corr = None
+    if not isinstance(raw_corr, list):
+        return []
+    return [item for item in raw_corr if isinstance(item, dict)]
+
+
+def _extract_agreed_sources(cand: Any) -> list[str]:
+    """Extract multi-source consensus source names from candidate attributes or metadata dicts."""
+    raw_agreed = getattr(cand, "_agreed_sources", None)
+    if not raw_agreed:
+        raw_data = getattr(cand, "raw_data", None)
+        if isinstance(raw_data, dict):
+            raw_agreed = raw_data.get("_agreed_sources")
+    if not raw_agreed:
+        ext_ids = getattr(cand, "external_ids", None)
+        if isinstance(ext_ids, dict):
+            raw_agreed = ext_ids.get("_agreed_sources")
+    if isinstance(raw_agreed, str):
+        try:
+            raw_agreed = json.loads(raw_agreed)
+        except Exception:
+            raw_agreed = None
+    if not isinstance(raw_agreed, (list, tuple, set)):
+        return []
+    out: list[str] = []
+    for item in raw_agreed:
+        s = str(item or "").strip()
+        if s and s not in out:
+            out.append(s)
+    return out
+
+
+def _format_candidate_authors(raw_authors: Any) -> list[str]:
+    serialized: list[str] = []
+    for a in raw_authors or []:
+        if isinstance(a, str):
+            serialized.append(a)
+        elif hasattr(a, "last_name"):
+            parts = [getattr(a, "last_name", ""), getattr(a, "first_name", "")]
+            serialized.append(" ".join(p for p in parts if p))
+        else:
+            serialized.append(str(a))
+    return serialized
+
+
+def _build_matched_fields(
+    doi: Any,
+    title: Any,
+    authors: list[str],
+    year: Any,
+    venue: Any,
+) -> list[str]:
+    fields: list[str] = []
+    if doi:
+        fields.append("doi")
+    if title:
+        fields.append("title")
+    if authors:
+        fields.append("authors")
+    if year:
+        fields.append("year")
+    if venue:
+        fields.append("venue")
+    return fields
+
+
 def _serialize_matched_sources(source: Any) -> list[dict[str, Any]]:
     """SourceResult → list of MatchedSource-shaped dicts for the API.
 
@@ -2472,54 +2657,110 @@ def _serialize_matched_sources(source: Any) -> list[dict[str, Any]]:
     source name, which fields were matched, the URL/DOI, and the
     candidate's confidence.
 
-    Only successful (found=True) candidates are returned; when no scholarly
-    candidates exist, falls back to synthesized ``web_html_meta`` /
-    ``wayback_html_meta`` metadata when non-soft-404 HTML ``<head>`` fields exist.
+    Expands multi-source consensus records (``_corroborating_records`` /
+    ``_agreed_sources`` / ``_pristine_candidates``) so every agreeing scholarly
+    provider appears in ``matched_sources`` even after Wave-0 or SQLite cache
+    deduplication. When no scholarly candidates exist, falls back to synthesized
+    ``web_html_meta`` / ``wayback_html_meta`` metadata when non-soft-404 HTML
+    ``<head>`` fields exist.
     """
     out: list[dict[str, Any]] = []
     if source is None:
         return out
+
+    checked_iso = datetime.now(UTC).isoformat()
+    seen_sources: set[str] = set()
+    pristine_by_source: dict[str, Any] = {}
+    for p_cand in getattr(source, "_pristine_candidates", None) or []:
+        if getattr(p_cand, "found", False):
+            p_src = str(getattr(p_cand, "source_name", "") or "").strip()
+            if p_src and p_src not in pristine_by_source:
+                pristine_by_source[p_src] = p_cand
+
+    def _cand_to_entry(cand_obj: Any, override_source: str | None = None) -> dict[str, Any]:
+        src_name = override_source or str(getattr(cand_obj, "source_name", "unknown") or "unknown")
+        s_authors = _format_candidate_authors(getattr(cand_obj, "authors", None))
+        s_doi = getattr(cand_obj, "doi", None)
+        s_title = getattr(cand_obj, "title", None)
+        s_year = str(getattr(cand_obj, "year", "")) if getattr(cand_obj, "year", None) else None
+        s_venue = getattr(cand_obj, "venue", None)
+        entry_dict: dict[str, Any] = {
+            "source": src_name,
+            "matched_fields": _build_matched_fields(s_doi, s_title, s_authors, s_year, s_venue),
+            "checked_at": checked_iso,
+            "url": getattr(cand_obj, "url", None),
+            "doi": s_doi,
+            "title": s_title,
+            "authors": s_authors,
+            "year": s_year,
+            "venue": s_venue,
+            "confidence": float(getattr(cand_obj, "confidence", 0.0) or 0.0),
+        }
+        clean_ext = _clean_public_external_ids(getattr(cand_obj, "external_ids", None))
+        if clean_ext:
+            entry_dict["external_ids"] = clean_ext
+        return entry_dict
+
     candidates = getattr(source, "candidates", None) or []
     for c in candidates:
         if not getattr(c, "found", False):
             continue
-        matched_fields: list[str] = []
-        if getattr(c, "doi", None):
-            matched_fields.append("doi")
-        if getattr(c, "title", None):
-            matched_fields.append("title")
-        if getattr(c, "authors", None):
-            matched_fields.append("authors")
-        if getattr(c, "year", None):
-            matched_fields.append("year")
-        if getattr(c, "venue", None):
-            matched_fields.append("venue")
-        raw_authors = getattr(c, "authors", None) or []
-        serialized_authors: list[str] = []
-        for a in raw_authors:
-            if isinstance(a, str):
-                serialized_authors.append(a)
-            elif hasattr(a, "last_name"):
-                parts = [getattr(a, "last_name", ""), getattr(a, "first_name", "")]
-                serialized_authors.append(" ".join(p for p in parts if p))
-            else:
-                serialized_authors.append(str(a))
-        entry: dict[str, Any] = {
-            "source": getattr(c, "source_name", "unknown"),
-            "matched_fields": matched_fields,
-            "checked_at": datetime.now(UTC).isoformat(),
-            "url": getattr(c, "url", None),
-            "doi": getattr(c, "doi", None),
-            "title": getattr(c, "title", None),
-            "authors": serialized_authors,
-            "year": str(getattr(c, "year", "")) if getattr(c, "year", None) else None,
-            "venue": getattr(c, "venue", None),
-            "confidence": float(getattr(c, "confidence", 0.0) or 0.0),
-        }
-        ext_ids = getattr(c, "external_ids", None)
-        if ext_ids:
-            entry["external_ids"] = dict(ext_ids)
+        if len(out) >= _MAX_SERIALIZED_MATCHED_SOURCES:
+            break
+        entry = _cand_to_entry(c)
         out.append(entry)
+        seen_sources.add(entry["source"])
+
+        for corr in _extract_corroborating_records(c):
+            if len(out) >= _MAX_SERIALIZED_MATCHED_SOURCES:
+                break
+            corr_src = str(corr.get("source_name") or corr.get("source") or "").strip()
+            if not corr_src or corr_src in seen_sources:
+                continue
+            c_authors = _format_candidate_authors(corr.get("authors")) or list(entry["authors"])
+            c_title = corr.get("title") or entry["title"]
+            c_raw_year = corr.get("year")
+            c_year = str(c_raw_year) if c_raw_year else entry["year"]
+            c_venue = corr.get("venue") if corr.get("venue") is not None else entry["venue"]
+            c_doi = corr.get("doi") if corr.get("doi") is not None else entry["doi"]
+            c_url = corr.get("url") if corr.get("url") is not None else entry["url"]
+            c_conf_raw = corr.get("confidence", corr.get("similarity", entry["confidence"]))
+            c_entry: dict[str, Any] = {
+                "source": corr_src,
+                "matched_fields": corr.get("matched_fields")
+                or _build_matched_fields(c_doi, c_title, c_authors, c_year, c_venue),
+                "checked_at": checked_iso,
+                "url": c_url,
+                "doi": c_doi,
+                "title": c_title,
+                "authors": c_authors,
+                "year": c_year,
+                "venue": c_venue,
+                "confidence": float(c_conf_raw or 0.0),
+            }
+            c_ext = _clean_public_external_ids(corr.get("external_ids"))
+            if c_ext:
+                c_entry["external_ids"] = c_ext
+            out.append(c_entry)
+            seen_sources.add(corr_src)
+
+        for agreed_src in _extract_agreed_sources(c):
+            if len(out) >= _MAX_SERIALIZED_MATCHED_SOURCES:
+                break
+            if not agreed_src or agreed_src in seen_sources:
+                continue
+            pristine_cand = pristine_by_source.get(agreed_src)
+            if pristine_cand is not None:
+                out.append(_cand_to_entry(pristine_cand, override_source=agreed_src))
+            else:
+                synth_entry = dict(entry)
+                synth_entry["source"] = agreed_src
+                synth_entry["authors"] = list(entry["authors"])
+                synth_entry["matched_fields"] = list(entry["matched_fields"])
+                if "external_ids" in entry:
+                    synth_entry["external_ids"] = dict(entry["external_ids"])
+                out.append(synth_entry)
+            seen_sources.add(agreed_src)
 
     if not out:
         html_meta = getattr(source, "html_meta", None)
@@ -2541,21 +2782,13 @@ def _serialize_matched_sources(source: Any) -> list[dict[str, Any]]:
                 web_src_name = (
                     "wayback_html_meta" if is_wayback_meta else "web_html_meta"
                 )
-                web_matched_fields: list[str] = []
-                if hm_doi:
-                    web_matched_fields.append("doi")
-                if hm_title:
-                    web_matched_fields.append("title")
-                if hm_authors:
-                    web_matched_fields.append("authors")
-                if hm_year:
-                    web_matched_fields.append("year")
-                if hm_venue:
-                    web_matched_fields.append("venue")
+                web_matched_fields = _build_matched_fields(
+                    hm_doi, hm_title, hm_authors, hm_year, hm_venue
+                )
                 out.append({
                     "source": web_src_name,
                     "matched_fields": web_matched_fields,
-                    "checked_at": datetime.now(UTC).isoformat(),
+                    "checked_at": checked_iso,
                     "url": getattr(source, "archive_url", None)
                     or getattr(html_meta, "canonical_url", None),
                     "doi": hm_doi,

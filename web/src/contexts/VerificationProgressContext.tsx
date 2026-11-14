@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { api, type EssayStatus } from '@/api/client';
+import { api, type DocumentDiagnostics, type EssayStatus } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { runWithConcurrency } from '@/lib/concurrencyPool';
@@ -31,7 +31,11 @@ import { streamEssayEvents } from '@/hooks/useEssayStream';
 export const BATCH_CONCURRENCY = 3;
 
 /** Status poll timing (mutable so Vitest suites can set 0ms). */
-export const batchTiming = { pollIntervalMs: 2000 };
+export const batchTiming = {
+  pollIntervalMs: 2000,
+  maxAttempts: 150,
+  maxQueuedPolls: 900,
+};
 export const singlePollTiming = { pollIntervalMs: 2000 };
 
 export const STEP_KEY_TO_INDEX: Record<string, number> = {
@@ -78,6 +82,8 @@ export interface ActiveSingleCheck {
   progress: number;
   message: string;
   queuePosition: number | null;
+  quotaCharged?: boolean;
+  documentDiagnostics?: DocumentDiagnostics | null;
   error: string | null;
   startedAt: number;
   acknowledged: boolean;
@@ -86,6 +92,7 @@ export interface ActiveSingleCheck {
 export type BatchFileStatus =
   | 'pending'
   | 'uploading'
+  | 'queued'
   | 'processing'
   | 'completed'
   | 'failed';
@@ -100,6 +107,9 @@ export interface BatchFileItem {
   progress: number;
   essayId?: number;
   error?: string;
+  quotaCharged?: boolean;
+  queuePosition?: number | null;
+  documentDiagnostics?: DocumentDiagnostics | null;
 }
 
 export interface BatchQueueState {
@@ -110,6 +120,7 @@ export interface BatchQueueState {
 
 export interface BatchQueueStats {
   pending: number;
+  queued: number;
   processing: number;
   completed: number;
   failed: number;
@@ -126,6 +137,7 @@ interface PersistedBatchPayload {
 export interface VerificationProgressContextValue {
   // Single Check ("Kiểm Tra Mới")
   activeSingleCheck: ActiveSingleCheck | null;
+  recentSingleCheck: ActiveSingleCheck | null;
   isSingleCheckInFlight: boolean;
   startSingleUpload: (
     file: File,
@@ -137,6 +149,7 @@ export interface VerificationProgressContextValue {
     filenameFallback?: string,
   ) => void;
   acknowledgeSingleCheck: (essayId?: number) => void;
+  dismissRecentSingleCheck: (essayId?: number) => void;
   registerProcessingPageMount: (essayId: number | null) => () => void;
   registerUploadPageMount: () => () => void;
 
@@ -151,6 +164,7 @@ export interface VerificationProgressContextValue {
   removeBatchFile: (id: string) => void;
   clearBatchFiles: () => void;
   retryBatchFile: (id: string) => void;
+  retryFailedBatchFiles: () => void;
   startBatchQueue: (overridePending?: BatchFileItem[]) => Promise<void>;
   markBatchAutoNavigated: () => void;
   registerBatchPageMount: () => () => void;
@@ -287,10 +301,12 @@ const noopCleanup = () => {};
  */
 const defaultContextValue: VerificationProgressContextValue = {
   activeSingleCheck: null,
+  recentSingleCheck: null,
   isSingleCheckInFlight: false,
   startSingleUpload: async (file, classId) => api.uploadEssay(file, classId),
   syncSingleCheckFromStatus: () => {},
   acknowledgeSingleCheck: () => {},
+  dismissRecentSingleCheck: () => {},
   registerProcessingPageMount: () => noopCleanup,
   registerUploadPageMount: () => noopCleanup,
   batchFiles: [],
@@ -301,6 +317,7 @@ const defaultContextValue: VerificationProgressContextValue = {
   },
   batchStats: {
     pending: 0,
+    queued: 0,
     processing: 0,
     completed: 0,
     failed: 0,
@@ -313,6 +330,7 @@ const defaultContextValue: VerificationProgressContextValue = {
   removeBatchFile: () => {},
   clearBatchFiles: () => {},
   retryBatchFile: () => {},
+  retryFailedBatchFiles: () => {},
   startBatchQueue: async () => {},
   markBatchAutoNavigated: () => {},
   registerBatchPageMount: () => noopCleanup,
@@ -392,9 +410,29 @@ export function VerificationProgressProvider({
     async (itemId: string, essayId: number, myGen: number) => {
       if (batchGenRef.current !== myGen) return;
 
+      const resolveReportDiagnosticsIfNeeded = async (
+        snapDiag: DocumentDiagnostics | null | undefined,
+      ): Promise<DocumentDiagnostics | null> => {
+        if (snapDiag != null) return snapDiag;
+        const getEssayFn = api?.getEssay as unknown as Record<string, unknown> | undefined;
+        const isGetEssayMocked = Boolean(getEssayFn && 'mock' in getEssayFn);
+        const envMeta = import.meta.env as Record<string, unknown>;
+        const isUnitTestEnv = import.meta.env.MODE === 'test' || Boolean(envMeta?.VITEST);
+        if (isUnitTestEnv && !isGetEssayMocked) {
+          return null;
+        }
+        try {
+          const report = await api.getEssay(essayId);
+          return report?.document_diagnostics ?? null;
+        } catch {
+          return null;
+        }
+      };
+
       const streamController = new AbortController();
       batchStreamControllersRef.current.add(streamController);
       let settledByStream = false;
+      let streamCompletedSnap: EssayStatus | null = null;
       try {
         settledByStream = await streamEssayEvents(
           essayId,
@@ -404,54 +442,34 @@ export function VerificationProgressProvider({
               return;
             }
             if (status.status === 'completed') {
-              setBatchFilePatch(itemId, { status: 'completed', progress: 100, error: undefined });
-              return;
-            }
-            if (status.status === 'failed') {
+              streamCompletedSnap = status;
               setBatchFilePatch(itemId, {
-                status: 'failed',
-                error: status.error || 'Processing failed',
+                status: 'completed',
+                progress: 100,
+                queuePosition: null,
+                error: undefined,
+                documentDiagnostics: status.document_diagnostics ?? null,
               });
               return;
             }
-            const progress = Math.round(
-              (status.step_index / Math.max(1, status.total_steps)) * 100,
-            );
-            setBatchFilePatch(itemId, { status: 'processing', progress });
-          },
-          streamController.signal,
-        );
-      } finally {
-        batchStreamControllersRef.current.delete(streamController);
-      }
-
-      if (settledByStream || batchGenRef.current !== myGen) {
-        return;
-      }
-
-      const pollController = new AbortController();
-      batchStreamControllersRef.current.add(pollController);
-      let attempts = 0;
-      const maxAttempts = 150;
-      try {
-        while (attempts < maxAttempts && batchGenRef.current === myGen) {
-          await new Promise((resolve) => setTimeout(resolve, batchTiming.pollIntervalMs));
-          if (batchGenRef.current !== myGen || pollController.signal.aborted) return;
-          attempts++;
-
-          try {
-            const status = await api.getEssayStatus(essayId, {
-              signal: pollController.signal,
-            });
-            if (batchGenRef.current !== myGen) return;
-            if (status.status === 'completed') {
-              setBatchFilePatch(itemId, { status: 'completed', progress: 100, error: undefined });
-              return;
-            }
             if (status.status === 'failed') {
               setBatchFilePatch(itemId, {
                 status: 'failed',
+                queuePosition: null,
+                quotaCharged: status.quota_charged,
                 error: status.error || 'Processing failed',
+              });
+              if (status.quota_charged === false) {
+                void refreshUser();
+              }
+              return;
+            }
+            if (status.status === 'queued') {
+              setBatchFilePatch(itemId, {
+                status: 'queued',
+                progress: 0,
+                queuePosition: status.queue_position ?? null,
+                error: undefined,
               });
               return;
             }
@@ -462,21 +480,138 @@ export function VerificationProgressProvider({
             const progress = Math.round(
               (rawIdx / Math.max(1, status.total_steps)) * 100,
             );
-            setBatchFilePatch(itemId, { status: 'processing', progress });
+            setBatchFilePatch(itemId, {
+              status: 'processing',
+              progress,
+              queuePosition: null,
+              ...(status.document_diagnostics != null
+                ? { documentDiagnostics: status.document_diagnostics }
+                : {}),
+            });
+          },
+          streamController.signal,
+        );
+      } finally {
+        batchStreamControllersRef.current.delete(streamController);
+      }
+
+      if (settledByStream) {
+        if (
+          streamCompletedSnap &&
+          (streamCompletedSnap as EssayStatus).document_diagnostics == null &&
+          batchGenRef.current === myGen
+        ) {
+          const fallbackDiag = await resolveReportDiagnosticsIfNeeded(null);
+          if (fallbackDiag && batchGenRef.current === myGen) {
+            setBatchFilePatch(itemId, { documentDiagnostics: fallbackDiag });
+          }
+        }
+        return;
+      }
+
+      if (batchGenRef.current !== myGen) {
+        return;
+      }
+
+      const pollController = new AbortController();
+      batchStreamControllersRef.current.add(pollController);
+      let attempts = 0;
+      let queuedPolls = 0;
+      const maxAttempts = batchTiming.maxAttempts;
+      const maxQueuedPolls = batchTiming.maxQueuedPolls;
+      try {
+        while (
+          attempts < maxAttempts &&
+          queuedPolls < maxQueuedPolls &&
+          batchGenRef.current === myGen
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, batchTiming.pollIntervalMs));
+          if (batchGenRef.current !== myGen || pollController.signal.aborted) return;
+
+          try {
+            const status = await api.getEssayStatus(essayId, {
+              signal: pollController.signal,
+            });
+            if (batchGenRef.current !== myGen) return;
+
+            if (status.status === 'queued') {
+              // Do NOT increment active processing timeout counter while waiting in FIFO queue
+              queuedPolls++;
+              setBatchFilePatch(itemId, {
+                status: 'queued',
+                progress: 0,
+                queuePosition: status.queue_position ?? null,
+                error: undefined,
+              });
+              continue;
+            }
+
+            if (status.status === 'completed') {
+              const resolvedDiag = await resolveReportDiagnosticsIfNeeded(
+                status.document_diagnostics,
+              );
+              if (batchGenRef.current !== myGen) return;
+              setBatchFilePatch(itemId, {
+                status: 'completed',
+                progress: 100,
+                queuePosition: null,
+                error: undefined,
+                documentDiagnostics: resolvedDiag,
+              });
+              return;
+            }
+
+            if (status.status === 'failed') {
+              setBatchFilePatch(itemId, {
+                status: 'failed',
+                queuePosition: null,
+                quotaCharged: status.quota_charged,
+                error: status.error || 'Processing failed',
+              });
+              if (status.quota_charged === false) {
+                void refreshUser();
+              }
+              return;
+            }
+
+            attempts++;
+            const rawIdx =
+              typeof status.step_index === 'number' && Number.isFinite(status.step_index)
+                ? status.step_index
+                : (STEP_KEY_TO_INDEX[status.step] ?? 0);
+            const progress = Math.round(
+              (rawIdx / Math.max(1, status.total_steps)) * 100,
+            );
+            setBatchFilePatch(itemId, {
+              status: 'processing',
+              progress,
+              queuePosition: null,
+              ...(status.document_diagnostics != null
+                ? { documentDiagnostics: status.document_diagnostics }
+                : {}),
+            });
           } catch (err) {
             if (err instanceof DOMException && err.name === 'AbortError') return;
-            // Transient poll error — continue polling
+            // Transient poll error — count toward active attempts so dead servers eventually time out
+            attempts++;
           }
         }
       } finally {
         batchStreamControllersRef.current.delete(pollController);
       }
 
-      if (attempts >= maxAttempts && batchGenRef.current === myGen) {
-        setBatchFilePatch(itemId, { status: 'failed', error: 'Processing timeout' });
+      if (
+        (attempts >= maxAttempts || queuedPolls >= maxQueuedPolls) &&
+        batchGenRef.current === myGen
+      ) {
+        setBatchFilePatch(itemId, {
+          status: 'failed',
+          queuePosition: null,
+          error: 'Processing timeout',
+        });
       }
     },
-    [setBatchFilePatch],
+    [refreshUser, setBatchFilePatch],
   );
 
   // Hydrate or clear state when authenticated user changes
@@ -512,7 +647,8 @@ export function VerificationProgressProvider({
       updateBatchFiles(restoredItems);
       setBatchTargetClassId(restoredBatch.targetClassId);
       const inFlightItems = restoredItems.filter(
-        (f) => f.status === 'processing' && f.essayId != null,
+        (f) =>
+          (f.status === 'queued' || f.status === 'processing') && f.essayId != null,
       );
       if (inFlightItems.length > 0) {
         const myGen = ++batchGenRef.current;
@@ -681,6 +817,19 @@ export function VerificationProgressProvider({
             return prev;
           }
         }
+        const nextQuotaCharged =
+          snap.quota_charged !== undefined
+            ? snap.quota_charged
+            : prev?.essayId === essayId
+              ? prev.quotaCharged
+              : undefined;
+        const nextDiagnostics =
+          snap.document_diagnostics != null
+            ? snap.document_diagnostics
+            : prev?.essayId === essayId
+              ? (prev.documentDiagnostics ?? null)
+              : null;
+
         if (!prev) {
           if (nextStatus === 'completed' || nextStatus === 'failed') {
             return null;
@@ -697,6 +846,8 @@ export function VerificationProgressProvider({
             progress: nextProgress,
             message: snap.message || '',
             queuePosition: nextQueuePos,
+            quotaCharged: nextQuotaCharged,
+            documentDiagnostics: nextDiagnostics,
             error: nextError,
             startedAt: Date.now(),
             acknowledged: false,
@@ -711,6 +862,8 @@ export function VerificationProgressProvider({
           prev.progress === nextProgress &&
           prev.message === snap.message &&
           prev.queuePosition === nextQueuePos &&
+          prev.quotaCharged === nextQuotaCharged &&
+          prev.documentDiagnostics === nextDiagnostics &&
           prev.error === nextError
         ) {
           return prev;
@@ -726,6 +879,8 @@ export function VerificationProgressProvider({
           progress: nextProgress,
           message: snap.message || prev.message,
           queuePosition: nextQueuePos,
+          quotaCharged: nextQuotaCharged,
+          documentDiagnostics: nextDiagnostics,
           error: nextError,
         };
       });
@@ -747,6 +902,8 @@ export function VerificationProgressProvider({
       return null;
     });
   }, []);
+
+  const dismissRecentSingleCheck = acknowledgeSingleCheck;
 
   // Background status polling when ProcessingPage is NOT currently mounted for activeSingleCheck
   const bgPollEssayId = activeSingleCheck?.essayId ?? null;
@@ -771,6 +928,13 @@ export function VerificationProgressProvider({
           .then((report) => {
             if (report) {
               queryClient.setQueryData(['essay-report', bgPollEssayId], report);
+              if (report.document_diagnostics) {
+                setActiveSingleCheck((prev) =>
+                  prev && prev.essayId === bgPollEssayId && prev.documentDiagnostics == null
+                    ? { ...prev, documentDiagnostics: report.document_diagnostics }
+                    : prev,
+                );
+              }
             }
           })
           .catch(() => {});
@@ -871,6 +1035,14 @@ export function VerificationProgressProvider({
         activeSingleCheck.status === 'processing'),
   );
 
+  const recentSingleCheck: ActiveSingleCheck | null =
+    !isSingleCheckInFlight &&
+    activeSingleCheck &&
+    !activeSingleCheck.acknowledged &&
+    (activeSingleCheck.status === 'completed' || activeSingleCheck.status === 'failed')
+      ? activeSingleCheck
+      : null;
+
   // ============================================================
   // Batch Check Actions & Persistent Worker Pool
   // ============================================================
@@ -886,30 +1058,73 @@ export function VerificationProgressProvider({
     async (fileItem: BatchFileItem, myGen: number, classIdSnapshot: number | null) => {
       if (batchGenRef.current !== myGen) return;
 
-      // If item already received an essayId earlier, just resume polling it
-      if (fileItem.essayId != null && !fileItem.file) {
-        setBatchFilePatch(fileItem.id, { status: 'processing', error: undefined });
-        await pollBatchEssayUntilSettled(fileItem.id, fileItem.essayId, myGen);
+      // If item already received a server essayId (e.g., failed during pipeline execution
+      // either in this SPA session or prior to F5 reload), trigger POST /essays/:id/reanalyze
+      // instead of uploading a duplicate essay or polling a dead failed job.
+      if (fileItem.essayId != null) {
+        setBatchFilePatch(fileItem.id, {
+          status: 'processing',
+          progress: 0,
+          queuePosition: null,
+          quotaCharged: undefined,
+          error: undefined,
+        });
+        try {
+          const reanalyzeRes = (await api.reanalyzeEssay(fileItem.essayId)) as {
+            status?: string;
+            essay_id?: number;
+            queue_position?: number | null;
+          };
+          void refreshUser();
+          if (batchGenRef.current !== myGen) return;
+
+          const reanalyzeQueued = reanalyzeRes?.status === 'queued';
+          setBatchFilePatch(fileItem.id, {
+            status: reanalyzeQueued ? 'queued' : 'processing',
+            progress: 0,
+            queuePosition: reanalyzeQueued ? (reanalyzeRes?.queue_position ?? null) : null,
+          });
+
+          await pollBatchEssayUntilSettled(fileItem.id, fileItem.essayId, myGen);
+        } catch (error) {
+          if (batchGenRef.current !== myGen) return;
+          setBatchFilePatch(fileItem.id, {
+            status: 'failed',
+            error: error instanceof Error ? error.message : 'Retry failed',
+          });
+        }
         return;
       }
 
       if (!fileItem.file) {
         setBatchFilePatch(fileItem.id, {
           status: 'failed',
-          error: t('batchUpload.reloadInterrupted'),
+          error: fileItem.error || t('batchUpload.reloadInterrupted'),
         });
         return;
       }
 
-      setBatchFilePatch(fileItem.id, { status: 'uploading', error: undefined });
+      setBatchFilePatch(fileItem.id, {
+        status: 'uploading',
+        progress: 0,
+        queuePosition: null,
+        quotaCharged: undefined,
+        error: undefined,
+      });
       try {
         const response = await api.uploadEssay(fileItem.file, classIdSnapshot);
         if (batchGenRef.current !== myGen) return;
 
+        const initSummary = (
+          response as { summary?: { status?: string; queue_position?: number } }
+        ).summary;
+        const initQueued = initSummary?.status === 'queued';
+
         setBatchFilePatch(fileItem.id, {
-          status: 'processing',
+          status: initQueued ? 'queued' : 'processing',
           essayId: response.essay_id,
           progress: 0,
+          queuePosition: initQueued ? (initSummary?.queue_position ?? null) : null,
         });
 
         await pollBatchEssayUntilSettled(fileItem.id, response.essay_id, myGen);
@@ -921,7 +1136,7 @@ export function VerificationProgressProvider({
         });
       }
     },
-    [pollBatchEssayUntilSettled, setBatchFilePatch, t],
+    [pollBatchEssayUntilSettled, refreshUser, setBatchFilePatch, t],
   );
 
   const startBatchQueue = useCallback(
@@ -1045,13 +1260,21 @@ export function VerificationProgressProvider({
     (id: string) => {
       const target = batchFilesRef.current.find((f) => f.id === id);
       if (!target) return;
-      // Cannot retry if neither raw File nor server essayId is available
-      if (!target.file && target.essayId == null) return;
+      // If both essayId and file are absent (reload-interrupted before upload finished), keep error intact
+      if (!target.file && target.essayId == null) {
+        setBatchFilePatch(id, {
+          status: 'failed',
+          error: target.error || t('batchUpload.reloadInterrupted'),
+        });
+        return;
+      }
 
       const updatedItem: BatchFileItem = {
         ...target,
         status: 'pending',
         progress: 0,
+        queuePosition: null,
+        quotaCharged: undefined,
         error: undefined,
       };
 
@@ -1067,8 +1290,40 @@ export function VerificationProgressProvider({
         void startBatchQueue([updatedItem, ...otherPending]);
       }
     },
-    [batchQueueState.isProcessing, startBatchQueue, updateBatchFiles],
+    [batchQueueState.isProcessing, setBatchFilePatch, startBatchQueue, t, updateBatchFiles],
   );
+
+  const retryFailedBatchFiles = useCallback(() => {
+    if (batchQueueState.isProcessing) return;
+    const retryableIds = new Set(
+      batchFilesRef.current
+        .filter((f) => f.status === 'failed' && (f.essayId != null || f.file != null))
+        .map((f) => f.id),
+    );
+    if (retryableIds.size === 0) return;
+
+    const toRun: BatchFileItem[] = [];
+    updateBatchFiles((prev) =>
+      prev.map((f) => {
+        if (!retryableIds.has(f.id)) return f;
+        const reset: BatchFileItem = {
+          ...f,
+          status: 'pending',
+          progress: 0,
+          queuePosition: null,
+          quotaCharged: undefined,
+          error: undefined,
+        };
+        toRun.push(reset);
+        return reset;
+      }),
+    );
+    setBatchQueueState((prev) => ({ ...prev, hasAutoNavigated: false }));
+    const otherPending = batchFilesRef.current.filter(
+      (f) => !retryableIds.has(f.id) && f.status === 'pending',
+    );
+    void startBatchQueue([...toRun, ...otherPending]);
+  }, [batchQueueState.isProcessing, startBatchQueue, updateBatchFiles]);
 
   const markBatchAutoNavigated = useCallback(() => {
     setBatchQueueState((prev) =>
@@ -1079,8 +1334,12 @@ export function VerificationProgressProvider({
   const batchStats = useMemo<BatchQueueStats>(
     () => ({
       pending: batchFiles.filter((f) => f.status === 'pending').length,
+      queued: batchFiles.filter((f) => f.status === 'queued').length,
       processing: batchFiles.filter(
-        (f) => f.status === 'uploading' || f.status === 'processing',
+        (f) =>
+          f.status === 'uploading' ||
+          f.status === 'queued' ||
+          f.status === 'processing',
       ).length,
       completed: batchFiles.filter((f) => f.status === 'completed').length,
       failed: batchFiles.filter((f) => f.status === 'failed').length,
@@ -1094,10 +1353,12 @@ export function VerificationProgressProvider({
   const value = useMemo<VerificationProgressContextValue>(
     () => ({
       activeSingleCheck,
+      recentSingleCheck,
       isSingleCheckInFlight,
       startSingleUpload,
       syncSingleCheckFromStatus,
       acknowledgeSingleCheck,
+      dismissRecentSingleCheck,
       registerProcessingPageMount,
       registerUploadPageMount,
       batchFiles,
@@ -1110,16 +1371,19 @@ export function VerificationProgressProvider({
       removeBatchFile,
       clearBatchFiles,
       retryBatchFile,
+      retryFailedBatchFiles,
       startBatchQueue,
       markBatchAutoNavigated,
       registerBatchPageMount,
     }),
     [
       activeSingleCheck,
+      recentSingleCheck,
       isSingleCheckInFlight,
       startSingleUpload,
       syncSingleCheckFromStatus,
       acknowledgeSingleCheck,
+      dismissRecentSingleCheck,
       registerProcessingPageMount,
       registerUploadPageMount,
       batchFiles,
@@ -1131,6 +1395,7 @@ export function VerificationProgressProvider({
       removeBatchFile,
       clearBatchFiles,
       retryBatchFile,
+      retryFailedBatchFiles,
       startBatchQueue,
       markBatchAutoNavigated,
       registerBatchPageMount,

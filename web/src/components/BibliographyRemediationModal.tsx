@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   XCircle,
+  Globe,
 } from 'lucide-react';
 import { isDocxFilename } from '@/lib/fileKind';
 import { useModalA11y } from '@/hooks/useModalA11y';
@@ -102,11 +103,12 @@ export function BibliographyRemediationModal({
 
   const handleDownloadHealedDocx = async () => {
     if (!isDocxSource || healedBusy) return;
-    const targetStyle = selectedStyle === 'ieee' ? 'ieee' : 'apa';
+    const selectedDocxStyle =
+      selectedStyle === 'ieee' ? 'ieee' : selectedStyle === 'tdtu' ? 'tdtu' : 'apa';
     setHealedBusy(true);
     setHealedError(null);
     try {
-      await api.downloadAutoHealedDocx(essayId, targetStyle, filename);
+      await api.downloadAutoHealedDocx(essayId, selectedDocxStyle, filename);
     } catch (err) {
       const detail = err instanceof Error ? err.message : '';
       setHealedError(
@@ -143,6 +145,8 @@ export function BibliographyRemediationModal({
         (e) =>
           e.is_error ||
           e.is_hallucination ||
+          e.remediation_status === 'hallucination' ||
+          e.remediation_status === 'manual_review' ||
           e.label === 'suspected_hallucination' ||
           e.label === 'metadata_error'
       ).length
@@ -154,6 +158,8 @@ export function BibliographyRemediationModal({
           (e) =>
             e.is_error ||
             e.is_hallucination ||
+            e.remediation_status === 'hallucination' ||
+            e.remediation_status === 'manual_review' ||
             e.label === 'suspected_hallucination' ||
             e.label === 'metadata_error'
         )
@@ -402,28 +408,65 @@ export function BibliographyRemediationModal({
             </div>
           ) : (
             visibleEntries.map((entry) => {
+              const rawIdx = String(
+                entry.display_index || entry.composite_label || entry.index
+              ).trim();
+              const formattedIndex =
+                rawIdx.startsWith('[') && rawIdx.endsWith(']')
+                  ? rawIdx
+                  : `[${rawIdx}]`;
+
               const isHallucination =
-                Boolean(entry.is_hallucination) || entry.label === 'suspected_hallucination';
-              const isMetadataError = entry.label === 'metadata_error';
-              const isFlaggedError = isHallucination || isMetadataError || Boolean(entry.is_error);
+                entry.remediation_status === 'hallucination' ||
+                Boolean(entry.is_hallucination) ||
+                entry.label === 'suspected_hallucination';
+              const isIncompleteMeta = Boolean(
+                entry.triggered_rules?.includes('R-INCOMPLETE-METADATA')
+              );
+              const isManualReview =
+                !isHallucination &&
+                (entry.remediation_status === 'manual_review' ||
+                  isIncompleteMeta ||
+                  (entry.label === 'metadata_error' &&
+                    !entry.was_modified &&
+                    entry.remediation_status !== 'repaired'));
+              const isResource =
+                !isHallucination &&
+                !isManualReview &&
+                (entry.remediation_status === 'resource' || entry.label === 'resource');
+              const isMetadataError =
+                !isHallucination &&
+                !isManualReview &&
+                !isResource &&
+                entry.label === 'metadata_error';
+              const isFlaggedError =
+                isHallucination ||
+                isMetadataError ||
+                (!isManualReview && !isResource && Boolean(entry.is_error));
 
               return (
                 <div
                   key={entry.verdict_id}
                   data-testid={`remediation-entry-card-${entry.index}`}
                   data-verdict-label={entry.label}
+                  data-remediation-status={entry.remediation_status || ''}
                   className="rounded-xl p-4 shadow-2xs space-y-3 border transition-all bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span
+                        data-testid={`remediation-entry-index-${entry.index}`}
                         className={`px-2 py-0.5 rounded font-mono text-xs font-bold ${
                           isFlaggedError
                             ? 'text-red-600 dark:text-red-400 bg-slate-100 dark:bg-slate-800'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                            : isManualReview
+                              ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/70 border border-amber-200 dark:border-amber-800'
+                              : isResource
+                                ? 'text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/70 border border-sky-200 dark:border-sky-800'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                         }`}
                       >
-                        #{entry.index}
+                        {formattedIndex}
                       </span>
 
                       {isHallucination ? (
@@ -432,6 +475,39 @@ export function BibliographyRemediationModal({
                           {lang === 'vi'
                             ? 'NGUỒN BỊA ĐẶT / ẢO GIÁC AI — CẦN LOẠI BỎ'
                             : 'SUSPECTED HALLUCINATION — FABRICATED SOURCE'}
+                        </span>
+                      ) : isManualReview ? (
+                        <>
+                          <span
+                            data-testid={`remediation-status-manual-${entry.index}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                          >
+                            <AlertTriangle className="h-3 w-3" />
+                            {isIncompleteMeta
+                              ? lang === 'vi'
+                                ? 'Cần bổ sung thủ công'
+                                : 'Manual Completion Needed'
+                              : lang === 'vi'
+                                ? '⚠ Cần kiểm tra thủ công'
+                                : '⚠ Manual Review Required'}
+                          </span>
+                          {isIncompleteMeta && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                              {lang === 'vi'
+                                ? 'Thiếu quy cách trích dẫn (R-INCOMPLETE-METADATA)'
+                                : 'Incomplete Reference (R-INCOMPLETE-METADATA)'}
+                            </span>
+                          )}
+                        </>
+                      ) : isResource ? (
+                        <span
+                          data-testid={`remediation-status-resource-${entry.index}`}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-sky-50 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+                        >
+                          <Globe className="h-3 w-3" />
+                          {lang === 'vi'
+                            ? 'Nguồn Web & Pháp quy'
+                            : 'Web / Statutory Resource'}
                         </span>
                       ) : isMetadataError ? (
                         <>
@@ -449,11 +525,11 @@ export function BibliographyRemediationModal({
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                               <AlertTriangle className="h-3 w-3" />
-                              {lang === 'vi' ? '⚠ Cần bổ sung thủ công' : '⚠ Manual Review Required'}
+                              {lang === 'vi' ? '⚠ Cần bổ sung thủ công' : '⚠ Manual Completion Needed'}
                             </span>
                           )}
                         </>
-                      ) : entry.was_modified ? (
+                      ) : entry.was_modified || entry.remediation_status === 'repaired' ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300">
                           <AlertTriangle className="h-3 w-3" />
                           {lang === 'vi' ? 'Đã bổ sung Metadata thiếu' : 'Metadata Enriched'}
@@ -528,26 +604,38 @@ export function BibliographyRemediationModal({
                   )}
 
                   <div className="grid grid-cols-1 lg:grid-cols-11 gap-3 items-stretch">
-                    {/* Original Raw Text (Text colored red if Metadata Error or Suspected Hallucination — no red box frame) */}
+                    {/* Original Raw Text */}
                     <div className="lg:col-span-5 rounded-lg p-3 bg-slate-50 dark:bg-slate-950/70">
                       <div
                         className={`text-[10px] font-mono uppercase tracking-wider mb-1 font-semibold ${
                           isFlaggedError
                             ? 'text-red-600 dark:text-red-400'
-                            : 'text-slate-400'
+                            : isManualReview
+                              ? 'text-amber-700 dark:text-amber-400'
+                              : isResource
+                                ? 'text-sky-700 dark:text-sky-400'
+                                : 'text-slate-400'
                         }`}
                       >
                         {isHallucination
                           ? lang === 'vi'
                             ? '✕ Bản gốc bị phát hiện Bịa đặt / Không tồn tại (Before)'
                             : '✕ Fabricated Source in Manuscript (Before)'
-                          : isMetadataError
+                          : isManualReview
                             ? lang === 'vi'
-                              ? '✕ Bản gốc bị lỗi Metadata trong bài nộp (Before)'
-                              : '✕ Erroneous Source in Manuscript (Before)'
-                            : lang === 'vi'
-                              ? 'Bản gốc trong bài nộp (Before)'
-                              : 'Original in Manuscript (Before)'}
+                              ? '⚠ Mục tham khảo thiếu thông tin trong bài nộp (Before)'
+                              : '⚠ Incomplete Reference in Manuscript (Before)'
+                            : isResource
+                              ? lang === 'vi'
+                                ? 'Nguồn Web & Pháp quy trong bài nộp (Before)'
+                                : 'Web / Statutory Source in Manuscript (Before)'
+                              : isMetadataError
+                                ? lang === 'vi'
+                                  ? '✕ Bản gốc bị lỗi Metadata trong bài nộp (Before)'
+                                  : '✕ Erroneous Source in Manuscript (Before)'
+                                : lang === 'vi'
+                                  ? 'Bản gốc trong bài nộp (Before)'
+                                  : 'Original in Manuscript (Before)'}
                       </div>
                       <p
                         className={`text-xs font-serif break-words leading-relaxed ${
@@ -562,7 +650,13 @@ export function BibliographyRemediationModal({
 
                     <div
                       className={`hidden lg:flex lg:col-span-1 items-center justify-center ${
-                        isHallucination ? 'text-red-500' : 'text-indigo-500'
+                        isHallucination
+                          ? 'text-red-500'
+                          : isManualReview
+                            ? 'text-amber-500'
+                            : isResource
+                              ? 'text-sky-500'
+                              : 'text-indigo-500'
                       }`}
                     >
                       <ArrowRight className="h-4 w-4" />
@@ -574,11 +668,15 @@ export function BibliographyRemediationModal({
                         className={`flex items-center justify-between text-[10px] font-mono uppercase tracking-wider mb-1 font-semibold ${
                           isHallucination
                             ? 'text-red-600 dark:text-red-400'
-                            : isMetadataError
-                              ? entry.was_modified
-                                ? 'text-emerald-700 dark:text-emerald-400'
-                                : 'text-amber-700 dark:text-amber-400'
-                              : 'text-indigo-600 dark:text-indigo-400'
+                            : isManualReview
+                              ? 'text-amber-700 dark:text-amber-400'
+                              : isResource
+                                ? 'text-sky-700 dark:text-sky-400'
+                                : isMetadataError
+                                  ? entry.was_modified
+                                    ? 'text-emerald-700 dark:text-emerald-400'
+                                    : 'text-amber-700 dark:text-amber-400'
+                                  : 'text-indigo-600 dark:text-indigo-400'
                         }`}
                       >
                         <span>
@@ -586,17 +684,25 @@ export function BibliographyRemediationModal({
                             ? lang === 'vi'
                               ? `✕ CẢNH BÁO ĐỎ — Khuyến nghị xóa bỏ (${selectedStyle.toUpperCase()})`
                               : `✕ RED ALERT — Remove Fabricated Entry (${selectedStyle.toUpperCase()})`
-                            : isMetadataError
-                              ? entry.was_modified
+                            : isManualReview
+                              ? lang === 'vi'
+                                ? `⚠ Cần bổ sung thủ công (${selectedStyle.toUpperCase()})`
+                                : `⚠ Manual Completion Needed (${selectedStyle.toUpperCase()})`
+                              : isResource
                                 ? lang === 'vi'
-                                  ? `✓ Bản đã sửa lỗi & Chuẩn hóa (${selectedStyle.toUpperCase()})`
-                                  : `✓ Auto-Repaired & Standardized (${selectedStyle.toUpperCase()})`
-                                : lang === 'vi'
-                                  ? `⚠ Cần bổ sung thủ công (${selectedStyle.toUpperCase()})`
-                                  : `⚠ Manual Review Required (${selectedStyle.toUpperCase()})`
-                              : lang === 'vi'
-                                ? `Bản chuẩn hóa (${selectedStyle.toUpperCase()})`
-                                : `Canonical Output (${selectedStyle.toUpperCase()})`}
+                                  ? `↗ Nguồn Web & Pháp quy (${selectedStyle.toUpperCase()})`
+                                  : `↗ Web / Statutory Resource (${selectedStyle.toUpperCase()})`
+                                : isMetadataError
+                                  ? entry.was_modified
+                                    ? lang === 'vi'
+                                      ? `✓ Bản đã sửa lỗi & Chuẩn hóa (${selectedStyle.toUpperCase()})`
+                                      : `✓ Auto-Repaired & Standardized (${selectedStyle.toUpperCase()})`
+                                    : lang === 'vi'
+                                      ? `⚠ Cần bổ sung thủ công (${selectedStyle.toUpperCase()})`
+                                      : `⚠ Manual Completion Needed (${selectedStyle.toUpperCase()})`
+                                  : lang === 'vi'
+                                    ? `Bản chuẩn hóa (${selectedStyle.toUpperCase()})`
+                                    : `Canonical Output (${selectedStyle.toUpperCase()})`}
                         </span>
                         <BookOpen className="h-3 w-3" />
                       </div>

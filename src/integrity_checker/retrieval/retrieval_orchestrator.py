@@ -131,6 +131,10 @@ class _CrossLoopSingleflight:
         with self._lock:
             return len(self._inflight)
 
+    def reset_stats(self) -> None:
+        with self._lock:
+            self.coalesced_hits = 0
+
     async def run(
         self,
         key: str,
@@ -217,6 +221,7 @@ class _TTLNegativeCache:
     def clear(self) -> None:
         with self._lock:
             self._store.clear()
+            self.hits = 0
 
     def get(self, key: str) -> SourceResult | None:
         if self._ttl <= 0 or self._max_entries <= 0:
@@ -1270,6 +1275,9 @@ class RetrievalOrchestrator:
             )
         self._wave0_memory_lock = threading.Lock()
         self._wave0_memory_cache: OrderedDict[str, tuple[float, SourceResult]] = OrderedDict()
+        self._session_stats_lock = threading.Lock()
+        self._session_cache_hits: int = 0
+        self._session_cache_misses: int = 0
 
         # Local database
         self._local_db: LocalDatabase | None = None
@@ -2430,7 +2438,28 @@ class RetrievalOrchestrator:
                 for s_name in getattr(c, "_agreed_sources", None) or []:
                     if s_name:
                         allowed_srcs.add(str(s_name))
-            succ_pool = [s for s in succ_pool if s in allowed_srcs] or list(allowed_srcs)
+                ext_agreed = (c.external_ids or {}).get("_agreed_sources")
+                if isinstance(ext_agreed, list):
+                    for s_name in ext_agreed:
+                        if s_name:
+                            allowed_srcs.add(str(s_name))
+                ext_corr = (c.external_ids or {}).get("_corroborating_records")
+                if isinstance(ext_corr, list):
+                    for corr_item in ext_corr:
+                        if isinstance(corr_item, dict) and corr_item.get("source_name"):
+                            allowed_srcs.add(str(corr_item["source_name"]))
+                raw_data_dict = getattr(c, "raw_data", None)
+                if isinstance(raw_data_dict, dict):
+                    for s_name in raw_data_dict.get("_agreed_sources") or []:
+                        if s_name:
+                            allowed_srcs.add(str(s_name))
+                    for corr_item in raw_data_dict.get("_corroborating_records") or []:
+                        if isinstance(corr_item, dict) and corr_item.get("source_name"):
+                            allowed_srcs.add(str(corr_item["source_name"]))
+            succ_pool = [s for s in succ_pool if s in allowed_srcs]
+            for s_name in allowed_srcs:
+                if s_name not in succ_pool:
+                    succ_pool.append(s_name)
 
         deduped = self._dedupe_candidates(cand_pool, citation=citation)
         quality_cands, quality_succeeded = self._filter_quality_candidates(
@@ -2634,11 +2663,47 @@ class RetrievalOrchestrator:
                 ttl,
             )
 
+    def _record_session_cache_hit(self, count: int = 1) -> None:
+        if count <= 0:
+            return
+        with self._session_stats_lock:
+            self._session_cache_hits += int(count)
+
+    def _record_session_cache_miss(self, count: int = 1) -> None:
+        if count <= 0:
+            return
+        with self._session_stats_lock:
+            self._session_cache_misses += int(count)
+
+    def get_runtime_cache_stats(self) -> dict[str, int | float]:
+        """Return live orchestrator runtime cache and singleflight metrics."""
+        with self._session_stats_lock:
+            hits = int(self._session_cache_hits)
+            misses = int(self._session_cache_misses)
+        with self._wave0_memory_lock:
+            wave0_entries = len(self._wave0_memory_cache)
+        negative_entries = len(self._negative_cache)
+        coalesced = int(self._singleflight.coalesced_hits)
+        total = hits + misses
+        hit_rate = round((hits / total) * 100.0, 2) if total > 0 else 0.0
+        return {
+            "session_hits": hits,
+            "session_misses": misses,
+            "session_hit_rate_percent": hit_rate,
+            "wave0_entries": wave0_entries,
+            "negative_cache_entries": negative_entries,
+            "singleflight_coalesced": coalesced,
+        }
+
     def clear_runtime_caches(self) -> None:
-        """Purge in-memory Wave-0 positive hits, verified clean-miss negative cache, and persistent cache stats."""
+        """Purge in-memory Wave-0 positive hits, verified clean-miss negative cache, and session/persistent cache stats."""
         with self._wave0_memory_lock:
             self._wave0_memory_cache.clear()
         self._negative_cache.clear()
+        self._singleflight.reset_stats()
+        with self._session_stats_lock:
+            self._session_cache_hits = 0
+            self._session_cache_misses = 0
         pc = self._persistent_cache
         if pc is not None:
             clear_fn = getattr(pc, "clear_memory_stats", None) or getattr(pc, "reset_stats", None)
@@ -2787,6 +2852,7 @@ class RetrievalOrchestrator:
                 if mat is not None:
                     if cit.url and self.enable_link_validation and mat.url_status is None:
                         url_validation_pairs.append((cit, mat))
+                    self._record_session_cache_hit(1)
                     resolved_by_id[id(cit)] = mat
                 else:
                     need_second_pass.append(cit)
@@ -2815,6 +2881,7 @@ class RetrievalOrchestrator:
                         if mat is not None:
                             if cit.url and self.enable_link_validation and mat.url_status is None:
                                 url_validation_pairs.append((cit, mat))
+                            self._record_session_cache_hit(1)
                             resolved_by_id[id(cit)] = mat
                             continue
                     still_pending.append(cit)
@@ -2841,6 +2908,7 @@ class RetrievalOrchestrator:
                 if matched_mem is not None:
                     if cit.url and self.enable_link_validation and matched_mem.url_status is None:
                         url_validation_pairs.append((cit, matched_mem))
+                    self._record_session_cache_hit(1)
                     resolved_by_id[id(cit)] = matched_mem
                 else:
                     after_mem.append(cit)
@@ -3061,9 +3129,12 @@ class RetrievalOrchestrator:
                 sources_failed=failed,
                 is_retracted=is_retracted,
             )
+            result._pristine_candidates = [copy.deepcopy(c) for c in pristine_cands]  # type: ignore[attr-defined]
+            result._pristine_succeeded = list(pristine_succeeded)  # type: ignore[attr-defined]
             if result.consensus_count() < 2:
                 continue
 
+            self._record_session_cache_miss(1)
             if cit.url and self.enable_link_validation:
                 url_validation_pairs.append((cit, result))
 
@@ -3127,6 +3198,10 @@ class RetrievalOrchestrator:
                     sources_failed=pure_failed,
                     is_retracted=pure_retracted,
                 )
+                pure_pristine_result._pristine_candidates = [  # type: ignore[attr-defined]
+                    copy.deepcopy(c) for c in confirming_pristine
+                ]
+                pure_pristine_result._pristine_succeeded = list(pure_srcs)  # type: ignore[attr-defined]
                 _store_wave0_entry(primary_key, pure_pristine_result)
 
             if secondary_key is not None or pure_consensus < 2:
@@ -3144,6 +3219,10 @@ class RetrievalOrchestrator:
                     sources_failed=dict(failed),
                     is_retracted=pristine_retracted,
                 )
+                pristine_result._pristine_candidates = [  # type: ignore[attr-defined]
+                    copy.deepcopy(c) for c in pristine_cands
+                ]
+                pristine_result._pristine_succeeded = list(pristine_succeeded)  # type: ignore[attr-defined]
                 if meta_key != primary_key:
                     _store_wave0_entry(meta_key, pristine_result)
 
@@ -3167,9 +3246,11 @@ class RetrievalOrchestrator:
 
         cached_hit = await self._resolve_from_verification_caches(citation)
         if cached_hit is not None:
+            self._record_session_cache_hit(1)
             return cached_hit
 
         if not self._singleflight_enabled:
+            self._record_session_cache_miss(1)
             uncached_res = await self._retrieve_uncached(citation, allow_serpapi=allow_serpapi)
             self._persist_verification_result(citation, uncached_res)
             return uncached_res
@@ -3190,6 +3271,7 @@ class RetrievalOrchestrator:
         if not citation.url:
             neg_hit = self._negative_cache.get(sf_key)
             if neg_hit is not None:
+                self._record_session_cache_hit(1)
                 neg_hit.citation_raw = citation.raw_text
                 logger.debug(
                     f"Negative Cache HIT (clean miss): '{(citation.title or citation.raw_text)[:50]}'"
@@ -3201,11 +3283,13 @@ class RetrievalOrchestrator:
             lambda: self._retrieve_uncached(citation, allow_serpapi=allow_serpapi),
         )
         if was_coalesced:
+            self._record_session_cache_hit(1)
             result.citation_raw = citation.raw_text
             logger.debug(
                 f"Singleflight COALESCED in-flight lookup for: '{(citation.title or citation.raw_text)[:50]}'"
             )
         else:
+            self._record_session_cache_miss(1)
             if self._is_cacheable_clean_miss(citation, result):
                 self._negative_cache.set(sf_key, result)
             self._persist_verification_result(citation, result)
@@ -4810,6 +4894,11 @@ class RetrievalOrchestrator:
                 arxiv_id = cand.external_ids.get("arxiv") or cand.external_ids.get("ArXiv")
 
             # Create paper
+            clean_paper_ext = {
+                str(k): v
+                for k, v in (cand.external_ids or {}).items()
+                if not str(k).startswith("_")
+            }
             paper = Paper(
                 doi=cand.doi,
                 arxiv_id=arxiv_id,
@@ -4823,7 +4912,7 @@ class RetrievalOrchestrator:
                 venue=cand.venue,
                 abstract=cand.abstract,
                 categories=[],
-                external_ids=cand.external_ids or {},
+                external_ids=clean_paper_ext,
                 source=source,
             )
 
@@ -4846,6 +4935,25 @@ class RetrievalOrchestrator:
         title_to_key: dict[str, str] = {}
         arxiv_to_key: dict[str, str] = {}
         sources_by_key: dict[str, list[str]] = {}
+        corroborating_by_key: dict[str, dict[str, dict[str, object]]] = {}
+
+        def _snapshot_candidate(cand_obj: SourceCandidate) -> dict[str, object]:
+            clean_ext = {
+                str(k): v
+                for k, v in (cand_obj.external_ids or {}).items()
+                if not str(k).startswith("_")
+            }
+            return {
+                "source_name": cand_obj.source_name or "unknown",
+                "title": cand_obj.title,
+                "authors": list(cand_obj.authors or []),
+                "year": cand_obj.year,
+                "venue": cand_obj.venue,
+                "doi": cand_obj.doi,
+                "url": cand_obj.url,
+                "confidence": float(cand_obj.confidence or 0.0),
+                "external_ids": clean_ext,
+            }
 
         cit_year_int: int | None = None
         if citation and citation.year and str(citation.year)[:4].isdigit():
@@ -4899,11 +5007,49 @@ class RetrievalOrchestrator:
                 arxiv_to_key[c_ax] = canonical_key
 
             src_list = sources_by_key.setdefault(canonical_key, [])
+            corr_map = corroborating_by_key.setdefault(canonical_key, {})
             if c.source_name and c.source_name not in src_list:
                 src_list.append(c.source_name)
             for prior_src in getattr(c, "_agreed_sources", None) or []:
                 if prior_src and str(prior_src) not in src_list:
                     src_list.append(str(prior_src))
+            ext_prior_agreed = (c.external_ids or {}).get("_agreed_sources")
+            if isinstance(ext_prior_agreed, list):
+                for prior_src in ext_prior_agreed:
+                    if prior_src and str(prior_src) not in src_list:
+                        src_list.append(str(prior_src))
+            raw_data_dict = getattr(c, "raw_data", None)
+            if isinstance(raw_data_dict, dict):
+                for prior_src in raw_data_dict.get("_agreed_sources") or []:
+                    if prior_src and str(prior_src) not in src_list:
+                        src_list.append(str(prior_src))
+
+            for prior_corr_source in (
+                getattr(c, "_corroborating_records", None),
+                raw_data_dict.get("_corroborating_records") if isinstance(raw_data_dict, dict) else None,
+                (c.external_ids or {}).get("_corroborating_records"),
+            ):
+                if isinstance(prior_corr_source, list):
+                    for item in prior_corr_source:
+                        if not isinstance(item, dict):
+                            continue
+                        s_name = str(item.get("source_name") or item.get("source") or "").strip()
+                        if not s_name:
+                            continue
+                        if s_name not in src_list:
+                            src_list.append(s_name)
+                        if s_name not in corr_map:
+                            corr_map[s_name] = dict(item)
+
+            if c.source_name:
+                existing_snap = corr_map.get(c.source_name)
+                prev_conf = (
+                    float(existing_snap.get("confidence", 0.0) or 0.0)
+                    if isinstance(existing_snap, dict)
+                    else -1.0
+                )
+                if existing_snap is None or float(c.confidence or 0.0) >= prev_conf:
+                    corr_map[c.source_name] = _snapshot_candidate(c)
 
             if canonical_key in bucket:
                 existing = bucket[canonical_key]
@@ -4983,8 +5129,18 @@ class RetrievalOrchestrator:
                 if not _year_matches(primary.year) and _year_matches(secondary.year):
                     primary.year = secondary.year
                 if secondary.external_ids:
-                    merged_ext = dict(secondary.external_ids)
-                    merged_ext.update(primary.external_ids or {})
+                    merged_ext = {
+                        str(k): v
+                        for k, v in secondary.external_ids.items()
+                        if not str(k).startswith("_")
+                    }
+                    merged_ext.update(
+                        {
+                            str(k): v
+                            for k, v in (primary.external_ids or {}).items()
+                            if not str(k).startswith("_")
+                        }
+                    )
                     if (
                         str((secondary.external_ids or {}).get("is_retracted", "")).lower() == "true"
                         or str((primary.external_ids or {}).get("is_retracted", "")).lower() == "true"
@@ -4997,8 +5153,32 @@ class RetrievalOrchestrator:
 
         for key, cand in bucket.items():
             if cand.found and key in sources_by_key:
-                cand._agreed_sources = list(sources_by_key[key])  # type: ignore[attr-defined]
-                cand._consensus_count = max(1, len(sources_by_key[key]))  # type: ignore[attr-defined]
+                agreed_list = list(sources_by_key[key])
+                corr_map = corroborating_by_key.get(key, {})
+                corr_records: list[dict[str, object]] = []
+                for s_name in agreed_list:
+                    snap = corr_map.get(s_name)
+                    if snap is not None:
+                        corr_records.append(dict(snap))
+                for s_name, snap in corr_map.items():
+                    if s_name not in agreed_list:
+                        corr_records.append(dict(snap))
+                cand._agreed_sources = agreed_list  # type: ignore[attr-defined]
+                cand._consensus_count = max(1, len(agreed_list))  # type: ignore[attr-defined]
+                cand._corroborating_records = corr_records  # type: ignore[attr-defined]
+                if len(agreed_list) >= 2 and corr_records:
+                    ext_copy = {
+                        str(k): v
+                        for k, v in (cand.external_ids or {}).items()
+                        if not str(k).startswith("_")
+                    }
+                    ext_copy["_corroborating_records"] = corr_records  # type: ignore[assignment]
+                    ext_copy["_agreed_sources"] = agreed_list  # type: ignore[assignment]
+                    cand.external_ids = ext_copy
+                cand_raw_data = getattr(cand, "raw_data", None)
+                if isinstance(cand_raw_data, dict):
+                    cand_raw_data["_agreed_sources"] = list(agreed_list)
+                    cand_raw_data["_corroborating_records"] = list(corr_records)
 
         return list(bucket.values())
 

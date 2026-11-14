@@ -45,6 +45,7 @@ class _SourceCircuit:
     ema_latency_ms: float = 0.0
     has_latency_sample: bool = False
     open_until: float = 0.0
+    opened_at: float | None = None
     probe_in_flight: bool = False
     probe_started_at: float = 0.0
     last_error: str | None = None
@@ -156,6 +157,7 @@ class CircuitBreakerRegistry:
             entry.probe_in_flight = False
             entry.probe_started_at = 0.0
             entry.open_until = 0.0
+            entry.opened_at = None
             if entry.state != CircuitState.CLOSED:
                 entry.state = CircuitState.CLOSED
 
@@ -208,6 +210,7 @@ class CircuitBreakerRegistry:
                 or entry.consecutive_failures >= self._failure_threshold
             ):
                 entry.state = CircuitState.OPEN
+                entry.opened_at = now
                 entry.open_until = now + self._recovery_timeout_seconds
                 entry.probe_in_flight = False
                 entry.probe_started_at = 0.0
@@ -256,16 +259,40 @@ class CircuitBreakerRegistry:
                     "has_latency_sample": bool(entry.has_latency_sample),
                     "open_remaining_seconds": open_remaining,
                     "cooldown_remaining_s": open_remaining,
+                    "opened_at": entry.opened_at,
                     "last_error": entry.last_error,
                     "last_status_code": entry.last_status_code,
                     "last_failure_at": entry.last_failure_at,
                 }
             return out
 
-    def reset(self) -> None:
-        """Clear all recorded per-source circuit state and telemetry."""
+    @staticmethod
+    def _reset_circuit_entry(entry: _SourceCircuit) -> None:
+        entry.state = CircuitState.CLOSED
+        entry.consecutive_failures = 0
+        entry.open_until = 0.0
+        entry.opened_at = None
+        entry.probe_in_flight = False
+        entry.probe_started_at = 0.0
+        entry.last_error = None
+        entry.last_status_code = None
+        entry.last_failure_at = None
+
+    def reset(self, source: str | None = None) -> list[str]:
+        """Reset either a single named provider's breaker or all tracked breakers back to CLOSED."""
         with self._lock:
-            self._circuits.clear()
+            if source is not None:
+                target = str(source).strip()
+                if not target or target not in self._circuits:
+                    return []
+                self._reset_circuit_entry(self._circuits[target])
+                return [target]
+
+            reset_names: list[str] = []
+            for name in sorted(self._circuits.keys()):
+                self._reset_circuit_entry(self._circuits[name])
+                reset_names.append(name)
+            return reset_names
 
 
 _REGISTRY_LOCK = threading.Lock()

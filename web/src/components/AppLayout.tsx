@@ -20,6 +20,10 @@ import {
   FlaskConical,
   Tag,
   Loader2,
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight,
+  Clock,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -102,8 +106,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const {
     activeSingleCheck,
+    recentSingleCheck,
     isSingleCheckInFlight,
     acknowledgeSingleCheck,
+    dismissRecentSingleCheck,
     isBatchActive,
     batchStats,
   } = useVerificationProgress();
@@ -113,6 +119,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [dismissedActiveKey, setDismissedActiveKey] = useState<string | null>(null);
 
   const currentLang = (i18n.resolvedLanguage || i18n.language || 'en').startsWith('vi')
     ? 'vi'
@@ -585,6 +592,218 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             {children}
           </div>
         </main>
+
+        {/* Floating Background Verification Pill (Desktop & Mobile) */}
+        {(() => {
+          const isOnActiveProcessingRoute =
+            activeSingleCheck?.essayId != null &&
+            location.pathname === `/verification/processing/${activeSingleCheck.essayId}`;
+          const isOnBatchRoute =
+            location.pathname === '/batch' || location.pathname === '/batch-upload';
+
+          const activeSingleKey = activeSingleCheck
+            ? `single:${activeSingleCheck.essayId ?? activeSingleCheck.startedAt}`
+            : null;
+          const activeBatchKey = isBatchActive
+            ? `batch:${batchStats.total}`
+            : null;
+
+          const showSingleActive =
+            isSingleCheckInFlight &&
+            Boolean(activeSingleCheck) &&
+            !isOnActiveProcessingRoute &&
+            dismissedActiveKey !== activeSingleKey;
+
+          const showBatchActive =
+            !showSingleActive &&
+            isBatchActive &&
+            !isOnBatchRoute &&
+            dismissedActiveKey !== activeBatchKey;
+
+          const showRecentTerminal =
+            !showSingleActive &&
+            !showBatchActive &&
+            Boolean(recentSingleCheck) &&
+            location.pathname !== `/verification/processing/${recentSingleCheck?.essayId}` &&
+            location.pathname !== `/verification/report/${recentSingleCheck?.essayId}`;
+
+          if (!showSingleActive && !showBatchActive && !showRecentTerminal) {
+            return null;
+          }
+
+          if (showSingleActive && activeSingleCheck) {
+            const isQueued = activeSingleCheck.status === 'queued';
+            const totalSteps = activeSingleCheck.totalSteps || 8;
+            const stepNum = Math.min(
+              totalSteps,
+              Math.max(1, (activeSingleCheck.stepIndex ?? 0) + 1),
+            );
+            const statusText = isQueued
+              ? activeSingleCheck.queuePosition != null
+                ? currentLang === 'vi'
+                  ? `Hàng đợi #${activeSingleCheck.queuePosition}`
+                  : `Queued #${activeSingleCheck.queuePosition}`
+                : currentLang === 'vi'
+                  ? 'Đang xếp hàng'
+                  : 'Queued'
+              : currentLang === 'vi'
+                ? `Bước ${stepNum}/${totalSteps} · ${activeSingleCheck.progress}%`
+                : `Step ${stepNum}/${totalSteps} · ${activeSingleCheck.progress}%`;
+
+            return (
+              <div
+                data-testid="floating-verification-pill"
+                className="fixed bottom-14 right-3.5 sm:right-6 z-40 max-w-[calc(100vw-1.75rem)] sm:max-w-sm flex items-center gap-1 rounded-full border border-indigo-200/90 dark:border-indigo-800/90 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md pl-3.5 pr-1.5 py-1.5 shadow-lg ring-1 ring-indigo-500/15"
+              >
+                <button
+                  type="button"
+                  data-testid="floating-verification-pill-action"
+                  onClick={() =>
+                    navigate(
+                      activeSingleCheck.essayId != null
+                        ? `/verification/processing/${activeSingleCheck.essayId}`
+                        : '/upload',
+                    )
+                  }
+                  className="flex items-center gap-2 min-w-0 text-left text-xs font-medium text-slate-800 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors cursor-pointer"
+                >
+                  {isQueued ? (
+                    <Clock className="h-3.5 w-3.5 text-amber-500 animate-pulse shrink-0" />
+                  ) : (
+                    <Loader2 className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0" />
+                  )}
+                  <span className="truncate max-w-[120px] sm:max-w-[150px] font-semibold">
+                    {activeSingleCheck.filename}
+                  </span>
+                  <span className="font-mono text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/70 shrink-0">
+                    {statusText}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="floating-verification-pill-dismiss"
+                  aria-label={currentLang === 'vi' ? 'Ẩn thông báo' : 'Dismiss'}
+                  onClick={() => setDismissedActiveKey(activeSingleKey)}
+                  className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          }
+
+          if (showBatchActive) {
+            const batchLabel =
+              currentLang === 'vi'
+                ? `Hàng loạt: ${batchStats.completed}/${batchStats.total} hoàn tất`
+                : `Batch: ${batchStats.completed}/${batchStats.total} completed`;
+
+            return (
+              <div
+                data-testid="floating-verification-pill"
+                className="fixed bottom-14 right-3.5 sm:right-6 z-40 max-w-[calc(100vw-1.75rem)] sm:max-w-sm flex items-center gap-1 rounded-full border border-indigo-200/90 dark:border-indigo-800/90 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md pl-3.5 pr-1.5 py-1.5 shadow-lg ring-1 ring-indigo-500/15"
+              >
+                <button
+                  type="button"
+                  data-testid="floating-verification-pill-action"
+                  onClick={() => navigate('/batch-upload')}
+                  className="flex items-center gap-2 min-w-0 text-left text-xs font-semibold text-slate-800 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors cursor-pointer"
+                >
+                  <Layers className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                  <span className="font-mono text-[11px] truncate">{batchLabel}</span>
+                  <ArrowRight className="h-3 w-3 text-indigo-500 shrink-0" />
+                </button>
+                <button
+                  type="button"
+                  data-testid="floating-verification-pill-dismiss"
+                  aria-label={currentLang === 'vi' ? 'Ẩn thông báo' : 'Dismiss'}
+                  onClick={() => setDismissedActiveKey(activeBatchKey)}
+                  className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          }
+
+          if (showRecentTerminal && recentSingleCheck) {
+            const isCompleted = recentSingleCheck.status === 'completed';
+            const refundSuffix =
+              !isCompleted && recentSingleCheck.quotaCharged === false
+                ? currentLang === 'vi'
+                  ? ' · Đã hoàn lượt'
+                  : ' · Credit Refunded'
+                : '';
+            const terminalLabel = isCompleted
+              ? currentLang === 'vi'
+                ? 'Hoàn tất -> Mở Báo cáo'
+                : 'Completed -> Open Report'
+              : currentLang === 'vi'
+                ? `Thất bại${refundSuffix} -> Thử lại`
+                : `Failed${refundSuffix} -> Retry`;
+
+            return (
+              <div
+                data-testid="floating-verification-pill"
+                className={`fixed bottom-14 right-3.5 sm:right-6 z-40 max-w-[calc(100vw-1.75rem)] sm:max-w-md flex items-center gap-1 rounded-full border backdrop-blur-md pl-3.5 pr-1.5 py-1.5 shadow-lg ${
+                  isCompleted
+                    ? 'border-emerald-200/90 dark:border-emerald-800/90 bg-white/95 dark:bg-slate-900/95 ring-1 ring-emerald-500/15'
+                    : 'border-red-200/90 dark:border-red-800/90 bg-white/95 dark:bg-slate-900/95 ring-1 ring-red-500/15'
+                }`}
+              >
+                <button
+                  type="button"
+                  data-testid="floating-verification-pill-action"
+                  onClick={() => {
+                    const id = recentSingleCheck.essayId;
+                    dismissRecentSingleCheck(id ?? undefined);
+                    if (id != null) {
+                      navigate(
+                        isCompleted
+                          ? `/verification/report/${id}`
+                          : `/verification/processing/${id}`,
+                      );
+                    } else {
+                      navigate('/upload');
+                    }
+                  }}
+                  className="flex items-center gap-2 min-w-0 text-left text-xs font-medium text-slate-800 dark:text-slate-100 cursor-pointer"
+                >
+                  {isCompleted ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  ) : (
+                    <AlertCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400 shrink-0" />
+                  )}
+                  <span className="truncate max-w-[110px] sm:max-w-[140px] font-semibold">
+                    {recentSingleCheck.filename}
+                  </span>
+                  <span
+                    className={`font-mono text-[11px] px-2 py-0.5 rounded-full border shrink-0 ${
+                      isCompleted
+                        ? 'bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                        : 'bg-red-50 dark:bg-red-950/70 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800'
+                    }`}
+                  >
+                    {terminalLabel}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="floating-verification-pill-dismiss"
+                  aria-label={currentLang === 'vi' ? 'Đóng thông báo' : 'Dismiss'}
+                  onClick={() =>
+                    dismissRecentSingleCheck(recentSingleCheck.essayId ?? undefined)
+                  }
+                  className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0 cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          }
+
+          return null;
+        })()}
 
         {/* Footer */}
         <footer className="relative shrink-0 border-t border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-3.5 sm:px-6 py-2.5 sm:py-3">

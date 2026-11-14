@@ -156,6 +156,8 @@ export interface Verdict {
     year_distance?: number;
     doi_exact_match?: boolean;
     source_consensus?: number;
+    source_used?: string | null;
+    agreed_sources?: string[];
     venue_sim?: number;
     content_alignment_score?: number;
     content_alignment_confidence?: string;
@@ -201,6 +203,8 @@ export interface Verdict {
   // Override / audit
   is_overridden: boolean;
   override_note?: string | null;
+  overridden_by?: string | null;
+  overridden_at?: string | null;
   override_record?: OverrideRecord;
 }
 
@@ -233,6 +237,7 @@ export interface DocumentDiagnostics {
 
 export interface RevisionChangeItem {
   citation_raw: string;
+  composite_label?: string | null;
   before_label: string;
   after_label: string;
   transition: string;
@@ -256,6 +261,8 @@ export interface RevisionDiffData {
     metadata_error: number;
     suspected_hallucination: number;
     unresolved: number;
+    resource?: number;
+    incomplete_metadata?: number;
   };
   counts_after?: {
     total: number;
@@ -263,6 +270,8 @@ export interface RevisionDiffData {
     metadata_error: number;
     suspected_hallucination: number;
     unresolved: number;
+    resource?: number;
+    incomplete_metadata?: number;
   };
   counts_delta?: {
     total: number;
@@ -270,6 +279,8 @@ export interface RevisionDiffData {
     metadata_error: number;
     suspected_hallucination: number;
     unresolved: number;
+    resource?: number;
+    incomplete_metadata?: number;
   };
   resolved_issues_count?: number;
   persisting_issues_count?: number;
@@ -587,6 +598,7 @@ export interface SharedEssayReport {
     resource: number;
     incomplete_metadata?: number;
   };
+  document_diagnostics?: DocumentDiagnostics | null;
   verdicts: SharedVerdictItem[];
 }
 
@@ -600,6 +612,12 @@ export interface CacheStats {
   persistent_entries?: number;
   expired_entries?: number;
   persistent_hits?: number;
+  session_hits?: number;
+  session_misses?: number;
+  session_hit_rate_percent?: number;
+  wave0_entries?: number;
+  negative_cache_entries?: number;
+  singleflight_coalesced?: number;
   local_papers_count?: number;
   local_queries_count?: number;
   local_hits_count?: number;
@@ -627,7 +645,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(`API ${resp.status}: ${text}`);
+    let parsedDetail: string | null = null;
+    try {
+      const err = JSON.parse(text);
+      if (typeof err?.detail === 'string') {
+        parsedDetail = err.detail;
+      } else if (
+        err?.detail &&
+        typeof err.detail === 'object' &&
+        !Array.isArray(err.detail) &&
+        typeof err.detail.message === 'string'
+      ) {
+        parsedDetail = err.detail.code
+          ? `${err.detail.code}: ${err.detail.message}`
+          : err.detail.message;
+      }
+    } catch {
+      // Keep raw text when body is not JSON
+    }
+    throw new Error(`API ${resp.status}: ${parsedDetail ?? text}`);
   }
   return resp.json();
 }
@@ -646,6 +682,15 @@ async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
         const err = await resp.json();
         if (typeof err?.detail === 'string') {
           detail = err.detail;
+        } else if (
+          err?.detail &&
+          typeof err.detail === 'object' &&
+          !Array.isArray(err.detail) &&
+          typeof err.detail.message === 'string'
+        ) {
+          detail = err.detail.code
+            ? `HTTP ${resp.status} (${err.detail.code}): ${err.detail.message}`
+            : err.detail.message;
         } else if (Array.isArray(err?.detail)) {
           detail =
             err.detail
@@ -1125,6 +1170,8 @@ export interface ClassAnalytics {
   join_code?: string | null;
   total_students: number;
   total_essays: number;
+  failed_essays?: number;
+  queued_essays?: number;
   avg_cis: number;
   recency_5yr_ratio: number;
   cis_distribution: Record<string, number>;
@@ -1153,6 +1200,11 @@ export interface ClassEssay {
   user_id: number | null;
   username: string | null;
   num_pages: number;
+  job_status?: 'queued' | 'processing' | 'completed' | 'failed' | string;
+  job_error?: string | null;
+  job_attempt_count?: number;
+  quota_charged?: boolean;
+  cis_score?: number | null;
 }
 
 export interface TeacherDashboard {
@@ -1171,10 +1223,23 @@ export interface PendingVerdict {
   filename: string;
   student_username: string | null;
   citation_raw?: string;
-  label: string;
+  label: ValidationLabel | string;
   confidence: number;
   reasoning: string;
   validated_at: string;
+  triggered_rules?: string[];
+  mismatched_fields?: string[];
+  composite_label?: string | null;
+  numeric_index?: number | null;
+  sub_index?: string | null;
+  url_status?: UrlValidationStatus | null;
+  url_status_code?: number | null;
+  archive_url?: string | null;
+  cited_url?: string | null;
+  html_meta?: HtmlPageMetaPayload | null;
+  is_retracted?: boolean;
+  matched_sources?: MatchedSource[];
+  features?: Verdict['features'];
 }
 
 export type CircuitBreakerState = 'closed' | 'open' | 'half_open';
@@ -1237,13 +1302,21 @@ export interface AuditLogEntry {
   logged_at: string | null;
 }
 
+export interface AuditLogStats {
+  total_events: number;
+  unique_actors: number;
+}
+
 // --- Endpoints ---
 
 export interface RemediatedBibliographyEntry {
   index: number;
+  display_index?: string;
+  composite_label?: string | null;
   verdict_id: string;
   label: string;
-  remediation_status?: 'verified' | 'repaired' | 'hallucination';
+  remediation_status?: 'verified' | 'repaired' | 'hallucination' | 'manual_review' | 'resource';
+  triggered_rules?: string[];
   is_error?: boolean;
   is_hallucination?: boolean;
   reasoning?: string;
@@ -1436,6 +1509,15 @@ export const api = {
   listPendingReviews: (classId: number) =>
     request<PendingVerdict[]>(`/teacher/classes/${classId}/pending-reviews`),
   getSystemHealth: () => request<SystemHealth>('/system/health'),
+  resetCircuitBreaker: (source?: string) =>
+    request<{ status: string; reset_sources: string[] }>(
+      '/system/circuit-breakers/reset',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(source ? { source } : {}),
+      },
+    ),
   listAuditLog: (
     params: { limit?: number; offset?: number; user?: string } = {},
   ) => {
@@ -1444,6 +1526,10 @@ export const api = {
     if (params.offset) qs.set('offset', String(params.offset));
     if (params.user) qs.set('user', params.user);
     return request<AuditLogEntry[]>(`/audit/log?${qs.toString()}`);
+  },
+  getAuditStats: (user?: string) => {
+    const qs = user && user.trim() ? `?user=${encodeURIComponent(user.trim())}` : '';
+    return request<AuditLogStats>(`/audit/stats${qs}`);
   },
   exportClassCSV: (classId: number) =>
     `${BASE_URL}/teacher/classes/${classId}/export.csv`,
@@ -1460,6 +1546,10 @@ export const api = {
       body: fd,
     });
   },
+  reanalyzeEssay: (id: number) =>
+    request<{ status: string; essay_id: number }>(`/essays/${id}/reanalyze`, {
+      method: 'POST',
+    }),
 
   /**
    * Fetch the analysis report. Returns null if the pipeline is still running
@@ -1552,7 +1642,7 @@ export const api = {
 
   downloadAutoHealedDocx: async (
     id: number,
-    style: 'apa' | 'ieee' = 'apa',
+    style: 'apa' | 'ieee' | 'tdtu' = 'apa',
     baseFilename?: string,
   ): Promise<void> => {
     const token = localStorage.getItem('token');

@@ -20,9 +20,11 @@ import {
   History,
   ShieldCheck,
   Sparkles,
+  RefreshCw,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, type EssayStatus } from '@/api/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { useVerificationProgress } from '@/contexts/VerificationProgressContext';
 import { streamEssayEvents } from '@/hooks/useEssayStream';
 import {
@@ -250,13 +252,28 @@ function buildPipelineReasoningLines(
 function classifyLiveSourceTone(rawStatus: string): {
   dotClass: string;
   pillClass: string;
+  isRateLimited: boolean;
 } {
   const val = rawStatus.trim().toLowerCase();
+  if (
+    val === 'rate_limited' ||
+    val.startsWith('rate_limited') ||
+    val === '429' ||
+    val === 'http_429'
+  ) {
+    return {
+      dotClass: 'bg-amber-500 animate-pulse',
+      pillClass:
+        'bg-amber-50/90 dark:bg-amber-950/60 border-amber-300/85 dark:border-amber-700/80 text-amber-800 dark:text-amber-200',
+      isRateLimited: true,
+    };
+  }
   if (val === 'ok' || val === 'done' || val === 'hit' || val === 'success') {
     return {
       dotClass: 'bg-emerald-500',
       pillClass:
         'bg-emerald-50/80 dark:bg-emerald-950/50 border-emerald-200/80 dark:border-emerald-800/70 text-emerald-800 dark:text-emerald-200',
+      isRateLimited: false,
     };
   }
   if (
@@ -269,6 +286,7 @@ function classifyLiveSourceTone(rawStatus: string): {
       dotClass: 'bg-rose-500',
       pillClass:
         'bg-rose-50/80 dark:bg-rose-950/50 border-rose-200/80 dark:border-rose-800/70 text-rose-800 dark:text-rose-200',
+      isRateLimited: false,
     };
   }
   if (
@@ -282,12 +300,14 @@ function classifyLiveSourceTone(rawStatus: string): {
       dotClass: 'bg-slate-400 dark:bg-slate-500',
       pillClass:
         'bg-slate-100/80 dark:bg-slate-800/70 border-slate-200/80 dark:border-slate-700 text-slate-600 dark:text-slate-300',
+      isRateLimited: false,
     };
   }
   return {
     dotClass: 'bg-indigo-500 animate-pulse',
     pillClass:
       'bg-indigo-50/80 dark:bg-indigo-950/50 border-indigo-200/80 dark:border-indigo-800/70 text-indigo-800 dark:text-indigo-200',
+    isRateLimited: false,
   };
 }
 
@@ -308,6 +328,7 @@ export function ProcessingPage() {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const { refreshUser } = useAuth();
   const {
     activeSingleCheck,
     syncSingleCheckFromStatus,
@@ -330,6 +351,9 @@ export function ProcessingPage() {
   const [redirecting, setRedirecting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [finalElapsedSeconds, setFinalElapsedSeconds] = useState<number | null>(null);
+  const [retryRunSeq, setRetryRunSeq] = useState(0);
+  const [reanalyzing, setReanalyzing] = useState(false);
+  const refundedRunKeyRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -337,7 +361,20 @@ export function ProcessingPage() {
     setRedirecting(false);
     setErrorMsg(null);
     setFinalElapsedSeconds(null);
+    refundedRunKeyRef.current = null;
   }, [essayId]);
+
+  useEffect(() => {
+    if (status?.status === 'failed' && status?.quota_charged === false) {
+      const runKey = `${essayId ?? 'none'}:${retryRunSeq}`;
+      if (refundedRunKeyRef.current !== runKey) {
+        refundedRunKeyRef.current = runKey;
+        void refreshUser();
+      }
+    } else if (status && status.status !== 'failed') {
+      refundedRunKeyRef.current = null;
+    }
+  }, [essayId, retryRunSeq, status, refreshUser]);
 
   useEffect(
     () => registerProcessingPageMount(essayId),
@@ -354,7 +391,22 @@ export function ProcessingPage() {
     const applySnap = (snap: EssayStatus) => {
       if (cancelled) return;
       consecutiveErrors = 0;
-      setStatusEntry({ essayId, snap });
+      setStatusEntry((prev) => {
+        const prevSame = prev && prev.essayId === essayId ? prev.snap : null;
+        const merged: EssayStatus = {
+          ...(prevSame ?? {}),
+          ...snap,
+          quota_charged:
+            snap.quota_charged !== undefined
+              ? snap.quota_charged
+              : prevSame?.quota_charged,
+          document_diagnostics:
+            snap.document_diagnostics != null
+              ? snap.document_diagnostics
+              : (prevSame?.document_diagnostics ?? snap.document_diagnostics),
+        };
+        return { essayId, snap: merged };
+      });
       syncSingleCheckFromStatus(essayId, snap);
       if (snap.status === 'failed') {
         setRedirecting(false);
@@ -426,7 +478,28 @@ export function ProcessingPage() {
       controller.abort();
       if (timer) clearInterval(timer);
     };
-  }, [essayId, queryClient, syncSingleCheckFromStatus]);
+  }, [essayId, retryRunSeq, queryClient, syncSingleCheckFromStatus]);
+
+  const handleRetryAnalysis = async () => {
+    if (essayId === null || reanalyzing || typeof api.reanalyzeEssay !== 'function') return;
+    setReanalyzing(true);
+    try {
+      await api.reanalyzeEssay(essayId);
+      refundedRunKeyRef.current = null;
+      setDisplayedStepIndex(0);
+      setRedirecting(false);
+      setErrorMsg(null);
+      setFinalElapsedSeconds(null);
+      setStatusEntry(null);
+      void refreshUser();
+      void queryClient.invalidateQueries({ queryKey: ['essays'] });
+      setRetryRunSeq((s) => s + 1);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Retry failed');
+    } finally {
+      setReanalyzing(false);
+    }
+  };
 
   const rawStepIndex = status
     ? typeof status.step_index === 'number' && Number.isFinite(status.step_index)
@@ -691,6 +764,21 @@ export function ProcessingPage() {
             )}
 
             <div className="flex flex-wrap items-center gap-2.5 pt-1">
+              {essayId !== null && typeof api.reanalyzeEssay === 'function' && (
+                <Button
+                  type="button"
+                  size="sm"
+                  data-testid="failed-reanalyze-btn"
+                  disabled={reanalyzing}
+                  onClick={() => void handleRetryAnalysis()}
+                  className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${reanalyzing ? 'animate-spin' : ''}`} />
+                  <span>
+                    {lang === 'vi' ? 'Thử lại phân tích' : 'Retry Analysis'}
+                  </span>
+                </Button>
+              )}
               <Button
                 asChild
                 size="sm"
@@ -1023,6 +1111,14 @@ export function ProcessingPage() {
                               <span className="font-semibold">
                                 {formatLiveSourceName(sourceKey)}
                               </span>
+                              {tone.isRateLimited && (
+                                <span
+                                  data-testid={`live-source-rate-limited-${sourceKey}`}
+                                  className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/70 border border-amber-300/80 dark:border-amber-700/80 text-[10px] font-bold tracking-tight text-amber-800 dark:text-amber-200"
+                                >
+                                  {lang === 'vi' ? 'Tạm giới hạn' : 'Rate-Limited'}
+                                </span>
+                              )}
                             </span>
                           );
                         })}

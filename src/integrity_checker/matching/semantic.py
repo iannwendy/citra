@@ -35,8 +35,11 @@ from integrity_checker.matching.vn_en_academic_bridge import (
     VN_EN_ACADEMIC_BRIDGE as _VN_EN_ACADEMIC_BRIDGE,  # noqa: F401  re-export (used by tests)
 )
 from integrity_checker.matching.vn_en_academic_bridge import (
+    bridge_cross_lingual_context,
+    bridge_vn_source_to_en,
     bridge_vn_to_en,
     compute_cross_lingual_concept_overlap,
+    find_en_cues_for_vn_source,
     find_vn_cues_for_en_source,
     is_vietnamese_text,
     normalize_vn_spelling,
@@ -592,10 +595,12 @@ class SemanticMatcher:
         source_title: str,
         source_abstract: str | None = None,
     ) -> tuple[bool, str]:
-        """Phát hiện khi khóa luận viết bằng tiếng Việt nhưng trích dẫn tài liệu tiếng Anh,
+        """Phát hiện khi khóa luận và tài liệu nguồn khác ngôn ngữ (VI ↔ EN)
         và tạo chuỗi ngữ nghĩa bắc cầu (Cross-Lingual Concept Bridge).
         """
-        is_xl, bridged, _ = bridge_vn_to_en(cited_context, source_title, source_abstract)
+        is_xl, bridged, _, _ = bridge_cross_lingual_context(
+            cited_context, source_title, source_abstract
+        )
         return is_xl, bridged
 
     @staticmethod
@@ -604,8 +609,11 @@ class SemanticMatcher:
         source_title: str,
         source_abstract: str | None = None,
     ) -> tuple[bool, str, list[str]]:
-        """Phát hiện ngữ cảnh xuyên ngôn ngữ Việt ↔ Anh kèm danh sách cặp khái niệm đã ánh xạ."""
-        return bridge_vn_to_en(cited_context, source_title, source_abstract)
+        """Phát hiện ngữ cảnh xuyên ngôn ngữ hai chiều Việt ↔ Anh kèm danh sách cặp khái niệm đã ánh xạ."""
+        is_xl, bridged, concepts, _ = bridge_cross_lingual_context(
+            cited_context, source_title, source_abstract
+        )
+        return is_xl, bridged, concepts
 
     def cross_lingual_title_similarity(
         self,
@@ -631,12 +639,21 @@ class SemanticMatcher:
         en_title = candidate_title if cit_is_vn else cited_title
 
         _, bridged_vn_title, bridged_concepts = bridge_vn_to_en(vn_title, en_title, None)
-        overlap_score, overlap_pairs = compute_cross_lingual_concept_overlap(vn_title, en_title)
+        overlap_score, overlap_pairs = compute_cross_lingual_concept_overlap(
+            cited_title, candidate_title
+        )
 
-        merged_concepts = list(bridged_concepts)
+        merged_concepts: list[str] = []
         for pair in overlap_pairs:
             if pair not in merged_concepts:
                 merged_concepts.append(pair)
+        for bc in bridged_concepts:
+            formatted_bc = bc
+            if not cit_is_vn and " → " in bc:
+                left_p, right_p = bc.split(" → ", 1)
+                formatted_bc = f"{right_p} → {left_p}"
+            if formatted_bc not in merged_concepts:
+                merged_concepts.append(formatted_bc)
 
         # Extract translated English portion inside bridged_vn_title "(...)" for clean SBERT comparison
         en_bridge_only = ""
@@ -814,11 +831,9 @@ class SemanticMatcher:
 
             concept_overlap_score = 0.0
             if is_cross_lingual:
-                vn_side = (focal_sentence or raw_context_clean) if ctx_is_vn else src_combined_str
-                en_side = src_combined_str if ctx_is_vn else (focal_sentence or raw_context_clean)
                 concept_overlap_score, overlap_pairs = compute_cross_lingual_concept_overlap(
-                    vn_side,
-                    en_side,
+                    focal_sentence or raw_context_clean,
+                    src_combined_str,
                 )
                 for pair in overlap_pairs:
                     if pair not in bridged_concepts:
@@ -868,6 +883,19 @@ class SemanticMatcher:
                         bridged_idx = len(batch_texts)
                         batch_texts.append(self._truncate_text(bridged_context, max_length=512))
 
+                    bridged_src_title_idx: int | None = None
+                    bridged_src_abs_idx: int | None = None
+                    if is_cross_lingual and src_is_vn and not ctx_is_vn:
+                        b_src_title = bridge_vn_source_to_en(source_title)
+                        if b_src_title and b_src_title != source_title:
+                            bridged_src_title_idx = len(batch_texts)
+                            batch_texts.append(self._truncate_text(b_src_title, max_length=384))
+                        if has_abs and source_abstract:
+                            b_src_abs = bridge_vn_source_to_en(source_abstract)
+                            if b_src_abs and b_src_abs != source_abstract:
+                                bridged_src_abs_idx = len(batch_texts)
+                                batch_texts.append(self._truncate_text(b_src_abs, max_length=512))
+
                     embs = self._encode(
                         model,
                         batch_texts,
@@ -890,11 +918,17 @@ class SemanticMatcher:
                             )
 
                         title_sim = _max_query_cos(embs[1])
+                        if bridged_src_title_idx is not None:
+                            title_sim = max(title_sim, _max_query_cos(embs[bridged_src_title_idx]))
                         best_evidence_sentence = source_title_trunc
                         best_evidence_score = title_sim
 
                         if has_abs:
                             whole_abs_sim = _max_query_cos(embs[2])
+                            if bridged_src_abs_idx is not None:
+                                whole_abs_sim = max(
+                                    whole_abs_sim, _max_query_cos(embs[bridged_src_abs_idx])
+                                )
                             best_evidence_score = max(title_sim, whole_abs_sim)
                             if abs_sents:
                                 sent_sims = [
@@ -1329,9 +1363,8 @@ class SemanticMatcher:
         if not body_pages or not source_title:
             return None
 
-        model = self._get_model()
-        if model is None:
-            return None
+        target_text = f"{source_title}. {self._truncate_text(source_abstract or '', 320)}".strip()
+        target_is_vn = is_vietnamese_text(target_text)
 
         title_tokens = {
             w.lower()
@@ -1351,11 +1384,14 @@ class SemanticMatcher:
 
         norm_title_sub = re.sub(r"\s+", " ", source_title.lower().strip())[:35]
 
-        # Build reverse Vietnamese concept cues for English references (so Vietnamese body paragraphs
-        # discussing an English paper's concept without English keywords are also discovered)
+        # Build bidirectional cross-lingual concept cues (EN -> VI and VI -> EN)
         vn_concept_cues = find_vn_cues_for_en_source(source_title, source_abstract)
+        en_concept_cues = (
+            find_en_cues_for_vn_source(source_title, source_abstract) if target_is_vn else []
+        )
 
         candidate_passages: list[tuple[int, str, float]] = []
+        xl_fallback_passages: list[tuple[int, str, float]] = []
         for page_num, page_text in body_pages:
             if not page_text or len(page_text.strip()) < 60:
                 continue
@@ -1391,32 +1427,71 @@ class SemanticMatcher:
                 kw_hits = len(title_tokens & win_words)
                 auth_hits = len(author_surnames & win_words)
                 vn_hits = sum(1 for vp in vn_concept_cues if vp in win_lower)
-                if kw_hits > 0 or auth_hits > 0 or vn_hits > 0:
+                en_hits = sum(
+                    1
+                    for ep in en_concept_cues
+                    if (ep in win_lower if " " in ep or "-" in ep else ep in win_words)
+                )
+                if kw_hits > 0 or auth_hits > 0 or vn_hits > 0 or en_hits > 0:
                     pre_score = (
                         kw_hits * 2.0
                         + auth_hits * 3.0
                         + vn_hits * 2.2
+                        + en_hits * 2.2
                         + min(len(window), 260) / 300.0
                     )
                     candidate_passages.append((page_num, window[:360], pre_score))
+                elif is_vietnamese_text(window) != target_is_vn:
+                    xl_fallback_passages.append(
+                        (page_num, window[:360], min(len(window), 260) / 300.0)
+                    )
 
-        if not candidate_passages:
+        fallback_start = 0
+        if candidate_passages:
+            # Keep top 8 keyword-relevant body windows and supplement with cross-lingual windows if space remains
+            candidate_passages.sort(key=lambda item: item[2], reverse=True)
+            top_windows = candidate_passages[:8]
+            fallback_start = len(top_windows)
+            if fallback_start < 8 and xl_fallback_passages:
+                xl_fallback_passages.sort(key=lambda item: item[2], reverse=True)
+                top_windows.extend(xl_fallback_passages[: 8 - fallback_start])
+        elif xl_fallback_passages:
+            # Cross-lingual specialized domain windows outside the static lexicon
+            xl_fallback_passages.sort(key=lambda item: item[2], reverse=True)
+            top_windows = xl_fallback_passages[:12]
+            fallback_start = 0
+        else:
             return None
 
-        # Keep top 8 keyword-relevant body windows and rank them with Sentence-BERT against title + abstract
-        candidate_passages.sort(key=lambda item: item[2], reverse=True)
-        top_windows = candidate_passages[:8]
+        has_vietnamese = target_is_vn or any(
+            is_vietnamese_text(win_text) for _, win_text, _ in top_windows
+        )
+        if has_vietnamese:
+            model = self._get_multilingual_model() or self._get_model()
+        else:
+            model = self._get_model()
+        if model is None:
+            return None
 
         try:
-            target_text = f"{source_title}. {self._truncate_text(source_abstract or '', 320)}".strip()
-            encoded_windows: list[str] = []
-            for _, win_text, _ in top_windows:
+            raw_windows = [win_text for _, win_text, _ in top_windows]
+            batch_texts: list[str] = [target_text] + list(raw_windows)
+            target_indices = [0]
+            if target_is_vn:
+                bridged_target = bridge_vn_source_to_en(target_text)
+                if bridged_target and bridged_target != target_text:
+                    target_indices.append(len(batch_texts))
+                    batch_texts.append(self._truncate_text(bridged_target, 512))
+
+            bridged_win_indices: dict[int, int] = {}
+            for idx, win_text in enumerate(raw_windows):
                 is_xl, bridged_win = self.detect_and_bridge_cross_lingual(
                     win_text, source_title, source_abstract
                 )
-                encoded_windows.append(bridged_win if (is_xl and bridged_win) else win_text)
+                if is_xl and bridged_win and bridged_win != win_text:
+                    bridged_win_indices[idx] = len(batch_texts)
+                    batch_texts.append(bridged_win)
 
-            batch_texts = [target_text] + encoded_windows
             embs = self._encode(
                 model,
                 batch_texts,
@@ -1425,21 +1500,32 @@ class SemanticMatcher:
                 show_progress_bar=False,
             )
             if len(embs) != len(batch_texts):
-                return top_windows[0][0], top_windows[0][1], 0.5
+                return None if fallback_start == 0 else (top_windows[0][0], top_windows[0][1], 0.5)
 
-            target_emb = embs[0]
-            best_idx = 0
+            best_idx = -1
             best_sim = -1.0
             for idx in range(len(top_windows)):
-                sim = float((target_emb @ embs[1 + idx]).item())
+                win_emb_positions = [1 + idx]
+                if idx in bridged_win_indices:
+                    win_emb_positions.append(bridged_win_indices[idx])
+                sim = max(
+                    float((embs[t_pos] @ embs[w_pos]).item())
+                    for t_pos in target_indices
+                    for w_pos in win_emb_positions
+                )
+                if idx >= fallback_start and sim < 0.35:
+                    continue
                 if sim > best_sim:
                     best_sim = sim
                     best_idx = idx
 
+            if best_idx < 0:
+                return None
+
             best_page, best_text, _ = top_windows[best_idx]
             return best_page, best_text, max(0.0, min(1.0, best_sim))
         except Exception:  # noqa: BLE001
-            return top_windows[0][0], top_windows[0][1], 0.5
+            return None if fallback_start == 0 else (top_windows[0][0], top_windows[0][1], 0.5)
 
     @staticmethod
     def _sanitize_abstract(text: str | None) -> str | None:

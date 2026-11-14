@@ -230,7 +230,13 @@ export function ProfilePage() {
             </span>
           </div>
           <p className="font-display font-bold text-lg text-slate-900 dark:text-slate-100 capitalize">
-            {authUser?.role ?? '—'}
+            {authUser?.role
+              ? authUser.role === 'admin'
+                ? t('admin.roleAdmin')
+                : authUser.role === 'teacher'
+                  ? t('admin.roleTeacher')
+                  : t('admin.roleUser')
+              : '—'}
           </p>
         </Card>
 

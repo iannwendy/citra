@@ -4,6 +4,7 @@
  */
 
 import type { ReactNode } from 'react';
+import type { ValidationLabel } from '@/api/client';
 
 export interface SourceConfig {
   color: string;
@@ -44,8 +45,13 @@ export interface GraphNode {
   detail?: string;
   children?: GraphNode[];
   matchedSource?: unknown;
+  sourceKey?: string;
+  verdictLabel?: ValidationLabel;
+  statusText?: string;
   similarityScore?: number;
   rulesTriggered?: string[];
   /** Optional icon override (some node types inject their own icon JSX) */
   iconOverride?: ReactNode;
 }
+
+export type EvidenceNodeData = GraphNode;

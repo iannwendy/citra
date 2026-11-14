@@ -69,6 +69,7 @@ export async function streamEssayEvents(
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
     let sawTerminal = false;
+    let mergedSnap: EssayStatus | null = null;
 
     const onAbort = () => {
       void reader.cancel().catch(() => {});
@@ -78,8 +79,13 @@ export async function streamEssayEvents(
     const processEventBlock = (rawBlock: string): boolean => {
       const lines = rawBlock.split('\n');
       const dataLines: string[] = [];
+      let eventType: string | null = null;
       for (const line of lines) {
         if (!line || line.startsWith(':')) {
+          continue;
+        }
+        if (line.startsWith('event:')) {
+          eventType = line.slice(6).trim().toLowerCase();
           continue;
         }
         if (line.startsWith('data:')) {
@@ -91,10 +97,41 @@ export async function streamEssayEvents(
       }
 
       try {
-        const parsed = JSON.parse(dataLines.join('\n')) as EssayStatus;
-        if (parsed && typeof parsed === 'object' && typeof parsed.status === 'string') {
-          onEvent(parsed);
-          if (parsed.status === 'completed' || parsed.status === 'failed') {
+        const parsed = JSON.parse(dataLines.join('\n')) as Partial<EssayStatus>;
+        if (!parsed || typeof parsed !== 'object') {
+          return false;
+        }
+        const resolvedStatus =
+          typeof parsed.status === 'string'
+            ? parsed.status
+            : eventType === 'completed' || eventType === 'failed' || eventType === 'queued'
+              ? eventType
+              : eventType === 'step'
+                ? 'processing'
+                : undefined;
+
+        if (typeof resolvedStatus === 'string') {
+          const nextSnap = {
+            ...(mergedSnap ?? {}),
+            ...parsed,
+            status: resolvedStatus,
+            quota_charged:
+              parsed.quota_charged !== undefined
+                ? parsed.quota_charged
+                : mergedSnap?.quota_charged,
+            document_diagnostics:
+              parsed.document_diagnostics != null
+                ? parsed.document_diagnostics
+                : (mergedSnap?.document_diagnostics ?? parsed.document_diagnostics),
+            sources_queried:
+              parsed.sources_queried && Object.keys(parsed.sources_queried).length > 0
+                ? { ...(mergedSnap?.sources_queried ?? {}), ...parsed.sources_queried }
+                : (mergedSnap?.sources_queried ?? parsed.sources_queried ?? {}),
+          } as EssayStatus;
+
+          mergedSnap = nextSnap;
+          onEvent(nextSnap);
+          if (nextSnap.status === 'completed' || nextSnap.status === 'failed') {
             return true;
           }
         }
