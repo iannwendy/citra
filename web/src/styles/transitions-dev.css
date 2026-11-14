@@ -1476,12 +1476,42 @@
 }
 
 /* ==========================================================================
+   Auto-Tour Progress Track (.t-autotour-bar)
+   Compositor-only scaleX(0 -> 1) indicator with hover-pause support
+   ========================================================================== */
+.t-autotour-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background-color: var(--solva-ink, #1C1A15);
+  opacity: 0.68;
+  transform-origin: left center;
+  animation: t-autotour-progress var(--autotour-dur, 4200ms) linear forwards;
+  will-change: transform;
+  pointer-events: none;
+}
+.t-autotour-bar[data-paused="true"] {
+  animation-play-state: paused;
+}
+@keyframes t-autotour-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ==========================================================================
    Accessibility Guard: prefers-reduced-motion: reduce
    ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
   .t-gen {
     display: none !important;
   }
+  .t-autotour-bar,
   .t-card-resize,
   .t-digit-group .t-digit,
   .t-badge,

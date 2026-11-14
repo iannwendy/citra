@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AuthContext } from '@/contexts/AuthContext';
@@ -37,6 +37,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   IconSwap,
+  NumberPopIn,
+  SoftTextSwap,
+  TactileToggle,
+  DirectionalStageSlide,
   SymmetricChevron,
   LearnMoreChevron,
   UIGenerationReveal,
@@ -2323,28 +2327,43 @@ function SolvaStickySection({
 function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
   const [selectedId, setSelectedId] = useState<string>(DEMO_CITATIONS[1].id);
   const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(true);
+  const [isHoverPaused, setIsHoverPaused] = useState<boolean>(false);
+  const remainingTourMsRef = useRef<number>(4200);
+  const tourStartedAtRef = useRef<number>(0);
   const {
     containerRef: debuggerRef,
     isVisible: debuggerVisible,
     replaySeed: debuggerSeed,
-  } = useFloralCardAnimation(5600);
+  } = useFloralCardAnimation(0);
 
   const activeCitation =
     DEMO_CITATIONS.find((c) => c.id === selectedId) || DEMO_CITATIONS[0];
 
   useEffect(() => {
-    if (!isAutoPlaying || !debuggerVisible) return;
-    const timer = window.setInterval(() => {
+    remainingTourMsRef.current = 4200;
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (!isAutoPlaying || !debuggerVisible || isHoverPaused) return;
+    tourStartedAtRef.current = Date.now();
+    const delayMs = Math.max(120, remainingTourMsRef.current);
+    const timer = window.setTimeout(() => {
+      remainingTourMsRef.current = 4200;
       setSelectedId((prev) => {
         const idx = DEMO_CITATIONS.findIndex((c) => c.id === prev);
         const nextIdx = (idx + 1) % DEMO_CITATIONS.length;
         return DEMO_CITATIONS[nextIdx].id;
       });
-    }, 4200);
-    return () => window.clearInterval(timer);
-  }, [isAutoPlaying, debuggerVisible]);
+    }, delayMs);
+    return () => {
+      const elapsed = Date.now() - tourStartedAtRef.current;
+      remainingTourMsRef.current = Math.max(120, remainingTourMsRef.current - elapsed);
+      window.clearTimeout(timer);
+    };
+  }, [isAutoPlaying, debuggerVisible, isHoverPaused, selectedId]);
 
   const handleSelectCitation = (id: string) => {
+    remainingTourMsRef.current = 4200;
     setSelectedId(id);
     setIsAutoPlaying(false);
   };
@@ -2446,6 +2465,9 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
         <SolvaScrollReveal delayMs={110} yOffset={36}>
           <div
             ref={debuggerRef}
+            data-testid="debugger-bezel"
+            onMouseEnter={() => setIsHoverPaused(true)}
+            onMouseLeave={() => setIsHoverPaused(false)}
             style={{ backgroundColor: 'var(--solva-surface)' }}
             className="rounded-[16px] p-[8px] sm:p-[12px]"
           >
@@ -2482,9 +2504,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                     style={{ color: 'var(--solva-muted)' }}
                     className="hidden sm:inline"
                   >
-                    (<SolvaLiveNumber value={18} replaySeed={debuggerSeed} durationMs={1150} />{' '}
-                    {lang === 'vi' ? 'trang' : 'pages'} ·{' '}
-                    <SolvaLiveNumber value={24} replaySeed={debuggerSeed} durationMs={1300} />{' '}
+                    (18 {lang === 'vi' ? 'trang' : 'pages'} · 24{' '}
                     {lang === 'vi' ? 'trích dẫn' : 'citations'})
                   </span>
                 </div>
@@ -2575,7 +2595,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                               ? 'var(--solva-ink)'
                               : 'var(--solva-border)',
                           }}
-                          className="w-full text-left p-3.5 rounded-[10px] border transition-all duration-200 cursor-pointer"
+                          className="relative overflow-hidden w-full text-left p-3.5 rounded-[10px] border transition-[background-color,border-color,color,box-shadow] duration-200 cursor-pointer"
                         >
                           <div className="flex items-center justify-between gap-2 mb-1.5">
                             <div className="flex items-center gap-2 min-w-0">
@@ -2633,15 +2653,20 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                             >
                               {lang === 'vi' ? 'Độ tin cậy:' : 'Conf:'}{' '}
                               <strong style={{ color: 'var(--solva-ink)' }}>
-                                <SolvaLiveNumber
-                                  value={cit.confidence}
-                                  suffix="%"
-                                  replaySeed={debuggerSeed}
-                                  durationMs={1250}
-                                />
+                                {cit.confidence}%
                               </strong>
                             </span>
                           </div>
+
+                          {isSelected && isAutoPlaying && (
+                            <span
+                              key={`tour-progress-${cit.id}`}
+                              data-testid="debugger-autotour-progress"
+                              data-paused={isHoverPaused ? 'true' : 'false'}
+                              aria-hidden="true"
+                              className="t-autotour-bar"
+                            />
+                          )}
                         </button>
                       );
                     })}
@@ -2692,7 +2717,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                 style={{ backgroundColor: 'var(--solva-card-elevated)' }}
                 className="lg:col-span-7 min-w-0 p-4 sm:p-6 flex flex-col justify-between"
               >
-                <div key={activeCitation.id} className="animate-debugger-switch">
+                <div>
                   <div
                     style={{ borderColor: 'var(--solva-border)' }}
                     className="flex flex-wrap items-start justify-between gap-4 pb-4 border-b"
@@ -2712,11 +2737,9 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                         </strong>
                         <span>
                           · {lang === 'vi' ? 'Độ tin cậy' : 'Confidence'}{' '}
-                          <SolvaLiveNumber
-                            value={activeCitation.confidence}
-                            suffix="%"
-                            replaySeed={debuggerSeed}
-                            durationMs={1150}
+                          <NumberPopIn
+                            value={`${activeCitation.confidence}%`}
+                            data-testid="debugger-active-confidence"
                           />
                         </span>
                       </div>
@@ -2724,7 +2747,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                         style={{ color: 'var(--solva-ink)' }}
                         className="font-solva-serif font-light text-[22px] sm:text-[26px] leading-[1.2] break-words"
                       >
-                        {localizeMetaValue(activeCitation.citedMeta.title)}
+                        <SoftTextSwap text={localizeMetaValue(activeCitation.citedMeta.title)} />
                       </h3>
                     </div>
 
@@ -2764,9 +2787,13 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                       >
                         {lang === 'vi' ? 'Lập luận Neuro-Symbolic:' : 'Neuro-Symbolic Reasoning:'}
                       </strong>
-                      {lang === 'vi'
-                        ? activeCitation.explanation.vi
-                        : activeCitation.explanation.en}
+                      <SoftTextSwap
+                        text={
+                          lang === 'vi'
+                            ? activeCitation.explanation.vi
+                            : activeCitation.explanation.en
+                        }
+                      />
                     </div>
                   </div>
 
@@ -2860,13 +2887,13 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                                     style={{ color: 'var(--solva-ink)' }}
                                     className="block sm:table-cell sm:py-2.5 sm:px-3 break-words"
                                   >
-                                    {citedVal}
+                                    <SoftTextSwap text={citedVal} />
                                   </td>
                                   <td
                                     style={{ color: 'var(--solva-muted)' }}
                                     className="block sm:table-cell sm:py-2.5 sm:px-3 break-words font-mono text-[11px]"
                                   >
-                                    {retVal}
+                                    <SoftTextSwap text={retVal} />
                                   </td>
                                   <td className="hidden sm:table-cell sm:py-2.5 sm:px-3 text-right whitespace-nowrap">
                                     {renderFieldStatusBadge(status)}
@@ -2991,7 +3018,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                                   backgroundColor: 'var(--solva-surface)',
                                   borderColor: 'var(--solva-border)',
                                 }}
-                                className="group p-3.5 rounded-[10px] border flex items-center justify-between gap-2 transition-all duration-200 hover:border-[#1C1A15]/40 dark:hover:border-[#FBFAF6]/35"
+                                className="group p-3.5 rounded-[10px] border flex items-center justify-between gap-2 transition-[background-color,border-color,color,box-shadow] duration-200 hover:border-[#1C1A15]/40 dark:hover:border-[#FBFAF6]/35"
                               >
                                 {cardContent}
                               </a>
@@ -3038,15 +3065,31 @@ function SolvaUseCasesSection({
 }) {
   const [activeTab, setActiveTab] = useState(0);
   const [autoCycleTabs, setAutoCycleTabs] = useState(true);
+  const [isHoverPaused, setIsHoverPaused] = useState(false);
+  const remainingStageMsRef = useRef<number>(6000);
+  const stageStartedAtRef = useRef<number>(0);
   const { containerRef: useCasesRef, isVisible: useCasesVisible } = useFloralCardAnimation(0);
+  const { containerRef: pipelineTabsRef, pillStyle: pipelinePill } =
+    useSlidingPill<HTMLDivElement>(activeTab);
 
   useEffect(() => {
-    if (!autoCycleTabs || !useCasesVisible) return;
-    const timer = window.setInterval(() => {
+    remainingStageMsRef.current = 6000;
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!autoCycleTabs || !useCasesVisible || isHoverPaused) return;
+    stageStartedAtRef.current = Date.now();
+    const delayMs = Math.max(120, remainingStageMsRef.current);
+    const timer = window.setTimeout(() => {
+      remainingStageMsRef.current = 6000;
       setActiveTab((prev) => (prev + 1) % 4);
-    }, 4600);
-    return () => window.clearInterval(timer);
-  }, [autoCycleTabs, useCasesVisible]);
+    }, delayMs);
+    return () => {
+      const elapsed = Date.now() - stageStartedAtRef.current;
+      remainingStageMsRef.current = Math.max(120, remainingStageMsRef.current - elapsed);
+      window.clearTimeout(timer);
+    };
+  }, [autoCycleTabs, useCasesVisible, isHoverPaused, activeTab]);
 
   // Pre-decode inactive tab WebP paintings during browser idle time so tab switching is instant
   useEffect(() => {
@@ -3257,11 +3300,31 @@ function SolvaUseCasesSection({
         <SolvaScrollReveal delayMs={90} yOffset={36}>
           <div
             ref={useCasesRef}
+            onMouseEnter={() => setIsHoverPaused(true)}
+            onMouseLeave={() => setIsHoverPaused(false)}
             style={{ backgroundColor: 'var(--solva-surface)' }}
             className="w-full rounded-[16px] flex flex-col"
           >
             {/* Top 4-Tab Bar (`padding: 16px 40px`, `gap: 24px`) */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-[16px] lg:gap-[24px] p-3 sm:px-[24px] lg:px-[40px] sm:py-[16px]">
+            <div
+              ref={pipelineTabsRef}
+              role="tablist"
+              aria-label={lang === 'vi' ? '4 giai đoạn thẩm định' : '4 verification stages'}
+              className="relative grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-[16px] lg:gap-[24px] p-3 sm:px-[24px] lg:px-[40px] sm:py-[16px]"
+            >
+              <span
+                aria-hidden="true"
+                data-testid="pipeline-tabs-pill"
+                style={{
+                  backgroundColor: 'var(--solva-bg)',
+                  width: `${pipelinePill.width}px`,
+                  height: `${pipelinePill.height}px`,
+                  transform: `translate3d(${pipelinePill.left}px, ${pipelinePill.top}px, 0)`,
+                  opacity: pipelinePill.ready ? 1 : 0,
+                  transition: pipelinePill.animate ? undefined : 'none',
+                }}
+                className="t-tabs-pill rounded-[10px]"
+              />
               {tabs.map((tab, idx) => {
                 const Icon = tab.icon;
                 const isActive = idx === activeTab;
@@ -3269,18 +3332,33 @@ function SolvaUseCasesSection({
                   <button
                     key={tab.label}
                     type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    data-pill-active={isActive ? 'true' : 'false'}
                     onClick={() => {
+                      remainingStageMsRef.current = 6000;
                       setActiveTab(idx);
                       setAutoCycleTabs(false);
                     }}
                     style={{
-                      backgroundColor: isActive ? 'var(--solva-bg)' : 'transparent',
+                      backgroundColor:
+                        isActive && !pipelinePill.ready ? 'var(--solva-bg)' : 'transparent',
                       color: isActive ? 'var(--solva-ink)' : 'var(--solva-muted)',
                     }}
-                    className="h-[44px] px-3 rounded-[10px] font-solva-sans text-[13px] sm:text-[14px] font-medium flex items-center justify-center gap-[8px] transition-all duration-200 cursor-pointer"
+                    className="t-tab relative overflow-hidden h-[44px] px-3 rounded-[10px] font-solva-sans text-[13px] sm:text-[14px] font-medium flex items-center justify-center gap-[8px] cursor-pointer"
                   >
                     <Icon className="w-4 h-4 shrink-0" />
                     <span className="truncate">{tab.label}</span>
+                    {isActive && autoCycleTabs && (
+                      <span
+                        key={`stage-progress-${idx}`}
+                        data-testid="pipeline-autotour-progress"
+                        data-paused={isHoverPaused ? 'true' : 'false'}
+                        style={{ '--autotour-dur': '6000ms' } as React.CSSProperties}
+                        aria-hidden="true"
+                        className="t-autotour-bar"
+                      />
+                    )}
                   </button>
                 );
               })}
@@ -3288,70 +3366,75 @@ function SolvaUseCasesSection({
 
             {/* Bottom Content Well (`#FBFAF6` inset with `12px` bezel) */}
             <div className="px-[8px] pb-[8px] sm:px-[12px] sm:pb-[12px]">
-              <div
-                key={activeTab}
-                style={{ backgroundColor: 'var(--solva-bg)' }}
-                className="rounded-[14px] p-3 sm:p-[12px] grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch animate-debugger-switch"
+              <DirectionalStageSlide
+                stageKey={activeTab}
+                data-testid="pipeline-stage-slide"
+                className="rounded-[14px]"
               >
-                {/* Left Column (`412px` equivalent on Desktop, `padding: 28px`) */}
-                <div className="lg:col-span-5 p-4 sm:p-[28px] flex flex-col justify-between gap-[32px]">
-                  <div className="space-y-[28px]">
-                    <h4
-                      style={{ color: 'var(--solva-ink)' }}
-                      className="font-solva-serif font-light text-[26px] sm:text-[30px] leading-[1.25] tracking-[-0.05em]"
-                    >
-                      {current.headline}
-                    </h4>
+                <div
+                  style={{ backgroundColor: 'var(--solva-bg)' }}
+                  className="rounded-[14px] p-3 sm:p-[12px] grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch"
+                >
+                  {/* Left Column (`412px` equivalent on Desktop, `padding: 28px`) */}
+                  <div className="lg:col-span-5 p-4 sm:p-[28px] flex flex-col justify-between gap-[32px]">
+                    <div className="space-y-[28px]">
+                      <h4
+                        style={{ color: 'var(--solva-ink)' }}
+                        className="font-solva-serif font-light text-[26px] sm:text-[30px] leading-[1.25] tracking-[-0.05em]"
+                      >
+                        {current.headline}
+                      </h4>
 
-                    <div className="space-y-[24px]">
-                      {current.subFeatures.map((sf) => (
-                        <div key={sf.title} className="flex items-start gap-3">
-                          <CheckCircle2
-                            style={{ color: 'var(--solva-ink)' }}
-                            className="w-[18px] h-[18px] mt-1 shrink-0"
-                          />
-                          <div className="space-y-[4px]">
-                            <h6
+                      <div className="space-y-[24px]">
+                        {current.subFeatures.map((sf) => (
+                          <div key={sf.title} className="flex items-start gap-3">
+                            <CheckCircle2
                               style={{ color: 'var(--solva-ink)' }}
-                              className="font-solva-sans text-[17px] sm:text-[18px] font-normal leading-[25.2px]"
-                            >
-                              {sf.title}
-                            </h6>
-                            <p
-                              style={{ color: 'var(--solva-muted)' }}
-                              className="font-solva-sans text-[14px] font-normal leading-[21px]"
-                            >
-                              {sf.desc}
-                            </p>
+                              className="w-[18px] h-[18px] mt-1 shrink-0"
+                            />
+                            <div className="space-y-[4px]">
+                              <h6
+                                style={{ color: 'var(--solva-ink)' }}
+                                className="font-solva-sans text-[17px] sm:text-[18px] font-normal leading-[25.2px]"
+                              >
+                                {sf.title}
+                              </h6>
+                              <p
+                                style={{ color: 'var(--solva-muted)' }}
+                                className="font-solva-sans text-[14px] font-normal leading-[21px]"
+                              >
+                                {sf.desc}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
+
+                    <SolvaButton
+                      to={isAuthenticated ? '/upload' : '/login'}
+                      variant="primary"
+                      fullWidth
+                    >
+                      {lang === 'vi' ? 'Trải nghiệm quy trình thẩm định này' : 'Try CITRA Free'}
+                    </SolvaButton>
                   </div>
 
-                  <SolvaButton
-                    to={isAuthenticated ? '/upload' : '/login'}
-                    variant="primary"
-                    fullWidth
-                  >
-                    {lang === 'vi' ? 'Trải nghiệm quy trình thẩm định này' : 'Try CITRA Free'}
-                  </SolvaButton>
+                  {/* Right Column (`764x501px` equivalent, Painterly Frame + Stage Card) */}
+                  <div className="lg:col-span-7">
+                    <SolvaPainterlyFrame
+                      paintingSrc={current.painting}
+                      alt={current.headline}
+                      radiusClass="rounded-[10px]"
+                      className="w-full h-full min-h-[380px] sm:min-h-[460px] p-5 sm:p-[40px] flex items-center justify-center"
+                    >
+                      <div className="w-full h-full flex items-center justify-center">
+                        <PipelineStageVisual tabIndex={activeTab} lang={lang} />
+                      </div>
+                    </SolvaPainterlyFrame>
+                  </div>
                 </div>
-
-                {/* Right Column (`764x501px` equivalent, Painterly Frame + Stage Card) */}
-                <div className="lg:col-span-7">
-                  <SolvaPainterlyFrame
-                    paintingSrc={current.painting}
-                    alt={current.headline}
-                    radiusClass="rounded-[10px]"
-                    className="w-full h-full min-h-[380px] sm:min-h-[460px] p-5 sm:p-[40px] flex items-center justify-center"
-                  >
-                    <div className="w-full h-full flex items-center justify-center">
-                      <PipelineStageVisual tabIndex={activeTab} lang={lang} />
-                    </div>
-                  </SolvaPainterlyFrame>
-                </div>
-              </div>
+              </DirectionalStageSlide>
             </div>
           </div>
         </SolvaScrollReveal>
@@ -3503,7 +3586,6 @@ function SolvaTaxonomyPricingSection({
   isAuthenticated: boolean;
 }) {
   const [annualBilling, setAnnualBilling] = useState(false);
-  const { containerRef: pricingRef, replaySeed: pricingSeed } = useFloralCardAnimation(5400);
 
   const tiers = [
     {
@@ -3642,7 +3724,7 @@ function SolvaTaxonomyPricingSection({
 
         {/* Toggle + 3 Cards Wrapper */}
         <div className="w-full flex flex-col items-center gap-[32px]">
-          {/* Solva Squircle Switch (`48x28px`, `border-radius: 8px`, `bg: #ECE9E0`) */}
+          {/* Tactile Switch (#27 TactileToggle) */}
           <SolvaScrollReveal yOffset={20}>
             <div className="inline-flex items-center gap-[10px]">
               <span
@@ -3651,25 +3733,12 @@ function SolvaTaxonomyPricingSection({
               >
                 {lang === 'vi' ? 'Thanh toán theo tháng' : 'Monthly'}
               </span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={annualBilling}
+              <TactileToggle
+                checked={annualBilling}
+                onChange={setAnnualBilling}
                 aria-label="Toggle billing cycle"
-                onClick={() => setAnnualBilling((prev) => !prev)}
-                style={{ backgroundColor: 'var(--solva-surface-alt)' }}
-                className="w-[48px] h-[28px] rounded-[8px] p-[4px] flex items-center transition-colors cursor-pointer"
-              >
-                <span
-                  style={{
-                    backgroundColor: annualBilling
-                      ? 'var(--solva-ink)'
-                      : 'var(--solva-subtle)',
-                    transform: annualBilling ? 'translateX(20px)' : 'translateX(0px)',
-                  }}
-                  className="w-[20px] h-[20px] rounded-[5px] transition-transform duration-200 ease-out"
-                />
-              </button>
+                data-testid="landing-billing-toggle"
+              />
               <span
                 style={{ color: 'var(--solva-ink)' }}
                 className="font-solva-sans text-[15px] sm:text-[16px]"
@@ -3680,7 +3749,7 @@ function SolvaTaxonomyPricingSection({
           </SolvaScrollReveal>
 
           {/* 3 Plan Cards (`389x483px` equivalent, `bg: #F4F2EC`, `rounded-[16px]`, `p-[32px]`) */}
-          <div ref={pricingRef} className="w-full grid grid-cols-1 lg:grid-cols-3 gap-[16px]">
+          <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-[16px]">
             {tiers.map((tier, idx) => (
               <SolvaScrollReveal
                 key={tier.name}
@@ -3736,17 +3805,17 @@ function SolvaTaxonomyPricingSection({
                       )}
                     </div>
 
-                    {/* Price Display (`Sentient` 40px Light) */}
+                    {/* Price Display (`Sentient` 40px Light + #02 Per-Digit NumberPopIn) */}
                     <div className="flex items-baseline gap-1.5">
                       <span
                         style={{ color: 'var(--solva-ink)' }}
                         className="font-solva-serif font-light text-[36px] sm:text-[40px] leading-[46px] tracking-[-0.05em]"
                       >
-                        <SolvaLiveNumber
-                          value={tier.metricNum}
-                          prefix="$"
-                          replaySeed={pricingSeed}
-                          durationMs={1350}
+                        <NumberPopIn
+                          value={`$${tier.metricNum}`}
+                          data-testid={`landing-price-${
+                            idx === 0 ? 'basic' : idx === 1 ? 'pro' : 'ultra'
+                          }`}
                         />
                       </span>
                       <span
@@ -3757,7 +3826,7 @@ function SolvaTaxonomyPricingSection({
                           tier.featured ? 'font-medium' : ''
                         }`}
                       >
-                        / {tier.unit}
+                        <SoftTextSwap text={`/ ${tier.unit}`} />
                       </span>
                     </div>
 
@@ -4309,14 +4378,14 @@ function SolvaFAQSection({ lang }: { lang: Lang }) {
                   className="relative w-[20px] h-[25px] flex items-center justify-center shrink-0"
                 >
                   <Plus
-                    className={`w-4 h-4 absolute transition-all duration-350 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                       isOpen
                         ? 'rotate-90 opacity-0 scale-75'
                         : 'rotate-0 opacity-100 scale-100'
                     }`}
                   />
                   <Minus
-                    className={`w-4 h-4 absolute transition-all duration-350 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                       isOpen
                         ? 'rotate-0 opacity-100 scale-100'
                         : '-rotate-90 opacity-0 scale-75'
@@ -4325,9 +4394,12 @@ function SolvaFAQSection({ lang }: { lang: Lang }) {
                 </span>
               </button>
               <div
+                data-open={isOpen ? 'true' : 'false'}
                 style={{
                   gridTemplateRows: isOpen ? '1fr' : '0fr',
-                  transition: 'grid-template-rows 420ms cubic-bezier(0.22, 1, 0.36, 1)',
+                  transition: isOpen
+                    ? 'grid-template-rows 300ms cubic-bezier(0.22, 1, 0.36, 1)'
+                    : 'grid-template-rows 190ms cubic-bezier(0.32, 0.72, 0, 1)',
                 }}
                 className="grid"
                 aria-hidden={!isOpen}
@@ -4338,10 +4410,11 @@ function SolvaFAQSection({ lang }: { lang: Lang }) {
                       opacity: isOpen ? 1 : 0,
                       transform: isOpen
                         ? 'translate3d(0, 0, 0)'
-                        : 'translate3d(0, -10px, 0)',
-                      filter: isOpen ? 'blur(0px)' : 'blur(2.5px)',
-                      transition:
-                        'opacity 360ms cubic-bezier(0.22, 1, 0.36, 1), transform 420ms cubic-bezier(0.22, 1, 0.36, 1), filter 320ms cubic-bezier(0.22, 1, 0.36, 1)',
+                        : 'translate3d(0, -8px, 0)',
+                      filter: isOpen ? 'blur(0px)' : 'blur(2px)',
+                      transition: isOpen
+                        ? 'opacity 260ms cubic-bezier(0.22, 1, 0.36, 1), transform 300ms cubic-bezier(0.22, 1, 0.36, 1), filter 240ms cubic-bezier(0.22, 1, 0.36, 1)'
+                        : 'opacity 150ms cubic-bezier(0.32, 0.72, 0, 1), transform 190ms cubic-bezier(0.32, 0.72, 0, 1), filter 150ms cubic-bezier(0.32, 0.72, 0, 1)',
                     }}
                     className="pb-[24px] pr-[24px]"
                   >

@@ -39,6 +39,7 @@ import { ThemeToggle } from '@/contexts/ThemeContext';
 import {
   CardHoverTilt,
   IconSwap,
+  NumberPopIn,
   SoftTextSwap,
   SymmetricChevron,
   useSlidingPill,
@@ -56,8 +57,6 @@ import {
 import {
   BottomCTAMockup,
   CohortBatchAuditWidget,
-  SolvaLiveNumber,
-  useFloralCardAnimation,
 } from '@/components/landing/SolvaMockupWidgets';
 import {
   ScholarlySourceLogo,
@@ -240,7 +239,7 @@ function SolvaPlanActionButton({
       onClick={onClick}
       data-testid={testId}
       style={variantStyle}
-      className={`group relative inline-flex items-center justify-center w-full h-[46px] px-[18px] pt-[1px] rounded-[10px] font-solva-sans text-[14px] font-medium leading-[21px] transition-all duration-200 select-none ${
+      className={`group relative inline-flex items-center justify-center w-full h-[46px] px-[18px] pt-[1px] rounded-[10px] font-solva-sans text-[14px] font-medium leading-[21px] transition-[background-color,border-color,color,opacity,box-shadow] duration-200 select-none ${
         disabled ? 'opacity-55 cursor-not-allowed' : 'cursor-pointer hover:opacity-95'
       }`}
     >
@@ -281,8 +280,6 @@ export function PricingPage() {
   const [loadingTier, setLoadingTier] = useState<'pro' | 'ultra' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canceled = searchParams.get('canceled') === '1';
-
-  const { containerRef: pricingRef, replaySeed: pricingSeed } = useFloralCardAnimation(5400);
 
   useEffect(() => {
     if (user?.billing_cycle === 'monthly' || user?.billing_cycle === 'annual') {
@@ -589,7 +586,6 @@ export function PricingPage() {
                 3 SOLVA EDITORIAL PRICING CARDS (Basic · Pro Floral · Ultra)
                 ============================================================ */}
             <div
-              ref={pricingRef}
               className="w-full grid grid-cols-1 lg:grid-cols-3 gap-[16px] items-stretch"
             >
               {/* 1. BASIC TIER */}
@@ -861,7 +857,7 @@ export function PricingPage() {
                         : 'Full Neuro-Symbolic pipeline for full-length theses, research manuscripts, and lecturer grading.'}
                     </p>
 
-                    {/* Price Display (`Sentient` 44px Light + SolvaLiveNumber) */}
+                    {/* Price Display (`Sentient` 44px Light + #02 Per-Digit NumberPopIn) */}
                     <div
                       style={{ borderColor: 'var(--solva-border)' }}
                       className="pt-4 border-t"
@@ -872,12 +868,7 @@ export function PricingPage() {
                           className="font-solva-serif font-light text-[40px] sm:text-[44px] leading-[48px] tracking-[-0.05em]"
                           data-testid="pro-price-display"
                         >
-                          <SolvaLiveNumber
-                            value={proPrice}
-                            prefix="$"
-                            replaySeed={pricingSeed}
-                            durationMs={1150}
-                          />
+                          <NumberPopIn value={`$${proPrice}`} />
                         </span>
                         <span
                           style={{ color: 'var(--solva-muted)' }}
@@ -1082,7 +1073,7 @@ export function PricingPage() {
                         : 'Unrestricted verification scale for university departments, research labs, and doctoral committees.'}
                     </p>
 
-                    {/* Price Display (`Sentient` 44px Light + SolvaLiveNumber) */}
+                    {/* Price Display (`Sentient` 44px Light + #02 Per-Digit NumberPopIn) */}
                     <div
                       style={{ borderColor: 'var(--solva-border)' }}
                       className="pt-4 border-t"
@@ -1093,12 +1084,7 @@ export function PricingPage() {
                           className="font-solva-serif font-light text-[40px] sm:text-[44px] leading-[48px] tracking-[-0.05em]"
                           data-testid="ultra-price-display"
                         >
-                          <SolvaLiveNumber
-                            value={ultraPrice}
-                            prefix="$"
-                            replaySeed={pricingSeed}
-                            durationMs={1150}
-                          />
+                          <NumberPopIn value={`$${ultraPrice}`} />
                         </span>
                         <span
                           style={{ color: 'var(--solva-muted)' }}
@@ -2147,14 +2133,14 @@ function PricingSolvaFAQSection({
                   className="relative w-[20px] h-[25px] flex items-center justify-center shrink-0"
                 >
                   <Plus
-                    className={`w-4 h-4 absolute transition-all duration-350 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                       isOpen
                         ? 'rotate-90 opacity-0 scale-75'
                         : 'rotate-0 opacity-100 scale-100'
                     }`}
                   />
                   <Minus
-                    className={`w-4 h-4 absolute transition-all duration-350 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                       isOpen
                         ? 'rotate-0 opacity-100 scale-100'
                         : '-rotate-90 opacity-0 scale-75'
@@ -2163,9 +2149,12 @@ function PricingSolvaFAQSection({
                 </span>
               </button>
               <div
+                data-open={isOpen ? 'true' : 'false'}
                 style={{
                   gridTemplateRows: isOpen ? '1fr' : '0fr',
-                  transition: 'grid-template-rows 420ms cubic-bezier(0.22, 1, 0.36, 1)',
+                  transition: isOpen
+                    ? 'grid-template-rows 300ms cubic-bezier(0.22, 1, 0.36, 1)'
+                    : 'grid-template-rows 190ms cubic-bezier(0.32, 0.72, 0, 1)',
                 }}
                 className="grid"
                 aria-hidden={!isOpen}
@@ -2176,10 +2165,11 @@ function PricingSolvaFAQSection({
                       opacity: isOpen ? 1 : 0,
                       transform: isOpen
                         ? 'translate3d(0, 0, 0)'
-                        : 'translate3d(0, -10px, 0)',
-                      filter: isOpen ? 'blur(0px)' : 'blur(2.5px)',
-                      transition:
-                        'opacity 360ms cubic-bezier(0.22, 1, 0.36, 1), transform 420ms cubic-bezier(0.22, 1, 0.36, 1), filter 320ms cubic-bezier(0.22, 1, 0.36, 1)',
+                        : 'translate3d(0, -8px, 0)',
+                      filter: isOpen ? 'blur(0px)' : 'blur(2px)',
+                      transition: isOpen
+                        ? 'opacity 260ms cubic-bezier(0.22, 1, 0.36, 1), transform 300ms cubic-bezier(0.22, 1, 0.36, 1), filter 240ms cubic-bezier(0.22, 1, 0.36, 1)'
+                        : 'opacity 150ms cubic-bezier(0.32, 0.72, 0, 1), transform 190ms cubic-bezier(0.32, 0.72, 0, 1), filter 150ms cubic-bezier(0.32, 0.72, 0, 1)',
                     }}
                     className="pb-[24px] pr-[24px]"
                   >
