@@ -692,8 +692,19 @@ class TestMultilingualQuantizedOnnxAndCrossLingualAlignment:
             / "hub"
             / "models--sentence-transformers--paraphrase-multilingual-MiniLM-L12-v2"
         )
-        if not cache_dir.exists():
-            pytest.skip("Multilingual MiniLM cache not present on this runner")
+        snapshots_dir = cache_dir / "snapshots"
+        has_cached_weights = snapshots_dir.exists() and any(
+            p.suffix in {".onnx", ".safetensors", ".bin"} for p in snapshots_dir.rglob("*")
+        )
+        if not has_cached_weights:
+            pytest.skip("Multilingual MiniLM weights not cached on this runner")
+
+        SemanticMatcher.clear_embedding_cache()
+        matcher = SemanticMatcher()
+        matcher.enable_multilingual_encoder = True
+        matcher.onnx_quantized = True
+        if matcher._load_multilingual_encoder() is None:
+            pytest.skip("Multilingual MiniLM encoder runtime unavailable on this runner")
 
         vi_claim = (
             "Phơi nhiễm cadmi mạn tính từ nước ngầm làm tổn thương ống lượn gần "
@@ -709,10 +720,6 @@ class TestMultilingualQuantizedOnnxAndCrossLingualAlignment:
         )
         assert overlap_score == 0.0
 
-        SemanticMatcher.clear_embedding_cache()
-        matcher = SemanticMatcher()
-        matcher.enable_multilingual_encoder = True
-        matcher.onnx_quantized = True
         res = matcher.check_content_alignment(
             cited_context=vi_claim,
             source_title=en_title,

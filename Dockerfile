@@ -26,7 +26,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir "onnxruntime>=1.18,<2.0" "optimum[onnxruntime]>=1.20,<2.0" && \
+    pip install --no-cache-dir "onnxruntime>=1.18,<2.0" "optimum[onnxruntime]>=2.0,<3.0" && \
     mkdir -p /opt/mupdf-libs && \
     cp -a /usr/lib/*-linux-gnu/libmupdf* \
           /usr/lib/*-linux-gnu/libfreetype* \
