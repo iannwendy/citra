@@ -14,29 +14,47 @@ import {
 import { type Lang } from './SolvaPrimitives';
 import { SYMBOLIC_RULES_RANGE } from '@/lib/productFacts';
 import { ScholarlySourceLogo, getScholarlySourceUrl } from './ScholarlySourceLogos';
+import { SubtleNumber } from '@/components/ui/transitions';
 
 /* ============================================================
    SOLVA FLOATING UI MOCKUP CARDS (WITH 8PX FROSTED GLASS RING)
    Placed over Impressionist Oil Paintings + 5% Film Grain Noise
-   With Smooth Viewport-Aware Count-Up & Autonomous Live Animations
+   With Latched One-Shot Entrance & Honest Live Micro-Telemetry
    ============================================================ */
 
+function isOSReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
 /**
- * Shared IntersectionObserver + Periodic Replay Hook for Floral Demo Cards.
- * - Detects when any floral-box demo card enters or leaves the viewport.
- * - Triggers an immediate count-up from 0 + staggered entrance on scroll-in,
- *   and periodically replays the smooth number & state animation while in view.
+ * Shared One-Shot IntersectionObserver Hook for Floral Demo Cards.
+ * - Latches permanently on first viewport intersection (`replayIntervalMs = 0` by default)
+ *   so metrics count up once on arrival and never zero-reset while the user reads.
  */
-export function useFloralCardAnimation(replayIntervalMs = 5200) {
+export function useFloralCardAnimation(replayIntervalMs = 0) {
+  const reduced = isOSReducedMotion();
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isVisible, setIsVisible] = useState(false);
-  const [replaySeed, setReplaySeed] = useState(0);
+  const hasEnteredRef = useRef<boolean>(reduced);
+  const [isVisible, setIsVisible] = useState<boolean>(reduced);
+  const [replaySeed, setReplaySeed] = useState<number>(reduced ? 1 : 0);
 
   useEffect(() => {
+    if (reduced) {
+      hasEnteredRef.current = true;
+      setIsVisible(true);
+      setReplaySeed(1);
+      return;
+    }
+
     const el = containerRef.current;
     if (!el || typeof window === 'undefined') return;
 
     if (typeof IntersectionObserver === 'undefined') {
+      hasEnteredRef.current = true;
       setIsVisible(true);
       setReplaySeed(1);
       return;
@@ -47,9 +65,17 @@ export function useFloralCardAnimation(replayIntervalMs = 5200) {
         const entry = entries[0];
         if (!entry) return;
         if (entry.isIntersecting) {
-          setIsVisible(true);
-          setReplaySeed((prev) => prev + 1);
-        } else {
+          if (!hasEnteredRef.current) {
+            hasEnteredRef.current = true;
+            setIsVisible(true);
+            setReplaySeed(1);
+            if (replayIntervalMs <= 0) {
+              observer.disconnect();
+            }
+          } else if (replayIntervalMs > 0) {
+            setIsVisible(true);
+          }
+        } else if (replayIntervalMs > 0) {
           setIsVisible(false);
         }
       },
@@ -58,22 +84,24 @@ export function useFloralCardAnimation(replayIntervalMs = 5200) {
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [replayIntervalMs, reduced]);
 
   useEffect(() => {
-    if (!isVisible || replayIntervalMs <= 0) return;
+    if (reduced || !isVisible || replayIntervalMs <= 0) return;
     const timer = window.setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       setReplaySeed((prev) => prev + 1);
     }, replayIntervalMs);
     return () => window.clearInterval(timer);
-  }, [isVisible, replayIntervalMs]);
+  }, [isVisible, replayIntervalMs, reduced]);
 
   const getStaggerStyle = (delayMs = 0): CSSProperties => ({
     opacity: isVisible ? 1 : 0.001,
     transform: isVisible ? 'translate3d(0, 0, 0)' : 'translate3d(0, 14px, 0)',
     filter: isVisible ? 'none' : 'blur(2.5px)',
-    transitionProperty: 'opacity, transform, filter, background-color, border-color',
+    transitionProperty: reduced
+      ? 'none'
+      : 'opacity, transform, filter, background-color, border-color',
     transitionDuration: isVisible ? '620ms' : '320ms',
     transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
     transitionDelay: isVisible ? `${delayMs}ms` : '0ms',
@@ -108,9 +136,8 @@ function formatSolvaLiveNumber(
 
 /**
  * Smooth Quartic Ease-Out Animated Number (`SolvaLiveNumber`)
- * Replicates and extends the smooth count-up feel of `SolvaAnimatedMetric` (15+, 96.4%, 4.9/5)
- * inside every floral demo card.
- * Updates DOM `textContent` directly in `requestAnimationFrame` to avoid ~4,200 React re-renders/sec.
+ * One-shot count-up on initial floral card entrance (`replaySeed: 0 -> 1`).
+ * Updates DOM `textContent` directly in `requestAnimationFrame` to avoid React re-renders.
  */
 export function SolvaLiveNumber({
   value,
@@ -144,7 +171,7 @@ export function SolvaLiveNumber({
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (typeof IntersectionObserver === 'undefined') {
+    if (typeof IntersectionObserver === 'undefined' || isOSReducedMotion()) {
       currentValRef.current = value;
       return;
     }
@@ -171,16 +198,17 @@ export function SolvaLiveNumber({
       cancelAnimationFrame(rafRef.current);
     }
 
+    const clock = () => Date.now();
     let startTime: number | null = null;
     let lastText = '';
 
-    const tick = (now: number) => {
+    const tick = () => {
+      const now = clock();
       if (startTime === null) {
         startTime = now;
       }
       const elapsed = Math.max(0, now - startTime);
       const progress = Math.max(0, Math.min(1, elapsed / Math.max(140, activeDuration)));
-      // Quartic ease-out for silky deceleration matching SolvaAnimatedMetric
       const eased = 1 - Math.pow(1 - progress, 4);
       const next = progress < 1 ? fromVal + (value - fromVal) * eased : value;
       currentValRef.current = next;
@@ -259,7 +287,7 @@ export function HeroVerificationMockup({
   activeStep: number;
   onSelectStep?: (step: number) => void;
 }) {
-  const { containerRef, isVisible, replaySeed, getStaggerStyle } = useFloralCardAnimation(5800);
+  const { containerRef, isVisible, replaySeed, getStaggerStyle } = useFloralCardAnimation();
   const [activeApiPulse, setActiveApiPulse] = useState(0);
 
   useEffect(() => {
@@ -349,10 +377,7 @@ export function HeroVerificationMockup({
         <div className="flex items-center gap-1.5 shrink-0">
           <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[5px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-medium">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>
-              GROBID TEI ·{' '}
-              <SolvaLiveNumber value={15} replaySeed={replaySeed} durationMs={1250} /> APIs
-            </span>
+            <span>GROBID TEI · 15 APIs</span>
           </span>
           <span
             style={{
@@ -361,13 +386,7 @@ export function HeroVerificationMockup({
             }}
             className="px-2 py-0.5 rounded-[5px] font-mono text-[10px] font-semibold"
           >
-            CIS:{' '}
-            <SolvaLiveNumber
-              value={selected.cisScore}
-              decimals={1}
-              replaySeed={replaySeed}
-              durationMs={1400}
-            />
+            CIS: <SubtleNumber value={selected.cisScore.toFixed(1)} />
           </span>
         </div>
       </div>
@@ -400,7 +419,7 @@ export function HeroVerificationMockup({
                   backgroundColor: isActive ? 'var(--solva-surface)' : 'transparent',
                   borderColor: isActive ? 'var(--solva-ink)' : 'var(--solva-border)',
                 }}
-                className="p-2.5 rounded-[8px] border transition-all duration-300 cursor-pointer hover:opacity-90"
+                className="p-2.5 rounded-[8px] border transition-[background-color,border-color,opacity] duration-300 cursor-pointer hover:opacity-90"
               >
                 <div className="flex items-center justify-between gap-1.5 mb-1">
                   <span
@@ -502,16 +521,13 @@ export function HeroVerificationMockup({
                     : 'text-emerald-600 dark:text-emerald-400'
                 }`}
               >
-                {selected.tone === 'red' ? (
-                  lang === 'vi' ? '404 Không tồn tại' : '404 Ghost'
-                ) : (
-                  <SolvaLiveNumber
-                    value={100}
-                    suffix={lang === 'vi' ? '% Khớp chuẩn' : '% Match'}
-                    replaySeed={replaySeed}
-                    durationMs={1150}
-                  />
-                )}
+                {selected.tone === 'red'
+                  ? lang === 'vi'
+                    ? '404 Không tồn tại'
+                    : '404 Ghost'
+                  : lang === 'vi'
+                    ? '100% Khớp chuẩn'
+                    : '100% Match'}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -536,12 +552,7 @@ export function HeroVerificationMockup({
                 ) : (
                   <>
                     {lang === 'vi' ? 'ĐỒNG THUẬN (DeBERTa ' : 'SUPPORTS (DeBERTa '}
-                    <SolvaLiveNumber
-                      value={selected.nliScore}
-                      decimals={2}
-                      replaySeed={replaySeed}
-                      durationMs={1250}
-                    />
+                    <SubtleNumber value={selected.nliScore.toFixed(2)} />
                     )
                   </>
                 )}
@@ -562,6 +573,7 @@ export function HeroVerificationMockup({
             <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
               {apiSources.map((s, idx) => {
                 const isPulsing = idx === activeApiPulse;
+                const liveMs = isPulsing ? Math.max(1, s.ms - 1) : s.ms;
                 const href = getScholarlySourceUrl(s.name) ?? '#';
                 return (
                   <a
@@ -578,7 +590,7 @@ export function HeroVerificationMockup({
                         ? 'var(--solva-ink)'
                         : 'var(--solva-border)',
                     }}
-                    className="group px-2 py-1.5 rounded-[6px] border flex items-center justify-between gap-1 transition-all duration-300 hover:border-[#1C1A15]/60 dark:hover:border-[#FBFAF6]/50 cursor-pointer"
+                    className="group px-2 py-1.5 rounded-[6px] border flex items-center justify-between gap-1 transition-[background-color,border-color] duration-300 hover:border-[#1C1A15]/60 dark:hover:border-[#FBFAF6]/50 cursor-pointer"
                   >
                     <span
                       style={{ color: 'var(--solva-ink)' }}
@@ -588,12 +600,7 @@ export function HeroVerificationMockup({
                       <span className="truncate">{s.name}</span>
                     </span>
                     <span style={{ color: 'var(--solva-muted)' }} className="shrink-0">
-                      <SolvaLiveNumber
-                        value={s.ms}
-                        suffix="ms"
-                        replaySeed={replaySeed}
-                        durationMs={1050 + idx * 140}
-                      />
+                      <SubtleNumber value={liveMs} suffix="ms" />
                     </span>
                   </a>
                 );
@@ -616,7 +623,7 @@ export function FeatureCardWidget({
   index: 0 | 1 | 2;
   lang: Lang;
 }) {
-  const { containerRef, isVisible, replaySeed, getStaggerStyle } = useFloralCardAnimation(5000);
+  const { containerRef, isVisible, replaySeed, getStaggerStyle } = useFloralCardAnimation();
   const [cycleStep, setCycleStep] = useState(0);
 
   useEffect(() => {
@@ -665,11 +672,11 @@ export function FeatureCardWidget({
               backgroundColor: 'var(--solva-surface)',
               borderColor: highlightL1 ? 'var(--solva-ink)' : 'transparent',
             }}
-            className="p-2.5 rounded-[10px] border space-y-1 transition-all duration-500"
+            className="p-2.5 rounded-[10px] border space-y-1 transition-[border-color,background-color] duration-500"
           >
             <div className="flex items-center justify-between text-[10px] font-mono">
               <span style={{ color: 'var(--solva-muted)' }}>
-                {lang === 'vi' ? 'TẦNG 1 · ĐỐI CHIẾU NỘI BỘ' : 'LAYER 1 · MAPPING'}
+                {lang === 'vi' ? 'TẦNG 1 · ĐỐI CHIẾU NGUỒN NỘI BỘ' : 'LAYER 1 · MAPPING'}
               </span>
               <span className="text-emerald-700 dark:text-emerald-400 font-semibold inline-flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -678,9 +685,9 @@ export function FeatureCardWidget({
             </div>
             <p style={{ color: 'var(--solva-ink)' }} className="text-[12px] font-medium">
               {lang === 'vi' ? 'Trong bài [' : 'In-text ['}
-              <SolvaLiveNumber value={activeRefNum} replaySeed={replaySeed} durationMs={1150} />
+              <SubtleNumber value={activeRefNum} />
               {lang === 'vi' ? '] ↔ Danh mục #' : '] ↔ Bibliography #'}
-              <SolvaLiveNumber value={activeRefNum} replaySeed={replaySeed} durationMs={1150} />
+              <SubtleNumber value={activeRefNum} />
             </p>
           </div>
 
@@ -690,7 +697,7 @@ export function FeatureCardWidget({
               backgroundColor: 'var(--solva-surface)',
               borderColor: highlightL2 ? 'var(--solva-ink)' : 'transparent',
             }}
-            className="p-2.5 rounded-[10px] border space-y-1 transition-all duration-500"
+            className="p-2.5 rounded-[10px] border space-y-1 transition-[border-color,background-color] duration-500"
           >
             <div className="flex items-center justify-between text-[10px] font-mono">
               <span style={{ color: 'var(--solva-muted)' }}>
@@ -701,21 +708,9 @@ export function FeatureCardWidget({
               </span>
             </div>
             <p style={{ color: 'var(--solva-ink)' }} className="text-[12px] font-medium">
-              {lang === 'vi' ? 'DOI hợp lệ · Lệch năm (' : 'DOI valid · Year drift ('}
-              <SolvaLiveNumber
-                value={2020}
-                startValue={2000}
-                replaySeed={replaySeed}
-                durationMs={1200}
-              />{' '}
-              →{' '}
-              <SolvaLiveNumber
-                value={2021}
-                startValue={2000}
-                replaySeed={replaySeed}
-                durationMs={1350}
-              />
-              )
+              {lang === 'vi'
+                ? 'DOI hợp lệ · Lệch năm (2020 → 2021)'
+                : 'DOI valid · Year drift (2020 → 2021)'}
             </p>
           </div>
         </div>
@@ -728,21 +723,13 @@ export function FeatureCardWidget({
           className="pt-2.5 border-t flex items-center justify-between text-[11px]"
         >
           <span style={{ color: 'var(--solva-muted)' }}>
-            <SolvaLiveNumber value={7} replaySeed={replaySeed} durationMs={1100} />{' '}
-            {lang === 'vi' ? 'trạng thái T1 · ' : 'L1 states · '}
-            <SolvaLiveNumber value={8} replaySeed={replaySeed} durationMs={1250} />{' '}
-            {lang === 'vi' ? 'nhãn T2' : 'L2 verdicts'}
+            {lang === 'vi' ? '7 trạng thái T1 · 8 nhãn T2' : '7 L1 states · 8 L2 verdicts'}
           </span>
           <span
             style={{ color: 'var(--solva-ink)' }}
             className="font-mono font-semibold"
           >
-            <SolvaLiveNumber
-              value={100}
-              suffix={lang === 'vi' ? '% Độc lập' : '% Orthogonal'}
-              replaySeed={replaySeed}
-              durationMs={1450}
-            />
+            {lang === 'vi' ? '100% Độc lập' : '100% Orthogonal'}
           </span>
         </div>
       </div>
@@ -799,8 +786,7 @@ export function FeatureCardWidget({
             className="text-[12px] font-medium flex items-center gap-1.5"
           >
             <Database className="w-3.5 h-3.5" />
-            <SolvaLiveNumber value={15} suffix="+" replaySeed={replaySeed} durationMs={1200} />{' '}
-            {lang === 'vi' ? 'CSDL Khoa học' : 'Scholarly Indexes'}
+            15+ {lang === 'vi' ? 'CSDL Khoa học' : 'Scholarly Indexes'}
           </span>
           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -825,7 +811,7 @@ export function FeatureCardWidget({
                   backgroundColor: 'var(--solva-surface)',
                   borderColor: isWaveActive ? 'var(--solva-ink)' : 'transparent',
                 }}
-                className="group px-2.5 py-1.5 rounded-[8px] border flex items-center justify-between text-[11px] transition-all duration-300 hover:border-[#1C1A15]/50 dark:hover:border-[#FBFAF6]/40 cursor-pointer"
+                className="group px-2.5 py-1.5 rounded-[8px] border flex items-center justify-between text-[11px] transition-[border-color,background-color] duration-300 hover:border-[#1C1A15]/50 dark:hover:border-[#FBFAF6]/40 cursor-pointer"
               >
                 <span
                   style={{ color: 'var(--solva-ink)' }}
@@ -835,26 +821,8 @@ export function FeatureCardWidget({
                   <span className="truncate">{api.name}</span>
                 </span>
                 <span className="font-mono text-[10px] text-emerald-700 dark:text-emerald-300 shrink-0 ml-2">
-                  {api.score !== undefined ? (
-                    <>
-                      {api.status}{' '}
-                      <SolvaLiveNumber
-                        value={api.score}
-                        decimals={2}
-                        replaySeed={replaySeed}
-                        durationMs={1200}
-                      />
-                    </>
-                  ) : (
-                    api.status
-                  )}{' '}
-                  ·{' '}
-                  <SolvaLiveNumber
-                    value={liveMs}
-                    suffix="ms"
-                    replaySeed={replaySeed}
-                    durationMs={1050 + idx * 110}
-                  />
+                  {api.score !== undefined ? `${api.status} ${api.score.toFixed(2)}` : api.status} ·{' '}
+                  <SubtleNumber value={liveMs} suffix="ms" />
                 </span>
               </a>
             );
@@ -908,7 +876,7 @@ export function FeatureCardWidget({
           {lang === 'vi' ? 'Suy luận Logic & Ngữ nghĩa NLI' : 'Neuro-Symbolic & NLI'}
         </span>
         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:text-[#1C1A15]">
-          R01–R<SolvaLiveNumber value={20} padDigits={2} replaySeed={replaySeed} durationMs={1200} />
+          {SYMBOLIC_RULES_RANGE}
         </span>
       </div>
 
@@ -919,7 +887,7 @@ export function FeatureCardWidget({
             backgroundColor: 'var(--solva-surface)',
             borderColor: cycleStep === 0 ? 'var(--solva-ink)' : 'transparent',
           }}
-          className="p-2.5 rounded-[10px] border space-y-1 transition-all duration-500"
+          className="p-2.5 rounded-[10px] border space-y-1 transition-[border-color,background-color] duration-500"
         >
           <div className="flex items-center justify-between text-[10px] font-mono">
             <span style={{ color: 'var(--solva-muted)' }}>
@@ -931,17 +899,7 @@ export function FeatureCardWidget({
             </span>
           </div>
           <p style={{ color: 'var(--solva-ink)' }} className="text-[11px] font-mono">
-            R<SolvaLiveNumber value={1} padDigits={2} replaySeed={replaySeed} durationMs={900} />
-            _DOI ∧ R
-            <SolvaLiveNumber value={3} padDigits={2} replaySeed={replaySeed} durationMs={1050} />
-            _TITLE_SIM (
-            <SolvaLiveNumber
-              value={currentSim}
-              decimals={2}
-              replaySeed={replaySeed}
-              durationMs={1350}
-            />
-            )
+            R01_DOI ∧ R03_TITLE_SIM (<SubtleNumber value={currentSim.toFixed(2)} />)
           </p>
         </div>
 
@@ -951,7 +909,7 @@ export function FeatureCardWidget({
             backgroundColor: 'var(--solva-surface)',
             borderColor: cycleStep === 1 ? 'var(--solva-ink)' : 'transparent',
           }}
-          className="p-2.5 rounded-[10px] border space-y-1.5 transition-all duration-500"
+          className="p-2.5 rounded-[10px] border space-y-1.5 transition-[border-color,background-color] duration-500"
         >
           <div className="flex items-center justify-between text-[10px] font-mono">
             <span style={{ color: 'var(--solva-muted)' }}>
@@ -959,19 +917,13 @@ export function FeatureCardWidget({
             </span>
             <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
               {lang === 'vi' ? 'ĐỒNG THUẬN (' : 'SUPPORTS ('}
-              <SolvaLiveNumber
-                value={currentStance}
-                suffix="%"
-                replaySeed={replaySeed}
-                durationMs={1400}
-              />
-              )
+              <SubtleNumber value={currentStance} suffix="%" />)
             </span>
           </div>
           <div className="w-full h-1.5 rounded-full bg-[#ECE9E0] dark:bg-[#29261F] overflow-hidden">
             <div
               style={{ width: `${currentStance}%` }}
-              className="h-full rounded-full bg-[#1C1A15] dark:bg-[#FBFAF6] transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)]"
+              className="h-full rounded-full bg-[#1C1A15] dark:bg-[#FBFAF6] transition-[width] duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)]"
             />
           </div>
         </div>
@@ -995,7 +947,7 @@ export function FeatureCardWidget({
 
 /**
  * 3. STICKY CARD FLOATING WIDGETS (340x340px inside 667x548px oil painting frame)
- * Exact 1:1 visual layout of Screenshots 0, 1, 2 with smooth staggered entrance & auto-running numbers.
+ * Exact 1:1 visual layout of Screenshots 0, 1, 2 with honest static identifiers & subtle telemetry.
  */
 export function StickyCardWidget({
   index,
@@ -1004,7 +956,7 @@ export function StickyCardWidget({
   index: 0 | 1 | 2;
   lang: Lang;
 }) {
-  const { containerRef, isVisible, replaySeed } = useFloralCardAnimation(4800);
+  const { containerRef, isVisible, replaySeed } = useFloralCardAnimation();
   const [activePhase, setActivePhase] = useState(0);
 
   useEffect(() => {
@@ -1059,15 +1011,10 @@ export function StickyCardWidget({
               color: activePhase === 0 ? 'var(--solva-ink)' : 'var(--solva-muted)',
               transform: activePhase === 0 ? 'translateX(2px)' : 'translateX(0px)',
             }}
-            className="transition-all duration-300"
+            className="transition-[color,transform] duration-300"
           >
             &lt;biblStruct xml:id=&quot;b
-            <SolvaLiveNumber
-              value={currentXmlId}
-              padDigits={2}
-              replaySeed={replaySeed}
-              durationMs={1250}
-            />
+            <SubtleNumber value={String(currentXmlId).padStart(2, '0')} />
             &quot;&gt;
           </div>
           <div
@@ -1075,7 +1022,7 @@ export function StickyCardWidget({
               color: 'var(--solva-ink)',
               transform: activePhase === 1 ? 'translateX(3px)' : 'translateX(0px)',
             }}
-            className="pl-3 transition-all duration-300"
+            className="pl-3 transition-transform duration-300"
           >
             &lt;title&gt;Deep Residual Learning&lt;/title&gt;
           </div>
@@ -1084,27 +1031,16 @@ export function StickyCardWidget({
               color: 'var(--solva-ink)',
               transform: activePhase === 2 ? 'translateX(3px)' : 'translateX(0px)',
             }}
-            className="pl-3 transition-all duration-300"
+            className="pl-3 transition-transform duration-300"
           >
-            &lt;idno type=&quot;DOI&quot;&gt;10.
-            <SolvaLiveNumber value={1109} replaySeed={replaySeed} durationMs={1300} />
-            /CVPR.
-            <SolvaLiveNumber
-              value={2016}
-              startValue={2000}
-              replaySeed={replaySeed}
-              durationMs={1350}
-            />
-            .
-            <SolvaLiveNumber value={90} replaySeed={replaySeed} durationMs={1400} />
-            &lt;/idno&gt;
+            &lt;idno type=&quot;DOI&quot;&gt;10.1109/CVPR.2016.90&lt;/idno&gt;
           </div>
           <div
             style={{
               color: activePhase === 3 ? 'var(--solva-ink)' : 'var(--solva-muted)',
               transform: activePhase === 3 ? 'translateX(2px)' : 'translateX(0px)',
             }}
-            className="transition-all duration-300"
+            className="transition-[color,transform] duration-300"
           >
             &lt;/biblStruct&gt;
           </div>
@@ -1112,39 +1048,10 @@ export function StickyCardWidget({
 
         <div className="grid grid-cols-2 gap-2 text-[11px]">
           {[
-            {
-              key: 'ieee',
-              node: (
-                <>
-                  IEEE [
-                  <SolvaLiveNumber value={1} replaySeed={replaySeed} durationMs={900} />
-                  ]–[N]
-                </>
-              ),
-            },
-            {
-              key: 'apa',
-              node: (
-                <>
-                  APA{' '}
-                  <SolvaLiveNumber value={7} replaySeed={replaySeed} durationMs={1100} />
-                  th (Author, Yr)
-                </>
-              ),
-            },
-            {
-              key: 'vancouver',
-              node: (
-                <>
-                  Vancouver (
-                  <SolvaLiveNumber value={1} replaySeed={replaySeed} durationMs={1000} />)
-                </>
-              ),
-            },
-            {
-              key: 'acm',
-              node: <>ACM / Harvard</>,
-            },
+            { key: 'ieee', label: 'IEEE [1]–[N]' },
+            { key: 'apa', label: 'APA 7th (Author, Yr)' },
+            { key: 'vancouver', label: 'Vancouver (1)' },
+            { key: 'acm', label: 'ACM / Harvard' },
           ].map((item, idx) => {
             const isStyleActive = idx === activePhase;
             return (
@@ -1159,7 +1066,7 @@ export function StickyCardWidget({
                     : 'var(--solva-border)',
                   transform: isStyleActive ? 'translateY(-1px)' : 'translateY(0px)',
                 }}
-                className="px-2.5 py-1.5 rounded-[6px] border flex items-center gap-1.5 transition-all duration-300"
+                className="px-2.5 py-1.5 rounded-[6px] border flex items-center gap-1.5 transition-[background-color,border-color,transform] duration-300"
               >
                 <Check
                   className={`w-3 h-3 text-emerald-600 shrink-0 transition-transform duration-300 ${
@@ -1167,7 +1074,7 @@ export function StickyCardWidget({
                   }`}
                 />
                 <span style={{ color: 'var(--solva-ink)' }} className="truncate">
-                  {item.node}
+                  {item.label}
                 </span>
               </div>
             );
@@ -1212,15 +1119,14 @@ export function StickyCardWidget({
               borderColor: activePhase === 0 ? 'var(--solva-ink)' : 'transparent',
               transform: activePhase === 0 ? 'translateY(-1px)' : 'translateY(0px)',
             }}
-            className="p-2.5 rounded-[8px] border flex items-center justify-between gap-2 transition-all duration-300"
+            className="p-2.5 rounded-[8px] border flex items-center justify-between gap-2 transition-[border-color,transform] duration-300"
           >
             <div className="min-w-0">
               <div
                 style={{ color: 'var(--solva-ink)' }}
                 className="text-[11px] font-mono font-semibold"
               >
-                R<SolvaLiveNumber value={1} padDigits={2} replaySeed={replaySeed} durationMs={1000} />
-                _DOI_EXACT
+                R01_DOI_EXACT
               </div>
               <div
                 style={{ color: 'var(--solva-muted)' }}
@@ -1243,37 +1149,22 @@ export function StickyCardWidget({
               borderColor: activePhase === 1 ? 'var(--solva-ink)' : 'transparent',
               transform: activePhase === 1 ? 'translateY(-1px)' : 'translateY(0px)',
             }}
-            className="p-2.5 rounded-[8px] border flex items-center justify-between gap-2 transition-all duration-300"
+            className="p-2.5 rounded-[8px] border flex items-center justify-between gap-2 transition-[border-color,transform] duration-300"
           >
             <div className="min-w-0">
               <div
                 style={{ color: 'var(--solva-ink)' }}
                 className="text-[11px] font-mono font-semibold"
               >
-                R<SolvaLiveNumber value={5} padDigits={2} replaySeed={replaySeed} durationMs={1150} />
-                _YEAR_DRIFT
+                R05_YEAR_DRIFT
               </div>
               <div
                 style={{ color: 'var(--solva-muted)' }}
                 className="text-[11px] truncate"
               >
-                {lang === 'vi' ? 'Ghi trong bài ' : 'Cited '}
-                <SolvaLiveNumber
-                  value={2018}
-                  startValue={2000}
-                  replaySeed={replaySeed}
-                  durationMs={1250}
-                />{' '}
-                {lang === 'vi' ? '· Công bố ' : '· Published '}
-                <SolvaLiveNumber
-                  value={2019}
-                  startValue={2000}
-                  replaySeed={replaySeed}
-                  durationMs={1350}
-                />{' '}
-                (Δ=
-                <SolvaLiveNumber value={1} replaySeed={replaySeed} durationMs={1050} />
-                {lang === 'vi' ? ' năm)' : 'yr)'}
+                {lang === 'vi'
+                  ? 'Ghi trong bài 2018 · Công bố 2019 (Δ=1 năm)'
+                  : 'Cited 2018 · Published 2019 (Δ=1yr)'}
               </div>
             </div>
             <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 bg-amber-500/12 text-amber-700 dark:text-amber-300">
@@ -1288,7 +1179,7 @@ export function StickyCardWidget({
               borderColor: activePhase === 2 ? 'var(--solva-ink)' : 'transparent',
               transform: activePhase === 2 ? 'translateY(-1px)' : 'translateY(0px)',
             }}
-            className="p-2.5 rounded-[8px] border flex items-center justify-between gap-2 transition-all duration-300"
+            className="p-2.5 rounded-[8px] border flex items-center justify-between gap-2 transition-[border-color,transform] duration-300"
           >
             <div className="min-w-0">
               <div
@@ -1307,12 +1198,7 @@ export function StickyCardWidget({
               </div>
             </div>
             <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300">
-              <SolvaLiveNumber
-                value={currentStance}
-                decimals={2}
-                replaySeed={replaySeed}
-                durationMs={1450}
-              />
+              <SubtleNumber value={currentStance.toFixed(2)} />
             </span>
           </div>
         </div>
@@ -1347,14 +1233,7 @@ export function StickyCardWidget({
           </span>
         </span>
         <span className="text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-300 shrink-0 whitespace-nowrap">
-          <SolvaLiveNumber
-            value={currentCisDelta}
-            prefix="+"
-            suffix=" CIS"
-            decimals={1}
-            replaySeed={replaySeed}
-            durationMs={1500}
-          />
+          <SubtleNumber prefix="+" value={currentCisDelta.toFixed(1)} suffix=" CIS" />
         </span>
       </div>
 
@@ -1395,13 +1274,7 @@ export function StickyCardWidget({
             {lang === 'vi' ? 'Bản nộp v2 (Đã chuẩn hóa)' : 'Draft v2 (Verified)'}
           </div>
           <div className="font-solva-serif text-[26px] leading-tight text-emerald-700 dark:text-emerald-300">
-            <SolvaLiveNumber
-              value={currentV2}
-              decimals={1}
-              suffix="%"
-              replaySeed={replaySeed}
-              durationMs={1550}
-            />
+            <SubtleNumber value={currentV2.toFixed(1)} suffix="%" />
           </div>
         </div>
       </div>
@@ -1414,7 +1287,7 @@ export function StickyCardWidget({
               : 'Hallucinated / Ghost DOIs resolved'}
           </span>
           <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
-            <SolvaLiveNumber value={3} replaySeed={replaySeed} durationMs={1050} /> →{' '}
+            3 →{' '}
             <SolvaLiveNumber
               value={0}
               startValue={3}
@@ -1430,7 +1303,7 @@ export function StickyCardWidget({
               : 'Missing bibliography entries fixed'}
           </span>
           <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
-            <SolvaLiveNumber value={4} replaySeed={replaySeed} durationMs={1100} /> →{' '}
+            4 →{' '}
             <SolvaLiveNumber
               value={0}
               startValue={4}
@@ -1454,7 +1327,7 @@ export function PipelineStageVisual({
   tabIndex: number;
   lang: Lang;
 }) {
-  const { containerRef, isVisible, replaySeed, getStaggerStyle } = useFloralCardAnimation(5200);
+  const { containerRef, isVisible, replaySeed, getStaggerStyle } = useFloralCardAnimation();
   const [activeRow, setActiveRow] = useState(0);
 
   useEffect(() => {
@@ -1567,17 +1440,15 @@ export function PipelineStageVisual({
   ];
 
   const active = stages[tabIndex] || stages[0];
-  const combinedSeed = replaySeed + tabIndex * 100;
 
   return (
     <div
       ref={containerRef}
-      key={tabIndex}
       style={{
         backgroundColor: 'var(--solva-card-elevated)',
         ...getStaggerStyle(0),
       }}
-      className="solva-glass-ring w-full rounded-[8px] p-5 sm:p-6 space-y-4 text-left border border-[#E7E3D9]/80 dark:border-[#332F26] animate-debugger-switch"
+      className="solva-glass-ring w-full rounded-[8px] p-5 sm:p-6 space-y-4 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
     >
       <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#E7E3D9] dark:border-[#332F26]">
         <span
@@ -1610,7 +1481,7 @@ export function PipelineStageVisual({
                 backgroundColor: 'var(--solva-surface)',
                 borderColor: isRowActive ? 'var(--solva-ink)' : 'transparent',
               }}
-              className="px-3.5 py-2.5 rounded-[8px] border flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[12px] transition-all duration-300"
+              className="px-3.5 py-2.5 rounded-[8px] border flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[12px] transition-[border-color,background-color] duration-300"
             >
               <span style={{ color: 'var(--solva-muted)' }} className="font-mono">
                 {'label' in m && m.label ? m.label : m.k}
@@ -1619,31 +1490,7 @@ export function PipelineStageVisual({
                 style={{ color: 'var(--solva-ink)' }}
                 className="font-medium sm:text-right"
               >
-                {m.k === 'Cache Hit Latency' ? (
-                  <>
-                    <SolvaLiveNumber
-                      value={3.2}
-                      decimals={1}
-                      suffix=" ms"
-                      replaySeed={combinedSeed}
-                      durationMs={1250}
-                    />{' '}
-                    (BM25 + Trigram FTS5)
-                  </>
-                ) : m.k === 'Title Similarity' ? (
-                  <>
-                    Token Jaccard + Levenshtein + MiniLM (
-                    <SolvaLiveNumber
-                      value={0.98}
-                      decimals={2}
-                      replaySeed={combinedSeed}
-                      durationMs={1350}
-                    />
-                    )
-                  </>
-                ) : (
-                  m.v
-                )}
+                {m.v}
               </span>
             </div>
           );
@@ -1662,72 +1509,36 @@ export function PipelineStageVisual({
         <span style={{ color: 'var(--solva-ink)' }}>
           {tabIndex === 0 && (
             <>
-              {lang === 'vi' ? 'Đã nhận diện ' : 'Extracted '}
-              <SolvaLiveNumber value={28} replaySeed={combinedSeed} durationMs={1200} />
-              {lang === 'vi' ? ' trích dẫn trong bài ([1]–[' : ' in-text markers ([1]–['}
-              <SolvaLiveNumber value={28} replaySeed={combinedSeed} durationMs={1200} />
-              {lang === 'vi' ? ']) và liên kết chuẩn xác ' : ']) and mapped '}
-              <SolvaLiveNumber value={27} replaySeed={combinedSeed} durationMs={1300} />
-              {lang === 'vi' ? ' mục tài liệu tham khảo chỉ trong ' : ' canonical bibliography entries in '}
+              {lang === 'vi'
+                ? 'Đã nhận diện 28 trích dẫn trong bài ([1]–[28]) và liên kết chuẩn xác 27 mục tài liệu tham khảo chỉ trong '
+                : 'Extracted 28 in-text markers ([1]–[28]) and mapped 27 canonical bibliography entries in '}
               <SolvaLiveNumber
                 value={340}
                 suffix="ms."
-                replaySeed={combinedSeed}
-                durationMs={1450}
+                replaySeed={replaySeed}
+                durationMs={1250}
               />
             </>
           )}
           {tabIndex === 1 && (
             <>
-              {lang === 'vi' ? 'Truy vấn đồng thời ' : 'Queried '}
-              <SolvaLiveNumber value={15} replaySeed={combinedSeed} durationMs={1150} />
-              {lang === 'vi' ? ' cổng API · Khử trùng lặp ' : ' APIs concurrently · Deduplicated '}
-              <SolvaLiveNumber value={64} replaySeed={combinedSeed} durationMs={1350} />
               {lang === 'vi'
-                ? ' bản ghi ứng viên · Xác lập hồ sơ học thuật chuẩn nhất.'
-                : ' candidate records · Ranked top canonical work.'}
+                ? 'Truy vấn đồng thời 15 cổng API · Khử trùng lặp 64 bản ghi ứng viên · Xác lập hồ sơ học thuật chuẩn nhất.'
+                : 'Queried 15 APIs concurrently · Deduplicated 64 candidate records · Ranked top canonical work.'}
             </>
           )}
           {tabIndex === 2 && (
             <>
               {lang === 'vi'
-                ? 'Kích hoạt quy tắc R01_EXACT_DOI & R04_AUTHOR_OVERLAP → Phán quyết: VERIFIED (Độ tin cậy: '
-                : 'Triggered R01_EXACT_DOI & R04_AUTHOR_OVERLAP → Verdict: VERIFIED (Confidence: '}
-              <SolvaLiveNumber
-                value={98.4}
-                decimals={1}
-                suffix="%)."
-                replaySeed={combinedSeed}
-                durationMs={1450}
-              />
+                ? 'Kích hoạt quy tắc R01_EXACT_DOI & R04_AUTHOR_OVERLAP → Phán quyết: VERIFIED (Độ tin cậy: 98.4%).'
+                : 'Triggered R01_EXACT_DOI & R04_AUTHOR_OVERLAP → Verdict: VERIFIED (Confidence: 98.4%).'}
             </>
           )}
           {tabIndex === 3 && (
             <>
               {lang === 'vi'
-                ? 'Luận điểm trích dẫn tương thích chặt chẽ với tóm tắt bài gốc (ĐỒNG THUẬN: '
-                : 'In-text claim entails retrieved abstract (SUPPORTS: '}
-              <SolvaLiveNumber
-                value={0.94}
-                decimals={2}
-                replaySeed={combinedSeed}
-                durationMs={1350}
-              />{' '}
-              · {lang === 'vi' ? 'BÁC BỎ: ' : 'REFUTES: '}
-              <SolvaLiveNumber
-                value={0.01}
-                decimals={2}
-                replaySeed={combinedSeed}
-                durationMs={1150}
-              />{' '}
-              · {lang === 'vi' ? 'TRUNG LẬP: ' : 'NEUTRAL: '}
-              <SolvaLiveNumber
-                value={0.05}
-                decimals={2}
-                replaySeed={combinedSeed}
-                durationMs={1200}
-              />
-              ).
+                ? 'Luận điểm trích dẫn tương thích chặt chẽ với tóm tắt bài gốc (ĐỒNG THUẬN: 0.94 · BÁC BỎ: 0.01 · TRUNG LẬP: 0.05).'
+                : 'In-text claim entails retrieved abstract (SUPPORTS: 0.94 · REFUTES: 0.01 · NEUTRAL: 0.05).'}
             </>
           )}
         </span>
@@ -1740,7 +1551,7 @@ export function PipelineStageVisual({
  * 5. BOTTOM CTA MOCKUP CARD (`800x533px` cropped style inside 588x376px painterly frame)
  */
 export function BottomCTAMockup({ lang }: { lang: Lang }) {
-  const { containerRef, isVisible, replaySeed, getStaggerStyle } = useFloralCardAnimation(5200);
+  const { containerRef, isVisible, replaySeed, getStaggerStyle } = useFloralCardAnimation();
   const [activeBox, setActiveBox] = useState(0);
 
   useEffect(() => {
@@ -1831,7 +1642,7 @@ export function BottomCTAMockup({ lang }: { lang: Lang }) {
                 borderColor: isHighlighted ? 'var(--solva-ink)' : 'transparent',
                 transform: isHighlighted ? 'translateY(-1px)' : 'translateY(0px)',
               }}
-              className="p-2.5 rounded-[8px] border transition-all duration-300"
+              className="p-2.5 rounded-[8px] border transition-[border-color,transform] duration-300"
             >
               <div className={`font-solva-serif text-[24px] leading-none ${stat.color}`}>
                 <SolvaLiveNumber
@@ -1865,12 +1676,7 @@ export function BottomCTAMockup({ lang }: { lang: Lang }) {
             : 'Ready for PDF / JSON export & instructor sign-off'}
         </span>
         <span className="font-mono text-emerald-700 dark:text-emerald-300 font-semibold shrink-0 ml-2">
-          <SolvaLiveNumber
-            value={100}
-            suffix={lang === 'vi' ? '% Truy vết rõ' : '% Traceable'}
-            replaySeed={replaySeed}
-            durationMs={1450}
-          />
+          {lang === 'vi' ? '100% Truy vết rõ' : '100% Traceable'}
         </span>
       </div>
     </div>
@@ -1883,7 +1689,7 @@ export function BottomCTAMockup({ lang }: { lang: Lang }) {
  * directly illustrating the "120 graduation theses on Monday morning" case study.
  */
 export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
-  const { containerRef, isVisible, replaySeed, getStaggerStyle } = useFloralCardAnimation(5200);
+  const { containerRef, isVisible, replaySeed, getStaggerStyle } = useFloralCardAnimation();
   const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
@@ -1897,7 +1703,6 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
   const theses = [
     {
       id: '#018',
-      idNum: 18,
       file: 'Thesis_018_Neural_RAG.pdf',
       verdict: lang === 'vi' ? 'DOI NGỤY TẠO' : 'GHOST DOI',
       tone: 'red' as const,
@@ -1910,7 +1715,6 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
     },
     {
       id: '#047',
-      idNum: 47,
       file: 'Thesis_047_Legal_NLP.pdf',
       verdict: lang === 'vi' ? 'LỆCH NĂM XB' : 'YEAR DRIFT',
       tone: 'amber' as const,
@@ -1923,7 +1727,6 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
     },
     {
       id: '#104',
-      idNum: 104,
       file: 'Thesis_104_BioMed_VLM.pdf',
       verdict: lang === 'vi' ? 'ĐÃ XÁC THỰC' : 'VERIFIED',
       tone: 'emerald' as const,
@@ -2053,7 +1856,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
                   ? 'var(--solva-ink)'
                   : 'var(--solva-border)',
               }}
-              className="w-full text-left px-3 py-2 rounded-[8px] border transition-all duration-200 cursor-pointer flex items-center justify-between gap-2"
+              className="w-full text-left px-3 py-2 rounded-[8px] border transition-[background-color,border-color] duration-200 cursor-pointer flex items-center justify-between gap-2"
             >
               <div className="flex items-center gap-2 min-w-0">
                 <span
@@ -2067,12 +1870,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
                   }}
                   className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0"
                 >
-                  #<SolvaLiveNumber
-                    value={item.idNum}
-                    padDigits={3}
-                    replaySeed={replaySeed}
-                    durationMs={1150 + idx * 120}
-                  />
+                  {item.id}
                 </span>
                 <span
                   style={{ color: 'var(--solva-ink)' }}
@@ -2113,12 +1911,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
           <span style={{ color: 'var(--solva-muted)' }}>
             CIS:{' '}
             <strong style={{ color: 'var(--solva-ink)' }}>
-              <SolvaLiveNumber
-                value={activeThesis.cisNum}
-                decimals={1}
-                replaySeed={replaySeed}
-                durationMs={1150}
-              />
+              <SubtleNumber value={activeThesis.cisNum.toFixed(1)} />
             </strong>
           </span>
         </div>
@@ -2133,8 +1926,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
       {/* Bottom Action Link to Live Debugger */}
       <div style={getStaggerStyle(250)} className="pt-0.5 flex items-center justify-between text-[11px]">
         <span style={{ color: 'var(--solva-muted)' }} className="font-mono text-[10px]">
-          <SolvaLiveNumber value={15} suffix="+ APIs" replaySeed={replaySeed} durationMs={1200} />{' '}
-          · GROBID TEI
+          15+ APIs · GROBID TEI
         </span>
         <a
           href="/#interactive-demo"

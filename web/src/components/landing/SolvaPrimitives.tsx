@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useRef, type ReactNode } from 'react';
+import { Fragment, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 /* ============================================================
@@ -163,13 +163,19 @@ function subscribeToScroll(
   };
 }
 
+function isOSReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
 /**
- * 0. Reversible Scroll-Linked Reveal Wrapper (`SolvaScrollReveal`)
- * - Initial page load / refresh & scrolling down into view: smoothly transitions from
- *   faded/blurred/shifted (`opacity: 0.001`, `translate3d(0, yOffset, 0)`, `scale(scaleFrom)`, `blur(blurPx)`)
- *   to crisp full visibility (`opacity: 1`, `translate3d(0,0,0)`, `scale(1)`, `blur(0px)`).
- * - Scrolling back up (`lùi lại`): as elements move back down toward the bottom edge
- *   of the viewport, they smoothly fade, blur, and glide back down.
+ * 0. Editorial Scroll Reveal Wrapper (`SolvaScrollReveal`)
+ * - Latches permanently on first viewport entry (`reversible = false` by default) so
+ *   reading back up never re-blurs or hides editorial copy, and unsubscribes from the
+ *   scroll loop + releases compositor memory (`will-change: auto`) once settled.
  */
 export function SolvaScrollReveal({
   children,
@@ -178,6 +184,7 @@ export function SolvaScrollReveal({
   scaleFrom = 0.985,
   blurPx = 3.5,
   triggerRatio = 0.91,
+  reversible = false,
   className = '',
 }: {
   children: ReactNode;
@@ -186,18 +193,45 @@ export function SolvaScrollReveal({
   scaleFrom?: number;
   blurPx?: number;
   triggerRatio?: number;
+  reversible?: boolean;
   className?: string;
 }) {
+  const reduced = isOSReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
-  const phaseRef = useRef<'visible' | 'below' | 'above'>('below');
-  const [phase, setPhase] = useState<'visible' | 'below' | 'above'>('below');
-  const [settled, setSettled] = useState(false);
+  const phaseRef = useRef<'visible' | 'below' | 'above'>(reduced ? 'visible' : 'below');
+  const latchedRef = useRef<boolean>(reduced);
+  const [phase, setPhase] = useState<'visible' | 'below' | 'above'>(
+    reduced ? 'visible' : 'below'
+  );
+  const [settled, setSettled] = useState<boolean>(reduced);
 
   useEffect(() => {
+    if (reduced) {
+      setPhase('visible');
+      setSettled(true);
+      return;
+    }
     const el = ref.current;
     if (!el) return;
-    return subscribeToScroll(el, (vh, _vw, schedule) => {
+    if (!reversible && latchedRef.current) return;
+
+    let unsub: (() => void) | null = null;
+    unsub = subscribeToScroll(el, (vh, _vw, schedule) => {
+      if (!reversible && latchedRef.current) return;
       const rect = el.getBoundingClientRect();
+
+      if (!reversible) {
+        if (rect.top <= vh * triggerRatio) {
+          latchedRef.current = true;
+          phaseRef.current = 'visible';
+          schedule(() => {
+            setPhase('visible');
+            unsub?.();
+          });
+        }
+        return;
+      }
+
       let nextPhase: 'visible' | 'below' | 'above';
       if (rect.top > vh * triggerRatio) {
         nextPhase = 'below';
@@ -212,11 +246,15 @@ export function SolvaScrollReveal({
         schedule(() => setPhase(nextPhase));
       }
     });
-  }, [triggerRatio]);
+    return () => {
+      unsub?.();
+    };
+  }, [triggerRatio, reversible, reduced]);
 
   const isVisible = phase === 'visible';
 
   useEffect(() => {
+    if (reduced) return;
     if (!isVisible) {
       setSettled(false);
       return;
@@ -225,7 +263,7 @@ export function SolvaScrollReveal({
       setSettled(true);
     }, delayMs + 720);
     return () => window.clearTimeout(timer);
-  }, [isVisible, delayMs]);
+  }, [isVisible, delayMs, reduced]);
 
   const translateY = phase === 'below' ? yOffset : phase === 'above' ? -16 : 0;
   const currentScale = isVisible ? 1 : scaleFrom;
@@ -240,7 +278,7 @@ export function SolvaScrollReveal({
         opacity: currentOpacity,
         transform: settled ? 'none' : `translate3d(0, ${translateY}px, 0) scale(${currentScale})`,
         filter: currentBlur > 0 ? `blur(${currentBlur}px)` : 'none',
-        transitionProperty: 'opacity, transform, filter',
+        transitionProperty: reduced ? 'none' : 'opacity, transform, filter',
         transitionDuration: isVisible ? '700ms' : '420ms',
         transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
         transitionDelay: `${activeDelay}ms`,
@@ -302,6 +340,7 @@ export function SolvaTwoToneHeading({
   size = 'h2',
   centered = false,
   delayMs = 0,
+  reversible = false,
   className = '',
 }: {
   as?: 'h1' | 'h2';
@@ -310,18 +349,45 @@ export function SolvaTwoToneHeading({
   size?: 'h1' | 'h2';
   centered?: boolean;
   delayMs?: number;
+  reversible?: boolean;
   className?: string;
 }) {
+  const reduced = isOSReducedMotion();
   const ref = useRef<HTMLHeadingElement>(null);
-  const phaseRef = useRef<'visible' | 'below' | 'above'>('below');
-  const [phase, setPhase] = useState<'visible' | 'below' | 'above'>('below');
-  const [wordsSettled, setWordsSettled] = useState(false);
+  const phaseRef = useRef<'visible' | 'below' | 'above'>(reduced ? 'visible' : 'below');
+  const latchedRef = useRef<boolean>(reduced);
+  const [phase, setPhase] = useState<'visible' | 'below' | 'above'>(
+    reduced ? 'visible' : 'below'
+  );
+  const [wordsSettled, setWordsSettled] = useState<boolean>(reduced);
 
   useEffect(() => {
+    if (reduced) {
+      setPhase('visible');
+      setWordsSettled(true);
+      return;
+    }
     const el = ref.current;
     if (!el) return;
-    return subscribeToScroll(el, (vh, _vw, schedule) => {
+    if (!reversible && latchedRef.current) return;
+
+    let unsub: (() => void) | null = null;
+    unsub = subscribeToScroll(el, (vh, _vw, schedule) => {
+      if (!reversible && latchedRef.current) return;
       const rect = el.getBoundingClientRect();
+
+      if (!reversible) {
+        if (rect.top <= vh * 0.91) {
+          latchedRef.current = true;
+          phaseRef.current = 'visible';
+          schedule(() => {
+            setPhase('visible');
+            unsub?.();
+          });
+        }
+        return;
+      }
+
       let nextPhase: 'visible' | 'below' | 'above';
       if (rect.top > vh * 0.91) {
         nextPhase = 'below';
@@ -336,7 +402,10 @@ export function SolvaTwoToneHeading({
         schedule(() => setPhase(nextPhase));
       }
     });
-  }, []);
+    return () => {
+      unsub?.();
+    };
+  }, [reversible, reduced]);
 
   const normalizedPrimary = primary.normalize('NFC');
   const normalizedSecondary = secondary ? secondary.normalize('NFC') : undefined;
@@ -365,6 +434,7 @@ export function SolvaTwoToneHeading({
   const wordY = phase === 'below' ? 28 : phase === 'above' ? -14 : 0;
 
   useEffect(() => {
+    if (reduced) return;
     if (!isVisible) {
       setWordsSettled(false);
       return;
@@ -375,7 +445,7 @@ export function SolvaTwoToneHeading({
       setWordsSettled(true);
     }, maxDelay);
     return () => window.clearTimeout(timer);
-  }, [isVisible, delayMs, primaryWords.length, secondaryWords.length]);
+  }, [isVisible, delayMs, primaryWords.length, secondaryWords.length, reduced]);
 
   const renderAnimatedWords = (words: string[], startIndex: number) =>
     words.map((word, idx) => {
@@ -389,7 +459,7 @@ export function SolvaTwoToneHeading({
               opacity: isVisible ? 1 : 0.001,
               transform: wordsSettled ? 'none' : `translate3d(0, ${wordY}px, 0)`,
               filter: isVisible ? 'none' : 'blur(4px)',
-              transitionProperty: 'opacity, transform, filter',
+              transitionProperty: reduced ? 'none' : 'opacity, transform, filter',
               transitionDuration: isVisible ? '640ms' : '360ms',
               transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
               transitionDelay: `${delay}ms`,
@@ -449,7 +519,7 @@ export function SolvaButton({
   className?: string;
   testId?: string;
 }) {
-  const baseClasses = `group relative inline-flex items-center justify-center h-[44px] px-[16px] pt-[1px] rounded-[10px] font-solva-sans text-[14px] font-medium leading-[21px] transition-all duration-200 cursor-pointer select-none ${
+  const baseClasses = `group relative inline-flex items-center justify-center h-[44px] px-[16px] pt-[1px] rounded-[10px] font-solva-sans text-[14px] font-medium leading-[21px] transition-[background-color,border-color,color,opacity,box-shadow] duration-200 cursor-pointer select-none ${
     fullWidth ? 'w-full' : ''
   } ${className}`;
 
@@ -824,8 +894,8 @@ export function SolvaStickyStackCard({
 }
 
 /**
- * 6. Reversible Scroll-Triggered Animated Count-Up Metric (`Sentient` 40px Light)
- * Counts up when scrolled into view; resets and fades out when scrolled back up above it.
+ * 6. One-Shot Scroll-Triggered Animated Count-Up Metric (`Sentient` 40px Light)
+ * Counts up once on first viewport entry and latches permanently without periodic zero-resets.
  * Updates DOM textContent directly during RAF ticks (zero React re-renders per frame).
  */
 export function SolvaAnimatedMetric({
@@ -841,98 +911,102 @@ export function SolvaAnimatedMetric({
   decimals?: number;
   label: string;
 }) {
+  const reduced = isOSReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
   const numRef = useRef<HTMLDivElement>(null);
-  const [isVisible, setIsVisible] = useState(false);
-  const hasAnimated = useRef(false);
+  const [isVisible, setIsVisible] = useState<boolean>(reduced);
+  const hasAnimated = useRef<boolean>(reduced);
   const animRafRef = useRef<number | null>(null);
 
-  const formatMetric = (val: number) => {
-    const safeVal = Math.abs(val) < 1e-9 ? 0 : val;
-    return `${prefix}${safeVal.toFixed(decimals)}${suffix}`;
-  };
-
-  const runCountAnimation = (fromVal: number, toVal: number, durationMs: number) => {
-    if (animRafRef.current !== null) {
-      cancelAnimationFrame(animRafRef.current);
-    }
-    let startTime: number | null = null;
-    let lastText = '';
-    const tick = (now: number) => {
-      if (startTime === null) {
-        startTime = now;
-      }
-      const elapsed = Math.max(0, now - startTime);
-      const progress = Math.max(0, Math.min(1, elapsed / durationMs));
-      const eased = 1 - Math.pow(1 - progress, 4);
-      const current = fromVal + (toVal - fromVal) * eased;
-      const nextText = formatMetric(progress < 1 && hasAnimated.current ? current : toVal);
-      if (numRef.current && nextText !== lastText) {
-        lastText = nextText;
-        numRef.current.textContent = nextText;
-      }
-      if (progress < 1 && hasAnimated.current) {
-        animRafRef.current = requestAnimationFrame(tick);
-      } else {
-        animRafRef.current = null;
-      }
-    };
-    animRafRef.current = requestAnimationFrame(tick);
-  };
+  const formatMetric = useCallback(
+    (val: number) => {
+      const safeVal = Math.abs(val) < 1e-9 ? 0 : val;
+      return `${prefix}${safeVal.toFixed(decimals)}${suffix}`;
+    },
+    [prefix, decimals, suffix]
+  );
 
   useEffect(() => {
+    const clock = () => Date.now();
+    const runCountAnimation = (fromVal: number, toVal: number, durationMs: number) => {
+      if (animRafRef.current !== null) {
+        cancelAnimationFrame(animRafRef.current);
+      }
+      let startTime: number | null = null;
+      let lastText = '';
+      const tick = () => {
+        const now = clock();
+        if (startTime === null) {
+          startTime = now;
+        }
+        const elapsed = Math.max(0, now - startTime);
+        const progress = Math.max(0, Math.min(1, elapsed / durationMs));
+        const eased = 1 - Math.pow(1 - progress, 4);
+        const current = fromVal + (toVal - fromVal) * eased;
+        const nextText = formatMetric(progress < 1 ? current : toVal);
+        if (numRef.current && nextText !== lastText) {
+          lastText = nextText;
+          numRef.current.textContent = nextText;
+        }
+        if (progress < 1) {
+          animRafRef.current = requestAnimationFrame(tick);
+        } else {
+          animRafRef.current = null;
+        }
+      };
+      animRafRef.current = requestAnimationFrame(tick);
+    };
+
+    if (reduced) {
+      hasAnimated.current = true;
+      setIsVisible(true);
+      if (numRef.current) {
+        numRef.current.textContent = formatMetric(targetValue);
+      }
+      return;
+    }
+
     const el = ref.current;
     if (!el) return;
-    const unsub = subscribeToScroll(el, (vh, _vw, schedule) => {
-      const rect = el.getBoundingClientRect();
+    if (hasAnimated.current) {
+      if (numRef.current) {
+        numRef.current.textContent = formatMetric(targetValue);
+      }
+      return;
+    }
 
-      if (rect.top > vh * 0.93 || rect.bottom < 32) {
-        if (hasAnimated.current) {
-          hasAnimated.current = false;
-          schedule(() => {
-            setIsVisible(false);
-            if (numRef.current) {
-              numRef.current.textContent = formatMetric(0);
-            }
-          });
-        }
-      } else if (!hasAnimated.current) {
+    let unsub: (() => void) | null = null;
+    unsub = subscribeToScroll(el, (vh, _vw, schedule) => {
+      if (hasAnimated.current) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.top <= vh * 0.93) {
         hasAnimated.current = true;
         schedule(() => {
           setIsVisible(true);
           runCountAnimation(0, targetValue, 1500);
+          unsub?.();
         });
       }
     });
 
     return () => {
-      unsub();
+      unsub?.();
       if (animRafRef.current !== null) {
         cancelAnimationFrame(animRafRef.current);
       }
     };
-  }, [targetValue, decimals, prefix, suffix]);
-
-  // Continuous gentle live count refresh while visible in viewport
-  useEffect(() => {
-    if (!isVisible) return;
-    const interval = window.setInterval(() => {
-      if (hasAnimated.current && document.visibilityState === 'visible') {
-        runCountAnimation(0, targetValue, 1450);
-      }
-    }, 5200);
-    return () => window.clearInterval(interval);
-  }, [isVisible, targetValue, decimals, prefix, suffix]);
+  }, [targetValue, formatMetric, reduced]);
 
   return (
     <div
       ref={ref}
       style={{
         opacity: isVisible ? 1 : 0.001,
-        transform: `translate3d(0, ${isVisible ? 0 : 20}px, 0)`,
+        transform: isVisible ? 'none' : 'translate3d(0, 20px, 0)',
         filter: isVisible ? 'none' : 'blur(3px)',
-        transition:
-          'opacity 560ms cubic-bezier(0.22, 1, 0.36, 1), transform 580ms cubic-bezier(0.22, 1, 0.36, 1), filter 480ms cubic-bezier(0.22, 1, 0.36, 1)',
+        transition: reduced
+          ? 'none'
+          : 'opacity 560ms cubic-bezier(0.22, 1, 0.36, 1), transform 580ms cubic-bezier(0.22, 1, 0.36, 1), filter 480ms cubic-bezier(0.22, 1, 0.36, 1)',
       }}
       className="flex flex-col gap-[4px]"
     >

@@ -1221,6 +1221,9 @@
     filter  var(--text-soft-dur) var(--text-soft-ease),
     opacity var(--text-soft-dur) var(--text-soft-ease);
 }
+.t-text-soft-old::before {
+  content: attr(data-old);
+}
 .t-text-soft-new {
   opacity: 0;
   filter: blur(var(--text-soft-blur));
@@ -1285,6 +1288,9 @@
   inset: 0;
   text-align: center;
   pointer-events: none;
+}
+.t-subtle-old::before {
+  content: attr(data-old);
 }
 .t-subtle-number.is-animating .t-subtle-new {
   animation: t-subtle-in var(--subtle-dur) var(--subtle-ease) both;

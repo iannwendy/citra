@@ -317,9 +317,7 @@ export function SubtleNumber({
     >
       <span className="t-subtle-slot">
         {oldStr !== null && (
-          <span className="t-subtle-old" aria-hidden="true">
-            {oldStr}
-          </span>
+          <span className="t-subtle-old" data-old={oldStr} aria-hidden="true" />
         )}
         <span className="t-subtle-new">{str}</span>
       </span>
@@ -385,9 +383,7 @@ export function SoftTextSwap({
       className={cn('t-text-soft', swapping && 'is-swapping', className)}
     >
       {prevText !== null && (
-        <span className="t-text-soft-old" aria-hidden="true">
-          {prevText}
-        </span>
+        <span className="t-text-soft-old" data-old={prevText} aria-hidden="true" />
       )}
       <span className={prevText !== null ? 't-text-soft-new' : undefined}>
         {currentText}
@@ -1455,32 +1451,35 @@ export function ReasoningStream({
   lineClassName?: string;
   'data-testid'?: string;
 }) {
-  const safeLines = lines.length > 0 ? lines : [''];
-  const tailWindow = safeLines.slice(-visibleLines);
-  const [windowItems, setWindowItems] = useState<string[]>(tailWindow);
+  const linesKey = lines.length > 0 ? lines.join('\n') : '';
+  const initialLines = linesKey ? linesKey.split('\n') : [''];
+  const [windowItems, setWindowItems] = useState<string[]>(() =>
+    initialLines.slice(-visibleLines),
+  );
   const [stepping, setStepping] = useState(false);
   const [resetting, setResetting] = useState(true);
-  const prevLastRef = useRef<string>(safeLines[safeLines.length - 1]);
-  const prevLenRef = useRef<number>(safeLines.length);
+  const prevLastRef = useRef<string>(initialLines[initialLines.length - 1]);
+  const prevLenRef = useRef<number>(initialLines.length);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const latest = safeLines[safeLines.length - 1];
+    const currentLines = linesKey ? linesKey.split('\n') : [''];
+    const latest = currentLines[currentLines.length - 1];
     const grew =
-      safeLines.length > prevLenRef.current || latest !== prevLastRef.current;
-    prevLenRef.current = safeLines.length;
+      currentLines.length > prevLenRef.current || latest !== prevLastRef.current;
+    prevLenRef.current = currentLines.length;
     prevLastRef.current = latest;
 
-    const latestSlice = safeLines.slice(-visibleLines);
+    const latestSlice = currentLines.slice(-visibleLines);
 
-    if (!grew || prefersReducedMotion() || safeLines.length <= 1) {
+    if (!grew || prefersReducedMotion() || currentLines.length <= 1) {
       setWindowItems(latestSlice);
       setStepping(false);
       setResetting(true);
       return;
     }
 
-    const withOutgoing = safeLines.slice(-(visibleLines + 1));
+    const withOutgoing = currentLines.slice(-(visibleLines + 1));
     if (withOutgoing.length <= latestSlice.length) {
       setWindowItems(latestSlice);
       setStepping(false);
@@ -1503,14 +1502,14 @@ export function ReasoningStream({
     const timer = setTimeout(() => {
       setResetting(true);
       setStepping(false);
-      setWindowItems(safeLines.slice(-visibleLines));
+      setWindowItems(currentLines.slice(-visibleLines));
     }, stepMs);
 
     return () => {
       cancelAnimationFrame(raf);
       clearTimeout(timer);
     };
-  }, [safeLines.join('\n'), visibleLines, stepMs]);
+  }, [linesKey, visibleLines, stepMs]);
 
   return (
     <div
