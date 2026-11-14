@@ -33,6 +33,7 @@ interface OrphanCitation {
   citation_raw: string;
   label: string;
   mapping_status: string;
+  triggered_rules?: string[];
 }
 
 interface UncitedReference {
@@ -142,6 +143,7 @@ function OrphanCitationCard({
           <div className="flex items-center gap-2 mt-2.5 flex-wrap">
             <VerdictBadge
               verdict={isUrlResource(citation) ? 'resource' : citation.label}
+              triggeredRules={citation.triggered_rules}
               size="sm"
             />
             <MappingStatusBadge status={citation.mapping_status as any} size="sm" />
@@ -450,6 +452,7 @@ export function OrphanDetectionPage() {
                             citation_raw: citation.citation_raw,
                             label: citation.label,
                             mapping_status: citation.mapping_status,
+                            triggered_rules: citation.triggered_rules,
                           }}
                           index={index}
                           isVi={Boolean(isVi)}
@@ -507,6 +510,7 @@ export function OrphanDetectionPage() {
                             citation_raw: citation.citation_raw,
                             label: citation.label,
                             mapping_status: citation.mapping_status,
+                            triggered_rules: citation.triggered_rules,
                           }}
                           index={index}
                           isVi={Boolean(isVi)}
@@ -558,6 +562,7 @@ export function OrphanDetectionPage() {
                                   verdict={
                                     isUrlResource(v) ? 'resource' : v.label
                                   }
+                                  triggeredRules={v.triggered_rules}
                                   size="sm"
                                 />
                                 <MappingStatusBadge

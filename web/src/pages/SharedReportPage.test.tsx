@@ -269,4 +269,87 @@ describe('Task 6.1: SharedReportPage & EssayHeader Share Receipt', () => {
     expect(matrix[0]!.slice(0, 8)).toEqual([1, 1, 1, 1, 1, 1, 1, 0]);
     expect(qrSvg.getAttribute('shape-rendering') || qrSvg.getAttribute('shapeRendering')).toBeTruthy();
   });
+
+  it('renders Incomplete Reference / Thiếu quy cách trích dẫn badge for R-INCOMPLETE-METADATA in SharedReportPage', async () => {
+    vi.spyOn(api, 'getSharedEssayReport').mockResolvedValue({
+      essay_id: 31,
+      filename: 'incomplete_vs_typo_refs.pdf',
+      created_at: '2026-11-14T08:00:00Z',
+      num_pages: 8,
+      num_citations: 2,
+      cis: {
+        score: 71.2,
+        components: {
+          verified_ratio: 0.0,
+          metadata_accuracy: 0.375,
+          in_text_bib_consistency: 1.0,
+          format_consistency: 0.85,
+          identifier_validity: 1.0,
+        },
+        weights_used: {},
+        num_citations: 2,
+        num_unresolved: 0,
+        disclaimer: 'This system is a decision-support tool.',
+      },
+      style_profile: {
+        style: 'APA_LIKE',
+        confidence: 0.92,
+        apa_count: 2,
+        ieee_count: 0,
+        mixed_count: 0,
+        features: {},
+        ratios: {},
+        explanation: '',
+      },
+      receipt_id: 'CITRA-00031-11223344',
+      verified_at: '2026-11-14T08:00:00Z',
+      disclaimer: 'This system is a decision-support tool.',
+      verdict_counts: {
+        verified: 0,
+        metadata_error: 2,
+        suspected_hallucination: 0,
+        unresolved: 0,
+        resource: 0,
+      },
+      verdicts: [
+        {
+          reference_id: 'ref-0001',
+          raw_text: '[1] Making a robot vacuum cleaner to avoid falling down the stairs',
+          label: 'metadata_error',
+          confidence: 0.8,
+          explanation: 'Incomplete bibliographic reference.',
+          triggered_rules: ['R-INCOMPLETE-METADATA'],
+          matched_source: null,
+        },
+        {
+          reference_id: 'ref-0002',
+          raw_text: 'Vaswani, A. et al. (2018). Attention Is All You Need. NeurIPS.',
+          label: 'metadata_error',
+          confidence: 0.72,
+          explanation: 'Publication year mismatch (2018 vs 2017).',
+          triggered_rules: ['R-SINGLE-SOURCE-PARTIAL'],
+          matched_source: null,
+        },
+      ],
+    });
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/verify/share/:token" element={<SharedReportPage />} />
+      </Routes>,
+      { initialRoute: '/verify/share/sh_31_1999999999_abcdef1234567890abcdef12', user: null },
+    );
+
+    await waitFor(() => expect(screen.getByTestId('shared-report-page')).toBeDefined());
+    expect(screen.getByTestId('shared-verdict-row-0').textContent).toContain('Incomplete Reference');
+    expect(screen.getByTestId('shared-verdict-row-1').textContent).toContain('Metadata Error');
+
+    fireEvent.click(screen.getByTestId('shared-lang-toggle'));
+    await waitFor(() =>
+      expect(screen.getByTestId('shared-verdict-row-0').textContent).toContain(
+        'Thiếu quy cách trích dẫn',
+      ),
+    );
+    expect(screen.getByTestId('shared-verdict-row-1').textContent).toContain('Lỗi Metadata');
+  });
 });

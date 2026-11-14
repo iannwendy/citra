@@ -356,13 +356,42 @@ class Repository:
                 "disclaimer": existing_cis.get("disclaimer", ""),
             }
         else:
+            def _verdict_record_rules(rec: object) -> list[str]:
+                raw_rules = getattr(rec, "triggered_rules", None)
+                if raw_rules is None:
+                    raw_rules = getattr(rec, "triggered_rules_json", None)
+                if isinstance(raw_rules, list):
+                    return [str(x) for x in raw_rules]
+                if isinstance(raw_rules, str) and raw_rules.strip():
+                    try:
+                        parsed = json.loads(raw_rules)
+                        if isinstance(parsed, list):
+                            return [str(x) for x in parsed]
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+                return []
+
             verified = sum(1 for v in academic_verdicts if v.label == "verified")
-            meta_err = sum(1 for v in academic_verdicts if v.label == "metadata_error")
+            incomplete_meta_err = sum(
+                1
+                for v in academic_verdicts
+                if v.label == "metadata_error"
+                and "R-INCOMPLETE-METADATA" in _verdict_record_rules(v)
+            )
+            other_meta_err = sum(
+                1
+                for v in academic_verdicts
+                if v.label == "metadata_error"
+                and "R-INCOMPLETE-METADATA" not in _verdict_record_rules(v)
+            )
             halluc = sum(1 for v in academic_verdicts if v.label == "suspected_hallucination")
             num_unresolved = sum(1 for v in academic_verdicts if v.label == "unresolved")
 
             verified_ratio = verified / n_academic
-            metadata_accuracy = max(0.0, 1.0 - (meta_err + halluc) / n_academic)
+            effective_meta_penalty = (
+                0.50 * other_meta_err + 0.75 * incomplete_meta_err + 1.00 * halluc
+            )
+            metadata_accuracy = max(0.0, 1.0 - effective_meta_penalty / n_academic)
 
             # Include both in-text CitationRecords and reference VerdictRecords for link consistency
             all_citations = (

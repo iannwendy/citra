@@ -239,8 +239,13 @@ class SemanticMatcher:
         return "onnx/model_qint8_avx2.onnx"
 
     def _load_multilingual_encoder(self):
-        """Load quantized ONNX INT8 multilingual encoder first when `onnx_quantized=True`,
-        falling back cleanly to local/cached PyTorch multilingual weights, then to `_get_model()`.
+        """Load quantized ONNX INT8 multilingual encoder first when `onnx_quantized=True`.
+
+        When `onnx_quantized=True` and ONNX loading fails (e.g. `optimum`/`onnxruntime`
+        absent in host `.venv`), ONLY attempts local cached PyTorch weights
+        (`local_files_only=True`) — never triggers an unquantized ~471 MB FP32 network
+        download that could breach the container RAM budget, returning `None` on local
+        cache miss so `_get_multilingual_model()` falls back cleanly to `_get_model()`.
         """
         from sentence_transformers import SentenceTransformer  # type: ignore
 
@@ -256,13 +261,13 @@ class SemanticMatcher:
                 )
             except (ImportError, ModuleNotFoundError) as exc:
                 logger.info(
-                    f"ONNX runtime/optimum unavailable ({exc}); falling back to PyTorch multilingual encoder."
+                    f"ONNX runtime/optimum unavailable ({exc}); checking local PyTorch multilingual cache only."
                 )
             except Exception as exc:  # noqa: BLE001
                 err_msg = str(exc)
                 if "optimum" in err_msg.lower() or "onnxruntime" in err_msg.lower() or "onnx backend" in err_msg.lower():
                     logger.info(
-                        f"ONNX backend unavailable ({exc}); falling back to PyTorch multilingual encoder."
+                        f"ONNX backend unavailable ({exc}); checking local PyTorch multilingual cache only."
                     )
                 else:
                     try:
@@ -274,8 +279,20 @@ class SemanticMatcher:
                     except Exception as retry_exc:  # noqa: BLE001
                         logger.info(
                             f"Quantized ONNX file '{onnx_file}' unavailable ({exc} / {retry_exc}); "
-                            f"falling back to PyTorch multilingual encoder."
+                            f"checking local PyTorch multilingual cache only."
                         )
+
+            try:
+                return SentenceTransformer(
+                    self.multilingual_model_name,
+                    local_files_only=True,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.info(
+                    f"Local multilingual encoder cache not found ({exc}); skipping unquantized FP32 "
+                    f"network download and falling back to default encoder '{self.model_name}'."
+                )
+                return None
 
         try:
             return self._load_sentence_transformer(self.multilingual_model_name)
@@ -283,11 +300,11 @@ class SemanticMatcher:
             logger.info(
                 f"Multilingual encoder unavailable ({exc}); falling back to default encoder '{self.model_name}'."
             )
-            return self._get_model()
+            return None
 
     def _get_multilingual_model(self):
-        """Lazy Dual-Encoder (Subsystem A3): returns quantized ONNX INT8 / PyTorch multilingual encoder
-        on demand when enabled or cached, falling back cleanly to `_get_model()`.
+        """Lazy Dual-Encoder (Subsystem A3): returns quantized ONNX INT8 / cached multilingual encoder
+        on demand when enabled, falling back cleanly to `_get_model()` without repeated retries.
         """
         if self._multilingual_model is not None:
             return self._multilingual_model
@@ -297,7 +314,10 @@ class SemanticMatcher:
             else self.multilingual_model_name
         )
         if cache_key in self._model_cache:
-            self._multilingual_model = self._model_cache[cache_key]
+            cached = self._model_cache[cache_key]
+            if cached is None:
+                return self._get_model()
+            self._multilingual_model = cached
             return self._multilingual_model
         if self.multilingual_model_name in self._model_cache and not self.onnx_quantized:
             self._multilingual_model = self._model_cache[self.multilingual_model_name]
@@ -312,13 +332,14 @@ class SemanticMatcher:
                         f"(onnx_quantized={self.onnx_quantized})"
                     )
                     loaded = self._load_multilingual_encoder()
-                    if loaded is None:
-                        return self._get_model()
                     self._model_cache[cache_key] = loaded
                 except Exception as e:  # noqa: BLE001
                     logger.info(f"Multilingual encoder fallback to default model: {e}")
-                    return self._get_model()
-            self._multilingual_model = self._model_cache[cache_key]
+                    self._model_cache[cache_key] = None
+            cached = self._model_cache[cache_key]
+            if cached is None:
+                return self._get_model()
+            self._multilingual_model = cached
         return self._multilingual_model
 
     def _encode(self, model: object, texts: object, **kwargs: object):

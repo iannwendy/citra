@@ -395,13 +395,16 @@ _FABRICATED_DOI_PATTERNS: list[re.Pattern[str]] = [
 # Known fake author patterns — these author names are clearly fabricated
 # Added v1.4 for better fake author detection
 _KNOWN_FAKE_AUTHORS: list[re.Pattern[str]] = [
-    re.compile(r"\b(fictional|fabricated|fake|counterfeit|phantom|hypothetical|mystery|synthetic)\b.*\b(scholar|author|researcher|scientist|paper|research)\b", re.IGNORECASE),
-    re.compile(r"\b(artificial|mock|pseudo|fraudulent)\b.*\b(author|scholar)\b", re.IGNORECASE),
-    re.compile(r"\b(?:unknown|unnamed|anonymous)\b", re.IGNORECASE),
-    re.compile(r"\b(example|sample|test)\b.*\b(author|scholar)\b", re.IGNORECASE),
+    re.compile(r"\b(fictional|fabricated|fake|counterfeit|phantom|hypothetical|mystery|synthetic)\b.*\b(scholar|author|researcher|scientist|writer|investigator)\b", re.IGNORECASE),
+    re.compile(r"^\s*(?:fictional|fabricated|fake|counterfeit|phantom|hypothetical|mystery|synthetic)\s+(?:paper|research|study)\s*$", re.IGNORECASE),
+    re.compile(r"\b(artificial|mock|pseudo|fraudulent)\b.*\b(author|scholar|researcher|scientist|writer)\b", re.IGNORECASE),
+    re.compile(r"\b(?:placeholder|anonymous|unknown|unnamed)\s+(?:author|scholar|researcher|scientist|writer|name|person|investigator)s?\b", re.IGNORECASE),
+    re.compile(r"\b(?:john|jane)\s+(?:doe|roe)\b", re.IGNORECASE),
+    re.compile(r"^\s*(?:unknown|unnamed|anonymous)(?:\s*,\s*[A-Z]\.?|\s+et\s+al\.?)?\s*$", re.IGNORECASE),
+    re.compile(r"\b(example|sample|test)\b.*\b(author|scholar|researcher)\b", re.IGNORECASE),
     # CamelCase suspicious names like "MysteryPaper", "FakeAuthor", "HypotheticalResearch"
-    # Match: starts with suspicious word + optional second capitalized word
-    re.compile(r"^(?:fictional|fabricated|fake|counterfeit|phantom|hypothetical|mystery|synthetic|artificial|unknown|pseudo)(\w+)?([A-Z]\w*)?(?:\s*\()?", re.IGNORECASE),
+    # Note: case-sensitive so plain words like "Artificial" or "Synthetic" do NOT match without a second Uppercase hump
+    re.compile(r"\b(?:[Ff]ictional|[Ff]abricated|[Ff]ake|[Cc]ounterfeit|[Pp]hantom|[Hh]ypothetical|[Mm]ystery|[Ss]ynthetic|[Aa]rtificial|[Uu]nknown|[Pp]seudo)[a-z]*[A-Z]\w*\b"),
 ]
 
 
@@ -484,7 +487,10 @@ _THESIS_OR_REPORT_SIGNAL_RE = re.compile(
 
 _LEGAL_OR_STANDARD_SIGNAL_RE = re.compile(
     r"\b(?:"
-    r"quốc\s+hội|chính\s+phủ|thủ\s+tướng|bộ\s+[a-zà-ỹ]+|nghị\s+định|thông\s+tư|quyết\s+định|"
+    r"quốc\s+hội|chính\s+phủ|thủ\s+tướng|bộ\s+[a-zà-ỹ]+|"
+    r"nghị\s+định(?:\s+số|\s+\d+|\s+của|\s+về|\s+quy\s+định)|"
+    r"thông\s+tư(?:\s+liên\s+tịch|\s+số|\s+\d+|\s+của|\s+hướng\s+dẫn|\s+quy\s+định)|"
+    r"(?<!cây\s)(?<!ra\s)quyết\s+định(?:\s+số|\s+\d+|\s+của|\s+về|\s+ban\s+hành|\s+phê\s+duyệt)|"
     r"luật\s+số|bộ\s+luật|hiến\s+pháp|u\.?s\.?c\.?\s*§|c\.?f\.?r\.?\s*§|pub\.\s*l\.\s*no\.|"
     r"iso/iec\s*\d+|nist\s+special\s+publication|nist\s+sp\s*\d+|rfc\s*\d+|"
     r"tcvn\s+(?:iso(?:/iec)?\s+)?\d+|qcvn\s+[a-zđ0-9]+"
@@ -603,6 +609,29 @@ def _is_non_journal_or_unindexed_source(
     return False, ""
 
 
+_INCOMPLETE_EXEMPT_NON_JOURNAL_KINDS: frozenset[str] = frozenset(
+    {"web_resource", "legal_or_standard", "classical_or_scriptural"}
+)
+
+
+def _is_exempt_from_incomplete_metadata(
+    citation_raw: str | None,
+    citation_url: str | None = None,
+    citation_doi: str | None = None,
+    citation_authors: list | None = None,
+) -> bool:
+    """Return True only when a bibliography entry belongs to a genuine non-academic /
+    statutory / scriptural / web category that naturally omits author/year/venue.
+    """
+    is_nj, nj_kind = _is_non_journal_or_unindexed_source(
+        citation_raw,
+        citation_url=citation_url,
+        citation_doi=citation_doi,
+        citation_authors=citation_authors,
+    )
+    return bool(is_nj and nj_kind in _INCOMPLETE_EXEMPT_NON_JOURNAL_KINDS)
+
+
 def _has_live_source(
     source: SourceResult,
     verified_sources: list[str],
@@ -630,9 +659,10 @@ def _is_fake_author_name(
 ) -> tuple[bool, str]:
     """Check if citation author name is clearly fake/fabricated.
 
-    Only inspects the author portion (parsed authors or prefix before publication year)
-    so real paper titles containing words like 'Unknown', 'Anonymous', 'Fake News',
-    or 'Synthetic' are not falsely flagged.
+    Only inspects genuine author slots (parsed authors that are not sliced first-words
+    of year-less bare titles, or the author prefix preceding `(Year)` / `Author. Title`)
+    so real or incomplete student titles containing words like 'Artificial', 'Synthetic',
+    'Unknown', 'Anonymous', or 'Fake News' are never falsely flagged.
 
     Returns:
         (is_fake, matched_pattern) — True if author looks fake, empty string otherwise.
@@ -640,43 +670,100 @@ def _is_fake_author_name(
     if not raw_text and not citation_authors:
         return False, ""
 
+    raw_stripped = re.sub(
+        r"^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*\d+[a-z]?\s*\)|\d+[a-z]?[.)])\s*",
+        "",
+        (raw_text or "").strip(),
+    )
+    year_match = (
+        re.search(
+            r"\(\s*(?:18|19|20)\d{2}[a-z]?\s*\)|\b(?:18|19|20)\d{2}[a-z]?\b",
+            raw_stripped,
+        )
+        if raw_stripped
+        else None
+    )
+
     author_parts: list[str] = []
     if citation_authors:
         for a in citation_authors:
             if hasattr(a, "raw") and getattr(a, "raw", ""):
-                author_parts.append(str(a.raw))
+                a_str = str(a.raw).strip()
             elif hasattr(a, "last_name") and getattr(a, "last_name", ""):
-                author_parts.append(str(a.last_name))
+                first_val = getattr(a, "first_name", "") or ""
+                a_str = f"{first_val} {a.last_name}".strip()
             else:
-                author_parts.append(str(a))
+                a_str = str(a).strip()
 
-    if raw_text:
-        # Extract the author prefix before the publication year (YYYY) or first sentence period
-        year_split = re.split(r"\(\s*(?:19|20)\d{2}[a-z]?\s*\)|\b(?:19|20)\d{2}[a-z]?\b", raw_text, maxsplit=1)
-        prefix = year_split[0].strip() if year_split else raw_text[:80].strip()
+            if not a_str:
+                continue
+
+            # Guard against GROBID/regex slicing the first word of a year-less bare title
+            # (e.g. "[2] Artificial intelligence in healthcare" -> authors=["Artificial"],
+            # "[2] Unknown input observer design" -> authors=["Unknown"]).
+            a_words = re.findall(r"[A-Za-zÀ-ỹ'\u2019\-]+", a_str)
+            if (
+                len(a_words) == 1
+                and "," not in a_str
+                and "." not in a_str
+                and raw_stripped
+                and not year_match
+            ):
+                m_lead = re.match(rf"^{re.escape(a_words[0])}(.*)$", raw_stripped, re.IGNORECASE)
+                if m_lead:
+                    rest = m_lead.group(1)
+                    has_author_delim = bool(
+                        re.match(
+                            r"^(?:\s*[,.;:]|\s+[A-ZÀ-Ỹ]\.|\s+et\s+al\b|\s*(?:&|and)\s+[A-ZÀ-Ỹ])",
+                            rest,
+                        )
+                    )
+                    has_fake_role_noun = bool(
+                        re.match(
+                            r"^\s+(?:author|scholar|researcher|scientist|writer|name)\b",
+                            rest,
+                            re.IGNORECASE,
+                        )
+                    )
+                    if not has_author_delim and not has_fake_role_noun:
+                        continue
+
+            author_parts.append(a_str)
+
+    if raw_stripped:
+        if year_match:
+            prefix = raw_stripped[: year_match.start()].strip().rstrip(".,;:")
+        else:
+            # Year-less reference: only take a clear `Author. CapitalizedTitle` prefix
+            # (never scan a year-less bare title or multi-word lowercase sentence as an author).
+            m_author_sent = re.match(r"^([^.]{2,60})\.\s+[A-ZÀ-Ỹ]", raw_stripped)
+            cand_prefix = m_author_sent.group(1).strip() if m_author_sent else ""
+            if cand_prefix and re.search(r"\b[a-zà-ỹ]{3,}\s+[a-zà-ỹ]{3,}\b", cand_prefix):
+                cand_prefix = ""
+            prefix = cand_prefix
         if prefix:
             author_parts.append(prefix)
 
-    author_segment = " ; ".join(author_parts).lower()
+    for part in author_parts:
+        part_clean = part.strip().rstrip(".,;:")
+        for pattern in _KNOWN_FAKE_AUTHORS:
+            match = pattern.search(part_clean)
+            if match:
+                return True, match.group(0)
 
-    # Check author segment against known fake patterns
-    for pattern in _KNOWN_FAKE_AUTHORS:
-        match = pattern.search(author_segment)
-        if match:
-            return True, match.group(0)
-
-    # Check for suspicious patterns in author position
-    # e.g., "Fictional Scholar et al. (2020)"
+    # Check for explicit fake author persona at the start of raw_stripped
     suspicious_author_patterns = [
-        r"^[\(\s]*(?:fictional|fabricated|fake|counterfeit|phantom|hypothetical|mystery|synthetic|artificial|mock|pseudo)\s+(?:scholar|author|researcher|scientist)",
-        r"^[\(\s]*example\s+(?:scholar|author)",
-        r"^[\(\s]*test\s+(?:author|scholar)",
+        r"^[\(\s]*(?:fictional|fabricated|fake|counterfeit|phantom|hypothetical|mystery|synthetic|artificial|mock|pseudo|placeholder|anonymous|unknown|unnamed)\s+(?:scholar|author|researcher|scientist|writer|name)\b",
+        r"^[\(\s]*(?:john|jane)\s+(?:doe|roe)\b",
+        r"^[\(\s]*example\s+(?:scholar|author|researcher)\b",
+        r"^[\(\s]*test\s+(?:author|scholar|researcher)\b",
     ]
 
-    raw_lower = (raw_text or "").lower()
+    raw_lower = raw_stripped.lower()
     for pattern in suspicious_author_patterns:
-        if re.search(pattern, raw_lower):
-            return True, pattern
+        m_susp = re.search(pattern, raw_lower, re.IGNORECASE)
+        if m_susp:
+            return True, m_susp.group(0).strip()
 
     return False, ""
 
@@ -1318,6 +1405,29 @@ class SymbolicRules:
                 style_penalty=style_penalty,
             )
 
+        url_status = getattr(source, "url_status", None)
+        url_status_code = getattr(source, "url_status_code", None)
+        if not citation_url:
+            raw_for_url = citation_raw or getattr(source, "citation_raw", "") or ""
+            if raw_for_url and re.search(r"https?:", raw_for_url, re.IGNORECASE):
+                from integrity_checker.retrieval.link_validator import clean_extracted_url
+
+                extracted_u = clean_extracted_url(raw_for_url)
+                if extracted_u.lower().startswith(("http://", "https://")) and "doi.org/" not in extracted_u.lower():
+                    citation_url = extracted_u
+
+        completeness = assess_bibliographic_completeness(
+            citation_raw=citation_raw or getattr(source, "citation_raw", None),
+            citation_authors=citation_authors,
+            citation_year=citation_year,
+            citation_venue=citation_venue,
+            citation_doi=citation_doi,
+            citation_url=citation_url,
+            url_status=url_status,
+            citation_type=citation_type,
+            citation_title=citation_title,
+        )
+
         # --- Pre-flight: FAKE AUTHOR check (NEW v1.4) ---
         # Check if author name is clearly fake/fabricated (skip if DOI + title strongly verified)
         if not (features.doi_exact_match and features.title_sim_fuzzy >= 0.85):
@@ -1401,29 +1511,6 @@ class SymbolicRules:
                 logger.debug(f"Error parsing year from '{citation_year}': {exc}")
 
         # --- Rule 5: No candidates returned ---
-        url_status = getattr(source, "url_status", None)
-        url_status_code = getattr(source, "url_status_code", None)
-        if not citation_url:
-            raw_for_url = citation_raw or getattr(source, "citation_raw", "") or ""
-            if raw_for_url and re.search(r"https?:", raw_for_url, re.IGNORECASE):
-                from integrity_checker.retrieval.link_validator import clean_extracted_url
-
-                extracted_u = clean_extracted_url(raw_for_url)
-                if extracted_u.lower().startswith(("http://", "https://")) and "doi.org/" not in extracted_u.lower():
-                    citation_url = extracted_u
-
-        completeness = assess_bibliographic_completeness(
-            citation_raw=citation_raw or getattr(source, "citation_raw", None),
-            citation_authors=citation_authors,
-            citation_year=citation_year,
-            citation_venue=citation_venue,
-            citation_doi=citation_doi,
-            citation_url=citation_url,
-            url_status=url_status,
-            citation_type=citation_type,
-            citation_title=citation_title,
-        )
-
         if not source.candidates or not source.best_candidate():
             if url_status == "dead_link" and not is_known_author:
                 status_detail = f"HTTP {url_status_code}" if url_status_code else "unreachable/DNS error"
@@ -1533,13 +1620,12 @@ class SymbolicRules:
                 and not (citation_doi and str(citation_doi).strip())
                 and not is_known_author
             ):
-                is_non_journal_inc, _ = _is_non_journal_or_unindexed_source(
+                if not _is_exempt_from_incomplete_metadata(
                     citation_raw or source.citation_raw,
                     citation_url=citation_url,
                     citation_doi=citation_doi,
                     citation_authors=citation_authors,
-                )
-                if not is_non_journal_inc:
+                ):
                     missing_f = list(completeness.missing_fields or ["authors", "year", "venue"])
                     return RuleOutcome(
                         label=ValidationLabel.METADATA_ERROR,
@@ -1854,6 +1940,19 @@ class SymbolicRules:
                 bool(citation_authors) or has_raw_author_prefix
             ) and author_sim < self.author_jaccard_verified
             has_tb_year_mismatch = year_dist > self.year_tolerance and year_dist < 900
+            if completeness.is_incomplete:
+                missing_f = list(completeness.missing_fields or ["authors", "year", "venue"])
+                return RuleOutcome(
+                    label=ValidationLabel.METADATA_ERROR,
+                    confidence=max(0.0, 0.80 - style_penalty),
+                    reasoning=(
+                        f"Incomplete textbook reference matching title '{best.title}' "
+                        f"but missing required metadata ({', '.join(missing_f)})."
+                    ),
+                    triggered_rules=triggered_rules + ["R-INCOMPLETE-METADATA"],
+                    mismatched_fields=missing_f,
+                    style_penalty=style_penalty,
+                )
             if has_tb_title_mismatch or has_tb_author_mismatch or has_tb_year_mismatch:
                 if has_tb_title_mismatch:
                     mismatched.append("title")
@@ -2291,6 +2390,21 @@ class SymbolicRules:
                 mismatched.append("year")
             if author_sim < self.author_jaccard_verified:
                 mismatched.append("author")
+            if (
+                completeness.is_incomplete
+                and not has_doi_conflict
+                and not is_known_author
+                and not _is_exempt_from_incomplete_metadata(
+                    citation_raw or source.citation_raw,
+                    citation_url=citation_url,
+                    citation_doi=citation_doi,
+                    citation_authors=citation_authors,
+                )
+            ):
+                for mf in completeness.missing_fields:
+                    if mf not in mismatched and not (mf == "authors" and "author" in mismatched):
+                        mismatched.append(mf)
+                triggered_rules.append("R-INCOMPLETE-METADATA")
             triggered_rules.append("R-CONSENSUS-PARTIAL")
             return RuleOutcome(
                 label=ValidationLabel.METADATA_ERROR,
@@ -2515,6 +2629,7 @@ class SymbolicRules:
         if (
             not doi_match
             and not (citation_doi and str(citation_doi).strip())
+            and not completeness.is_incomplete
             and title_sim < self.title_sim_verified
             and (year_dist > 2 or author_sim < 0.50)
         ):
@@ -2706,35 +2821,40 @@ class SymbolicRules:
                 style_penalty=0.0,
             )
 
-        # --- Rule 4f (Subsystem A1): Incomplete bibliography entry with noisy low-similarity hit (<0.78) ---
+        # --- Rule 4f (Subsystem A1): Incomplete bibliography entry (both high-sim bare title & low-sim noise) ---
         if (
             completeness.is_incomplete
-            and title_sim < 0.78
             and not doi_match
             and not has_doi_conflict
-            and _has_live_source(source, verified_sources)
+            and (consensus >= 1 or _has_live_source(source, verified_sources))
             and not is_known_author
-        ):
-            is_non_journal_inc, _ = _is_non_journal_or_unindexed_source(
+            and not _is_exempt_from_incomplete_metadata(
                 citation_raw or source.citation_raw,
                 citation_url=citation_url,
                 citation_doi=citation_doi,
                 citation_authors=citation_authors,
             )
-            if not is_non_journal_inc:
-                missing_f = list(completeness.missing_fields or ["authors", "year", "venue"])
-                return RuleOutcome(
-                    label=ValidationLabel.METADATA_ERROR,
-                    confidence=max(0.0, 0.80 - style_penalty),
-                    reasoning=(
-                        f"Incomplete bibliographic reference missing {', '.join(missing_f)}; "
-                        f"weak candidate match (title_sim={title_sim:.2f} < 0.78) reflects missing "
-                        f"citation metadata rather than a fabricated academic source."
-                    ),
-                    triggered_rules=["R-INCOMPLETE-METADATA"],
-                    mismatched_fields=missing_f,
-                    style_penalty=style_penalty,
+        ):
+            missing_f = list(completeness.missing_fields or ["authors", "year", "venue"])
+            if title_sim >= 0.78:
+                reason_msg = (
+                    f"Incomplete bibliographic reference matching title (title_sim={title_sim:.2f}) "
+                    f"but missing required metadata ({', '.join(missing_f)})."
                 )
+            else:
+                reason_msg = (
+                    f"Incomplete bibliographic reference missing {', '.join(missing_f)}; "
+                    f"weak candidate match (title_sim={title_sim:.2f} < 0.78) reflects missing "
+                    f"citation metadata rather than a fabricated academic source."
+                )
+            return RuleOutcome(
+                label=ValidationLabel.METADATA_ERROR,
+                confidence=max(0.0, 0.80 - style_penalty),
+                reasoning=reason_msg,
+                triggered_rules=triggered_rules + ["R-INCOMPLETE-METADATA"],
+                mismatched_fields=missing_f,
+                style_penalty=style_penalty,
+            )
 
         # --- Rule 5: Border zone -> UNRESOLVED (abstention) ---
         is_semantic_only_noise = bool(

@@ -48,12 +48,11 @@ _PMID_RE = re.compile(r"\b(?:PMID\s*:?\s*\d{5,10}|PMC\d{5,10})\b", re.IGNORECASE
 _VN_LEGAL_OR_STANDARD_ID_RE = re.compile(
     r"\b(?:"
     r"TCVN\s+(?:ISO(?:/IEC)?\s+)?\d+|"
-    r"QCVN\s+[A-ZĐ0-9]+|"
-    r"Nghị\s+định(?:\s+số)?\s+\d+|"
-    r"Luật\s+số\s+\d+|"
-    r"Thông\s+tư(?:\s+số)?\s+\d+|"
-    r"Quyết\s+định(?:\s+số)?\s+\d+|"
-    r"Nghị\s+định|Luật\s+số|Thông\s+tư|Quyết\s+định"
+    r"QCVN\s+[0-9]+(?:[-:][0-9]+)*(?:\s*:\s*(?:19|20)\d{2})?|"
+    r"(?:Nghị\s+định|Thông\s+tư|Quyết\s+định|Chỉ\s+thị|Nghị\s+quyết)(?:\s+liên\s+tịch)?(?:\s+số)?\s+\d+\s*/\s*(?:(?:19|20)?\d{2}|[A-ZĐ]{2,})|"
+    r"(?:Nghị\s+định|Thông\s+tư|Quyết\s+định|Chỉ\s+thị|Nghị\s+quyết)\s+số\s+\d+|"
+    r"Luật\s+số\s+\d+\s*/\s*(?:19|20)?\d{2}|"
+    r"(?:Bộ\s+luật|Luật)\s+[A-ZÀ-Ỹ][^.,;()\n]{2,80}?\s+(?:năm\s+)?(?:19|20)\d{2}"
     r")\b",
     re.IGNORECASE,
 )
@@ -279,16 +278,29 @@ def _is_real_author_entry(author_item: Any, raw_after_marker: str) -> bool:
     if isinstance(author_item, str):
         surface = author_item.strip()
     else:
-        initials_val = getattr(author_item, "initials", None) or getattr(
-            author_item, "forename", None
+        initials_val = getattr(author_item, "initials", None)
+        forename_val = getattr(author_item, "forename", None)
+        full_first_val = getattr(author_item, "full_first_names", None)
+        first_name_val = getattr(author_item, "first_name", None)
+        has_initials = bool(initials_val or forename_val or full_first_val or first_name_val)
+        raw_val = (getattr(author_item, "raw", "") or "").strip()
+        full_name_val = (getattr(author_item, "full_name", "") or "").strip()
+        last_name_val = (getattr(author_item, "last_name", "") or "").strip()
+        first_str = (
+            " ".join(str(x) for x in full_first_val if x)
+            if isinstance(full_first_val, (list, tuple)) and full_first_val
+            else str(first_name_val or forename_val or "").strip()
         )
-        has_initials = bool(initials_val)
-        surface = (
-            getattr(author_item, "raw", "")
-            or getattr(author_item, "full_name", "")
-            or getattr(author_item, "last_name", "")
-            or str(author_item)
-        ).strip()
+        if raw_val:
+            surface = raw_val
+        elif full_name_val:
+            surface = full_name_val
+        elif last_name_val and first_str:
+            surface = f"{first_str} {last_name_val}".strip()
+        elif last_name_val:
+            surface = last_name_val
+        else:
+            surface = str(author_item).strip()
 
     surface_clean = surface.strip(" .,;:()[]{}\"'")
     if not surface_clean:
@@ -314,6 +326,31 @@ def _is_real_author_entry(author_item: Any, raw_after_marker: str) -> bool:
         token_lower = word_tokens[0].lower()
         if len(token_lower) <= 1:
             return False
+
+        # Evaluate explicit author cues in `raw_after_marker` (`et al.`, `và cộng sự`, `(Year)`,
+        # `, Initial.`, `& Author`, `; Author`) BEFORE rejecting tokens in
+        # `_SPURIOUS_SINGLE_WORD_AUTHOR_TOKENS` so real surnames ("An", "On", "In", "Tài",
+        # "Chương", "Hướng", "Phát", etc.) are preserved when used as authors.
+        author_cue_re = re.compile(
+            rf"\b{re.escape(word_tokens[0])}"
+            r"(?:"
+            r"\s*,\s*[A-ZÀ-Ỹ](?:\.|\b)|"
+            r"\s+[A-ZÀ-Ỹ]\.|"
+            r"\s*\(\s*(?:18|19|20)\d{2}\b|"
+            r"\s*,\s*(?:18|19|20)\d{2}\b|"
+            r"\s+et\s+al\b|"
+            r"\s+(?:và\s+)?cộng\s+sự\b|"
+            r"\s*(?:,\s*)?(?:&|and)\s+[A-ZÀ-Ỹ]|"
+            r"\s*;\s*[A-ZÀ-Ỹ]"
+            r")",
+            re.IGNORECASE,
+        )
+        has_author_punctuation_or_cue = bool(
+            raw_after_marker and author_cue_re.search(raw_after_marker)
+        )
+        if has_author_punctuation_or_cue:
+            return True
+
         if token_lower in _SPURIOUS_SINGLE_WORD_AUTHOR_TOKENS:
             return False
 
@@ -324,20 +361,8 @@ def _is_real_author_entry(author_item: Any, raw_after_marker: str) -> bool:
             m_first = re.match(r"^([A-Za-zÀ-ỹ'\u2019\-]+)(.*)$", raw_after_marker)
             if m_first and m_first.group(1).lower() == token_lower:
                 rest = m_first.group(2)
-                has_author_punctuation_or_cue = bool(
-                    re.match(
-                        r"^(?:"
-                        r"\s*[,.;:]|"
-                        r"\s+[A-ZÀ-Ỹ]\.|"
-                        r"\s*\(\s*(?:18|19|20)\d{2}|"
-                        r"\s+(?:18|19|20)\d{2}\b|"
-                        r"\s+et\s+al\b|"
-                        r"\s+(?:&|and|và)\s+[A-ZÀ-Ỹ]"
-                        r")",
-                        rest,
-                    )
-                )
-                if not has_author_punctuation_or_cue and re.match(r"^\s+[a-zà-ỹ]", rest):
+                has_prefix_delim = bool(re.match(r"^\s*[,.;:]", rest))
+                if not has_prefix_delim and re.match(r"^\s+[a-zà-ỹ]", rest):
                     first_rest_word = re.findall(r"^\s+([a-zà-ỹ]+)", rest)
                     if not first_rest_word or first_rest_word[0] not in _NAME_PARTICLES:
                         return False
@@ -464,7 +489,6 @@ def assess_bibliographic_completeness(
         is_incomplete = bool(
             (not has_valid_year and not has_academic_venue)
             or (not has_real_authors and not has_valid_year)
-            or (not has_real_authors and not has_academic_venue)
         )
 
     return BibliographicCompleteness(

@@ -89,9 +89,9 @@ RUN mkdir -p data/essays data/essays/uploads data/avatars data/ground_truth data
     chown -R appuser:appgroup /app data/ /home/appuser/.cache
 
 # Pre-download Sentence-BERT models (all-MiniLM-L6-v2 + quantized ONNX INT8 multilingual encoder)
+# Fail loud at docker build time if either model download or ONNX runtime check fails
 USER appuser
-RUN python -c "import platform; from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2'); arch = platform.machine().lower(); fn = 'onnx/model_qint8_arm64.onnx' if arch in ('arm64', 'aarch64') else 'onnx/model_qint8_avx2.onnx'; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2', backend='onnx', model_kwargs={'file_name': fn})" || \
-    python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+RUN python -c "import platform; from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2'); arch = platform.machine().lower(); fn = 'onnx/model_qint8_arm64.onnx' if arch in ('arm64', 'aarch64') else 'onnx/model_qint8_avx2.onnx'; SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2', backend='onnx', model_kwargs={'file_name': fn})"
 
 # Copy source (chỉ invalidate layer nhẹ cuối cùng khi code thay đổi)
 USER root

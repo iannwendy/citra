@@ -398,7 +398,7 @@ class TestRIncompleteMetadataVsHallucinationRules:
 
 
 class TestCISIncompleteMetadataWeighting:
-    """Verify `R-INCOMPLETE-METADATA` receives 0.25 `metadata_accuracy` credit in `CISCalculator`."""
+    """Verify Spec §2.1 CIS `metadata_accuracy` monotonicity and `Repository.recalculate_essay_cis` parity."""
 
     def test_cis_gives_quarter_metadata_accuracy_credit_to_incomplete_metadata(self) -> None:
         calc = CISCalculator()
@@ -408,6 +408,20 @@ class TestCISIncompleteMetadataWeighting:
             authors=["Making"],
         )
 
+        verified_verdict = CitationVerdict(
+            citation=cit,
+            label=ValidationLabel.VERIFIED,
+            confidence=0.98,
+            triggered_rules=["R-CONSENSUS-EXACT"],
+            mismatched_fields=[],
+        )
+        standard_meta_err_verdict = CitationVerdict(
+            citation=cit,
+            label=ValidationLabel.METADATA_ERROR,
+            confidence=0.70,
+            triggered_rules=["R-SINGLE-SOURCE-PARTIAL"],
+            mismatched_fields=["year"],
+        )
         incomplete_verdict = CitationVerdict(
             citation=cit,
             label=ValidationLabel.METADATA_ERROR,
@@ -422,22 +436,80 @@ class TestCISIncompleteMetadataWeighting:
             triggered_rules=["R-NO-CANDIDATE", "R-NO-SCHOLARLY-RECORD"],
             mismatched_fields=["title"],
         )
-        standard_meta_err_verdict = CitationVerdict(
-            citation=cit,
-            label=ValidationLabel.METADATA_ERROR,
-            confidence=0.70,
-            triggered_rules=["R-SINGLE-SOURCE-PARTIAL"],
-            mismatched_fields=["year"],
-        )
 
+        res_verified = calc.compute([verified_verdict])
+        res_standard_meta = calc.compute([standard_meta_err_verdict])
         res_incomplete = calc.compute([incomplete_verdict])
         res_halluc = calc.compute([halluc_verdict])
-        res_standard_meta = calc.compute([standard_meta_err_verdict])
 
+        assert res_verified.components.metadata_accuracy == pytest.approx(1.00)
+        assert res_standard_meta.components.metadata_accuracy == pytest.approx(0.50)
         assert res_incomplete.components.metadata_accuracy == pytest.approx(0.25)
         assert res_halluc.components.metadata_accuracy == pytest.approx(0.00)
-        assert res_standard_meta.components.metadata_accuracy == pytest.approx(0.00)
-        assert res_incomplete.components.metadata_accuracy > res_halluc.components.metadata_accuracy
+        assert (
+            res_verified.components.metadata_accuracy
+            > res_standard_meta.components.metadata_accuracy
+            > res_incomplete.components.metadata_accuracy
+            > res_halluc.components.metadata_accuracy
+        )
+
+    def test_repository_recalculate_essay_cis_matches_monotonic_metadata_accuracy(self) -> None:
+        import json as _json
+
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import Session as SqlSession
+
+        from integrity_checker.db.models import Base, VerdictRecord
+        from integrity_checker.db.repository import Repository
+
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+
+        with SqlSession(engine) as session:
+            repo = Repository(session)
+            essay = repo.create_essay(filename="monotonic_cis_check.pdf", num_pages=5)
+            records = [
+                VerdictRecord(
+                    essay_id=essay.id,
+                    citation_raw="Vaswani, A. et al. (2017). Attention Is All You Need. NeurIPS.",
+                    label="verified",
+                    confidence=0.98,
+                    mapping_status="matched",
+                    triggered_rules=_json.dumps(["R-CONSENSUS-EXACT"]),
+                ),
+                VerdictRecord(
+                    essay_id=essay.id,
+                    citation_raw="Vaswani, A. et al. (2018). Attention Is All You Need. NeurIPS.",
+                    label="metadata_error",
+                    confidence=0.75,
+                    mapping_status="matched",
+                    triggered_rules=_json.dumps(["R-SINGLE-SOURCE-PARTIAL"]),
+                ),
+                VerdictRecord(
+                    essay_id=essay.id,
+                    citation_raw="[3] Making a robot vacuum cleaner to avoid falling down the stairs",
+                    label="metadata_error",
+                    confidence=0.80,
+                    mapping_status="matched",
+                    triggered_rules=_json.dumps(["R-INCOMPLETE-METADATA"]),
+                ),
+                VerdictRecord(
+                    essay_id=essay.id,
+                    citation_raw="Doe, R. (2023). Quantum Neural Transformers. Cell, 186, 1-10.",
+                    label="suspected_hallucination",
+                    confidence=0.90,
+                    mapping_status="matched",
+                    triggered_rules=_json.dumps(["R-NO-SCHOLARLY-RECORD"]),
+                ),
+            ]
+            session.add_all(records)
+            session.flush()
+
+            cis_dict = repo.recalculate_essay_cis(essay.id)
+            assert cis_dict is not None
+            # Penalty = (0.0 + 0.50 + 0.75 + 1.00) / 4 = 2.25 / 4 = 0.5625 -> accuracy = 0.4375
+            expected_meta_acc = 1.0 - (0.50 + 0.75 + 1.00) / 4.0
+            assert cis_dict["components"]["metadata_accuracy"] == pytest.approx(expected_meta_acc)
 
 
 class TestMultilingualQuantizedOnnxAndCrossLingualAlignment:
@@ -493,12 +565,15 @@ class TestMultilingualQuantizedOnnxAndCrossLingualAlignment:
                 "file_name": "onnx/model_qint8_arm64.onnx"
             }
 
-        # Case 2: `optimum` / `onnxruntime` absent -> ImportError / OSError falls back cleanly
+        # Case 2: `optimum` / `onnxruntime` absent -> ONLY attempts local PyTorch cache (`local_files_only=True`)
         fallback_pytorch_model = MagicMock(name="FallbackPytorchMultilingualModel")
+        seen_calls: list[dict] = []
 
         def _fake_st_constructor(*args, **kwargs):
+            seen_calls.append(dict(kwargs))
             if kwargs.get("backend") == "onnx":
                 raise ImportError("optimum.onnxruntime is not installed")
+            assert kwargs.get("local_files_only") is True
             return fallback_pytorch_model
 
         with patch(
@@ -507,6 +582,39 @@ class TestMultilingualQuantizedOnnxAndCrossLingualAlignment:
         ):
             loaded_fb = matcher._load_multilingual_encoder()
             assert loaded_fb is fallback_pytorch_model
+            assert any(c.get("local_files_only") is True for c in seen_calls)
+
+        # Case 3: Both ONNX and local PyTorch cache miss -> NEVER downloads FP32 over network; falls back to _get_model()
+        miss_calls: list[dict] = []
+
+        def _fake_st_miss(*args, **kwargs):
+            miss_calls.append(dict(kwargs))
+            if kwargs.get("backend") == "onnx":
+                raise ImportError("optimum.onnxruntime is not installed")
+            if kwargs.get("local_files_only") is True:
+                raise OSError("Model not found in local HuggingFace cache")
+            raise AssertionError("Unquantized FP32 network download must NEVER be triggered when onnx_quantized=True")
+
+        mono_fallback = MagicMock(name="DefaultMonoEncoder")
+        cache_key = f"{matcher.multilingual_model_name}::onnx"
+        prior_cached = SemanticMatcher._model_cache.pop(cache_key, None)
+        matcher._multilingual_model = None
+        try:
+            with (
+                patch("sentence_transformers.SentenceTransformer", side_effect=_fake_st_miss),
+                patch.object(matcher, "_get_model", return_value=mono_fallback),
+            ):
+                assert matcher._load_multilingual_encoder() is None
+                resolved = matcher._get_multilingual_model()
+                assert resolved is mono_fallback
+                assert all(
+                    c.get("backend") == "onnx" or c.get("local_files_only") is True
+                    for c in miss_calls
+                )
+        finally:
+            SemanticMatcher._model_cache.pop(cache_key, None)
+            if prior_cached is not None:
+                SemanticMatcher._model_cache[cache_key] = prior_cached
 
     def test_cross_lingual_vi_en_alignment_outside_static_dictionary_with_deterministic_encoder(
         self,
@@ -719,3 +827,335 @@ class TestTask7CarriedInIso4StemCleanup:
         assert len(epsl_subs) == 2
         assert epsl_subs[0].title is None
         assert (epsl_subs[0].venue or "").rstrip(".") == "Earth Planet. Sci. Lett"
+
+
+class TestTask8FixRound1Regressions:
+    """Regression suite for all Task 8 Fix Round 1 review findings."""
+
+    def test_finding1_substantive_author_year_hallucinations_never_downgrade_to_incomplete(
+        self,
+    ) -> None:
+        rules = SymbolicRules()
+        zero_features = MatchFeatures()
+
+        # 1. Korean/Chinese/Vietnamese single-token surnames ("An", "Tài") with explicit author cues + year
+        raw_an = "An et al. (2023). Quantum Neural Transformers for Autonomous Surgery. Cell, 186, 112-129."
+        comp_an = assess_bibliographic_completeness(
+            citation_raw=raw_an,
+            citation_authors=["An"],
+            citation_year="2023",
+            citation_venue="Cell",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert comp_an.has_real_authors is True
+        assert comp_an.has_valid_year is True
+        assert comp_an.is_incomplete is False
+
+        out_an = rules.evaluate(
+            zero_features,
+            SourceResult(
+                citation_raw=raw_an,
+                candidates=[],
+                sources_queried=["crossref", "openalex", "semantic_scholar"],
+                sources_succeeded=["crossref", "openalex", "semantic_scholar"],
+            ),
+            citation_raw=raw_an,
+            citation_authors=["An"],
+            citation_year="2023",
+            citation_venue="Cell",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert out_an.label == ValidationLabel.SUSPECTED_HALLUCINATION
+        assert "R-INCOMPLETE-METADATA" not in out_an.triggered_rules
+
+        raw_tai = "Tài (2023). Nghiên cứu mạng lượng tử tự hành."
+        comp_tai = assess_bibliographic_completeness(
+            citation_raw=raw_tai,
+            citation_authors=["Tài"],
+            citation_year="2023",
+            citation_venue=None,
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert comp_tai.has_real_authors is True
+        assert comp_tai.has_valid_year is True
+        assert comp_tai.is_incomplete is False
+
+        out_tai = rules.evaluate(
+            zero_features,
+            SourceResult(
+                citation_raw=raw_tai,
+                candidates=[],
+                sources_queried=["crossref", "openalex", "semantic_scholar"],
+                sources_succeeded=["crossref", "openalex", "semantic_scholar"],
+            ),
+            citation_raw=raw_tai,
+            citation_authors=["Tài"],
+            citation_year="2023",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert out_tai.label == ValidationLabel.SUSPECTED_HALLUCINATION
+        assert "R-INCOMPLETE-METADATA" not in out_tai.triggered_rules
+
+        # 2. Structured `Author` object with `full_first_names` (and empty `raw` / `initials`)
+        structured_author = Author(
+            last_name="tài",
+            full_first_names=["Nguyễn", "Văn"],
+            initials=[],
+            raw="",
+        )
+        raw_vn_author = "Nguyễn Văn Tài (2023). Mạng nơ-ron lượng tử cho phẫu thuật tự hành."
+        comp_struct = assess_bibliographic_completeness(
+            citation_raw=raw_vn_author,
+            citation_authors=[structured_author],
+            citation_year="2023",
+            citation_venue=None,
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert comp_struct.has_real_authors is True
+        assert comp_struct.is_incomplete is False
+
+    def test_finding2_preflight_fake_author_never_flags_bare_student_titles(self) -> None:
+        rules = SymbolicRules()
+        zero_features = MatchFeatures()
+
+        bare_student_titles = [
+            ("[2] Artificial intelligence in healthcare", ["Artificial"]),
+            ("[2] Synthetic aperture radar imaging", ["Synthetic"]),
+            ("[2] Unknown input observer design for mobile robots", ["Unknown"]),
+            ("[2] Unknown input observer design. Applications to mobile robots.", ["Unknown"]),
+            ("[2] Detecting fake news in social media research", ["Detecting"]),
+        ]
+        for raw, sp_authors in bare_student_titles:
+            outcome = rules.evaluate(
+                zero_features,
+                SourceResult(
+                    citation_raw=raw,
+                    candidates=[],
+                    sources_queried=["crossref", "openalex", "semantic_scholar"],
+                    sources_succeeded=["crossref", "openalex", "semantic_scholar"],
+                ),
+                citation_raw=raw,
+                citation_authors=sp_authors,
+                citation_type=CitationType.REFERENCE_LIST,
+            )
+            assert outcome.label == ValidationLabel.METADATA_ERROR, f"Failed on {raw}: {outcome}"
+            assert outcome.triggered_rules == ["R-INCOMPLETE-METADATA"], f"Failed on {raw}: {outcome}"
+            assert "R-FAKE-AUTHOR" not in outcome.triggered_rules
+
+        # Genuine fake author personas MUST still trigger R-FAKE-AUTHOR (0.95)
+        fake_persona_cases = [
+            ("John Doe (2023). Fake Title.", ["John Doe"], "2023"),
+            ("Jane Roe, 2022. Fake Study.", ["Jane Roe"], "2022"),
+            ("Placeholder Author (2023). Fabricated Paper.", ["Placeholder Author"], "2023"),
+            ("Anonymous Researcher (2024). Quantum Hallucinations.", ["Anonymous Researcher"], "2024"),
+            ("Unknown Author. (2023). Some Fabricated Study.", ["Unknown Author"], "2023"),
+            ("John Doe. Quantum Gravity.", ["John Doe"], None),
+        ]
+        for raw, f_authors, yr in fake_persona_cases:
+            outcome = rules.evaluate(
+                zero_features,
+                SourceResult(
+                    citation_raw=raw,
+                    candidates=[],
+                    sources_queried=["crossref", "openalex"],
+                    sources_succeeded=["crossref", "openalex"],
+                ),
+                citation_raw=raw,
+                citation_authors=f_authors,
+                citation_year=yr,
+                citation_type=CitationType.REFERENCE_LIST,
+            )
+            assert outcome.label == ValidationLabel.SUSPECTED_HALLUCINATION, f"Failed on {raw}: {outcome}"
+            assert "R-FAKE-AUTHOR" in outcome.triggered_rules, f"Failed on {raw}: {outcome}"
+            assert outcome.confidence == pytest.approx(0.95)
+
+    def test_finding5_high_similarity_bare_titles_emit_r_incomplete_metadata(self) -> None:
+        rules = SymbolicRules()
+        raw = "[2] Attention Is All You Need"
+        real_cand_1 = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title="Attention Is All You Need",
+            authors=["Ashish Vaswani", "Noam Shazeer"],
+            year="2017",
+            venue="NeurIPS",
+            doi="10.48550/arXiv.1706.03762",
+            confidence=0.95,
+            score=1.0,
+        )
+        real_cand_2 = SourceCandidate(
+            source_name="semantic_scholar",
+            found=True,
+            title="Attention Is All You Need",
+            authors=["Ashish Vaswani", "Noam Shazeer"],
+            year="2017",
+            venue="NeurIPS",
+            confidence=0.95,
+            score=1.0,
+        )
+
+        # Subcase A: consensus=1, title_sim=1.00 -> METADATA_ERROR with R-INCOMPLETE-METADATA
+        out_single = rules.evaluate(
+            MatchFeatures(
+                title_sim_fuzzy=1.00,
+                author_jaccard=0.0,
+                year_distance=99,
+                doi_exact_match=False,
+                source_consensus=1,
+            ),
+            SourceResult(
+                citation_raw=raw,
+                candidates=[real_cand_1],
+                sources_queried=["openalex", "crossref"],
+                sources_succeeded=["openalex", "crossref"],
+            ),
+            citation_raw=raw,
+            citation_authors=["Attention"],
+            citation_title="Attention Is All You Need",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert out_single.label == ValidationLabel.METADATA_ERROR
+        assert "R-INCOMPLETE-METADATA" in out_single.triggered_rules
+
+        # Subcase B: consensus=2, title_sim=0.85 -> METADATA_ERROR with R-INCOMPLETE-METADATA
+        out_mid_consensus = rules.evaluate(
+            MatchFeatures(
+                title_sim_fuzzy=0.85,
+                author_jaccard=0.0,
+                year_distance=99,
+                doi_exact_match=False,
+                source_consensus=2,
+            ),
+            SourceResult(
+                citation_raw=raw,
+                candidates=[real_cand_1, real_cand_2],
+                sources_queried=["openalex", "semantic_scholar"],
+                sources_succeeded=["openalex", "semantic_scholar"],
+            ),
+            citation_raw=raw,
+            citation_authors=["Attention"],
+            citation_title="Attention Is All You Need",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert out_mid_consensus.label == ValidationLabel.METADATA_ERROR
+        assert "R-INCOMPLETE-METADATA" in out_mid_consensus.triggered_rules
+
+        # Subcase C: consensus=2, title_sim=1.00 (Rule 3 R-CONSENSUS-PARTIAL path) -> includes R-INCOMPLETE-METADATA
+        out_high_consensus = rules.evaluate(
+            MatchFeatures(
+                title_sim_fuzzy=1.00,
+                author_jaccard=0.0,
+                year_distance=99,
+                doi_exact_match=False,
+                source_consensus=2,
+            ),
+            SourceResult(
+                citation_raw=raw,
+                candidates=[real_cand_1, real_cand_2],
+                sources_queried=["openalex", "semantic_scholar"],
+                sources_succeeded=["openalex", "semantic_scholar"],
+            ),
+            citation_raw=raw,
+            citation_authors=["Attention"],
+            citation_title="Attention Is All You Need",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert out_high_consensus.label == ValidationLabel.METADATA_ERROR
+        assert "R-INCOMPLETE-METADATA" in out_high_consensus.triggered_rules
+
+    def test_finding5_bare_stubs_and_cay_quyet_dinh_do_not_bypass_r_incomplete_metadata(
+        self,
+    ) -> None:
+        rules = SymbolicRules()
+        zero_features = MatchFeatures()
+
+        # 1. Bare Vietnamese/English non-journal stubs missing author, year, and publisher -> R-INCOMPLETE-METADATA
+        bare_stubs = [
+            "[2] Bài giảng trí tuệ nhân tạo",
+            "[2] Giáo trình học máy cơ bản",
+            "[2] Tài liệu hướng dẫn sử dụng hệ thống",
+            "[2] Luận văn ứng dụng học sâu trong y sinh",
+            "[2] Khóa luận tốt nghiệp ngành khoa học máy tính",
+            "[2] Technical report on autonomous navigation",
+            "[2] White paper on zero trust architecture",
+            "[2] Ứng dụng cây quyết định trong phân loại dữ liệu",
+            "[2] Hệ hỗ trợ ra quyết định trong quản trị doanh nghiệp",
+        ]
+        for raw in bare_stubs:
+            comp = assess_bibliographic_completeness(
+                citation_raw=raw,
+                citation_authors=[],
+                citation_year=None,
+                citation_venue=None,
+                citation_type=CitationType.REFERENCE_LIST,
+            )
+            assert comp.has_resolvable_id is False, f"False resolvable ID on {raw}"
+            assert comp.is_incomplete is True, f"Expected is_incomplete=True on {raw}"
+
+            outcome = rules.evaluate(
+                zero_features,
+                SourceResult(
+                    citation_raw=raw,
+                    candidates=[],
+                    sources_queried=["crossref", "openalex"],
+                    sources_succeeded=["crossref", "openalex"],
+                ),
+                citation_raw=raw,
+                citation_authors=[],
+                citation_type=CitationType.REFERENCE_LIST,
+            )
+            assert outcome.label == ValidationLabel.METADATA_ERROR, f"Failed on {raw}: {outcome}"
+            assert outcome.triggered_rules == ["R-INCOMPLETE-METADATA"], f"Failed on {raw}: {outcome}"
+
+        # 2. Complete Vietnamese textbook WITH author + year + publisher keeps is_incomplete=False (R-UNINDEXED-BOOK-OR-SOURCE)
+        complete_vn_book = "Nguyễn Văn A (2020). Giáo trình Học máy cơ bản. NXB ĐHQG TP.HCM."
+        comp_book = assess_bibliographic_completeness(
+            citation_raw=complete_vn_book,
+            citation_authors=["Nguyễn Văn A"],
+            citation_year="2020",
+            citation_venue="NXB ĐHQG TP.HCM",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert comp_book.is_incomplete is False
+        out_book = rules.evaluate(
+            zero_features,
+            SourceResult(
+                citation_raw=complete_vn_book,
+                candidates=[],
+                sources_queried=["crossref", "openalex"],
+                sources_succeeded=["crossref", "openalex"],
+            ),
+            citation_raw=complete_vn_book,
+            citation_authors=["Nguyễn Văn A"],
+            citation_year="2020",
+            citation_venue="NXB ĐHQG TP.HCM",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert out_book.label == ValidationLabel.UNRESOLVED
+        assert "R-UNINDEXED-BOOK-OR-SOURCE" in out_book.triggered_rules
+
+        # 3. Genuine numbered Vietnamese legal documents still set has_resolvable_id=True
+        for legal_raw in (
+            "[1] Nghị định số 13/2023/NĐ-CP về bảo vệ dữ liệu cá nhân.",
+            "[2] Quyết định số 749/QĐ-TTg phê duyệt Chương trình Chuyển đổi số quốc gia.",
+            "[3] Luật An ninh mạng năm 2018.",
+        ):
+            comp_leg = assess_bibliographic_completeness(
+                citation_raw=legal_raw,
+                citation_authors=[],
+                citation_year=None,
+                citation_venue=None,
+                citation_type=CitationType.REFERENCE_LIST,
+            )
+            assert comp_leg.has_resolvable_id is True, f"Expected resolvable ID on {legal_raw}"
+            assert comp_leg.is_incomplete is False
+
+    def test_finding6_dockerfile_prebake_has_no_silent_fallback_pipe(self) -> None:
+        dockerfile_path = Path(__file__).resolve().parents[2] / "Dockerfile"
+        content = dockerfile_path.read_text(encoding="utf-8")
+        assert "paraphrase-multilingual-MiniLM-L12-v2" in content
+        assert "onnx/model_qint8_arm64.onnx" in content
+        assert "onnx/model_qint8_avx2.onnx" in content
+        for line in content.splitlines():
+            if "paraphrase-multilingual-MiniLM-L12-v2" in line:
+                assert "||" not in line, f"Silent fallback '||' found in Dockerfile pre-bake: {line}"

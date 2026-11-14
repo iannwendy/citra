@@ -271,7 +271,10 @@ export function SharedReportPage() {
     );
   };
 
-  const renderVerdictBadge = (label: SharedVerdictItem['label']) => {
+  const renderVerdictBadge = (
+    label: SharedVerdictItem['label'],
+    triggeredRules?: string[],
+  ) => {
     switch (label) {
       case 'verified':
         return (
@@ -280,13 +283,24 @@ export function SharedReportPage() {
             {t('verdict.verified')}
           </span>
         );
-      case 'metadata_error':
+      case 'metadata_error': {
+        const isIncompleteMeta = (triggeredRules ?? []).includes(
+          'R-INCOMPLETE-METADATA',
+        );
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300/60 dark:border-amber-800">
             <AlertTriangle className="h-3.5 w-3.5" />
-            {t('verdict.metadataError')}
+            {isIncompleteMeta
+              ? t(
+                  'verdict.incompleteReference',
+                  lang === 'vi'
+                    ? 'Thiếu quy cách trích dẫn'
+                    : 'Incomplete Reference',
+                )
+              : t('verdict.metadataError')}
           </span>
         );
+      }
       case 'suspected_hallucination':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-300 border border-red-300/60 dark:border-red-800">
@@ -690,7 +704,7 @@ export function SharedReportPage() {
                           <span className="font-mono text-xs font-bold text-slate-400">
                             #{idx + 1} ({v.reference_id})
                           </span>
-                          {renderVerdictBadge(v.label)}
+                          {renderVerdictBadge(v.label, v.triggered_rules)}
                           <span className="font-mono text-xs text-slate-500">
                             {(Number(v.confidence || 0) * 100).toFixed(0)}%{' '}
                             {t('essay.confidence')}

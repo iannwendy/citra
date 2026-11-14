@@ -394,6 +394,18 @@ const RULE_CATALOG: Record<
     condition: 'IF scholarly_record_exists == TRUE AND (url_status == "dead_link" OR title_sim < 0.60) THEN FLAG_DOMAIN_EXCEPTION',
     status: 'warning',
   },
+  'R-INCOMPLETE-METADATA': {
+    nameEn: 'Incomplete Bibliographic Reference (Missing Author / Year / Venue)',
+    nameVi: 'Thiếu quy cách trích dẫn học thuật (Thiếu Tác giả / Năm / Nơi công bố)',
+    condition: 'IF is_incomplete == TRUE AND has_resolvable_id == FALSE THEN METADATA_ERROR',
+    status: 'warning',
+  },
+  'R-URL-CONTENT-MISMATCH': {
+    nameEn: 'Cited Web Page Title / Metadata Mismatch',
+    nameVi: 'Nội dung / Tiêu đề trang URL không khớp tiêu đề trích dẫn',
+    condition: 'IF url_status == "alive" AND html_meta_title_sim < 0.20 THEN METADATA_ERROR',
+    status: 'warning',
+  },
   'R-BROKEN-LINK': {
     nameEn: 'Broken / Unreachable Citation URL (HTTP 404/410/DNS)',
     nameVi: 'Liên kết URL trích dẫn bị hỏng hoặc không thể truy cập (HTTP 404/410)',
@@ -556,14 +568,16 @@ function formatShortInText(
   return (stripped || rawText).slice(0, 42);
 }
 
-function getVerdictBadgeVisuals(
+export function getVerdictBadgeVisuals(
   label: ValidationLabel,
-  triggeredRules?: string[]
+  triggeredRules?: string[],
+  lang: 'vi' | 'en' = 'en'
 ): {
   text: string;
   badgeClass: string;
 } {
   const isLegal = (triggeredRules ?? []).some((r) => r.includes('LEGAL'));
+  const isIncompleteMeta = (triggeredRules ?? []).includes('R-INCOMPLETE-METADATA');
   switch (label) {
     case 'verified':
       return {
@@ -573,7 +587,13 @@ function getVerdictBadgeVisuals(
       };
     case 'metadata_error':
       return {
-        text: isLegal ? '⚠ LEGAL_METADATA_ERROR' : '⚠ METADATA_ERROR',
+        text: isIncompleteMeta
+          ? lang === 'vi'
+            ? '⚠ Thiếu quy cách trích dẫn'
+            : '⚠ Incomplete Reference'
+          : isLegal
+            ? '⚠ LEGAL_METADATA_ERROR'
+            : '⚠ METADATA_ERROR',
         badgeClass:
           'verdict-badge-metadata-error bg-amber-100/90 text-amber-800 border border-amber-300 dark:bg-amber-950/90 dark:text-amber-300 dark:border-amber-700 font-bold',
       };
@@ -924,7 +944,13 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
           : '';
       mainText = `Trích dẫn khớp chính xác với công trình trong ${srcStr}. Các trường thông tin (${fldStr}) hoàn toàn nhất quán với bản ghi gốc.${brokenLinkNoteVi}${telemetrySuffix}`;
     } else if (verdict.label === 'metadata_error') {
-      if (
+      if ((verdict.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')) {
+        const missingStrVi =
+          mismatchedFields.length > 0
+            ? ` (thiếu ${mismatchedFields.join(', ')})`
+            : '';
+        mainText = `Thiếu quy cách trích dẫn học thuật${missingStrVi}: mục tham khảo chưa đủ thông tin định danh (tác giả, năm xuất bản, nơi công bố hoặc DOI/URL). Đây là lỗi trình bày trích dẫn chứ không phải nguồn do AI bịa đặt — vui lòng bổ sung đầy đủ thông tin.${telemetrySuffix}`;
+      } else if (
         (verdict.triggered_rules ?? []).includes('R-CROSS-LINGUAL-TITLE-MATCH') ||
         verdict.features?.cross_lingual_title_detected
       ) {
@@ -1012,7 +1038,13 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
         : '';
     mainTextEn = `The citation matches a canonical publication in ${srcStr}. Verified fields (${fldStr}) are consistent with the source record.${brokenLinkNoteEn}${telemetrySuffixEn}`;
   } else if (verdict.label === 'metadata_error') {
-    if (
+    if ((verdict.triggered_rules ?? []).includes('R-INCOMPLETE-METADATA')) {
+      const missingStrEn =
+        mismatchedFields.length > 0
+          ? ` (missing ${mismatchedFields.join(', ')})`
+          : '';
+      mainTextEn = `Incomplete bibliographic reference${missingStrEn}: this entry lacks required scholarly identifiers (author, publication year, academic venue, or DOI/URL). This reflects incomplete formatting rather than an AI-fabricated source — please complete the citation details.${telemetrySuffixEn}`;
+    } else if (
       (verdict.triggered_rules ?? []).includes('R-CROSS-LINGUAL-TITLE-MATCH') ||
       verdict.features?.cross_lingual_title_detected
     ) {
@@ -1497,7 +1529,8 @@ function enrichVerdictItem(
 
   const verdictVisual = getVerdictBadgeVisuals(
     verdict.label,
-    verdict.triggered_rules
+    verdict.triggered_rules,
+    lang
   );
   const mappingVisual = getMappingBadgeVisuals(verdict.mapping_status);
   const linkBadge = getLinkBadgeVisuals(verdict, lang);

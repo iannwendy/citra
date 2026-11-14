@@ -216,9 +216,14 @@ class CISCalculator:
         # 1. Verified ratio — tỉ lệ academic citations được verify
         verified_ratio = verified / n_academic if n_academic > 0 else 0.0
 
-        # 2. Metadata accuracy: R-INCOMPLETE-METADATA receives 0.25 credit (0.75 penalty)
-        #    compared to 0.00 credit (1.00 penalty) for SUSPECTED_HALLUCINATION / hard mismatches.
-        effective_meta_penalty = other_meta_err + 0.75 * incomplete_meta_err + halluc
+        # 2. Metadata accuracy (Spec §2.1 strict monotonicity):
+        #    VERIFIED = 1.00 credit (0.00 penalty)
+        #    METADATA_ERROR (standard, e.g. 1-year typo) = 0.50 credit (0.50 penalty)
+        #    METADATA_ERROR + R-INCOMPLETE-METADATA = 0.25 credit (0.75 penalty)
+        #    SUSPECTED_HALLUCINATION = 0.00 credit (1.00 penalty)
+        effective_meta_penalty = (
+            0.50 * other_meta_err + 0.75 * incomplete_meta_err + 1.00 * halluc
+        )
         metadata_accuracy = (
             max(0.0, 1.0 - effective_meta_penalty / n_academic) if n_academic > 0 else 0.0
         )
