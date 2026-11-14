@@ -578,7 +578,7 @@ export function ProcessingPage() {
                       s === 'completed'
                         ? 'bg-emerald-100 dark:bg-emerald-900/60'
                         : s === 'active'
-                          ? 'bg-indigo-600 text-white shadow-xs'
+                          ? 'bg-white dark:bg-slate-900 border border-indigo-200/90 dark:border-indigo-700/80 shadow-xs'
                           : 'bg-slate-200/70 dark:bg-slate-800'
                     }`}
                   >
@@ -588,7 +588,7 @@ export function ProcessingPage() {
                         className="text-emerald-600 dark:text-emerald-400"
                       />
                     ) : s === 'active' ? (
-                      <MatrixDotLoader variant="scan" className="text-white" />
+                      <MatrixDotLoader variant="scan" />
                     ) : (
                       <Circle className="h-3.5 w-3.5 text-slate-400 dark:text-slate-600" />
                     )}

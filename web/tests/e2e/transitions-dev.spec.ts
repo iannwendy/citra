@@ -246,4 +246,136 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
     await closeNavBtn.click();
     await expect(mobileAside).toHaveClass(/-translate-x-full/);
   });
+
+  test('7. Processing Page: MatrixDotLoader (#31) active step badge matches light and dark theme polarity without inversion', async ({
+    page,
+  }) => {
+    setupAuthenticatedPage(page);
+    await page.addInitScript(() => {
+      localStorage.setItem('theme', 'light');
+    });
+
+    const activeSnapshot = {
+      status: 'processing',
+      queue_position: null,
+      step: 'parsing',
+      step_index: 0,
+      total_steps: 8,
+      message: 'Parsing PDF structure...',
+      citations_found: 0,
+      references_found: 0,
+      linked: 0,
+      sources_queried: {},
+      elapsed_seconds: 0.5,
+      finished_at: null,
+      error: null,
+    };
+
+    await page.route('**/api/essays/109/events', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream; charset=utf-8',
+        body: `data: ${JSON.stringify(activeSnapshot)}\n\n`,
+      });
+    });
+    await page.route('**/api/essays/109/status', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(activeSnapshot),
+      });
+    });
+
+    await page.goto('/verification/processing/109');
+    await waitForAuth(page);
+
+    const step1 = page.getByTestId('pipeline-step-1');
+    await expect(step1).toHaveAttribute('data-step-status', 'active');
+
+    const matrix = step1.locator('.t-matrix');
+    await expect(matrix).toBeVisible();
+    await expect(matrix).toHaveAttribute('data-variant', 'scan');
+    await expect(matrix.locator('i')).toHaveCount(16);
+
+    const readLoaderMetrics = () =>
+      page.evaluate(() => {
+        const parseRgb = (cssColor: string): [number, number, number] => {
+          const m = cssColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+          if (!m) return [0, 0, 0];
+          return [Number(m[1]), Number(m[2]), Number(m[3])];
+        };
+        const luminance = ([r, g, b]: [number, number, number]): number => {
+          const lin = (c: number) => {
+            const s = c / 255;
+            return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+          };
+          return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+        };
+
+        const matrixEl = document.querySelector(
+          '[data-testid="pipeline-step-1"] .t-matrix',
+        ) as HTMLElement | null;
+        const badgeEl = matrixEl?.parentElement as HTMLElement | null;
+        if (!matrixEl || !badgeEl) {
+          throw new Error('Active step MatrixDotLoader or badge container missing');
+        }
+
+        const badgeBg = getComputedStyle(badgeEl).backgroundColor;
+        const bodyBg = getComputedStyle(document.body).backgroundColor;
+        const matrixStyle = getComputedStyle(matrixEl);
+
+        return {
+          isDarkHtml: document.documentElement.classList.contains('dark'),
+          bodyBg,
+          bodyLuminance: luminance(parseRgb(bodyBg)),
+          badgeBg,
+          badgeLuminance: luminance(parseRgb(badgeBg)),
+          matrixBase: matrixStyle.getPropertyValue('--matrix-base').trim(),
+          matrixActive: matrixStyle.getPropertyValue('--matrix-active').trim().toLowerCase(),
+        };
+      });
+
+    // Light mode: both page canvas and active loader badge must be light (not inverted dark #1C1A15)
+    const lightMetrics = await readLoaderMetrics();
+    expect(lightMetrics.isDarkHtml).toBe(false);
+    expect(lightMetrics.bodyLuminance).toBeGreaterThan(0.85);
+    expect(
+      lightMetrics.badgeLuminance,
+      `Expected light badge surface in light mode, got ${lightMetrics.badgeBg}`,
+    ).toBeGreaterThan(0.8);
+    expect(lightMetrics.matrixActive).toBe('#10b981');
+
+    // Switch to Dark mode via the real sidebar theme toggle
+    const themeToggle = page.locator('button[title^="Theme:"]').first();
+    await expect(themeToggle).toBeVisible();
+    for (let i = 0; i < 3; i++) {
+      const isDark = await page.evaluate(() =>
+        document.documentElement.classList.contains('dark'),
+      );
+      if (isDark) break;
+      await themeToggle.click();
+    }
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.classList.contains('dark')),
+      )
+      .toBe(true);
+
+    // Dark mode: wait for 300ms theme transition to settle, then verify both page canvas and active loader badge are dark (not inverted white #FBFAF6)
+    await expect
+      .poll(async () => (await readLoaderMetrics()).badgeLuminance, {
+        message: 'Expected active step loader badge to settle to a dark surface in dark mode',
+      })
+      .toBeLessThan(0.15);
+
+    const darkMetrics = await readLoaderMetrics();
+    expect(darkMetrics.isDarkHtml).toBe(true);
+    expect(darkMetrics.bodyLuminance).toBeLessThan(0.05);
+    expect(
+      darkMetrics.badgeLuminance,
+      `Expected dark badge surface in dark mode, got ${darkMetrics.badgeBg}`,
+    ).toBeLessThan(0.15);
+    expect(darkMetrics.matrixActive).toBe('#34d399');
+    expect(lightMetrics.badgeLuminance).toBeGreaterThan(darkMetrics.badgeLuminance);
+  });
 });
