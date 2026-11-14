@@ -531,11 +531,11 @@ class TestMultilingualQuantizedOnnxAndCrossLingualAlignment:
         )
         assert (
             SemanticMatcher._select_quantized_onnx_file("x86_64")
-            == "onnx/model_qint8_avx2.onnx"
+            == "onnx/model_quint8_avx2.onnx"
         )
         assert (
             SemanticMatcher._select_quantized_onnx_file("AMD64")
-            == "onnx/model_qint8_avx2.onnx"
+            == "onnx/model_quint8_avx2.onnx"
         )
 
     def test_load_multilingual_encoder_uses_onnx_and_falls_back_cleanly(self) -> None:
@@ -1155,7 +1155,7 @@ class TestTask8FixRound1Regressions:
         content = dockerfile_path.read_text(encoding="utf-8")
         assert "paraphrase-multilingual-MiniLM-L12-v2" in content
         assert "onnx/model_qint8_arm64.onnx" in content
-        assert "onnx/model_qint8_avx2.onnx" in content
+        assert "onnx/model_quint8_avx2.onnx" in content
         for line in content.splitlines():
             if "paraphrase-multilingual-MiniLM-L12-v2" in line:
                 assert "||" not in line, f"Silent fallback '||' found in Dockerfile pre-bake: {line}"

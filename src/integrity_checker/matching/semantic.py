@@ -235,8 +235,8 @@ class SemanticMatcher:
         if arch in {"arm64", "aarch64"} or arch.startswith(("arm64", "aarch64")):
             return "onnx/model_qint8_arm64.onnx"
         if arch in {"x86_64", "amd64", "x64"}:
-            return "onnx/model_qint8_avx2.onnx"
-        return "onnx/model_qint8_avx2.onnx"
+            return "onnx/model_quint8_avx2.onnx"
+        return "onnx/model_quint8_avx2.onnx"
 
     def _load_multilingual_encoder(self):
         """Load quantized ONNX INT8 multilingual encoder first when `onnx_quantized=True`.
