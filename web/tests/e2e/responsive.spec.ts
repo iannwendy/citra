@@ -584,12 +584,12 @@ test.describe('Responsive Layout — Authenticated Workspaces (Student, Teacher,
     await assertNoHorizontalOverflow(page, 'CreateClassDialog @ 375x812');
   });
 
-  test('Long underscore-connected filename does not overflow on Mobile (375x812)', async ({
+  test('Long underscore-connected filename does not overflow across Mobile, Tablet, Laptop, and Desktop viewports', async ({
     page,
   }) => {
     setupAllResponsiveMocks(page);
     const longFilename =
-      'VietDepression_for_Detecting_Depression_Related_Language_in_Vietnamese_YouTube_Comments.pdf';
+      'VietDepression_for_Detecting_Depression_Related_Language_in_Vietnamese_YouTube_Comments_and_Social_Media_Discourse.pdf';
 
     await page.route(/\/api\/essays$/, (route) => {
       if (route.request().method() === 'GET') {
@@ -649,19 +649,40 @@ test.describe('Responsive Layout — Authenticated Workspaces (Student, Teacher,
       })
     );
 
-    await page.setViewportSize({ width: 375, height: 812 });
+    for (const vp of [
+      { name: '375x812', width: 375, height: 812 },
+      { name: '640x900', width: 640, height: 900 },
+      { name: '768x1024', width: 768, height: 1024 },
+      { name: '1024x768', width: 1024, height: 768 },
+      { name: '1280x800', width: 1280, height: 800 },
+      { name: '1440x900', width: 1440, height: 900 },
+    ]) {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
 
-    for (const route of ['/dashboard', '/history', '/verification/report/1']) {
-      await page.goto(route);
-      await page.waitForLoadState('domcontentloaded');
-      await page.waitForTimeout(400);
-      await assertNoHorizontalOverflow(page, `${route} (long filename) @ 375x812`);
+      for (const route of ['/dashboard', '/history', '/verification/report/1']) {
+        await page.goto(route);
+        await page.waitForLoadState('domcontentloaded');
+        await page.waitForTimeout(400);
+        await assertNoHorizontalOverflow(page, `${route} (long filename) @ ${vp.name}`);
+
+        if (route === '/dashboard') {
+          const tableOverflow = await page.evaluate(() => {
+            const table = document.querySelector('table');
+            const wrapper = table?.parentElement;
+            return wrapper ? wrapper.scrollWidth > wrapper.clientWidth : false;
+          });
+          expect(
+            tableOverflow,
+            `Expected no internal table overflow on /dashboard @ ${vp.name}`
+          ).toBe(false);
+        }
+      }
+
+      // Verify EssayHeader h1 boundingBox stays within the viewport
+      const h1Box = await page.locator('h1').first().boundingBox();
+      expect(h1Box).not.toBeNull();
+      expect(h1Box!.x + h1Box!.width).toBeLessThanOrEqual(vp.width);
     }
-
-    // Verify EssayHeader h1 boundingBox stays within the 375px viewport
-    const h1Box = await page.locator('h1').first().boundingBox();
-    expect(h1Box).not.toBeNull();
-    expect(h1Box!.x + h1Box!.width).toBeLessThanOrEqual(375);
   });
 
   test('Verification Report Split-Pane IDE has no extra whitespace gap between citation list and manuscript context across responsive viewports', async ({

@@ -198,7 +198,7 @@
     "tablePages": "Pages",
     "tableUploaded": "Uploaded",
     "tableActions": "Actions",
-    "viewReport": "View Report",
+    "viewReport": "View",
     "showingCount": "Showing {{shown}} of {{total}} documents",
     "deleteConfirmTitle": "Delete this document?",
     "deleteConfirmMessage": "This will permanently remove the document and its analysis. This action cannot be undone.",

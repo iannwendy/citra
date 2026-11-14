@@ -198,7 +198,7 @@
     "tablePages": "Số trang",
     "tableUploaded": "Ngày tải lên",
     "tableActions": "Thao tác",
-    "viewReport": "Xem báo cáo",
+    "viewReport": "Xem",
     "showingCount": "Hiển thị {{shown}} / {{total}} tài liệu",
     "deleteConfirmTitle": "Xóa tài liệu này?",
     "deleteConfirmMessage": "Tài liệu và kết quả phân tích sẽ bị xóa vĩnh viễn. Không thể hoàn tác hành động này.",

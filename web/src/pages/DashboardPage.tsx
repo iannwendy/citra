@@ -361,27 +361,27 @@ export function DashboardPage() {
             )}
           </div>
         ) : (
-          <Table className="t-skel-reveal block sm:table">
-            <TableHeader className="hidden sm:table-header-group">
+          <Table className="t-skel-reveal block md:table">
+            <TableHeader className="hidden md:table-header-group">
               <TableRow className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200/80 dark:border-slate-800">
-                <TableHead className="font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-5">
+                <TableHead className="w-full font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-3.5 xl:px-5">
                   {t('dashboard.tableDocument')}
                 </TableHead>
-                <TableHead className="font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3">
+                <TableHead className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-2.5 xl:px-4">
                   {t('dashboard.tablePages')}
                 </TableHead>
-                <TableHead className="font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3">
+                <TableHead className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-2.5 xl:px-4">
                   CIS
                 </TableHead>
-                <TableHead className="font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3">
+                <TableHead className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-2.5 xl:px-4">
                   {t('dashboard.tableUploaded')}
                 </TableHead>
-                <TableHead className="font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-5 text-right">
+                <TableHead className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-3.5 xl:px-5 text-right">
                   {t('dashboard.tableActions')}
                 </TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody className="block sm:table-row-group divide-y divide-slate-100 dark:divide-slate-800/80">
+            <TableBody className="block md:table-row-group divide-y divide-slate-100 dark:divide-slate-800/80">
               {filteredEssays.map((essay) => {
                 const jobStatus = (essay.job_status || 'completed').toLowerCase();
                 const isQueued = jobStatus === 'queued';
@@ -400,10 +400,10 @@ export function DashboardPage() {
                 return (
                 <TableRow
                   key={essay.id}
-                  className="flex flex-col sm:table-row p-3.5 sm:p-0 gap-2 sm:gap-0 group hover:bg-slate-50/80 dark:hover:bg-slate-900/60 transition-colors"
+                  className="flex flex-col md:table-row p-3.5 md:p-0 gap-2 md:gap-0 group hover:bg-slate-50/80 dark:hover:bg-slate-900/60 transition-colors"
                 >
-                  <TableCell className="py-0 sm:py-3.5 px-0 sm:px-5 min-w-0 w-full sm:w-auto">
-                    <div className="flex items-center gap-3 min-w-0">
+                  <TableCell className="py-0 md:py-3.5 px-0 md:px-3.5 xl:px-5 min-w-0 w-full md:max-w-0 overflow-hidden">
+                    <div className="flex items-center gap-2.5 xl:gap-3 min-w-0">
                       <FileFormatIcon filename={essay.filename} size="md" />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap min-w-0">
@@ -411,7 +411,7 @@ export function DashboardPage() {
                             to={targetHref}
                             title={essay.filename}
                             data-testid={`dashboard-essay-link-${essay.id}`}
-                            className="text-sm font-semibold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 truncate max-w-full sm:max-w-xs md:max-w-md block transition-colors"
+                            className="text-sm font-semibold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 truncate min-w-0 max-w-full block transition-colors"
                           >
                             {essay.filename}
                           </Link>
@@ -453,36 +453,36 @@ export function DashboardPage() {
                           )}
                         </div>
                         {!isUser && (
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                          <div className="flex items-center gap-1.5 mt-0.5 min-w-0 whitespace-nowrap overflow-hidden">
+                            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 shrink-0">
                               ID #{essay.id}
                             </span>
-                            <span className="text-slate-300 dark:text-slate-700">·</span>
+                            <span className="text-slate-300 dark:text-slate-700 shrink-0">·</span>
                             {(() => {
                               const fmt = getDocumentFormat(essay.filename);
                               if (fmt === 'docx') {
                                 return (
-                                  <span className="text-[11px] font-mono font-medium text-[#2563EB] dark:text-[#60A5FA]">
+                                  <span className="text-[11px] font-mono font-medium text-[#2563EB] dark:text-[#60A5FA] truncate">
                                     WORD DOCX · OPENXML
                                   </span>
                                 );
                               }
                               if (fmt === 'bib') {
                                 return (
-                                  <span className="text-[11px] font-mono font-medium text-emerald-600 dark:text-emerald-400">
+                                  <span className="text-[11px] font-mono font-medium text-emerald-600 dark:text-emerald-400 truncate">
                                     BIBTEX · .BIB
                                   </span>
                                 );
                               }
                               if (fmt === 'ris') {
                                 return (
-                                  <span className="text-[11px] font-mono font-medium text-amber-600 dark:text-amber-400">
+                                  <span className="text-[11px] font-mono font-medium text-amber-600 dark:text-amber-400 truncate">
                                     RIS · BIBLIOGRAPHY
                                   </span>
                                 );
                               }
                               return (
-                                <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
+                                <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 truncate">
                                   GROBID TEI
                                 </span>
                               );
@@ -492,16 +492,16 @@ export function DashboardPage() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="py-0 sm:py-4 px-0 sm:px-4 flex items-center justify-between sm:table-cell">
-                    <span className="sm:hidden text-[11px] font-mono uppercase text-slate-400">
+                  <TableCell className="py-0 md:py-4 px-0 md:px-2.5 xl:px-4 whitespace-nowrap flex items-center justify-between md:table-cell">
+                    <span className="md:hidden text-[11px] font-mono uppercase text-slate-400">
                       {t('dashboard.tablePages')}
                     </span>
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-xs font-mono tabular-nums font-semibold text-slate-700 dark:text-slate-300">
                       {essay.num_pages}
                     </span>
                   </TableCell>
-                  <TableCell className="py-0 sm:py-4 px-0 sm:px-4 flex items-center justify-between sm:table-cell">
-                    <span className="sm:hidden text-[11px] font-mono uppercase text-slate-400">
+                  <TableCell className="py-0 md:py-4 px-0 md:px-2.5 xl:px-4 whitespace-nowrap flex items-center justify-between md:table-cell">
+                    <span className="md:hidden text-[11px] font-mono uppercase text-slate-400">
                       CIS
                     </span>
                     <span
@@ -511,12 +511,12 @@ export function DashboardPage() {
                       {cisDisplay}
                     </span>
                   </TableCell>
-                  <TableCell className="py-0 sm:py-4 px-0 sm:px-4 flex items-center justify-between sm:table-cell">
-                    <span className="sm:hidden text-[11px] font-mono uppercase text-slate-400">
+                  <TableCell className="py-0 md:py-4 px-0 md:px-2.5 xl:px-4 whitespace-nowrap flex items-center justify-between md:table-cell">
+                    <span className="md:hidden text-[11px] font-mono uppercase text-slate-400">
                       {t('dashboard.tableUploaded')}
                     </span>
                     <div className="flex items-center gap-1.5 text-xs font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                      <Clock className="h-3.5 w-3.5 text-slate-400" />
+                      <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                       {new Date(essay.uploaded_at).toLocaleDateString(dateLocale, {
                         month: 'short',
                         day: 'numeric',
@@ -524,16 +524,16 @@ export function DashboardPage() {
                       })}
                     </div>
                   </TableCell>
-                  <TableCell className="py-1 sm:py-4 px-0 sm:px-5 text-right">
-                    <div className="flex items-center justify-end gap-1.5 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800/60">
+                  <TableCell className="py-1 md:py-4 px-0 md:px-3.5 xl:px-5 whitespace-nowrap text-right">
+                    <div className="flex items-center justify-end gap-1.5 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-slate-800/60">
                       {!isInProgress && !isFailed && (
                         <>
                           <Link
                             to={`/verification/report/${essay.id}/issues`}
                             title={t('essay.issues')}
-                            className="hidden md:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-amber-300 dark:hover:border-amber-700 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+                            className="hidden xl:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium whitespace-nowrap shrink-0 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-amber-300 dark:hover:border-amber-700 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
                           >
-                            <AlertCircle className="h-3.5 w-3.5" />
+                            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                             <span>{t('essay.issues')}</span>
                           </Link>
                           {canViewTrace ? (
@@ -541,9 +541,9 @@ export function DashboardPage() {
                               to={`/verification/report/${essay.id}/trace`}
                               title={t('essay.logicTrace')}
                               data-testid={`dashboard-trace-link-${essay.id}`}
-                              className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-violet-300 dark:hover:border-violet-700 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+                              className="hidden xl:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium whitespace-nowrap shrink-0 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-violet-300 dark:hover:border-violet-700 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
                             >
-                              <GitBranch className="h-3.5 w-3.5" />
+                              <GitBranch className="h-3.5 w-3.5 shrink-0" />
                               <span>Trace</span>
                             </Link>
                           ) : (
@@ -555,9 +555,9 @@ export function DashboardPage() {
                                   : 'Logic Trace is available on Pro / Ultra — click to upgrade'
                               }
                               data-testid={`dashboard-trace-locked-${essay.id}`}
-                              className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium rounded-lg border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+                              className="hidden xl:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-mono font-medium whitespace-nowrap shrink-0 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
                             >
-                              <Lock className="h-3.5 w-3.5" />
+                              <Lock className="h-3.5 w-3.5 shrink-0" />
                               <span>Trace</span>
                             </Link>
                           )}
@@ -566,9 +566,9 @@ export function DashboardPage() {
                       <Link
                         to={targetHref}
                         data-testid={`dashboard-primary-action-${essay.id}`}
-                        className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-indigo-50 dark:bg-indigo-950/90 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/70 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white transition-all"
+                        className="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 rounded-xl bg-indigo-50 dark:bg-indigo-950/90 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/70 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white transition-all"
                       >
-                        <Eye className="h-3.5 w-3.5" />
+                        <Eye className="h-3.5 w-3.5 shrink-0" />
                         {isInProgress
                           ? lang === 'vi'
                             ? 'Xem tiến trình'
@@ -586,7 +586,7 @@ export function DashboardPage() {
                           setConfirmDeleteId(essay.id);
                         }}
                         disabled={deletingId === essay.id}
-                        className="p-2 rounded-xl text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors disabled:opacity-50"
+                        className="p-2 shrink-0 rounded-xl text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors disabled:opacity-50"
                         title={t('common.delete')}
                         aria-label={`Delete ${essay.filename}`}
                       >
