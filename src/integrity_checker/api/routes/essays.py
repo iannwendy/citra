@@ -722,6 +722,28 @@ def get_essay_status(
             "queue_position": None,
         }
 
+    if getattr(essay, "job_status", None) == "processing":
+        if persisted_snap is not None and persisted_snap.get("status") in (
+            "processing",
+            "queued",
+        ):
+            return persisted_snap
+        return {
+            "status": "processing",
+            "step": "parsing",
+            "step_index": 0,
+            "total_steps": 8,
+            "message": "Processing...",
+            "citations_found": 0,
+            "references_found": 0,
+            "linked": 0,
+            "sources_queried": {},
+            "elapsed_seconds": 0.0,
+            "finished_at": None,
+            "error": None,
+            "queue_position": None,
+        }
+
     verdicts = repo.get_verdicts(essay_id)
     if (
         verdicts
@@ -945,7 +967,7 @@ async def reanalyze_essay(
         else:
             raise HTTPException(status_code=404, detail="Persisted document file not found on disk")
 
-    if _get_worker_mode() == "web_only":
+    if _get_worker_mode() in {"web_only", "worker_only"}:
         _clear_persisted_progress_snapshot(essay)
         essay.job_status = "queued"
         essay.job_heartbeat_at = datetime.now(UTC)
@@ -954,8 +976,21 @@ async def reanalyze_essay(
         get_tracker().clear(essay_id)
         return {"status": "queued", "essay_id": essay.id}
 
+    peek_queued = (
+        get_pipeline_admission_controller().peek_queue_position_if_saturated() is not None
+    )
+    _clear_persisted_progress_snapshot(essay)
+    essay.job_status = "queued" if peek_queued else "processing"
+    essay.job_heartbeat_at = datetime.now(UTC)
+    essay.job_error = None
+    db.commit()
+
     tracker = get_tracker()
-    tracker.init(essay_id, is_retry=True)
+    init_state = tracker.init(essay_id, is_retry=True)
+    if init_state.status in ("queued", "processing") and essay.job_status != init_state.status:
+        db.refresh(essay)
+        essay.job_status = init_state.status
+        db.commit()
     if is_test_runtime():
         await _run_pipeline_task(
             essay.id,

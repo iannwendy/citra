@@ -517,6 +517,132 @@ async def test_sse_db_fallback_reanalysis_prefers_active_processing_over_prior_c
     assert snap["step"] == "linking"
 
 
+async def test_sse_inline_queued_reanalysis_never_emits_stale_sql_completed_on_poll_timeout(
+    clean_db,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fix Round 1 regression: When an already-completed essay is re-analyzed under a saturated
+    admission queue in inline mode:
+    1. POST /api/essays/{id}/reanalyze immediately resets SQLite job_status to 'queued' and clears job_error.
+    2. While in-memory tracker state is active ('queued'/'processing'), subscribe() does NOT poll SQLite
+       on poll_interval TimeoutError and NEVER prematurely emits stale 'completed'/'failed' from run #1,
+       waiting cleanly for the new run's live updates and completion."""
+    from unittest.mock import patch
+
+    from integrity_checker.api.progress import get_pipeline_admission_controller
+
+    monkeypatch.setenv("CITRA_WORKER_MODE", "inline")
+    uploads_dir = tmp_path / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(essays_route, "UPLOADS_DIR", uploads_dir)
+
+    owner, owner_token = _create_user_with_token(clean_db, username="queued_reanalyze_owner")
+    essay = EssayRecord(
+        filename="already_completed.pdf",
+        num_pages=6,
+        user_id=owner.id,
+        job_status="completed",
+        job_error="old transient note",
+        cis_json=json.dumps({"score": 91.0, "components": {}, "num_citations": 4, "num_unresolved": 0}),
+        style_profile_json=json.dumps(
+            {
+                "style": "APA_LIKE",
+                "_progress_snapshot": {
+                    "status": "completed",
+                    "step": "done",
+                    "step_index": 7,
+                },
+            }
+        ),
+    )
+    clean_db.add(essay)
+    clean_db.commit()
+    essay_id = essay.id
+    (uploads_dir / f"{essay_id}.pdf").write_bytes(b"%PDF-1.4\n%stub\n")
+
+    # Saturate admission controller so tracker.init() enters 'queued' state
+    adm = get_pipeline_admission_controller()
+    orig_explicit_max = adm._explicit_max
+    adm._explicit_max = 1
+    try:
+        async with adm.acquire(999901):
+            app = create_app()
+            client = TestClient(app)
+            with (
+                patch.object(essays_route, "is_test_runtime", return_value=False),
+                patch.object(essays_route, "_run_pipeline_task", return_value=None),
+            ):
+                re_resp = client.post(
+                    f"/api/essays/{essay_id}/reanalyze",
+                    headers={"Authorization": f"Bearer {owner_token}"},
+                )
+            assert re_resp.status_code == 200
+
+            verify_s = get_session()
+            try:
+                refreshed = verify_s.get(EssayRecord, essay_id)
+                assert refreshed is not None
+                assert refreshed.job_status == "queued"
+                assert refreshed.job_error is None
+            finally:
+                verify_s.close()
+
+            # Even if SQLite still held stale job_status='completed' + cis_json while in-memory is 'queued',
+            # subscribe() must trust in-memory state, perform zero SQLite polls while in-memory is active,
+            # and wait for the new run's updates!
+            stale_s = get_session()
+            try:
+                stale_row = stale_s.get(EssayRecord, essay_id)
+                assert stale_row is not None
+                stale_row.job_status = "completed"
+                stale_s.commit()
+            finally:
+                stale_s.close()
+
+            tracker = get_tracker()
+            in_mem = tracker.get(essay_id)
+            assert in_mem is not None and in_mem.status == "queued"
+
+            with patch.object(
+                tracker,
+                "load_db_fallback_snapshot",
+                wraps=tracker.load_db_fallback_snapshot,
+            ) as spy_db_fallback:
+                sub_iter = tracker.subscribe(essay_id, poll_interval=0.02).__aiter__()
+                try:
+                    first_snap = await sub_iter.__anext__()
+                    assert first_snap["status"] == "queued"
+
+                    async def _delayed_new_run() -> None:
+                        # Sleep past > 3 poll_interval timeouts while queued
+                        await asyncio.sleep(0.08)
+                        tracker.update(
+                            essay_id,
+                            status="processing",
+                            queue_position=None,
+                            step="retrieving",
+                            step_index=4,
+                            message="Re-querying Crossref...",
+                        )
+                        await asyncio.sleep(0.02)
+                        tracker.complete(essay_id)
+
+                    producer = asyncio.create_task(_delayed_new_run())
+                    subsequent: list[dict[str, Any]] = []
+                    async for snap in sub_iter:
+                        subsequent.append(snap)
+                    await producer
+                finally:
+                    await sub_iter.aclose()
+
+                assert spy_db_fallback.call_count == 0
+                assert [s["status"] for s in subsequent] == ["processing", "completed"]
+                assert [s["step"] for s in subsequent] == ["retrieving", "done"]
+    finally:
+        adm._explicit_max = orig_explicit_max
+
+
 def test_nginx_prod_conf_defines_unbuffered_sse_locations_before_api_proxy() -> None:
     """Both Nginx server blocks proxying /api/ must define unbuffered SSE location before location /api/."""
     nginx_conf_path = PROJECT_ROOT / "web" / "nginx.prod.conf"

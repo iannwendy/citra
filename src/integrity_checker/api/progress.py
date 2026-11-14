@@ -358,11 +358,11 @@ class ProgressTracker:
                         "queue_position": None,
                     }
 
-                if job_status == "processing" and (
-                    persisted_snap is None
-                    or persisted_snap.get("status") not in ("completed", "failed")
-                ):
-                    if persisted_snap is not None:
+                if job_status == "processing":
+                    if persisted_snap is not None and persisted_snap.get("status") in (
+                        "processing",
+                        "queued",
+                    ):
                         return persisted_snap
                     return {
                         "status": "processing",
@@ -471,7 +471,7 @@ class ProgressTracker:
             initial_snap = (
                 initial_mem_snap
                 if initial_mem_snap is not None
-                else self.load_db_fallback_snapshot(essay_id)
+                else await asyncio.to_thread(self.load_db_fallback_snapshot, essay_id)
             )
             last_sig: str | None = None
             if initial_snap is not None:
@@ -494,22 +494,25 @@ class ProgressTracker:
                     if item.get("status") in ("completed", "failed"):
                         return
                 except TimeoutError:
-                    has_in_memory = worker_mode != "web_only" and self.get(essay_id) is not None
-                    db_snap = self.load_db_fallback_snapshot(essay_id)
-                    if not has_in_memory:
-                        if db_snap is None:
-                            return
-                        sig = self._snapshot_signature(db_snap)
+                    in_mem = None if worker_mode == "web_only" else self.get(essay_id)
+                    if in_mem is not None:
+                        mem_snap = in_mem.to_snapshot()
+                        sig = self._snapshot_signature(mem_snap)
                         if sig != last_sig:
                             last_sig = sig
-                            yield db_snap
-                        if db_snap.get("status") in ("completed", "failed"):
+                            yield mem_snap
+                        if mem_snap.get("status") in ("completed", "failed"):
                             return
-                    elif db_snap is not None and db_snap.get("status") in ("completed", "failed"):
-                        sig = self._snapshot_signature(db_snap)
-                        if sig != last_sig:
-                            last_sig = sig
-                            yield db_snap
+                        continue
+
+                    db_snap = await asyncio.to_thread(self.load_db_fallback_snapshot, essay_id)
+                    if db_snap is None:
+                        return
+                    sig = self._snapshot_signature(db_snap)
+                    if sig != last_sig:
+                        last_sig = sig
+                        yield db_snap
+                    if db_snap.get("status") in ("completed", "failed"):
                         return
         finally:
             with self._lock:
