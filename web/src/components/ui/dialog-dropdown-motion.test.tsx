@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { useState } from 'react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { MemoryRouter } from 'react-router-dom';
 import tailwindConfig from '../../../tailwind.config';
 import {
@@ -62,9 +64,10 @@ describe('Task 4: Asymmetric Overlays & SolvaHeader Exit Animations', () => {
     const content = screen.getByTestId('test-dialog-content');
     expect(content.className).toContain('data-[state=open]:animate-dialog-content-in');
     expect(content.className).toContain('data-[state=closed]:animate-dialog-content-out');
+    expect(content.className).toContain('motion-reduce:animate-none');
   });
 
-  it('applies asymmetric data-[state=open] and data-[state=closed] animations to DropdownMenuContent', () => {
+  it('applies asymmetric data-[state=open] and data-[state=closed] animations + motion-reduce:animate-none to DropdownMenuContent and @keyframes t-dropdown-in to .t-dropdown.is-open', () => {
     render(
       <DropdownMenu open>
         <DropdownMenuTrigger asChild>
@@ -79,6 +82,13 @@ describe('Task 4: Asymmetric Overlays & SolvaHeader Exit Animations', () => {
     const menu = screen.getByTestId('test-dropdown-content');
     expect(menu.className).toContain('data-[state=open]:animate-dropdown-in');
     expect(menu.className).toContain('data-[state=closed]:animate-dropdown-out');
+    expect(menu.className).toContain('motion-reduce:animate-none');
+
+    const css = readFileSync(
+      resolve(__dirname, '../../styles/transitions-dev.css'),
+      'utf8',
+    );
+    expect(css).toContain('@keyframes t-dropdown-in');
   });
 
   it('useExitPresence retains mounted=true with phase="closing" for 150ms before unmounting', () => {

@@ -28,10 +28,15 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
     expect(tokens.easeSmoothOut).toContain('cubic-bezier');
     expect(tokens.easeBounce).toContain('cubic-bezier');
 
-    // 2. Verify UIGenerationReveal container (.t-gen-wrap + .t-gen) wraps the Hero Verification Mockup
+    // 2. Verify UIGenerationReveal container (.t-gen-wrap + .t-gen) measures real Hero Verification Mockup boxes & settles
     const genWrap = page.locator('.t-gen-wrap').first();
     const genOverlay = page.locator('.t-gen').first();
     await expect(genWrap).toBeVisible();
+    await expect
+      .poll(async () => genOverlay.locator('.t-gen-wire').count(), {
+        timeout: 1500,
+      })
+      .toBeGreaterThan(5);
     await expect(genOverlay).toHaveAttribute('data-phase', 'done', { timeout: 4000 });
 
     // 3. Verify Benchmark 120K 3-view switcher uses #16 Sliding Tabs (.t-tabs-pill + .t-tab)

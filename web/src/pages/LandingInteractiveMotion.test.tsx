@@ -118,12 +118,18 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
     );
   }
 
-  it('Interactive Debugger renders Auto-Tour progress bar, pauses on hover, and switches via NumberPopIn + SoftTextSwap without resetting active tab', () => {
+  it('Interactive Debugger renders Auto-Tour progress bar paused while off-screen, starts on intersection, pauses on hover, and switches via NumberPopIn + SoftTextSwap without resetting active tab', () => {
     const { container } = renderLanding();
-    intersectAll();
 
     const demoSection = container.querySelector('#interactive-demo') as HTMLElement;
     expect(demoSection).not.toBeNull();
+
+    // Off-screen below the fold: CSS progress bar MUST stay paused at scaleX(0) in lockstep with JS timer
+    expect(
+      within(demoSection).getByTestId('debugger-autotour-progress').getAttribute('data-paused'),
+    ).toBe('true');
+
+    intersectAll();
 
     const progress = within(demoSection).getByTestId('debugger-autotour-progress');
     expect(progress.getAttribute('data-paused')).toBe('false');
@@ -164,12 +170,18 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
     expect(demoSection.querySelectorAll('.t-text-soft').length).toBeGreaterThan(0);
   });
 
-  it('4-Stage Pipeline (#how-it-works) renders sliding .t-tabs-pill across role="tab" buttons and wraps stage visual in causal DirectionalStageSlide', () => {
+  it('4-Stage Pipeline (#how-it-works) renders sliding .t-tabs-pill across role="tab" buttons, pauses progress bar off-screen, and wraps stage visual in causal DirectionalStageSlide without opacity:0.001 blink', () => {
     const { container } = renderLanding();
-    intersectAll();
 
     const pipelineSection = container.querySelector('#how-it-works') as HTMLElement;
     expect(pipelineSection).not.toBeNull();
+    expect(
+      within(pipelineSection)
+        .getByTestId('pipeline-autotour-progress')
+        .getAttribute('data-paused'),
+    ).toBe('true');
+
+    intersectAll();
 
     const pill = within(pipelineSection).getByTestId('pipeline-tabs-pill');
     expect(pill.classList.contains('t-tabs-pill')).toBe(true);
@@ -177,16 +189,23 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
     const tabs = within(pipelineSection).getAllByRole('tab');
     expect(tabs).toHaveLength(4);
     expect(tabs[0].getAttribute('aria-selected')).toBe('true');
-    expect(within(pipelineSection).getByTestId('pipeline-autotour-progress')).toBeDefined();
+    expect(
+      within(pipelineSection)
+        .getByTestId('pipeline-autotour-progress')
+        .getAttribute('data-paused'),
+    ).toBe('false');
 
     const slideViewport = within(pipelineSection).getByTestId('pipeline-stage-slide');
     expect(slideViewport.classList.contains('t-stage-slide-viewport')).toBe(true);
 
-    // Click Stage 3 (index 2) -> causal forward direction (+1), stops auto-cycle
+    // Click Stage 3 (index 2) -> causal forward direction (+1), stops auto-cycle, and PipelineStageVisual does NOT mount cloaked at opacity 0.001
     fireEvent.click(tabs[2]);
     expect(tabs[2].getAttribute('aria-selected')).toBe('true');
     expect(slideViewport.getAttribute('data-direction')).toBe('1');
     expect(within(pipelineSection).queryByTestId('pipeline-autotour-progress')).toBeNull();
+    const stageVisualCard = slideViewport.querySelector('.solva-glass-ring') as HTMLElement;
+    expect(stageVisualCard).not.toBeNull();
+    expect(stageVisualCard.style.opacity).not.toBe('0.001');
 
     // Click Stage 1 (index 0) -> causal backward direction (-1)
     fireEvent.click(tabs[0]);

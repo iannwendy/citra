@@ -282,6 +282,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Sidebar */}
       <aside
+        style={{ viewTransitionName: 'citra-app-sidebar' }}
         className={`
           fixed lg:static inset-y-0 left-0 z-50
           w-72 max-w-[85vw] h-screen supports-[height:100dvh]:h-dvh shrink-0 overflow-hidden bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800/80

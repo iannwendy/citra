@@ -39,7 +39,7 @@ const DropdownMenuSubContent = React.forwardRef<
   <DropdownMenuPrimitive.SubContent
     ref={ref}
     className={cn(
-      'z-50 min-w-[8rem] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1 text-slate-900 dark:text-slate-100 shadow-lg origin-[var(--radix-dropdown-menu-content-transform-origin,top_left)] data-[state=open]:animate-dropdown-in data-[state=closed]:animate-dropdown-out',
+      'z-50 min-w-[8rem] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1 text-slate-900 dark:text-slate-100 shadow-lg origin-[var(--radix-dropdown-menu-content-transform-origin,top_left)] data-[state=open]:animate-dropdown-in data-[state=closed]:animate-dropdown-out motion-reduce:animate-none',
       className
     )}
     {...props}
@@ -57,7 +57,7 @@ const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-50 min-w-[10rem] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1.5 text-slate-900 dark:text-slate-100 shadow-lg origin-[var(--radix-dropdown-menu-content-transform-origin,top_right)] data-[state=open]:animate-dropdown-in data-[state=closed]:animate-dropdown-out',
+        'z-50 min-w-[10rem] overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1.5 text-slate-900 dark:text-slate-100 shadow-lg origin-[var(--radix-dropdown-menu-content-transform-origin,top_right)] data-[state=open]:animate-dropdown-in data-[state=closed]:animate-dropdown-out motion-reduce:animate-none',
         className
       )}
       {...props}

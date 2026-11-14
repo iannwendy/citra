@@ -1075,13 +1075,7 @@ function SolvaHeroSection({
           </div>
 
           {/* Right Column: Painterly Mockup Frame (`660x521px` on Desktop) */}
-          <SolvaScrollReveal
-            delayMs={150}
-            yOffset={36}
-            scaleFrom={0.975}
-            blurPx={4}
-            className="w-full lg:w-[660px] shrink-0"
-          >
+          <div className="w-full lg:w-[660px] shrink-0">
             <SolvaPainterlyFrame
               paintingSrc="/solva/hero-bg.webp"
               priority
@@ -1112,7 +1106,7 @@ function SolvaHeroSection({
                 </UIGenerationReveal>
               </div>
             </SolvaPainterlyFrame>
-          </SolvaScrollReveal>
+          </div>
         </div>
 
         {/* Bottom Infinite Edge-Masked Scholarly API Ticker (`1200x112px`) */}
@@ -2672,7 +2666,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                             <span
                               key={`tour-progress-${cit.id}`}
                               data-testid="debugger-autotour-progress"
-                              data-paused={isHoverPaused ? 'true' : 'false'}
+                              data-paused={isHoverPaused || !debuggerVisible ? 'true' : 'false'}
                               aria-hidden="true"
                               className="t-autotour-bar"
                             />
@@ -3363,7 +3357,7 @@ function SolvaUseCasesSection({
                       <span
                         key={`stage-progress-${idx}`}
                         data-testid="pipeline-autotour-progress"
-                        data-paused={isHoverPaused ? 'true' : 'false'}
+                        data-paused={isHoverPaused || !useCasesVisible ? 'true' : 'false'}
                         style={{ '--autotour-dur': '6000ms' } as React.CSSProperties}
                         aria-hidden="true"
                         className="t-autotour-bar"

@@ -58,6 +58,9 @@ export function CardResize({
     if (prefersReducedMotion()) return;
 
     let initialized = false;
+    let prevHeight = 0;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const h =
@@ -65,22 +68,32 @@ export function CardResize({
           inner.getBoundingClientRect().height;
         if (!initialized) {
           initialized = true;
-          outer.style.height = `${h}px`;
-          requestAnimationFrame(() => {
-            outer.style.height = 'auto';
-          });
+          prevHeight = h;
+          outer.style.height = 'auto';
           return;
         }
+        if (Math.abs(h - prevHeight) < 0.5) return;
+        const fromH = prevHeight;
+        prevHeight = h;
+        if (settleTimer) clearTimeout(settleTimer);
+        outer.style.height = `${fromH}px`;
+        void outer.offsetHeight;
         outer.style.height = `${h}px`;
+        settleTimer = setTimeout(() => {
+          outer.style.height = 'auto';
+        }, 320);
       }
     });
     ro.observe(inner);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      if (settleTimer) clearTimeout(settleTimer);
+    };
   }, []);
 
   return (
     <div ref={outerRef} className={cn('t-card-resize', className)}>
-      <div ref={innerRef} className={innerClassName}>
+      <div ref={innerRef} className={cn('t-card-resize-inner', innerClassName)}>
         {children}
       </div>
     </div>
@@ -185,52 +198,56 @@ export function NumberPopIn({
   'data-testid'?: string;
 }) {
   const str = String(value);
-  const prevRef = useRef<string>(str);
-  const groupRef = useRef<HTMLSpanElement>(null);
-  const [oldStr, setOldStr] = useState<string | null>(null);
-  const [animating, setAnimating] = useState(false);
+  const trackRef = useRef<{
+    current: string;
+    old: string | null;
+    runId: number;
+  }>({
+    current: str,
+    old: null,
+    runId: 0,
+  });
+  const [, setCleanupTick] = useState(0);
+
+  if (str !== trackRef.current.current) {
+    const prev = trackRef.current.current;
+    trackRef.current = {
+      current: str,
+      old: prefersReducedMotion() ? null : prev,
+      runId: trackRef.current.runId + 1,
+    };
+  }
+
+  const activeOld = trackRef.current.old;
+  const activeRunId = trackRef.current.runId;
 
   useEffect(() => {
-    const prev = prevRef.current;
-    if (prev === str) return;
-    prevRef.current = str;
-
-    if (prefersReducedMotion()) {
-      setOldStr(null);
-      setAnimating(false);
-      return;
-    }
-
-    setOldStr(prev);
-    setAnimating(false);
-    const raf = requestAnimationFrame(() => {
-      if (groupRef.current) {
-        void groupRef.current.offsetHeight;
-      }
-      setAnimating(true);
-    });
+    if (activeOld === null) return;
+    const runAtSchedule = activeRunId;
     const timer = setTimeout(() => {
-      setOldStr(null);
-      setAnimating(false);
-    }, 700);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(timer);
-    };
-  }, [str]);
+      if (trackRef.current.runId === runAtSchedule) {
+        trackRef.current = { ...trackRef.current, old: null };
+        setCleanupTick((t) => t + 1);
+      }
+    }, 780);
+    return () => clearTimeout(timer);
+  }, [activeOld, activeRunId]);
 
-  const slots = diffNumberSlots(oldStr, str);
+  const animating = activeOld !== null;
+  const slots = diffNumberSlots(activeOld, str);
 
   return (
     <span
-      ref={groupRef}
-      aria-label={str}
       data-testid={testId}
       className={cn('t-digit-group', animating && 'is-animating', className)}
     >
       <span className="sr-only">{str}</span>
       {slots.map((slot, idx) => (
-        <span key={idx} className="t-digit-slot" aria-hidden="true">
+        <span
+          key={slot.isSame ? `same-${idx}` : `${activeRunId}-${idx}`}
+          className="t-digit-slot"
+          aria-hidden="true"
+        >
           {slot.oldCh !== null && !slot.isSame && (
             <span
               className="t-digit-old"
@@ -269,56 +286,58 @@ export function SubtleNumber({
 }) {
   const str = `${prefix}${value}${suffix}`;
   const numVal = typeof value === 'number' ? value : parseFloat(String(value)) || 0;
-  const prevStrRef = useRef(str);
-  const prevNumRef = useRef(numVal);
-  const containerRef = useRef<HTMLSpanElement>(null);
-  const [dir, setDir] = useState<1 | -1>(1);
-  const [animating, setAnimating] = useState(false);
-  const [oldStr, setOldStr] = useState<string | null>(null);
+  const trackRef = useRef<{
+    current: string;
+    numVal: number;
+    old: string | null;
+    dir: 1 | -1;
+    runId: number;
+  }>({
+    current: str,
+    numVal,
+    old: null,
+    dir: 1,
+    runId: 0,
+  });
+  const [, setCleanupTick] = useState(0);
+
+  if (str !== trackRef.current.current) {
+    const prev = trackRef.current;
+    trackRef.current = {
+      current: str,
+      numVal,
+      old: prefersReducedMotion() ? null : prev.current,
+      dir: numVal >= prev.numVal ? 1 : -1,
+      runId: prev.runId + 1,
+    };
+  }
+
+  const activeOld = trackRef.current.old;
+  const activeDir = trackRef.current.dir;
+  const activeRunId = trackRef.current.runId;
 
   useEffect(() => {
-    const prevStr = prevStrRef.current;
-    if (prevStr === str) return;
-
-    const nextDir: 1 | -1 = numVal >= prevNumRef.current ? 1 : -1;
-    prevStrRef.current = str;
-    prevNumRef.current = numVal;
-    setDir(nextDir);
-
-    if (prefersReducedMotion()) {
-      setOldStr(null);
-      setAnimating(false);
-      return;
-    }
-
-    setOldStr(prevStr);
-    setAnimating(false);
-    const raf = requestAnimationFrame(() => {
-      if (containerRef.current) {
-        void containerRef.current.offsetHeight;
-      }
-      setAnimating(true);
-    });
+    if (activeOld === null) return;
+    const runAtSchedule = activeRunId;
     const timer = setTimeout(() => {
-      setOldStr(null);
-      setAnimating(false);
-    }, 240);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(timer);
-    };
-  }, [str, numVal]);
+      if (trackRef.current.runId === runAtSchedule) {
+        trackRef.current = { ...trackRef.current, old: null };
+        setCleanupTick((t) => t + 1);
+      }
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [activeOld, activeRunId]);
+
+  const animating = activeOld !== null;
 
   return (
     <span
-      ref={containerRef}
-      aria-label={str}
-      style={{ '--subtle-dir': dir } as React.CSSProperties}
+      style={{ '--subtle-dir': activeDir } as React.CSSProperties}
       className={cn('t-subtle-number', animating && 'is-animating', className)}
     >
-      <span className="t-subtle-slot">
-        {oldStr !== null && (
-          <span className="t-subtle-old" data-old={oldStr} aria-hidden="true" />
+      <span key={activeRunId} className="t-subtle-slot">
+        {activeOld !== null && (
+          <span className="t-subtle-old" data-old={activeOld} aria-hidden="true" />
         )}
         <span className="t-subtle-new">{str}</span>
       </span>
@@ -339,55 +358,61 @@ export function SoftTextSwap({
   className?: string;
   align?: 'start' | 'center' | 'end';
 }) {
-  const [prevText, setPrevText] = useState<string | null>(null);
-  const [currentText, setCurrentText] = useState(text);
-  const [swapping, setSwapping] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trackRef = useRef<{
+    current: string;
+    old: string | null;
+    runId: number;
+  }>({
+    current: text,
+    old: null,
+    runId: 0,
+  });
+  const [, setCleanupTick] = useState(0);
+
+  if (text !== trackRef.current.current) {
+    const prev = trackRef.current;
+    trackRef.current = {
+      current: text,
+      old: prefersReducedMotion() ? null : prev.current,
+      runId: prev.runId + 1,
+    };
+  }
+
+  const activeOld = trackRef.current.old;
+  const activeRunId = trackRef.current.runId;
 
   useEffect(() => {
-    if (text === currentText) return;
-    if (prefersReducedMotion()) {
-      setCurrentText(text);
-      setPrevText(null);
-      setSwapping(false);
-      return;
-    }
-
-    setPrevText(currentText);
-    setCurrentText(text);
-    setSwapping(false);
-
-    const raf = requestAnimationFrame(() => {
-      setSwapping(true);
-    });
-
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      setSwapping(false);
-      setPrevText(null);
+    if (activeOld === null) return;
+    const runAtSchedule = activeRunId;
+    const timer = setTimeout(() => {
+      if (trackRef.current.runId === runAtSchedule) {
+        trackRef.current = { ...trackRef.current, old: null };
+        setCleanupTick((t) => t + 1);
+      }
     }, 260);
+    return () => clearTimeout(timer);
+  }, [activeOld, activeRunId]);
 
-    return () => {
-      cancelAnimationFrame(raf);
-    };
-  }, [text, currentText]);
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
+  const swapping = activeOld !== null;
 
   return (
     <span
       style={{ '--text-soft-align': align } as React.CSSProperties}
       className={cn('t-text-soft', swapping && 'is-swapping', className)}
     >
-      {prevText !== null && (
-        <span className="t-text-soft-old" data-old={prevText} aria-hidden="true" />
+      {activeOld !== null && (
+        <span
+          key={`old-${activeRunId}`}
+          className="t-text-soft-old"
+          data-old={activeOld}
+          aria-hidden="true"
+        />
       )}
-      <span className={prevText !== null ? 't-text-soft-new' : undefined}>
-        {currentText}
+      <span
+        key={`new-${activeRunId}`}
+        className={activeOld !== null ? 't-text-soft-new' : undefined}
+      >
+        {text}
       </span>
     </span>
   );
@@ -1361,11 +1386,29 @@ export function useSlidingPill<T extends HTMLElement = HTMLDivElement>(
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => measure());
-    ro.observe(container);
-    return () => ro.disconnect();
-  }, [measure]);
+    if (!container) return;
+    let cancelled = false;
+    const ro =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => measure())
+        : null;
+    if (ro) {
+      ro.observe(container);
+      const activeEl = container.querySelector<HTMLElement>(
+        '[data-pill-active="true"], [aria-selected="true"]',
+      );
+      if (activeEl) ro.observe(activeEl);
+    }
+    if (typeof document !== 'undefined' && 'fonts' in document && document.fonts?.ready) {
+      void document.fonts.ready.then(() => {
+        if (!cancelled) measure();
+      });
+    }
+    return () => {
+      cancelled = true;
+      ro?.disconnect();
+    };
+  }, [activeKey, measure]);
 
   return { containerRef, pillStyle };
 }
@@ -1435,6 +1478,11 @@ export function TactileToggle({
    Scrolling agent/pipeline telemetry viewport with top/bottom mask-image fades
    and seamless compositor translateY stepping
    ========================================================================== */
+interface ReasoningLineEntry {
+  id: number;
+  text: string;
+}
+
 export function ReasoningStream({
   lines,
   visibleLines = 3,
@@ -1454,33 +1502,46 @@ export function ReasoningStream({
 }) {
   const linesKey = lines.length > 0 ? lines.join('\n') : '';
   const initialLines = linesKey ? linesKey.split('\n') : [''];
-  const [windowItems, setWindowItems] = useState<string[]>(() =>
-    initialLines.slice(-visibleLines),
+  const nextIdRef = useRef<number>(initialLines.length);
+  const entriesRef = useRef<ReasoningLineEntry[]>(
+    initialLines.map((text, i) => ({ id: i, text })),
+  );
+  const [windowItems, setWindowItems] = useState<ReasoningLineEntry[]>(() =>
+    entriesRef.current.slice(-visibleLines),
   );
   const [stepping, setStepping] = useState(false);
   const [resetting, setResetting] = useState(true);
-  const prevLastRef = useRef<string>(initialLines[initialLines.length - 1]);
-  const prevLenRef = useRef<number>(initialLines.length);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const currentLines = linesKey ? linesKey.split('\n') : [''];
-    const latest = currentLines[currentLines.length - 1];
+    const prevEntries = entriesRef.current;
+
+    // Reconcile prefix lines so surviving items preserve their monotonic entry.id (zero DOM remount / role="log" spam)
+    const nextEntries: ReasoningLineEntry[] = currentLines.map((text, idx) => {
+      if (idx < prevEntries.length && prevEntries[idx].text === text) {
+        return prevEntries[idx];
+      }
+      const id = nextIdRef.current++;
+      return { id, text };
+    });
+
     const grew =
-      currentLines.length > prevLenRef.current || latest !== prevLastRef.current;
-    prevLenRef.current = currentLines.length;
-    prevLastRef.current = latest;
+      nextEntries.length > prevEntries.length ||
+      nextEntries[nextEntries.length - 1]?.id !==
+        prevEntries[prevEntries.length - 1]?.id;
+    entriesRef.current = nextEntries;
 
-    const latestSlice = currentLines.slice(-visibleLines);
+    const latestSlice = nextEntries.slice(-visibleLines);
 
-    if (!grew || prefersReducedMotion() || currentLines.length <= 1) {
+    if (!grew || prefersReducedMotion() || nextEntries.length <= 1) {
       setWindowItems(latestSlice);
       setStepping(false);
       setResetting(true);
       return;
     }
 
-    const withOutgoing = currentLines.slice(-(visibleLines + 1));
+    const withOutgoing = nextEntries.slice(-(visibleLines + 1));
     if (withOutgoing.length <= latestSlice.length) {
       setWindowItems(latestSlice);
       setStepping(false);
@@ -1503,7 +1564,7 @@ export function ReasoningStream({
     const timer = setTimeout(() => {
       setResetting(true);
       setStepping(false);
-      setWindowItems(currentLines.slice(-visibleLines));
+      setWindowItems(entriesRef.current.slice(-visibleLines));
     }, stepMs);
 
     return () => {
@@ -1537,15 +1598,15 @@ export function ReasoningStream({
               : 'translate3d(0, 0, 0)',
           }}
         >
-          {windowItems.map((line, idx) => {
+          {windowItems.map((entry, idx) => {
             const isLatest = idx === windowItems.length - 1;
             return (
               <div
-                key={`${idx}-${line}`}
+                key={entry.id}
                 data-latest={isLatest ? 'true' : 'false'}
                 className={cn('t-reason-line', lineClassName)}
               >
-                {line}
+                {entry.text}
               </div>
             );
           })}
@@ -1575,7 +1636,7 @@ export function DirectionalStageSlide({
   className?: string;
   'data-testid'?: string;
 }) {
-  const [track, setTrack] = useState<{
+  const trackRef = useRef<{
     current: string | number;
     dir: 1 | -1;
   }>({
@@ -1583,17 +1644,30 @@ export function DirectionalStageSlide({
     dir: direction ?? 1,
   });
 
-  let activeDir: 1 | -1 = direction ?? track.dir;
-  if (stageKey !== track.current) {
+  if (stageKey !== trackRef.current.current) {
+    const prev = trackRef.current.current;
+    let nextDir: 1 | -1;
     if (direction !== undefined) {
-      activeDir = direction;
-    } else if (typeof stageKey === 'number' && typeof track.current === 'number') {
-      activeDir = stageKey >= track.current ? 1 : -1;
+      nextDir = direction;
+    } else if (typeof stageKey === 'number' && typeof prev === 'number') {
+      nextDir = stageKey >= prev ? 1 : -1;
     } else {
-      activeDir = String(stageKey) >= String(track.current) ? 1 : -1;
+      nextDir = String(stageKey) >= String(prev) ? 1 : -1;
     }
-    setTrack({ current: stageKey, dir: activeDir });
+    trackRef.current = { current: stageKey, dir: nextDir };
   }
+
+  const activeDir: 1 | -1 = direction ?? trackRef.current.dir;
+
+  const stageVariants = {
+    initial: (dir: 1 | -1) => ({ opacity: 0, x: dir * distancePx }),
+    animate: { opacity: 1, x: 0, transition: TRANSITION_ENTER },
+    exit: (dir: 1 | -1) => ({
+      opacity: 0,
+      x: -dir * Math.round(distancePx * 0.7),
+      transition: TRANSITION_EXIT,
+    }),
+  };
 
   if (prefersReducedMotion()) {
     return (
@@ -1617,9 +1691,10 @@ export function DirectionalStageSlide({
         <m.div
           key={stageKey}
           custom={activeDir}
-          initial={{ opacity: 0, x: activeDir * distancePx }}
-          animate={{ opacity: 1, x: 0, transition: TRANSITION_ENTER }}
-          exit={{ opacity: 0, x: -activeDir * Math.round(distancePx * 0.7), transition: TRANSITION_EXIT }}
+          variants={stageVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
         >
           {children}
         </m.div>

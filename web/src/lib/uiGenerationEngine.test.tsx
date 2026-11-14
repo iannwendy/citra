@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, act } from '@testing-library/react';
 import { measureTarget } from './uiGenerationEngine';
 import { UIGenerationReveal } from '@/components/ui/transitions';
+import { HeroVerificationMockup } from '@/components/landing/SolvaMockupWidgets';
 
 function mockRect(
   el: Element,
@@ -210,5 +211,41 @@ describe('Task 3: Real transitions-ui-generation Engine & UIGenerationReveal', (
     } finally {
       window.matchMedia = origMatchMedia;
     }
+  });
+
+  it('HeroVerificationMockup mounts at full opacity without 0.001 stagger cloak and measureTarget captures descendants even during low-opacity transitions', () => {
+    const { container } = render(
+      <div>
+        <div
+          data-testid="fading-card"
+          style={{ backgroundColor: 'rgb(255, 255, 255)', borderRadius: '12px' }}
+        >
+          <div
+            data-testid="fading-child"
+            style={{
+              opacity: 0.001,
+              backgroundColor: 'rgb(244, 242, 236)',
+              borderTopWidth: '1px',
+              borderRadius: '8px',
+            }}
+          >
+            Queue Item
+          </div>
+        </div>
+        <HeroVerificationMockup lang="en" activeStep={0} />
+      </div>,
+    );
+
+    const fadingCard = container.querySelector('[data-testid="fading-card"]') as HTMLElement;
+    const fadingChild = container.querySelector('[data-testid="fading-child"]') as HTMLElement;
+    mockRect(fadingCard, { left: 0, top: 0, width: 400, height: 200 });
+    mockRect(fadingChild, { left: 16, top: 20, width: 368, height: 48 });
+
+    const measured = measureTarget(fadingCard, { maxParts: 20, keys: 3 });
+    expect(measured.parts.filter((p) => p.kind === 'box').length).toBeGreaterThanOrEqual(1);
+
+    const heroRoot = container.querySelector('.solva-glass-ring') as HTMLElement;
+    expect(heroRoot).not.toBeNull();
+    expect(heroRoot.style.opacity).not.toBe('0.001');
   });
 });

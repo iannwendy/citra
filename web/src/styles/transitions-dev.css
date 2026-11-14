@@ -338,11 +338,15 @@
   transition: height var(--resize-dur) var(--resize-ease);
   will-change: height;
 }
+.t-card-resize-inner {
+  display: flow-root;
+}
 
 /* ==========================================================================
    #02 Number pop-in (.t-digit-group)
    ========================================================================== */
 .t-digit-group {
+  position: relative;
   display: inline-flex;
   align-items: baseline;
   font-variant-numeric: tabular-nums;
@@ -481,14 +485,33 @@
   transform: scale(1);
   opacity: 1;
   pointer-events: auto;
+  animation: t-dropdown-in var(--dropdown-open-dur) var(--dropdown-ease) both;
 }
 .t-dropdown.is-closing {
   transform: scale(var(--dropdown-closing-scale));
   opacity: 0;
   pointer-events: none;
-  transition:
-    transform var(--dropdown-close-dur) var(--dropdown-ease),
-    opacity   var(--dropdown-close-dur) var(--dropdown-ease);
+  animation: t-dropdown-out var(--dropdown-close-dur) var(--dropdown-ease) both;
+}
+@keyframes t-dropdown-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0) scale(var(--dropdown-pre-scale));
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+@keyframes t-dropdown-out {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, -3px, 0) scale(var(--dropdown-closing-scale));
+  }
 }
 
 .t-mobile-drawer {
@@ -1220,24 +1243,42 @@
 }
 .t-text-soft > span {
   grid-area: 1 / 1;
-  transition:
-    filter  var(--text-soft-dur) var(--text-soft-ease),
-    opacity var(--text-soft-dur) var(--text-soft-ease);
+}
+.t-text-soft-old {
+  pointer-events: none;
 }
 .t-text-soft-old::before {
   content: attr(data-old);
 }
 .t-text-soft-new {
-  opacity: 0;
-  filter: blur(var(--text-soft-blur));
-}
-.t-text-soft.is-swapping .t-text-soft-old {
-  opacity: 0;
-  filter: blur(var(--text-soft-blur));
-}
-.t-text-soft.is-swapping .t-text-soft-new {
   opacity: 1;
   filter: blur(0);
+}
+.t-text-soft.is-swapping .t-text-soft-old {
+  animation: t-text-soft-out var(--text-soft-dur) var(--text-soft-ease) both;
+}
+.t-text-soft.is-swapping .t-text-soft-new {
+  animation: t-text-soft-in var(--text-soft-dur) var(--text-soft-ease) both;
+}
+@keyframes t-text-soft-in {
+  from {
+    opacity: 0;
+    filter: blur(var(--text-soft-blur));
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+@keyframes t-text-soft-out {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(var(--text-soft-blur));
+  }
 }
 
 /* ==========================================================================
@@ -1514,17 +1555,24 @@
 html[data-theme-switching="true"],
 html[data-theme-switching="true"] body,
 html[data-theme-switching="true"] header,
-html[data-theme-switching="true"] aside,
 html[data-theme-switching="true"] main,
 html[data-theme-switching="true"] section,
 html[data-theme-switching="true"] footer,
 html[data-theme-switching="true"] nav,
-html[data-theme-switching="true"] div,
-html[data-theme-switching="true"] article {
+html[data-theme-switching="true"] article,
+html[data-theme-switching="true"] div:not(.t-mobile-drawer):not(.t-dropdown):not(.t-card-resize) {
   transition:
     background-color 180ms var(--ease-smooth-out),
     border-color     180ms var(--ease-smooth-out),
-    color            180ms var(--ease-smooth-out) !important;
+    color            180ms var(--ease-smooth-out);
+}
+@media (min-width: 1024px) {
+  html[data-theme-switching="true"] aside {
+    transition:
+      background-color 180ms var(--ease-smooth-out),
+      border-color     180ms var(--ease-smooth-out),
+      color            180ms var(--ease-smooth-out);
+  }
 }
 
 ::view-transition-old(root) {
@@ -1532,6 +1580,12 @@ html[data-theme-switching="true"] article {
 }
 ::view-transition-new(root) {
   animation: 210ms cubic-bezier(0.22, 1, 0.36, 1) both t-vt-fade-in;
+}
+::view-transition-old(citra-app-sidebar) {
+  display: none;
+}
+::view-transition-new(citra-app-sidebar) {
+  animation: none;
 }
 @keyframes t-vt-fade-out {
   from { opacity: 1; }
@@ -1547,7 +1601,11 @@ html[data-theme-switching="true"] article {
    ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-old(root),
-  ::view-transition-new(root) {
+  ::view-transition-new(root),
+  ::view-transition-old(citra-app-sidebar),
+  ::view-transition-new(citra-app-sidebar),
+  [data-state="open"],
+  [data-state="closed"] {
     animation: none !important;
   }
   .t-gen {

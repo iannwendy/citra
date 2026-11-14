@@ -208,13 +208,17 @@ export function measureTarget(
     return { w: 0, h: 0, r: 0, parts: [] };
   }
 
-  const area = R.width * R.height;
+  const invScaleX = el.offsetWidth > 0 ? el.offsetWidth / R.width : 1;
+  const invScaleY = el.offsetHeight > 0 ? el.offsetHeight / R.height : 1;
+  const W = R.width * invScaleX;
+  const H = R.height * invScaleY;
+  const area = W * H;
   const parts: MeasuredPart[] = [];
   const rel = (r: DOMRect) => ({
-    x: r.left - R.left,
-    y: r.top - R.top,
-    w: r.width,
-    h: r.height,
+    x: (r.left - R.left) * invScaleX,
+    y: (r.top - R.top) * invScaleY,
+    w: r.width * invScaleX,
+    h: r.height * invScaleY,
   });
 
   const isHidden = (node: Element): boolean => {
@@ -223,9 +227,9 @@ export function measureTarget(
       cur && cur !== el;
       cur = cur.parentElement
     ) {
+      if (cur.classList.contains('sr-only')) return true;
       const cs = getComputedStyle(cur);
-      const op = cs.opacity === '' ? 1 : Number(cs.opacity);
-      if (cs.display === 'none' || cs.visibility === 'hidden' || op < 0.05) {
+      if (cs.display === 'none' || cs.visibility === 'hidden') {
         return true;
       }
     }
@@ -416,9 +420,9 @@ export function measureTarget(
     });
 
   return {
-    w: R.width,
-    h: R.height,
-    r: Math.min(radius, R.width / 2, R.height / 2),
+    w: W,
+    h: H,
+    r: Math.min(radius, W / 2, H / 2),
     parts,
   };
 }

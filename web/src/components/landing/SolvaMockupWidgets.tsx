@@ -287,7 +287,7 @@ export function HeroVerificationMockup({
   activeStep: number;
   onSelectStep?: (step: number) => void;
 }) {
-  const { containerRef, isVisible, replaySeed, getStaggerStyle } = useFloralCardAnimation();
+  const { containerRef, isVisible, replaySeed } = useFloralCardAnimation();
   const [activeApiPulse, setActiveApiPulse] = useState(0);
 
   useEffect(() => {
@@ -352,7 +352,6 @@ export function HeroVerificationMockup({
       ref={containerRef}
       style={{
         backgroundColor: 'var(--solva-card-elevated)',
-        ...getStaggerStyle(0),
       }}
       className="solva-glass-ring rounded-[10px] w-full max-w-full lg:w-[640px] border border-[#E7E3D9]/80 dark:border-[#332F26] overflow-hidden text-left select-none"
     >
@@ -415,7 +414,6 @@ export function HeroVerificationMockup({
                 key={item.marker}
                 onClick={() => onSelectStep?.(idx)}
                 style={{
-                  ...getStaggerStyle(70 + idx * 65),
                   backgroundColor: isActive ? 'var(--solva-surface)' : 'transparent',
                   borderColor: isActive ? 'var(--solva-ink)' : 'var(--solva-border)',
                 }}
@@ -1327,7 +1325,7 @@ export function PipelineStageVisual({
   tabIndex: number;
   lang: Lang;
 }) {
-  const { containerRef, isVisible, replaySeed, getStaggerStyle } = useFloralCardAnimation();
+  const { containerRef, isVisible, replaySeed } = useFloralCardAnimation();
   const [activeRow, setActiveRow] = useState(0);
 
   useEffect(() => {
@@ -1446,7 +1444,6 @@ export function PipelineStageVisual({
       ref={containerRef}
       style={{
         backgroundColor: 'var(--solva-card-elevated)',
-        ...getStaggerStyle(0),
       }}
       className="solva-glass-ring w-full rounded-[8px] p-5 sm:p-6 space-y-4 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
     >
@@ -1477,7 +1474,6 @@ export function PipelineStageVisual({
             <div
               key={m.k}
               style={{
-                ...getStaggerStyle(70 + idx * 60),
                 backgroundColor: 'var(--solva-surface)',
                 borderColor: isRowActive ? 'var(--solva-ink)' : 'transparent',
               }}
@@ -1499,7 +1495,6 @@ export function PipelineStageVisual({
 
       <div
         style={{
-          ...getStaggerStyle(240),
           backgroundColor: 'var(--solva-bg)',
           borderColor: 'var(--solva-border)',
         }}

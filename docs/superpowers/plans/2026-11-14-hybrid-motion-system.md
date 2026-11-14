@@ -44,18 +44,18 @@
   - `m`, `AnimatePresence` re-exported from `motion/react`
   - `SPRING_PILL`, `SPRING_LAYOUT`, `TRANSITION_ENTER`, `TRANSITION_EXIT` transition presets in `web/src/components/ui/motion-primitives.tsx`
 
-- [ ] **Step 1: Install `motion` in `web/` and write the failing test `web/src/components/ui/motion-primitives.test.tsx`**
+- [x] **Step 1: Install `motion` in `web/` and write the failing test `web/src/components/ui/motion-primitives.test.tsx`**
   - Assert `<CitraMotionProvider>` renders `m.div` children and `AnimatePresence` unmounts exiting keys cleanly.
   - Assert `useStaggeredAnimation` defaults to `45ms` stagger capped at `<= 270ms`.
   - Assert `web/src/index.css` custom component classes (`.card-interactive`, `.card-glow`, `.badge-verified`, `.input-focus`) use explicit transition properties instead of `transition-all`.
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
   - Run: `cd web && npx vitest run src/components/ui/motion-primitives.test.tsx`
   - Expected: FAIL (`Cannot find module './motion-primitives'`)
-- [ ] **Step 3: Implement `motion-primitives.tsx`, wire `<CitraMotionProvider>` in `main.tsx`, replace `transition-all` in `index.css`, and tune `useScrollAnimation.ts`**
-- [ ] **Step 4: Run Vitest + TypeScript check to verify green**
+- [x] **Step 3: Implement `motion-primitives.tsx`, wire `<CitraMotionProvider>` in `main.tsx`, replace `transition-all` in `index.css`, and tune `useScrollAnimation.ts`**
+- [x] **Step 4: Run Vitest + TypeScript check to verify green**
   - Run: `cd web && npx vitest run src/components/ui/motion-primitives.test.tsx && npm test && npx tsc -b`
   - Expected: PASS (all suites green, 0 TS errors)
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
   - `git commit -m "feat(motion): add LazyMotion provider, editorial spring presets, and CSS transition hygiene"`
 
 ---
@@ -75,20 +75,20 @@
   - `ReasoningStream({ lines, className, heightPx, holdMs, stepMs, loop, 'data-testid' }: ReasoningStreamProps)`
   - `DirectionalStageSlide({ stageKey, stageIndex, children, className }: DirectionalStageSlideProps)`
 
-- [ ] **Step 1: Write the failing test `web/src/components/ui/transitions.test.tsx`**
+- [x] **Step 1: Write the failing test `web/src/components/ui/transitions.test.tsx`**
   - Assert `NumberPopIn` changing from `$16` to `$20` marks `$` with `data-same`, wraps `1->2` and `6->0` in `.t-digit-slot` with `.t-digit-old[data-char]`, and preserves `container.textContent === '$20'` immediately during animation.
   - Assert `NumberPopIn` changing from `1,299` to `1,305` marks `1,` with `data-same` and applies `data-stagger="1"` and `data-stagger="2"` on the trailing two changed slots.
   - Assert `TactileToggle` omits `.is-init` on initial render, adds `.is-init` on first click, toggles `data-on` and `aria-checked`, and invokes `onCheckedChange`.
   - Assert `ReasoningStream` renders `.t-reason` + `.t-reason-viewport` + `.t-reason-scroll` with provided telemetry lines and disables stepping under `prefers-reduced-motion: reduce`.
   - Assert `DirectionalStageSlide` renders stage content cleanly with `data-direction="forward"|"backward"` when `stageIndex` increments/decrements.
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
   - Run: `cd web && npx vitest run src/components/ui/transitions.test.tsx`
   - Expected: FAIL (`TactileToggle` / `ReasoningStream` / `DirectionalStageSlide` undefined and `NumberPopIn` missing `data-same` / `.t-digit-slot`)
-- [ ] **Step 3: Implement CSS rules in `transitions-dev.css` and React components in `transitions.tsx`**
-- [ ] **Step 4: Run tests and TypeScript check to verify green**
+- [x] **Step 3: Implement CSS rules in `transitions-dev.css` and React components in `transitions.tsx`**
+- [x] **Step 4: Run tests and TypeScript check to verify green**
   - Run: `cd web && npx vitest run src/components/ui/transitions.test.tsx && npm test && npx tsc -b`
   - Expected: PASS
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
   - `git commit -m "feat(transitions): upgrade per-digit NumberPopIn and add TactileToggle, ReasoningStream, and DirectionalStageSlide"`
 
 ---
@@ -106,19 +106,19 @@
   - `runUIGeneration(targetEl: HTMLElement, overlayHostEl: HTMLElement, options?: UIGenerationOptions): UIGenerationHandle`
   - Upgraded `UIGenerationReveal` in `web/src/components/ui/transitions.tsx` preserving `.t-gen-wrap` and `.t-gen[data-phase="idle"|"building"|"done"]`
 
-- [ ] **Step 1: Write the failing test `web/src/lib/uiGenerationEngine.test.tsx`**
+- [x] **Step 1: Write the failing test `web/src/lib/uiGenerationEngine.test.tsx`**
   - Assert `measureDomStructure` extracts boxes, interactive buttons, and SVG icon paths from a structured card element.
   - Assert `UIGenerationReveal` transitions `.t-gen` to `data-phase="done"` immediately under `prefers-reduced-motion: reduce`.
   - Assert `UIGenerationReveal` runs the RAF wireframe/scanline lifecycle, cleans up SVG child nodes upon completion, restores target element inline `opacity`/`clipPath`/`filter`, and sets `data-phase="done"`.
   - Assert unmounting mid-run cancels RAF cleanly without throwing or leaking nodes.
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
   - Run: `cd web && npx vitest run src/lib/uiGenerationEngine.test.tsx`
   - Expected: FAIL (`Cannot find module './uiGenerationEngine'`)
-- [ ] **Step 3: Implement `uiGenerationEngine.ts`, scoped `.t-gen` CSS tokens (Light & Dark Solva palette, `overflow: hidden` inside `.t-gen-wrap`), and wire `UIGenerationReveal`**
-- [ ] **Step 4: Run tests and TypeScript check to verify green**
+- [x] **Step 3: Implement `uiGenerationEngine.ts`, scoped `.t-gen` CSS tokens (Light & Dark Solva palette, `overflow: hidden` inside `.t-gen-wrap`), and wire `UIGenerationReveal`**
+- [x] **Step 4: Run tests and TypeScript check to verify green**
   - Run: `cd web && npx vitest run src/lib/uiGenerationEngine.test.tsx && npm test && npx tsc -b`
   - Expected: PASS
-- [ ] **Step 5: Commit Task 3**
+- [x] **Step 5: Commit Task 3**
   - `git commit -m "feat(ui-generation): port real DOM-measuring wireframe and scanline engine for UIGenerationReveal"`
 
 ---
@@ -139,18 +139,18 @@
   - Asymmetric Radix open/close animations (`data-[state=open]` & `data-[state=closed]`) with preserved `-50% -50%` centering on `DialogContent`.
   - `usePresencePhase(isOpen: boolean, closeDurationMs: number)` hook (or `transitions.tsx` export) used by `SolvaHeader` and `PricingPage` nav dropdown + mobile menu so `.is-open` transitions through `.is-closing` before unmounting.
 
-- [ ] **Step 1: Write the failing test `web/src/components/ui/dialog-dropdown-motion.test.tsx`**
+- [x] **Step 1: Write the failing test `web/src/components/ui/dialog-dropdown-motion.test.tsx`**
   - Assert `DialogContent` includes both `data-[state=open]:animate-dialog-in` and `data-[state=closed]:animate-dialog-out` (preserving `-50%` centering in keyframes).
   - Assert `DropdownMenuContent` includes both `data-[state=open]:animate-dropdown-in` and `data-[state=closed]:animate-dropdown-out`.
   - Assert `LandingPage` `SolvaHeader` Platform dropdown mounts with `.t-dropdown.is-open` on click, transitions to `.t-dropdown.is-closing` on second click/Escape, and unmounts after `150ms`.
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
   - Run: `cd web && npx vitest run src/components/ui/dialog-dropdown-motion.test.tsx`
   - Expected: FAIL (`animate-dialog-out` missing and `SolvaHeader` unmounts synchronously in `0ms` without `.is-closing`)
-- [ ] **Step 3: Implement keyframes in `tailwind.config.ts` / `transitions-dev.css`, update `dialog.tsx` and `dropdown-menu.tsx`, and wire `.is-closing` presence retention in `LandingPage.tsx` and `PricingPage.tsx`**
-- [ ] **Step 4: Run tests and TypeScript check to verify green**
+- [x] **Step 3: Implement keyframes in `tailwind.config.ts` / `transitions-dev.css`, update `dialog.tsx` and `dropdown-menu.tsx`, and wire `.is-closing` presence retention in `LandingPage.tsx` and `PricingPage.tsx`**
+- [x] **Step 4: Run tests and TypeScript check to verify green**
   - Run: `cd web && npx vitest run src/components/ui/dialog-dropdown-motion.test.tsx && npm test && npx tsc -b`
   - Expected: PASS
-- [ ] **Step 5: Commit Task 4**
+- [x] **Step 5: Commit Task 4**
   - `git commit -m "fix(overlays): add asymmetric close animations to Dialog, DropdownMenu, and SolvaHeader menus"`
 
 ---
@@ -168,17 +168,17 @@
   - One-shot latched `SolvaScrollReveal` and `SolvaTwoToneHeading` (never re-blurring or hiding once settled).
   - One-shot `SolvaAnimatedMetric` and `useFloralCardAnimation` (zero periodic `replaySeed` resets to `0`), with static scholarly identifiers (`10.1109/CVPR.2016.90`, `R01`, `R05`, `APA 7th`, `#018`) rendered as stable text and live micro-telemetry rendered via `SubtleNumber`.
 
-- [ ] **Step 1: Write the failing test `web/src/components/landing/SolvaMotionCalm.test.tsx`**
+- [x] **Step 1: Write the failing test `web/src/components/landing/SolvaMotionCalm.test.tsx`**
   - Assert `SolvaAnimatedMetric` and `StickyCardWidget(0)` DO NOT reset their numbers or DOI `10.1109/CVPR.2016.90` back to `0` when advancing fake timers across `5000ms–15000ms`.
   - Assert `SolvaScrollReveal` and `SolvaTwoToneHeading` remain latched (`opacity: 1`, `filter: none`) after settling even if bounding rect moves back below viewport threshold on scroll-up.
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
   - Run: `cd web && npx vitest run src/components/landing/SolvaMotionCalm.test.tsx`
   - Expected: FAIL (`replaySeed` increments after `4800ms–5800ms` resetting numbers toward `0`, and scroll-up re-applies `phase = 'below'`)
-- [ ] **Step 3: Refactor `SolvaPrimitives.tsx` and `SolvaMockupWidgets.tsx` to latch editorial text reveals and replace periodic `0`-resets with honest static identifiers + subtle ambient telemetry**
-- [ ] **Step 4: Run tests and TypeScript check to verify green**
+- [x] **Step 3: Refactor `SolvaPrimitives.tsx` and `SolvaMockupWidgets.tsx` to latch editorial text reveals and replace periodic `0`-resets with honest static identifiers + subtle ambient telemetry**
+- [x] **Step 4: Run tests and TypeScript check to verify green**
   - Run: `cd web && npx vitest run src/components/landing/SolvaMotionCalm.test.tsx && npm test && npx tsc -b`
   - Expected: PASS
-- [ ] **Step 5: Commit Task 5**
+- [x] **Step 5: Commit Task 5**
   - `git commit -m "refactor(landing): latch editorial scroll reveals and eliminate periodic metric zero-resets"`
 
 ---
@@ -194,19 +194,19 @@
 **Interfaces:**
 - Consumes: `NumberPopIn`, `TactileToggle`, `SoftTextSwap`, `DirectionalStageSlide`, `SymmetricChevron`, `useSlidingPill` from `web/src/components/ui/transitions.tsx`
 
-- [ ] **Step 1: Write the failing test `web/src/pages/LandingInteractiveMotion.test.tsx`**
+- [x] **Step 1: Write the failing test `web/src/pages/LandingInteractiveMotion.test.tsx`**
   - Assert `#interactive-demo` renders `data-testid="debugger-autotour-progress"` on the active citation item while auto-tour is active, pauses on mouseEnter (`data-paused="true"`), and removes auto-tour on manual citation click.
   - Assert `#how-it-works` renders a `.t-tabs-pill` sliding indicator across the 4 pipeline stage tabs (`role="tab"`) and wraps `PipelineStageVisual` in `DirectionalStageSlide`.
   - Assert `LandingPage` `#pricing` uses `TactileToggle` (`.t-toggle[role="switch"]`) and both `LandingPage` and `PricingPage` render Pro/Ultra prices with `.t-digit-group` while keeping `pro-price-display` / `ultra-price-display` `textContent` strictly `'$16'` / `'$20'` and `'$160'` / `'$200'`.
   - Assert `#faq` accordion items apply asymmetric open/close durations (`300ms` open / `190ms` close).
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
   - Run: `cd web && npx vitest run src/pages/LandingInteractiveMotion.test.tsx`
   - Expected: FAIL (`debugger-autotour-progress`, `#how-it-works` `.t-tabs-pill`, and `#pricing` `.t-toggle` missing)
-- [ ] **Step 3: Implement Interactive Debugger 2.0, 4-Stage Pipeline pill + directional slide, Pricing `TactileToggle` + per-digit `NumberPopIn`, and asymmetric FAQ on `LandingPage.tsx` & `PricingPage.tsx`**
-- [ ] **Step 4: Run tests (including `PricingAndBilling.test.tsx` & `LandingVietnameseTypography.test.tsx`) and TypeScript check**
+- [x] **Step 3: Implement Interactive Debugger 2.0, 4-Stage Pipeline pill + directional slide, Pricing `TactileToggle` + per-digit `NumberPopIn`, and asymmetric FAQ on `LandingPage.tsx` & `PricingPage.tsx`**
+- [x] **Step 4: Run tests (including `PricingAndBilling.test.tsx` & `LandingVietnameseTypography.test.tsx`) and TypeScript check**
   - Run: `cd web && npx vitest run src/pages/LandingInteractiveMotion.test.tsx src/pages/PricingAndBilling.test.tsx src/pages/LandingVietnameseTypography.test.tsx && npm test && npx tsc -b`
   - Expected: PASS
-- [ ] **Step 5: Commit Task 6**
+- [x] **Step 5: Commit Task 6**
   - `git commit -m "feat(landing,pricing): add debugger auto-tour progress, directional pipeline pill, tactile pricing drum, and asymmetric FAQ"`
 
 ---
@@ -224,18 +224,18 @@
 **Interfaces:**
 - Consumes: `ReasoningStream` from `web/src/components/ui/transitions.tsx`; `m`, `AnimatePresence`, `SPRING_PILL` from `web/src/components/ui/motion-primitives.tsx`
 
-- [ ] **Step 1: Write the failing test `web/src/pages/WorkspaceMotionContinuity.test.tsx`**
+- [x] **Step 1: Write the failing test `web/src/pages/WorkspaceMotionContinuity.test.tsx`**
   - Assert `ProcessingPage` renders `data-testid="processing-reasoning-stream"` (`.t-reason`) displaying live step & scholarly source telemetry lines synthesized from `EssayStatus` while `status === 'processing'`.
   - Assert `AppLayout` renders the active sidebar indicator `data-testid="sidebar-active-indicator"` and moves it seamlessly across route navigation (`/dashboard` -> `/history`) with `viewTransition` enabled on nav links.
   - Assert `ThemeToggle` updates `document.documentElement.classList.contains('dark')` synchronously on the exact click tick while setting transient `data-theme-switching="true"` (cleared after `220ms`, omitted under `prefers-reduced-motion: reduce`).
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
   - Run: `cd web && npx vitest run src/pages/WorkspaceMotionContinuity.test.tsx`
   - Expected: FAIL (`processing-reasoning-stream` and `sidebar-active-indicator` missing)
-- [ ] **Step 3: Implement `ReasoningStream` telemetry feed in `ProcessingPage.tsx`, `m.span` `layoutId` active bar + `viewTransition` links in `AppLayout.tsx`, synchronous `data-theme-switching` cross-fade in `ThemeContext.tsx` + `transitions-dev.css`, and `AnimatePresence` result reveal in `LiveCitationSandbox.tsx`**
-- [ ] **Step 4: Run tests (including `ProcessingPage.test.tsx`) and TypeScript check**
+- [x] **Step 3: Implement `ReasoningStream` telemetry feed in `ProcessingPage.tsx`, `m.span` `layoutId` active bar + `viewTransition` links in `AppLayout.tsx`, synchronous `data-theme-switching` cross-fade in `ThemeContext.tsx` + `transitions-dev.css`, and `AnimatePresence` result reveal in `LiveCitationSandbox.tsx`**
+- [x] **Step 4: Run tests (including `ProcessingPage.test.tsx`) and TypeScript check**
   - Run: `cd web && npx vitest run src/pages/WorkspaceMotionContinuity.test.tsx src/pages/ProcessingPage.test.tsx && npm test && npx tsc -b`
   - Expected: PASS
-- [ ] **Step 5: Commit Task 7**
+- [x] **Step 5: Commit Task 7**
   - `git commit -m "feat(workspace): integrate live ReasoningStream on ProcessingPage, sidebar layoutId indicator, and smooth theme/route transitions"`
 
 ---
@@ -245,17 +245,17 @@
 **Files:**
 - Modify: `web/tests/e2e/transitions-dev.spec.ts`
 
-- [ ] **Step 1: Expand `web/tests/e2e/transitions-dev.spec.ts` with end-to-end assertions covering all new hybrid motion upgrades**
+- [x] **Step 1: Expand `web/tests/e2e/transitions-dev.spec.ts` with end-to-end assertions covering all new hybrid motion upgrades**
   - Verify `SolvaHeader` Platform dropdown `.is-open` -> `.is-closing` smooth exit transition.
   - Verify `#interactive-demo` Auto-Tour progress bar + hover pause + per-digit `NumberPopIn` confidence update.
   - Verify `#how-it-works` 4-stage `.t-tabs-pill` + `DirectionalStageSlide`.
   - Verify Landing `#pricing` `TactileToggle` (`#27`) + per-digit `NumberPopIn` exact price text (`$16` ↔ `$20`).
   - Verify `ProcessingPage` `#29 ReasoningStream` (`.t-reason` + `mask-image`) alongside `MatrixDotLoader` light/dark polarity.
   - Verify `AppLayout` `sidebar-active-indicator` route transition & zero `430×932` horizontal overflow across every public and authenticated page.
-- [ ] **Step 2: Start local Vite dev server and run full Playwright E2E + Vitest + ESLint + Production Build**
+- [x] **Step 2: Start local Vite dev server and run full Playwright E2E + Vitest + ESLint + Production Build**
   - Run: `cd web && npm test && npm run lint && npm run build` + Playwright `npx playwright test tests/e2e/transitions-dev.spec.ts` against live Vite server on `:5173`.
   - Expected: 100% PASS (0 Vitest failures, 0 ESLint warnings/errors, 0 TS/Vite build errors, all Playwright E2E tests green).
-- [ ] **Step 3: Commit Task 8**
+- [x] **Step 3: Commit Task 8**
   - `git commit -m "test(e2e): expand transitions-dev Playwright suite for hybrid motion choreography and workspace continuity"`
-- [ ] **Step 4: Dispatch fresh-context Senior Code & UX/UI Reviewer subagent (`Model: "inherit"` = Gemini 4 Carbon High Effort) over `BASE..HEAD`**
+- [x] **Step 4: Dispatch fresh-context Senior Code & UX/UI Reviewer subagent (`Model: "inherit"` = Gemini 4 Carbon High Effort) over `BASE..HEAD`**
   - Address any Critical or Important findings via strict TDD (`RED -> GREEN`), re-run Vitest + Lint + Build + Playwright E2E, and commit any review fixes cleanly.

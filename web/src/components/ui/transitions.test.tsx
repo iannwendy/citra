@@ -3,7 +3,10 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { useState } from 'react';
 import { CitraMotionProvider } from './motion-primitives';
 import {
+  CardResize,
   NumberPopIn,
+  SubtleNumber,
+  SoftTextSwap,
   TactileToggle,
   ReasoningStream,
   DirectionalStageSlide,
@@ -27,6 +30,7 @@ describe('Task 2: Core transitions.dev Primitives (#02, #27, #29, #08)', () => {
       const priceEl = screen.getByTestId('price-num');
       expect(priceEl.textContent).toBe('$20');
       expect(screen.getByText('$20')).toBeDefined();
+      expect(priceEl.hasAttribute('aria-label')).toBe(false);
 
       const initialSlots = container.querySelectorAll('.t-digit-slot');
       expect(initialSlots.length).toBe(3);
@@ -34,7 +38,8 @@ describe('Task 2: Core transitions.dev Primitives (#02, #27, #29, #08)', () => {
       // Update from $20 -> $16
       rerender(<NumberPopIn value="$16" data-testid="price-num" />);
 
-      // CRITICAL INVARIANT: textContent AND Testing Library getByText must immediately resolve "$16"
+      // CRITICAL INVARIANT: Frame 0 must immediately have .is-animating (zero post-paint flash / pre-rAF double glyph)
+      expect(priceEl.classList.contains('is-animating')).toBe(true);
       expect(priceEl.textContent).toBe('$16');
       expect(screen.getByText('$16')).toBeDefined();
 
@@ -148,6 +153,108 @@ describe('Task 2: Core transitions.dev Primitives (#02, #27, #29, #08)', () => {
       const renderedLines = container.querySelectorAll('.t-reason-line');
       expect(renderedLines.length).toBe(3);
       expect(renderedLines[renderedLines.length - 1].getAttribute('data-latest')).toBe('true');
+
+      // Surviving lines must keep stable DOM node identity across subsequent SSE steps (no role="log" spam)
+      const survivingLineNode = renderedLines[1];
+      rerender(
+        <ReasoningStream
+          lines={[...updatedLines, '[05.1s] Calibrating DeBERTa-v3 NLI stance']}
+          visibleLines={3}
+          data-testid="reason-stream"
+        />,
+      );
+      act(() => {
+        vi.advanceTimersByTime(450);
+      });
+      const nextRenderedLines = container.querySelectorAll('.t-reason-line');
+      expect(nextRenderedLines[0]).toBe(survivingLineNode);
+    });
+  });
+
+  describe('#01 CardResize, #36 SubtleNumber & #34 SoftTextSwap frame hygiene', () => {
+    it('SubtleNumber & SoftTextSwap activate animation class synchronously on Frame 0 and SubtleNumber lasts full >=420ms without prohibited aria-label', () => {
+      vi.useFakeTimers();
+      const { container, rerender } = render(
+        <div>
+          <SubtleNumber value={42} suffix="ms" />
+          <SoftTextSwap text="Initial Metadata" />
+        </div>,
+      );
+
+      const subtleEl = container.querySelector('.t-subtle-number') as HTMLElement;
+      const softEl = container.querySelector('.t-text-soft') as HTMLElement;
+      expect(subtleEl.hasAttribute('aria-label')).toBe(false);
+      expect(subtleEl.classList.contains('is-animating')).toBe(false);
+      expect(softEl.classList.contains('is-swapping')).toBe(false);
+
+      rerender(
+        <div>
+          <SubtleNumber value={58} suffix="ms" />
+          <SoftTextSwap text="Updated Metadata" />
+        </div>,
+      );
+
+      // Frame 0 synchronous activation (no pre-rAF double-glyph frame)
+      expect(subtleEl.classList.contains('is-animating')).toBe(true);
+      expect(softEl.classList.contains('is-swapping')).toBe(true);
+
+      // At 350ms (< 420ms --subtle-dur), SubtleNumber must still be animating (not cut off at 240ms!)
+      act(() => {
+        vi.advanceTimersByTime(350);
+      });
+      expect(subtleEl.classList.contains('is-animating')).toBe(true);
+
+      act(() => {
+        vi.advanceTimersByTime(120);
+      });
+      expect(subtleEl.classList.contains('is-animating')).toBe(false);
+    });
+
+    it('CardResize uses .t-card-resize-inner (flow-root margin containment) and interpolates numeric px heights before restoring auto', () => {
+      vi.useFakeTimers();
+      let roCallback: ResizeObserverCallback | null = null;
+      const origRO = globalThis.ResizeObserver;
+      globalThis.ResizeObserver = class {
+        constructor(cb: ResizeObserverCallback) {
+          roCallback = cb;
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      } as unknown as typeof ResizeObserver;
+
+      try {
+        const { container } = render(
+          <CardResize>
+            <div className="mt-4">Verification Content</div>
+          </CardResize>,
+        );
+        const outer = container.querySelector('.t-card-resize') as HTMLElement;
+        const inner = container.querySelector('.t-card-resize-inner') as HTMLElement;
+        expect(inner).not.toBeNull();
+        expect(roCallback).not.toBeNull();
+
+        act(() => {
+          roCallback!(
+            [{ borderBoxSize: [{ blockSize: 0, inlineSize: 300 }] } as unknown as ResizeObserverEntry],
+            {} as ResizeObserver,
+          );
+        });
+        act(() => {
+          roCallback!(
+            [{ borderBoxSize: [{ blockSize: 280, inlineSize: 300 }] } as unknown as ResizeObserverEntry],
+            {} as ResizeObserver,
+          );
+        });
+        expect(outer.style.height).toBe('280px');
+
+        act(() => {
+          vi.advanceTimersByTime(340);
+        });
+        expect(outer.style.height).toBe('auto');
+      } finally {
+        globalThis.ResizeObserver = origRO;
+      }
     });
   });
 
