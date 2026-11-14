@@ -83,6 +83,7 @@ describe('v3.70.0 — Batch Lifecycle, SSE Refund/Rate-Limit, Floating Pill, Sta
 
   it('BatchUploadPage + VerificationProgressContext: does not prematurely time out while queued (>150 polls), renders diagnostic chips, shows Credit Refunded + mixed-outcome banner, and calls api.reanalyzeEssay on existing essayId retry', async () => {
     const refreshUserSpy = vi.fn().mockResolvedValue(undefined);
+    batchTiming.maxAttempts = 8;
 
     const uploadSpy = vi
       .spyOn(api, 'uploadEssay')
@@ -99,8 +100,8 @@ describe('v3.70.0 — Batch Lifecycle, SSE Refund/Rate-Limit, Floating Pill, Sta
     vi.spyOn(api, 'getEssayStatus').mockImplementation(async (essayId: number) => {
       if (essayId === 901) {
         pollsFor901 += 1;
-        // Stay in 'queued' for 160 polls (> maxAttempts = 150) to prove queued polls do NOT consume processing timeout
-        if (pollsFor901 <= 160) {
+        // Stay in 'queued' for 12 polls (> maxAttempts = 8) to prove queued polls do NOT consume processing timeout
+        if (pollsFor901 <= 12) {
           return makeStatus({
             status: 'queued',
             queue_position: 2,
@@ -162,12 +163,16 @@ describe('v3.70.0 — Batch Lifecycle, SSE Refund/Rate-Limit, Floating Pill, Sta
     });
     fireEvent.click(screen.getByRole('button', { name: /start verification/i }));
 
-    // Wait for mixed batch to settle (901 completed after 161 polls; 902 failed with refund)
-    const mixedBanner = await screen.findByTestId('batch-mixed-outcome-banner');
+    // Wait for mixed batch to settle (901 completed after 13 polls > maxAttempts=8; 902 failed with refund)
+    const mixedBanner = await screen.findByTestId(
+      'batch-mixed-outcome-banner',
+      {},
+      { timeout: 4000 },
+    );
     expect(mixedBanner.textContent).toContain(
       '1 completed, 1 failed (credits automatically refunded)',
     );
-    expect(pollsFor901).toBeGreaterThan(160);
+    expect(pollsFor901).toBeGreaterThan(12);
 
     // Refund badge + refreshUser called when quota_charged === false
     expect(screen.getByText('Credit Refunded')).toBeDefined();
@@ -181,10 +186,13 @@ describe('v3.70.0 — Batch Lifecycle, SSE Refund/Rate-Limit, Floating Pill, Sta
     expect(uploadSpy).toHaveBeenCalledTimes(2);
     fireEvent.click(screen.getByTestId('batch-retry-failed-btn'));
 
-    await waitFor(() => {
-      expect(reanalyzeSpy).toHaveBeenCalledWith(902);
-      expect(screen.getAllByText('Complete').length).toBe(2);
-    });
+    await waitFor(
+      () => {
+        expect(reanalyzeSpy).toHaveBeenCalledWith(902);
+        expect(screen.getAllByText('Complete').length).toBe(2);
+      },
+      { timeout: 4000 },
+    );
     expect(uploadSpy).toHaveBeenCalledTimes(2);
   });
 
