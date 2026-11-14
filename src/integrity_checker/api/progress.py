@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from collections import deque
 from collections.abc import AsyncIterator
@@ -65,6 +66,14 @@ class ProgressState:
 MAX_AUTO_RETRIES = 1
 STATE_TTL_SECONDS = 3600.0
 MAX_TRACKED_STATES = 500
+SUBSCRIBER_QUEUE_MAXSIZE = 16
+
+
+def _current_worker_mode() -> str:
+    mode = os.getenv("CITRA_WORKER_MODE", "inline").strip().lower()
+    if mode in {"web_only", "worker_only", "inline"}:
+        return mode
+    return "inline"
 
 
 class ProgressTracker:
@@ -73,7 +82,61 @@ class ProgressTracker:
     def __init__(self) -> None:
         self._states: dict[int, ProgressState] = {}
         self._retry_counts: dict[int, int] = {}
+        self._subscribers: dict[
+            int, list[tuple[asyncio.AbstractEventLoop, asyncio.Queue[dict[str, Any]]]]
+        ] = {}
         self._lock = Lock()
+
+    @staticmethod
+    def _enqueue_snapshot_on_loop(
+        queue: asyncio.Queue[dict[str, Any]],
+        snapshot: dict[str, Any],
+    ) -> None:
+        """Push snapshot onto subscriber queue on its owning event loop without blocking."""
+        if queue.full():
+            try:
+                oldest = queue.get_nowait()
+                if oldest.get("status") in ("completed", "failed"):
+                    # Never discard an already-queued terminal snapshot
+                    try:
+                        queue.put_nowait(oldest)
+                    except asyncio.QueueFull:
+                        pass
+                    return
+            except asyncio.QueueEmpty:
+                pass
+        try:
+            queue.put_nowait(snapshot)
+        except asyncio.QueueFull:
+            pass
+
+    def _notify_subscribers(
+        self,
+        subs: list[tuple[asyncio.AbstractEventLoop, asyncio.Queue[dict[str, Any]]]],
+        snapshot: dict[str, Any],
+    ) -> None:
+        if not subs:
+            return
+        for loop, queue in subs:
+            if loop.is_closed():
+                continue
+            try:
+                loop.call_soon_threadsafe(
+                    self._enqueue_snapshot_on_loop,
+                    queue,
+                    dict(snapshot),
+                )
+            except RuntimeError:
+                pass
+
+    @staticmethod
+    def _snapshot_signature(snapshot: dict[str, Any]) -> str:
+        comparable = {
+            k: v
+            for k, v in snapshot.items()
+            if k not in ("elapsed_seconds", "started_at")
+        }
+        return json.dumps(comparable, sort_keys=True, default=str)
 
     def _prune_unlocked(self, now: float) -> None:
         if len(self._states) <= MAX_TRACKED_STATES:
@@ -166,6 +229,8 @@ class ProgressTracker:
             )
             self._states[essay_id] = state
             snapshot = state.to_snapshot()
+            subs = list(self._subscribers.get(essay_id, ()))
+        self._notify_subscribers(subs, snapshot)
         self._persist_snapshot(essay_id, snapshot)
         return state
 
@@ -180,7 +245,8 @@ class ProgressTracker:
 
     def update(self, essay_id: int, **fields: Any) -> ProgressState | None:
         """Merge ``fields`` into the state. Returns None if essay unknown."""
-        snapshot: dict[str, Any] | None = None
+        notify_snapshot: dict[str, Any] | None = None
+        subs: list[tuple[asyncio.AbstractEventLoop, asyncio.Queue[dict[str, Any]]]] = []
         should_persist = False
         with self._lock:
             state = self._states.get(essay_id)
@@ -192,6 +258,8 @@ class ProgressTracker:
             for key, value in fields.items():
                 if hasattr(state, key):
                     setattr(state, key, value)
+            notify_snapshot = state.to_snapshot()
+            subs = list(self._subscribers.get(essay_id, ()))
             if (
                 state.status != prev_status
                 or state.step != prev_step
@@ -200,9 +268,10 @@ class ProgressTracker:
                 or "error" in fields
             ):
                 should_persist = True
-                snapshot = state.to_snapshot()
-        if should_persist and snapshot is not None:
-            self._persist_snapshot(essay_id, snapshot)
+        if notify_snapshot is not None:
+            self._notify_subscribers(subs, notify_snapshot)
+        if should_persist and notify_snapshot is not None:
+            self._persist_snapshot(essay_id, notify_snapshot)
         return state
 
     def complete(self, essay_id: int) -> ProgressState | None:
@@ -231,6 +300,227 @@ class ProgressTracker:
         with self._lock:
             self._states.pop(essay_id, None)
             self._retry_counts.pop(essay_id, None)
+
+    def load_db_fallback_snapshot(self, essay_id: int) -> dict[str, Any] | None:
+        """Reconstruct progress snapshot from SQLite for multi-worker / restart resilience."""
+        try:
+            from integrity_checker.db.models import EssayRecord
+            from integrity_checker.db.repository import Repository
+            from integrity_checker.db.session import get_session
+
+            session = get_session()
+            try:
+                essay = session.get(EssayRecord, essay_id)
+                if essay is None:
+                    return None
+
+                persisted_snap = self.load_persisted_snapshot(essay_id, essay)
+                job_status = getattr(essay, "job_status", None)
+
+                if job_status == "queued":
+                    if persisted_snap is not None and persisted_snap.get("status") == "queued":
+                        return persisted_snap
+                    return {
+                        "status": "queued",
+                        "step": "queued",
+                        "step_index": 0,
+                        "total_steps": len(STEP_KEYS),
+                        "message": "Queued for analysis...",
+                        "citations_found": 0,
+                        "references_found": 0,
+                        "linked": 0,
+                        "sources_queried": {},
+                        "elapsed_seconds": 0.0,
+                        "finished_at": None,
+                        "error": None,
+                        "queue_position": None,
+                    }
+
+                if job_status == "failed":
+                    fail_err = (
+                        essay.job_error
+                        or (persisted_snap or {}).get("error")
+                        or "Analysis failed due to an internal processing error."
+                    )
+                    return {
+                        "status": "failed",
+                        "step": (persisted_snap or {}).get("step", STEP_KEYS[0]),
+                        "step_index": int((persisted_snap or {}).get("step_index", 0) or 0),
+                        "total_steps": len(STEP_KEYS),
+                        "message": f"Failed: {fail_err}",
+                        "citations_found": int((persisted_snap or {}).get("citations_found", 0) or 0),
+                        "references_found": int((persisted_snap or {}).get("references_found", 0) or 0),
+                        "linked": int((persisted_snap or {}).get("linked", 0) or 0),
+                        "sources_queried": (persisted_snap or {}).get("sources_queried", {}),
+                        "elapsed_seconds": float((persisted_snap or {}).get("elapsed_seconds", 0.0) or 0.0),
+                        "finished_at": (persisted_snap or {}).get("finished_at"),
+                        "error": fail_err,
+                        "queue_position": None,
+                    }
+
+                if job_status == "processing" and (
+                    persisted_snap is None
+                    or persisted_snap.get("status") not in ("completed", "failed")
+                ):
+                    if persisted_snap is not None:
+                        return persisted_snap
+                    return {
+                        "status": "processing",
+                        "step": STEP_KEYS[0],
+                        "step_index": 0,
+                        "total_steps": len(STEP_KEYS),
+                        "message": "Processing...",
+                        "citations_found": 0,
+                        "references_found": 0,
+                        "linked": 0,
+                        "sources_queried": {},
+                        "elapsed_seconds": 0.0,
+                        "finished_at": None,
+                        "error": None,
+                        "queue_position": None,
+                    }
+
+                repo = Repository(session)
+                verdicts = repo.get_verdicts(essay_id)
+                if (
+                    verdicts
+                    or essay.cis_json is not None
+                    or (persisted_snap is not None and persisted_snap.get("status") == "completed")
+                ):
+                    extracted = repo.get_citations(essay_id)
+                    doc_diag = None
+                    if essay.style_profile_json:
+                        try:
+                            sp_parsed = json.loads(essay.style_profile_json)
+                            if isinstance(sp_parsed, dict):
+                                doc_diag = sp_parsed.get("document_diagnostics")
+                        except Exception:
+                            doc_diag = None
+                    return {
+                        "status": "completed",
+                        "step": "done",
+                        "step_index": len(STEP_KEYS) - 1,
+                        "total_steps": len(STEP_KEYS),
+                        "message": "Analysis complete",
+                        "citations_found": sum(
+                            c.citation_type in {"in_text", "numeric"} for c in extracted
+                        ),
+                        "references_found": sum(
+                            c.citation_type == "reference_list" for c in extracted
+                        ),
+                        "linked": sum(v.mapping_status == "matched" for v in verdicts),
+                        "sources_queried": (persisted_snap or {}).get("sources_queried", {}),
+                        "elapsed_seconds": float(
+                            (persisted_snap or {}).get("elapsed_seconds", 0.0) or 0.0
+                        ),
+                        "finished_at": (persisted_snap or {}).get("finished_at"),
+                        "error": None,
+                        "queue_position": None,
+                        "document_diagnostics": doc_diag,
+                    }
+
+                if persisted_snap is not None and persisted_snap.get("status") in (
+                    "failed",
+                    "processing",
+                    "queued",
+                ):
+                    return persisted_snap
+
+                return {
+                    "status": "processing",
+                    "step": STEP_KEYS[0],
+                    "step_index": 0,
+                    "total_steps": len(STEP_KEYS),
+                    "message": "Processing...",
+                    "citations_found": 0,
+                    "references_found": 0,
+                    "linked": 0,
+                    "sources_queried": {},
+                    "elapsed_seconds": 0.0,
+                    "finished_at": None,
+                    "error": None,
+                    "queue_position": None,
+                }
+            finally:
+                session.close()
+        except Exception:
+            return None
+
+    async def subscribe(
+        self,
+        essay_id: int,
+        poll_interval: float = 1.0,
+        heartbeat_interval: float = 15.0,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield live progress snapshots for ``essay_id`` until terminal status or disconnect."""
+        _ = heartbeat_interval  # Kept in signature for SSE route configuration compatibility
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=SUBSCRIBER_QUEUE_MAXSIZE)
+        sub_entry = (loop, queue)
+        worker_mode = _current_worker_mode()
+
+        with self._lock:
+            self._subscribers.setdefault(essay_id, []).append(sub_entry)
+            initial_mem_snap = (
+                None
+                if worker_mode == "web_only" or essay_id not in self._states
+                else self._states[essay_id].to_snapshot()
+            )
+
+        try:
+            initial_snap = (
+                initial_mem_snap
+                if initial_mem_snap is not None
+                else self.load_db_fallback_snapshot(essay_id)
+            )
+            last_sig: str | None = None
+            if initial_snap is not None:
+                last_sig = self._snapshot_signature(initial_snap)
+                yield initial_snap
+                if initial_snap.get("status") in ("completed", "failed"):
+                    return
+
+            effective_poll = max(0.01, float(poll_interval))
+            while True:
+                worker_mode = _current_worker_mode()
+                try:
+                    item = await asyncio.wait_for(queue.get(), timeout=effective_poll)
+                    if worker_mode == "web_only":
+                        continue
+                    sig = self._snapshot_signature(item)
+                    if sig != last_sig:
+                        last_sig = sig
+                        yield item
+                    if item.get("status") in ("completed", "failed"):
+                        return
+                except TimeoutError:
+                    has_in_memory = worker_mode != "web_only" and self.get(essay_id) is not None
+                    db_snap = self.load_db_fallback_snapshot(essay_id)
+                    if not has_in_memory:
+                        if db_snap is None:
+                            return
+                        sig = self._snapshot_signature(db_snap)
+                        if sig != last_sig:
+                            last_sig = sig
+                            yield db_snap
+                        if db_snap.get("status") in ("completed", "failed"):
+                            return
+                    elif db_snap is not None and db_snap.get("status") in ("completed", "failed"):
+                        sig = self._snapshot_signature(db_snap)
+                        if sig != last_sig:
+                            last_sig = sig
+                            yield db_snap
+                        return
+        finally:
+            with self._lock:
+                subs = self._subscribers.get(essay_id)
+                if subs is not None:
+                    try:
+                        subs.remove(sub_entry)
+                    except ValueError:
+                        pass
+                    if not subs:
+                        self._subscribers.pop(essay_id, None)
 
 
 @dataclass

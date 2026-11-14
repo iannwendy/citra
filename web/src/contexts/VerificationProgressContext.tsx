@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { runWithConcurrency } from '@/lib/concurrencyPool';
 import { queryClient } from '@/lib/queryClient';
+import { streamEssayEvents } from '@/hooks/useEssayStream';
 
 /* ============================================================
    VerificationProgressContext
@@ -357,7 +358,13 @@ export function VerificationProgressProvider({
   });
   const batchPageMountedRef = useRef(false);
   const batchGenRef = useRef(0);
+  const batchStreamControllersRef = useRef<Set<AbortController>>(new Set());
   const hydratedUserIdRef = useRef<number | null>(null);
+
+  const abortBatchStreams = useCallback(() => {
+    batchStreamControllersRef.current.forEach((ctrl) => ctrl.abort());
+    batchStreamControllersRef.current.clear();
+  }, []);
 
   const updateBatchFiles = useCallback(
     (updater: BatchFileItem[] | ((prev: BatchFileItem[]) => BatchFileItem[])) => {
@@ -379,9 +386,48 @@ export function VerificationProgressProvider({
     [updateBatchFiles],
   );
 
-  /** Poll an essay status until completion/failure for a BatchFileItem. */
+  /** Stream SSE (or fall back to HTTP polling) until completion/failure for a BatchFileItem. */
   const pollBatchEssayUntilSettled = useCallback(
     async (itemId: string, essayId: number, myGen: number) => {
+      if (batchGenRef.current !== myGen) return;
+
+      const streamController = new AbortController();
+      batchStreamControllersRef.current.add(streamController);
+      let settledByStream = false;
+      try {
+        settledByStream = await streamEssayEvents(
+          essayId,
+          (status) => {
+            if (batchGenRef.current !== myGen) {
+              streamController.abort();
+              return;
+            }
+            if (status.status === 'completed') {
+              setBatchFilePatch(itemId, { status: 'completed', progress: 100, error: undefined });
+              return;
+            }
+            if (status.status === 'failed') {
+              setBatchFilePatch(itemId, {
+                status: 'failed',
+                error: status.error || 'Processing failed',
+              });
+              return;
+            }
+            const progress = Math.round(
+              (status.step_index / Math.max(1, status.total_steps)) * 100,
+            );
+            setBatchFilePatch(itemId, { status: 'processing', progress });
+          },
+          streamController.signal,
+        );
+      } finally {
+        batchStreamControllersRef.current.delete(streamController);
+      }
+
+      if (settledByStream || batchGenRef.current !== myGen) {
+        return;
+      }
+
       let attempts = 0;
       const maxAttempts = 150;
       while (attempts < maxAttempts && batchGenRef.current === myGen) {
@@ -425,6 +471,7 @@ export function VerificationProgressProvider({
       hydratedUserIdRef.current = null;
       singleGenRef.current += 1;
       batchGenRef.current += 1;
+      abortBatchStreams();
       setActiveSingleCheck(null);
       updateBatchFiles([]);
       setBatchTargetClassId(null);
@@ -493,7 +540,7 @@ export function VerificationProgressProvider({
         hasAutoNavigated: false,
       });
     }
-  }, [userId, pollBatchEssayUntilSettled, t, updateBatchFiles]);
+  }, [abortBatchStreams, userId, pollBatchEssayUntilSettled, t, updateBatchFiles]);
 
   // Persist Single Check state to sessionStorage
   useEffect(() => {
@@ -699,50 +746,57 @@ export function VerificationProgressProvider({
     let cancelled = false;
     let consecutiveErrors = 0;
     let timer: ReturnType<typeof setInterval> | null = null;
+    const controller = new AbortController();
+
+    const handleSettledSingle = (snap: EssayStatus) => {
+      if (snap.status === 'completed') {
+        if (timer) clearInterval(timer);
+        void queryClient.invalidateQueries({ queryKey: ['essays'] });
+        void api
+          .getEssay(bgPollEssayId)
+          .then((report) => {
+            if (report) {
+              queryClient.setQueryData(['essay-report', bgPollEssayId], report);
+            }
+          })
+          .catch(() => {});
+
+        const displayFilename = activeSingleCheck?.filename || `ID #${bgPollEssayId}`;
+        toast.success(
+          t('upload.toastCompletedTitle'),
+          t('upload.toastCompletedDesc', { filename: displayFilename }),
+          onNavigate
+            ? {
+                action: {
+                  label: t('upload.openReport'),
+                  onClick: () => {
+                    acknowledgeSingleCheck(bgPollEssayId);
+                    onNavigate(`/verification/report/${bgPollEssayId}`);
+                  },
+                },
+              }
+            : undefined,
+        );
+      } else if (snap.status === 'failed') {
+        if (timer) clearInterval(timer);
+        toast.error(
+          t('upload.toastFailedTitle'),
+          snap.error || t('upload.uploadFailed'),
+        );
+      }
+    };
 
     const tick = async () => {
       try {
-        const snap = await api.getEssayStatus(bgPollEssayId);
+        const snap = await api.getEssayStatus(bgPollEssayId, { signal: controller.signal });
         if (cancelled) return;
         consecutiveErrors = 0;
         syncSingleCheckFromStatus(bgPollEssayId, snap);
-
-        if (snap.status === 'completed') {
-          if (timer) clearInterval(timer);
-          void queryClient.invalidateQueries({ queryKey: ['essays'] });
-          void api
-            .getEssay(bgPollEssayId)
-            .then((report) => {
-              if (report) {
-                queryClient.setQueryData(['essay-report', bgPollEssayId], report);
-              }
-            })
-            .catch(() => {});
-
-          const displayFilename = activeSingleCheck?.filename || `ID #${bgPollEssayId}`;
-          toast.success(
-            t('upload.toastCompletedTitle'),
-            t('upload.toastCompletedDesc', { filename: displayFilename }),
-            onNavigate
-              ? {
-                  action: {
-                    label: t('upload.openReport'),
-                    onClick: () => {
-                      acknowledgeSingleCheck(bgPollEssayId);
-                      onNavigate(`/verification/report/${bgPollEssayId}`);
-                    },
-                  },
-                }
-              : undefined,
-          );
-        } else if (snap.status === 'failed') {
-          if (timer) clearInterval(timer);
-          toast.error(
-            t('upload.toastFailedTitle'),
-            snap.error || t('upload.uploadFailed'),
-          );
+        if (snap.status === 'completed' || snap.status === 'failed') {
+          handleSettledSingle(snap);
         }
       } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         consecutiveErrors += 1;
         if (!cancelled && consecutiveErrors >= 5) {
           if (timer) clearInterval(timer);
@@ -757,13 +811,29 @@ export function VerificationProgressProvider({
       }
     };
 
-    void tick();
-    timer = setInterval(() => {
+    void (async () => {
+      const streamed = await streamEssayEvents(
+        bgPollEssayId,
+        (snap) => {
+          if (cancelled) return;
+          consecutiveErrors = 0;
+          syncSingleCheckFromStatus(bgPollEssayId, snap);
+          if (snap.status === 'completed' || snap.status === 'failed') {
+            handleSettledSingle(snap);
+          }
+        },
+        controller.signal,
+      );
+      if (cancelled || streamed) return;
       void tick();
-    }, singlePollTiming.pollIntervalMs);
+      timer = setInterval(() => {
+        void tick();
+      }, singlePollTiming.pollIntervalMs);
+    })();
 
     return () => {
       cancelled = true;
+      controller.abort();
       if (timer) clearInterval(timer);
     };
   }, [
@@ -945,13 +1015,14 @@ export function VerificationProgressProvider({
 
   const clearBatchFiles = useCallback(() => {
     batchGenRef.current += 1;
+    abortBatchStreams();
     updateBatchFiles([]);
     setBatchQueueState({
       isProcessing: false,
       currentIndex: -1,
       hasAutoNavigated: false,
     });
-  }, [updateBatchFiles]);
+  }, [abortBatchStreams, updateBatchFiles]);
 
   const retryBatchFile = useCallback(
     (id: string) => {

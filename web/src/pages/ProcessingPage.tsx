@@ -19,6 +19,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { api, type EssayStatus } from '@/api/client';
 import { useVerificationProgress } from '@/contexts/VerificationProgressContext';
+import { streamEssayEvents } from '@/hooks/useEssayStream';
 import {
   SCHOLARLY_APIS_LABEL,
   SYMBOLIC_RULES_COUNT,
@@ -163,17 +164,25 @@ export function ProcessingPage() {
     let cancelled = false;
     let consecutiveErrors = 0;
     let timer: ReturnType<typeof setInterval> | null = null;
+    const controller = new AbortController();
+
+    const applySnap = (snap: EssayStatus) => {
+      if (cancelled) return;
+      consecutiveErrors = 0;
+      setStatus(snap);
+      syncSingleCheckFromStatus(essayId, snap);
+    };
+
     const tick = async () => {
       try {
         const snap = await api.getEssayStatus(essayId);
         if (cancelled) return;
-        consecutiveErrors = 0;
-        setStatus(snap);
-        syncSingleCheckFromStatus(essayId, snap);
+        applySnap(snap);
         if (snap.status === 'failed' || snap.status === 'completed') {
           if (timer) clearInterval(timer);
         }
       } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
         consecutiveErrors += 1;
         if (!cancelled && consecutiveErrors >= 5) {
           if (timer) clearInterval(timer);
@@ -199,10 +208,17 @@ export function ProcessingPage() {
         }
       }
     };
-    void tick();
-    timer = setInterval(tick, 800);
+
+    void (async () => {
+      const streamed = await streamEssayEvents(essayId, applySnap, controller.signal);
+      if (cancelled || streamed) return;
+      void tick();
+      timer = setInterval(tick, 800);
+    })();
+
     return () => {
       cancelled = true;
+      controller.abort();
       if (timer) clearInterval(timer);
     };
   }, [essayId, syncSingleCheckFromStatus]);

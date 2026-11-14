@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
-import { api, type AnalysisReport } from '@/api/client';
+import { api, type AnalysisReport, type EssayStatus } from '@/api/client';
 import { queryClient } from '@/lib/queryClient';
+import { streamEssayEvents } from './useEssayStream';
 
 function getValidCachedReport(essayId: number | null): AnalysisReport | null {
   if (essayId == null || Number.isNaN(essayId) || essayId <= 0) {
@@ -44,6 +45,8 @@ export interface UseEssayPollingOptions {
   intervalMs?: number;
   /** Error message khi fetch fail (không phải abort). Default: "Failed to load report. Please try again." */
   errorMessage?: string;
+  /** Optional callback receiving live SSE / polled EssayStatus snapshots. */
+  onStatus?: (snap: EssayStatus) => void;
 }
 
 export interface UseEssayPollingResult {
@@ -57,11 +60,17 @@ export function useEssayPolling(
   essayId: number | null,
   options: UseEssayPollingOptions = {},
 ): UseEssayPollingResult {
-  const { intervalMs = 2000, errorMessage = 'Failed to load report. Please try again.' } = options;
+  const {
+    intervalMs = 2000,
+    errorMessage = 'Failed to load report. Please try again.',
+    onStatus,
+  } = options;
   const [report, setReport] = useState<AnalysisReport | null>(() => getValidCachedReport(essayId));
   const [error, setError] = useState<string | null>(null);
   // Ref giữ cancelled flag — tránh re-create closure mỗi lần effect re-run
   const cancelledRef = useRef(false);
+  const onStatusRef = useRef(onStatus);
+  onStatusRef.current = onStatus;
 
   useEffect(() => {
     // Reset state khi essayId đổi (hoặc dùng ngay dữ liệu đã có trong queryClient cache)
@@ -84,6 +93,7 @@ export function useEssayPolling(
     // AbortController để cancel in-flight fetch khi unmount / essayId đổi
     const controller = new AbortController();
     let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let sseAttempted = false;
 
     const tryFetch = async () => {
       try {
@@ -102,9 +112,54 @@ export function useEssayPolling(
           return;
         }
 
-        // Pipeline vẫn đang chạy (HTTP 425) — check status
+        // Prefer real-time SSE stream on first HTTP 425 encounter; fall back to polling if unavailable
+        if (!sseAttempted) {
+          sseAttempted = true;
+          let terminalSnap: EssayStatus | null = null;
+          const settledByStream = await streamEssayEvents(
+            essayId,
+            (snap) => {
+              if (cancelledRef.current) return;
+              onStatusRef.current?.(snap);
+              if (snap.status === 'completed' || snap.status === 'failed') {
+                terminalSnap = snap;
+              }
+            },
+            controller.signal,
+          );
+          if (cancelledRef.current || controller.signal.aborted) return;
+
+          if (settledByStream && terminalSnap) {
+            const finalSnap = terminalSnap as EssayStatus;
+            if (finalSnap.status === 'failed') {
+              setError(finalSnap.error ?? 'Pipeline failed.');
+              if (pollTimer) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+              }
+              return;
+            }
+            if (finalSnap.status === 'completed') {
+              const ready = await api.getEssay(essayId, { signal: controller.signal });
+              if (cancelledRef.current) return;
+              if (ready) {
+                cacheValidReport(essayId, ready);
+                setReport(ready);
+                setError(null);
+                if (pollTimer) {
+                  clearInterval(pollTimer);
+                  pollTimer = null;
+                }
+                return;
+              }
+            }
+          }
+        }
+
+        // Pipeline vẫn đang chạy (HTTP 425) — check status via HTTP polling fallback
         const status = await api.getEssayStatus(essayId, { signal: controller.signal });
         if (cancelledRef.current) return;
+        onStatusRef.current?.(status);
 
         if (status.status === 'failed') {
           setError(status.error ?? 'Pipeline failed.');
@@ -156,7 +211,7 @@ export function useEssayPolling(
       controller.abort();
       if (pollTimer) clearInterval(pollTimer);
     };
-  }, [essayId, intervalMs]);
+  }, [essayId, intervalMs, errorMessage]);
 
   return { report, error, isPolling: report == null && error == null && essayId != null };
 }

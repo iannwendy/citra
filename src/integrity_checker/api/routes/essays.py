@@ -4,15 +4,27 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import os
 import tempfile
 import threading
+import time
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import func, update
 from sqlalchemy.orm import Session
 
@@ -35,6 +47,15 @@ UPLOADS_DIR = PROJECT_ROOT / "data" / "essays" / "uploads"
 ALLOWED_UPLOAD_EXTENSIONS = (".pdf", ".docx", ".bib", ".ris")
 
 _QUOTA_CLAIM_LOCK = threading.Lock()
+
+SSE_POLL_INTERVAL_SECONDS: float = 1.0
+SSE_HEARTBEAT_INTERVAL_SECONDS: float = 15.0
+SSE_DISCONNECT_CHECK_SECONDS: float = 0.25
+SSE_RESPONSE_HEADERS: dict[str, str] = {
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
 
 
 def _get_worker_mode() -> str:
@@ -801,6 +822,88 @@ def get_essay_status(
         "error": None,
         "queue_position": None,
     }
+
+
+@router.get("/{essay_id}/events")
+async def stream_essay_events(
+    essay_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    """Stream real-time Server-Sent Events (SSE) progress frames for an essay.
+
+    Authenticates strictly via ``Authorization: Bearer <token>`` (never query-string
+    tokens), enforces ownership/class access prior to opening the stream, releases
+    the request-scoped SQLite session immediately, and streams unbuffered SSE frames.
+    """
+    repo = Repository(db)
+    essay = repo.get_essay(essay_id)
+    if not essay:
+        raise HTTPException(status_code=404, detail="Essay not found")
+
+    if not repo.can_user_access_essay(current_user, essay):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Release the request-scoped DB connection before opening a long-lived SSE stream
+    db.close()
+
+    tracker = get_tracker()
+    poll_interval = max(0.01, float(SSE_POLL_INTERVAL_SECONDS))
+    heartbeat_interval = max(0.02, float(SSE_HEARTBEAT_INTERVAL_SECONDS))
+    disconnect_interval = max(0.01, float(SSE_DISCONNECT_CHECK_SECONDS))
+
+    async def _event_stream() -> AsyncIterator[str]:
+        sub_iter = tracker.subscribe(
+            essay_id,
+            poll_interval=poll_interval,
+            heartbeat_interval=heartbeat_interval,
+        ).__aiter__()
+        next_task: asyncio.Task[dict[str, Any]] | None = None
+        last_frame_at = time.monotonic()
+
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                if next_task is None:
+                    next_task = asyncio.create_task(sub_iter.__anext__())
+
+                remaining_hb = max(0.0, heartbeat_interval - (time.monotonic() - last_frame_at))
+                wait_timeout = min(remaining_hb, disconnect_interval)
+                done, _ = await asyncio.wait({next_task}, timeout=wait_timeout)
+
+                if done:
+                    try:
+                        snapshot = next_task.result()
+                    except StopAsyncIteration:
+                        next_task = None
+                        break
+                    next_task = None
+                    yield f"data: {json.dumps(snapshot, ensure_ascii=False)}\n\n"
+                    last_frame_at = time.monotonic()
+                    if snapshot.get("status") in ("completed", "failed"):
+                        break
+                else:
+                    if await request.is_disconnected():
+                        break
+                    if (time.monotonic() - last_frame_at) >= heartbeat_interval:
+                        yield ": keepalive\n\n"
+                        last_frame_at = time.monotonic()
+        finally:
+            if next_task is not None and not next_task.done():
+                next_task.cancel()
+                try:
+                    await next_task
+                except (asyncio.CancelledError, StopAsyncIteration):
+                    pass
+            await sub_iter.aclose()
+
+    return StreamingResponse(
+        _event_stream(),
+        media_type="text/event-stream",
+        headers=dict(SSE_RESPONSE_HEADERS),
+    )
 
 
 @router.post("/{essay_id}/reanalyze")

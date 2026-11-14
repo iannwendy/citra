@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from integrity_checker.api.routes import (
     audit,
@@ -26,6 +27,71 @@ from integrity_checker.db.session import init_db
 from integrity_checker.logging import configure_logging, get_logger
 
 logger = get_logger(__name__)
+
+
+class SSEPassthroughGZipMiddleware:
+    """Pure ASGI GZip wrapper that bypasses compression and buffering for SSE streams."""
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        minimum_size: int = 500,
+        compresslevel: int = 9,
+    ) -> None:
+        self.app = app
+        self._gzip_app = GZipMiddleware(
+            app,
+            minimum_size=minimum_size,
+            compresslevel=compresslevel,
+        )
+
+    @staticmethod
+    def _should_bypass_gzip(scope: Scope) -> bool:
+        if scope.get("type") != "http":
+            return True
+        path = scope.get("path", "")
+        if isinstance(path, str) and path.endswith("/events"):
+            return True
+        for raw_key, raw_val in scope.get("headers") or ():
+            if raw_key.lower() == b"accept" and b"text/event-stream" in raw_val.lower():
+                return True
+        return False
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if self._should_bypass_gzip(scope):
+            await self.app(scope, receive, send)
+            return
+        await self._gzip_app(scope, receive, send)
+
+
+class SecurityHeadersMiddleware:
+    """Pure ASGI security-header injector preserving zero-buffer streaming & disconnect detection."""
+
+    _DEFAULT_HEADERS: tuple[tuple[bytes, bytes], ...] = (
+        (b"x-content-type-options", b"nosniff"),
+        (b"x-frame-options", b"SAMEORIGIN"),
+        (b"referrer-policy", b"strict-origin-when-cross-origin"),
+    )
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def _send_with_headers(message: Message) -> None:
+            if message.get("type") == "http.response.start":
+                raw_headers = list(message.get("headers") or [])
+                existing = {k.lower() for k, _ in raw_headers}
+                for key_bytes, val_bytes in self._DEFAULT_HEADERS:
+                    if key_bytes not in existing:
+                        raw_headers.append((key_bytes, val_bytes))
+                message = {**message, "headers": raw_headers}
+            await send(message)
+
+        await self.app(scope, receive, _send_with_headers)
 
 
 def create_app() -> FastAPI:
@@ -73,16 +139,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.add_middleware(GZipMiddleware, minimum_size=1000)
+    app.add_middleware(SSEPassthroughGZipMiddleware, minimum_size=1000)
+    app.add_middleware(SecurityHeadersMiddleware)
     logger.info(f"CORS configured with origins: {origins}, credentials: {allow_credentials}")
-
-    @app.middleware("http")
-    async def add_security_headers(request, call_next):
-        response = await call_next(request)
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
-        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        return response
 
     # Init DB (MVP)
     init_db()
