@@ -671,3 +671,61 @@ def test_nginx_prod_conf_defines_unbuffered_sse_locations_before_api_proxy() -> 
     assert len(api_matches) == 2
     assert sse_matches[0].start() < api_matches[0].start()
     assert api_matches[0].start() < sse_matches[1].start() < api_matches[1].start()
+
+
+async def test_db_fallback_and_status_refresh_live_elapsed_seconds_for_active_persisted_snapshot(
+    clean_db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When reconnecting mid-step in web_only / DB fallback mode, active persisted snapshots
+    with started_at must report live elapsed_seconds rather than the stale step-start value."""
+    monkeypatch.setenv("CITRA_WORKER_MODE", "web_only")
+    owner, owner_token = _create_user_with_token(clean_db, username="live_elapsed_user")
+    started_five_sec_ago = time.time() - 5.2
+
+    essay = EssayRecord(
+        filename="elapsed_live.pdf",
+        num_pages=6,
+        user_id=owner.id,
+        job_status="processing",
+        style_profile_json=json.dumps(
+            {
+                "_progress_snapshot": {
+                    "status": "processing",
+                    "step": "parsing",
+                    "step_index": 0,
+                    "total_steps": 8,
+                    "message": "Parsing document...",
+                    "citations_found": 0,
+                    "references_found": 0,
+                    "linked": 0,
+                    "sources_queried": {},
+                    "started_at": started_five_sec_ago,
+                    "elapsed_seconds": 0.2,
+                    "finished_at": None,
+                    "error": None,
+                    "queue_position": None,
+                }
+            }
+        ),
+    )
+    clean_db.add(essay)
+    clean_db.commit()
+    essay_id = essay.id
+
+    tracker = get_tracker()
+    db_snap = tracker.load_db_fallback_snapshot(essay_id)
+    assert db_snap is not None
+    assert db_snap["elapsed_seconds"] >= 5.0
+
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as ac:
+        resp = await ac.get(
+            f"/api/essays/{essay_id}/status",
+            headers={"Authorization": f"Bearer {owner_token}"},
+        )
+        assert resp.status_code == 200
+        status_payload = resp.json()
+        assert status_payload["elapsed_seconds"] >= 5.0
+

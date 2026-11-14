@@ -438,6 +438,64 @@ test.describe('Background Verification Progress Persistence (E2E + Responsive)',
     await expect(page.getByTestId('recent-single-check-banner')).toHaveCount(0);
   });
 
+  test('ProcessingPage elapsed second counter ticks smoothly in real time during long steps without new backend snapshots', async ({
+    page,
+  }) => {
+    const server = await setupMockBackend(page);
+    server.setNextEssayId(88);
+    // Backend stays stuck on Step 0 (parsing) with initial elapsed_seconds = 0.2 (no step transitions)
+    server.statuses.set(
+      88,
+      buildStatus({
+        status: 'processing',
+        step: 'parsing',
+        step_index: 0,
+        message: 'Parsing document...',
+        citations_found: 0,
+        references_found: 0,
+        linked: 0,
+        elapsed_seconds: 0.2,
+      }),
+    );
+
+    // Explicitly abort /events with 404 or single initial frame? Even better: serve SSE frame 1 and keep behavior realistic,
+    // or let status return static 0.2s — in BOTH cases backend never sends a higher elapsed_seconds!
+    await page.route('**/api/essays/88/events', (route) =>
+      route.fulfill({ status: 404, body: 'Not mocked' }),
+    );
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/upload');
+
+    await page
+      .locator('input[type="file"]')
+      .setInputFiles(dummyPdfPayload('Realtime_Timer_Verification.pdf'));
+    await page.getByRole('button', { name: /Bắt đầu xác minh/i }).click();
+
+    await expect(page).toHaveURL(/\/verification\/processing\/88$/);
+    const timerBadge = page.getByTestId('processing-elapsed-time');
+    await expect(timerBadge).toBeVisible();
+
+    const parseSec = async () => {
+      const txt = (await timerBadge.textContent())?.trim() ?? '';
+      const num = Number.parseFloat(txt.replace(/s$/i, ''));
+      return num;
+    };
+
+    const t0 = await parseSec();
+    expect(t0).toBeGreaterThanOrEqual(0.2);
+
+    // Wait 700ms while backend still returns static elapsed_seconds: 0.2 on Step 0
+    await page.waitForTimeout(700);
+    const t1 = await parseSec();
+    expect(t1).toBeGreaterThan(t0 + 0.4);
+
+    // Wait another 700ms — counter must continue advancing smoothly in real time
+    await page.waitForTimeout(700);
+    const t2 = await parseSec();
+    expect(t2).toBeGreaterThan(t1 + 0.4);
+  });
+
   test('Batch Check ("Kiểm tra hàng loạt") keeps worker pool & progress alive across tab switches, F5 reload, and background completion', async ({
     page,
   }) => {

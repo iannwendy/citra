@@ -29,7 +29,11 @@ from sqlalchemy.orm import Session
 
 from integrity_checker.api.deps import get_current_user, get_db, get_pipeline, require_admin
 from integrity_checker.api.job_recovery import QUOTA_LEDGER_LOCK, refund_upload_quota_once
-from integrity_checker.api.progress import get_pipeline_admission_controller, get_tracker
+from integrity_checker.api.progress import (
+    get_pipeline_admission_controller,
+    get_tracker,
+    refresh_live_snapshot_elapsed,
+)
 from integrity_checker.billing.plans import ensure_user_quota_current, get_user_plan_policy
 from integrity_checker.config import PROJECT_ROOT, is_test_runtime
 from integrity_checker.db.models import CitationRecord, EssayRecord, User, VerdictRecord
@@ -714,7 +718,7 @@ def get_essay_status(
     persisted_snap = tracker.load_persisted_snapshot(essay_id, essay)
     if getattr(essay, "job_status", None) == "queued":
         if persisted_snap is not None and persisted_snap.get("status") == "queued":
-            return persisted_snap
+            return refresh_live_snapshot_elapsed(persisted_snap)
         return {
             "status": "queued",
             "step": "queued",
@@ -736,7 +740,7 @@ def get_essay_status(
             "processing",
             "queued",
         ):
-            return persisted_snap
+            return refresh_live_snapshot_elapsed(persisted_snap)
         return {
             "status": "processing",
             "step": "parsing",
@@ -814,7 +818,7 @@ def get_essay_status(
         "processing",
         "queued",
     ):
-        return persisted_snap
+        return refresh_live_snapshot_elapsed(persisted_snap)
 
     # Server restarted before background analysis finished: auto-resume at most once
     # if the uploaded PDF is persisted on disk.

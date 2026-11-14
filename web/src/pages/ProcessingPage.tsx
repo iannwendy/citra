@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -144,7 +144,14 @@ export function ProcessingPage() {
   const numericId = id ? parseInt(id, 10) : null;
   const essayId = numericId !== null && !isNaN(numericId) ? numericId : null;
 
-  const [status, setStatus] = useState<EssayStatus | null>(null);
+  const [statusEntry, setStatusEntry] = useState<{
+    essayId: number;
+    snap: EssayStatus;
+  } | null>(null);
+  const status =
+    essayId !== null && statusEntry?.essayId === essayId
+      ? statusEntry.snap
+      : null;
   const [displayedStepIndex, setDisplayedStepIndex] = useState<number>(0);
   const [redirecting, setRedirecting] = useState(false);
   const queryClient = useQueryClient();
@@ -169,7 +176,7 @@ export function ProcessingPage() {
     const applySnap = (snap: EssayStatus) => {
       if (cancelled) return;
       consecutiveErrors = 0;
-      setStatus(snap);
+      setStatusEntry({ essayId, snap });
       syncSingleCheckFromStatus(essayId, snap);
     };
 
@@ -203,7 +210,7 @@ export function ProcessingPage() {
                 ? err.message
                 : 'Unable to fetch processing status.',
           };
-          setStatus(failedSnap);
+          setStatusEntry({ essayId, snap: failedSnap });
           syncSingleCheckFromStatus(essayId, failedSnap);
         }
       }
@@ -341,12 +348,7 @@ export function ProcessingPage() {
                 {lang === 'vi' ? `Hàng đợi #${queuePos}` : `Queue #${queuePos}`}
               </Badge>
             )}
-            {status?.elapsed_seconds !== undefined && status.elapsed_seconds > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs font-mono text-slate-500 dark:text-slate-400">
-                <Clock className="h-3.5 w-3.5" />
-                {status.elapsed_seconds.toFixed(1)}s
-              </span>
-            )}
+            <LiveElapsedTimer key={essayId ?? 'none'} status={status} />
           </div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
             {isFailed
@@ -702,6 +704,104 @@ function StatCard({
       </p>
       <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">{label}</p>
     </Card>
+  );
+}
+
+function LiveElapsedTimer({ status }: { status: EssayStatus | null }) {
+  const anchorRef = useRef<{ baseElapsed: number; baseTimeMs: number } | null>(
+    null,
+  );
+  const prevTerminalRef = useRef<boolean>(false);
+  const [displaySeconds, setDisplaySeconds] = useState<number>(0);
+
+  const isTerminal =
+    status?.status === 'completed' || status?.status === 'failed';
+  const serverElapsed =
+    status &&
+    typeof status.elapsed_seconds === 'number' &&
+    Number.isFinite(status.elapsed_seconds)
+      ? Math.max(0, status.elapsed_seconds)
+      : 0;
+
+  useEffect(() => {
+    if (!status) {
+      anchorRef.current = null;
+      prevTerminalRef.current = false;
+      setDisplaySeconds(0);
+      return;
+    }
+
+    const now = Date.now();
+    const restartedAfterTerminal = prevTerminalRef.current && !isTerminal;
+    prevTerminalRef.current = isTerminal;
+
+    setDisplaySeconds((prev) => {
+      if (restartedAfterTerminal) {
+        anchorRef.current = { baseElapsed: serverElapsed, baseTimeMs: now };
+        return serverElapsed;
+      }
+      const currentLive = anchorRef.current
+        ? Math.max(
+            prev,
+            anchorRef.current.baseElapsed +
+              Math.max(0, now - anchorRef.current.baseTimeMs) / 1000,
+          )
+        : prev;
+      const synced = Math.max(currentLive, serverElapsed);
+      anchorRef.current = { baseElapsed: synced, baseTimeMs: now };
+      return synced;
+    });
+  }, [status, isTerminal, serverElapsed]);
+
+  const hasStatus = Boolean(status);
+
+  useEffect(() => {
+    if (!hasStatus || isTerminal) return;
+
+    const updateTick = () => {
+      const anchor = anchorRef.current;
+      if (!anchor) return;
+      const elapsed =
+        anchor.baseElapsed +
+        Math.max(0, Date.now() - anchor.baseTimeMs) / 1000;
+      setDisplaySeconds((prev) => (elapsed > prev ? elapsed : prev));
+    };
+
+    const interval = setInterval(updateTick, 100);
+    const onVisibility = () => {
+      if (
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'visible'
+      ) {
+        updateTick();
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibility);
+      }
+    };
+  }, [hasStatus, isTerminal]);
+
+  const shownSeconds = Math.max(displaySeconds, serverElapsed);
+
+  if (!status || (isTerminal && shownSeconds <= 0)) {
+    return null;
+  }
+
+  return (
+    <span
+      data-testid="processing-elapsed-time"
+      className="inline-flex items-center gap-1 text-xs font-mono tabular-nums text-slate-500 dark:text-slate-400"
+    >
+      <Clock className="h-3.5 w-3.5" />
+      {shownSeconds.toFixed(1)}s
+    </span>
   );
 }
 

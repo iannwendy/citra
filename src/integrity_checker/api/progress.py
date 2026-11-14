@@ -76,6 +76,22 @@ def _current_worker_mode() -> str:
     return "inline"
 
 
+def refresh_live_snapshot_elapsed(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Recompute live elapsed_seconds from started_at for non-terminal persisted snapshots."""
+    if snapshot.get("status") not in ("queued", "processing"):
+        return snapshot
+    if snapshot.get("finished_at") is not None:
+        return snapshot
+    started_at = snapshot.get("started_at")
+    if isinstance(started_at, (int, float)) and started_at > 0:
+        prev_elapsed = float(snapshot.get("elapsed_seconds", 0.0) or 0.0)
+        live_elapsed = max(prev_elapsed, time.time() - float(started_at))
+        out = dict(snapshot)
+        out["elapsed_seconds"] = live_elapsed
+        return out
+    return snapshot
+
+
 class ProgressTracker:
     """Thread-safe in-memory dict of ``essay_id -> ProgressState`` with bounded TTL cleanup."""
 
@@ -319,7 +335,7 @@ class ProgressTracker:
 
                 if job_status == "queued":
                     if persisted_snap is not None and persisted_snap.get("status") == "queued":
-                        return persisted_snap
+                        return refresh_live_snapshot_elapsed(persisted_snap)
                     return {
                         "status": "queued",
                         "step": "queued",
@@ -363,7 +379,7 @@ class ProgressTracker:
                         "processing",
                         "queued",
                     ):
-                        return persisted_snap
+                        return refresh_live_snapshot_elapsed(persisted_snap)
                     return {
                         "status": "processing",
                         "step": STEP_KEYS[0],
@@ -424,7 +440,7 @@ class ProgressTracker:
                     "processing",
                     "queued",
                 ):
-                    return persisted_snap
+                    return refresh_live_snapshot_elapsed(persisted_snap)
 
                 return {
                     "status": "processing",
