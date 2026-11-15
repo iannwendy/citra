@@ -524,13 +524,16 @@ export function buildEvidenceGraph(
         const isWebMetaMismatch =
           isUrlContentMismatch &&
           (db === 'web_html_meta' || db === 'wayback_html_meta');
+        const isHallucinationCandidate =
+          verdict.label === 'suspected_hallucination' && c.matched;
         const obsPageTitle = c.title || observedWeb?.title || null;
 
-        const candidateStatus: GraphNode['status'] = isWebMetaMismatch
-          ? 'warning'
-          : c.matched
-            ? 'success'
-            : 'no_match';
+        const candidateStatus: GraphNode['status'] =
+          isWebMetaMismatch || isHallucinationCandidate
+            ? 'warning'
+            : c.matched
+              ? 'success'
+              : 'no_match';
 
         const candidateDetail = isWebMetaMismatch
           ? obsPageTitle
@@ -540,13 +543,17 @@ export function buildEvidenceGraph(
             : isVi
               ? 'Metadata trang web không khớp tiêu đề trích dẫn.'
               : 'Observed web page metadata mismatches cited title.'
-          : c.matched
+          : isHallucinationCandidate
             ? isVi
-              ? `Trường khớp: ${cleanedFields || 'thông tin sẵn có'}.`
-              : `Matched fields: ${cleanedFields || 'available details'}.`
-            : isVi
-              ? 'Không tìm thấy bản ghi khớp'
-              : 'No match found';
+              ? `Ứng viên gần nhất (chỉ trùng: ${cleanedFields || 'một phần'}) — không xác thực được trích dẫn.`
+              : `Nearest neighbor candidate (overlap: ${cleanedFields || 'partial'}) — does not verify cited work.`
+            : c.matched
+              ? isVi
+                ? `Trường khớp: ${cleanedFields || 'thông tin sẵn có'}.`
+                : `Matched fields: ${cleanedFields || 'available details'}.`
+              : isVi
+                ? 'Không tìm thấy bản ghi khớp'
+                : 'No match found';
 
         return {
           id: `${db}-${idx}`,
@@ -558,7 +565,11 @@ export function buildEvidenceGraph(
             ? isVi
               ? 'LỆCH NỘI DUNG'
               : 'MISMATCH'
-            : undefined,
+            : isHallucinationCandidate
+              ? isVi
+                ? 'LỆCH NGUỒN'
+                : 'CONFLICT'
+              : undefined,
           detail: candidateDetail,
           matchedSource: {
             source: db,
@@ -572,7 +583,11 @@ export function buildEvidenceGraph(
                     id: `${db}-${idx}-link`,
                     label: isVi ? 'Xem công bố gốc' : 'View Publication',
                     type: 'candidate' as const,
-                    status: (isWebMetaMismatch ? 'warning' : 'success') as GraphNode['status'],
+                    status: (
+                      isWebMetaMismatch || isHallucinationCandidate
+                        ? 'warning'
+                        : 'success'
+                    ) as GraphNode['status'],
                     detail: c.url,
                     iconOverride: (
                       <ExternalLink className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />

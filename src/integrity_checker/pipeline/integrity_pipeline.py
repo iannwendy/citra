@@ -302,7 +302,7 @@ class AnalysisReport:
                         "api_exhausted": v.api_exhausted,
                         "used_local_db": v.used_local_db,
                     },
-                    "matched_sources": _serialize_matched_sources(v.matched_source),
+                    "matched_sources": _serialize_matched_sources(v.matched_source, citation=v.citation),
                     "warnings": _get_verdict_warnings_from_verdict(v),
                     "suggestions": ExplanationGenerator.suggestions(v),
                 }
@@ -2329,7 +2329,11 @@ def _serialize_verdict_for_json(v: CitationVerdict) -> dict[str, Any]:
         getattr(v, "is_retracted", False)
         or (getattr(v.matched_source, "is_retracted", False) if v.matched_source else False)
     )
-    matched_sources: list[dict[str, Any]] = _serialize_matched_sources(v.matched_source)
+    matched_sources: list[dict[str, Any]] = _serialize_matched_sources(
+        v.matched_source,
+        citation=v.citation,
+        mismatched_fields=v.mismatched_fields,
+    )
     return {
         "citation_raw": v.citation.raw_text,
         "label": v.label.value,
@@ -2629,28 +2633,137 @@ def _format_candidate_authors(raw_authors: Any) -> list[str]:
     return serialized
 
 
+_LIGHT_TITLE_CALC: Any | None = None
+
+
+def _get_light_title_calc() -> Any:
+    global _LIGHT_TITLE_CALC
+    if _LIGHT_TITLE_CALC is None:
+        from integrity_checker.matching.features import FeatureCalculator
+        from integrity_checker.matching.fuzzy import FuzzyMatcher
+
+        calc = FeatureCalculator.__new__(FeatureCalculator)
+        calc.fuzzy = FuzzyMatcher()
+        calc.semantic = None  # type: ignore[assignment]
+        calc.enable_content_alignment = False
+        _LIGHT_TITLE_CALC = calc
+    return _LIGHT_TITLE_CALC
+
+
 def _build_matched_fields(
     doi: Any,
     title: Any,
     authors: list[str],
     year: Any,
     venue: Any,
+    citation: Any | None = None,
+    mismatched_fields: list[str] | None = None,
 ) -> list[str]:
+    mismatched_norm: set[str] = set()
+    for mf in mismatched_fields or []:
+        mf_low = str(mf).strip().lower()
+        if mf_low:
+            mismatched_norm.add(mf_low)
+            if mf_low == "author":
+                mismatched_norm.add("authors")
+            elif mf_low == "authors":
+                mismatched_norm.add("author")
+
     fields: list[str] = []
-    if doi:
-        fields.append("doi")
-    if title:
-        fields.append("title")
+    if citation is None:
+        if doi and "doi" not in mismatched_norm:
+            fields.append("doi")
+        if title and "title" not in mismatched_norm:
+            fields.append("title")
+        if authors and "authors" not in mismatched_norm:
+            fields.append("authors")
+        if year and "year" not in mismatched_norm:
+            fields.append("year")
+        if venue and "venue" not in mismatched_norm:
+            fields.append("venue")
+        return fields
+
+    from integrity_checker.matching.features import FeatureCalculator
+
+    cit_title_raw = getattr(citation, "title", None) or getattr(citation, "raw_text", None)
+    t_sim = 0.0
+    if title and cit_title_raw:
+        is_raw_fb = not bool(getattr(citation, "title", None))
+        if not (
+            is_raw_fb
+            and re.match(
+                r"^(?:https?://|doi:\s*|10\.\d{4,}/)\S+$",
+                str(cit_title_raw).strip(),
+                re.IGNORECASE,
+            )
+        ):
+            t_sim = _get_light_title_calc()._compute_title_similarity(
+                str(cit_title_raw), str(title), is_raw_fallback=is_raw_fb
+            )
+            if t_sim < 0.80 and (
+                is_raw_fb or re.search(r"\(\d+/\d{4}/[A-ZĐ0-9-]+\)\s*$", str(title))
+            ):
+                base_cand_title = re.sub(r"\s*\([^)]*\)\s*$", "", str(title)).strip().lower()
+                if len(base_cand_title) >= 8 and base_cand_title in str(cit_title_raw).lower():
+                    t_sim = max(t_sim, 0.90)
+
+    a_sim = 0.0
     if authors:
+        cited_authors = list(getattr(citation, "authors", None) or [])
+        if cited_authors:
+            from integrity_checker.matching.author_matcher import author_match_score
+
+            has_et_al = FeatureCalculator._citation_has_et_al(citation, cited_authors)
+            a_sim = author_match_score(cited_authors, list(authors), has_et_al=has_et_al)
+        elif getattr(citation, "raw_text", None):
+            raw_low = str(citation.raw_text).lower()
+            if any(
+                len(str(a).strip()) >= 3 and str(a).strip().lower() in raw_low
+                for a in authors
+            ):
+                a_sim = 1.0
+
+    if doi and "doi" not in mismatched_norm:
+        from integrity_checker.retrieval.arxiv_client import ArxivClient
+
+        cit_doi_eff = getattr(citation, "doi", None)
+        if not cit_doi_eff:
+            try:
+                cit_ax = ArxivClient.extract_arxiv_id(citation)
+            except Exception:
+                cit_ax = None
+            if cit_ax:
+                cit_doi_eff = f"10.48550/arxiv.{cit_ax}"
+        if cit_doi_eff:
+            doi_ok = FeatureCalculator._doi_matches(str(cit_doi_eff), str(doi))
+            if not doi_ok and t_sim >= 0.90 and a_sim >= 0.70:
+                d1_n = FeatureCalculator._normalize_doi_str(str(cit_doi_eff))
+                d2_n = FeatureCalculator._normalize_doi_str(str(doi))
+                if d1_n.startswith("10.48550/arxiv") != d2_n.startswith("10.48550/arxiv"):
+                    doi_ok = True
+            if doi_ok:
+                fields.append("doi")
+
+    if title and t_sim >= 0.80 and "title" not in mismatched_norm:
+        fields.append("title")
+    if authors and a_sim >= 0.50 and "authors" not in mismatched_norm:
         fields.append("authors")
-    if year:
-        fields.append("year")
-    if venue:
-        fields.append("venue")
+    if year and getattr(citation, "year", None) and "year" not in mismatched_norm:
+        if FeatureCalculator._year_distance(getattr(citation, "year", None), year) == 0:
+            fields.append("year")
+    if venue and getattr(citation, "venue", None) and "venue" not in mismatched_norm:
+        from integrity_checker.matching.venue_normalizer import VenueNormalizer
+
+        if VenueNormalizer().similarity(str(citation.venue), str(venue)) >= 0.45:
+            fields.append("venue")
     return fields
 
 
-def _serialize_matched_sources(source: Any) -> list[dict[str, Any]]:
+def _serialize_matched_sources(
+    source: Any,
+    citation: Any | None = None,
+    mismatched_fields: list[str] | None = None,
+) -> list[dict[str, Any]]:
     """SourceResult → list of MatchedSource-shaped dicts for the API.
 
     Each dict carries the data the frontend EvidenceGraph needs:
@@ -2686,7 +2799,15 @@ def _serialize_matched_sources(source: Any) -> list[dict[str, Any]]:
         s_venue = getattr(cand_obj, "venue", None)
         entry_dict: dict[str, Any] = {
             "source": src_name,
-            "matched_fields": _build_matched_fields(s_doi, s_title, s_authors, s_year, s_venue),
+            "matched_fields": _build_matched_fields(
+                s_doi,
+                s_title,
+                s_authors,
+                s_year,
+                s_venue,
+                citation=citation,
+                mismatched_fields=mismatched_fields,
+            ),
             "checked_at": checked_iso,
             "url": getattr(cand_obj, "url", None),
             "doi": s_doi,
@@ -2727,8 +2848,29 @@ def _serialize_matched_sources(source: Any) -> list[dict[str, Any]]:
             c_conf_raw = corr.get("confidence", corr.get("similarity", entry["confidence"]))
             c_entry: dict[str, Any] = {
                 "source": corr_src,
-                "matched_fields": corr.get("matched_fields")
-                or _build_matched_fields(c_doi, c_title, c_authors, c_year, c_venue),
+                "matched_fields": (
+                    _build_matched_fields(
+                        c_doi,
+                        c_title,
+                        c_authors,
+                        c_year,
+                        c_venue,
+                        citation=citation,
+                        mismatched_fields=mismatched_fields,
+                    )
+                    if citation is not None
+                    else (
+                        corr.get("matched_fields")
+                        or _build_matched_fields(
+                            c_doi,
+                            c_title,
+                            c_authors,
+                            c_year,
+                            c_venue,
+                            mismatched_fields=mismatched_fields,
+                        )
+                    )
+                ),
                 "checked_at": checked_iso,
                 "url": c_url,
                 "doi": c_doi,
@@ -2783,7 +2925,13 @@ def _serialize_matched_sources(source: Any) -> list[dict[str, Any]]:
                     "wayback_html_meta" if is_wayback_meta else "web_html_meta"
                 )
                 web_matched_fields = _build_matched_fields(
-                    hm_doi, hm_title, hm_authors, hm_year, hm_venue
+                    hm_doi,
+                    hm_title,
+                    hm_authors,
+                    hm_year,
+                    hm_venue,
+                    citation=citation,
+                    mismatched_fields=mismatched_fields,
                 )
                 out.append({
                     "source": web_src_name,

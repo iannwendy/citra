@@ -385,7 +385,7 @@ def _is_fake_url(url: str | None) -> tuple[bool, str]:
 # Merged from module-level and class-level duplicates (2026-09-15).
 _FABRICATED_DOI_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"10\.1234/(?:ncr|fake|fab|hallucination)", re.IGNORECASE),
-    re.compile(r"10\.9999?/(?:jmle|fake|fab|pseudonym)", re.IGNORECASE),
+    re.compile(r"10\.9999?/", re.IGNORECASE),
     re.compile(r"10\.\d{4,}/(?:nonexistent|imaginary|temp)", re.IGNORECASE),
     re.compile(r"10\.0000/", re.IGNORECASE),
     re.compile(r"10\.\d{4,}/(?:paper-\d+|fake-\w+)", re.IGNORECASE),
@@ -533,6 +533,7 @@ def _is_non_journal_or_unindexed_source(
     citation_url: str | None = None,
     citation_doi: str | None = None,
     citation_authors: list | None = None,
+    citation_venue: str | None = None,
 ) -> tuple[bool, str]:
     """Identify legitimate non-journal / non-indexed sources (BUG-22) so they are not
     falsely flagged as SUSPECTED_HALLUCINATION when academic paper APIs return 0 matches.
@@ -546,14 +547,16 @@ def _is_non_journal_or_unindexed_source(
         return False, ""
 
     raw = (citation_raw or "").strip()
+    venue = (citation_venue or "").strip()
     url = (citation_url or "").strip()
-    combined = f"{raw} {url}".strip()
+    combined = " | ".join(p for p in (raw, venue, url) if p).strip()
     if not combined:
         return False, ""
 
     # If it explicitly looks like a journal/conference periodical article, it SHOULD be
     # indexed in scholarly databases — do not exempt it from hallucination rules.
-    if _PERIODICAL_JOURNAL_SIGNAL_RE.search(raw):
+    periodical_text = " | ".join(p for p in (raw, venue) if p)
+    if _PERIODICAL_JOURNAL_SIGNAL_RE.search(periodical_text):
         return False, ""
 
     # 1. Legal / regulatory / technical standard documents
@@ -622,6 +625,7 @@ def _is_exempt_from_incomplete_metadata(
     citation_url: str | None = None,
     citation_doi: str | None = None,
     citation_authors: list | None = None,
+    citation_venue: str | None = None,
 ) -> bool:
     """Return True only when a bibliography entry belongs to a genuine non-academic /
     statutory / scriptural / web category that naturally omits author/year/venue.
@@ -631,6 +635,7 @@ def _is_exempt_from_incomplete_metadata(
         citation_url=citation_url,
         citation_doi=citation_doi,
         citation_authors=citation_authors,
+        citation_venue=citation_venue,
     )
     return bool(is_nj and nj_kind in _INCOMPLETE_EXEMPT_NON_JOURNAL_KINDS)
 
@@ -1265,42 +1270,79 @@ class SymbolicRules:
             _non_venue_pat = re.compile(
                 r"\b(?:arxiv|corr|preprint|biorxiv|medrxiv|ssrn|hal|zenodo|openreview|"
                 r"researchgate|sciencedirect|springer|elsevier|wiley|taylor|francis|"
-                r"ieee\s+xplore|acm\s+digital|lecture\s+notes|lncs|pubmed)\b",
+                r"ieee\s+xplore|acm\s+digital|lecture\s+notes|lncs|pubmed|pmlr|"
+                r"proceedings\s+of\s+machine\s+learning\s+research|acl\s+anthology|ceur)\b",
                 re.IGNORECASE,
             )
             cv_clean = citation_venue.strip()
             bv_clean = best_cand.venue.strip()
+            c_is_bogus_venue = bool(
+                re.search(
+                    r"\b(?:unknown|imaginary|hypothetical|nonexistent|fictional|placeholder|unverified|bogus)\b",
+                    cv_clean,
+                    re.I,
+                )
+            )
             if (
                 len(cv_clean) >= 3
                 and len(bv_clean) >= 3
                 and cv_clean.lower() not in {"ieee", "acm"}
                 and bv_clean.lower() not in {"ieee", "acm"}
                 and not _non_venue_pat.search(cv_clean)
-                and not _non_venue_pat.search(bv_clean)
+                and (not _non_venue_pat.search(bv_clean) or c_is_bogus_venue)
                 and not (citation_doi and "10.48550/arxiv" in str(citation_doi).lower())
                 and "vn_standard_code" not in (best_cand.external_ids or {})
             ):
                 from integrity_checker.matching.venue_normalizer import VenueNormalizer
 
-                v_sim = VenueNormalizer().similarity(cv_clean, bv_clean)
+                vn = VenueNormalizer()
+                v_sim = vn.similarity(cv_clean, bv_clean)
                 if v_sim < 0.15 and outcome.label == ValidationLabel.METADATA_ERROR:
                     if "venue" not in outcome.mismatched_fields:
                         outcome.mismatched_fields.append("venue")
                     if "R-VENUE-MISMATCH" not in outcome.triggered_rules:
                         outcome.triggered_rules.append("R-VENUE-MISMATCH")
                 elif (
-                    v_sim < 0.10
+                    v_sim < 0.35
                     and outcome.label == ValidationLabel.VERIFIED
-                    and features.doi_exact_match
+                    and (features.doi_exact_match or len(cv_clean) >= 6)
                 ):
-                    c_is_j = bool(re.search(r"\b(?:journal|transactions)\b", cv_clean, re.I))
-                    b_is_j = bool(re.search(r"\b(?:journal|transactions)\b", bv_clean, re.I))
-                    c_is_c = bool(re.search(r"\b(?:proceedings|conference|symposium|workshop)\b", cv_clean, re.I))
-                    b_is_c = bool(re.search(r"\b(?:proceedings|conference|symposium|workshop)\b", bv_clean, re.I))
-                    if (c_is_j and b_is_c and not c_is_c) or (c_is_c and b_is_j and not c_is_j):
+                    _explicit_venue_re = re.compile(
+                        r"\b(?:journal|transactions|proceedings|conference|symposium|letters|workshop)\b",
+                        re.I,
+                    )
+                    _generic_venue_words = {
+                        "journal", "transactions", "proceedings", "conference", "symposium",
+                        "letters", "workshop", "international", "annual", "meeting", "of",
+                        "the", "on", "in", "for", "and", "at", "to", "ieee", "acm",
+                        "proc", "conf", "trans", "int",
+                    }
+                    c_canon = vn._candidate_canonicals(cv_clean)
+                    b_canon = vn._candidate_canonicals(bv_clean)
+                    c_is_explicit = bool(_explicit_venue_re.search(cv_clean) or c_canon)
+                    b_is_explicit = bool(_explicit_venue_re.search(bv_clean) or b_canon)
+                    c_exp_str = " ".join(c_canon) if c_canon else cv_clean
+                    b_exp_str = " ".join(b_canon) if b_canon else bv_clean
+                    c_words = {
+                        w for w in re.findall(r"[a-z]{3,}", c_exp_str.lower())
+                        if w not in _generic_venue_words
+                    }
+                    b_words = {
+                        w for w in re.findall(r"[a-z]{3,}", b_exp_str.lower())
+                        if w not in _generic_venue_words
+                    }
+                    has_zero_content_overlap = bool(
+                        c_words and b_words and not (c_words & b_words)
+                    )
+                    if (
+                        (c_is_bogus_venue and v_sim < 0.15)
+                        or (c_is_explicit and b_is_explicit and has_zero_content_overlap)
+                    ):
                         outcome.label = ValidationLabel.METADATA_ERROR
                         outcome.confidence = min(outcome.confidence, 0.72)
                         outcome.mismatched_fields = ["venue"]
+                        if 0 < features.year_distance < 900:
+                            outcome.mismatched_fields.append("year")
                         outcome.triggered_rules.append("R-VENUE-MISMATCH")
                         outcome.reasoning += (
                             f" Venue conflict detected: cited '{cv_clean}' vs canonical '{bv_clean}'."
@@ -1663,6 +1705,7 @@ class SymbolicRules:
                     citation_url=citation_url,
                     citation_doi=citation_doi,
                     citation_authors=citation_authors,
+                    citation_venue=citation_venue,
                 ):
                     missing_f = list(completeness.missing_fields or ["authors", "year", "venue"])
                     return RuleOutcome(
@@ -1718,6 +1761,7 @@ class SymbolicRules:
                     citation_url=citation_url,
                     citation_doi=citation_doi,
                     citation_authors=citation_authors,
+                    citation_venue=citation_venue,
                 )
                 if is_non_journal:
                     if non_journal_kind in ("web_resource", "legal_or_standard"):
@@ -2420,7 +2464,22 @@ class SymbolicRules:
                 )
 
         # --- Rule 3: ≥2 sources in consensus ---
-        if consensus >= self.consensus_verified and title_sim >= self.title_sim_verified:
+        _venue_sim_val = float(getattr(features, "venue_sim", 0.0) or 0.0)
+        _is_topical_buzzword_doi_conflict = bool(
+            has_doi_conflict
+            and bool(citation_authors)
+            and author_sim == 0.0
+            and (
+                features.title_sim_fuzzy < 0.85
+                or (features.title_sim_fuzzy < 0.95 and _venue_sim_val < 0.20)
+            )
+            and not is_cross_lingual_title
+        )
+        if (
+            consensus >= self.consensus_verified
+            and title_sim >= self.title_sim_verified
+            and not _is_topical_buzzword_doi_conflict
+        ):
             if (
                 author_sim >= self.author_jaccard_verified
                 and year_dist <= self.year_tolerance
@@ -2452,6 +2511,7 @@ class SymbolicRules:
                     citation_url=citation_url,
                     citation_doi=citation_doi,
                     citation_authors=citation_authors,
+                    citation_venue=citation_venue,
                 )
             ):
                 for mf in completeness.missing_fields:
@@ -2537,6 +2597,35 @@ class SymbolicRules:
                     f"Found paper by the same author on {', '.join(source.sources_succeeded)} "
                     f"(title_sim={features.title_sim_fuzzy:.2f}, author_sim={author_sim:.2f}) "
                     f"with mismatched fields: {', '.join(mismatched)}."
+                ),
+                triggered_rules=triggered_rules,
+                mismatched_fields=mismatched,
+                style_penalty=style_penalty,
+            )
+
+        # --- Rule 3d: 1 live source with strong title + author match but conflicting DOI → METADATA_ERROR ---
+        if (
+            consensus >= 1
+            and _has_live_source(source, verified_sources)
+            and has_doi_conflict
+            and features.title_sim_fuzzy >= 0.85
+            and author_sim >= self.author_jaccard_verified
+        ):
+            mismatched.append("doi")
+            if "R-DOI-CONFLICT" not in triggered_rules:
+                triggered_rules.append("R-DOI-CONFLICT")
+            if features.title_sim_fuzzy < 0.90:
+                mismatched.append("title")
+            if year_dist > self.year_tolerance and year_dist < 900:
+                mismatched.append("year")
+            triggered_rules.append("R-SINGLE-SOURCE-PARTIAL")
+            return RuleOutcome(
+                label=ValidationLabel.METADATA_ERROR,
+                confidence=max(0.0, 0.70 - style_penalty),
+                reasoning=(
+                    f"Scholarly record matched title and authors on {', '.join(source.sources_succeeded)} "
+                    f"(title_sim={features.title_sim_fuzzy:.2f}, author_sim={author_sim:.2f}), "
+                    f"but cited DOI conflicts with canonical record: {', '.join(mismatched)}."
                 ),
                 triggered_rules=triggered_rules,
                 mismatched_fields=mismatched,
@@ -2697,6 +2786,7 @@ class SymbolicRules:
                     citation_url=citation_url,
                     citation_doi=citation_doi,
                     citation_authors=citation_authors,
+                    citation_venue=citation_venue,
                 )
                 if is_vn_unindexed and vn_unindexed_kind in (
                     "thesis_or_report",
@@ -2791,26 +2881,45 @@ class SymbolicRules:
                     style_penalty=style_penalty,
                 )
 
-        # --- Rule 4c: Non-existent / unresolvable DOI with low title similarity → SUSPECTED_HALLUCINATION ---
+        # --- Rule 4c: Non-existent / unresolvable DOI with low title similarity or zero-author topical neighbor → SUSPECTED_HALLUCINATION ---
+        _doi_ra_err = str((getattr(source, "sources_failed", None) or {}).get("doi_ra", "")).lower()
+        _doi_ra_nonexistent = "does not exist" in _doi_ra_err or "invalid doi" in _doi_ra_err
+        _is_zero_author_doi_neighbor = bool(
+            (_doi_ra_nonexistent or has_doi_conflict)
+            and bool(citation_authors)
+            and author_sim < 0.20
+            and (
+                features.title_sim_fuzzy < 0.85
+                or (
+                    author_sim == 0.0
+                    and features.title_sim_fuzzy < 0.95
+                    and _venue_sim_val < 0.20
+                )
+            )
+            and not is_cross_lingual_title
+        )
         if (
             citation_doi
             and str(citation_doi).strip()
             and _has_live_source(source, verified_sources)
             and not doi_match
-            and title_sim < 0.60
+            and (title_sim < 0.60 or _is_zero_author_doi_neighbor)
             and not is_known_author
         ):
             triggered_rules.append("R-NONEXISTENT-DOI")
+            mismatched_doi_fields = ["doi", "title"]
+            if bool(citation_authors) and author_sim < 0.20:
+                mismatched_doi_fields.append("author")
             return RuleOutcome(
                 label=ValidationLabel.SUSPECTED_HALLUCINATION,
                 confidence=max(0.0, 0.85 - style_penalty),
                 reasoning=(
                     f"Cited DOI '{citation_doi}' did not resolve to any matching record and "
-                    f"best candidate title similarity is low ({title_sim:.2f}). "
-                    f"Suspected fabricated or non-existent DOI."
+                    f"best candidate does not match cited work (fuzzy_title_sim={features.title_sim_fuzzy:.2f}, "
+                    f"author_sim={author_sim:.2f}). Suspected fabricated or non-existent DOI."
                 ),
                 triggered_rules=triggered_rules,
-                mismatched_fields=["doi", "title"],
+                mismatched_fields=mismatched_doi_fields,
                 style_penalty=style_penalty,
             )
 
@@ -2886,6 +2995,7 @@ class SymbolicRules:
                 citation_url=citation_url,
                 citation_doi=citation_doi,
                 citation_authors=citation_authors,
+                citation_venue=citation_venue,
             )
         ):
             missing_f = list(completeness.missing_fields or ["authors", "year", "venue"])
@@ -2997,6 +3107,7 @@ class SymbolicRules:
                 citation_url=citation_url,
                 citation_doi=citation_doi,
                 citation_authors=citation_authors,
+                citation_venue=citation_venue,
             )
             if is_non_journal:
                 if non_journal_kind in ("web_resource", "legal_or_standard"):

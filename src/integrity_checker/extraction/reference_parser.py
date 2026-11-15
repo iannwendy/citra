@@ -1706,15 +1706,29 @@ class ReferenceListParser:
             ):
                 continue
             # Skip short repeated lines without year/URL (typical running headers, never numbered ref starts or DOI/page lines)
+            prev_nonempty = next((c.strip() for c in reversed(cleaned) if c.strip()), "")
+            is_continuation_from_prev = bool(
+                prev_nonempty
+                and re.search(
+                    r"\b(?:of(?:\s+the)?|in(?:\s+the)?|on|for|and|at|to)\s*$",
+                    prev_nonempty,
+                    re.IGNORECASE,
+                )
+            )
             if (
                 counts[stripped] >= 2
                 and len(stripped) < 100  # Increased from 80 to catch more headers
+                and not is_continuation_from_prev
                 and (
                     len(stripped.split()) >= 2
                     or (stripped.isupper() and len(stripped) >= 4 and stripped.upper() != "URL")
                 )
                 and not re.fullmatch(r"(?:[A-ZÀ-Ý]\.\s*)+", stripped)
-                and not re.search(r"(?:19|20)\d{2}|\bdoi\s*:|\b10\.\d{4,9}/|\bpp?\.\s*\d+|\bProceedings\s+of\b", stripped, re.IGNORECASE)
+                and not re.search(
+                    r"(?:19|20)\d{2}|\bdoi\s*:|\b10\.\d{4,9}/|\bpp?\.\s*\d+|\b\d+\s*[-–—]\s*\d+\b|\bProceedings\s+of\b",
+                    stripped,
+                    re.IGNORECASE,
+                )
                 and "http" not in stripped.lower()
                 and not re.match(r"^\s*(?:\[\d{1,3}\]|\d{1,3}\s*[\.\)])\s+[A-ZÀ-Ý]", stripped)
             ):

@@ -1,0 +1,231 @@
+[
+  {
+    "filename": "essay_06_chimeric_and_buzzword_traps.pdf",
+    "title": "Essay 06 — Chimeric Citations and LLM Buzzword Hallucination Traps",
+    "references": [
+      {
+        "index": 1,
+        "raw_reference": "Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L., & Polosukhin, I. (2017). Attention is all you need. Advances in Neural Information Processing Systems, 30. https://doi.org/10.48550/arXiv.1706.03762",
+        "intext_marker": "(Vaswani et al., 2017)",
+        "expected_label": "verified",
+        "forbidden_matched_fields": [],
+        "forbidden_100_badges": [],
+        "notes": "Valid control citation with arXiv DOI and NeurIPS venue."
+      },
+      {
+        "index": 2,
+        "raw_reference": "Kowalski, M., & Vandenberg, L. (2017). Hyperbolic quantum graph topology for autonomous underwater swarm navigation. Journal of Subsea Robotics, 14(2), 112-124. https://doi.org/10.1109/CVPR.2016.90",
+        "intext_marker": "(Kowalski & Vandenberg, 2017)",
+        "expected_label": "suspected_hallucination",
+        "forbidden_matched_fields": [
+          "title",
+          "authors",
+          "year",
+          "venue"
+        ],
+        "forbidden_100_badges": [
+          "title",
+          "authors",
+          "year",
+          "venue"
+        ],
+        "notes": "Chimeric citation splicing fabricated authors/title/venue with He et al. (2016) ResNet DOI."
+      },
+      {
+        "index": 3,
+        "raw_reference": "Devlin, J., & Chang, M. W. (2019). Magnetohydrodynamic turbulence modeling in circumstellar accretion disks. Astrophysical Journal Letters, 875(2), L14. https://doi.org/10.18653/v1/N19-1423",
+        "intext_marker": "(Devlin & Chang, 2019)",
+        "expected_label": "suspected_hallucination",
+        "forbidden_matched_fields": [
+          "title",
+          "venue"
+        ],
+        "forbidden_100_badges": [
+          "title",
+          "venue"
+        ],
+        "notes": "Same-author + real BERT DOI chimera with completely unrelated astrophysics title and venue."
+      },
+      {
+        "index": 4,
+        "raw_reference": "Martinez, C. R., & Takahashi, K. (2024). Self-reflective retrieval-augmented generation for hallucination mitigation in large language models. Journal of Artificial Intelligence Research, 81, 415-448. https://doi.org/10.1613/jair.1.99871",
+        "intext_marker": "(Martinez & Takahashi, 2024)",
+        "expected_label": "suspected_hallucination",
+        "forbidden_matched_fields": [
+          "doi",
+          "authors",
+          "venue"
+        ],
+        "forbidden_100_badges": [
+          "doi",
+          "authors",
+          "venue",
+          "url"
+        ],
+        "notes": "Realistic JAIR DOI prefix (10.1613/jair) + high-buzzword 2024 RAG/LLM hallucinated title."
+      },
+      {
+        "index": 5,
+        "raw_reference": "Patel, S. K., & O'Connor, D. J. (2024). Fine-grained factual consistency evaluation in abstractive summarization with large language models. Artificial Intelligence, 335, 109999. https://doi.org/10.1016/j.artint.2024.999999",
+        "intext_marker": "(Patel & O'Connor, 2024)",
+        "expected_label": "suspected_hallucination",
+        "forbidden_matched_fields": [
+          "doi",
+          "authors"
+        ],
+        "forbidden_100_badges": [
+          "doi",
+          "authors",
+          "url"
+        ],
+        "notes": "Realistic Elsevier Artificial Intelligence DOI prefix with non-existent suffix + buzzword title."
+      }
+    ]
+  },
+  {
+    "filename": "essay_07_subtle_metadata_and_preprint_conflicts.pdf",
+    "title": "Essay 07 — Subtle Metadata Conflicts, Adjacent DOI Typos, and Venue Swaps",
+    "references": [
+      {
+        "index": 1,
+        "raw_reference": "LeCun, Y., Bengio, Y., & Hinton, G. (2015). Deep learning. Nature, 521(7553), 436-444. https://doi.org/10.1038/nature14538",
+        "intext_marker": "(LeCun, Bengio, & Hinton, 2015)",
+        "expected_label": "metadata_error",
+        "forbidden_matched_fields": [
+          "doi"
+        ],
+        "forbidden_100_badges": [
+          "doi",
+          "url"
+        ],
+        "notes": "1-digit DOI typo (nature14538 is an adjacent real Nature article; paper is nature14539)."
+      },
+      {
+        "index": 2,
+        "raw_reference": "Devlin, J., Chang, M. W., Lee, K., & Toutanova, K. (2019). BERT: Pre-training of deep bidirectional transformers for language understanding. International Journal of Quantum Chemistry, 119(4), 4171-4186. https://doi.org/10.18653/v1/N19-1423",
+        "intext_marker": "(Devlin et al., 2019)",
+        "expected_label": "metadata_error",
+        "forbidden_matched_fields": [
+          "venue"
+        ],
+        "forbidden_100_badges": [
+          "venue"
+        ],
+        "notes": "Real BERT authors/year/title/DOI but completely wrong non-preprint journal venue."
+      },
+      {
+        "index": 3,
+        "raw_reference": "Sutskever, I., Vinyals, O., & Le, Q. V. (2016). Deep residual learning for image recognition. Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition, 770-778. https://doi.org/10.1109/CVPR.2016.90",
+        "intext_marker": "(Sutskever, Vinyals, & Le, 2016)",
+        "expected_label": "metadata_error",
+        "forbidden_matched_fields": [
+          "authors"
+        ],
+        "forbidden_100_badges": [
+          "authors"
+        ],
+        "notes": "Author swap: Seq2Seq authors attributed to ResNet CVPR paper and DOI."
+      },
+      {
+        "index": 4,
+        "raw_reference": "He, K., Zhang, X., Ren, S., & Sun, J. (2020). Deep residual learning for image recognition. Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition, 770-778. https://doi.org/10.1109/CVPR.2016.90",
+        "intext_marker": "(He et al., 2020)",
+        "expected_label": "metadata_error",
+        "forbidden_matched_fields": [
+          "year"
+        ],
+        "forbidden_100_badges": [
+          "year"
+        ],
+        "notes": "4-year publication year error (2020 vs 2016) on real ResNet paper and DOI."
+      },
+      {
+        "index": 5,
+        "raw_reference": "Brown, T. B., Mann, B., Ryder, N., Subbiah, M., Kaplan, J., Dhariwal, P., Neelakantan, A., et al. (2020). Language models are few-shot learners. Advances in Neural Information Processing Systems, 33, 1877-1901. https://doi.org/10.48550/arXiv.2005.14165",
+        "intext_marker": "(Brown et al., 2020)",
+        "expected_label": "verified",
+        "forbidden_matched_fields": [],
+        "forbidden_100_badges": [],
+        "notes": "Valid NeurIPS paper cited with official arXiv preprint DOI."
+      }
+    ]
+  },
+  {
+    "filename": "essay_08_vn_legal_cross_lingual_and_url_traps.pdf",
+    "title": "Essay 08 — Kiểm định Trích dẫn Pháp luật Việt Nam, Đa ngôn ngữ và Liên kết Web",
+    "references": [
+      {
+        "index": 1,
+        "raw_reference": "[1] Bộ luật Dân sự (Bộ luật số 91/2015/QH13) ngày 24/11/2015 của Quốc hội.",
+        "intext_marker": "[1]",
+        "expected_label": "resource",
+        "forbidden_matched_fields": [],
+        "forbidden_100_badges": [],
+        "notes": "Valid Vietnamese Civil Code 2015."
+      },
+      {
+        "index": 2,
+        "raw_reference": "[2] Luật Doanh nghiệp (Luật số 59/2020/QH14) ngày 17/06/2020 của Bộ Tài chính.",
+        "intext_marker": "[2]",
+        "expected_label": "metadata_error",
+        "forbidden_matched_fields": [
+          "venue"
+        ],
+        "forbidden_100_badges": [
+          "venue"
+        ],
+        "notes": "Corrupted Vietnamese Enterprise Law 2020: wrong issuing authority (Bộ Tài chính vs Quốc hội)."
+      },
+      {
+        "index": 3,
+        "raw_reference": "[3] Bộ luật Trí tuệ Nhân tạo Quốc gia (Bộ luật số 888/2024/QH15) ngày 15/08/2024 của Quốc hội.",
+        "intext_marker": "[3]",
+        "expected_label": "suspected_hallucination",
+        "forbidden_matched_fields": [
+          "title",
+          "year",
+          "venue"
+        ],
+        "forbidden_100_badges": [
+          "title",
+          "year",
+          "venue"
+        ],
+        "notes": "Fabricated Vietnamese Code (outside the 6 official Codes + impossible code number 888)."
+      },
+      {
+        "index": 4,
+        "raw_reference": "[4] Vaswani, A., Shazeer, N., & Parmar, N. (2017). Chú ý là tất cả những gì bạn cần. Advances in Neural Information Processing Systems, 30, 5998-6008.",
+        "intext_marker": "[4]",
+        "expected_label": "metadata_error",
+        "forbidden_matched_fields": [
+          "title"
+        ],
+        "forbidden_100_badges": [
+          "title"
+        ],
+        "notes": "Cross-lingual translated title violation (Vietnamese translation of Attention Is All You Need)."
+      },
+      {
+        "index": 5,
+        "raw_reference": "[5] Nguyen, H. T., & Tran, Q. M. (2024). Khung đánh giá tính toàn vẹn học thuật tự động cho khóa luận tốt nghiệp đại học. Tạp chí Khoa học Giả định Việt Nam, 99(1), 10-25. https://tapchikhoahocgiadinh-vn.invalid/2024/integrity-framework",
+        "intext_marker": "[5]",
+        "expected_label": "suspected_hallucination",
+        "forbidden_matched_fields": [
+          "title",
+          "authors",
+          "venue",
+          "doi"
+        ],
+        "forbidden_100_badges": [
+          "title",
+          "authors",
+          "venue",
+          "doi",
+          "url"
+        ],
+        "notes": "Fabricated Vietnamese article with .invalid fake/unreachable URL."
+      }
+    ]
+  }
+]

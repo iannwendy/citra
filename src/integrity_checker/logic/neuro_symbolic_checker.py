@@ -629,7 +629,7 @@ class NeuroSymbolicChecker:
                         else (citation.authors or [])
                     ),
                     year=canon_year,
-                    venue="Hệ thống Pháp luật Việt Nam (VBQPPL)",
+                    venue=legal_res.canonical_authority or "Hệ thống Pháp luật Việt Nam (VBQPPL)",
                     score=0.95,
                     confidence=0.95,
                     cached=True,
@@ -1015,10 +1015,38 @@ class NeuroSymbolicChecker:
                             )
                     # Otherwise fall through to normal verification of the real matching / chimeric candidate
                 else:
-                    # Title matches known paper → VERIFIED
+                    # Title matches known paper → check DOI/year/venue consistency before VERIFIED
+                    agreeing_other_cands = [
+                        c
+                        for c in other_cands
+                        if (
+                            known_doi
+                            and c.doi
+                            and FeatureCalculator._doi_matches(str(c.doi), str(known_doi))
+                        )
+                        or (
+                            c.title
+                            and title_similarity(c.title, known_title) >= 0.80
+                            and (
+                                not known_authors
+                                or author_match_score(known_authors, list(c.authors or [])) >= 0.50
+                            )
+                        )
+                    ]
+                    if not known_candidate.venue:
+                        for ag_c in agreeing_other_cands:
+                            if ag_c.venue and "arxiv" not in ag_c.venue.lower():
+                                known_candidate.venue = ag_c.venue
+                                break
+                        if not known_candidate.venue:
+                            for ag_c in agreeing_other_cands:
+                                if ag_c.venue:
+                                    known_candidate.venue = ag_c.venue
+                                    break
+
                     enhanced_source = SourceResult(
                         citation_raw=source.citation_raw,
-                        candidates=[known_candidate] + other_cands,
+                        candidates=[known_candidate] + agreeing_other_cands,
                         sources_queried=["known_papers"] + other_queried,
                         sources_succeeded=["known_papers"] + other_succeeded,
                         sources_failed=source.sources_failed,
@@ -1050,6 +1078,138 @@ class NeuroSymbolicChecker:
                         and getattr(features, "content_is_aligned", False)
                     ):
                         known_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
+
+                    kp_mismatched: list[str] = []
+                    if citation.doi and str(citation.doi).strip():
+                        cit_doi_str = str(citation.doi).strip()
+                        kp_doi_str = str(known_doi).strip() if known_doi else ""
+                        is_fab_kp_doi = self.rules._is_fabricated_doi(cit_doi_str)
+                        matches_kp_doi = bool(
+                            kp_doi_str and FeatureCalculator._doi_matches(cit_doi_str, kp_doi_str)
+                        )
+                        matches_agreeing_doi = any(
+                            c.doi and FeatureCalculator._doi_matches(cit_doi_str, str(c.doi))
+                            for c in agreeing_other_cands
+                        )
+                        has_doi_lookup_failure = any(
+                            "no results" in str(err).lower() or "does not exist" in str(err).lower()
+                            for err in (source.sources_failed or {}).values()
+                        )
+                        is_valid_arxiv_pub_pair = bool(
+                            kp_doi_str
+                            and ("10.48550/arxiv" in cit_doi_str.lower())
+                            != ("10.48550/arxiv" in kp_doi_str.lower())
+                            and not is_fab_kp_doi
+                            and not has_doi_lookup_failure
+                        )
+                        if is_fab_kp_doi or (
+                            kp_doi_str
+                            and not matches_kp_doi
+                            and not matches_agreeing_doi
+                            and not is_valid_arxiv_pub_pair
+                        ):
+                            kp_mismatched.append("doi")
+                            features.doi_exact_match = False
+                            features.has_doi_conflict = True  # type: ignore[attr-defined]
+                            if "R-DOI-CONFLICT" not in known_rules:
+                                known_rules.append("R-DOI-CONFLICT")
+
+                    if (
+                        0 < features.year_distance < 900
+                        and features.year_distance > self.rules.year_tolerance
+                    ):
+                        kp_mismatched.append("year")
+
+                    if citation.venue and known_candidate.venue:
+                        cv_kp = citation.venue.strip()
+                        bv_kp = known_candidate.venue.strip()
+                        _kp_non_venue_re = re.compile(
+                            r"\b(?:arxiv|corr|preprint|biorxiv|medrxiv|ssrn|hal|zenodo|openreview|"
+                            r"researchgate|sciencedirect|springer|elsevier|wiley|taylor|francis|"
+                            r"ieee\s+xplore|acm\s+digital|lecture\s+notes|lncs|pubmed|pmlr|"
+                            r"proceedings\s+of\s+machine\s+learning\s+research|acl\s+anthology|ceur)\b",
+                            re.IGNORECASE,
+                        )
+                        _kp_bogus_re = re.compile(
+                            r"\b(?:unknown|imaginary|hypothetical|nonexistent|fictional|placeholder|unverified|bogus)\b",
+                            re.IGNORECASE,
+                        )
+                        _kp_explicit_venue_re = re.compile(
+                            r"\b(?:journal|transactions|proceedings|conference|symposium|letters|workshop)\b",
+                            re.IGNORECASE,
+                        )
+                        c_is_bogus = bool(_kp_bogus_re.search(cv_kp))
+                        if (
+                            len(cv_kp) >= 3
+                            and len(bv_kp) >= 3
+                            and cv_kp.lower() not in {"ieee", "acm"}
+                            and bv_kp.lower() not in {"ieee", "acm"}
+                            and not _kp_non_venue_re.search(cv_kp)
+                            and (not _kp_non_venue_re.search(bv_kp) or c_is_bogus)
+                            and not (citation.doi and "10.48550/arxiv" in str(citation.doi).lower())
+                        ):
+                            from integrity_checker.matching.venue_normalizer import VenueNormalizer
+
+                            vn_kp = VenueNormalizer()
+                            kp_v_sim = vn_kp.similarity(cv_kp, bv_kp)
+                            _kp_generic_words = {
+                                "journal", "transactions", "proceedings", "conference", "symposium",
+                                "letters", "workshop", "international", "annual", "meeting", "of",
+                                "the", "on", "in", "for", "and", "at", "to", "ieee", "acm",
+                                "proc", "conf", "trans", "int",
+                            }
+                            c_canon_kp = vn_kp._candidate_canonicals(cv_kp)
+                            b_canon_kp = vn_kp._candidate_canonicals(bv_kp)
+                            c_is_exp = bool(_kp_explicit_venue_re.search(cv_kp) or c_canon_kp)
+                            b_is_exp = bool(_kp_explicit_venue_re.search(bv_kp) or b_canon_kp)
+                            c_exp_kp = " ".join(c_canon_kp) if c_canon_kp else cv_kp
+                            b_exp_kp = " ".join(b_canon_kp) if b_canon_kp else bv_kp
+                            c_words_kp = {
+                                w for w in re.findall(r"[a-z]{3,}", c_exp_kp.lower())
+                                if w not in _kp_generic_words
+                            }
+                            b_words_kp = {
+                                w for w in re.findall(r"[a-z]{3,}", b_exp_kp.lower())
+                                if w not in _kp_generic_words
+                            }
+                            kp_zero_overlap = bool(
+                                c_words_kp and b_words_kp and not (c_words_kp & b_words_kp)
+                            )
+                            if (c_is_bogus and kp_v_sim < 0.15) or (
+                                kp_v_sim < 0.35
+                                and c_is_exp
+                                and b_is_exp
+                                and kp_zero_overlap
+                            ):
+                                kp_mismatched.append("venue")
+                                if "R-VENUE-MISMATCH" not in known_rules:
+                                    known_rules.append("R-VENUE-MISMATCH")
+
+                    if kp_mismatched:
+                        err_reason = (
+                            f"Matched known seminal paper '{paper_info.get('title')}', "
+                            f"but cited metadata conflicts on {', '.join(kp_mismatched)}."
+                        )
+                        return self._apply_dead_link_exception(
+                            CitationVerdict(
+                                citation=citation,
+                                label=ValidationLabel.METADATA_ERROR,
+                                confidence=0.78,
+                                matched_source=enhanced_source,
+                                features=features,
+                                reasoning=self._enhance_reasoning_with_neural(
+                                    err_reason,
+                                    features,
+                                    known_rules,
+                                    source=enhanced_source,
+                                    citation_context=effective_context,
+                                ),
+                                triggered_rules=known_rules,
+                                mismatched_fields=kp_mismatched,
+                            ),
+                            enhanced_source,
+                        )
+
                     known_note = (
                         "APIs failed but paper is well-documented."
                         if (source.sources_failed or source.api_exhausted)

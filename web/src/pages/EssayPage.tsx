@@ -876,6 +876,91 @@ function computeWebAuthorSim(citedAuthors: string, obsAuthors: string): number {
   return overlap / Math.min(setA.size, setB.size);
 }
 
+const PREPRINT_VENUE_RE =
+  /\b(?:arxiv|corr|biorxiv|medrxiv|ssrn|preprint|hal|zenodo|openreview)\b/i;
+
+const BOGUS_VENUE_RE =
+  /\b(?:unknown|imaginary|hypothetical|nonexistent|fictional|placeholder|bogus)\b/i;
+
+function normalizeDoiForCompare(raw: string): string {
+  if (!raw || raw === '—') return '';
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '')
+    .replace(/^doi:\s*/i, '')
+    .replace(/\.+$/, '')
+    .trim();
+}
+
+function areEquivalentCanonicalDois(d1: string, d2: string): boolean {
+  if (!d1 || !d2) return false;
+  if (d1 === d2) return true;
+  const [shorter, longer] = d1.length <= d2.length ? [d1, d2] : [d2, d1];
+  if (shorter.includes('(') && !shorter.includes(')') && longer.startsWith(`${shorter})`)) {
+    return true;
+  }
+  const bertEquiv = new Set(['10.18653/v1/n19-1423', '10.48550/arxiv.1810.04805']);
+  return bertEquiv.has(d1) && bertEquiv.has(d2);
+}
+
+function normalizeAcademicVenueTokens(venue: string): string[] {
+  const expanded = venue
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/\b(?:neurips|nips)\b/g, 'neural information processing systems')
+    .replace(/\bcvpr\b/g, 'computer vision pattern recognition')
+    .replace(/\biccv\b/g, 'computer vision')
+    .replace(/\beccv\b/g, 'european computer vision')
+    .replace(/\bicml\b/g, 'machine learning')
+    .replace(/\biclr\b/g, 'learning representations')
+    .replace(/\bnaacl(?:-hlt)?\b/g, 'north american chapter association computational linguistics')
+    .replace(/\bemnlp\b/g, 'empirical methods natural language processing')
+    .replace(/\bacl\b/g, 'association computational linguistics')
+    .replace(/\bjmlr\b/g, 'machine learning')
+    .replace(/\bjair\b/g, 'artificial intelligence')
+    .replace(/\btpami\b/g, 'pattern analysis machine intelligence')
+    .replace(/\bpnas\b/g, 'national academy sciences')
+    .replace(/[^a-z0-9\s]/g, ' ');
+
+  const boiler = new Set([
+    'the', 'of', 'and', 'in', 'on', 'at', 'for', 'to', 'a', 'an', 'with',
+    'journal', 'proceedings', 'proc', 'conference', 'conf', 'international',
+    'int', 'annual', 'meeting', 'symposium', 'workshop', 'transactions',
+    'trans', 'review', 'letters', 'advances', 'adv', 'research', 'ieee',
+    'acm', 'cvf', 'springer', 'elsevier', 'wiley', 'findings', 'volume', 'vol',
+  ]);
+  return expanded
+    .split(/\s+/)
+    .filter((t) => t.length >= 2 && !boiler.has(t) && !/^(?:19|20)\d{2}$/.test(t));
+}
+
+function computeAcademicVenueSim(v1: string, v2: string): number {
+  if (!v1 || !v2 || v1 === '—' || v2 === '—') return 0;
+  const clean1 = normalizeWebText(v1);
+  const clean2 = normalizeWebText(v2);
+  if (!clean1 || !clean2) return 0;
+  if (clean1 === clean2) return 1.0;
+
+  const tokA = normalizeAcademicVenueTokens(v1);
+  const tokB = normalizeAcademicVenueTokens(v2);
+  if (tokA.length === 0 || tokB.length === 0) {
+    return computeWebTextSim(v1, v2);
+  }
+  const setA = new Set(tokA);
+  const setB = new Set(tokB);
+  let overlap = 0;
+  for (const t of setA) {
+    if (setB.has(t)) overlap += 1;
+  }
+  if (overlap === 0) return 0;
+  const containment = overlap / Math.min(setA.size, setB.size);
+  const jaccard = overlap / (setA.size + setB.size - overlap);
+  return 0.65 * containment + 0.35 * jaccard;
+}
+
 function normalizeAuthorDisplay(name: string): string {
   if (!name || name === '—') return name;
   return name
@@ -1215,14 +1300,26 @@ function buildLocalizedReasoning(verdict: Verdict, lang: 'vi' | 'en'): string {
       ? [topSource]
       : effectiveSourcesList;
 
+  const rawMismatchedKeySet =
+    verdict.label === 'verified'
+      ? new Set<string>()
+      : new Set(
+          (verdict.mismatched_fields ?? []).flatMap((f) => {
+            const k = f.toLowerCase();
+            return k === 'author' || k === 'authors' ? ['author', 'authors'] : [k];
+          })
+        );
+
   const matchedFields = [
     ...new Set(
       primaryFieldSource.flatMap((s) =>
-        (s.matched_fields ?? []).map((f) =>
-          lang === 'vi'
-            ? fieldMapVi[f.toLowerCase()] ?? f
-            : fieldMapEn[f.toLowerCase()] ?? f
-        )
+        (s.matched_fields ?? [])
+          .filter((f) => !rawMismatchedKeySet.has(f.toLowerCase()))
+          .map((f) =>
+            lang === 'vi'
+              ? fieldMapVi[f.toLowerCase()] ?? f
+              : fieldMapEn[f.toLowerCase()] ?? f
+          )
       )
     ),
   ];
@@ -1525,9 +1622,10 @@ function enrichVerdictItem(
     : rawVerdict;
   const marker = getCitationMarkerLabel(verdict, index);
 
-  const mismatchedFieldsSet = new Set(
-    (verdict.mismatched_fields ?? []).map((f) => f.toLowerCase())
-  );
+  const mismatchedFieldsSet =
+    verdict.label === 'verified'
+      ? new Set<string>()
+      : new Set((verdict.mismatched_fields ?? []).map((f) => f.toLowerCase()));
   const isIncompleteMeta = (verdict.triggered_rules ?? []).includes(
     'R-INCOMPLETE-METADATA',
   );
@@ -2002,6 +2100,15 @@ function enrichVerdictItem(
     };
   };
 
+  const hasDoiRuleConflict = (verdict.triggered_rules ?? []).some((r) =>
+    [
+      'R-FABRICATED-DOI',
+      'R-NONEXISTENT-DOI',
+      'R-DOI-CONFLICT',
+      'R-CHIMERIC-DOI-MISMATCH',
+    ].includes(r),
+  );
+
   const computeYearStatus = (): { status: FieldStatus; label?: string } => {
     if (isWebResourceMode || useObservedWebMeta) {
       return computeWebFieldStatus('year');
@@ -2019,6 +2126,15 @@ function enrichVerdictItem(
       (validYearDistance !== undefined && validYearDistance > 0)
     ) {
       return { status: 'mismatch', label: 'Diff' };
+    }
+    if (retrievedMeta.year !== '—') {
+      const citedYr = parseInt(citedMeta.year, 10);
+      const retYr = parseInt(retrievedMeta.year, 10);
+      if (!Number.isNaN(citedYr) && !Number.isNaN(retYr)) {
+        return citedYr === retYr
+          ? { status: 'match', label: '100% Match' }
+          : { status: 'mismatch', label: 'Diff' };
+      }
     }
     if (
       matchedFieldsSet.has('year') ||
@@ -2052,10 +2168,40 @@ function enrichVerdictItem(
       return { status: 'match', label: '100% Match' };
     }
     if (citedMeta.venue === '—') return { status: 'missing' };
-    if (matchedFieldsSet.has('venue') || verdict.label === 'verified') {
+
+    const hasExplicitBestVenue = Boolean(bestSource?.venue && bestSource.venue.trim());
+    const lexicalVenueSim = computeAcademicVenueSim(citedMeta.venue, retrievedMeta.venue);
+    const effectiveVenueSim = Math.max(verdict.features?.venue_sim ?? 0, lexicalVenueSim);
+
+    if (BOGUS_VENUE_RE.test(citedMeta.venue) && effectiveVenueSim < 0.5) {
+      return { status: 'mismatch', label: 'Diff' };
+    }
+
+    if (!hasExplicitBestVenue && retrievedMeta.venue !== citedMeta.venue) {
+      return verdict.label === 'verified'
+        ? { status: 'match', label: '100% Match' }
+        : { status: 'partial', label: 'Indexed' };
+    }
+
+    const citedIsPreprint = PREPRINT_VENUE_RE.test(citedMeta.venue);
+    const retrievedIsPreprint = PREPRINT_VENUE_RE.test(retrievedMeta.venue);
+    if (citedIsPreprint !== retrievedIsPreprint && effectiveVenueSim < 0.45) {
+      if (
+        verdict.label === 'verified' ||
+        (Boolean(verdict.features?.doi_exact_match) && authorSim >= 0.5)
+      ) {
+        return { status: 'partial', label: 'Preprint' };
+      }
+      return { status: 'mismatch', label: 'Diff' };
+    }
+
+    if (effectiveVenueSim >= 0.5) {
       return { status: 'match', label: '100% Match' };
     }
-    return { status: 'partial', label: 'Indexed' };
+    if (effectiveVenueSim >= 0.25) {
+      return { status: 'partial', label: `${Math.round(effectiveVenueSim * 100)}% Sim` };
+    }
+    return { status: 'mismatch', label: 'Diff' };
   };
 
   const computeDoiStatus = (): { status: FieldStatus; label?: string } => {
@@ -2075,18 +2221,37 @@ function enrichVerdictItem(
       return { status: 'missing' };
     }
     if (!retrievedMeta) return { status: 'mismatch', label: 'Diff' };
-    if (mismatchedFieldsSet.has('doi')) return { status: 'mismatch', label: 'Diff' };
-    if (
-      citedMeta.doi !== '—' &&
-      (Boolean(verdict.features?.doi_exact_match) ||
-        matchedFieldsSet.has('doi') ||
-        (retrievedMeta.doi !== '—' &&
-          citedMeta.doi.toLowerCase() === retrievedMeta.doi.toLowerCase()))
-    ) {
-      return { status: 'match', label: '100% Match' };
+    if (mismatchedFieldsSet.has('doi') || hasDoiRuleConflict) {
+      return { status: 'mismatch', label: 'Diff' };
     }
     if (citedMeta.doi === '—' && retrievedMeta.doi !== '—') {
       return { status: 'partial', label: 'Retrieved' };
+    }
+
+    const normCitedDoi = normalizeDoiForCompare(citedMeta.doi);
+    const normRetrievedDoi = normalizeDoiForCompare(retrievedMeta.doi);
+    if (normCitedDoi && normRetrievedDoi) {
+      if (normCitedDoi === normRetrievedDoi) {
+        return { status: 'match', label: '100% Match' };
+      }
+      if (
+        areEquivalentCanonicalDois(normCitedDoi, normRetrievedDoi) ||
+        (Boolean(verdict.features?.doi_exact_match) &&
+          (normCitedDoi.startsWith('10.48550/arxiv') !==
+            normRetrievedDoi.startsWith('10.48550/arxiv')))
+      ) {
+        return { status: 'partial', label: 'Preprint DOI' };
+      }
+      return { status: 'mismatch', label: 'Diff' };
+    }
+
+    if (citedMeta.doi !== '—' && Boolean(verdict.features?.doi_exact_match)) {
+      return { status: 'match', label: '100% Match' };
+    }
+    if (citedMeta.doi !== '—') {
+      return verdict.label === 'verified'
+        ? { status: 'partial', label: 'Provided' }
+        : { status: 'partial', label: 'Unverified' };
     }
     return { status: 'missing' };
   };
@@ -2124,6 +2289,16 @@ function enrichVerdictItem(
     if (!retrievedMeta && isIncompleteMeta && citedMeta.url !== '—') {
       return { status: 'missing', label: lang === 'vi' ? 'Đã ghi' : 'Provided' };
     }
+    if (!retrievedMeta && !isWebResourceMode) {
+      return { status: 'mismatch', label: 'Broken Link' };
+    }
+    const citedUrlIsDoi = /^https?:\/\/(?:dx\.)?doi\.org\//i.test(citedMeta.url);
+    if (citedUrlIsDoi) {
+      const doiEval = computeDoiStatus();
+      if (doiEval.status === 'mismatch') {
+        return { status: 'mismatch', label: 'Broken Link' };
+      }
+    }
     if (
       citedMeta.url !== '—' &&
       (verdict.label === 'verified' || verdict.label === 'resource')
@@ -2133,7 +2308,7 @@ function enrichVerdictItem(
     if (citedMeta.url === '—' && retrievedMeta && retrievedMeta.url !== '—') {
       return { status: 'partial', label: 'Resolved URL' };
     }
-    return { status: 'partial', label: 'Checked' };
+    return { status: 'partial', label: 'Unverified' };
   };
 
   // Build Manuscript Context with highlighted citation
@@ -2591,6 +2766,9 @@ export function EssayPage() {
       'Broken Link': 'Liên kết hỏng',
       'Verified Link': 'Liên kết hợp lệ',
       'Resolved URL': 'Đã phân giải URL',
+      Preprint: 'Bản tiền ấn phẩm',
+      'Preprint DOI': 'DOI tiền ấn phẩm',
+      Unverified: 'Chưa xác minh',
     };
     return mapVi[label] ?? label;
   };

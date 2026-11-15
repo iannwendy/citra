@@ -2863,13 +2863,23 @@ async def verify_sandbox_citations_instant(
             cand: Any,
             override_source: str | None = None,
             checked_ts: str = checked_at_iso,
+            cit_obj: Any = citation,
+            verdict_mm: tuple[str, ...] = tuple(verdict.mismatched_fields or ()),
         ) -> dict[str, Any]:
             cand_authors = _format_candidate_authors(getattr(cand, "authors", None))
             c_doi = getattr(cand, "doi", None)
             c_title = getattr(cand, "title", None)
             c_year = str(getattr(cand, "year", "")) if getattr(cand, "year", None) else None
             c_venue = getattr(cand, "venue", None)
-            m_fields = _build_matched_fields(c_doi, c_title, cand_authors, c_year, c_venue)
+            m_fields = _build_matched_fields(
+                c_doi,
+                c_title,
+                cand_authors,
+                c_year,
+                c_venue,
+                citation=cit_obj,
+                mismatched_fields=list(verdict_mm),
+            )
             src_name = override_source or getattr(cand, "source_name", "unknown")
             return {
                 "source": src_name,
@@ -2928,8 +2938,15 @@ async def verify_sandbox_citations_instant(
                 matched_sources_list.append({
                     "source": corr_src,
                     "source_name": corr_src,
-                    "matched_fields": corr.get("matched_fields")
-                    or _build_matched_fields(c_doi, c_title, c_authors, c_year, c_venue),
+                    "matched_fields": _build_matched_fields(
+                        c_doi,
+                        c_title,
+                        c_authors,
+                        c_year,
+                        c_venue,
+                        citation=citation,
+                        mismatched_fields=list(verdict.mismatched_fields or []),
+                    ),
                     "checked_at": checked_at_iso,
                     "title": c_title,
                     "authors": c_authors,
@@ -3035,17 +3052,15 @@ async def verify_sandbox_citations_instant(
                 web_venue = html_meta_dict.get("site_name")
                 web_doi = html_meta_dict.get("citation_doi")
                 web_url = html_meta_dict.get("canonical_url") or arch_url or getattr(citation, "url", None)
-                web_m_fields: list[str] = []
-                if web_doi:
-                    web_m_fields.append("doi")
-                if web_title:
-                    web_m_fields.append("title")
-                if web_authors:
-                    web_m_fields.append("authors")
-                if web_year:
-                    web_m_fields.append("year")
-                if web_venue:
-                    web_m_fields.append("venue")
+                web_m_fields = _build_matched_fields(
+                    web_doi,
+                    web_title,
+                    web_authors,
+                    web_year,
+                    web_venue,
+                    citation=citation,
+                    mismatched_fields=list(verdict.mismatched_fields or []),
+                )
                 web_entry = {
                     "source": synth_name,
                     "source_name": synth_name,

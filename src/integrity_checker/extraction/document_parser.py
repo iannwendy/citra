@@ -2475,6 +2475,7 @@ class DocumentParser:
                 and len(donor.title.strip()) >= 5
                 and (
                     re.match(r"^[,;\s]*(?:&\s*|and\b)", target.title.strip(), re.IGNORECASE)
+                    or re.match(r"^;\s*[A-ZÀ-Ý]", target.title.strip())
                     or re.match(r"^[-–.,;\s]*[A-Za-z]{1,3}\.?$", target.title.strip())
                     or len(target.title.strip(" -–.,;:")) < 4
                 )

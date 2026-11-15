@@ -269,7 +269,11 @@ class Repository:
                                 or ("R-RETRACTED-PAPER" in (getattr(v, "triggered_rules", None) or []))
                             ),
                             "checked_url": getattr(v.citation, "url", None) if getattr(v, "citation", None) else None,
-                            "matched_sources": _serialize_matched_sources(getattr(v, "matched_source", None)),
+                            "matched_sources": _serialize_matched_sources(
+                                getattr(v, "matched_source", None),
+                                citation=getattr(v, "citation", None),
+                                mismatched_fields=getattr(v, "mismatched_fields", None),
+                            ),
                             "citation_link": (
                                 {
                                     "occurrence_id": v.citation_link.occurrence_id,
