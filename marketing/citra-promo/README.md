@@ -1,63 +1,43 @@
-# CITRA — 60-second promo film
+# CITRA — 90-Second · 120fps Keynote Spatial Cinema Film (`v3.75.2`)
 
-Programmatic marketing video for CITRA, built with [Remotion](https://remotion.dev).
-Every frame is rendered from real UI captures of the running platform plus code-driven
-motion design; the soundtrack is synthesised procedurally (royalty-free by construction).
+Programmatic 5-Act bilingual keynote film for **CITRA (`v3.75.2`)**, engineered with [Remotion](https://remotion.dev) at **true 120 fps (`10,800` frames · `90.0s`)** for both the **Software Engineering Graduation Thesis Defense (Tôn Đức Thắng University)** and the official **`citra.io.vn`** landing page.
 
-| Item | Value |
+| Item | Specification |
 | :--- | :--- |
-| Output | `out/CITRA_Promo_4K60.mp4` |
-| Resolution | 3840 × 2160 (UHD 4K), rendered at `--scale=2` from a 1920×1080 layout |
-| Frame rate | 60 fps · 3,600 frames · 60 s |
-| Video | H.264 High, CRF 14, `x264 slow`, yuv420p |
-| Audio | AAC 320 kbps stereo, 48 kHz (from a 24-bit WAV master) |
+| **Masters** | `out/CITRA_Promo_90s_120fps.mp4` (`2560×1440` @ `120fps`) · `out/CITRA_Promo_1080p120.mp4` (`1920×1080` @ `120fps`) |
+| **Web Delivery** | `web/public/media/citra-film-v2/` (Hybrid `120fps` + `60fps` AV1 / HEVC / H.264 ladder + `4s` teaser + AVIF/WebP/JPG posters) |
+| **Frame Rate** | `120 fps` · `10,800` frames · `90.0 s` (`120 BPM` bar-locked: `1 bar = 2.0 s = 240 frames`) |
+| **Audio** | Procedural 5-Act Stereo Score + Synchronized Foley (`48 kHz`, 24-bit WAV → AAC `320 kbps`) |
+| **Copywriting** | International English display headlines (`Sentient`) + Vietnamese technical HUD captions (`Plus Jakarta Sans` & `Source Serif 4`) |
 
-## Storyboard (locked to 120 BPM — 1 bar = 2 s)
+## 13-Scene · 5-Act Storyboard (`src/timeline.json`)
 
-| Time | Scene | Feature |
-| :--- | :--- | :--- |
-| 0–10 s | Hook | A real reference verifies; an AI-fabricated one glitches → “Some of them never existed.” |
-| 10–14 s | Brand reveal | Logo, “Verify every citation. Trace every source.” |
-| 14–18 s | 01 Upload | PDF/DOCX drop + 5-stage pipeline (GROBID → 15+ APIs → SBERT → 28 rules → calibrated verdict) |
-| 18–24 s | 02 Hallucination detection | Citation Debugger IDE, reasoning + `R-FABRICATED-DOI` rule |
-| 24–28 s | 03 Retraction watch | Retracted-paper warning + field-by-field metadata diff |
-| 28–32 s | 04 Explainable AI | 5-stage neuro-symbolic Logic Trace |
-| 32–38 s | 05 1-Click Auto-Fix | Remediation studio, before → after, APA/IEEE/Harvard/BibTeX/RIS/.DOCX |
-| 38–42 s | 06 Evidence graph | Evidence DAG from database hit to verdict |
-| 42–48 s | 07 For educators | Shared AI-hallucination radar + faculty review queue |
-| 48–52 s | Montage | Sandbox, consistency, document, issues, dashboard, batch, health, pricing (beat cuts) |
-| 52–56 s | Proof | 15+ databases · 128K+ papers · 28 rules · 98.58 % benchmark accuracy |
-| 56–60 s | End card | CTA `citra.io.vn` + Vietnamese tagline |
+| Time | Scene ID | Theme | Spatial Layout & `v3.75.2` Highlights |
+| :--- | :--- | :---: | :--- |
+| `00–10s` | `hook` | Dark Obsidian | 3D Floating Manuscript + Volumetric Laser Scanner (`✓ Verified`, `⚠ Retracted`, `✕ Fake DOI Glitch`) → Keynote Statement |
+| `10–16s` | `reveal` | Warm Ivory | Optical Iris Bloom + 3D Glass CITRA Emblem + Kinetic Wordmark + `v3.75.2 · R01–R30` |
+| `16–22s` | `ingest` | Warm Ivory | Isometric Split Browser (`upload` → `report-consistency`) + `GROBID TEI-XML` & `12 Citation Styles + VN Legal` |
+| `22–30s` | `architecture` | Dark Obsidian | Code-Driven **8-Stage Real-Time SSE Pipeline** + **15+ External & 128K+ Local FTS5 Constellation** |
+| `30–38s` | `hallucination` | Warm Ivory | Full-Bleed $C^1$ Macro Camera Dive + Two 3D `GlassLoupe` Magnifiers (`0 / 15+ DBs` & `R-FABRICATED-DOI`) |
+| `38–44s` | `retraction` | Warm Ivory | Asymmetric Dual-Plane Perspective (`processing` Wayback CDX + `tall-meta` Retraction Watch Alert) |
+| `44–50s` | `trace` | Warm Ivory | Counter-Scrolling Twin Glass Viewports (`tall-trace` 5-Stage Trace + `tall-evgraph` Evidence DAG) |
+| `50–58s` | `autofix` | Warm Ivory | 1-Click Auto-Remediation Studio + `Auto-Healed .DOCX` + **ISO/IEC 18004 QR Digital Verification Receipt** |
+| `58–66s` | `educator` | Warm Ivory | 3-Plane Cascading Cohort Command Center (`Đồ án Tốt nghiệp CNTT 2026` Shared Hallucination Radar + Faculty Queue) |
+| `66–72s` | `ecosystem` | Warm Ivory | 3D Spatial Bento Matrix Pulling Back Across 8 Live Screens (`Sandbox`, `100p Thesis`, `Batch`, `Admin`, etc.) |
+| `72–80s` | `ablation` | Dark Obsidian | **120,000-Paper Paper-Disjoint Benchmark** (`98.58%` Neuro-Symbolic / `99.86%` 16D HybridML vs `64.85%` Pure SBERT, `100%` Hallucination F1, `0.0433` ECE) |
+| `80–86s` | `scale` | Warm Ivory | Swiss-Grid Engineering Monument (`1,064` Audited PDFs · `228K+` LOC · `2,205+` Automated Tests · `R01–R30`) |
+| `86–90s` | `endcard` | Warm Ivory | Grand Finale CITRA Lockup + `citra.io.vn` + `TON DUC THANG UNIVERSITY · 2026` |
 
-## Rebuild
-
-```bash
-npm install
-# 1) UI captures (needs the local stack on :5173 / :8000)
-node capture/capture.mjs && node capture/capture_extra.mjs
-# 2) Soundtrack (numpy + scipy)
-python3 audio/make_music.py
-# 3) Preview / render
-npx remotion studio
-npx remotion render CitraPromo out/CITRA_Promo_4K60.mp4 --scale=2 --codec=h264 --crf=14 \
-  --x264-preset=slow --image-format=jpeg --jpeg-quality=100 --audio-codec=aac --audio-bitrate=320k
-```
-
-### Web delivery (landing page `#film` section)
+## Verify, Render & Encode
 
 ```bash
-# grain-free 1440p60 master (animated grain wastes bitrate; the page overlays static CSS grain)
-npx remotion render CitraPromo out/web_master_1440p.mp4 --scale=1.3333333333333333 --props='{"grain":false}' \
-  --codec=h264 --crf=8 --image-format=jpeg --jpeg-quality=100 --audio-codec=aac --audio-bitrate=320k
-# AV1 / HEVC / H.264 ladder + teaser + posters -> web/public/media/citra-film-v1/  (needs brew ffmpeg)
+cd marketing/citra-promo
+npm test && npx tsc --noEmit
+
+# 1) Synthesize 90s 48kHz 24-bit stereo soundtrack + foley
+../../.venv/bin/python audio/make_music.py
+
+# 2) Render 1440p120 master + presentation deliverables
+npm run render:web-master
 ./scripts/encode_web.sh
 ```
-
-The player lives in `web/src/components/landing/CitraFilm.tsx`. When re-encoding, bump the folder
-version (`citra-film-v2`) in both the script and `BASE`, because `/media/` is served `immutable`.
-
-Scene timing lives in `src/timeline.json` and is shared by the video and the music generator,
-so whooshes, hits and cuts stay in sync if you retime a scene.
-
-> Note: `remotion.config.ts` points Remotion at Playwright's Chromium headless shell because
-> Remotion's own downloaded shell stalls on this machine.

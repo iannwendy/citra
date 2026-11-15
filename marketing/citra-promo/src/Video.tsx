@@ -1,37 +1,67 @@
 import React from 'react';
 import { AbsoluteFill, Audio, Sequence, staticFile } from 'remotion';
 import timeline from './timeline.json';
-import { sec } from './theme';
-import { Hook } from './scenes/Hook';
-import { Reveal } from './scenes/Reveal';
-import { AutoFix, Graph, Hallucination, Metadata, Teacher, Trace, Upload } from './scenes/Features';
-import { EndCard, Montage, Stats } from './scenes/Closing';
+import { C, sec } from './theme';
+import { PortalMode } from './components/motion';
+import { OVERLAP_SEC, ScenePortal } from './components/transitions';
+import { HookScene, RevealScene } from './scenes/Act1HookReveal';
+import { ArchitectureScene, IngestScene } from './scenes/Act2Architecture';
+import {
+  AutoFixScene,
+  HallucinationScene,
+  RetractionScene,
+  TraceScene,
+} from './scenes/Act3Inspection';
+import { EcosystemScene, EducatorScene } from './scenes/Act4Ecosystem';
+import { AblationScene, EndCardScene, ScaleScene } from './scenes/Act5ProofFinale';
 
-const SCENES: Record<string, React.FC> = {
-  hook: Hook,
-  reveal: Reveal,
-  pipeline: Upload,
-  hallucination: Hallucination,
-  metadata: Metadata,
-  trace: Trace,
-  autofix: AutoFix,
-  graph: Graph,
-  teacher: Teacher,
-  montage: Montage,
-  stats: Stats,
-  endcard: EndCard,
+export const SCENE_COMPONENTS: Record<string, React.FC> = {
+  hook: HookScene,
+  reveal: RevealScene,
+  ingest: IngestScene,
+  architecture: ArchitectureScene,
+  hallucination: HallucinationScene,
+  retraction: RetractionScene,
+  trace: TraceScene,
+  autofix: AutoFixScene,
+  educator: EducatorScene,
+  ecosystem: EcosystemScene,
+  ablation: AblationScene,
+  scale: ScaleScene,
+  endcard: EndCardScene,
 };
 
-export const CitraPromo: React.FC = () => (
-  <AbsoluteFill style={{ background: '#FAF8F3' }}>
-    {timeline.scenes.map((s) => {
-      const Comp = SCENES[s.id];
-      return (
-        <Sequence key={s.id} from={sec(s.start)} durationInFrames={sec(s.end - s.start)} name={s.id}>
-          <Comp />
-        </Sequence>
-      );
-    })}
-    <Audio src={staticFile('audio/soundtrack.wav')} />
-  </AbsoluteFill>
-);
+export const CitraPromo: React.FC = () => {
+  const totalScenes = timeline.scenes.length;
+
+  return (
+    <AbsoluteFill style={{ backgroundColor: C.obsidian }}>
+      {timeline.scenes.map((s, idx) => {
+        const Comp = SCENE_COMPONENTS[s.id];
+        const isFirst = idx === 0;
+        const isLast = idx === totalScenes - 1;
+        const baseDurSec = s.end - s.start;
+        const renderDurSec = isLast ? baseDurSec : baseDurSec + OVERLAP_SEC;
+
+        return (
+          <Sequence
+            key={s.id}
+            from={sec(s.start)}
+            durationInFrames={sec(renderDurSec)}
+            name={`${String(idx + 1).padStart(2, '0')}-${s.id}`}
+          >
+            <ScenePortal
+              mode={s.transition as PortalMode}
+              isFirst={isFirst}
+              isLast={isLast}
+              darkExit={s.theme === 'dark'}
+            >
+              <Comp />
+            </ScenePortal>
+          </Sequence>
+        );
+      })}
+      <Audio src={staticFile('audio/soundtrack.wav')} />
+    </AbsoluteFill>
+  );
+};

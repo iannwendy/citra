@@ -1,10 +1,19 @@
 {
   "name": "citra-promo",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "type": "module",
   "scripts": {
     "studio": "remotion studio",
-    "capture": "node capture/capture.mjs"
+    "test": "node --test src/__tests__/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "music": "../../.venv/bin/python audio/make_music.py",
+    "capture": "node capture/capture.mjs",
+    "render:web-master": "remotion render CitraPromo out/web_master_1440p120.mp4 --scale=1.3333333333333333 --props='{\"grain\":false}' --codec=h264 --crf=10 --x264-preset=medium --image-format=jpeg --jpeg-quality=98 --audio-codec=aac --audio-bitrate=320k",
+    "render:1080p120": "remotion render CitraPromo out/CITRA_Promo_1080p120.mp4 --props='{\"grain\":false}' --codec=h264 --crf=16 --x264-preset=medium --image-format=jpeg --jpeg-quality=98 --audio-codec=aac --audio-bitrate=320k",
+    "render:1440p120": "remotion render CitraPromo out/CITRA_Promo_90s_120fps.mp4 --scale=1.3333333333333333 --props='{\"grain\":false}' --codec=h264 --crf=14 --x264-preset=medium --image-format=jpeg --jpeg-quality=100 --audio-codec=aac --audio-bitrate=320k",
+    "render:4k120": "remotion render CitraPromo out/CITRA_Promo_4K120.mp4 --scale=2 --props='{\"grain\":false}' --codec=h264 --crf=15 --x264-preset=medium --image-format=jpeg --jpeg-quality=100 --audio-codec=aac --audio-bitrate=320k",
+    "encode:web": "bash scripts/encode_web.sh"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.539",
