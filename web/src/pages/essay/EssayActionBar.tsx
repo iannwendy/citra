@@ -1,7 +1,17 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, FileSearch, Link2, GitBranch, Terminal, Lock, Sparkles } from 'lucide-react';
+import {
+  AlertCircle,
+  BookOpen,
+  Check,
+  FileSearch,
+  GitBranch,
+  Link2,
+  Lock,
+  Network,
+  Sparkles,
+} from 'lucide-react';
 import { useRole } from '@/hooks/useRole';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { BibliographyRemediationModal } from '@/components/BibliographyRemediationModal';
@@ -10,22 +20,41 @@ import { Button } from '@/components/ui/button';
 interface EssayActionBarProps {
   essayId: string;
   filename?: string;
+  issueCount?: number;
+  consistencyOk?: boolean;
+  workspaceMode?: 'debugger' | 'graph';
+  onChangeWorkspaceMode?: (mode: 'debugger' | 'graph') => void;
+  hideRemediationButton?: boolean;
   onOpenRemediation?: () => void;
 }
 
 /**
- * Quick navigation row beneath the report header. Links to companion pages
- * (Debugger Report, Issues, Document, Consistency, Logic Trace) + Remediation Engine using shadcn/ui Button.
+ * Single-purpose View Switcher Bar beneath the report header.
+ * Presents 3 clear human-friendly views:
+ * 1. Danh mục trích dẫn (Citations)
+ * 2. Xem trong bài viết (In Document)
+ * 3. Kiểm tra thiếu / thừa (In-Text Check)
+ * Plus optional Network Graph toggle on the main report workspace.
  */
-export function EssayActionBar({ essayId, filename, onOpenRemediation }: EssayActionBarProps) {
-  const { t, i18n } = useTranslation();
-  const { has, isUser } = useRole();
+export function EssayActionBar({
+  essayId,
+  filename,
+  issueCount,
+  consistencyOk,
+  workspaceMode = 'debugger',
+  onChangeWorkspaceMode,
+  hideRemediationButton = false,
+  onOpenRemediation,
+}: EssayActionBarProps) {
+  const { i18n } = useTranslation();
+  const { has } = useRole();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [lockedFeature, setLockedFeature] = useState<string>('');
   const [remediationOpen, setRemediationOpen] = useState(false);
   const location = useLocation();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const isVi = lang === 'vi';
+
   const remediationLabel = isVi ? 'Chuẩn hóa Tài liệu tham khảo' : 'Remediation Engine';
   const remediationSubtitle = isVi
     ? 'Tự động chuẩn hóa (APA / IEEE / TDTU)'
@@ -40,6 +69,9 @@ export function EssayActionBar({ essayId, filename, onOpenRemediation }: EssayAc
   const isConsistency = currentPath.endsWith('/consistency');
   const isTrace = currentPath.endsWith('/trace');
 
+  const isCitationsTabActive = isReportRoot && workspaceMode !== 'graph';
+  const isGraphTabActive = isReportRoot && workspaceMode === 'graph';
+
   const handleLockedClick = (featureTitle: string) => {
     setLockedFeature(featureTitle);
     setUpgradeOpen(true);
@@ -47,59 +79,63 @@ export function EssayActionBar({ essayId, filename, onOpenRemediation }: EssayAc
 
   return (
     <>
-      <div className="flex flex-wrap sm:inline-flex items-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs overflow-x-auto scrollbar-none max-w-full">
+      <div
+        role="tablist"
+        aria-label={isVi ? 'Chế độ xem báo cáo' : 'Report Views'}
+        className="flex flex-wrap sm:inline-flex items-center gap-1 p-1 rounded-xl bg-slate-100/90 dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 max-w-full"
+      >
+        {/* View 1: Citations (Default) */}
         <Button
           asChild
-          variant={isReportRoot ? 'default' : 'ghost'}
+          variant={isCitationsTabActive ? 'default' : 'ghost'}
           size="sm"
-          className={`h-8 rounded-xl text-xs font-medium shrink-0 whitespace-nowrap ${
-            isReportRoot
-              ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs'
-              : 'text-slate-600 dark:text-slate-400'
+          className={`h-8 rounded-lg text-xs font-semibold shrink-0 whitespace-nowrap transition-all ${
+            isCitationsTabActive
+              ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
-          <Link to={basePath}>
-            <Terminal className={`h-3.5 w-3.5 ${isReportRoot ? 'text-white' : 'text-indigo-500'}`} />
-            <span>
-              {isUser
-                ? t('essay.citationsTab')
-                : lang === 'vi'
-                  ? 'Citation Debugger'
-                  : 'Citation Debugger'}
-            </span>
+          <Link
+            to={basePath}
+            onClick={() => {
+              if (onChangeWorkspaceMode) {
+                onChangeWorkspaceMode('debugger');
+              }
+            }}
+          >
+            <BookOpen
+              className={`h-3.5 w-3.5 ${
+                isCitationsTabActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
+              }`}
+            />
+            <span>{isVi ? 'Danh mục trích dẫn' : 'Citations'}</span>
+            {typeof issueCount === 'number' && issueCount > 0 && (
+              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800">
+                {issueCount}
+              </span>
+            )}
           </Link>
         </Button>
 
-        <Button
-          asChild
-          variant={isIssues ? 'default' : 'ghost'}
-          size="sm"
-          className={`h-8 rounded-xl text-xs font-medium shrink-0 whitespace-nowrap ${
-            isIssues
-              ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs'
-              : 'text-slate-600 dark:text-slate-400'
-          }`}
-        >
-          <Link to={`${basePath}/issues`}>
-            <AlertCircle className={`h-3.5 w-3.5 ${isIssues ? 'text-white' : 'text-amber-500'}`} />
-            <span>{t('essay.issues')}</span>
-          </Link>
-        </Button>
-
+        {/* View 2: In Document */}
         {has('view_document_inspector') ? (
           <Button
             asChild
             variant={isDocument ? 'default' : 'ghost'}
             size="sm"
-            className={`h-8 rounded-xl text-xs font-medium shrink-0 whitespace-nowrap ${
+            className={`h-8 rounded-lg text-xs font-semibold shrink-0 whitespace-nowrap transition-all ${
               isDocument
-                ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400'
+                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Link to={`${basePath}/document`}>
-              <FileSearch className={`h-3.5 w-3.5 ${isDocument ? 'text-white' : 'text-indigo-500'}`} />
-              <span>{t('essay.document')}</span>
+              <FileSearch
+                className={`h-3.5 w-3.5 ${
+                  isDocument ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
+                }`}
+              />
+              <span>{isVi ? 'Xem trong bài viết' : 'In Document'}</span>
             </Link>
           </Button>
         ) : (
@@ -108,31 +144,38 @@ export function EssayActionBar({ essayId, filename, onOpenRemediation }: EssayAc
             variant="ghost"
             size="sm"
             data-testid="locked-document-inspector-btn"
-            onClick={() => handleLockedClick('Document Inspector')}
-            className="h-8 rounded-xl text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer"
+            onClick={() =>
+              handleLockedClick(isVi ? 'Xem trích dẫn trong bài viết' : 'In-Document Citation View')
+            }
+            className="h-8 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer"
           >
-            <Lock className="h-3.5 w-3.5 text-amber-500" />
-            <span>{t('essay.document')}</span>
-            <span className="ml-1 px-1.5 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 text-[9px] font-mono font-bold">
-              PRO
-            </span>
+            <Lock className="h-3 w-3 text-slate-400" />
+            <span>{isVi ? 'Xem trong bài viết' : 'In Document'}</span>
           </Button>
         )}
 
+        {/* View 3: In-Text <-> Bibliography Check */}
         {has('view_orphan_detection') ? (
           <Button
             asChild
             variant={isConsistency ? 'default' : 'ghost'}
             size="sm"
-            className={`h-8 rounded-xl text-xs font-medium shrink-0 whitespace-nowrap ${
+            className={`h-8 rounded-lg text-xs font-semibold shrink-0 whitespace-nowrap transition-all ${
               isConsistency
-                ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400'
+                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Link to={`${basePath}/consistency`}>
-              <Link2 className={`h-3.5 w-3.5 ${isConsistency ? 'text-white' : 'text-emerald-500'}`} />
-              <span>{t('essay.consistency')}</span>
+              <Link2
+                className={`h-3.5 w-3.5 ${
+                  isConsistency ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
+                }`}
+              />
+              <span>{isVi ? 'Kiểm tra thiếu / thừa' : 'In-Text Check'}</span>
+              {consistencyOk && (
+                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              )}
             </Link>
           </Button>
         ) : (
@@ -141,85 +184,115 @@ export function EssayActionBar({ essayId, filename, onOpenRemediation }: EssayAc
             variant="ghost"
             size="sm"
             data-testid="locked-consistency-btn"
-            onClick={() => handleLockedClick('Citation Consistency & Orphan Analysis')}
-            className="h-8 rounded-xl text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer"
+            onClick={() =>
+              handleLockedClick(
+                isVi
+                  ? 'Kiểm tra thiếu / thừa trích dẫn'
+                  : 'Citation Consistency & Orphan Analysis',
+              )
+            }
+            className="h-8 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer"
           >
-            <Lock className="h-3.5 w-3.5 text-amber-500" />
-            <span>{t('essay.consistency')}</span>
-            <span className="ml-1 px-1.5 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 text-[9px] font-mono font-bold">
-              PRO
-            </span>
+            <Lock className="h-3 w-3 text-slate-400" />
+            <span>{isVi ? 'Kiểm tra thiếu / thừa' : 'In-Text Check'}</span>
           </Button>
         )}
 
-        {has('view_logic_trace') ? (
+        {/* Optional View 4: Subtle Network Graph Switcher (when inside EssayPage) */}
+        {onChangeWorkspaceMode && (
           <Button
-            asChild
-            variant={isTrace ? 'default' : 'ghost'}
+            type="button"
+            variant={isGraphTabActive ? 'default' : 'ghost'}
             size="sm"
-            className={`h-8 rounded-xl text-xs font-medium shrink-0 whitespace-nowrap ${
-              isTrace
-                ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400'
+            data-testid="mode-graph-btn"
+            onClick={() => {
+              if (!has('view_logic_trace')) {
+                handleLockedClick(
+                  isVi
+                    ? 'Sơ đồ Mạng lưới Liên kết Trích dẫn'
+                    : 'Interactive Citation Network Graph',
+                );
+                return;
+              }
+              onChangeWorkspaceMode(isGraphTabActive ? 'debugger' : 'graph');
+            }}
+            className={`h-8 rounded-lg text-xs font-semibold shrink-0 whitespace-nowrap cursor-pointer transition-all ${
+              isGraphTabActive
+                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <Link to={`${basePath}/trace`}>
-              <GitBranch className={`h-3.5 w-3.5 ${isTrace ? 'text-white' : 'text-violet-500'}`} />
-              <span>{t('essay.logicTrace')}</span>
-            </Link>
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            data-testid="locked-logic-trace-btn"
-            onClick={() => handleLockedClick('Neuro-Symbolic Logic Trace')}
-            className="h-8 rounded-xl text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer"
-          >
-            <Lock className="h-3.5 w-3.5 text-amber-500" />
-            <span>{t('essay.logicTrace')}</span>
-            <span className="ml-1 px-1.5 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 text-[9px] font-mono font-bold">
-              PRO
-            </span>
+            <Network
+              className={`h-3.5 w-3.5 ${
+                isGraphTabActive ? 'text-violet-600 dark:text-violet-400' : 'text-slate-500'
+              }`}
+            />
+            <span>{isVi ? 'Sơ đồ' : 'Network'}</span>
           </Button>
         )}
 
-        {has('view_logic_trace') ? (
+        {/* Contextual indicator ONLY when visiting companion /issues or /trace URL directly */}
+        {isIssues && (
           <Button
-            type="button"
-            variant="ghost"
+            asChild
+            variant="default"
             size="sm"
-            data-testid="actionbar-remediation-btn"
-            title={remediationSubtitle}
-            aria-label={`${remediationLabel} — ${remediationSubtitle}`}
-            onClick={() => (onOpenRemediation ? onOpenRemediation() : setRemediationOpen(true))}
-            className="h-8 rounded-xl text-xs font-medium shrink-0 whitespace-nowrap text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 cursor-pointer"
+            className="h-8 rounded-lg text-xs font-semibold shrink-0 whitespace-nowrap bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs"
           >
-            <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
-            <span>{remediationLabel}</span>
-            <span className="hidden xl:inline text-[10px] font-mono text-slate-500 dark:text-slate-400">
-              · {remediationSubtitle}
-            </span>
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            data-testid="locked-remediation-btn"
-            title={remediationSubtitle}
-            aria-label={`${remediationLabel} — ${remediationSubtitle}`}
-            onClick={() => handleLockedClick(`${remediationLabel} — ${remediationSubtitle}`)}
-            className="h-8 rounded-xl text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer"
-          >
-            <Lock className="h-3.5 w-3.5 text-amber-500" />
-            <span>{remediationLabel}</span>
-            <span className="ml-1 px-1.5 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 text-[9px] font-mono font-bold">
-              PRO
-            </span>
+            <Link to={`${basePath}/issues`}>
+              <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+              <span>{isVi ? 'Danh sách vấn đề' : 'Issues'}</span>
+            </Link>
           </Button>
         )}
+
+        {isTrace && (
+          <Button
+            asChild
+            variant="default"
+            size="sm"
+            className="h-8 rounded-lg text-xs font-semibold shrink-0 whitespace-nowrap bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs"
+          >
+            <Link to={`${basePath}/trace`}>
+              <GitBranch className="h-3.5 w-3.5 text-violet-500" />
+              <span>{isVi ? 'Chi tiết kiểm chứng' : 'How We Verified'}</span>
+            </Link>
+          </Button>
+        )}
+
+        {/* Standalone Remediation CTA (hidden when EssayHeader already renders Primary CTA above) */}
+        {!hideRemediationButton &&
+          (has('view_logic_trace') ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              data-testid="actionbar-remediation-btn"
+              title={remediationSubtitle}
+              aria-label={`${remediationLabel} — ${remediationSubtitle}`}
+              onClick={() =>
+                onOpenRemediation ? onOpenRemediation() : setRemediationOpen(true)
+              }
+              className="h-8 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 cursor-pointer"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+              <span>{remediationLabel}</span>
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              data-testid="locked-remediation-btn"
+              title={remediationSubtitle}
+              aria-label={`${remediationLabel} — ${remediationSubtitle}`}
+              onClick={() => handleLockedClick(`${remediationLabel} — ${remediationSubtitle}`)}
+              className="h-8 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer"
+            >
+              <Lock className="h-3 w-3 text-slate-400" />
+              <span>{remediationLabel}</span>
+            </Button>
+          ))}
       </div>
 
       <BibliographyRemediationModal

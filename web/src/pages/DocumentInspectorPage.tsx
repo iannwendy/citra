@@ -807,6 +807,7 @@ export function DocumentInspectorPage() {
         filename={report.filename}
         numPages={report.num_pages}
         numCitations={report.num_citations}
+        numReferences={report.verdicts.length}
         styleName={report.style_profile?.style}
       />
 

@@ -1,11 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Quote, Clock, Download, ShieldCheck, Lock, Sparkles, Loader2, Share2, ExternalLink, Check } from 'lucide-react';
+import {
+  ArrowLeft,
+  Download,
+  ShieldCheck,
+  Lock,
+  Sparkles,
+  Loader2,
+  Share2,
+  ExternalLink,
+  Check,
+  ChevronDown,
+} from 'lucide-react';
 import { api, type EssayShareLinkResponse } from '@/api/client';
 import { IconSwap, TextMorph } from '@/components/ui/transitions';
 import { useRole } from '@/hooks/useRole';
 import { UpgradeModal } from '@/components/UpgradeModal';
+import { BibliographyRemediationModal } from '@/components/BibliographyRemediationModal';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,8 +27,8 @@ import { copyTextToClipboard } from '@/lib/clipboard';
 import { isDocxFilename, type ExportFormat } from '@/lib/fileKind';
 
 /* ============================================================
-   EssayHeader (Scholarly Precision shadcn/ui v2.0)
-   Breadcrumb back-link + filename title + meta line + export buttons.
+   EssayHeader — Compact Editorial Document Topbar
+   Single-purpose Zone 1: Document Identity + Primary Fix CTA + Grouped Export Menu
    ============================================================ */
 
 export interface EssayHeaderProps {
@@ -24,7 +36,9 @@ export interface EssayHeaderProps {
   filename: string;
   numPages: number;
   numCitations: number;
+  numReferences?: number;
   styleName?: string;
+  onOpenRemediation?: () => void;
 }
 
 export function EssayHeader({
@@ -32,30 +46,71 @@ export function EssayHeader({
   filename,
   numPages,
   numCitations,
+  numReferences,
   styleName,
+  onOpenRemediation,
 }: EssayHeaderProps) {
   const { t, i18n } = useTranslation();
-  const { isUser, quota } = useRole();
+  const { has, quota } = useRole();
   const toast = useToast();
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [lockedFormat, setLockedFormat] = useState<string>('PDF');
+  const [remediationOpen, setRemediationOpen] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [busy, setBusy] = useState<ExportFormat | 'healed' | 'share' | null>(null);
   const [shareInfo, setShareInfo] = useState<EssayShareLinkResponse | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const isVi = lang === 'vi';
 
-  // Export permissions come from the plan quota (backend `/auth/me`), never
-  // from the role: Pro/Ultra students get every format, Basic only JSON.
   const allowedFormats = new Set<string>(
     (quota?.allowed_export_formats ?? []).map((f) => f.toLowerCase()),
   );
   const canExport = (fmt: ExportFormat) => allowedFormats.has(fmt);
-  // Auto-healed DOCX is a premium Word export: it follows the DOCX entitlement.
   const canExportHealed = canExport('docx');
+  const canUseRemediation = has('view_logic_trace');
   const isDocxSource = isDocxFilename(filename);
 
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setExportMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [exportMenuOpen]);
+
   const openUpgrade = (label: string) => {
+    setExportMenuOpen(false);
     setLockedFormat(label);
     setUpgradeOpen(true);
+  };
+
+  const handleRemediationClick = () => {
+    if (!canUseRemediation) {
+      openUpgrade(
+        isVi
+          ? 'Sửa & Chuẩn hóa Danh mục Tài liệu Tham khảo'
+          : 'Fix & Format Citations',
+      );
+      return;
+    }
+    if (onOpenRemediation) {
+      onOpenRemediation();
+    } else {
+      setRemediationOpen(true);
+    }
   };
 
   const runDownload = async (
@@ -67,6 +122,7 @@ export function EssayHeader({
     setBusy(key);
     try {
       await fn();
+      setExportMenuOpen(false);
     } catch (err) {
       const detail = err instanceof Error ? err.message : '';
       toast.error(
@@ -109,6 +165,7 @@ export function EssayHeader({
     try {
       const res = await api.createEssayShareLink(essayId);
       setShareInfo(res);
+      setExportMenuOpen(false);
       const origin =
         typeof window !== 'undefined' && window.location?.origin
           ? window.location.origin
@@ -130,16 +187,20 @@ export function EssayHeader({
     }
   };
 
-  const renderFormatButton = (fmt: ExportFormat, primary = false) => {
+  const renderMenuFormatItem = (
+    fmt: ExportFormat,
+    titleVi: string,
+    titleEn: string,
+    subVi?: string,
+    subEn?: string,
+  ) => {
     const label = fmt.toUpperCase();
     const locked = !canExport(fmt);
     const loading = busy === fmt;
     return (
-      <Button
+      <button
         key={fmt}
         type="button"
-        variant={primary ? 'default' : 'outline'}
-        size="sm"
         onClick={() => handleDownload(fmt)}
         disabled={loading}
         data-testid={`export-${fmt}-btn`}
@@ -151,176 +212,317 @@ export function EssayHeader({
             : t('essay.export.download', { filename, format: label })
         }
         title={locked ? t('essay.export.lockedHint', { format: label }) : undefined}
-        className={
-          primary
-            ? 'h-8 font-mono text-xs rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white w-full sm:w-auto'
-            : 'h-8 font-mono text-xs rounded-xl w-full sm:w-auto'
-        }
+        className="w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl text-left text-xs sm:text-[13px] text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 cursor-pointer"
       >
-        {loading ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : locked ? (
-          <Lock className={primary ? 'h-3.5 w-3.5 text-amber-300' : 'h-3.5 w-3.5 text-amber-500'} />
-        ) : fmt === 'pdf' || fmt === 'docx' ? (
-          <FileFormatIcon format={fmt} size="xs" />
-        ) : (
-          <Download className="h-3.5 w-3.5" />
-        )}
-        {label}
-        {locked && (
-          <span
-            className={
-              primary
-                ? 'ml-1 px-1 py-0.2 rounded bg-amber-400/20 text-amber-200 text-[9px] font-bold'
-                : 'ml-1 px-1 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 text-[9px] font-bold'
-            }
-          >
-            PRO
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span className="mt-0.5 shrink-0">
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+            ) : locked ? (
+              <Lock className="h-4 w-4 text-amber-500" />
+            ) : fmt === 'pdf' || fmt === 'docx' ? (
+              <FileFormatIcon format={fmt} size="xs" />
+            ) : (
+              <Download className="h-4 w-4 text-slate-500" />
+            )}
           </span>
-        )}
-      </Button>
-    );
-  };
-
-  return (
-    <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-4 sm:p-6 shadow-xs overflow-hidden">
-      <div className="flex flex-col xl:flex-row items-start justify-between gap-4 w-full min-w-0">
-        <div className="w-full min-w-0 flex-1">
-          <div className="flex items-center gap-3 flex-wrap mb-2.5">
-            <Link
-              to="/history"
-              className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 transition-colors"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              {t('essay.backToReports').replace(/^←\s*/, '')}
-            </Link>
-            {!isUser && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-semibold text-indigo-700 dark:text-indigo-300">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                {lang === 'vi' ? 'BÁO CÁO KIỂM CHỨNG HỌC THUẬT' : 'VERIFICATION REPORT IDE'}
+          <div className="min-w-0">
+            <span className="font-semibold block truncate">
+              {isVi ? titleVi : titleEn}
+            </span>
+            {(subVi || subEn) && (
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                {isVi ? subVi : subEn}
               </span>
             )}
           </div>
+        </div>
+        {locked && (
+          <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 text-[10px] font-bold">
+            PRO
+          </span>
+        )}
+      </button>
+    );
+  };
 
-          <div className="flex items-center gap-3 min-w-0">
-            <FileFormatIcon filename={filename} size="lg" />
+  const hasDistinctReferences =
+    typeof numReferences === 'number' &&
+    numReferences > 0 &&
+    numReferences !== numCitations;
+
+  return (
+    <div className="relative rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 px-4 py-3.5 sm:px-5 shadow-xs">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 w-full min-w-0">
+        {/* Document Identity Cluster */}
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <Link
+            to="/history"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 transition-colors shrink-0"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span>{isVi ? 'Lịch sử' : t('essay.backToReports').replace(/^←\s*/, '')}</span>
+          </Link>
+
+          <FileFormatIcon filename={filename} size="md" />
+
+          <div className="min-w-0 flex-1">
             <h1
-              className="font-display text-lg sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-slate-100 break-words [overflow-wrap:anywhere] tracking-tight max-w-full min-w-0 flex-1"
+              className="font-sans text-base sm:text-lg lg:text-xl font-bold text-slate-900 dark:text-slate-100 truncate tracking-tight"
               title={filename}
             >
               {filename}
             </h1>
-          </div>
 
-          <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300 mt-2.5 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-              <FileFormatIcon filename={filename} size="xs" />
-              {numPages}{' '}
-              {lang !== 'vi' && numPages === 1 ? 'page' : t('history.pages')}
-            </span>
-            <span className="inline-flex items-center gap-1.5 font-mono text-xs px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-              <Quote className="h-3.5 w-3.5 text-emerald-500" />
-              {numCitations}{' '}
-              {lang !== 'vi' && numCitations === 1
-                ? 'citation'
-                : t('essay.citationsTab').toLowerCase()}
-            </span>
-            {styleName && styleName.trim().toUpperCase() !== 'UNKNOWN' && (
-              <Badge variant="secondary" className="font-mono text-xs">
-                {styleName}
-              </Badge>
-            )}
-            {!isUser && (
-              <span className="inline-flex items-center gap-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">
-                <Clock className="h-3.5 w-3.5 text-slate-400" />
-                ID #{essayId}
+            <div className="flex items-center gap-2 text-xs sm:text-[13px] text-slate-600 dark:text-slate-400 mt-0.5 flex-wrap">
+              <span>
+                {numPages}{' '}
+                {!isVi && numPages === 1 ? 'page' : t('history.pages')}
               </span>
-            )}
+              <span className="text-slate-300 dark:text-slate-600" aria-hidden="true">
+                •
+              </span>
+              <span data-testid="header-citation-summary">
+                {hasDistinctReferences ? (
+                  isVi ? (
+                    <>
+                      <strong className="font-semibold text-slate-900 dark:text-slate-100">
+                        {numReferences}
+                      </strong>{' '}
+                      tài liệu tham khảo{' '}
+                      <span className="text-slate-500 dark:text-slate-400">
+                        ({numCitations} lượt trích trong bài)
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <strong className="font-semibold text-slate-900 dark:text-slate-100">
+                        {numReferences}
+                      </strong>{' '}
+                      {numReferences === 1 ? 'reference' : 'references'}{' '}
+                      <span className="text-slate-500 dark:text-slate-400">
+                        ({numCitations} in-text{' '}
+                        {numCitations === 1 ? 'mention' : 'mentions'})
+                      </span>
+                    </>
+                  )
+                ) : (
+                  <>
+                    {numCitations}{' '}
+                    {!isVi && numCitations === 1
+                      ? 'citation'
+                      : t('essay.citationsTab').toLowerCase()}
+                  </>
+                )}
+              </span>
+
+              {styleName && styleName.trim().toUpperCase() !== 'UNKNOWN' && (
+                <>
+                  <span className="text-slate-300 dark:text-slate-600" aria-hidden="true">
+                    •
+                  </span>
+                  <Badge variant="secondary" className="text-[11px] font-medium px-2 py-0">
+                    {styleName}
+                  </Badge>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Export Actions */}
-        <div className="flex flex-col items-start xl:items-end gap-1.5 shrink-0 w-full xl:w-auto">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 dark:text-slate-500">
-            {t('essay.export.sectionLabel')}
-          </span>
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full xl:w-auto">
-            {renderFormatButton('json')}
-            {renderFormatButton('csv')}
-            {renderFormatButton('pdf', true)}
-            {renderFormatButton('docx')}
-            <Tooltip
-              content={isDocxSource ? undefined : t('essay.export.healedRequiresDocx')}
-              className="w-full sm:w-auto"
-            >
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleDownloadHealedDocx}
-                disabled={!isDocxSource || busy === 'healed'}
-                aria-disabled={!isDocxSource}
-                aria-busy={busy === 'healed'}
-                title={isDocxSource ? undefined : t('essay.export.healedRequiresDocx')}
-                data-testid="export-healed-docx-btn"
-                className="h-8 font-mono text-xs rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {busy === 'healed' ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : !canExportHealed ? (
-                  <Lock className="h-3.5 w-3.5 text-amber-300" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5" />
-                )}
-                <FileFormatIcon format="docx" size="xs" />
-                {t('essay.export.healedDocx')}
-                {!canExportHealed && (
-                  <span className="ml-1 px-1 py-0.2 rounded bg-amber-400/20 text-amber-200 text-[9px] font-bold">
-                    PRO
-                  </span>
-                )}
-              </Button>
-            </Tooltip>
+        {/* Clean 2-Control Action Cluster (Primary Fix CTA + Grouped Export Menu) */}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+          <Button
+            type="button"
+            size="sm"
+            data-testid="header-remediation-btn"
+            onClick={handleRemediationClick}
+            className="h-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-[13px] font-semibold shadow-xs px-3.5 cursor-pointer"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-amber-300 shrink-0" />
+            <span>
+              {isVi ? 'Sửa & Chuẩn hóa trích dẫn' : 'Fix & Format Citations'}
+            </span>
+          </Button>
+
+          <div ref={exportMenuRef} className="relative">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void handleShareReceipt()}
-              disabled={busy === 'share'}
-              aria-busy={busy === 'share'}
-              data-testid="share-receipt-btn"
-              className="h-8 font-mono text-xs rounded-xl border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 w-full sm:w-auto"
+              data-testid="export-menu-trigger"
+              aria-expanded={exportMenuOpen}
+              aria-haspopup="menu"
+              onClick={() => setExportMenuOpen((v) => !v)}
+              className="h-9 rounded-xl text-xs sm:text-[13px] font-semibold px-3.5 border-slate-300 dark:border-slate-700 cursor-pointer"
             >
-              {busy === 'share' ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <IconSwap
-                  active={Boolean(shareInfo)}
-                  iconA={<Share2 className="h-3.5 w-3.5" />}
-                  iconB={<Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />}
-                />
-              )}
-              <TextMorph text={t('essay.share.buttonLabel')} />
+              <Download className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+              <span>{isVi ? 'Xuất báo cáo' : 'Export'}</span>
+              <ChevronDown
+                className={`h-3.5 w-3.5 text-slate-500 transition-transform duration-150 ${
+                  exportMenuOpen ? 'rotate-180' : ''
+                }`}
+              />
             </Button>
-          </div>
-          {shareInfo && (
+
             <div
-              data-testid="shared-receipt-banner"
-              className="flex flex-wrap items-center gap-2 text-xs font-mono text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 rounded-lg px-2.5 py-1 mt-1 max-w-full"
+              role="menu"
+              data-testid="export-dropdown-menu"
+              data-open={exportMenuOpen ? 'true' : 'false'}
+              className={`absolute right-0 top-[calc(100%+6px)] z-50 w-72 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1.5 shadow-xl origin-top-right transition-all duration-150 ${
+                exportMenuOpen
+                  ? 'opacity-100 scale-100 pointer-events-auto visible'
+                  : 'opacity-0 scale-95 pointer-events-none invisible'
+              }`}
             >
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-              <span className="font-bold">{shareInfo.receipt_id}</span>
-              <Link
-                to={`/verify/share/${shareInfo.share_token}`}
-                data-testid="shared-receipt-link"
-                className="inline-flex items-center gap-1 underline hover:text-indigo-900 dark:hover:text-indigo-100"
+              <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                {isVi ? 'Tài liệu báo cáo' : 'Report Documents'}
+              </div>
+
+              {renderMenuFormatItem(
+                'pdf',
+                'Báo cáo kiểm định (.PDF)',
+                'Verification Report (.PDF)',
+                'Bản trình bày chuẩn để nộp hoặc lưu trữ',
+                'Formatted report for submission or archiving',
+              )}
+
+              {renderMenuFormatItem(
+                'docx',
+                'Báo cáo chi tiết (.DOCX)',
+                'Detailed Report (.DOCX)',
+                'Dễ dàng ghi chú và chỉnh sửa trên Word',
+                'Editable Word report with full notes',
+              )}
+
+              <Tooltip
+                content={isDocxSource ? undefined : t('essay.export.healedRequiresDocx')}
+                className="w-full block"
               >
-                {t('essay.share.openPublicReceipt')}
-                <ExternalLink className="h-3 w-3" />
-              </Link>
+                <button
+                  type="button"
+                  onClick={handleDownloadHealedDocx}
+                  disabled={!isDocxSource || busy === 'healed'}
+                  aria-disabled={!isDocxSource}
+                  aria-busy={busy === 'healed'}
+                  title={isDocxSource ? undefined : t('essay.export.healedRequiresDocx')}
+                  data-testid="export-healed-docx-btn"
+                  className="w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl text-left text-xs sm:text-[13px] text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span className="mt-0.5 shrink-0">
+                      {busy === 'healed' ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                      ) : !canExportHealed ? (
+                        <Lock className="h-4 w-4 text-amber-500" />
+                      ) : (
+                        <Sparkles className="h-4 w-4 text-emerald-600" />
+                      )}
+                    </span>
+                    <div className="min-w-0">
+                      <span className="font-semibold block truncate">
+                        {isVi
+                          ? 'Bản Word đã tự sửa lỗi (.DOCX)'
+                          : t('essay.export.healedDocx')}
+                      </span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                        {isVi
+                          ? 'Tự cập nhật trích dẫn đúng ngay trên file gốc'
+                          : 'Auto-applies verified citations to .docx'}
+                      </span>
+                    </div>
+                  </div>
+                  {!canExportHealed && (
+                    <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 text-[10px] font-bold">
+                      PRO
+                    </span>
+                  )}
+                </button>
+              </Tooltip>
+
+              <div className="my-1 h-px bg-slate-200/80 dark:bg-slate-800" />
+
+              <button
+                type="button"
+                onClick={() => void handleShareReceipt()}
+                disabled={busy === 'share'}
+                aria-busy={busy === 'share'}
+                data-testid="share-receipt-btn"
+                className="w-full flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl text-left text-xs sm:text-[13px] text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <span className="mt-0.5 shrink-0 text-indigo-600 dark:text-indigo-400">
+                    {busy === 'share' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <IconSwap
+                        active={Boolean(shareInfo)}
+                        iconA={<Share2 className="h-4 w-4" />}
+                        iconB={
+                          <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        }
+                      />
+                    )}
+                  </span>
+                  <div className="min-w-0">
+                    <span className="font-semibold block truncate">
+                      <TextMorph
+                        text={
+                          isVi
+                            ? 'Chia sẻ chứng nhận xác thực'
+                            : t('essay.share.buttonLabel')
+                        }
+                      />
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                      {isVi
+                        ? 'Sao chép liên kết công khai gửi giảng viên'
+                        : 'Copy public verification receipt link'}
+                    </span>
+                  </div>
+                </div>
+              </button>
+
+              <div className="my-1 h-px bg-slate-200/80 dark:bg-slate-800" />
+
+              <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                {isVi ? 'Dữ liệu nâng cao' : 'Raw Data'}
+              </div>
+
+              {renderMenuFormatItem('csv', 'Xuất bảng tính (.CSV)', 'Spreadsheet (.CSV)')}
+              {renderMenuFormatItem('json', 'Xuất dữ liệu thô (.JSON)', 'Raw Data (.JSON)')}
             </div>
-          )}
+          </div>
         </div>
       </div>
+
+      {shareInfo && (
+        <div
+          data-testid="shared-receipt-banner"
+          className="flex flex-wrap items-center gap-2 text-xs text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/60 border border-indigo-200/80 dark:border-indigo-800/80 rounded-xl px-3 py-1.5 mt-3"
+        >
+          <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+          <span className="font-mono font-bold">{shareInfo.receipt_id}</span>
+          <Link
+            to={`/verify/share/${shareInfo.share_token}`}
+            data-testid="shared-receipt-link"
+            className="inline-flex items-center gap-1 font-medium underline hover:text-indigo-900 dark:hover:text-indigo-100"
+          >
+            {t('essay.share.openPublicReceipt')}
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+        </div>
+      )}
+
+      {!onOpenRemediation && (
+        <BibliographyRemediationModal
+          open={remediationOpen}
+          essayId={essayId}
+          filename={filename}
+          lang={lang}
+          onClose={() => setRemediationOpen(false)}
+        />
+      )}
 
       <UpgradeModal
         open={upgradeOpen}
