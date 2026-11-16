@@ -171,6 +171,10 @@ describe('Task 7 — Core Workspace Continuity', () => {
     );
 
     const indicatorBefore = screen.getByTestId('sidebar-active-indicator');
+    const indicatorTokens = indicatorBefore.className.split(/\s+/);
+    expect(indicatorTokens).toContain('rounded-full');
+    expect(indicatorTokens).not.toContain('rounded-r-full');
+    expect(indicatorTokens).not.toContain('left-0');
     const uploadLink = indicatorBefore.closest('a') as HTMLAnchorElement;
     expect(uploadLink.getAttribute('href')).toBe('/upload');
     expect(uploadLink.getAttribute('data-view-transition')).toBe('true');

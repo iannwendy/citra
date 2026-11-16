@@ -21,6 +21,7 @@ import { EssayHeader } from './essay/EssayHeader';
 import { EssayActionBar } from './essay/EssayActionBar';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { AppLayout } from '@/components/AppLayout';
+import { SolvaScrollReveal } from '@/components/landing/SolvaPrimitives';
 
 function createMockUser(overrides: Partial<User> = {}): User {
   return {
@@ -722,6 +723,100 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     await waitFor(() => {
       expect(screen.getByTestId('modal-checkout-dest')).toBeDefined();
     });
+  });
+
+  it('UpgradeModal overrides DialogContent grid/padding defaults so the body scrolls cleanly without clipping CTA buttons and closes via Close button', () => {
+    const onOpenChange = vi.fn();
+    renderWithAuth(
+      <UpgradeModal
+        open={true}
+        onOpenChange={onOpenChange}
+        featureName="Elevated Upload Quota & Page Limit"
+        reasonTitle="Plan Quota or Limit Reached"
+        reasonDescription="PDF page limit exceeded (20 pages uploaded; maximum allowed on the Basic plan is 15 pages). Please upgrade to Pro or Ultra."
+      />,
+      { user: createMockUser({ plan_tier: 'basic' }), initialEntries: ['/upload'] },
+    );
+
+    const dialog = screen.getByTestId('upgrade-modal');
+    const tokens = dialog.className.split(/\s+/);
+
+    // tailwind-merge output on DialogContent must NOT retain grid, sm:p-6, or gap-4,
+    // which otherwise cause the body to overflow max-h-[90dvh] and get clipped by overflow-hidden
+    expect(tokens).toContain('flex');
+    expect(tokens).toContain('flex-col');
+    expect(tokens).not.toContain('grid');
+    expect(tokens).not.toContain('sm:p-6');
+    expect(tokens).not.toContain('gap-4');
+
+    const scrollableBody = screen.getByTestId('upgrade-modal-body');
+    const bodyTokens = scrollableBody.className.split(/\s+/);
+    expect(bodyTokens).toContain('flex-1');
+    expect(bodyTokens).toContain('min-h-0');
+    expect(bodyTokens).toContain('overflow-y-auto');
+    expect(bodyTokens).not.toContain('max-h-[80vh]');
+
+    const closeBtn = screen.getByRole('button', { name: /close/i });
+    fireEvent.click(closeBtn);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('SolvaScrollReveal reveals elements when a non-bubbling scroll event fires on an inner overflow container like AppLayout#main-content', async () => {
+    const origInnerHeight = window.innerHeight;
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      writable: true,
+      value: 800,
+    });
+
+    let simulatedTop = 760; // > 800 * 0.91 (728), so initially 'below' (opacity 0.001)
+
+    try {
+      render(
+        <div data-testid="scroll-shell" style={{ overflowY: 'auto' }}>
+          <SolvaScrollReveal triggerRatio={0.91}>
+            <div data-testid="reveal-target">Plan Card</div>
+          </SolvaScrollReveal>
+        </div>,
+      );
+
+      const target = screen.getByTestId('reveal-target');
+      const wrapper = target.parentElement as HTMLElement;
+      vi.spyOn(wrapper, 'getBoundingClientRect').mockImplementation(
+        () =>
+          ({
+            top: simulatedTop,
+            bottom: simulatedTop + 420,
+            left: 0,
+            right: 360,
+            width: 360,
+            height: 420,
+            x: 0,
+            y: simulatedTop,
+            toJSON: () => ({}),
+          }) as DOMRect,
+      );
+
+      // Flush initial RAF check while simulatedTop = 760 (> 728)
+      await new Promise((r) => setTimeout(r, 40));
+      expect(wrapper.style.opacity).toBe('0.001');
+
+      // User scrolls halfway down inside AppLayout's overflow-y-auto <main>:
+      // element scroll events do NOT bubble in browsers (bubbles: false)!
+      simulatedTop = 380;
+      const scrollShell = screen.getByTestId('scroll-shell');
+      scrollShell.dispatchEvent(new Event('scroll', { bubbles: false }));
+
+      await waitFor(() => {
+        expect(wrapper.style.opacity).toBe('1');
+      });
+    } finally {
+      Object.defineProperty(window, 'innerHeight', {
+        configurable: true,
+        writable: true,
+        value: origInnerHeight,
+      });
+    }
   });
 
   it('AppLayout renders Sidebar Quota Meter (used/limit), Plan Badge (BASIC / PRO), and Upgrade CTA link to /pricing', async () => {

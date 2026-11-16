@@ -338,7 +338,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               if (visibleItems.length === 0) return null;
               return (
                 <div key={group.labelKey} className={group.roles ? 'pt-2' : ''}>
-                  <p className="px-3.5 py-1.5 text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  <p className="px-[18px] py-1.5 text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                     {t(group.labelKey)}
                   </p>
                   <div className="space-y-0.5">
@@ -358,7 +358,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           data-view-transition="true"
                           onClick={() => setMobileOpen(false)}
                           className={`
-                            relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium
+                            relative flex items-center gap-3 pl-[18px] pr-3.5 py-2.5 rounded-xl text-sm font-medium
                             transition-[background-color,color,box-shadow] duration-200
                             ${active
                               ? 'bg-indigo-50/90 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-semibold ring-1 ring-indigo-500/20 shadow-2xs'
@@ -371,7 +371,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                               layoutId="citra-sidebar-active-bar"
                               transition={SPRING_PILL}
                               data-testid="sidebar-active-indicator"
-                              className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-indigo-600 dark:bg-indigo-400"
+                              className="absolute left-1.5 top-2.5 bottom-2.5 w-1 rounded-full bg-indigo-600 dark:bg-indigo-400"
                             />
                           )}
                           <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-indigo-600 dark:text-indigo-400' : ''}`} />

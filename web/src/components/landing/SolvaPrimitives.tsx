@@ -37,6 +37,7 @@ let rafId: number | null = null;
 let listenersAttached = false;
 let forceFullSync = true;
 let lastScrollY = 0;
+let activeScrollTop: number | null = null;
 let sharedObserver: IntersectionObserver | null = null;
 
 function scheduleWrite(fn: WriteCallback) {
@@ -49,7 +50,8 @@ function flushScrollSubscribers() {
 
   const vh = window.innerHeight || 900;
   const vw = window.innerWidth || 1440;
-  const currentScrollY = window.scrollY || window.pageYOffset || 0;
+  const currentScrollY =
+    activeScrollTop ?? (window.scrollY || window.pageYOffset || 0);
   const isLargeJump = Math.abs(currentScrollY - lastScrollY) > vh * 0.55;
   lastScrollY = currentScrollY;
 
@@ -79,7 +81,18 @@ function requestScrollFrame(fullSync = false) {
   }
 }
 
-function handleGlobalScroll() {
+function handleGlobalScroll(event?: Event) {
+  const target = event?.target;
+  if (
+    target &&
+    target !== document &&
+    target !== window &&
+    typeof (target as Element).scrollTop === 'number'
+  ) {
+    activeScrollTop = (target as Element).scrollTop;
+  } else if (typeof window !== 'undefined') {
+    activeScrollTop = window.scrollY || window.pageYOffset || 0;
+  }
   requestScrollFrame(false);
 }
 
@@ -142,8 +155,14 @@ function subscribeToScroll(
 
   if (!listenersAttached && typeof window !== 'undefined') {
     listenersAttached = true;
+    activeScrollTop = null;
     lastScrollY = window.scrollY || window.pageYOffset || 0;
-    window.addEventListener('scroll', handleGlobalScroll, { passive: true });
+    // Use capture: true so non-bubbling `scroll` events from overflow containers
+    // (such as AppLayout's `#main-content`) also drive scroll reveals.
+    window.addEventListener('scroll', handleGlobalScroll, {
+      passive: true,
+      capture: true,
+    });
     window.addEventListener('resize', handleGlobalResize, { passive: true });
   }
 
@@ -157,7 +176,8 @@ function subscribeToScroll(
     scrollEntries.delete(entry);
     if (scrollEntries.size === 0 && listenersAttached && typeof window !== 'undefined') {
       listenersAttached = false;
-      window.removeEventListener('scroll', handleGlobalScroll);
+      activeScrollTop = null;
+      window.removeEventListener('scroll', handleGlobalScroll, true);
       window.removeEventListener('resize', handleGlobalResize);
     }
   };

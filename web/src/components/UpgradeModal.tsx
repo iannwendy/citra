@@ -11,12 +11,14 @@ import {
   Building2,
   Loader2,
   CreditCard,
+  X,
 } from 'lucide-react';
 import { api, type BillingCycle } from '@/api/client';
 import { SCHOLARLY_APIS_LABEL } from '@/lib/productFacts';
 import { useRole } from '@/hooks/useRole';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -83,22 +85,25 @@ export function UpgradeModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="sm:max-w-3xl p-0 overflow-hidden border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
+        hideCloseButton
+        className="flex flex-col gap-0 p-0 sm:p-0 sm:max-w-3xl max-h-[90dvh] overflow-hidden border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
         data-testid="upgrade-modal"
       >
         {/* Top Banner */}
-        <div className="bg-gradient-to-r from-indigo-950 via-indigo-900 to-slate-900 px-6 py-5 text-white relative overflow-hidden">
+        <div className="shrink-0 bg-gradient-to-r from-indigo-950 via-indigo-900 to-slate-900 px-5 sm:px-6 py-4 sm:py-5 text-white relative overflow-hidden">
           <div className="flex items-start justify-between gap-4 relative z-10">
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 min-w-0">
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-[11px] font-mono font-semibold">
-                <Lock className="h-3 w-3" />
-                {featureName
-                  ? lang === 'vi'
-                    ? `TÍNH NĂNG PREMIUM · ${featureName.toUpperCase()}`
-                    : `PREMIUM FEATURE · ${featureName.toUpperCase()}`
-                  : lang === 'vi'
-                    ? 'NÂNG CẤP TÀI KHOẢN CITRA PREMIUM'
-                    : 'UPGRADE TO CITRA PREMIUM'}
+                <Lock className="h-3 w-3 shrink-0" />
+                <span className="truncate">
+                  {featureName
+                    ? lang === 'vi'
+                      ? `TÍNH NĂNG PREMIUM · ${featureName.toUpperCase()}`
+                      : `PREMIUM FEATURE · ${featureName.toUpperCase()}`
+                    : lang === 'vi'
+                      ? 'NÂNG CẤP TÀI KHOẢN CITRA PREMIUM'
+                      : 'UPGRADE TO CITRA PREMIUM'}
+                </span>
               </div>
               <DialogHeader className="text-left">
                 <DialogTitle className="font-display text-xl sm:text-2xl font-bold text-white">
@@ -123,10 +128,17 @@ export function UpgradeModal({
                 </DialogDescription>
               </DialogHeader>
             </div>
+            <DialogClose className="rounded-lg p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 shrink-0 cursor-pointer">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </DialogClose>
           </div>
         </div>
 
-        <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+        <div
+          data-testid="upgrade-modal-body"
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-5"
+        >
           {/* Billing Cycle Toggle */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800">
             <div className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">

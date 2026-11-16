@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "essay-integrity-checker"
-version = "3.77.0"
+version = "3.77.1"
 description = "Neuro-Symbolic system for citation integrity scoring and hallucinated reference detection in student essays"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -135,3 +135,6 @@ markers = [
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["integrity_checker*"]
+
+[tool.setuptools.package-data]
+"integrity_checker.export.fonts" = ["*.ttf"]

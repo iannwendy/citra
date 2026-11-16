@@ -589,7 +589,7 @@ export function PricingPage() {
               className="w-full grid grid-cols-1 lg:grid-cols-3 gap-[16px] items-stretch"
             >
               {/* 1. BASIC TIER */}
-              <SolvaScrollReveal delayMs={0} yOffset={36} className="h-full">
+              <SolvaScrollReveal delayMs={0} yOffset={36} triggerRatio={0.99} className="h-full">
                 <div
                   style={{
                     backgroundColor: 'var(--solva-surface)',
@@ -768,7 +768,7 @@ export function PricingPage() {
               </SolvaScrollReveal>
 
               {/* 2. PRO TIER (CENTER HIGHLIGHTED — RADIAL WATERCOLOR FLORAL BACKDROP + #19 CardHoverTilt) */}
-              <SolvaScrollReveal delayMs={95} yOffset={36} className="h-full">
+              <SolvaScrollReveal delayMs={95} yOffset={36} triggerRatio={0.99} className="h-full">
                 <CardHoverTilt maxTilt={3.5} className="h-full" cardClassName="h-full rounded-[16px]">
                 <div
                   style={{
@@ -1005,7 +1005,7 @@ export function PricingPage() {
               </SolvaScrollReveal>
 
               {/* 3. ULTRA TIER */}
-              <SolvaScrollReveal delayMs={190} yOffset={36} className="h-full">
+              <SolvaScrollReveal delayMs={190} yOffset={36} triggerRatio={0.99} className="h-full">
                 <div
                   style={{
                     backgroundColor: 'var(--solva-surface)',

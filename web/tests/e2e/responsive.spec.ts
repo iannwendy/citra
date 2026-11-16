@@ -835,4 +835,234 @@ test.describe('Responsive Layout — Authenticated Workspaces (Student, Teacher,
       ).toBeLessThanOrEqual(24);
     }
   });
+
+  test('UpgradeModal on Basic plan upload limit error scrolls smoothly to CTA buttons and footer without bottom clipping across laptop and mobile viewports', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'mock-basic-token');
+      localStorage.setItem('i18nextLng', 'en');
+    });
+
+    await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
+      const url = route.request().url();
+      if (url.includes('/api/auth/me')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: 999,
+            username: 'basic_tester',
+            email: 'basic@example.com',
+            full_name: 'Basic Plan Student',
+            role: 'user',
+            plan_tier: 'basic',
+            is_active: true,
+            needs_onboarding: false,
+            quota: {
+              monthly_uploads_used: 0,
+              monthly_uploads_limit: 3,
+              monthly_uploads_remaining: 3,
+              max_file_size_mb: 5,
+              max_pages_per_pdf: 15,
+              max_citations_per_essay: 30,
+              max_batch_files: 1,
+              allowed_export_formats: ['json'],
+              allow_batch_upload: false,
+              allow_deep_inspector: false,
+              allow_serpapi_fallback: false,
+              quota_reset_at: '2026-12-01T00:00:00Z',
+            },
+          }),
+        });
+      }
+      if (route.request().method() === 'POST') {
+        return route.fulfill({
+          status: 413,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            detail:
+              'PDF page limit exceeded (20 pages uploaded; maximum allowed on the Basic plan is 15 pages). Please upgrade to Pro or Ultra.',
+          }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: '[]',
+      });
+    });
+
+    for (const vp of [
+      { name: 'Laptop 13-14in (1440x740)', width: 1440, height: 740 },
+      { name: 'Compact Laptop (1280x720)', width: 1280, height: 720 },
+      { name: 'Mobile SE (375x667)', width: 375, height: 667 },
+    ]) {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await page.goto('/upload', { waitUntil: 'domcontentloaded' });
+
+      const fileInput = page.locator('input[type="file"]').first();
+      await fileInput.setInputFiles({
+        name: 'thesis_20_pages.pdf',
+        mimeType: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.4 dummy'),
+      });
+
+      await page.locator('button.btn-shimmer').click();
+
+      const modal = page.getByTestId('upgrade-modal');
+      await expect(modal).toBeVisible();
+      await page.waitForTimeout(300);
+
+      const initialLayout = await page.evaluate(() => {
+        const dialog = document.querySelector('[data-testid="upgrade-modal"]') as HTMLElement;
+        const banner = dialog.children[0] as HTMLElement;
+        const dRect = dialog.getBoundingClientRect();
+        const bRect = banner.getBoundingClientRect();
+        return {
+          bannerTopDelta: Math.abs(bRect.top - dRect.top),
+          bannerLeftDelta: Math.abs(bRect.left - dRect.left),
+          dialogOverflowsItself: dialog.scrollHeight > dialog.clientHeight + 2,
+          dialogRect: dRect,
+        };
+      });
+
+      expect(
+        initialLayout.bannerTopDelta,
+        `Expected full-bleed header banner flush with top of UpgradeModal at ${vp.name}`
+      ).toBeLessThanOrEqual(2);
+      expect(
+        initialLayout.bannerLeftDelta,
+        `Expected full-bleed header banner flush with left edge of UpgradeModal at ${vp.name}`
+      ).toBeLessThanOrEqual(2);
+      expect(
+        initialLayout.dialogOverflowsItself,
+        `Expected UpgradeModal outer container not to clip overflowing rows at ${vp.name}`
+      ).toBe(false);
+
+      // Scroll down inside the modal using mouse wheel
+      const { dialogRect } = initialLayout;
+      await page.mouse.move(
+        dialogRect.left + dialogRect.width / 2,
+        dialogRect.top + dialogRect.height * 0.65
+      );
+      await page.mouse.wheel(0, 1400);
+      await page.waitForTimeout(250);
+
+      const afterScroll = await page.evaluate(() => {
+        const dialog = document.querySelector('[data-testid="upgrade-modal"]') as HTMLElement;
+        const proBtn = document.querySelector('[data-testid="modal-upgrade-pro-btn"]') as HTMLElement;
+        const ultraBtn = document.querySelector('[data-testid="modal-upgrade-ultra-btn"]') as HTMLElement;
+        const footerBtn = Array.from(dialog.querySelectorAll('button')).find((b) =>
+          b.textContent?.includes('Compare all 3 plans')
+        ) as HTMLElement | undefined;
+
+        const dRect = dialog.getBoundingClientRect();
+        const proRect = proBtn.getBoundingClientRect();
+        const ultraRect = ultraBtn.getBoundingClientRect();
+        const fRect = footerBtn?.getBoundingClientRect();
+
+        return {
+          dialogBottom: dRect.bottom,
+          proBottom: proRect.bottom,
+          ultraBottom: ultraRect.bottom,
+          footerBottom: fRect?.bottom ?? Infinity,
+        };
+      });
+
+      expect(
+        afterScroll.proBottom,
+        `Expected Pro CTA button completely visible inside modal after scrolling at ${vp.name}`
+      ).toBeLessThanOrEqual(afterScroll.dialogBottom);
+      expect(
+        afterScroll.ultraBottom,
+        `Expected Ultra CTA button completely visible inside modal after scrolling at ${vp.name}`
+      ).toBeLessThanOrEqual(afterScroll.dialogBottom);
+      expect(
+        afterScroll.footerBottom,
+        `Expected footer comparison link completely visible inside modal after scrolling at ${vp.name}`
+      ).toBeLessThanOrEqual(afterScroll.dialogBottom);
+
+      // Close modal via Close button
+      await modal.getByRole('button', { name: /close/i }).click();
+      await expect(modal).toBeHidden();
+    }
+  });
+
+  test('Authenticated /pricing reveals all 3 plan cards on desktop without scrolling to the bottom, and sidebar active indicator is symmetrically inset inside nav pill', async ({
+    page,
+  }) => {
+    setupAllResponsiveMocks(page);
+
+    // 1. Verify sidebar active indicator on /dashboard is symmetrically rounded and strictly inside the nav pill
+    await page.setViewportSize({ width: 1440, height: 800 });
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    const indicator = page.getByTestId('sidebar-active-indicator');
+    await expect(indicator).toBeVisible();
+
+    const sidebarGeometry = await page.evaluate(() => {
+      const ind = document.querySelector('[data-testid="sidebar-active-indicator"]') as HTMLElement;
+      const link = ind.closest('a') as HTMLElement;
+      const indRect = ind.getBoundingClientRect();
+      const linkRect = link.getBoundingClientRect();
+      const style = getComputedStyle(ind);
+      return {
+        leftInset: indRect.left - linkRect.left,
+        topInset: indRect.top - linkRect.top,
+        bottomInset: linkRect.bottom - indRect.bottom,
+        topLeftRadius: style.borderTopLeftRadius,
+        topRightRadius: style.borderTopRightRadius,
+      };
+    });
+
+    expect(sidebarGeometry.leftInset).toBeGreaterThanOrEqual(4);
+    expect(sidebarGeometry.topInset).toBeGreaterThanOrEqual(6);
+    expect(sidebarGeometry.bottomInset).toBeGreaterThanOrEqual(6);
+    expect(sidebarGeometry.topLeftRadius).toBe(sidebarGeometry.topRightRadius);
+
+    // 2. Verify /pricing at 1440x800 (and 1440x740) reveals all 3 plan cards on partial scroll without needing to scroll to the bottom
+    for (const vp of [
+      { name: 'Desktop 1440x800', width: 1440, height: 800 },
+      { name: 'Laptop 1440x740', width: 1440, height: 740 },
+    ]) {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await page.goto('/pricing', { waitUntil: 'domcontentloaded' });
+      await page.getByTestId('plan-card-pro').waitFor({ state: 'attached' });
+
+      // Scroll halfway down (320px out of ~5100px) inside AppLayout's #main-content
+      await page.evaluate(() => {
+        const main = document.getElementById('main-content');
+        if (main) {
+          main.scrollTop = 320;
+          main.dispatchEvent(new Event('scroll', { bubbles: false }));
+        }
+      });
+
+      await expect
+        .poll(
+          async () =>
+            page.evaluate(() => {
+              const basic = document.querySelector('[data-testid="plan-card-basic"]')?.parentElement;
+              const pro = document
+                .querySelector('[data-testid="plan-card-pro"]')
+                ?.closest('[style*="opacity"]');
+              const ultra = document.querySelector('[data-testid="plan-card-ultra"]')?.parentElement;
+              return {
+                basic: basic ? Number(getComputedStyle(basic).opacity) : 0,
+                pro: pro ? Number(getComputedStyle(pro).opacity) : 0,
+                ultra: ultra ? Number(getComputedStyle(ultra).opacity) : 0,
+              };
+            }),
+          {
+            message: `Expected all 3 pricing plan cards to reveal on partial scroll at ${vp.name}`,
+            timeout: 2500,
+          }
+        )
+        .toEqual({
+          basic: expect.closeTo(1, 1),
+          pro: expect.closeTo(1, 1),
+          ultra: expect.closeTo(1, 1),
+        });
+    }
+  });
 });
