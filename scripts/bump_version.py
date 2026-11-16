@@ -33,6 +33,8 @@ WEB_PACKAGE_JSON = ROOT_DIR / "web" / "package.json"
 ROOT_PACKAGE_JSON = ROOT_DIR / "package.json"
 PYPROJECT_TOML = ROOT_DIR / "pyproject.toml"
 PY_VERSION_FILE = ROOT_DIR / "src" / "integrity_checker" / "__version__.py"
+README_MD = ROOT_DIR / "README.md"
+CLAUDE_MD = ROOT_DIR / "CLAUDE.md"
 
 VERSION_FILES = [
     WEB_VERSION_TS,
@@ -40,6 +42,8 @@ VERSION_FILES = [
     ROOT_PACKAGE_JSON,
     PYPROJECT_TOML,
     PY_VERSION_FILE,
+    README_MD,
+    CLAUDE_MD,
 ]
 
 CONVENTIONAL_HEADER_RE = re.compile(
@@ -155,6 +159,31 @@ def update_all_version_files(new_version: str, build_date: str) -> None:
             count=1,
         )
         PY_VERSION_FILE.write_text(text, encoding="utf-8")
+
+    # 5. README.md & CLAUDE.md (enforced by test_wave3_eval_scripts_and_configs.py)
+    if README_MD.exists():
+        text = README_MD.read_text(encoding="utf-8")
+        text = re.sub(
+            r"(Essay Integrity Checker v)\d+\.\d+\.\d+",
+            rf"\g<1>{new_version}",
+            text,
+        )
+        text = re.sub(
+            r"(Python package metadata \(v)\d+\.\d+\.\d+(\))",
+            rf"\g<1>{new_version}\2",
+            text,
+        )
+        README_MD.write_text(text, encoding="utf-8")
+
+    if CLAUDE_MD.exists():
+        text = CLAUDE_MD.read_text(encoding="utf-8")
+        text = re.sub(
+            r"(?m)^(-\s*\*\*Version:\*\*\s*v)\d+\.\d+\.\d+",
+            rf"\g<1>{new_version}",
+            text,
+            count=1,
+        )
+        CLAUDE_MD.write_text(text, encoding="utf-8")
 
 
 def _git_output(*args: str) -> str:
