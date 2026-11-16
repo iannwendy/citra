@@ -724,6 +724,20 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
       } finally {
         vi.useRealTimers();
       }
+
+      // Network split resizer allows dragging / keyboard resizing left-right and double-click reset
+      const splitContainer = screen.getByTestId('network-split-container');
+      const resizer = screen.getByTestId('network-split-resizer');
+      expect(resizer.getAttribute('role')).toBe('separator');
+      expect(splitContainer.style.getPropertyValue('--network-split-pct')).toBe('32%');
+
+      // Keyboard ArrowRight widens left reference column; double-click resets to 32%
+      fireEvent.keyDown(resizer, { key: 'ArrowRight' });
+      expect(splitContainer.style.getPropertyValue('--network-split-pct')).toBe('35%');
+      expect(localStorage.getItem('citra.network.splitPct')).toBe('35');
+
+      fireEvent.doubleClick(resizer);
+      expect(splitContainer.style.getPropertyValue('--network-split-pct')).toBe('32%');
     });
   });
 });

@@ -26,20 +26,25 @@ import {
   Clock,
   PanelLeftClose,
   PanelLeftOpen,
+  Shield,
+  ChevronsUpDown,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVerificationProgress } from '@/contexts/VerificationProgressContext';
 import { getQuotaView } from '@/lib/quotaDisplay';
 import { useRole, type UserCapability, type UserRole } from '@/hooks/useRole';
-import { ThemeToggle, useTheme } from '@/contexts/ThemeContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { NotificationCenterButton, useToast } from '@/contexts/ToastContext';
 import { HelpModal } from './HelpModal';
 import { GoogleOnboardingModal } from './GoogleOnboardingModal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Separator } from '@/components/ui/separator';
 import { m, SPRING_PILL } from '@/components/ui/motion-primitives';
+import { SymmetricChevron } from '@/components/ui/transitions';
 
 /* ============================================================
    CITRA — App Layout Component (Scholarly Precision v2.0)
@@ -82,23 +87,13 @@ const SIDEBAR_GROUPS: NavGroup[] = [
       { path: '/teacher/reviews', labelKey: 'nav.pendingReviews', icon: ClipboardCheck, capability: 'override_verdict' },
     ],
   },
-  {
-    labelKey: 'nav.administration',
-    roles: ['admin'],
-    items: [
-      { path: '/admin/users', labelKey: 'nav.accounts', icon: Users, capability: 'manage_users' },
-      { path: '/admin/promos', labelKey: 'nav.promoCodes', icon: Tag, capability: 'manage_users' },
-      { path: '/admin/system', labelKey: 'nav.systemHealth', icon: Activity, capability: 'view_system_health' },
-      { path: '/admin/audit', labelKey: 'nav.auditLog', icon: FileText, capability: 'view_audit_log' },
-    ],
-  },
-  {
-    labelKey: 'nav.preferences',
-    items: [
-      { path: '/pricing', labelKey: 'nav.pricing', icon: Sparkles },
-      { path: '/settings', labelKey: 'nav.settings', icon: Settings },
-    ],
-  },
+];
+
+const ADMIN_CONSOLE_ITEMS: NavItem[] = [
+  { path: '/admin/users', labelKey: 'nav.accounts', icon: Users, capability: 'manage_users' },
+  { path: '/admin/promos', labelKey: 'nav.promoCodes', icon: Tag, capability: 'manage_users' },
+  { path: '/admin/system', labelKey: 'nav.systemHealth', icon: Activity, capability: 'view_system_health' },
+  { path: '/admin/audit', labelKey: 'nav.auditLog', icon: FileText, capability: 'view_audit_log' },
 ];
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -116,7 +111,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     batchStats,
   } = useVerificationProgress();
   const { has, role, planTier, isBasic, quota, canBatchUpload, isAdmin } = useRole();
-  const { toggleTheme } = useTheme();
+  const { theme, setTheme, toggleTheme } = useTheme();
   const toast = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -129,12 +124,52 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       return false;
     }
   });
+  const [adminConsoleOpen, setAdminConsoleOpen] = useState<boolean>(() =>
+    location.pathname.startsWith('/admin'),
+  );
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const accountTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [railTooltip, setRailTooltip] = useState<{ label: string; top: number } | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [dismissedActiveKey, setDismissedActiveKey] = useState<string | null>(null);
 
   const isDesktopCollapsed = sidebarCollapsed && !mobileOpen;
+
+  // Auto-expand Admin Console when visiting any /admin/* route, and close Account Popover on navigation
+  useEffect(() => {
+    if (location.pathname.startsWith('/admin')) {
+      setAdminConsoleOpen(true);
+    }
+    setAccountMenuOpen(false);
+  }, [location.pathname]);
+
+  // Close Account Popover on outside click or Escape
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const onPointerDown = (ev: MouseEvent) => {
+      const target = ev.target as Node | null;
+      if (
+        target &&
+        !accountMenuRef.current?.contains(target) &&
+        !accountTriggerRef.current?.contains(target)
+      ) {
+        setAccountMenuOpen(false);
+      }
+    };
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') {
+        setAccountMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [accountMenuOpen]);
 
   const toggleSidebarCollapse = useCallback(() => {
     setRailTooltip(null);
@@ -179,8 +214,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [location.pathname, acknowledgeSingleCheck]);
 
-  const handleToggleLanguage = () => {
-    const next = currentLang === 'en' ? 'vi' : 'en';
+  const handleSelectLanguage = (next: 'vi' | 'en') => {
+    if (next === currentLang) return;
     void i18n.changeLanguage(next);
     localStorage.setItem('language', next);
     localStorage.setItem('i18nextLng', next);
@@ -347,9 +382,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </button>
 
         <div className="flex flex-col h-full">
-          {/* Logo & ChatGPT-Style Sidebar Collapse / Expand Header */}
+          {/* Logo, Notification Bell & ChatGPT-Style Sidebar Collapse / Expand Header */}
           {isDesktopCollapsed ? (
-            <div className="py-3.5 px-2 border-b border-slate-200/80 dark:border-slate-800/80 bg-gradient-to-b from-slate-50/60 to-transparent dark:from-slate-950/40 flex items-center justify-center shrink-0">
+            <div className="py-3 px-2 border-b border-slate-200/80 dark:border-slate-800/80 bg-gradient-to-b from-slate-50/60 to-transparent dark:from-slate-950/40 flex flex-col items-center gap-2 shrink-0">
               <button
                 type="button"
                 data-testid="sidebar-collapse-toggle"
@@ -384,9 +419,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 />
                 <PanelLeftOpen className="h-4 w-4 text-slate-700 dark:text-slate-200 absolute opacity-0 scale-75 group-hover/rail-logo:opacity-100 group-hover/rail-logo:scale-100 group-focus-visible/rail-logo:opacity-100 group-focus-visible/rail-logo:scale-100 transition-all duration-150" />
               </button>
+              <NotificationCenterButton lang={currentLang} />
             </div>
           ) : (
-            <div className="px-5 py-4 border-b border-slate-200/80 dark:border-slate-800/80 bg-gradient-to-b from-slate-50/60 to-transparent dark:from-slate-950/40 flex items-center justify-between gap-2 shrink-0">
+            <div className="px-4 py-3.5 border-b border-slate-200/80 dark:border-slate-800/80 bg-gradient-to-b from-slate-50/60 to-transparent dark:from-slate-950/40 flex items-center justify-between gap-2 shrink-0">
               <Link
                 to="/dashboard"
                 onClick={() => setMobileOpen(false)}
@@ -409,25 +445,28 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </span>
               </Link>
 
-              <button
-                type="button"
-                data-testid="sidebar-collapse-toggle"
-                aria-expanded="true"
-                aria-label={currentLang === 'vi' ? 'Thu gọn thanh bên' : 'Collapse sidebar'}
-                title={currentLang === 'vi' ? 'Thu gọn thanh bên (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
-                onClick={toggleSidebarCollapse}
-                className="hidden lg:inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
-              >
-                <PanelLeftClose className="h-4 w-4" />
-              </button>
+              <div className="hidden lg:flex items-center gap-1 shrink-0">
+                <NotificationCenterButton lang={currentLang} />
+                <button
+                  type="button"
+                  data-testid="sidebar-collapse-toggle"
+                  aria-expanded="true"
+                  aria-label={currentLang === 'vi' ? 'Thu gọn thanh bên' : 'Collapse sidebar'}
+                  title={currentLang === 'vi' ? 'Thu gọn thanh bên (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
+                  onClick={toggleSidebarCollapse}
+                  className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                >
+                  <PanelLeftClose className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Navigation — capability-driven */}
+          {/* Navigation — High-Frequency Daily Workspace & Teaching + Collapsible Admin Console */}
           <nav
             onScroll={hideRailTooltip}
             className={`flex-1 overflow-y-auto scrollbar-none ${
-              isDesktopCollapsed ? 'px-2 py-3 space-y-1' : 'px-3 py-4 space-y-1.5'
+              isDesktopCollapsed ? 'px-2 py-3 space-y-1' : 'px-3 py-3.5 space-y-1.5'
             }`}
           >
             {SIDEBAR_GROUPS.map((group, groupIdx) => {
@@ -483,8 +522,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                             transition-[background-color,color,box-shadow] duration-200
                             ${
                               isDesktopCollapsed
-                                ? 'justify-center h-11 w-11 mx-auto px-0'
-                                : 'gap-3 pl-[18px] pr-3.5 py-2.5'
+                                ? 'justify-center h-10 w-10 mx-auto px-0'
+                                : 'gap-3 pl-[18px] pr-3.5 py-2'
                             }
                             ${
                               active
@@ -500,7 +539,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                               data-testid="sidebar-active-indicator"
                               className={`absolute ${
                                 isDesktopCollapsed ? 'left-1' : 'left-1.5'
-                              } top-2.5 bottom-2.5 w-1 rounded-full bg-indigo-600 dark:bg-indigo-400`}
+                              } top-2 bottom-2 w-1 rounded-full bg-indigo-600 dark:bg-indigo-400`}
                             />
                           )}
                           <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-indigo-600 dark:text-indigo-400' : ''}`} />
@@ -560,11 +599,151 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </div>
               );
             })}
+
+            {/* Collapsible Admin Console Accordion (Admin-only, collapsed to 1 clean row by default) */}
+            {role === 'admin' && (() => {
+              const visibleAdminItems = ADMIN_CONSOLE_ITEMS.filter(
+                (item) => !item.capability || has(item.capability),
+              );
+              if (visibleAdminItems.length === 0) return null;
+              const isAdminRouteActive = location.pathname.startsWith('/admin');
+              const adminLabel = currentLang === 'vi' ? 'Quản trị hệ thống' : 'Admin Console';
+
+              return (
+                <div className={isDesktopCollapsed ? '' : 'pt-2'}>
+                  {isDesktopCollapsed && (
+                    <div
+                      aria-hidden="true"
+                      className="my-2 mx-auto w-6 h-px bg-slate-200/80 dark:bg-slate-800"
+                    />
+                  )}
+                  <button
+                    type="button"
+                    data-testid="sidebar-admin-console-toggle"
+                    aria-expanded={adminConsoleOpen}
+                    aria-label={isDesktopCollapsed ? adminLabel : undefined}
+                    title={isDesktopCollapsed ? adminLabel : undefined}
+                    onClick={() => setAdminConsoleOpen((prev) => !prev)}
+                    onMouseEnter={(e) => showRailTooltip(e.currentTarget, adminLabel)}
+                    onMouseLeave={hideRailTooltip}
+                    className={`w-full flex items-center rounded-xl text-sm font-medium transition-colors cursor-pointer ${
+                      isDesktopCollapsed
+                        ? 'justify-center h-10 w-10 mx-auto px-0'
+                        : 'justify-between gap-2 pl-[18px] pr-3 py-2'
+                    } ${
+                      isAdminRouteActive && !adminConsoleOpen
+                        ? 'bg-indigo-50/90 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-semibold ring-1 ring-indigo-500/20'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <span className="flex items-center gap-3 min-w-0">
+                      <Shield
+                        className={`h-4 w-4 shrink-0 ${
+                          isAdminRouteActive ? 'text-indigo-600 dark:text-indigo-400' : ''
+                        }`}
+                      />
+                      {!isDesktopCollapsed && <span className="truncate">{adminLabel}</span>}
+                    </span>
+                    {!isDesktopCollapsed && (
+                      <SymmetricChevron
+                        open={adminConsoleOpen}
+                        size={15}
+                        className="text-slate-400 shrink-0"
+                      />
+                    )}
+                  </button>
+
+                  {/* #21 Smooth 120fps Accordion Expand/Collapse + Staggered Item Cascade */}
+                  <div
+                    data-testid="sidebar-admin-console-panel"
+                    data-open={adminConsoleOpen ? 'true' : 'false'}
+                    aria-hidden={!adminConsoleOpen}
+                    className="t-acc-panel"
+                  >
+                    <div className="t-acc-panel-inner">
+                      <div
+                        className={
+                          isDesktopCollapsed
+                            ? 'pt-1 space-y-0.5'
+                            : 'relative mt-1 ml-5 pl-2.5 space-y-0.5'
+                        }
+                      >
+                        {!isDesktopCollapsed && (
+                          <span
+                            aria-hidden="true"
+                            className={`pointer-events-none absolute left-0 top-1 bottom-1 w-px bg-slate-200/90 dark:bg-slate-800 origin-top transition-[transform,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                              adminConsoleOpen ? 'scale-y-100 opacity-100' : 'scale-y-50 opacity-0'
+                            }`}
+                          />
+                        )}
+                        {visibleAdminItems.map((item, idx) => {
+                          const Icon = item.icon;
+                          const active = isActive(item.path);
+                          const itemLabel = t(item.labelKey);
+
+                          return (
+                            <Link
+                              key={item.path}
+                              to={item.path}
+                              viewTransition
+                              data-view-transition="true"
+                              tabIndex={adminConsoleOpen ? undefined : -1}
+                              aria-label={isDesktopCollapsed ? itemLabel : undefined}
+                              title={isDesktopCollapsed ? itemLabel : undefined}
+                              onClick={() => {
+                                hideRailTooltip();
+                                setMobileOpen(false);
+                              }}
+                              onMouseEnter={(e) => showRailTooltip(e.currentTarget, itemLabel)}
+                              onMouseLeave={hideRailTooltip}
+                              style={{
+                                transitionDelay: adminConsoleOpen ? `${idx * 30}ms` : '0ms',
+                              }}
+                              className={`relative flex items-center rounded-xl text-[13px] font-medium transition-[transform,opacity,background-color,color] ${
+                                adminConsoleOpen
+                                  ? 'opacity-100 translate-y-0 duration-220 ease-[cubic-bezier(0.22,1,0.36,1)]'
+                                  : 'opacity-0 -translate-y-1.5 pointer-events-none duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]'
+                              } ${
+                                isDesktopCollapsed
+                                  ? 'justify-center h-9 w-10 mx-auto px-0'
+                                  : 'gap-2.5 px-3 py-1.5'
+                              } ${
+                                active
+                                  ? 'bg-indigo-50/90 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-semibold'
+                                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-800/60'
+                              }`}
+                            >
+                              {active && adminConsoleOpen && (
+                                <m.span
+                                  layoutId="citra-sidebar-active-bar"
+                                  transition={SPRING_PILL}
+                                  data-testid="sidebar-active-indicator"
+                                  className="absolute left-1 top-1.5 bottom-1.5 w-1 rounded-full bg-indigo-600 dark:bg-indigo-400"
+                                />
+                              )}
+                              <Icon className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-indigo-600 dark:text-indigo-400' : ''}`} />
+                              <span className={isDesktopCollapsed ? 'sr-only' : 'truncate'}>
+                                {itemLabel}
+                              </span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </nav>
 
-          {/* Subscription Quota & Upgrade Card */}
-          {isDesktopCollapsed ? (
-            <div className="px-2 pb-2 flex flex-col items-center gap-1.5" data-testid="sidebar-quota-card">
+          {/* Bottom ChatGPT-Style Single Account Pill + Compact Basic Upgrade CTA */}
+          <div
+            data-testid="sidebar-quota-card"
+            className={`border-t border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50 shrink-0 ${
+              isDesktopCollapsed ? 'p-2 flex flex-col items-center gap-1.5' : 'p-2.5 space-y-1.5'
+            }`}
+          >
+            {isBasic && (
               <Link
                 to="/pricing"
                 onClick={() => {
@@ -574,275 +753,287 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 onMouseEnter={(e) =>
                   showRailTooltip(
                     e.currentTarget,
-                    `${planTier.toUpperCase()} · ${
-                      sidebarQuota.uploadsUnlimited
-                        ? sidebarQuota.usage
-                        : `${quota.monthly_uploads_used}/${quota.monthly_uploads_limit}`
-                    }`,
+                    currentLang === 'vi' ? 'Nâng cấp Pro · $16/th' : 'Upgrade to Pro · $16/mo',
                   )
                 }
                 onMouseLeave={hideRailTooltip}
-                data-testid={isBasic ? 'sidebar-upgrade-link' : undefined}
-                className="w-12 rounded-xl px-1.5 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-800 flex flex-col items-center gap-1 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors"
+                data-testid="sidebar-upgrade-link"
+                className={
+                  isDesktopCollapsed
+                    ? 'h-9 w-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white inline-flex items-center justify-center transition-colors shadow-2xs'
+                    : 'w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shadow-2xs'
+                }
               >
-                <span
-                  data-testid="sidebar-plan-badge"
-                  className={`px-1.5 py-0.5 rounded-full text-[8.5px] font-mono font-bold uppercase leading-none ${
-                    planTier === 'ultra'
-                      ? 'bg-violet-600 text-white'
-                      : planTier === 'pro'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200'
-                  }`}
-                >
-                  {planTier.toUpperCase()}
-                </span>
-                <span data-testid="sidebar-quota-text" className="sr-only">
-                  {sidebarQuota.uploadsUnlimited
-                    ? sidebarQuota.usage
-                    : `${quota.monthly_uploads_used} / ${quota.monthly_uploads_limit}`}
-                </span>
-                <div className="h-1 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${
-                      sidebarQuota.exhausted ? 'bg-red-500' : 'bg-indigo-600 dark:bg-indigo-400'
-                    }`}
-                    style={{
-                      width: `${sidebarQuota.uploadsUnlimited ? 100 : sidebarQuota.percent}%`,
-                    }}
-                  />
-                </div>
-              </Link>
-            </div>
-          ) : (
-            <div className="px-3.5 pb-2" data-testid="sidebar-quota-card">
-              <div className="rounded-xl p-3 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-800/80 dark:via-slate-900 dark:to-indigo-950/30 border border-slate-200/90 dark:border-slate-800 space-y-2 shadow-2xs">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                    {currentLang === 'vi' ? 'Gói cước' : 'Plan'}
+                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                {!isDesktopCollapsed && (
+                  <span>
+                    {currentLang === 'vi'
+                      ? 'Nâng cấp Pro · $16/th'
+                      : 'Upgrade to Pro · $16/mo'}
                   </span>
+                )}
+              </Link>
+            )}
+
+            <button
+              ref={accountTriggerRef}
+              type="button"
+              data-testid="sidebar-account-trigger"
+              aria-expanded={accountMenuOpen}
+              aria-haspopup="menu"
+              onClick={() => {
+                hideRailTooltip();
+                setAccountMenuOpen((prev) => !prev);
+              }}
+              onMouseEnter={(e) =>
+                showRailTooltip(
+                  e.currentTarget,
+                  `${user?.full_name || user?.username || 'User'} (${planTier.toUpperCase()})`,
+                )
+              }
+              onMouseLeave={hideRailTooltip}
+              className={`w-full flex items-center rounded-xl transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                isDesktopCollapsed
+                  ? 'justify-center p-1 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  : 'gap-2.5 px-2.5 py-2 hover:bg-white dark:hover:bg-slate-800/90 border border-transparent hover:border-slate-200/90 dark:hover:border-slate-700'
+              } ${
+                accountMenuOpen
+                  ? 'bg-white dark:bg-slate-800 border-slate-200/90 dark:border-slate-700 shadow-2xs'
+                  : ''
+              }`}
+            >
+              <Avatar className="h-9 w-9 border-2 border-indigo-200 dark:border-indigo-800 shrink-0">
+                {user?.avatar_url ? (
+                  <AvatarImage src={user.avatar_url} alt={user?.username} />
+                ) : (
+                  <AvatarFallback>
+                    <User className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                  </AvatarFallback>
+                )}
+              </Avatar>
+
+              <div className={isDesktopCollapsed ? 'sr-only' : 'flex-1 min-w-0 text-left'}>
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate leading-tight">
+                  {user?.full_name || user?.username || 'User'}
+                </p>
+                <div className="flex items-center gap-1.5 mt-0.5">
                   <span
                     data-testid="sidebar-plan-badge"
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
+                    className={`px-1.5 py-0.2 rounded text-[9.5px] font-mono font-bold uppercase leading-tight ${
                       planTier === 'ultra'
                         ? 'bg-violet-600 text-white'
                         : planTier === 'pro'
                           ? 'bg-indigo-600 text-white'
-                          : 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
                     }`}
                   >
                     {planTier.toUpperCase()}
                   </span>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-600 dark:text-slate-400">
-                    <span>
-                      {currentLang === 'vi' ? 'Lượt tải tháng' : 'Monthly Checks'}
-                    </span>
-                    <span data-testid="sidebar-quota-text" className="font-semibold text-slate-900 dark:text-white">
-                      {sidebarQuota.uploadsUnlimited
-                        ? sidebarQuota.usage
-                        : `${quota.monthly_uploads_used} / ${quota.monthly_uploads_limit}`}
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-[width,background-color] duration-300 ${
-                        sidebarQuota.exhausted
-                          ? 'bg-red-500'
-                          : 'bg-indigo-600 dark:bg-indigo-400'
-                      }`}
-                      style={{
-                        width: `${sidebarQuota.uploadsUnlimited ? 100 : sidebarQuota.percent}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {isBasic && (
-                  <Link
-                    to="/pricing"
-                    onClick={() => setMobileOpen(false)}
-                    data-testid="sidebar-upgrade-link"
-                    className="mt-1 w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shadow-2xs"
+                  <span className="text-[11px] text-slate-400">·</span>
+                  <span
+                    data-testid="sidebar-quota-text"
+                    className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate"
                   >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    <span>
-                      {currentLang === 'vi'
-                        ? 'Nâng cấp Pro · $16/th'
-                        : 'Upgrade to Pro · $16/mo'}
-                    </span>
-                  </Link>
-                )}
-              </div>
-            </div>
-          )}
-
-          <Separator />
-
-          {/* Theme Toggle, Language & Help */}
-          {isDesktopCollapsed ? (
-            <div className="py-2 px-2 flex flex-col items-center gap-1.5">
-              <NotificationCenterButton lang={currentLang} />
-              <button
-                type="button"
-                onClick={handleToggleLanguage}
-                title="Switch language (VI / EN)"
-                onMouseEnter={(e) =>
-                  showRailTooltip(
-                    e.currentTarget,
-                    currentLang === 'vi' ? 'Ngôn ngữ: Tiếng Việt' : 'Language: English',
-                  )
-                }
-                onMouseLeave={hideRailTooltip}
-                className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[10px] font-mono font-bold text-slate-700 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors cursor-pointer"
-              >
-                {currentLang === 'vi' ? 'VI' : 'EN'}
-              </button>
-              <ThemeToggle size="sm" />
-              <button
-                type="button"
-                onClick={() => setHelpOpen(true)}
-                aria-label={t('nav.helpShortcuts')}
-                onMouseEnter={(e) => showRailTooltip(e.currentTarget, `${t('nav.helpShortcuts')} (Ctrl+/)`)}
-                onMouseLeave={hideRailTooltip}
-                className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                <HelpCircle className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-              </button>
-            </div>
-          ) : (
-            <div className="px-4 py-2.5 space-y-1">
-              <div className="flex items-center justify-between px-2 py-1 gap-2">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('nav.theme')}</span>
-                <div className="flex items-center gap-1.5">
-                  <NotificationCenterButton lang={currentLang} />
-                  <button
-                    type="button"
-                    onClick={handleToggleLanguage}
-                    title="Switch language (VI / EN)"
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700 hover:-translate-y-[1px] active:scale-95 transition-[transform,border-color,background-color] duration-200 cursor-pointer"
-                  >
-                    <Globe className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
-                    <span>{currentLang === 'vi' ? 'VI' : 'EN'}</span>
-                  </button>
-                  <ThemeToggle size="sm" showLabel />
+                    {sidebarQuota.uploadsUnlimited
+                      ? sidebarQuota.usage
+                      : `${quota.monthly_uploads_used} / ${quota.monthly_uploads_limit}`}
+                  </span>
                 </div>
               </div>
 
-              <button
-                onClick={() => setHelpOpen(true)}
-                className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              >
-                <span className="flex items-center gap-2">
-                  <HelpCircle className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                  {t('nav.helpShortcuts')}
-                </span>
-                <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500">
-                  Ctrl+/
-                </kbd>
-              </button>
-            </div>
-          )}
-
-          {/* User Info & Logout */}
-          {isDesktopCollapsed ? (
-            <div className="p-2 border-t border-slate-200/80 dark:border-slate-800/80 flex flex-col items-center gap-1.5 bg-slate-50/60 dark:bg-slate-900/60">
-              <Link
-                to="/profile"
-                onClick={() => {
-                  hideRailTooltip();
-                  setMobileOpen(false);
-                }}
-                onMouseEnter={(e) =>
-                  showRailTooltip(
-                    e.currentTarget,
-                    `${user?.full_name || user?.username || 'User'} · ${t('nav.viewProfile')}`,
-                  )
-                }
-                onMouseLeave={hideRailTooltip}
-                aria-label="View profile"
-                className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-              >
-                <Avatar className="h-9 w-9 border-2 border-indigo-200 dark:border-indigo-800 hover:scale-105 transition-transform">
-                  {user?.avatar_url ? (
-                    <AvatarImage src={user.avatar_url} alt={user?.username} />
-                  ) : (
-                    <AvatarFallback>
-                      <User className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                    </AvatarFallback>
-                  )}
-                </Avatar>
-              </Link>
-
-              <button
-                onClick={handleLogout}
-                disabled={loggingOut}
-                aria-label={t('nav.signOut')}
-                title={t('nav.signOut')}
-                onMouseEnter={(e) => showRailTooltip(e.currentTarget, t('nav.signOut'))}
-                onMouseLeave={hideRailTooltip}
-                className="h-9 w-9 inline-flex items-center justify-center rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-50 cursor-pointer"
-              >
-                {loggingOut ? (
-                  <div className="h-4 w-4 border-2 border-red-600/30 border-t-red-600 rounded-full animate-spin" />
-                ) : (
-                  <LogOut className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-          ) : (
-            <div className="p-3 border-t border-slate-200/80 dark:border-slate-800/80 space-y-1.5 bg-slate-50/60 dark:bg-slate-900/60">
-              <div className="flex flex-col gap-1 px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-9 w-9 border-2 border-indigo-200 dark:border-indigo-800">
-                    {user?.avatar_url ? (
-                      <AvatarImage src={user.avatar_url} alt={user?.username} />
-                    ) : (
-                      <AvatarFallback>
-                        <User className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                      {user?.full_name || user?.username || 'User'}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 capitalize flex items-center gap-1.5 font-mono">
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                      {user?.role || 'user'}
-                    </p>
-                  </div>
-                  <Link
-                    to="/profile"
-                    onClick={() => setMobileOpen(false)}
-                    className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline shrink-0"
-                    aria-label="View profile"
-                  >
-                    {t('nav.viewProfile')}
-                  </Link>
-                </div>
-              </div>
-
-              {/* Logout Button */}
-              <button
-                onClick={handleLogout}
-                disabled={loggingOut}
-                title="Logout"
-                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-[background-color,color,opacity] duration-200 disabled:opacity-50"
-              >
-                {loggingOut ? (
-                  <div className="h-4 w-4 border-2 border-red-600/30 border-t-red-600 rounded-full animate-spin" />
-                ) : (
-                  <LogOut className="h-4 w-4" />
-                )}
-                {loggingOut ? t('nav.signingOut') : t('nav.signOut')}
-              </button>
-            </div>
-          )}
+              {!isDesktopCollapsed && (
+                <ChevronsUpDown className="h-4 w-4 text-slate-400 shrink-0" />
+              )}
+            </button>
+          </div>
         </div>
       </aside>
+
+      {/* ChatGPT-Style Floating Bottom-Left Account Popover Menu */}
+      {accountMenuOpen && (
+        <div
+          ref={accountMenuRef}
+          role="menu"
+          data-testid="sidebar-account-popover"
+          className={`fixed z-[75] rounded-2xl border border-slate-200/90 dark:border-slate-700/90 bg-white dark:bg-slate-900 shadow-2xl p-2 text-sm animate-in fade-in zoom-in-95 duration-150 ${
+            isDesktopCollapsed
+              ? 'bottom-3 left-3 lg:left-[80px] w-[272px]'
+              : 'bottom-16 left-3 w-[264px]'
+          }`}
+        >
+          {/* Identity & Quota Header */}
+          <div className="px-3 py-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-800 mb-1.5 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
+                  {user?.email || user?.username || 'User'}
+                </p>
+                <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 capitalize">
+                  {user?.role || 'user'} · {planTier.toUpperCase()}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
+                <span>{currentLang === 'vi' ? 'Lượt kiểm tra tháng' : 'Monthly Checks'}</span>
+                <span className="font-mono font-semibold text-slate-900 dark:text-white">
+                  {sidebarQuota.uploadsUnlimited
+                    ? sidebarQuota.usage
+                    : `${quota.monthly_uploads_used} / ${quota.monthly_uploads_limit}`}
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${
+                    sidebarQuota.exhausted ? 'bg-red-500' : 'bg-indigo-600 dark:bg-indigo-400'
+                  }`}
+                  style={{
+                    width: `${sidebarQuota.uploadsUnlimited ? 100 : sidebarQuota.percent}%`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Personal & Plan Links */}
+          <div className="space-y-0.5">
+            <Link
+              to="/profile"
+              onClick={() => {
+                setAccountMenuOpen(false);
+                setMobileOpen(false);
+              }}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <User className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
+              <span>{t('nav.viewProfile')}</span>
+            </Link>
+
+            <Link
+              to="/pricing"
+              onClick={() => {
+                setAccountMenuOpen(false);
+                setMobileOpen(false);
+              }}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <span>{t('nav.pricing')}</span>
+            </Link>
+
+            <Link
+              to="/settings"
+              onClick={() => {
+                setAccountMenuOpen(false);
+                setMobileOpen(false);
+              }}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <Settings className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
+              <span>{t('nav.settings')}</span>
+            </Link>
+          </div>
+
+          <div className="my-1.5 h-px bg-slate-200/80 dark:bg-slate-800" />
+
+          {/* Inline Theme & Language Segmented Controls */}
+          <div className="px-2.5 py-1.5 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                {t('nav.theme')}
+              </span>
+              <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700">
+                {([
+                  { key: 'light', icon: Sun, label: 'Light' },
+                  { key: 'dark', icon: Moon, label: 'Dark' },
+                  { key: 'system', icon: Monitor, label: 'System' },
+                ] as const).map(({ key, icon: ModeIcon, label }) => {
+                  const activeMode = theme === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      title={label}
+                      aria-label={label}
+                      onClick={() => setTheme(key)}
+                      className={`h-6 w-7 rounded-md inline-flex items-center justify-center transition-all cursor-pointer ${
+                        activeMode
+                          ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      <ModeIcon className="h-3.5 w-3.5" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Globe className="h-3.5 w-3.5 text-slate-400" />
+                <span>{currentLang === 'vi' ? 'Ngôn ngữ' : 'Language'}</span>
+              </span>
+              <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[11px] font-mono font-bold">
+                {(['vi', 'en'] as const).map((lng) => {
+                  const isCurr = currentLang === lng;
+                  return (
+                    <button
+                      key={lng}
+                      type="button"
+                      onClick={() => handleSelectLanguage(lng)}
+                      className={`px-2.5 py-0.5 rounded-md uppercase transition-all cursor-pointer ${
+                        isCurr
+                          ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                      }`}
+                    >
+                      {lng}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setAccountMenuOpen(false);
+              setHelpOpen(true);
+            }}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-[13px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <span className="flex items-center gap-2.5">
+              <HelpCircle className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
+              <span>{t('nav.helpShortcuts')}</span>
+            </span>
+            <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500">
+              Ctrl+/
+            </kbd>
+          </button>
+
+          <div className="my-1.5 h-px bg-slate-200/80 dark:bg-slate-800" />
+
+          <button
+            type="button"
+            data-testid="account-popover-signout"
+            onClick={() => {
+              setAccountMenuOpen(false);
+              void handleLogout();
+            }}
+            disabled={loggingOut}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/35 transition-colors disabled:opacity-50 cursor-pointer"
+          >
+            {loggingOut ? (
+              <div className="h-4 w-4 border-2 border-red-600/30 border-t-red-600 rounded-full animate-spin" />
+            ) : (
+              <LogOut className="h-4 w-4 shrink-0" />
+            )}
+            <span>{loggingOut ? t('nav.signingOut') : t('nav.signOut')}</span>
+          </button>
+        </div>
+      )}
 
       {/* Floating ChatGPT-Style Dark Rail Tooltip (Never clipped by overflow-y-auto!) */}
       {isDesktopCollapsed && railTooltip && (

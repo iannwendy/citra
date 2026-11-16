@@ -1511,19 +1511,18 @@ html[lang='vi'] .font-solva-serif,
   container-name: citra-main;
 }
 
+@media (min-width: 1024px) {
+  .citra-network-resizable-grid {
+    grid-template-columns: minmax(230px, var(--network-split-pct, 32%)) 12px minmax(360px, 1fr);
+  }
+}
+
 @container citra-main (min-width: 1160px) {
   .citra-cq-citations-left {
     grid-column: span 4 / span 4;
   }
   .citra-cq-citations-right {
     grid-column: span 8 / span 8;
-  }
-  .citra-cq-network-grid {
-    grid-template-columns: minmax(290px, 3.4fr) minmax(0, 8.6fr);
-  }
-  .citra-cq-network-left,
-  .citra-cq-network-right {
-    grid-column: auto;
   }
   .citra-cq-flow-stage {
     height: 446px;
@@ -1543,9 +1542,6 @@ html[lang='vi'] .font-solva-serif,
 }
 
 @container citra-main (min-width: 1360px) {
-  .citra-cq-network-grid {
-    grid-template-columns: minmax(310px, 3fr) minmax(0, 9fr);
-  }
   .citra-cq-page-narrow {
     max-width: 76rem;
   }

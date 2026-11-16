@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ChevronUp,
@@ -7,6 +7,7 @@ import {
   Database,
   Link2,
   Search,
+  GripVertical,
 } from 'lucide-react';
 import type {
   Verdict,
@@ -75,6 +76,97 @@ export function CitationGraphView({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeId, setActiveId] = useState<string | null>(
     selectedCitationId ?? verdicts[0]?.citation_id ?? null,
+  );
+
+  // Interactive Left-Right Split Resizer state (20% .. 56%, default 32%)
+  const DEFAULT_SPLIT_PCT = 32;
+  const MIN_SPLIT_PCT = 20;
+  const MAX_SPLIT_PCT = 56;
+  const [splitPct, setSplitPct] = useState<number>(() => {
+    try {
+      if (typeof window === 'undefined') return DEFAULT_SPLIT_PCT;
+      const raw = Number(localStorage.getItem('citra.network.splitPct'));
+      if (Number.isFinite(raw) && raw >= MIN_SPLIT_PCT && raw <= MAX_SPLIT_PCT) {
+        return raw;
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return DEFAULT_SPLIT_PCT;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const splitContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const commitSplitPct = useCallback((next: number) => {
+    const clamped = Math.min(
+      MAX_SPLIT_PCT,
+      Math.max(MIN_SPLIT_PCT, Math.round(next * 10) / 10),
+    );
+    setSplitPct(clamped);
+    try {
+      localStorage.setItem('citra.network.splitPct', String(clamped));
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
+
+  const handleResizerPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0) return;
+      const container = splitContainerRef.current;
+      if (!container) return;
+      e.preventDefault();
+      const rect = container.getBoundingClientRect();
+      if (rect.width <= 0) return;
+
+      setIsResizing(true);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+
+      let rafId: number | null = null;
+      const onMove = (ev: PointerEvent) => {
+        const pct = ((ev.clientX - rect.left) / rect.width) * 100;
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          commitSplitPct(pct);
+          rafId = null;
+        });
+      };
+
+      const onUp = () => {
+        if (rafId !== null) cancelAnimationFrame(rafId);
+        setIsResizing(false);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+      };
+
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+    },
+    [commitSplitPct],
+  );
+
+  const handleResizerKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        commitSplitPct(splitPct - 3);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        commitSplitPct(splitPct + 3);
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        commitSplitPct(MIN_SPLIT_PCT);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        commitSplitPct(MAX_SPLIT_PCT);
+      }
+    },
+    [commitSplitPct, splitPct],
   );
 
   const { containerRef: cleanFilterRef, pillStyle: cleanFilterPill } =
@@ -316,20 +408,23 @@ export function CitationGraphView({
         </div>
       )}
 
-      {/* Main 2-Column Layout: Clean Compact Selector (4 cols) + Exhibition Flow Board (8 cols) */}
+      {/* Main 2-Column Resizable Layout: Left Reference Picker + Drag Handle + Right Flow Board */}
       <div
+        ref={splitContainerRef}
+        data-testid="network-split-container"
+        style={{ '--network-split-pct': `${splitPct}%` } as React.CSSProperties}
         className={
           isCleanEmbeddedMode
-            ? 'citra-cq-network-grid grid grid-cols-1 lg:grid-cols-12 w-full min-w-0'
-            : 'citra-cq-network-grid grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start p-3.5 sm:p-5 w-full min-w-0'
+            ? 'citra-network-resizable-grid grid grid-cols-1 w-full min-w-0'
+            : 'citra-network-resizable-grid grid grid-cols-1 gap-4 lg:gap-0 items-start p-3.5 sm:p-5 w-full min-w-0'
         }
       >
         {/* Left Column: Minimalist, Non-Tech Reference Picker */}
         <div
           className={
             isCleanEmbeddedMode
-              ? 'citra-cq-network-left lg:col-span-4 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col lg:max-h-[730px] min-w-0'
-              : 'citra-cq-network-left lg:col-span-4 space-y-2 lg:max-h-[680px] lg:overflow-y-auto lg:pr-1 w-full min-w-0'
+              ? 'border-b lg:border-b-0 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col lg:max-h-[730px] min-w-0'
+              : 'space-y-2 lg:max-h-[680px] lg:overflow-y-auto lg:pr-2 w-full min-w-0'
           }
         >
           {isCleanEmbeddedMode && (
@@ -487,12 +582,64 @@ export function CitationGraphView({
           </div>
         </div>
 
-        {/* Right Column: Exhibition-Grade Interactive Decision Flow Board (8 cols on lg+, single mounted instance for 120fps) */}
+        {/* Interactive Left-Right Drag Resizer Handle (Desktop lg+) */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={
+            isVi
+              ? 'Kéo sang trái hoặc phải để chỉnh độ rộng hai cột (nhấp đúp để đặt lại)'
+              : 'Drag left or right to resize columns (double-click to reset)'
+          }
+          aria-valuemin={MIN_SPLIT_PCT}
+          aria-valuemax={MAX_SPLIT_PCT}
+          aria-valuenow={Math.round(splitPct)}
+          tabIndex={0}
+          data-testid="network-split-resizer"
+          title={
+            isVi
+              ? 'Kéo trái/phải để chỉnh độ rộng · Nhấp đúp để đặt lại'
+              : 'Drag left/right to resize · Double-click to reset'
+          }
+          onPointerDown={handleResizerPointerDown}
+          onDoubleClick={() => commitSplitPct(DEFAULT_SPLIT_PCT)}
+          onKeyDown={handleResizerKeyDown}
+          className="hidden lg:flex items-center justify-center self-stretch relative cursor-col-resize select-none group/resizer focus:outline-none z-20"
+        >
+          {/* Crisp 1px vertical seam that lights up on hover/drag */}
+          <div
+            aria-hidden="true"
+            className={`absolute inset-y-0 left-1/2 -translate-x-1/2 transition-all duration-150 ${
+              isResizing
+                ? 'w-[2px] bg-indigo-500 dark:bg-emerald-400'
+                : 'w-px bg-slate-200 dark:bg-slate-800 group-hover/resizer:w-[2px] group-hover/resizer:bg-indigo-400 dark:group-hover/resizer:bg-emerald-400/80 group-focus-visible/resizer:w-[2px] group-focus-visible/resizer:bg-indigo-500'
+            }`}
+          />
+          {/* Tactile Centered Grip Pill */}
+          <div
+            aria-hidden="true"
+            className={`relative z-10 h-9 w-3.5 rounded-full border flex items-center justify-center transition-all duration-150 shadow-2xs ${
+              isResizing
+                ? 'border-indigo-500 dark:border-emerald-400 bg-indigo-50 dark:bg-emerald-950 scale-110'
+                : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 group-hover/resizer:border-indigo-400 dark:group-hover/resizer:border-emerald-400 group-hover/resizer:scale-105'
+            }`}
+          >
+            <GripVertical
+              className={`h-3 w-3 ${
+                isResizing
+                  ? 'text-indigo-600 dark:text-emerald-300'
+                  : 'text-slate-400 group-hover/resizer:text-indigo-600 dark:group-hover/resizer:text-emerald-300'
+              }`}
+            />
+          </div>
+        </div>
+
+        {/* Right Column: Exhibition-Grade Interactive Decision Flow Board */}
         <div
           className={
             isCleanEmbeddedMode
-              ? 'citra-cq-network-right lg:col-span-8 p-4 sm:p-5 bg-white dark:bg-slate-950 min-w-0'
-              : 'citra-cq-network-right lg:col-span-8 lg:sticky lg:top-4 w-full min-w-0'
+              ? 'p-4 sm:p-5 bg-white dark:bg-slate-950 min-w-0'
+              : 'lg:sticky lg:top-4 lg:pl-3 w-full min-w-0'
           }
         >
           {activeVerdict && (

@@ -47,11 +47,15 @@ function makeWorkspaceUser(): User {
   };
 }
 
-function renderWorkspace(ui: React.ReactElement, initialEntries = ['/upload']) {
+function renderWorkspace(
+  ui: React.ReactElement,
+  initialEntries = ['/upload'],
+  roleOverride: User['role'] = 'user',
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const user = makeWorkspaceUser();
+  const user: User = { ...makeWorkspaceUser(), role: roleOverride };
   return render(
     <CitraMotionProvider>
       <QueryClientProvider client={queryClient}>
@@ -62,7 +66,7 @@ function renderWorkspace(ui: React.ReactElement, initialEntries = ['/upload']) {
                 user,
                 token: 'mock-jwt',
                 isLoading: false,
-                isAdmin: false,
+                isAdmin: roleOverride === 'admin',
                 login: vi.fn(),
                 logout: vi.fn(),
                 refreshUser: vi.fn().mockResolvedValue(undefined),
@@ -311,5 +315,63 @@ describe('Task 7 — Core Workspace Continuity', () => {
     fireEvent.keyDown(window, { key: 'b', ctrlKey: true });
     expect(screen.getByTestId('app-sidebar').getAttribute('data-collapsed')).toBe('false');
     expect(localStorage.getItem('citra.sidebar.collapsed')).toBe('false');
+  });
+
+  it('AppLayout organizes sidebar like ChatGPT: collapsible Admin Console accordion + bottom Account Popover housing Profile, Pricing, Settings, Theme, Language, Help & Sign out', () => {
+    renderWorkspace(
+      <Routes>
+        <Route
+          path="/dashboard"
+          element={
+            <AppLayout>
+              <div data-testid="dash-view">Dashboard</div>
+            </AppLayout>
+          }
+        />
+      </Routes>,
+      ['/dashboard'],
+      'admin',
+    );
+
+    const sidebar = screen.getByTestId('app-sidebar');
+
+    // Outer sidebar does NOT clutter nav with standalone /settings link or standalone Sign out button
+    expect(sidebar.querySelector('nav a[href="/settings"]')).toBeNull();
+    expect(screen.queryByTestId('sidebar-account-popover')).toBeNull();
+
+    // Admin Console uses #21 AccordionExpand (.t-acc-panel) so it animates smoothly both opening AND closing
+    const adminToggle = screen.getByTestId('sidebar-admin-console-toggle');
+    const adminPanel = screen.getByTestId('sidebar-admin-console-panel');
+    expect(adminPanel.className).toContain('t-acc-panel');
+    expect(adminToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(adminPanel.getAttribute('data-open')).toBe('false');
+    expect(adminPanel.getAttribute('aria-hidden')).toBe('true');
+
+    const adminUsersLink = sidebar.querySelector('nav a[href="/admin/users"]') as HTMLAnchorElement;
+    expect(adminUsersLink).not.toBeNull();
+    expect(adminUsersLink.getAttribute('tabindex')).toBe('-1');
+
+    // Expand -> smooth 0fr -> 1fr + staggered items + focusable links
+    fireEvent.click(adminToggle);
+    expect(adminToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(adminPanel.getAttribute('data-open')).toBe('true');
+    expect(adminPanel.getAttribute('aria-hidden')).toBe('false');
+    expect(adminUsersLink.getAttribute('tabindex')).toBeNull();
+
+    // Collapse again -> stays mounted in DOM with data-open="false" for smooth exit animation
+    fireEvent.click(adminToggle);
+    expect(adminToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(adminPanel.getAttribute('data-open')).toBe('false');
+    expect(screen.getByTestId('sidebar-admin-console-panel')).toBeDefined();
+
+    // Clicking bottom Account Pill opens ChatGPT-style Account Popover with personal & preference controls
+    const accountTrigger = screen.getByTestId('sidebar-account-trigger');
+    fireEvent.click(accountTrigger);
+    const popover = screen.getByTestId('sidebar-account-popover');
+    expect(popover).toBeDefined();
+    expect(popover.querySelector('a[href="/profile"]')).not.toBeNull();
+    expect(popover.querySelector('a[href="/pricing"]')).not.toBeNull();
+    expect(popover.querySelector('a[href="/settings"]')).not.toBeNull();
+    expect(screen.getByTestId('account-popover-signout')).toBeDefined();
   });
 });
