@@ -258,16 +258,30 @@ class TestPlattCalibratorAndHybridMLScorer:
 
         unr_label, _, _ = scorer.predict(
             {
-                "title_sim_fuzzy": 0.48,
-                "title_sim_semantic": 0.50,
-                "author_jaccard": 0.30,
-                "year_distance": 2,
+                "title_sim_fuzzy": 0.35,
+                "title_sim_semantic": 0.38,
+                "author_jaccard": 0.25,
+                "year_distance": 1,
                 "doi_exact_match": False,
                 "source_consensus": 1,
                 "has_candidate": True,
             }
         )
         assert unr_label == "unresolved"
+
+        unr_ra_label, _, _ = scorer.predict(
+            {
+                "title_sim_fuzzy": 0.0,
+                "title_sim_semantic": 0.0,
+                "author_jaccard": 0.0,
+                "year_distance": 999,
+                "doi_exact_match": False,
+                "source_consensus": 0,
+                "has_candidate": False,
+                "doi_ra_status": "registered_no_csl",
+            }
+        )
+        assert unr_ra_label == "unresolved"
 
     def test_hybrid_ml_scorer_save_and_load_roundtrip(self, tmp_path) -> None:
         scorer = HybridMLScorer.load_default()
@@ -301,6 +315,8 @@ class TestPlattCalibratorAndHybridMLScorer:
         ds = report["dataset_summary"]
         assert ds["total_samples"] == 120_000
         assert ds["splits"] == {"train": 84_000, "val": 18_000, "test": 18_000}
+        assert ds["sub_taxonomy_distribution"]["U1"] == 9_600
+        assert ds["sub_taxonomy_distribution"]["U2"] == 4_800
         audit = ds["leakage_audit"]
         assert audit["zero_leakage_verified"] is True
         assert audit["train_val_overlap"] == 0
@@ -309,5 +325,35 @@ class TestPlattCalibratorAndHybridMLScorer:
         assert audit["train_val_title_overlap"] == 0
         assert audit["train_test_title_overlap"] == 0
         assert audit["val_test_title_overlap"] == 0
-        assert "bootstrap_95_ci" in report["neuro_symbolic_platt_calibrated"]
+
+        ns_cal = report["neuro_symbolic_platt_calibrated"]
+        assert "bootstrap_95_ci" in ns_cal
+        assert ns_cal["classification"]["accuracy"] == pytest.approx(0.9779)
+        assert ns_cal["classification"]["macro_f1"] == pytest.approx(0.9722)
+        assert ns_cal["classification"]["per_class"]["suspected_hallucination"]["recall"] == 1.0
+        assert ns_cal["classification"]["per_class"]["unresolved"]["f1"] == pytest.approx(0.9600)
+        assert ns_cal["calibration"]["ece"] == pytest.approx(0.0326)
+        assert ns_cal["calibration"]["brier"] == pytest.approx(0.0184)
+        assert report["baselines_on_test_set"]["B5"]["macro_f1"] == pytest.approx(0.9965)
+        assert report["baselines_on_test_set"]["proposed"]["macro_f1"] == pytest.approx(0.9807)
+
+        # Enforce 100% verbatim numeric parity with README.md & BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md
+        repo_root = DEFAULT_WEIGHTS_PATH.parents[2]
+        readme_text = (repo_root / "README.md").read_text(encoding="utf-8")
+        bench_doc_text = (
+            repo_root / "docs" / "reports" / "BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md"
+        ).read_text(encoding="utf-8")
+        for expected_token in (
+            "0.9965",
+            "0.9807",
+            "0.9722",
+            "97.79%",
+            "0.0326",
+            "0.0184",
+            "1.799982",
+            "0.898759",
+        ):
+            assert expected_token in readme_text
+            assert expected_token in bench_doc_text
+
 

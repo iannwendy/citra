@@ -387,6 +387,135 @@ def _make_chimeric_hallucinated_title(p1: dict[str, Any], p2: dict[str, Any], rn
     return f"{rng.choice(prefixes)} {' '.join(w1)} {rng.choice(suffixes)}"
 
 
+_BORDERLINE_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "a", "an", "the", "of", "in", "on", "for", "to", "with", "by", "and", "or",
+        "from", "at", "as", "via", "into", "over", "under", "using", "towards", "toward",
+        "based", "new", "novel", "approach", "study", "method", "methods", "system", "systems",
+    }
+)
+
+_BORDERLINE_PARAPHRASES: dict[str, str] = {
+    "neural": "Connectionist",
+    "network": "Architecture",
+    "networks": "Architectures",
+    "learning": "Acquisition",
+    "deep": "Multilayer",
+    "model": "Formulation",
+    "models": "Formulations",
+    "language": "Linguistic",
+    "languages": "Idioms",
+    "translation": "Transduction",
+    "machine": "Automated",
+    "semantic": "Conceptual",
+    "semantics": "Meaning",
+    "representations": "Embeddings",
+    "representation": "Embedding",
+    "attention": "Salience",
+    "classification": "Categorization",
+    "detection": "Identification",
+    "generation": "Synthesis",
+    "analysis": "Examination",
+    "evaluation": "Assessment",
+    "graph": "Relational",
+    "graphs": "Topologies",
+    "transformer": "Self-Attentive",
+    "transformers": "Self-Attentive",
+    "information": "Epistemic",
+    "extraction": "Mining",
+    "parsing": "Syntactic",
+    "parser": "Decoder",
+    "speech": "Spoken",
+    "recognition": "Transcription",
+    "text": "Discourse",
+    "texts": "Corpora",
+    "word": "Lexical",
+    "words": "Lexicon",
+    "sentence": "Utterance",
+    "sentences": "Utterances",
+    "question": "Query",
+    "answering": "Resolution",
+    "dialogue": "Conversational",
+    "dialog": "Conversational",
+    "knowledge": "Ontological",
+    "reasoning": "Inference",
+    "training": "Optimization",
+    "pretrained": "Initialized",
+    "pretraining": "Initialization",
+    "data": "Corpus",
+    "dataset": "Benchmark",
+    "datasets": "Benchmarks",
+    "multilingual": "Cross-Lingual",
+    "cross-lingual": "Bilingual",
+    "sentiment": "Affective",
+    "summarization": "Condensation",
+    "retrieval": "Lookup",
+    "search": "Indexing",
+    "entity": "Mention",
+    "entities": "Mentions",
+    "relation": "Linkage",
+    "relations": "Linkages",
+    "prediction": "Forecasting",
+    "context": "Contextual",
+    "contextual": "Situational",
+    "hierarchical": "Stratified",
+    "sequence": "Sequential",
+    "sequences": "Chains",
+    "structured": "Compositional",
+    "structure": "Syntax",
+    "unsupervised": "Self-Guided",
+    "supervised": "Annotated",
+    "domain": "Field",
+    "adaptation": "Transfer",
+    "alignment": "Correspondence",
+    "visual": "Perceptual",
+    "vision": "Perception",
+    "image": "Pictorial",
+    "document": "Manuscript",
+    "documents": "Manuscripts",
+    "framework": "Paradigm",
+    "efficient": "Scalable",
+    "improving": "Refining",
+    "estimation": "Approximation",
+    "vector": "Subspace",
+    "space": "Manifold",
+}
+
+_BORDERLINE_SUBCLAUSES: tuple[str, ...] = (
+    "Preliminary Preprint Notes on Methodological Perspectives and Institutional Protocols",
+    "Exploratory Preprint Draft on Comparative Formulations and Field Observations",
+    "Extended Workshop Draft on Operational Constraints and Analytical Tradeoffs",
+    "Translated Summary of Empirical Criteria and Longitudinal Review",
+    "Interim Research Memorandum on Structural Assumptions and Applied Characterization",
+    "Early Technical Commentary on Boundary Conditions and Qualitative Assessment",
+)
+
+
+def _make_borderline_preprint_title(title: str, idx: int, rng: random.Random) -> str:
+    """Keep ~48%-56% of content words (lead anchor + renamed/translated paraphrases) + neutral subclause."""
+    content = [
+        re.sub(r"[^A-Za-z0-9\-]", "", w)
+        for w in title.split()
+        if re.sub(r"[^A-Za-z0-9]", "", w).lower() not in _BORDERLINE_STOPWORDS
+        and len(re.sub(r"[^A-Za-z0-9]", "", w)) >= 3
+    ]
+    if not content:
+        content = [re.sub(r"[^A-Za-z0-9\-]", "", w) for w in title.split() if w]
+    n_keep = max(2, int(round(len(content) * rng.uniform(0.48, 0.56))))
+    kept = content[:n_keep]
+    out: list[str] = []
+    for k, w in enumerate(kept):
+        wl = w.lower()
+        if k == 0 and len(w) <= 10:
+            out.append(w)
+        elif wl in _BORDERLINE_PARAPHRASES:
+            out.append(_BORDERLINE_PARAPHRASES[wl])
+        else:
+            out.append("Analytical" if k % 2 == 0 else "Empirical")
+    subclause = _BORDERLINE_SUBCLAUSES[idx % len(_BORDERLINE_SUBCLAUSES)]
+    return f"{' '.join(out)}: {subclause}"
+
+
 def _encode_texts_fast(texts: list[str], batch_size: int = 256) -> np.ndarray:
     """Encode unique texts with Sentence-BERT on MPS/CUDA/CPU and map back to full array."""
     from sentence_transformers import SentenceTransformer
@@ -699,41 +828,83 @@ def build_split_dataset(
         context_sents_to_encode.append(s1)
         abs_sents_to_encode.append(s2)
 
-    # 4. UNRESOLVED / ABSTENTION BAND (12%)
+    # 4. UNRESOLVED / ABSTENTION BAND (12%: U1 = 8% ambiguous partial-evidence, U2 = 4% insufficient registry/rate-limited)
     offset_unr = n_verified + n_meta + n_halluc
     for m in range(n_unres):
         idx = offset_unr + m
         p1 = pool_papers[idx]
-        p2 = pool_papers[offset_unr + ((m + 83) % n_unres)]
         s1, _ = _extract_sentences(p1["abstract"], p1["title"])
 
-        # Construct borderline title overlap (keep ~35-45% of p1 words + p2 words)
-        w1 = p1["title"].split()
-        w2 = p2["title"].split()
-        keep_n = max(2, int(len(w1) * 0.38))
-        c_title = f"{' '.join(w1[:keep_n])} and {' '.join(w2[:max(3, len(w2)//2)])}"
-        c_authors = [p1["authors"][0], "UnknownColleague, R."] if (m % 2 == 0) else ["AmbiguousAuthor, T."]
-        unr_yd = rng.choice([1, 2, 3, 4])
+        if m % 3 != 0:
+            # U1 (8% = 9,600): Ambiguous partial-evidence / renamed preprint / translated borderline
+            sub_type = "U1"
+            c_title = _make_borderline_preprint_title(p1["title"], m, rng)
+            k_auth = 1 if len(p1["authors"]) <= 4 else max(2, (len(p1["authors"]) + 3) // 4)
+            c_authors = list(p1["authors"][:k_auth]) + ["Collaborator, R."]
+            unr_yd = rng.choice([0, 1, 2])
+            cited_year_val = int(p1["year"]) + unr_yd
+            if m % 2 == 0:
+                cited_venue_val = p1["venue"]
+            elif m % 4 == 1:
+                cited_venue_val = "arXiv Preprint"
+            else:
+                cited_venue_val = ""
+            cand_doi_val = p1["doi"] or None
+            c_doi_val = None
+            consensus_val = 1
+            has_cand_val = True
+            api_exhausted_val = False
+            doi_ra_status_val = None
+        else:
+            # U2 (4% = 4,800): Regional DOI registered_no_csl (half) & upstream API rate-limited abstention (half)
+            sub_type = "U2"
+            u2_idx = m // 3
+            c_title = p1["title"]
+            c_authors = list(p1["authors"][:2])
+            unr_yd = 999
+            cited_year_val = int(p1["year"])
+            cand_doi_val = None
+            consensus_val = 0
+            has_cand_val = False
+            if u2_idx % 2 == 0:
+                cited_venue_val = p1["venue"]
+                c_doi_val = (
+                    f"10.11499/sicejl.{int(p1['year'])}.{1000 + u2_idx}"
+                    if ((u2_idx // 2) % 2 == 0)
+                    else f"10.5109/es.{int(p1['year'])}.{1000 + u2_idx}"
+                )
+                api_exhausted_val = False
+                doi_ra_status_val = "registered_no_csl"
+            else:
+                cited_venue_val = (
+                    "Working Paper Series" if ((u2_idx // 2) % 2 == 0) else p1["venue"]
+                )
+                c_doi_val = None
+                api_exhausted_val = True
+                doi_ra_status_val = None
 
         raw_Specs.append(
             {
                 "id": f"{split_name}_unr_{m:05d}",
                 "paper_id": p1["paper_id"],
                 "true_label": "unresolved",
-                "sub_type": "U1" if (m % 3 != 0) else "U2",
+                "sub_type": sub_type,
                 "cited_title": c_title,
                 "cand_title": p1["title"],
                 "cited_authors": c_authors,
                 "cand_authors": p1["authors"],
-                "cited_year": int(p1["year"]) + unr_yd,
+                "cited_year": cited_year_val,
                 "cand_year": int(p1["year"]),
                 "year_distance": unr_yd,
-                "cited_venue": p2["venue"],
+                "cited_venue": cited_venue_val,
                 "cand_venue": p1["venue"],
-                "cand_doi": p1["doi"] or None,
+                "cand_doi": cand_doi_val,
                 "doi_exact_match": False,
-                "source_consensus": rng.choice([0, 1]),
-                "has_candidate": True,
+                "cited_doi": c_doi_val,
+                "source_consensus": consensus_val,
+                "has_candidate": has_cand_val,
+                "api_exhausted": api_exhausted_val,
+                "doi_ra_status": doi_ra_status_val,
                 "use_context": False,
                 "context_aligned_mode": "none",
                 "url_status": None,
@@ -822,6 +993,8 @@ def build_split_dataset(
                 "content_alignment_confidence": ca_conf,
                 "content_is_aligned": ca_aligned,
                 "has_candidate": has_cand,
+                "api_exhausted": bool(spec.get("api_exhausted", False)),
+                "doi_ra_status": spec.get("doi_ra_status"),
                 "url_status": spec["url_status"],
                 "url_status_code": spec["url_status_code"],
                 "cited_doi": spec.get("cited_doi"),
@@ -835,6 +1008,8 @@ def build_split_dataset(
 
 def _run_symbolic_rule_on_item(rules: SymbolicRules, item: dict[str, Any]) -> tuple[MatchFeatures, Any]:
     """Execute the production SymbolicRules engine on a single dataset record."""
+    api_exhausted = bool(item.get("api_exhausted", False))
+    doi_ra_status = str(item.get("doi_ra_status") or "")
     feat = MatchFeatures(
         title_sim_fuzzy=item["title_sim_fuzzy"],
         title_sim_semantic=item["title_sim_semantic"],
@@ -846,6 +1021,8 @@ def _run_symbolic_rule_on_item(rules: SymbolicRules, item: dict[str, Any]) -> tu
         content_alignment_score=item.get("content_alignment_score", 0.0),
         content_alignment_confidence=item.get("content_alignment_confidence", ""),
         content_is_aligned=item.get("content_is_aligned", False),
+        api_exhausted=api_exhausted,
+        doi_ra_status=doi_ra_status,
     )
     has_cand = bool(item.get("has_candidate", True))
     cited_title = item.get("cited_title")
@@ -857,6 +1034,7 @@ def _run_symbolic_rule_on_item(rules: SymbolicRules, item: dict[str, Any]) -> tu
     cited_year = str(item.get("cited_year") or "2021")
     cand_year = str(item.get("cand_year") or "2021")
     cand_doi = item.get("cand_doi") or ("10.1000/cand" if item["doi_exact_match"] else None)
+    cited_doi = item.get("cited_doi") or (cand_doi if item["doi_exact_match"] else None)
     crossref_ok = bool(item.get("crossref_matched", bool(cand_doi)))
 
     source_pool = (
@@ -865,6 +1043,9 @@ def _run_symbolic_rule_on_item(rules: SymbolicRules, item: dict[str, Any]) -> tu
         else ("openalex", "dblp", "arxiv", "datacite", "doaj")
     )
     cands: list[SourceCandidate] = []
+    queried_sources = ["crossref", "openalex", "datacite", "arxiv", "dblp"]
+    failed_sources: dict[str, str] = {}
+
     if has_cand:
         n_cands = max(1, int(item.get("source_consensus", 1)))
         for c_idx in range(n_cands):
@@ -881,6 +1062,41 @@ def _run_symbolic_rule_on_item(rules: SymbolicRules, item: dict[str, Any]) -> tu
                     score=0.95,
                 )
             )
+    elif doi_ra_status == "registered_no_csl" and cited_doi:
+        ra_err = f"DOI RA: CSL metadata unavailable for '{cited_doi}' (RA=JaLC)"
+        cands.append(
+            SourceCandidate(
+                source_name="doi_ra",
+                found=False,
+                doi=cited_doi,
+                url=f"https://doi.org/{cited_doi}",
+                external_ids={
+                    "doi": cited_doi,
+                    "doi_ra": "JaLC",
+                    "doi_ra_status": "registered_no_csl",
+                },
+                error=ra_err,
+            )
+        )
+        queried_sources = ["crossref", "openalex", "doi_ra"]
+        failed_sources = {
+            "crossref": "Crossref: no results for query",
+            "openalex": "OpenAlex: no results for query",
+            "doi_ra": ra_err,
+        }
+    elif api_exhausted:
+        queried_sources = ["crossref", "openalex", "dblp"]
+        failed_sources = {
+            "crossref": "Crossref: HTTP 429 rate limit backoff",
+            "openalex": "OpenAlex: HTTP 429 rate limit exceeded",
+            "dblp": "DBLP: no results for query",
+        }
+    else:
+        failed_sources = {
+            "crossref": "Crossref: no results for query",
+            "openalex": "OpenAlex: no results for query",
+        }
+
     author_prefix = ", ".join(cited_authors[:2]) if cited_authors else "Author A"
     title_part = cited_title or "Substantive Scholarly Paper Title"
     venue_part = f" {cited_venue}." if cited_venue else " Proceedings."
@@ -890,25 +1106,18 @@ def _run_symbolic_rule_on_item(rules: SymbolicRules, item: dict[str, Any]) -> tu
     source = SourceResult(
         citation_raw=raw_citation,
         candidates=cands,
-        sources_queried=["crossref", "openalex", "datacite", "arxiv", "dblp"],
+        sources_queried=queried_sources,
         sources_succeeded=succeeded_sources,
-        sources_failed=(
-            {}
-            if has_cand
-            else {
-                "crossref": "Crossref: no results for query",
-                "openalex": "OpenAlex: no results for query",
-            }
-        ),
-        api_exhausted=False,
+        sources_failed=failed_sources,
+        api_exhausted=api_exhausted,
         url_status=item.get("url_status"),
         url_status_code=item.get("url_status_code"),
     )
-    cited_doi = item.get("cited_doi") or (cand_doi if item["doi_exact_match"] else None)
     cited_url = "http://example.com/fake-paper" if item.get("url_status") == "fake_domain" else None
     outcome = rules.apply(
         feat,
         source,
+        api_exhausted=api_exhausted,
         citation_doi=cited_doi,
         citation_url=cited_url,
         citation_authors=cited_authors if cited_authors is not None else (["Author A"] if item["author_jaccard"] < 0.4 else None),
@@ -1037,6 +1246,7 @@ def evaluate_neuro_symbolic_with_calibrator(
                 features=feat,
                 has_candidate=has_cand,
                 style_penalty=outcome.style_penalty,
+                triggered_rules=outcome.triggered_rules,
             )
         else:
             final_conf = raw_conf

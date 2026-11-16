@@ -1445,7 +1445,14 @@ class NeuroSymbolicChecker:
 
         final_confidence = outcome.confidence
         if self.enable_calibration and self.hybrid_scorer is not None and outcome.confidence > 0.0:
+            from integrity_checker.logic.rules import _extract_registered_no_csl_ra
+
             has_cand = any(getattr(c, "found", True) for c in (source.candidates or []))
+            features.api_exhausted = bool(
+                api_exhausted or getattr(source, "api_exhausted", False)
+            )
+            if _extract_registered_no_csl_ra(source):
+                features.doi_ra_status = "registered_no_csl"
             final_confidence = self.hybrid_scorer.calibrate_verdict_confidence(
                 symbolic_label=outcome.label.value,
                 symbolic_confidence=outcome.confidence,

@@ -3100,15 +3100,36 @@ class SymbolicRules:
             and consensus <= 1
             and len(source.sources_queried) >= 4
         )
-        if self.abstention_low <= title_sim <= self.abstention_high and not is_semantic_only_noise:
+        is_partial_author_grey_zone = bool(
+            sources_found > 0
+            and not doi_match
+            and not has_doi_conflict
+            and author_sim >= 0.18
+            and year_dist is not None
+            and abs(year_dist) <= 3
+            and 0.28 <= title_sim < self.title_sim_metadata_error
+            and not (is_known_author and author_sim >= 0.50 and title_sim < self.abstention_low)
+        )
+        if (
+            (self.abstention_low <= title_sim <= self.abstention_high and not is_semantic_only_noise)
+            or is_partial_author_grey_zone
+        ):
             triggered_rules.append("R-ABSTENTION-BORDER")
+            if is_partial_author_grey_zone and title_sim < self.abstention_low:
+                border_reason = (
+                    f"Partial author overlap (author_sim={author_sim:.2f}) and plausible publication year "
+                    f"(year_dist={year_dist}) with grey-zone title similarity ({title_sim:.2f} in "
+                    f"[0.28, {self.title_sim_metadata_error:.2f})) — system abstains for manual review."
+                )
+            else:
+                border_reason = (
+                    f"Title similarity ({title_sim:.2f}) falls within the abstention border zone "
+                    f"[{self.abstention_low}, {self.abstention_high}] — system abstains for manual review."
+                )
             return RuleOutcome(
                 label=ValidationLabel.UNRESOLVED,
                 confidence=max(0.0, title_sim - style_penalty),
-                reasoning=(
-                    f"Title similarity ({title_sim:.2f}) falls within the abstention border zone "
-                    f"[{self.abstention_low}, {self.abstention_high}] — system abstains for manual review."
-                ),
+                reasoning=border_reason,
                 triggered_rules=triggered_rules,
                 mismatched_fields=[],
                 style_penalty=style_penalty,

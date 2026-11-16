@@ -540,6 +540,8 @@ class HybridMLScorer:
             ca_score = float(features.get("content_alignment_score", 0.0) or 0.0)
             ca_conf = str(features.get("content_alignment_confidence", "") or "")
             ca_aligned = bool(features.get("content_is_aligned", False))
+            api_exhausted = bool(features.get("api_exhausted", False))
+            doi_ra_status = str(features.get("doi_ra_status") or "")
             if has_candidate is None:
                 has_cand = 1.0 if (
                     features.get("has_candidate")
@@ -562,6 +564,8 @@ class HybridMLScorer:
             ca_score = float(getattr(features, "content_alignment_score", 0.0) or 0.0)
             ca_conf = str(getattr(features, "content_alignment_confidence", "") or "")
             ca_aligned = bool(getattr(features, "content_is_aligned", False))
+            api_exhausted = bool(getattr(features, "api_exhausted", False))
+            doi_ra_status = str(getattr(features, "doi_ra_status", "") or "")
             if has_candidate is None:
                 has_cand = 1.0 if (consensus > 0 or tf > 0.0 or ts > 0.0 or doi_ok > 0.0) else 0.0
             else:
@@ -587,7 +591,19 @@ class HybridMLScorer:
         title_mismatch_author = t_max * (1.0 - aj) if t_max >= 0.60 else 0.0
         title_mismatch_year = t_max * (1.0 - year_match) if t_max >= 0.60 else 0.0
         doi_mismatch_title = doi_ok * (1.0 - t_max)
-        abstention_zone = 1.0 if (0.40 <= t_max < 0.60 and doi_ok == 0.0 and has_cand > 0.0) else 0.0
+        has_partial_author_grey = 0.28 <= t_max < 0.60 and aj >= 0.18 and abs_yd <= 3
+        has_border_title = 0.40 <= t_max < 0.60 and (aj > 0.0 or tf >= 0.65 or consensus > 1)
+        has_registry_abstention = has_cand == 0.0 and (
+            api_exhausted or doi_ra_status == "registered_no_csl"
+        )
+        abstention_zone = (
+            1.0
+            if (
+                (doi_ok == 0.0 and has_cand > 0.0 and (has_border_title or has_partial_author_grey))
+                or has_registry_abstention
+            )
+            else 0.0
+        )
 
         return [
             round(tf, 6),

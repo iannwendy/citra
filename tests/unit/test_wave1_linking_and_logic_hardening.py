@@ -757,3 +757,165 @@ class TestSymbolicRulesAndCalibrationHardening:
     def test_thread_locks_present_on_neuro_symbolic_checker_and_semantic_intent_cache(self) -> None:
         assert hasattr(NeuroSymbolicChecker, "_init_lock")
         assert hasattr(SemanticMatcher, "_intent_cache_lock")
+
+    def test_partial_author_grey_zone_abstains_while_zero_author_chimeric_stays_hallucinated(self) -> None:
+        from integrity_checker.evaluation.baselines import BaselineRunner
+
+        rules = SymbolicRules()
+        cand_5_authors = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title="Cross-Lingual Pretraining for Low-Resource Biomedical Named Entity Recognition",
+            authors=[
+                "Nguyen, V. A.",
+                "Tran, B. Q.",
+                "Le, C. M.",
+                "Pham, D. H.",
+                "Hoang, E. T.",
+            ],
+            year="2022",
+            venue="Proceedings of EMNLP",
+            confidence=0.62,
+        )
+        raw_partial = (
+            "Nguyen, V. A., & Collaborator, R. (2023). Biomedical Mention Identification via "
+            "Multilingual Preprint Adaptation. Working Paper."
+        )
+        source_partial = SourceResult(
+            citation_raw=raw_partial,
+            candidates=[cand_5_authors],
+            sources_queried=["crossref", "openalex", "dblp", "arxiv"],
+            sources_succeeded=["openalex"],
+        )
+        # 5-author paper where student cites [FirstAuthor, Collaborator] -> author_jaccard = 1/5 = 0.20,
+        # year_distance = 1 (<= 3), title_sim = 0.35 in [0.28, 0.60) -> MUST abstain to UNRESOLVED!
+        feats_partial = MatchFeatures(
+            title_sim_fuzzy=0.35,
+            title_sim_semantic=0.33,
+            author_jaccard=0.20,
+            year_distance=1,
+            doi_exact_match=False,
+            source_consensus=1,
+        )
+        out_partial = rules.apply(
+            feats_partial,
+            source_partial,
+            citation_authors=["Nguyen, V. A.", "Collaborator, R."],
+            citation_year="2023",
+            citation_raw=raw_partial,
+            citation_venue="Proceedings of EMNLP",
+        )
+        assert out_partial.label == ValidationLabel.UNRESOLVED
+        assert "R-ABSTENTION-BORDER" in out_partial.triggered_rules
+        assert "R-HALLUCINATED-SOURCE" not in out_partial.triggered_rules
+
+        # Zero-author chimeric hallucination at same title_sim=0.35 MUST stay SUSPECTED_HALLUCINATION!
+        raw_chimeric = (
+            "NonExistentName, X. (2023). Biomedical Mention Identification via "
+            "Multilingual Preprint Adaptation. Journal of Synthetic AI."
+        )
+        source_chimeric = SourceResult(
+            citation_raw=raw_chimeric,
+            candidates=[cand_5_authors],
+            sources_queried=["crossref", "openalex", "dblp", "arxiv"],
+            sources_succeeded=["openalex"],
+        )
+        feats_chimeric = MatchFeatures(
+            title_sim_fuzzy=0.35,
+            title_sim_semantic=0.46,
+            author_jaccard=0.0,
+            year_distance=1,
+            doi_exact_match=False,
+            source_consensus=1,
+        )
+        out_chimeric = rules.apply(
+            feats_chimeric,
+            source_chimeric,
+            citation_authors=["NonExistentName, X."],
+            citation_year="2023",
+            citation_raw=raw_chimeric,
+            citation_venue="Journal of Synthetic AI",
+        )
+        assert out_chimeric.label == ValidationLabel.SUSPECTED_HALLUCINATION
+        assert "R-HALLUCINATED-SOURCE" in out_chimeric.triggered_rules
+
+        # Large year discrepancy (year_distance = 6 > 3) with low title_sim=0.35 MUST stay SUSPECTED_HALLUCINATION!
+        feats_far_year = MatchFeatures(
+            title_sim_fuzzy=0.35,
+            title_sim_semantic=0.33,
+            author_jaccard=0.20,
+            year_distance=6,
+            doi_exact_match=False,
+            source_consensus=1,
+        )
+        out_far_year = rules.apply(
+            feats_far_year,
+            source_partial,
+            citation_authors=["Nguyen, V. A.", "Collaborator, R."],
+            citation_year="2016",
+            citation_raw=raw_partial.replace("2023", "2016"),
+            citation_venue="Proceedings of EMNLP",
+        )
+        assert out_far_year.label == ValidationLabel.SUSPECTED_HALLUCINATION
+
+        # BaselineRunner("proposed") mirrors partial-author grey-zone, zero-author noise, and U2 registry abstentions
+        runner = BaselineRunner()
+        res = runner.run(
+            "proposed",
+            [
+                {
+                    "id": "u1_partial_author",
+                    "true_label": "unresolved",
+                    "title_sim_fuzzy": 0.35,
+                    "title_sim_semantic": 0.33,
+                    "author_jaccard": 0.20,
+                    "year_distance": 1,
+                    "doi_exact_match": False,
+                    "source_consensus": 1,
+                    "has_candidate": True,
+                },
+                {
+                    "id": "h2_zero_author_noise",
+                    "true_label": "suspected_hallucination",
+                    "title_sim_fuzzy": 0.35,
+                    "title_sim_semantic": 0.46,
+                    "author_jaccard": 0.0,
+                    "year_distance": 1,
+                    "doi_exact_match": False,
+                    "source_consensus": 1,
+                    "has_candidate": True,
+                },
+                {
+                    "id": "u2_regional_doi_no_csl",
+                    "true_label": "unresolved",
+                    "title_sim_fuzzy": 0.0,
+                    "title_sim_semantic": 0.0,
+                    "author_jaccard": 0.0,
+                    "year_distance": 999,
+                    "doi_exact_match": False,
+                    "source_consensus": 0,
+                    "has_candidate": False,
+                    "cited_doi": "10.11499/sicejl.2023.1001",
+                    "doi_ra_status": "registered_no_csl",
+                },
+                {
+                    "id": "u2_api_exhausted",
+                    "true_label": "unresolved",
+                    "title_sim_fuzzy": 0.0,
+                    "title_sim_semantic": 0.0,
+                    "author_jaccard": 0.0,
+                    "year_distance": 999,
+                    "doi_exact_match": False,
+                    "source_consensus": 0,
+                    "has_candidate": False,
+                    "api_exhausted": True,
+                },
+            ],
+        )
+        assert res["predictions"] == [
+            "unresolved",
+            "suspected_hallucination",
+            "unresolved",
+            "unresolved",
+        ]
+

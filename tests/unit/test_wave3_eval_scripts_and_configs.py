@@ -208,6 +208,81 @@ class TestTrainNeuroSymbolicIntegrity:
             assert passed_source.candidates[0].title == sample["cand_title"]
             assert passed_source.candidates[0].title != "Candidate Title"
 
+    def test_u1_and_u2_grey_zone_scenarios_use_real_metadata_without_oracle_clamping(self) -> None:
+        trainer = _load_script_module(
+            "train_neuro_symbolic_model_u1_u2", "scripts/train_neuro_symbolic_model.py"
+        )
+        pool_papers = [
+            {
+                "paper_id": 2000 + idx,
+                "title": f"Empirical Neural Sequence Transduction for Low Resource Translation {idx:03d}",
+                "authors": [
+                    f"LeadScholar{idx}, A.",
+                    f"CoAuthorB{idx}, B.",
+                    f"CoAuthorC{idx}, C.",
+                    f"CoAuthorD{idx}, D.",
+                ],
+                "year": 2021,
+                "venue": "Proceedings of EMNLP",
+                "doi": f"10.18653/v1/2021.emnlp.{idx}" if idx % 2 == 0 else "",
+                "abstract": (
+                    "We study neural sequence transduction under low-resource bilingual settings. "
+                    "Experiments confirm substantial gains across morphological benchmarks."
+                ),
+                "has_full_abstract": True,
+            }
+            for idx in range(50)
+        ]
+
+        def _fake_encode(texts: list[str], batch_size: int = 256) -> np.ndarray:
+            n_quarter = len(texts) // 4
+            out = np.zeros((len(texts), 4), dtype=np.float32)
+            for i in range(n_quarter):
+                out[i] = [0.42, float(np.sqrt(1.0 - 0.42**2)), 0.0, 0.0]
+                out[n_quarter + i] = [1.0, 0.0, 0.0, 0.0]
+                out[2 * n_quarter + i] = [0.35, float(np.sqrt(1.0 - 0.35**2)), 0.0, 0.0]
+                out[3 * n_quarter + i] = [1.0, 0.0, 0.0, 0.0]
+            return out
+
+        with patch.object(trainer, "_encode_texts_fast", side_effect=_fake_encode):
+            records = trainer.build_split_dataset(pool_papers, split_name="u1u2", seed=123)
+
+        u1_records = [r for r in records if r["sub_type"] == "U1"]
+        u2_records = [r for r in records if r["sub_type"] == "U2"]
+        assert len(u1_records) >= 3
+        assert len(u2_records) >= 2
+
+        rules = SymbolicRules()
+        for r in u1_records:
+            assert r["true_label"] == "unresolved"
+            assert "AmbiguousAuthor, T." not in r["cited_authors"]
+            assert "UnknownColleague, R." not in r["cited_authors"]
+            assert r["cited_authors"][0] == r["cand_authors"][0]
+            assert r["author_jaccard"] >= 0.20
+            assert r["year_distance"] in {0, 1, 2}
+            assert r["doi_exact_match"] is False
+            assert r["source_consensus"] == 1
+            assert r["has_candidate"] is True
+            _, outcome = trainer._run_symbolic_rule_on_item(rules, r)
+            assert outcome.label == ValidationLabel.UNRESOLVED
+            assert "R-ABSTENTION-BORDER" in outcome.triggered_rules
+
+        seen_ra = False
+        seen_rate_limit = False
+        for r in u2_records:
+            assert r["true_label"] == "unresolved"
+            assert r["has_candidate"] is False
+            _, outcome = trainer._run_symbolic_rule_on_item(rules, r)
+            assert outcome.label == ValidationLabel.UNRESOLVED
+            if r.get("doi_ra_status") == "registered_no_csl":
+                seen_ra = True
+                assert str(r.get("cited_doi", "")).startswith(("10.11499/", "10.5109/"))
+                assert "R-DOI-RA-NO-CSL" in outcome.triggered_rules
+            if r.get("api_exhausted") is True:
+                seen_rate_limit = True
+                assert "R-RATE-LIMITED-ABSTAIN" in outcome.triggered_rules
+        assert seen_ra and seen_rate_limit
+
 
 class TestEvaluationReportAndBaselines:
     """Unit coverage for EvaluationReport and CitationVerdict feature extraction in BaselineRunner."""

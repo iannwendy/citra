@@ -75,6 +75,8 @@ class BaselineRunner:
                 "has_candidate": features.get("has_candidate", item.get("has_candidate")),
                 "url_status": features.get("url_status", item.get("url_status")),
                 "cited_doi": features.get("cited_doi", item.get("cited_doi")),
+                "api_exhausted": bool(features.get("api_exhausted", item.get("api_exhausted", False))),
+                "doi_ra_status": features.get("doi_ra_status", item.get("doi_ra_status")),
                 "crossref_matched": bool(
                     features.get("crossref_matched", item.get("crossref_matched", False))
                     or any(
@@ -129,6 +131,17 @@ class BaselineRunner:
         citation_obj = getattr(item, "citation", None)
         cited_doi = getattr(item, "cited_doi", None) or getattr(citation_obj, "doi", None)
         raw_yd = getattr(feat_obj, "year_distance", 0)
+        api_exhausted = bool(
+            getattr(item, "api_exhausted", False)
+            or getattr(feat_obj, "api_exhausted", False)
+            or getattr(matched_source_raw, "api_exhausted", False)
+        )
+        doi_ra_status = getattr(feat_obj, "doi_ra_status", None) or None
+        if not doi_ra_status and matched_source_raw is not None and hasattr(matched_source_raw, "candidates"):
+            from integrity_checker.logic.rules import _extract_registered_no_csl_ra
+
+            if _extract_registered_no_csl_ra(matched_source_raw):
+                doi_ra_status = "registered_no_csl"
 
         return {
             "id": getattr(item, "citation_id", None) or getattr(citation_obj, "id", None),
@@ -146,6 +159,8 @@ class BaselineRunner:
             "has_candidate": has_candidate,
             "url_status": url_status,
             "cited_doi": cited_doi,
+            "api_exhausted": api_exhausted,
+            "doi_ra_status": doi_ra_status,
             "crossref_matched": crossref_matched,
         }
 
@@ -211,14 +226,21 @@ class BaselineRunner:
         ca_aligned = feat.get("content_is_aligned", False)
         url_status = feat.get("url_status")
         cited_doi = feat.get("cited_doi")
+        has_cand = feat.get("has_candidate")
+        api_exhausted = bool(feat.get("api_exhausted", False))
+        doi_ra_status = feat.get("doi_ra_status")
 
         # Pre-flight & hard symbolic guardrails (fake URL, dead URL with low title, non-existent DOI)
         if url_status == "fake_domain":
             return "suspected_hallucination"
+        if doi_ra_status == "registered_no_csl" and cited_doi and not doi_ok and title_best < 0.60:
+            return "unresolved"
         if cited_doi and not doi_ok and title_best < 0.60:
             return "suspected_hallucination"
         if url_status == "dead_link" and not doi_ok and title_best < 0.60:
             return "suspected_hallucination"
+        if has_cand is False and api_exhausted:
+            return "unresolved"
 
         # Content alignment contradiction check (R-CONTENT-MISMATCH)
         # Decision-support guardrail: strongly matched real papers (title >= 0.85, author >= 0.50, yd <= 1)
@@ -242,7 +264,10 @@ class BaselineRunner:
             return "metadata_error"
         if title_best >= 0.60 and (aj < 0.50 or yd > 1 or title_best < 0.85):
             return "metadata_error"
-        if 0.40 <= title_best < 0.60:
+        is_sem_noise = tf < 0.65 and aj == 0.0 and not doi_ok and consensus <= 1
+        if 0.40 <= title_best < 0.60 and not is_sem_noise:
+            return "unresolved"
+        if has_cand is not False and not doi_ok and aj >= 0.18 and yd <= 3 and 0.28 <= title_best < 0.60:
             return "unresolved"
         return "suspected_hallucination"
 

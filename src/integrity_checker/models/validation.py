@@ -85,6 +85,8 @@ class MatchFeatures:
     html_meta_title_sim: float | None = None
     html_meta: dict[str, Any] | None = None
     has_scholarly_candidate: bool = True
+    api_exhausted: bool = False
+    doi_ra_status: str = ""
 
     @property
     def title_sim_max(self) -> float:
