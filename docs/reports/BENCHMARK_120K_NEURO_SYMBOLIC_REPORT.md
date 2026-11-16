@@ -1,6 +1,6 @@
 # Báo Cáo Thực Nghiệm & Kiểm Định Mô Hình Neuro-Symbolic Quy Mô Lớn (120,000 Bài Báo Khoa Học, OOD Guardrail Stress Test & Kiểm Định Thống Kê)
 
-> **Hệ thống:** CITRA (`SourceLogic` — Essay Integrity Checker v3.80.0)
+> **Hệ thống:** CITRA (`SourceLogic` — Essay Integrity Checker v3.81.0)
 > **Quy mô Benchmark:** `120,000` bài báo khoa học độc lập (`Train: 84,000` · `Validation: 18,000` · `Held-Out Test: 18,000`) + `2,400` mẫu Out-of-Distribution (OOD) Hard-Guardrail Stress Test + `300 × 20` cấu hình Phân tích Độ nhạy Trọng số `CIS`
 > **Phương pháp:** Strict Stratified Paper- & Normalized-Title-Disjoint Split (`70 / 15 / 15`, `0%` chồng lấp `paper_id` & tiêu đề chuẩn hóa) + Trích xuất đặc trưng thực tế không ép ngưỡng theo nhãn qua `Sentence-BERT (all-MiniLM-L6-v2)` & `RapidFuzz` trên cả **4 nhãn** (`VERIFIED`, `METADATA_ERROR`, `SUSPECTED_HALLUCINATION`, `UNRESOLVED`)
 > **Artifacts xuất bản:**
@@ -19,10 +19,10 @@ Toàn bộ quy trình xây dựng tập dữ liệu, loại bỏ thiên lệch l
 | :--- | :--- | :--- |
 | **1. Phân tách Độc lập theo Bài báo & Tiêu đề (*Strict Stratified Paper- & Title-Disjoint Split*)** | Từ `129,125` bản ghi trong [`data/local_papers.db`](../../data/local_papers.db) (`128,105` bài báo hợp lệ duy nhất theo khóa tiêu đề chuẩn hóa; `98.43%` thuộc ACL Anthology), hệ thống lấy mẫu phân tầng **`120,000` bài báo thực tế độc lập** (`80,000` bài có đầy đủ abstract `>80` ký tự + `40,000` bài có đầy đủ metadata thư mục) và chia tách **trước** khi sinh bất kỳ biến nhiễu hay ghép chéo nào:<br>• **Train (`70%`)**: `84,000` bài báo (`56,000` full-abstract + `28,000` metadata)<br>• **Validation (`15%`)**: `18,000` bài báo (`12,000` full-abstract + `6,000` metadata)<br>• **Held-Out Test (`15%`)**: `18,000` bài báo (`12,000` full-abstract + `6,000` metadata)<br>• Mọi phép biến đổi chéo bài báo chỉ ghép các bài báo **nằm trong cùng một tập split** (`0 / 0 / 0` chồng lấp `paper_id` & tiêu đề chuẩn hóa). | **SciFact** (*Wadden et al., EMNLP 2020*) & **FEVER** (*Thorne et al., NAACL 2018*) |
 | **2. Triệt tiêu Lối tắt Đặc trưng Một chiều (*4-Class Authentic Context Alignment*)** | Phân bổ tỷ lệ bài báo có full abstract (`66.7%`) đồng đều vào **cả 4 phân lớp** trong từng split để tính điểm đối sánh ngữ nghĩa `content_alignment_score` thực tế bằng chính abstract gốc của bài báo đó trên cả 4 nhãn:<br>• `VERIFIED`: `50.0%` có ngữ cảnh trích dẫn (`median = 0.6053`)<br>• `METADATA_ERROR`: `44.5%` có ngữ cảnh trích dẫn (`median = 0.3751`, bao gồm cả ngữ cảnh khớp trên trích dẫn sai năm/tác giả/DOI và phân nhóm gán sai nội dung `R-CONTENT-MISMATCH`)<br>• `SUSPECTED_HALLUCINATION`: `40.0%` số ca có ứng viên ở `H2/H4` (`8.5%` toàn nhãn, `median = 0.1961`)<br>• `UNRESOLVED`: `35.0%` của `U1` (`22.6%` toàn nhãn, `median = 0.3179`)<br>$\Rightarrow P(\text{VERIFIED} \mid \text{content\_alignment} > 0) = 54.47\%$, triệt tiêu hoàn toàn lối tắt `content_alignment > 0 => VERIFIED`. | **Poliak et al.** (*NAACL 2018*) & **Gururangan et al.** (*NAACL 2018 — Annotation Artifacts in NLI*) |
-| **3. Mô phỏng Ảo giác LLM Cùng Chuyên ngành Thực tế (*Plausible Same-Domain Hallucinations*)** | Loại bỏ hoàn toàn các chuỗi giả lập viễn tưởng dễ đoán. Các nhóm `H1–H4` (`36,000` mẫu) ghép cụm mở đầu học thuật (`3–4` từ đầu của `p1["title"]`) với cụm phương pháp luận (`3–5` từ cuối của `p3["title"]`), gán tên các học giả có thật (`[p3["authors"][0], p4["authors"][-1]]` không trùng ứng viên `p2`) và tên hội nghị/tạp chí học thuật thật (`ACL`, `EMNLP`, `COLING`, `TACL`, `LREC`, `NAACL`) hoàn toàn bên trong cùng một split. | **Walters & Wilder** (*Scientific Reports, 2023*) & **ALCE** (*Gao et al., EMNLP 2023*) |
-| **4. Đồng nhất `BaselineRunner("proposed")` với `SymbolicRules` & Trích xuất Không Cắt Ngưỡng** | Không dùng `np.clip` theo nhãn đích. Mã hóa **`330,656` câu/tiêu đề duy nhất** (từ `480,000` chuỗi thành phần) bằng `Sentence-BERT (all-MiniLM-L6-v2)` trên GPU (`mps`). Đồng thời `BaselineRunner("proposed")` gọi trực tiếp bộ luật sản xuất `SymbolicRules`, đảm bảo kết quả `Proposed` ở Bảng 5.1 và `SymbolicRules` ở Bảng 5.2 **khớp tuyệt đối 100%** (`96.19%` Accuracy, `0.9497` Macro-F1). | **Sentence-BERT** (*Reimers & Gurevych, EMNLP 2019*) |
-| **5. Tối ưu Siêu tham số & Hiệu chỉnh Xác suất Hậu nghiệm (*Post-Hoc Platt Calibration*)** | • Trọng số `HybridMLScorer` học hoàn toàn trên **Train (`84,000` mẫu)**.<br>• Siêu tham số L2 $C^* = 10.0$ (`Val Macro-F1 = 0.9950`) và tham số **Logit-Space Platt Scaling** ($a = 1.882781, b = 0.780221$) khớp độc lập trên **Validation (`18,000` mẫu)**. | **Platt Scaling** (*Platt, 1999*) & **Modern Neural Calibration** (*Guo et al., ICML 2017*) |
-| **6. Kiểm định Thống kê Bắt cặp, OOD Stress Test (`N = 2,400`) & Độ nhạy Trọng số `CIS`** | Thực hiện **kiểm định McNemar hiệu chỉnh liên tục**, **Paired Bootstrap $B = 1,000$ lần** với hiệu chỉnh mẫu hữu hạn Davison–Hinkley, kiểm định **Wilcoxon Signed-Rank** trên độ giảm Brier Score, bộ thử nghiệm **OOD Hard-Guardrail (`N = 2,400`)** chứng minh ưu thế vượt trội của Neuro-Symbolic trước Pure ML `B5` (`97.17%` so với `40.58%`), và phân tích độ nhạy `CIS` (`300` bản thảo $\times$ `20` vector trọng số). | **Dror et al.** (*ACL 2018*), **Berg-Kirkpatrick et al.** (*EMNLP 2012*) & **Dietterich** (*1998*) |
+| **3. Mô phỏng Ảo giác LLM Cùng Chuyên ngành Thực tế (*Plausible Same-Domain Hallucinations*)** | Loại bỏ hoàn toàn các chuỗi giả lập viễn tưởng dễ đoán và chặn biên năm xuất bản thực tế (`1950 <= cited_year <= 2026`). Các nhóm `H1–H4` (`36,000` mẫu) ghép sạch cụm mở đầu học thuật (`3–4` từ đầu của `p1["title"]`) với cụm phương pháp luận (`3–5` từ cuối của `p3["title"]`), gán tên các học giả có thật (`[p3["authors"][0], p4["authors"][-1]]` không trùng ứng viên `p2`) và tên hội nghị/tạp chí học thuật thật (`ACL`, `EMNLP`, `COLING`, `TACL`, `LREC`, `NAACL`) hoàn toàn bên trong cùng một split. | **Walters & Wilder** (*Scientific Reports, 2023*) & **ALCE** (*Gao et al., EMNLP 2023*) |
+| **4. Đồng nhất `BaselineRunner("proposed")` với `SymbolicRules` & Trích xuất Không Cắt Ngưỡng** | Không dùng `np.clip` theo nhãn đích. Mã hóa **`330,705` câu/tiêu đề duy nhất** (từ `480,000` chuỗi thành phần) bằng `Sentence-BERT (all-MiniLM-L6-v2)` trên GPU (`mps`). Đồng thời `BaselineRunner("proposed")` gọi trực tiếp bộ luật sản xuất `SymbolicRules`, đảm bảo kết quả `Proposed` ở Bảng 5.1 và `SymbolicRules` ở Bảng 5.2 **khớp tuyệt đối 100%** (`96.67%` Accuracy, `0.9548` Macro-F1). | **Sentence-BERT** (*Reimers & Gurevych, EMNLP 2019*) |
+| **5. Tối ưu Siêu tham số & Hiệu chỉnh Xác suất Hậu nghiệm (*Post-Hoc Platt Calibration*)** | • Trọng số `HybridMLScorer` học hoàn toàn trên **Train (`84,000` mẫu)**.<br>• Siêu tham số L2 $C^* = 10.0$ (`Val Macro-F1 = 0.9951`) và tham số **Logit-Space Platt Scaling** ($a = 1.971871, b = 0.848874$) khớp độc lập trên **Validation (`18,000` mẫu)**. | **Platt Scaling** (*Platt, 1999*) & **Modern Neural Calibration** (*Guo et al., ICML 2017*) |
+| **6. Kiểm định Thống kê Bắt cặp, OOD Stress Test (`N = 2,400`) & Độ nhạy Trọng số `CIS`** | Thực hiện **kiểm định McNemar hiệu chỉnh liên tục**, **Paired Bootstrap $B = 1,000$ lần** với hiệu chỉnh mẫu hữu hạn Davison–Hinkley, kiểm định **Wilcoxon Signed-Rank** trên độ giảm Brier Score, bộ thử nghiệm **OOD Hard-Guardrail (`N = 2,400`)** chứng minh ưu thế vượt trội của Neuro-Symbolic trước Pure ML `B5` (`98.08%` so với `44.92%`), và phân tích độ nhạy `CIS` (`300` bản thảo $\times$ `20` vector trọng số). | **Dror et al.** (*ACL 2018*), **Berg-Kirkpatrick et al.** (*EMNLP 2012*) & **Dietterich** (*1998*) |
 
 ---
 
@@ -42,10 +42,10 @@ Toàn bộ quy trình xây dựng tập dữ liệu, loại bỏ thiên lệch l
 
 | Tập Dữ liệu (`Split`) | Tỷ lệ | Tổng số Bài báo Độc lập | Bài báo Full Abstract (`66.7%`) | Bài báo Metadata-Complete (`33.3%`) | Số câu/tiêu đề duy nhất mã hóa SBERT | Kiểm định Giao tập (`paper_id` & `norm_title`) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Train Split** | `70.0%` | **`84,000`** | `56,000` | `28,000` | `231,336` | `\|Train ∩ Val\| = 0` (`ID` & `Title`) |
-| **Validation Split** | `15.0%` | **`18,000`** | `12,000` | `6,000` | `49,663` | `\|Train ∩ Test\| = 0` (`ID` & `Title`) |
-| **Held-Out Test Split** | `15.0%` | **`18,000`** | `12,000` | `6,000` | `49,657` | `\|Val ∩ Test\| = 0` (`ID` & `Title`) |
-| **Tổng cộng** | **`100.0%`** | **`120,000`** | **`80,000`** | **`40,000`** | **`330,656`** | **`zero_leakage_verified = True`** |
+| **Train Split** | `70.0%` | **`84,000`** | `56,000` | `28,000` | `231,374` | `\|Train ∩ Val\| = 0` (`ID` & `Title`) |
+| **Validation Split** | `15.0%` | **`18,000`** | `12,000` | `6,000` | `49,669` | `\|Train ∩ Test\| = 0` (`ID` & `Title`) |
+| **Held-Out Test Split** | `15.0%` | **`18,000`** | `12,000` | `6,000` | `49,662` | `\|Val ∩ Test\| = 0` (`ID` & `Title`) |
+| **Tổng cộng** | **`100.0%`** | **`120,000`** | **`80,000`** | **`40,000`** | **`330,705`** | **`zero_leakage_verified = True`** |
 
 ### 2.3. Kiểm định Phân bố `content_alignment_score` trên Cả 4 Nhãn (`Feature Shortcut Audit`, Test $N = 18,000$)
 
@@ -89,10 +89,10 @@ Toàn bộ quy trình xây dựng tập dữ liệu, loại bỏ thiên lệch l
 
 | Giá trị $C$ ứng viên | `0.1` | `0.25` | `0.5` | `1.0` | `2.0` | `5.0` | **`10.0` *(Được chọn)*** |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Validation Macro-F1** | `0.9908` | `0.9924` | `0.9934` | `0.9940` | `0.9943` | `0.9948` | **`0.9950`** |
+| **Validation Macro-F1** | `0.9894` | `0.9923` | `0.9929` | `0.9933` | `0.9939` | `0.9950` | **`0.9951`** |
 
 - **Tham số kết hợp Symbolic – ML (`symbolic_blend_alpha`):** $\alpha = 0.72$ ($S_{\text{blend}} = 0.72 \cdot C_{\text{symbolic}} + 0.28 \cdot P_{\text{ML}}(y_{\text{sym}} \mid \mathbf{x})$).
-- **Tham số Platt Scaling khớp độc lập trên tập Validation ($N = 18,000$):** $a = 1.882781$ (`1.8828`), $b = 0.780221$ (`0.7802`).
+- **Tham số Platt Scaling khớp độc lập trên tập Validation ($N = 18,000$):** $a = 1.971871$ (`1.9719`), $b = 0.848874$ (`0.8489`).
 
 ---
 
@@ -103,56 +103,56 @@ Toàn bộ quy trình xây dựng tập dữ liệu, loại bỏ thiên lệch l
 | Phương pháp / Baseline | Mô tả Cơ chế Quyết định | Accuracy | Macro-Precision | Macro-Recall | **Macro-F1** |
 | :--- | :--- | :---: | :---: | :---: | :---: |
 | **`B0` (`doi_only`)** | Chỉ xác thực khi có DOI khớp chính xác | `26.34%` | `0.2336` | `0.3496` | `0.1963` |
-| **`B1` (`single_source_crossref`)** | Chỉ tra cứu đơn nguồn trên `Crossref` | `58.22%` | `0.5630` | `0.4807` | `0.4528` |
-| **`B3` (`embedding_only`)** | Thuần ngữ nghĩa `Sentence-BERT` cosine similarity trên tiêu đề | `67.58%` | `0.5020` | `0.5312` | `0.4752` |
-| **`B4` (`no_calibration`)** | Tổ hợp tuyến tính đa đặc trưng, tắt vùng abstention (`UNRESOLVED`) | `79.66%` | `0.6185` | `0.6553` | `0.6216` |
-| **`B2` (`fuzzy_only`)** | Chỉ dùng so khớp từ vựng `RapidFuzz` tiêu đề + `AuthorJaccard` | `81.11%` | `0.6282` | `0.6719` | `0.6380` |
-| **`Proposed` (`Neuro-Symbolic`)** | **Bộ luật `SymbolicRules` sản xuất + Đối sánh Ngữ nghĩa Abstract + Link Check + `PlattCalibrator` + Abstention** | **`96.19%`** | **`0.9504`** | **`0.9527`** | **`0.9497`** |
-| **`B5` (`ml_hybrid`)** *(In-Distribution)* | `HybridMLScorer` (Multinomial Logistic Regression 16D, $C = 10.0$ — *xem mục 6 cho kiểm thử OOD*) | **`99.52%`** | **`0.9951`** | **`0.9953`** | **`0.9952`** |
+| **`B1` (`single_source_crossref`)** | Chỉ tra cứu đơn nguồn trên `Crossref` | `58.18%` | `0.5628` | `0.4802` | `0.4522` |
+| **`B3` (`embedding_only`)** | Thuần ngữ nghĩa `Sentence-BERT` cosine similarity trên tiêu đề | `67.29%` | `0.4972` | `0.5278` | `0.4701` |
+| **`B4` (`no_calibration`)** | Tổ hợp tuyến tính đa đặc trưng, tắt vùng abstention (`UNRESOLVED`) | `79.76%` | `0.6191` | `0.6565` | `0.6228` |
+| **`B2` (`fuzzy_only`)** | Chỉ dùng so khớp từ vựng `RapidFuzz` tiêu đề + `AuthorJaccard` | `81.22%` | `0.6290` | `0.6731` | `0.6392` |
+| **`Proposed` (`Neuro-Symbolic`)** | **Bộ luật `SymbolicRules` sản xuất + Đối sánh Ngữ nghĩa Abstract + Link Check + `PlattCalibrator` + Abstention** | **`96.67%`** | **`0.9527`** | **`0.9622`** | **`0.9548`** |
+| **`B5` (`ml_hybrid`)** *(In-Distribution)* | `HybridMLScorer` (Multinomial Logistic Regression 16D, $C = 10.0$ — *xem mục 6 cho kiểm thử OOD*) | **`99.48%`** | **`0.9945`** | **`0.9949`** | **`0.9947`** |
 
 ### 5.2. Hiệu năng Chi tiết Từng Nhãn của Hệ thống Đề xuất (`Proposed Neuro-Symbolic`)
 
 | Nhãn Phán quyết (`ValidationLabel`) | Số mẫu Test ($N$) | Precision | Recall | **F1-Score** | Ý nghĩa Thực tiễn & Bất biến An toàn Học thuật |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **`VERIFIED`** | `6,480` | **`0.9777`** | **`0.9991`** | **`0.9882`** | **`0 / 6,480` bài báo hợp lệ bị kết luận oan là `SUSPECTED_HALLUCINATION`**; **`0 / 5,400` bài ảo giác lọt lưới thành `VERIFIED`** (`6,474 / 6,480` đúng tuyệt đối, `5` ca chuyển sang `METADATA_ERROR`, `1` ca chuyển sang `UNRESOLVED`). |
-| **`SUSPECTED_HALLUCINATION`** | `5,400` | **`0.9649`** | **`0.9928`** | **`0.9786`** | Phát hiện **`5,361 / 5,400` (`99.28%` Recall)** trích dẫn ảo giác ghép chéo chuyên ngành với tên học giả thật; `39` ca mang họ học giả kinh điển trùng danh sách bảo hộ được chuyển thận trọng sang `UNRESOLVED` thay vì bỏ lọt thành `VERIFIED`. |
-| **`METADATA_ERROR`** | `3,960` | **`0.9950`** | **`0.8619`** | **`0.9237`** | Đạt **99.50% Precision** trên các lỗi sai năm (`M1`), sai tác giả (`M2`), lệch tiêu đề (`M3`, `M4`) và gán sai ngữ cảnh (`R-CONTENT-MISMATCH`). `285` ca vùng biên đa trường chuyển thận trọng sang `UNRESOLVED`. |
-| **`UNRESOLVED` *(Abstention)*** | `2,160` | **`0.8641`** | **`0.9569`** | **`0.9082`** | Khoanh vùng chính xác **`2,067 / 2,160` (`95.69%` Recall)** ca vùng xám (`U1` `R-ABSTENTION-BORDER`, `U2` DOI khu vực `R-DOI-RA-NO-CSL` & nghẽn API `R-RATE-LIMITED-ABSTAIN`). |
-| **Trung bình Vĩ mô / Tổng (`Macro / Total`)** | **`18,000`** | **`0.9504`** | **`0.9527`** | **`0.9497`** | **Overall Accuracy: `96.19%`** (`17,315 / 18,000` mẫu khớp nhãn gốc hoàn toàn, đồng nhất tuyệt đối giữa Bảng 5.1 và Bảng 5.2). |
+| **`VERIFIED`** | `6,480` | **`0.9771`** | **`0.9991`** | **`0.9879`** | **`0 / 6,480` bài báo hợp lệ bị kết luận oan là `SUSPECTED_HALLUCINATION`**; **`0 / 5,400` bài ảo giác lọt lưới thành `VERIFIED`** (`6,474 / 6,480` đúng tuyệt đối, `5` ca chuyển sang `METADATA_ERROR`, `1` ca chuyển sang `UNRESOLVED`). |
+| **`SUSPECTED_HALLUCINATION`** | `5,400` | **`0.9926`** | **`0.9931`** | **`0.9929`** | Phát hiện **`5,363 / 5,400` (`99.31%` Recall, `99.26%` Precision)** trích dẫn ảo giác ghép chéo chuyên ngành với tên học giả thật; `37` ca mang họ học giả kinh điển trùng danh sách bảo hộ được chuyển thận trọng sang `UNRESOLVED` thay vì bỏ lọt thành `VERIFIED`. |
+| **`METADATA_ERROR`** | `3,960` | **`0.9953`** | **`0.8631`** | **`0.9245`** | Đạt **99.53% Precision** trên các lỗi sai năm (`M1`), sai tác giả (`M2`), lệch tiêu đề (`M3`, `M4`) và gán sai ngữ cảnh (`R-CONTENT-MISMATCH`). `353` ca vùng biên đa trường chuyển thận trọng sang `UNRESOLVED`. |
+| **`UNRESOLVED` *(Abstention)*** | `2,160` | **`0.8459`** | **`0.9935`** | **`0.9138`** | Khoanh vùng chính xác **`2,146 / 2,160` (`99.35%` Recall)** ca vùng xám (`U1` `R-ABSTENTION-BORDER`, `U2` DOI khu vực `R-DOI-RA-NO-CSL` & nghẽn API `R-RATE-LIMITED-ABSTAIN`). |
+| **Trung bình Vĩ mô / Tổng (`Macro / Total`)** | **`18,000`** | **`0.9527`** | **`0.9622`** | **`0.9548`** | **Overall Accuracy: `96.67%`** (`17,401 / 18,000` mẫu khớp nhãn gốc hoàn toàn, đồng nhất tuyệt đối giữa Bảng 5.1 và Bảng 5.2). |
 
 ### 5.3. Ma trận Nhầm lẫn (`4×4 Confusion Matrix` trên $N = 18,000$ Mẫu Test)
 
 | Nhãn Thực tế (`Gold`) \ Dự đoán (`Pred`) | Dự đoán: `VERIFIED` | Dự đoán: `METADATA_ERROR` | Dự đoán: `SUSPECTED_HALLUCINATION` | Dự đoán: `UNRESOLVED` | **Tổng Thực tế (`Support`)** |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Thực tế: `VERIFIED`** | **`6,474`** | `5` | `0` | `1` | `6,480` |
-| **Thực tế: `METADATA_ERROR`** | `148` | **`3,413`** | `114` | `285` | `3,960` |
-| **Thực tế: `SUSPECTED_HALLUCINATION`** | `0` | `0` | **`5,361`** | `39` | `5,400` |
-| **Thực tế: `UNRESOLVED`** | `0` | `12` | `81` | **`2,067`** | `2,160` |
+| **Thực tế: `METADATA_ERROR`** | `152` | **`3,418`** | `37` | `353` | `3,960` |
+| **Thực tế: `SUSPECTED_HALLUCINATION`** | `0` | `0` | **`5,363`** | `37` | `5,400` |
+| **Thực tế: `UNRESOLVED`** | `0` | `11` | `3` | **`2,146`** | `2,160` |
 
 ### 5.4. Hiệu quả Hiệu chỉnh Xác suất (`Logit-Space Platt Scaling`) & Khoảng Tin cậy 95% Bootstrap ($B = 1,000$)
 
 | Cấu hình Độ tin cậy | Macro-F1 | **ECE** *(95% CI)* | **Brier Score** *(95% CI)* | Acc @ `50%` Cov | Acc @ `70%` Cov | Acc @ `90%` Cov | Acc @ `95%` Cov | Acc @ `100%` Cov *(95% CI)* |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Chưa hiệu chỉnh (`Uncalibrated Raw`)** | `0.9497` | `0.2256` | `0.1020` | `96.62%` | `97.24%` | `97.64%` | `97.73%` | `96.19%` |
-| **Đã hiệu chỉnh (`Platt-Calibrated`)** | **`0.9497`**<br>`[0.9462, 0.9533]` | **`0.0382`** *(↓ **5.91×** / `-83.1%`)*<br>`[0.0358, 0.0405]` | **`0.0265`** *(↓ **3.85×** / `-74.0%`)*<br>`[0.0247, 0.0284]` | **`97.62%`** | **`97.68%`** | **`98.12%`** | **`97.97%`** | **`96.19%`**<br>`[0.9592, 0.9647]` |
+| **Chưa hiệu chỉnh (`Uncalibrated Raw`)** | `0.9548` | `0.2281` | `0.0964` | `98.30%` | `98.44%` | `98.47%` | `98.28%` | `96.67%` |
+| **Đã hiệu chỉnh (`Platt-Calibrated`)** | **`0.9548`**<br>`[0.9510, 0.9582]` | **`0.0436`** *(↓ **5.23×** / `-80.9%`)*<br>`[0.0416, 0.0455]` | **`0.0183`** *(↓ **5.27×** / `-81.0%`)*<br>`[0.0169, 0.0198]` | **`99.14%`** | **`98.86%`** | **`99.05%`** | **`98.81%`** | **`96.67%`**<br>`[0.9641, 0.9693]` |
 
 ---
 
 ## 6. Kiểm Thử Sức Chịu Đựng Ngoài Phân Phối (`OOD Hard-Guardrail Stress Suite`, $N = 2,400$) — Tại Sao Kiến Trúc Neuro-Symbolic Vượt Trội Hơn Học Máy Thuần Túy (`Pure ML B5`)?
 
-Trên tập Test trong phân phối ($N = 18,000$), bộ phân loại hồi quy logistic 16 chiều `B5` đạt `99.52%` vì phân phối Test khớp hoàn toàn với phân phối biên nhiễu lúc huấn luyện. Tuy nhiên, trong kiểm toán học thuật thực tế, hệ thống thường xuyên đối mặt với **các vi phạm ràng buộc biểu tượng bậc nhất (*First-Order Symbolic Constraints*)** mà vector tương đồng liên tục 16 chiều không thể biểu diễn.
+Trên tập Test trong phân phối ($N = 18,000$), bộ phân loại hồi quy logistic 16 chiều `B5` đạt `99.48%` vì phân phối Test khớp hoàn toàn với phân phối biên nhiễu lúc huấn luyện. Tuy nhiên, trong kiểm toán học thuật thực tế, hệ thống thường xuyên đối mặt với **các vi phạm ràng buộc biểu tượng bậc nhất (*First-Order Symbolic Constraints*)** mà vector tương đồng liên tục 16 chiều không thể biểu diễn.
 
-Để chứng minh thực nghiệm luận điểm cốt lõi của khóa luận, chúng tôi xây dựng bộ kiểm thử **Out-of-Distribution (OOD) Hard-Guardrail Stress Suite gồm `2,400` mẫu (`6` nhóm $\times$ `400` mẫu, trích xuất 100% từ `test_papers`, `0` chồng lấp Train/Val)**:
+Để chứng minh thực nghiệm luận điểm cốt lõi của khóa luận (không ghi đè thủ công bất kỳ trường nào trái với `raw_citation`), chúng tôi xây dựng bộ kiểm thử **Out-of-Distribution (OOD) Hard-Guardrail Stress Suite gồm `2,400` mẫu (`6` nhóm $\times$ `400` mẫu, trích xuất 100% từ `test_papers`, `0` chồng lấp Train/Val)**:
 
 | Nhóm Kiểm thử Ràng buộc Thực tế (`OOD Category`, $N = 400$/nhóm) | Nhãn Gốc (`Gold`) | Luật Bảo vệ Biểu tượng | `B4` (`No Calib.`) | **Pure ML `B5` (`HybridMLScorer`)** | **`Proposed Neuro-Symbolic`** | **Chênh lệch ($\Delta = \text{NS} - \text{B5}$)** | Phân tích Nguyên nhân Sụp đổ của Pure ML `B5` |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: | :--- |
 | **1. Bài báo đã bị rút bài chính thức (`retracted_papers`)** | `metadata_error` | `R-RETRACTED-PAPER` | `0.00%` | **`0.00%`** *(400/400 gán `verified`)* | **`100.00%`** | **`+100.00%`** | Bài rút lại vẫn khớp tuyệt đối DOI, tiêu đề, tác giả, năm (`tf=1.0, aj=1.0, doi=1.0`) $\rightarrow$ `B5` xác nhận nhầm 100% công trình đã bị rút bài. |
-| **2. Ghép chéo DOI thật vào bài bịa đặt cùng thời kỳ (`chimeric_spliced_dois`)** | `suspected_hallucination` | `R-CHIMERIC-DOI-MISMATCH` | `0.00%` | **`43.50%`** *(205 `unresolved`, 21 `meta`)* | **`83.00%`** | **`+39.50%`** | Khi sinh viên dán DOI thật của bài cùng năm (`yd ∈ {0,1}`) vào tiêu đề bịa đặt, `B5` bị đánh lừa bởi `doi_exact=1` và `year_match≈1`. |
+| **2. Ghép chéo DOI thật vào bài bịa đặt cùng thời kỳ (`chimeric_spliced_dois`)** | `suspected_hallucination` | `R-CHIMERIC-DOI-MISMATCH` | `0.00%` | **`44.50%`** *(205 `unresolved`, 17 `meta`)* | **`88.50%`** | **`+44.00%`** | Khi sinh viên dán DOI thật của bài cùng năm (`yd ∈ {0,1,2}`) vào tiêu đề bịa đặt, `B5` bị đánh lừa bởi `doi_exact=1` và `year_match≈1`. |
 | **3. Tên miền giả mạo / RFC 2606 trên tiêu đề gần đúng (`fake_placeholder_urls`)** | `suspected_hallucination` | `R-FAKE-URL` | `0.00%` | **`0.00%`** *(200 `verified`, 197 `meta`)* | **`100.00%`** | **`+100.00%`** | Vector liên tục của `B5` không kiểm tra cấu trúc DNS/RFC 2606 (`example.com`, `.invalid`, `fake-*`) nên bị tiêu đề khớp một phần đánh lừa. |
 | **4. DOI khu vực hợp lệ chưa có CSL (`regional_dois_no_csl`)** | `unresolved` | `R-DOI-RA-NO-CSL` | `0.00%` | `100.00%`* | **`100.00%`** | `0.00%` | *`B5` chỉ sống sót nhờ đặc trưng chỉ báo biểu tượng `abstention_zone_indicator` (`vec[15]`) do tầng Symbolic cấp sẵn; `B4` sụp đổ về `0.00%`. |
 | **5. Nghẽn tần suất HTTP 429 toàn cục (`http_429_rate_limit_abstention`)** | `unresolved` | `R-RATE-LIMITED-ABSTAIN` | `0.00%` | `100.00%`* | **`100.00%`** | `0.00%` | *Tương tự mục 4, nhờ cờ biểu tượng `api_exhausted` được truyền vào `vec[15]` để tránh kết luận oan khi API quá tải. |
-| **6. Sai thẩm quyền ban hành Luật Việt Nam (`vn_statutory_authority_mismatch`)** | `metadata_error` | `VNLegalVerifier` (`R-VN-LEGAL-MISMATCH`) | `0.00%` | **`0.00%`** *(200 `hal`, 200 `verified`)* | **`100.00%`** | **`+100.00%`** | Gán `Luật 59/2020/QH14` cho `Bộ Tài chính` hoặc `Nghị định NĐ-CP` cho `Quốc hội`: `B5` không nắm hiến pháp phân quyền lập pháp Việt Nam. |
-| **Tổng hợp Toàn bộ OOD Suite ($N = 2,400$)** | **3 Nhãn OOD** | **Symbolic Guardrails + VNLegal** | `0.00%`<br>*(F1 `0.0000`)* | **`40.58%`**<br>*(Active F1 `0.3938`)* | **`97.17%`**<br>*(Active F1 `0.9713`)* | **`+56.58%`**<br>*(+0.5775 F1)* | **Kiểm định McNemar: $\chi^2 = 1,266.4711$, $n_{10} = 1,406$, $n_{01} = 48$, $p = 2.19 \times 10^{-277}$ ($\log_{10} p = -276.66$).** |
+| **6. Sai thẩm quyền & số hiệu văn bản luật Việt Nam (`vn_statutory_authority_mismatch`)** | `metadata_error` | `VNLegalVerifier` (`R-VN-LEGAL-MISMATCH`) | `20.00%` | **`25.00%`** *(200 `hal`, 100 `meta`, 100 `ver`)* | **`100.00%`** | **`+75.00%`** | Phân tích trực tiếp qua `parse_vn_legal_reference` (0 ghi đè): `B5` bắt được 100 ca sai cơ quan có ứng viên nhưng gán nhầm 200 ca không ứng viên thành `hallucination` và 100 ca sai số hiệu (`99/2015/QH13`, `59/2020/QH14` trên `Luật Đầu tư`) thành `verified`. |
+| **Tổng hợp Toàn bộ OOD Suite ($N = 2,400$)** | **3 Nhãn OOD** | **Symbolic Guardrails + VNLegal** | `3.33%`<br>*(F1 `0.0584`)* | **`44.92%`**<br>*(Active F1 `0.4556`)* | **`98.08%`**<br>*(Active F1 `0.9808`)* | **`+53.17%`**<br>*(+0.5252 F1)* | **Kiểm định McNemar: $\chi^2 = 1,225.9615$, $n_{10} = 1,301$, $n_{01} = 25$, $p = 1.39 \times 10^{-268}$ ($\log_{10} p = -267.86$).** |
 
 ---
 
@@ -162,13 +162,13 @@ Trên tập Test trong phân phối ($N = 18,000$), bộ phân loại hồi quy 
 
 | Cặp Đối sánh trên Tập Held-Out Test ($N = 18,000$) | $\Delta\text{Accuracy}$ *(95% CI)* | $\Delta\text{Macro-F1}$ *(95% CI)* | Cặp Bất đồng McNemar ($n_{10} \text{ / } n_{01}$) | Thống kê McNemar $\chi^2$ | McNemar $p$-value ($\log_{10} p$) | Paired Bootstrap $p$-value ($B=1,000$) | Kết luận ($\alpha = 0.001$) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`Proposed` vs. `B0` (`doi_only`)** | **`+69.85%`** `[+69.14%, +70.53%]` | **`+0.7534`** `[+0.7486, +0.7584]` | `12,667 / 94` | `12,385.7992` | `< 1e-16` (`-2691.69`) | **`< 0.001`** (`0.000999`) | **Có ý nghĩa thống kê ($p \ll 0.001$)** |
-| **`Proposed` vs. `B1` (`crossref`)** | **`+37.97%`** `[+37.26%, +38.68%]` | **`+0.4969`** `[+0.4903, +0.5034]` | `7,036 / 201` | `6,453.4415` | `< 1e-16` (`-1403.35`) | **`< 0.001`** (`0.000999`) | **Có ý nghĩa thống kê ($p \ll 0.001$)** |
-| **`Proposed` vs. `B3` (`embedding`)** | **`+28.61%`** `[+27.93%, +29.34%]` | **`+0.4745`** `[+0.4680, +0.4812]` | `5,357 / 207` | `4,764.9535` | `< 1e-16` (`-1036.63`) | **`< 0.001`** (`0.000999`) | **Có ý nghĩa thống kê ($p \ll 0.001$)** |
-| **`Proposed` vs. `B4` (`no_calib`)** | **`+16.54%`** `[+15.92%, +17.12%]` | **`+0.3281`** `[+0.3224, +0.3333]` | `3,265 / 288` | `2,492.7036` | `< 1e-16` (`-543.08`) | **`< 0.001`** (`0.000999`) | **Có ý nghĩa thống kê ($p \ll 0.001$)** |
-| **`Proposed` vs. `B2` (`fuzzy_only`)** | **`+15.08%`** `[+14.46%, +15.67%]` | **`+0.3117`** `[+0.3065, +0.3166]` | `2,986 / 271` | `2,261.5278` | `< 1e-16` (`-492.86`) | **`< 0.001`** (`0.000999`) | **Có ý nghĩa thống kê ($p \ll 0.001$)** |
-| **`Proposed` vs. `B5` *(In-Dist.)*** | `-3.32%` `[-3.58%, -3.05%]` | `-0.0455` `[-0.0492, -0.0419]` | `39 / 637` | `527.2322` | `1.13e-116` (`-115.95`) | `1.0000` *(one-sided)* | Đánh đổi có chủ đích lấy **`+56.58%` OOD** ($p = 2.19 \times 10^{-277}$) |
-| **`Platt-Calibrated` vs. `Uncalibrated`** | $\Delta\text{ECE} = \mathbf{-0.1873}$<br>`[-0.1909, -0.1838]` | $\Delta\text{Brier} = \mathbf{-0.0755}$<br>`[-0.0769, -0.0741]` | Wilcoxon $W = 4,122,216.0$ | — | Wilcoxon `< 1e-16` | **ECE `< 0.001` · Brier `< 0.001`** | **Giảm sai số xác suất có ý nghĩa thống kê tuyệt đối** |
+| **`Proposed` vs. `B0` (`doi_only`)** | **`+70.33%`** `[+69.68%, +70.97%]` | **`+0.7585`** `[+0.7534, +0.7632]` | `12,674 / 15` | `12,627.0757` | `< 1e-16` (`-2744.08`) | **`< 0.001`** (`0.000999`) | **Có ý nghĩa thống kê ($p \ll 0.001$)** |
+| **`Proposed` vs. `B1` (`crossref`)** | **`+38.49%`** `[+37.76%, +39.24%]` | **`+0.5026`** `[+0.4955, +0.5093]` | `7,095 / 166` | `6,610.2719` | `< 1e-16` (`-1437.41`) | **`< 0.001`** (`0.000999`) | **Có ý nghĩa thống kê ($p \ll 0.001$)** |
+| **`Proposed` vs. `B3` (`embedding`)** | **`+29.38%`** `[+28.64%, +30.04%]` | **`+0.4846`** `[+0.4776, +0.4913]` | `5,473 / 185` | `4,940.3268` | `< 1e-16` (`-1074.72`) | **`< 0.001`** (`0.000999`) | **Có ý nghĩa thống kê ($p \ll 0.001$)** |
+| **`Proposed` vs. `B4` (`no_calib`)** | **`+16.91%`** `[+16.32%, +17.53%]` | **`+0.3320`** `[+0.3267, +0.3374]` | `3,321 / 277` | `2,573.6101` | `< 1e-16` (`-560.66`) | **`< 0.001`** (`0.000999`) | **Có ý nghĩa thống kê ($p \ll 0.001$)** |
+| **`Proposed` vs. `B2` (`fuzzy_only`)** | **`+15.45%`** `[+14.86%, +16.04%]` | **`+0.3156`** `[+0.3103, +0.3206]` | `3,038 / 257` | `2,345.4932` | `< 1e-16` (`-511.10`) | **`< 0.001`** (`0.000999`) | **Có ý nghĩa thống kê ($p \ll 0.001$)** |
+| **`Proposed` vs. `B5` *(In-Dist.)*** | `-2.81%` `[-3.07%, -2.56%]` | `-0.0400` `[-0.0438, -0.0364]` | `40 / 546` | `435.1962` | `1.20e-96` (`-95.92`) | `1.0000` *(one-sided)* | Đánh đổi có chủ đích lấy **`+53.17%` OOD** ($p = 1.39 \times 10^{-268}$) |
+| **`Platt-Calibrated` vs. `Uncalibrated`** | $\Delta\text{ECE} = \mathbf{-0.1845}$<br>`[-0.1869, -0.1819]` | $\Delta\text{Brier} = \mathbf{-0.0780}$<br>`[-0.0795, -0.0766]` | Wilcoxon $W = 2,781,065.0$ | — | Wilcoxon `< 1e-16` | **ECE `< 0.001` · Brier `< 0.001`** | **Giảm sai số xác suất có ý nghĩa thống kê tuyệt đối** |
 
 ### 7.2. Phân tích Độ nhạy Trọng số Điểm Toàn vẹn Trích dẫn (`CIS Rubric Weight Sensitivity Analysis`)
 
@@ -190,11 +190,11 @@ $$\mathbf{w}_0 = (\text{verified\_ratio}=0.35,\ \text{metadata\_accuracy}=0.25,\
 
 Để bổ trợ cho benchmark cấp đặc trưng `120,000` mẫu (vốn đánh giá riêng tầng đối sánh & suy diễn trên đầu vào đã phân tách trường), chúng tôi xây dựng bộ kiểm thử đầu-cuối hoàn toàn trên **chuỗi tài liệu tham khảo thô (`raw_reference`)** ([`data/essays/end_to_end_gold_benchmark.json`](../../data/essays/end_to_end_gold_benchmark.json) và [`scripts/evaluation/run_ground_truth_evaluation.py`](../../scripts/evaluation/run_ground_truth_evaluation.py)):
 - **Quy trình đầu-cuối không dùng nhãn đích (*Zero Label-Oracle Blindness*):** Mọi chuỗi tham khảo thô đều đi qua đúng đường ống sản xuất: `ReferenceListParser` + `parse_vn_legal_reference` $\rightarrow$ `RetrievalOrchestrator` (`--mode offline` hoặc `--mode live`) $\rightarrow$ `NeuroSymbolicChecker` (giữ nguyên đầy đủ **5 nhãn chuẩn**, tuyệt đối không gộp `RESOURCE` vào `VERIFIED`; được chứng minh tự động bằng kiểm thử hoán vị nhãn mù `test_ground_truth_e2e_evaluation.py`).
-- **Bộ đối kháng thực địa (`data/essays/adversarial_ground_truth.json`, $N = 15$ trên `essay_06..08`):** Đạt **`100.00%` Accuracy (`15 / 15`)**, **5-Class Macro-F1 = `1.0000` (`100.00%`)**, **4-Class Scholarly Accuracy = `100.00%` (`14 / 14`)**, `ECE = 0.0843`, `Brier = 0.0135` (`~2.5s`), bắt trọn lỗi tráo tác giả Sutskever, tráo tạp chí Hóa lượng tử trên bài BERT, sai cơ quan ban hành `Luật Doanh nghiệp` (`Bộ Tài chính`), URL giả `.invalid`, DOI ghép chéo chimeric và phân loại chuẩn `Bộ luật Dân sự 91/2015/QH13` thành `RESOURCE`.
+- **Bộ đối kháng thực địa (`data/essays/adversarial_ground_truth.json`, $N = 15$ trên `essay_06..08`):** Đạt **`100.00%` Accuracy (`15 / 15`)**, **5-Class Macro-F1 = `1.0000` (`100.00%`)**, **4-Class Scholarly Accuracy = `100.00%` (`14 / 14`)**, `ECE = 0.0829`, `Brier = 0.0134` (`~2.7s`), bắt trọn lỗi tráo tác giả Sutskever, tráo tạp chí Hóa lượng tử trên bài BERT, sai cơ quan ban hành `Luật Doanh nghiệp` (`Bộ Tài chính`), URL giả `.invalid`, DOI ghép chéo chimeric và phân loại chuẩn `Bộ luật Dân sự 91/2015/QH13` thành `RESOURCE`.
 
 ### 8.1. Kết quả Tổng hợp & Từng Nhãn trên Tập Chuẩn Đa Miền (`N = 120` Tham khảo Thô, `7` Chuẩn, `6` Lĩnh vực)
 
-- **5-Class End-to-End (`N = 120`):** **Accuracy = `99.17%` (`119 / 120`)** · Macro-Precision = **`99.38%`** (`0.9938`) · Macro-Recall = **`99.33%`** (`0.9933`) · **Macro-F1 = `99.34%` (`0.9934`)** · `ECE = 0.0909` · `Brier = 0.0390` (`~4.6s`; giữ nguyên `119 / 120` ngay cả khi chạy `--no-local-db`).
+- **5-Class End-to-End (`N = 120`):** **Accuracy = `99.17%` (`119 / 120`)** · Macro-Precision = **`99.38%`** (`0.9938`) · Macro-Recall = **`99.33%`** (`0.9933`) · **Macro-F1 = `99.34%` (`0.9934`)** · `ECE = 0.0878` · `Brier = 0.0376` (`~5.5s`; giữ nguyên `119 / 120` ngay cả khi chạy `--no-local-db`).
 - **4-Class Scholarly (`N = 103`, tách riêng `17` mục `RESOURCE`):** **Accuracy = `99.03%` (`102 / 103`)** · Macro-Precision = **`99.22%`** (`0.9922`) · Macro-Recall = **`99.17%`** (`0.9917`) · **Macro-F1 = `99.18%` (`0.9918`)**.
 
 | Nhãn Phán quyết (`5-Class Taxonomy`) | Số mẫu ($N$) | Precision | Recall | **F1-Score** | Hàng Ma trận Nhầm lẫn (`[VER, META, HAL, UNR, RES]`) & Ghi chú |
@@ -227,7 +227,7 @@ $$\mathbf{w}_0 = (\text{verified\_ratio}=0.35,\ \text{metadata\_accuracy}=0.25,\
    - *Giới hạn:* Tập benchmark `120,000` mẫu được kiến tạo theo phương pháp **bán tổng hợp có kiểm soát (*controlled semi-synthetic perturbation*)** trên `120,000` bài báo thật thay vì `120,000` trích dẫn lỗi do con người gõ tay hoàn toàn (vốn không tồn tại tập dữ liệu công khai có gán nhãn ở quy mô $10^5$). Các quy tắc tạo nhiễu nếu thiết kế sơ sài có thể tạo ra lối tắt đặc trưng (*annotation artifacts*).
    - *Giảm thiểu:* Hệ thống đã loại bỏ hoàn toàn `np.clip` theo nhãn, khử trùng lặp tiêu đề chuẩn hóa trước khi chia tập (`0/0/0` chồng lấp), kích hoạt điểm đối sánh ngữ nghĩa `Sentence-BERT` trên **cả 4 nhãn** ($P(\text{VERIFIED} \mid \text{score} > 0) = 54.47\%$), và sử dụng ghép chéo tiêu đề học thuật cùng miền + tên học giả thật thay cho mẫu chuỗi giả lập. Ngoài ra, tập kiểm thử đầu-cuối trên chuỗi tham khảo thô và `310` tệp PDF thực tế bổ trợ trực tiếp cho đánh giá cấp đặc trưng.
 2. **Tính hợp lệ Ngoại tại (*External Validity* — Độ tập trung Miền CS/NLP trong Kho Nội bộ `local_papers.db`):**
-   - *Giới hạn:* Trong `129,125` bản ghi của kho SQLite FTS5 nội bộ (`data/local_papers.db`), có **`127,102` bài (`98.43%`) thuộc ACL Anthology** (Khoa học Máy tính, Xử lý Ngôn ngữ Tự nhiên & Trí tuệ Nhân tạo), chỉ có `1.57%` thuộc các lĩnh vực khác. Do đó, kết quả `96.19%` trên benchmark `120,000` mẫu phản ánh mạnh nhất đặc thù ngôn ngữ học thuật tiếng Anh ngành CS/NLP.
+   - *Giới hạn:* Trong `129,125` bản ghi của kho SQLite FTS5 nội bộ (`data/local_papers.db`), có **`127,102` bài (`98.43%`) thuộc ACL Anthology** (Khoa học Máy tính, Xử lý Ngôn ngữ Tự nhiên & Trí tuệ Nhân tạo), chỉ có `1.57%` thuộc các lĩnh vực khác. Do đó, kết quả `96.67%` trên benchmark `120,000` mẫu phản ánh mạnh nhất đặc thù ngôn ngữ học thuật tiếng Anh ngành CS/NLP.
    - *Giảm thiểu:* Khi vận hành thực tế trên khóa luận đa ngành (Y sinh, Hóa học, Kinh tế, Luật Việt Nam, Nhân văn), `RetrievalOrchestrator` không phụ thuộc riêng vào `local_papers.db` mà truy vấn song song **15+ cơ sở dữ liệu liên ngành trực tuyến** (`Crossref`, `OpenAlex`, `Europe PMC`, `NCBI/bioRxiv`, `DOAJ`, `DataCite`, `OpenAIRE/HAL`, `OpenLibrary`, `Global DOI RA`, `VNLegalVerifier`). Hiệu năng đa ngành được kiểm chứng độc lập qua bộ `310` PDF thực tế (`12` chuẩn trích dẫn) và bộ chuẩn đầu-cuối đa miền (`N = 120`).
 3. **Tính hợp lệ Cấu trúc (*Construct Validity* — Khoảng trống Abstract sau Tường phí & Phụ thuộc Tầng Phân tích PDF):**
    - *Giới hạn:* Nhiều bài báo xuất bản thương mại (Elsevier, Wiley, IEEE Xplore cũ) không mở công khai toàn văn `abstract` trên Crossref/DOI CSL, khiến tầng đối sánh ngữ nghĩa cấp độ câu chỉ so khớp được với tiêu đề hoặc phải bỏ qua kiểm chứng luận điểm. Bên cạnh đó, các lỗi tách dòng PDF phức tạp hoặc lỗi nhận diện của GROBID ở Thượng nguồn có thể lan truyền xuống tầng đối sánh.

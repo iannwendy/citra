@@ -285,6 +285,7 @@ class TestTrainNeuroSymbolicIntegrity:
 
     def test_four_class_content_alignment_no_toy_strings_and_reviewer2_proofs(self) -> None:
         import json
+        import re
 
         script_path = REPO_ROOT / "scripts" / "train_neuro_symbolic_model.py"
         script_text = script_path.read_text(encoding="utf-8")
@@ -298,10 +299,12 @@ class TestTrainNeuroSymbolicIntegrity:
             "Interplanetary",
             "UnrelatedCoAuthorX",
             "Collaborator, R.",
+            "[true_auth] if has_stat_cand",
         ):
             assert forbidden_toy not in script_text, (
-                f"Toy synthetic template '{forbidden_toy}' must not exist in train_neuro_symbolic_model.py"
+                f"Forbidden template/override '{forbidden_toy}' must not exist in train_neuro_symbolic_model.py"
             )
+        assert "parse_vn_legal_reference(variant_raw)" in script_text
 
         trainer = _load_script_module(
             "train_neuro_symbolic_model_r2", "scripts/train_neuro_symbolic_model.py"
@@ -309,14 +312,18 @@ class TestTrainNeuroSymbolicIntegrity:
         pool_papers = [
             {
                 "paper_id": 3000 + idx,
-                "title": f"Empirical Multilingual Representation Alignment for Syntactic Parsing {idx:03d}",
+                "title": (
+                    f"ADaPT: Token-Level Decoupling and its Analysis (Part {idx:03d}) for [in French]"
+                    if idx % 3 == 0
+                    else f"Empirical Multilingual Representation Alignment for Syntactic Parsing {idx:03d}"
+                ),
                 "authors": [
                     f"ScholarAlpha{idx}, A.",
                     f"ScholarBeta{idx}, B.",
                     f"ScholarGamma{idx}, C.",
                     f"ScholarDelta{idx}, D.",
                 ],
-                "year": 2019 + (idx % 5),
+                "year": 2022 + (idx % 5),
                 "venue": "Proceedings of the Annual Meeting of the Association for Computational Linguistics",
                 "doi": f"10.18653/v1/2021.acl-long.{idx}" if idx % 2 == 0 else "",
                 "abstract": (
@@ -350,12 +357,34 @@ class TestTrainNeuroSymbolicIntegrity:
                 f"Class '{cls_name}' must contain records with content_alignment_score > 0"
             )
 
+        # (b) Strict year upper-bound (<= 2026) and clean title splicing (zero 'for for', balanced brackets)
+        for rec in records:
+            assert 1950 <= int(rec["cited_year"]) <= 2026
+            if int(rec["year_distance"]) < 100 and rec["has_candidate"]:
+                assert abs(int(rec["cited_year"]) - int(rec["cand_year"])) == int(rec["year_distance"])
+            ct = str(rec["cited_title"])
+            assert not re.search(r"\b([A-Za-z]+)\s+\1\b", ct, re.IGNORECASE), f"Duplicate adjacent word in {ct!r}"
+            assert not re.search(
+                r"\b(?:its|their|our|his|her)\s+(?:for|via|with|in|under)\b", ct, re.IGNORECASE
+            ), f"Possessive-connector collision in {ct!r}"
+            assert ct.count("(") == ct.count(")"), f"Unbalanced parentheses in {ct!r}"
+            assert ct.count("[") == ct.count("]"), f"Unbalanced brackets in {ct!r}"
+
         # (c) BaselineRunner("proposed") MUST match SymbolicRules 100% on full-metadata preview records
         summary_path = REPO_ROOT / "data" / "models" / "neuro_symbolic_dataset_summary.json"
         report_path = REPO_ROOT / "data" / "models" / "neuro_symbolic_benchmark_report.json"
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         preview = summary["sample_preview"]
         assert len(preview) >= 10
+        for item in preview:
+            assert 1950 <= int(item["cited_year"]) <= 2026, f"Future cited_year in sample_preview: {item}"
+            ct_prev = str(item["cited_title"])
+            assert not re.search(r"\bfor\s+for\b", ct_prev, re.IGNORECASE), f"for-for artifact in {ct_prev!r}"
+            assert not re.search(
+                r"\b(?:its|their|our|his|her)\s+(?:for|via|with|in|under)\b", ct_prev, re.IGNORECASE
+            ), f"Possessive-connector artifact in {ct_prev!r}"
+            assert ct_prev.count("(") == ct_prev.count(")"), f"Unbalanced parentheses in {ct_prev!r}"
+            assert ct_prev.count("[") == ct_prev.count("]"), f"Unbalanced brackets in {ct_prev!r}"
 
         rules = SymbolicRules()
         runner = BaselineRunner(symbolic_rules=rules)

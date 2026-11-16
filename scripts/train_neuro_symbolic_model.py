@@ -76,6 +76,7 @@ from integrity_checker.evaluation.baselines import (  # noqa: E402
     evaluate_symbolic_record,
 )
 from integrity_checker.evaluation.metrics import MetricsCalculator  # noqa: E402
+from integrity_checker.extraction.patterns.apa import parse_vn_legal_reference  # noqa: E402
 from integrity_checker.linking.statuses import CitationMappingStatus, StyleProfile  # noqa: E402
 from integrity_checker.logic.calibration import (  # noqa: E402
     CalibrationCalculator,
@@ -84,6 +85,7 @@ from integrity_checker.logic.calibration import (  # noqa: E402
 )
 from integrity_checker.logic.cis import CISCalculator  # noqa: E402
 from integrity_checker.logic.rules import SymbolicRules  # noqa: E402
+from integrity_checker.logic.vn_legal_verifier import verify_vn_legal_citation  # noqa: E402
 from integrity_checker.matching.author_matcher import author_match_score  # noqa: E402
 from integrity_checker.matching.fuzzy import FuzzyMatcher  # noqa: E402
 from integrity_checker.matching.venue_normalizer import VenueNormalizer  # noqa: E402
@@ -122,18 +124,67 @@ _ACL_VENUE_EXPANSIONS: dict[str, str] = {
     "sigdial": "Proceedings of the Annual Meeting of the Special Interest Group on Discourse and Dialogue",
     "inlg": "Proceedings of the International Natural Language Generation Conference",
     "bea": "Proceedings of the Workshop on Innovative Use of NLP for Building Educational Applications",
+    "rocling": "Proceedings of the Conference on Computational Linguistics and Speech Processing",
+    "anlp": "Proceedings of the Conference on Applied Natural Language Processing",
+    "icon": "Proceedings of the International Conference on Natural Language Processing",
+    "alta": "Proceedings of the Australasian Language Technology Association Workshop",
+    "nodalida": "Proceedings of the Nordic Conference on Computational Linguistics",
+    "iwslt": "Proceedings of the International Conference on Spoken Language Translation",
+    "mtsummit": "Proceedings of Machine Translation Summit",
+    "bionlp": "Proceedings of the BioNLP Workshop",
+    "sigmorphon": "Proceedings of the SIGMORPHON Workshop on Computational Research in Phonetics, Phonology, and Morphology",
+    "hlt": "Proceedings of the Human Language Technology Conference",
+    "law": "Proceedings of the Linguistic Annotation Workshop",
+    "muc": "Proceedings of the Message Understanding Conference",
+    "tipster": "Proceedings of the TIPSTER Text Program",
+    "tinlap": "Proceedings of Theoretical Issues in Natural Language Processing",
 }
+
+MAX_SCHOLARLY_YEAR = 2026
+MIN_SCHOLARLY_YEAR = 1950
 
 _SPLICE_PREPOSITIONS: frozenset[str] = frozenset(
     {
         "for", "in", "on", "with", "via", "under", "across", "through",
         "using", "towards", "toward", "from", "over", "by", "into", "against",
+        "between", "among", "within", "without", "about", "around", "beyond",
+        "during", "after", "before", "upon", "onto", "per",
     }
 )
 
 _SPLICE_TRAILING_FUNC_WORDS: frozenset[str] = _SPLICE_PREPOSITIONS | frozenset(
-    {"and", "or", "of", "the", "a", "an", "to", "as", "at", "is", "are"}
+    {
+        "and", "or", "nor", "but", "yet", "so", "of", "the", "a", "an", "to", "as", "at",
+        "is", "are", "was", "were", "be", "been", "being", "has", "have", "had",
+        "do", "does", "did", "can", "could", "will", "would", "should", "may", "might",
+        "its", "their", "our", "his", "her", "my", "your",
+        "this", "that", "these", "those", "such", "both", "either", "neither",
+        "which", "who", "whom", "whose", "whether", "how", "when", "where", "why", "what",
+        "not", "no", "than", "vs", "vs.", "versus",
+    }
 )
+
+
+def _perturb_year_bounded(
+    base_year: int,
+    yd: int,
+    *,
+    max_year: int = MAX_SCHOLARLY_YEAR,
+    min_year: int = MIN_SCHOLARLY_YEAR,
+) -> int:
+    """Perturb `base_year` by `yd` while guaranteeing `min_year <= cited_year <= max_year`.
+
+    When `base_year + yd > max_year` (e.g., 2021..2026 papers), steps backward (`base_year - yd`)
+    so `|cited_year - base_year| == yd` holds strictly without generating impossible future years.
+    """
+    base = max(min_year, min(max_year, int(base_year)))
+    if yd <= 0:
+        return base
+    if yd >= 100:
+        return min(max_year, 2023)
+    if base + yd <= max_year:
+        return base + yd
+    return max(min_year, base - yd)
 
 
 def _expand_scholarly_venue(raw_venue: str | None) -> str:
@@ -449,32 +500,87 @@ def _abbreviate_author_name(name: str) -> str:
     return f"{last}, {first_init}."
 
 
+def _strip_token_punct(word: str) -> str:
+    """Strip edge punctuation from a title token for grammatical boundary checks."""
+    return word.strip(":;,()[]{}\"'“”‘’?!")
+
+
+def _sanitize_balanced_delimiters(text: str) -> str:
+    """Remove unmatched brackets/parens/quotes and collapse adjacent duplicate words."""
+    chars = list(text)
+    for open_ch, close_ch in (("(", ")"), ("[", "]"), ("{", "}")):
+        stack: list[int] = []
+        remove_idx: set[int] = set()
+        for idx_c, ch in enumerate(chars):
+            if ch == open_ch:
+                stack.append(idx_c)
+            elif ch == close_ch:
+                if stack:
+                    stack.pop()
+                else:
+                    remove_idx.add(idx_c)
+        remove_idx.update(stack)
+        if remove_idx:
+            chars = [c for i_c, c in enumerate(chars) if i_c not in remove_idx]
+    out = "".join(chars).replace('"', "").replace("“", "").replace("”", "")
+    out = re.sub(r"\b([A-Za-z]+)\s+\1\b", r"\1", out, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", out).strip(" :;,-–—/")
+
+
+def _clean_title_for_splicing(title: str) -> str:
+    """Strip editorial language tags (`[in French]`) and parenthetical asides prior to splicing."""
+    cleaned = re.sub(r"\s*\[in\s+[A-Za-z\-\s]+\]\s*$", "", str(title or ""), flags=re.IGNORECASE)
+    cleaned = re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", cleaned)
+    cleaned = cleaned.replace("(", " ").replace(")", " ").replace("[", " ").replace("]", " ")
+    cleaned = cleaned.replace('"', "").replace("“", "").replace("”", "")
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
 def _corrupt_title_minor_ocr(title: str, rng: random.Random) -> str:
     """Realistic minor variation: subtitle drop, hyphen/punctuation shift, or minor OCR typo."""
     mode = rng.randint(0, 2)
     if mode == 0 and ":" in title:
-        main_part = title.split(":")[0].strip()
+        main_part = _sanitize_balanced_delimiters(title.split(":")[0].strip())
         if len(main_part) >= 24:
             return main_part
     words = title.split()
     if mode == 1 and len(words) >= 6:
-        return " ".join(words[:-1])
+        return _sanitize_balanced_delimiters(" ".join(words[:-1]))
     if len(words) >= 4:
         idx = rng.randint(1, len(words) - 2)
         w = words[idx]
         if len(w) > 5:
             words[idx] = w[:2] + w[3:]
-    return " ".join(words)
+    return _sanitize_balanced_delimiters(" ".join(words))
 
 
 def _corrupt_title_moderate(title: str, other_title: str, rng: random.Random) -> str:
-    """Keep 45-65% of original title words and splice a phrase from another paper in the same split."""
-    words = title.split()
-    other_words = other_title.split()
+    """Keep 45-65% of original title words and splice a clean phrase from another paper in the same split."""
+    t1 = _clean_title_for_splicing(title)
+    t2 = _clean_title_for_splicing(other_title)
+    words = [w for w in t1.split() if _strip_token_punct(w)]
+    other_words = [w for w in t2.split() if _strip_token_punct(w)]
     keep_k = max(3, int(len(words) * rng.uniform(0.48, 0.64)))
+    head = list(words[:keep_k])
+    while len(head) > 1 and _strip_token_punct(head[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS:
+        head.pop()
+    if not head or _strip_token_punct(head[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS:
+        head = ["Neural", "Sequence", "Models"]
+    head[-1] = head[-1].rstrip(":;,-–—")
+
     tail_k = max(2, min(4, len(other_words) // 3))
-    tail = " ".join(other_words[-tail_k:]) if len(other_words) >= tail_k else "Computational Models"
-    return f"{' '.join(words[:keep_k])} for {tail}"
+    tail = list(other_words[-tail_k:]) if len(other_words) >= tail_k else ["Computational", "Models"]
+    while len(tail) > 1 and _strip_token_punct(tail[0]).lower() in _SPLICE_TRAILING_FUNC_WORDS:
+        tail.pop(0)
+    while len(tail) > 1 and _strip_token_punct(tail[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS:
+        tail.pop()
+    if (
+        not tail
+        or _strip_token_punct(tail[0]).lower() in _SPLICE_TRAILING_FUNC_WORDS
+        or _strip_token_punct(tail[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS
+    ):
+        tail = ["Computational", "Models"]
+    return _sanitize_balanced_delimiters(f"{' '.join(head)} for {' '.join(tail)}")
 
 
 def _make_spliced_academic_title(
@@ -487,28 +593,50 @@ def _make_spliced_academic_title(
     Combines the opening 3-4 academic words of `p1["title"]` with the closing 3-5
     methodological phrase words of `p3["title"]` from a distant paper in the same split pool.
     """
-    w1 = [w.strip(":;,") for w in p1["title"].split() if w.strip(":;,")]
-    w3 = [w.strip(":;,") for w in p3["title"].split() if w.strip(":;,")]
+    t1 = _clean_title_for_splicing(p1["title"])
+    t3 = _clean_title_for_splicing(p3["title"])
+    w1 = [w.strip(":;,") for w in t1.split() if _strip_token_punct(w)]
+    w3 = [w.strip(":;,") for w in t3.split() if _strip_token_punct(w)]
     head_len = min(len(w1), rng.choice([3, 4]))
     head = list(w1[:head_len])
-    while len(head) > 2 and head[-1].lower() in _SPLICE_TRAILING_FUNC_WORDS:
+    while len(head) > 1 and _strip_token_punct(head[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS:
         head.pop()
+    if not head or _strip_token_punct(head[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS:
+        head = ["Contextual", "Language", "Representations"]
+    head[-1] = head[-1].rstrip(":;,-–—")
 
     tail_len = min(len(w3), rng.choice([3, 4, 5]))
     tail = list(w3[-tail_len:])
-    while len(tail) > 2 and tail[0].lower() in {"and", "or", "of", "the", "a", "an", "to"}:
-        tail.pop(0)
+    non_prep_boundary = _SPLICE_TRAILING_FUNC_WORDS - _SPLICE_PREPOSITIONS
+    while len(tail) > 1:
+        t0 = _strip_token_punct(tail[0]).lower()
+        t1_next = _strip_token_punct(tail[1]).lower() if len(tail) > 1 else ""
+        if t0 in non_prep_boundary or (
+            t0 in _SPLICE_PREPOSITIONS
+            and t1_next in (_SPLICE_TRAILING_FUNC_WORDS - {"the", "a", "an"})
+        ):
+            tail.pop(0)
+        else:
+            break
+    while len(tail) > 1 and _strip_token_punct(tail[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS:
+        tail.pop()
+    if (
+        len(tail) < 2
+        or _strip_token_punct(tail[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS
+        or (len(tail) == 1 and _strip_token_punct(tail[0]).lower() in _SPLICE_TRAILING_FUNC_WORDS)
+    ):
+        tail = ["in", "Neural", "Language", "Models"]
 
-    if tail and tail[0].lower() in _SPLICE_PREPOSITIONS:
-        spliced = " ".join(head + tail)
+    if _strip_token_punct(tail[0]).lower() in _SPLICE_PREPOSITIONS:
+        spliced = _sanitize_balanced_delimiters(" ".join(head + tail))
     else:
         connector = rng.choice(["for", "via", "with", "in", "under"])
-        spliced = f"{' '.join(head)} {connector} {' '.join(tail)}"
+        spliced = _sanitize_balanced_delimiters(f"{' '.join(head)} {connector} {' '.join(tail)}")
 
     # Guarantee spliced title is non-identical to p1 and p3
     norm_spliced = _normalize_title_key(spliced)
     if norm_spliced in {_normalize_title_key(p1["title"]), _normalize_title_key(p3["title"])}:
-        spliced = f"{spliced} in Multilingual Corpora"
+        spliced = _sanitize_balanced_delimiters(f"{spliced} in Multilingual Corpora")
     return spliced
 
 
@@ -799,7 +927,7 @@ def build_split_dataset(
                 "cand_title": p["title"],
                 "cited_authors": c_authors,
                 "cand_authors": p["authors"],
-                "cited_year": int(p["year"]) + yd,
+                "cited_year": _perturb_year_bounded(int(p["year"]), yd),
                 "cand_year": int(p["year"]),
                 "year_distance": yd,
                 "cited_venue": c_venue,
@@ -928,7 +1056,7 @@ def build_split_dataset(
                 "cand_title": p["title"],
                 "cited_authors": c_authors,
                 "cand_authors": p["authors"],
-                "cited_year": int(p["year"]) + yd,
+                "cited_year": _perturb_year_bounded(int(p["year"]), yd),
                 "cand_year": int(p["year"]),
                 "year_distance": yd,
                 "cited_venue": p["venue"],
@@ -1036,7 +1164,7 @@ def build_split_dataset(
                 "cand_title": cand_title,
                 "cited_authors": c_authors,
                 "cand_authors": p2["authors"],
-                "cited_year": 2023 if yd >= 100 else max(1960, min(2025, int(p2["year"]) + yd)),
+                "cited_year": _perturb_year_bounded(int(p2["year"]), yd),
                 "cand_year": int(p2["year"]),
                 "year_distance": yd,
                 "cited_venue": c_venue,
@@ -1079,7 +1207,7 @@ def build_split_dataset(
             c_authors = list(p1["authors"][:k_auth]) + extra_coauthor
             use_context = m in u1_ctx_set
             unr_yd = 2 if use_context else rng.choice([0, 1, 2])
-            cited_year_val = int(p1["year"]) + unr_yd
+            cited_year_val = _perturb_year_bounded(int(p1["year"]), unr_yd)
             if m % 2 == 0:
                 cited_venue_val = p1["venue"]
             elif m % 4 == 1:
@@ -1245,6 +1373,9 @@ def build_split_dataset(
             }
         )
 
+    assert all(
+        MIN_SCHOLARLY_YEAR <= int(r["cited_year"]) <= MAX_SCHOLARLY_YEAR for r in records
+    ), f"Impossible cited_year outside [{MIN_SCHOLARLY_YEAR}, {MAX_SCHOLARLY_YEAR}] in {split_name}"
     rng.shuffle(records)
     return records
 
@@ -1570,75 +1701,67 @@ def compute_statistical_significance_tests(
     }
 
 
-_VN_LEGAL_OOD_TEMPLATES: tuple[tuple[str, str, int, str, str], ...] = (
+_VN_LEGAL_OOD_TEMPLATES: tuple[tuple[str, str, int, str], ...] = (
+    # 5 Constitutional Issuing-Authority Mismatches (e.g., QH law attributed to Ministry/Gov, or NĐ-CP to QH)
     (
         "Bộ Tài chính (2020). Luật Doanh nghiệp số 59/2020/QH14 của Bộ Tài chính ban hành ngày 17/06/2020.",
         "Luật Doanh nghiệp số 59/2020/QH14",
         2020,
-        "Bộ Tài chính",
         "Quốc hội",
     ),
     (
         "Chính phủ (2015). Bộ luật Dân sự số 91/2015/QH13 của Chính phủ ban hành ngày 24/11/2015.",
         "Bộ luật Dân sự số 91/2015/QH13",
         2015,
-        "Chính phủ",
         "Quốc hội",
     ),
     (
         "Bộ Kế hoạch và Đầu tư (2020). Luật Đầu tư số 61/2020/QH14 của Bộ Kế hoạch và Đầu tư.",
         "Luật Đầu tư số 61/2020/QH14",
         2020,
-        "Bộ Kế hoạch và Đầu tư",
         "Quốc hội",
     ),
     (
         "Bộ Tài nguyên và Môi trường (2024). Luật Đất đai số 31/2024/QH15 của Bộ Tài nguyên và Môi trường.",
         "Luật Đất đai số 31/2024/QH15",
         2024,
-        "Bộ Tài nguyên và Môi trường",
-        "Quốc hội",
-    ),
-    (
-        "Bộ Thông tin và Truyền thông (2018). Luật An ninh mạng số 24/2018/QH14 của Bộ Thông tin và Truyền thông.",
-        "Luật An ninh mạng số 24/2018/QH14",
-        2018,
-        "Bộ Thông tin và Truyền thông",
-        "Quốc hội",
-    ),
-    (
-        "Bộ Khoa học và Công nghệ (2022). Luật Sở hữu trí tuệ số 07/2022/QH15 của Bộ Khoa học và Công nghệ.",
-        "Luật Sở hữu trí tuệ số 07/2022/QH15",
-        2022,
-        "Bộ Khoa học và Công nghệ",
-        "Quốc hội",
-    ),
-    (
-        "Chính phủ (2023). Luật Giao dịch điện tử số 20/2023/QH15 của Chính phủ ban hành ngày 22/06/2023.",
-        "Luật Giao dịch điện tử số 20/2023/QH15",
-        2023,
-        "Chính phủ",
-        "Quốc hội",
-    ),
-    (
-        "Bộ Lao động (2019). Bộ luật Lao động số 45/2019/QH14 của Bộ Lao động ban hành ngày 20/11/2019.",
-        "Bộ luật Lao động số 45/2019/QH14",
-        2019,
-        "Bộ Lao động",
         "Quốc hội",
     ),
     (
         "Quốc hội (2023). Nghị định số 13/2023/NĐ-CP của Quốc hội về bảo vệ dữ liệu cá nhân.",
         "Nghị định số 13/2023/NĐ-CP về bảo vệ dữ liệu cá nhân",
         2023,
-        "Quốc hội",
         "Chính phủ",
     ),
+    # 5 Statutory Code-Number Mismatches (exact constitutional issuing authority, wrong/swapped Số hiệu)
     (
-        "Bộ Tư pháp (2021). Nghị định số 01/2021/NĐ-CP của Bộ Tư pháp về đăng ký doanh nghiệp.",
+        "Quốc hội (2015). Bộ luật Dân sự số 99/2015/QH13 ban hành ngày 24/11/2015.",
+        "Bộ luật Dân sự số 91/2015/QH13",
+        2015,
+        "Quốc hội",
+    ),
+    (
+        "Quốc hội (2020). Luật Đầu tư số 59/2020/QH14 ban hành ngày 17/06/2020.",
+        "Luật Đầu tư số 61/2020/QH14",
+        2020,
+        "Quốc hội",
+    ),
+    (
+        "Quốc hội (2024). Luật Đất đai số 45/2024/QH15 ban hành ngày 18/01/2024.",
+        "Luật Đất đai số 31/2024/QH15",
+        2024,
+        "Quốc hội",
+    ),
+    (
+        "Quốc hội (2022). Luật Sở hữu trí tuệ số 36/2022/QH15 ban hành ngày 16/06/2022.",
+        "Luật Sở hữu trí tuệ số 07/2022/QH15",
+        2022,
+        "Quốc hội",
+    ),
+    (
+        "Chính phủ (2021). Nghị định số 88/2021/NĐ-CP của Chính phủ về đăng ký doanh nghiệp.",
         "Nghị định số 01/2021/NĐ-CP về đăng ký doanh nghiệp",
         2021,
-        "Bộ Tư pháp",
         "Chính phủ",
     ),
 )
@@ -1735,7 +1858,7 @@ def run_ood_guardrail_stress_test(
                 "cand_title": p2["title"],
                 "cited_authors": c_authors,
                 "cand_authors": list(p2["authors"]),
-                "cited_year": int(p2["year"]) + yd,
+                "cited_year": _perturb_year_bounded(int(p2["year"]), yd),
                 "cand_year": int(p2["year"]),
                 "year_distance": yd,
                 "cited_venue": p3["venue"],
@@ -1776,7 +1899,7 @@ def run_ood_guardrail_stress_test(
                 "cand_title": p["title"],
                 "cited_authors": c_authors,
                 "cand_authors": list(p["authors"]),
-                "cited_year": int(p["year"]) + yd,
+                "cited_year": _perturb_year_bounded(int(p["year"]), yd),
                 "cand_year": int(p["year"]),
                 "year_distance": yd,
                 "cited_venue": p["venue"],
@@ -1863,16 +1986,29 @@ def run_ood_guardrail_stress_test(
         cited_titles_enc.append(p["title"])
         cand_titles_enc.append(p["title"])
 
-    # Category 6: Vietnamese Statutory Authority Mismatch (N = 400, Gold: metadata_error via VNLegalVerifier)
-    # Half evaluated without statutory registry candidate (scholarly APIs return 0 matches),
-    # half evaluated with matched statutory title/year candidate (only constitutional issuing authority wrong).
+    # Category 6: Vietnamese Statutory Authority & Code Mismatches (N = 400, Gold: metadata_error via VNLegalVerifier)
+    # Every sample is parsed directly via production `parse_vn_legal_reference(variant_raw)` with ZERO manual
+    # field overrides: 200 samples without statutory candidate (matching scholarly-API 0-hit behavior) and
+    # 200 samples with canonical statutory candidate across all 10 templates (5 authority + 5 code swaps).
+    n_vn_tpl = len(_VN_LEGAL_OOD_TEMPLATES)
     for i in range(n_per_cat):
         p = test_papers[(4200 + i) % n_pool]
-        raw_cit, canon_title, stat_year, wrong_auth, true_auth = _VN_LEGAL_OOD_TEMPLATES[
-            i % len(_VN_LEGAL_OOD_TEMPLATES)
-        ]
+        raw_cit, canon_title, stat_year, true_auth = _VN_LEGAL_OOD_TEMPLATES[i % n_vn_tpl]
         variant_raw = f"[{i + 1}] {raw_cit}"
-        has_stat_cand = (i % 2 == 1)
+        parsed_cit = parse_vn_legal_reference(variant_raw)
+        assert parsed_cit is not None, f"parse_vn_legal_reference failed on {variant_raw}"
+        parsed_title = str(parsed_cit.title or canon_title)
+        parsed_authors = [str(a.raw or a.last_name) for a in (parsed_cit.authors or []) if (a.raw or a.last_name)]
+        parsed_year = int(parsed_cit.year or stat_year)
+        parsed_venue = str(parsed_cit.venue or "")
+        legal_check = verify_vn_legal_citation(
+            raw_text=variant_raw,
+            extracted_year=str(parsed_year),
+            extracted_venue=parsed_venue,
+        )
+        assert not legal_check.is_valid, f"Expected statutory violation in {variant_raw}"
+        assert "R-VN-LEGAL-FABRICATED" not in (legal_check.triggered_rules or [])
+        has_stat_cand = ((i // n_vn_tpl) % 2 == 1)
         raw_ood_specs.append(
             {
                 "id": f"ood_vn_legal_{i:04d}",
@@ -1881,14 +2017,14 @@ def run_ood_guardrail_stress_test(
                 "true_label": "metadata_error",
                 "is_vn_legal": True,
                 "raw_citation": variant_raw,
-                "cited_title": canon_title,
+                "cited_title": parsed_title,
                 "cand_title": canon_title,
-                "cited_authors": [true_auth] if has_stat_cand else [wrong_auth],
+                "cited_authors": parsed_authors,
                 "cand_authors": [true_auth],
-                "cited_year": stat_year,
+                "cited_year": parsed_year,
                 "cand_year": stat_year,
-                "year_distance": 0 if has_stat_cand else 999,
-                "cited_venue": wrong_auth,
+                "year_distance": abs(parsed_year - stat_year) if has_stat_cand else 999,
+                "cited_venue": parsed_venue,
                 "cand_venue": true_auth,
                 "cand_doi": None,
                 "cited_doi": None,
@@ -1900,7 +2036,7 @@ def run_ood_guardrail_stress_test(
                 "url_status_code": None,
             }
         )
-        cited_titles_enc.append(canon_title)
+        cited_titles_enc.append(parsed_title)
         cand_titles_enc.append(canon_title)
 
     ood_embs = _encode_texts_fast(cited_titles_enc + cand_titles_enc, batch_size=256)
@@ -1933,6 +2069,10 @@ def run_ood_guardrail_stress_test(
         )
         ood_records.append(rec)
 
+    assert all(
+        MIN_SCHOLARLY_YEAR <= int(r["cited_year"]) <= MAX_SCHOLARLY_YEAR for r in ood_records
+    ), "OOD stress records must not contain impossible future cited_year values"
+
     runner = BaselineRunner(ml_scorer=scorer)
     categories_order = (
         ("retracted_papers", "Retracted Papers (R-RETRACTED-PAPER)", "metadata_error"),
@@ -1940,7 +2080,11 @@ def run_ood_guardrail_stress_test(
         ("fake_placeholder_urls", "Fake / Placeholder URLs (R-FAKE-URL)", "suspected_hallucination"),
         ("regional_dois_no_csl", "Regional DOIs without CSL (R-DOI-RA-NO-CSL)", "unresolved"),
         ("http_429_rate_limit_abstention", "HTTP 429 API Exhaustion (R-RATE-LIMITED-ABSTAIN)", "unresolved"),
-        ("vn_statutory_authority_mismatch", "VN Statutory Authority Mismatch (VNLegalVerifier)", "metadata_error"),
+        (
+            "vn_statutory_authority_mismatch",
+            "VN Statutory Authority & Code Mismatches (VNLegalVerifier)",
+            "metadata_error",
+        ),
     )
 
     per_category: dict[str, Any] = {}
