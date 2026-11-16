@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Routes, Route } from 'react-router-dom';
 import { api } from '@/api/client';
 import i18n from '@/i18n';
-import { renderWithProviders, makeUser, screen, fireEvent, waitFor } from '@/test-utils';
+import { renderWithProviders, makeUser, screen, fireEvent, waitFor, act } from '@/test-utils';
 import { makeReport, makeVerdict } from '@/test-fixtures';
 import { EssayHeader } from './essay/EssayHeader';
 import { EssayActionBar } from './essay/EssayActionBar';
@@ -14,9 +14,13 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
     await i18n.changeLanguage('vi');
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe('Task 1: Compact Document Header (EssayHeader)', () => {
-    it('eliminates VERIFICATION REPORT IDE / ID# / EXPORT AUDIT ARTIFACT clutter and clarifies references vs in-text mentions', () => {
-      const { container } = renderWithProviders(
+    it('eliminates VERIFICATION REPORT IDE / ID# / EXPORT AUDIT ARTIFACT clutter and clarifies references vs in-text mentions', async () => {
+      const { container, unmount } = renderWithProviders(
         <EssayHeader
           essayId={119}
           filename="VietDepression_PLOS_ONE.pdf"
@@ -32,10 +36,27 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
       expect(container.textContent).not.toContain('BÁO CÁO KIỂM CHỨNG HỌC THUẬT');
       expect(container.textContent).not.toContain('ID #119');
       expect(container.textContent).not.toContain('EXPORT AUDIT ARTIFACT');
+      expect(screen.getByTestId('header-back-btn').textContent?.trim()).toBe('Quay lại');
 
       const summary = screen.getByTestId('header-citation-summary');
       expect(summary.textContent).toContain('53 tài liệu tham khảo');
       expect(summary.textContent).toContain('115 lượt trích trong bài');
+      unmount();
+
+      await i18n.changeLanguage('en');
+      renderWithProviders(
+        <EssayHeader
+          essayId={119}
+          filename="VietDepression_PLOS_ONE.pdf"
+          numPages={20}
+          numCitations={115}
+          numReferences={53}
+          styleName="IEEE-LIKE"
+        />,
+        { user: makeUser('teacher', 'ultra') },
+      );
+      expect(screen.getByTestId('header-back-btn').textContent?.trim()).toBe('Back');
+      expect(screen.getByTestId('header-back-btn').textContent).not.toContain('Back to Reports');
     });
 
     it('consolidates export formats into a clean Export dropdown trigger + primary Fix & Format CTA', () => {
@@ -306,6 +327,403 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
       expect(drawer.getAttribute('data-open')).toBe('false');
       fireEvent.click(screen.getByTestId('deep-verification-drawer-toggle'));
       expect(drawer.getAttribute('data-open')).toBe('true');
+    });
+  });
+
+  describe('Task 6: Unified Single-Page 4-View Consolidation, Pinned Tab Bar & 120fps Motion', () => {
+    it('keeps all 4 view tabs pinned in one fixed segmented bar with a 120fps sliding pill and transitions all 4 views in-place with causal DirectionalStageSlide', async () => {
+      vi.spyOn(api, 'getEssay').mockResolvedValue(
+        makeReport({
+          essay_id: 119,
+          filename: 'VietDepression_PLOS_ONE.pdf',
+          num_pages: 20,
+          num_citations: 115,
+          verdicts: [
+            makeVerdict({
+              citation_id: 'cit-1',
+              numeric_index: 1,
+              citation_raw: '[1] De Choudhury et al. (2013). Predicting depression via social media.',
+              context: 'Prior studies examined social media signals [1].',
+              mapping_status: 'matched',
+              label: 'verified',
+              confidence: 0.98,
+            }),
+            makeVerdict({
+              citation_id: 'cit-2',
+              numeric_index: 2,
+              citation_raw: '[2] Missing Entry (2022). Unmatched paper.',
+              context: 'Another claim cited [2] in text.',
+              mapping_status: 'missing_reference',
+              label: 'metadata_error',
+              confidence: 0.72,
+            }),
+          ],
+        }),
+      );
+
+      const { container } = renderWithProviders(
+        <Routes>
+          <Route path="/verification/report/:id" element={<EssayPage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'ultra'), initialRoute: '/verification/report/119' },
+      );
+
+      await waitFor(() =>
+        expect(screen.getByTestId('report-tabs-sliding-pill')).toBeDefined(),
+      );
+
+      const pill = screen.getByTestId('report-tabs-sliding-pill');
+      expect(pill.classList.contains('t-tabs-pill')).toBe(true);
+
+      const healthSummaryBefore = screen.getByTestId('report-health-summary');
+      const tablistBefore = screen.getByTestId('report-view-tablist');
+      const citationsBtn = screen.getByTestId('mode-citations-btn');
+      const docBtn = screen.getByTestId('mode-document-btn');
+      const consistencyBtn = screen.getByTestId('mode-consistency-btn');
+      const graphBtn = screen.getByTestId('mode-graph-btn');
+
+      expect(citationsBtn.getAttribute('aria-selected')).toBe('true');
+      expect(docBtn.getAttribute('aria-selected')).toBe('false');
+      expect(consistencyBtn.getAttribute('aria-selected')).toBe('false');
+      expect(graphBtn.getAttribute('aria-selected')).toBe('false');
+
+      const stage = screen.getByTestId('report-view-stage');
+      expect(stage.classList.contains('t-stage-slide-viewport')).toBe(true);
+
+      // Click citation item in left queue -> detail inspector has smooth stage wrapper
+      expect(screen.getByTestId('citation-detail-stage')).toBeDefined();
+
+      // 1. Click Tab 2 ("Xem trong bài viết") -> switches in-place without unmounting health bar or tablist!
+      fireEvent.click(docBtn);
+      expect(screen.getByTestId('report-health-summary')).toBe(healthSummaryBefore);
+      expect(screen.getByTestId('report-view-tablist')).toBe(tablistBefore);
+      expect(docBtn.getAttribute('aria-selected')).toBe('true');
+      expect(citationsBtn.getAttribute('aria-selected')).toBe('false');
+      expect(stage.getAttribute('data-direction')).toBe('1');
+      expect(screen.getByText('Chế độ xem tài liệu')).toBeDefined();
+      expect(container.textContent).not.toContain('document_inspector.tei');
+      expect(container.textContent).not.toContain('document_inspector.docx');
+
+      // 2. Click Tab 3 ("Kiểm tra thiếu / thừa") -> switches forward (+1) in-place without fake python chrome
+      fireEvent.click(consistencyBtn);
+      expect(screen.getByTestId('report-health-summary')).toBe(healthSummaryBefore);
+      expect(screen.getByTestId('report-view-tablist')).toBe(tablistBefore);
+      expect(consistencyBtn.getAttribute('aria-selected')).toBe('true');
+      expect(docBtn.getAttribute('aria-selected')).toBe('false');
+      expect(stage.getAttribute('data-direction')).toBe('1');
+      expect(screen.getByText('Trích dẫn thiếu tham khảo')).toBeDefined();
+      expect(container.textContent).not.toContain('bipartite_consistency.py');
+
+      // 3. Click Tab 1 ("Danh mục trích dẫn") -> slides causally backward (-1) back to Citations inspector
+      fireEvent.click(citationsBtn);
+      expect(screen.getByTestId('report-health-summary')).toBe(healthSummaryBefore);
+      expect(screen.getByTestId('report-view-tablist')).toBe(tablistBefore);
+      expect(citationsBtn.getAttribute('aria-selected')).toBe('true');
+      expect(stage.getAttribute('data-direction')).toBe('-1');
+      expect(screen.getByTestId('deep-verification-drawer')).toBeDefined();
+    });
+
+    it('opens directly on the requested tab when visiting /document or /consistency URL and opens UpgradeModal cleanly for Basic users', async () => {
+      vi.spyOn(api, 'getEssay').mockResolvedValue(
+        makeReport({
+          essay_id: 119,
+          filename: 'VietDepression_PLOS_ONE.pdf',
+          num_pages: 20,
+          num_citations: 10,
+          verdicts: [
+            makeVerdict({
+              citation_id: 'cit-1',
+              numeric_index: 1,
+              citation_raw: '[1] De Choudhury et al. (2013). Paper.',
+              mapping_status: 'matched',
+              label: 'verified',
+            }),
+          ],
+        }),
+      );
+
+      // Pro/Ultra bookmark to /verification/report/119/document lands on Unified EssayPage with Tab 2 active
+      const { unmount } = renderWithProviders(
+        <Routes>
+          <Route path="/verification/report/:id/document" element={<EssayPage />} />
+        </Routes>,
+        { user: makeUser('user', 'pro'), initialRoute: '/verification/report/119/document' },
+      );
+
+      await waitFor(() =>
+        expect(screen.getByTestId('mode-document-btn').getAttribute('aria-selected')).toBe('true'),
+      );
+      expect(screen.getByText('Chế độ xem tài liệu')).toBeDefined();
+      unmount();
+
+      // Basic user sees locked tabs in the exact same pinned bar and opens UpgradeModal on click
+      renderWithProviders(
+        <Routes>
+          <Route path="/verification/report/:id" element={<EssayPage />} />
+        </Routes>,
+        { user: makeUser('user', 'basic'), initialRoute: '/verification/report/119' },
+      );
+
+      const lockedDocBtn = await screen.findByTestId('locked-document-inspector-btn');
+      const tablistBefore = screen.getByTestId('report-view-tablist');
+      fireEvent.click(lockedDocBtn);
+      expect(screen.getByTestId('report-view-tablist')).toBe(tablistBefore);
+    });
+
+    it('stays inside the Network tab when clicking any reference card (updating EvidenceGraph in-place at 120fps) and uses clean uniform 1px editorial borders instead of tacky border-l-4 stripes', async () => {
+      vi.spyOn(api, 'getEssay').mockResolvedValue(
+        makeReport({
+          essay_id: 119,
+          filename: 'VietDepression_PLOS_ONE.pdf',
+          num_pages: 20,
+          num_citations: 15,
+          verdicts: [
+            makeVerdict({
+              citation_id: 'cit-1',
+              numeric_index: 1,
+              citation_raw: '[1] Vietnam National Administration of Tourism (2025). Annual Report.',
+              mapping_status: 'matched',
+              label: 'resource',
+              confidence: 0.95,
+            }),
+            makeVerdict({
+              citation_id: 'cit-2',
+              numeric_index: 2,
+              citation_raw: '[2] Pontiki, M. et al. (2014). SemEval-2014 Task 4: Aspect Based Sentiment Analysis.',
+              mapping_status: 'matched',
+              label: 'verified',
+              confidence: 0.96,
+            }),
+          ],
+        }),
+      );
+
+      const { container } = renderWithProviders(
+        <Routes>
+          <Route path="/verification/report/:id" element={<EssayPage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'ultra'), initialRoute: '/verification/report/119' },
+      );
+
+      const citationsBtn = await screen.findByTestId('mode-citations-btn');
+      const graphBtn = screen.getByTestId('mode-graph-btn');
+
+      // Check Citations queue cards have NO curved thick border-l-4 / border-l-[3.5px]
+      expect(container.innerHTML).not.toContain('border-l-4');
+      expect(container.innerHTML).not.toContain('border-l-[3.5px]');
+
+      // Switch to Network tab
+      fireEvent.click(graphBtn);
+      expect(graphBtn.getAttribute('aria-selected')).toBe('true');
+      expect(citationsBtn.getAttribute('aria-selected')).toBe('false');
+      expect(screen.getByTestId('citation-graph-view')).toBeDefined();
+
+      // Network ref cards have NO border-l-4 curved stripe
+      const refCard0 = screen.getByTestId('graph-ref-card-0');
+      const refCard1 = screen.getByTestId('graph-ref-card-1');
+      expect(refCard0.className).not.toContain('border-l-4');
+      expect(refCard1.className).not.toContain('border-l-4');
+
+      // Click [2] in Network tab -> MUST STAY in Network tab and select [2]!
+      fireEvent.click(refCard1);
+      expect(graphBtn.getAttribute('aria-selected')).toBe('true');
+      expect(citationsBtn.getAttribute('aria-selected')).toBe('false');
+      expect(screen.getByTestId('citation-graph-view')).toBeDefined();
+      expect(refCard1.getAttribute('data-selected')).toBe('true');
+      expect(refCard0.getAttribute('data-selected')).toBe('false');
+      expect(screen.getByTestId('network-evidence-stage')).toBeDefined();
+    });
+
+    it('calibrates the CIS score donut ring directly to report.cis.score (99.9% renders a virtually full ring even when non-scholarly web resources are present)', async () => {
+      const verdicts = [
+        ...Array.from({ length: 26 }, (_, idx) =>
+          makeVerdict({
+            citation_id: `v-${idx + 1}`,
+            numeric_index: idx + 1,
+            citation_raw: `[${idx + 1}] Verified Paper (${2020 + (idx % 5)}). Journal.`,
+            mapping_status: 'matched',
+            label: 'verified',
+          }),
+        ),
+        ...Array.from({ length: 4 }, (_, idx) =>
+          makeVerdict({
+            citation_id: `res-${idx + 1}`,
+            numeric_index: 27 + idx,
+            citation_raw: `[${27 + idx}] Official Portal (2025). https://example.org/${idx}`,
+            mapping_status: 'matched',
+            label: 'resource',
+          }),
+        ),
+      ];
+
+      vi.spyOn(api, 'getEssay').mockResolvedValue(
+        makeReport({
+          essay_id: 120,
+          filename: 'GoodNstay_SRS.docx',
+          num_pages: 15,
+          num_citations: 30,
+          cis: { score: 99.9, grade: 'A', total_academic: 26, verified: 26 } as never,
+          verdicts,
+        }),
+      );
+
+      renderWithProviders(
+        <Routes>
+          <Route path="/verification/report/:id" element={<EssayPage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'ultra'), initialRoute: '/verification/report/120' },
+      );
+
+      const ring = await screen.findByTestId('cis-score-ring');
+      expect(ring.getAttribute('data-score')).toBe('99.9');
+
+      const progressCircle = ring.querySelector(
+        '[data-testid="cis-score-ring-progress"]',
+      ) as SVGCircleElement;
+      expect(progressCircle).not.toBeNull();
+      const dashArray = parseFloat(progressCircle.getAttribute('stroke-dasharray') || '0');
+      const dashOffset = parseFloat(progressCircle.getAttribute('stroke-dashoffset') || '999');
+      expect(dashArray).toBeGreaterThan(90);
+      // At 99.9%, remaining offset must be ~0.1% of circumference (< 0.5px), NOT a 13-18% missing chunk!
+      expect(dashOffset).toBeLessThan(0.5);
+    });
+
+    it('renders the InteractiveDecisionFlowBoard in the Network tab with zero ML jargon, 4 clickable pipeline stages, interactive satellite DB nodes, and Cinema spotlight mode', async () => {
+      vi.spyOn(api, 'getEssay').mockResolvedValue(
+        makeReport({
+          essay_id: 121,
+          filename: 'Thesis_Defense_Demo.pdf',
+          num_pages: 24,
+          num_citations: 18,
+          verdicts: [
+            makeVerdict({
+              citation_id: 'cit-7',
+              numeric_index: 7,
+              citation_raw: '[7] Choudhury, M. et al. (2013). Negatively correlated noisy learners. PLOS ONE.',
+              mapping_status: 'matched',
+              label: 'metadata_error',
+              confidence: 0.89,
+              mismatched_fields: ['year'],
+              triggered_rules: ['R-SINGLE-SOURCE-PARTIAL'],
+              matched_sources: [
+                {
+                  source: 'crossref',
+                  title: 'Negatively correlated noisy learners',
+                  authors: ['Munmun De Choudhury'],
+                  year: '2014',
+                  venue: 'PLOS ONE',
+                  doi: '10.1371/journal.pone.0119482',
+                  confidence: 0.95,
+                  matched_fields: ['title', 'authors', 'venue', 'doi'],
+                  checked_at: '2026-11-16T00:00:00Z',
+                },
+              ],
+            }),
+          ],
+        }),
+      );
+
+      renderWithProviders(
+        <Routes>
+          <Route path="/verification/report/:id" element={<EssayPage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'ultra'), initialRoute: '/verification/report/121' },
+      );
+
+      const graphBtn = await screen.findByTestId('mode-graph-btn');
+      fireEvent.click(graphBtn);
+
+      const board = await screen.findByTestId('interactive-decision-flow-board');
+      expect(board).toBeDefined();
+
+      // Zero ML / internal jargon in the Network workspace
+      const graphView = screen.getByTestId('citation-graph-view');
+      expect(graphView.textContent).not.toContain('RapidFuzz');
+      expect(graphView.textContent).not.toContain('Sentence-BERT');
+      expect(graphView.textContent).not.toContain('Author Jaccard');
+      expect(graphView.textContent).not.toContain('DAG TRACE');
+      expect(graphView.textContent).not.toContain('R-SINGLE-SOURCE-PARTIAL');
+
+      // 4 end-to-end pipeline steps are interactive
+      const step0 = screen.getByTestId('flow-step-0');
+      const step2 = screen.getByTestId('flow-step-2');
+      expect(step0).toBeDefined();
+      expect(step2).toBeDefined();
+
+      // Crossref satellite node is lit as matched, OpenAlex is unmatched
+      const crossrefSat = screen.getByTestId('flow-sat-crossref');
+      const openalexSat = screen.getByTestId('flow-sat-openalex');
+      expect(crossrefSat.getAttribute('data-matched')).toBe('true');
+      expect(openalexSat.getAttribute('data-matched')).toBe('false');
+
+      // Clicking Step 3 (index 2) updates the plain-language story card
+      fireEvent.click(step2);
+      expect(step2.getAttribute('data-active')).toBe('true');
+      expect(screen.getByTestId('flow-story-card').textContent).toContain('Năm xuất bản');
+
+      // Clicking Crossref satellite node focuses it and shows human provenance story
+      fireEvent.click(crossrefSat);
+      expect(crossrefSat.getAttribute('data-focused')).toBe('true');
+      expect(screen.getByTestId('flow-story-card').textContent).toContain('Crossref');
+
+      // Cinema Spotlight toggle switches board presentation mode cleanly
+      const cinemaToggle = screen.getByTestId('flow-cinema-toggle');
+      expect(board.getAttribute('data-cinema')).toBe('false');
+      fireEvent.click(cinemaToggle);
+      expect(board.getAttribute('data-cinema')).toBe('true');
+
+      // Slow 4-Act Replay Flow physically transforms the MAIN BOARD step-by-step (>= 2.2s per act)
+      vi.useFakeTimers();
+      try {
+        const replayBtn = screen.getByTestId('flow-replay-btn');
+        fireEvent.click(replayBtn);
+
+        // Act 1 (0ms - 2300ms): Main board enters "step-0" (Reading Manuscript), satellites standby
+        expect(board.getAttribute('data-board-phase')).toBe('step-0');
+        expect(screen.getByTestId('flow-main-stage-hud').textContent).toContain('1/4');
+        expect(crossrefSat.getAttribute('data-phase-state')).toBe('standby');
+
+        // After 800ms it MUST STILL be on Act 1 (not zooming past in 420ms!)
+        act(() => {
+          vi.advanceTimersByTime(800);
+        });
+        expect(board.getAttribute('data-board-phase')).toBe('step-0');
+
+        // Advance to Act 2 (2400ms total): Main board enters "step-1" (Broadcasting Radar Scan to 15+ DBs)
+        act(() => {
+          vi.advanceTimersByTime(1600);
+        });
+        expect(board.getAttribute('data-board-phase')).toBe('step-1');
+        expect(screen.getByTestId('flow-main-stage-hud').textContent).toContain('2/4');
+        expect(crossrefSat.getAttribute('data-phase-state')).toBe('hit');
+        expect(openalexSat.getAttribute('data-phase-state')).toBe('scanning');
+
+        // Advance to Act 3 (4800ms total): Main board enters "step-2" and morphs Center Hub into Live Field Diff Matrix!
+        act(() => {
+          vi.advanceTimersByTime(2400);
+        });
+        expect(board.getAttribute('data-board-phase')).toBe('step-2');
+        expect(screen.getByTestId('flow-main-stage-hud').textContent).toContain('3/4');
+        const matrix = screen.getByTestId('flow-hub-field-matrix');
+        expect(matrix.textContent).toContain('Năm xuất bản');
+        expect(matrix.textContent).toContain('2013');
+        expect(matrix.textContent).toContain('2014');
+
+        // Advance to Act 4 (7200ms total): Dedicated Final Verdict Seal inside Center Hub on Main Board
+        act(() => {
+          vi.advanceTimersByTime(2400);
+        });
+        expect(board.getAttribute('data-board-phase')).toBe('step-3');
+        expect(screen.getByTestId('flow-main-stage-hud').textContent).toContain('4/4');
+        const verdictSeal = screen.getByTestId('flow-hub-verdict-seal');
+        expect(verdictSeal).toBeDefined();
+
+        // Clicking replayBtn while running stops replay cleanly back to overview
+        fireEvent.click(replayBtn);
+        expect(board.getAttribute('data-board-phase')).toBe('overview');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

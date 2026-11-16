@@ -8,6 +8,7 @@ import io
 import json
 import os
 import re
+import unicodedata
 from datetime import UTC, datetime
 from html import escape
 from pathlib import Path
@@ -1493,12 +1494,24 @@ def _register_unicode_pdf_fonts() -> tuple[str, str]:
     registered = set(pdfmetrics.getRegisteredFontNames())
     if (
         _PDF_UNICODE_FONTS_CACHE is not None
+        and _PDF_UNICODE_FONTS_CACHE[0] != "Helvetica"
         and _PDF_UNICODE_FONTS_CACHE[0] in registered
         and _PDF_UNICODE_FONTS_CACHE[1] in registered
     ):
         return _PDF_UNICODE_FONTS_CACHE
 
     candidates: list[tuple[Path, Path, Path | None, Path | None]] = []
+
+    # 0. Bundled DejaVuSans TTFs inside integrity_checker/export/fonts (works in slim Docker & offline)
+    bundled_dir = Path(__file__).resolve().parents[2] / "export" / "fonts"
+    candidates.append(
+        (
+            bundled_dir / "DejaVuSans.ttf",
+            bundled_dir / "DejaVuSans-Bold.ttf",
+            None,
+            None,
+        )
+    )
 
     # 1. matplotlib bundled DejaVuSans (full Vietnamese & scholarly Unicode support)
     try:
@@ -1625,18 +1638,51 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
         leading=11,
         spaceAfter=2,
     )
+    def _pdf_text(val: Any) -> str:
+        return escape(unicodedata.normalize("NFC", str(val or "")))
+
     table_cell_style = ParagraphStyle(
         'TableCell',
         parent=styles['Normal'],
         fontName=font_reg,
         fontSize=8,
-        leading=9,
+        leading=11,
+        textColor=colors.HexColor("#1e293b"),
         spaceAfter=0,
         wordWrap='LTR',
     )
+    table_center_style = ParagraphStyle(
+        'TableCellCenter',
+        parent=table_cell_style,
+        alignment=1,
+    )
+    status_verified_style = ParagraphStyle(
+        'TableStatusVerified',
+        parent=table_center_style,
+        fontName=font_bold,
+        textColor=colors.HexColor("#059669"),
+    )
+    status_warn_style = ParagraphStyle(
+        'TableStatusWarn',
+        parent=table_center_style,
+        fontName=font_bold,
+        textColor=colors.HexColor("#d97706"),
+    )
+    status_error_style = ParagraphStyle(
+        'TableStatusError',
+        parent=table_center_style,
+        fontName=font_bold,
+        textColor=colors.HexColor("#dc2626"),
+    )
+    status_muted_style = ParagraphStyle(
+        'TableStatusMuted',
+        parent=table_center_style,
+        fontName=font_bold,
+        textColor=colors.HexColor("#475569"),
+    )
     table_header_style = ParagraphStyle(
         'TableHeader',
-        parent=table_cell_style,
+        parent=table_center_style,
         textColor=colors.whitesmoke,
         fontName=font_bold,
     )
@@ -1650,7 +1696,7 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
     # Essay info (escape filename to prevent ReportLab XML/HTML tag injection & SSRF)
     essay_id_val = int(getattr(essay, "id", 1) or 1)
     utc_now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
-    elements.append(Paragraph(f"<b>File:</b> {escape(essay.filename or '')}", body_style))
+    elements.append(Paragraph(f"<b>File:</b> {_pdf_text(essay.filename)}", body_style))
     elements.append(Paragraph(f"<b>Essay ID:</b> {essay_id_val}", body_style))
     elements.append(Paragraph(f"<b>Pages:</b> {getattr(essay, 'num_pages', 0)}", body_style))
     elements.append(Paragraph(f"<b>Generated:</b> {utc_now_str}", body_style))
@@ -1722,7 +1768,7 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
     if diag_notes:
         elements.append(Paragraph("Document Diagnostics", heading_style))
         elements.append(
-            Paragraph(escape(" | ".join(diag_notes)), diag_style)
+            Paragraph(_pdf_text(" | ".join(diag_notes)), diag_style)
         )
         elements.append(Spacer(1, 0.25 * cm))
 
@@ -1835,24 +1881,43 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
             cit_display = raw_cit
 
         v_rules = _load_verdict_rules(v)
+        norm_lbl = _normalize_verdict_label(v)
         if "R-INCOMPLETE-METADATA" in v_rules:
             source_status = "Incomplete Metadata"
+            src_style = status_warn_style
         else:
-            source_status = _format_label(_normalize_verdict_label(v))
-        mapping_status = _format_mapping_status(getattr(v, "mapping_status", None) or "matched")
+            source_status = _format_label(norm_lbl)
+            if norm_lbl in ("verified", "resource"):
+                src_style = status_verified_style
+            elif norm_lbl == "metadata_error":
+                src_style = status_warn_style
+            elif norm_lbl == "suspected_hallucination":
+                src_style = status_error_style
+            else:
+                src_style = status_muted_style
+
+        raw_map = getattr(v, "mapping_status", None) or "matched"
+        mapping_status = _format_mapping_status(raw_map)
+        map_style = (
+            status_verified_style
+            if raw_map == "matched"
+            else status_error_style
+            if raw_map == "missing_reference"
+            else status_warn_style
+        )
         confidence = f"{(getattr(v, 'confidence', 0.0) or 0.0) * 100:.0f}%"
 
         verdict_data.append([
-            Paragraph(escape(idx_display), table_cell_style),
-            Paragraph(escape(cit_display), table_cell_style),
-            Paragraph(escape(source_status), table_cell_style),
-            Paragraph(escape(mapping_status), table_cell_style),
-            Paragraph(escape(confidence), table_cell_style),
+            Paragraph(_pdf_text(idx_display), table_center_style),
+            Paragraph(_pdf_text(cit_display), table_cell_style),
+            Paragraph(_pdf_text(source_status), src_style),
+            Paragraph(_pdf_text(mapping_status), map_style),
+            Paragraph(_pdf_text(confidence), table_center_style),
         ])
 
     verdict_table = Table(
         verdict_data,
-        colWidths=[1.3 * cm, 5.7 * cm, 3 * cm, 3 * cm, 2 * cm],
+        colWidths=[1.1 * cm, 7.6 * cm, 2.9 * cm, 2.8 * cm, 2.2 * cm],
         repeatRows=1,
     )
     verdict_table_styles = [

@@ -1173,16 +1173,23 @@ export function DonutChart({
   const cy = size / 2;
   const ro = Math.min(cx, cy) - 2;
   const ri = ro - thickness;
-  const nonZeroCount = segments.filter((s) => s.value > 0).length;
-  const gap = nonZeroCount > 1 ? Math.min(2.5, size * 0.05) : 0;
-  const cr = Math.min(1.75, thickness * 0.25);
+  const rawTotal = segments.reduce((acc, s) => acc + Math.max(0, s.value), 0) || 1;
+  // Drop sub-0.8% dust segments when rendering compact rings so sector gaps never eat into a 99.9% arc
+  const effectiveSegments = segments.map((s) => {
+    const val = Math.max(0, s.value);
+    return val / rawTotal < 0.008 ? { ...s, value: 0 } : { ...s, value: val };
+  });
+  const nonZeroCount = effectiveSegments.filter((s) => s.value > 0).length;
+  const gap = nonZeroCount > 1 ? Math.min(2.2, size * 0.035) : 0;
+  const cr = Math.min(1.5, thickness * 0.22);
 
-  const total = segments.reduce((acc, s) => acc + Math.max(0, s.value), 0) || 1;
+  const total =
+    effectiveSegments.reduce((acc, s) => acc + Math.max(0, s.value), 0) || 1;
   let cursor = 0;
 
   return (
     <div
-      className={cn('t-donut', className)}
+      className={cn('t-donut shrink-0', className)}
       style={{ width: size, height: size }}
     >
       <svg viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
@@ -1196,7 +1203,7 @@ export function DonutChart({
           className="text-slate-200/70 dark:text-slate-800/80"
           strokeWidth={thickness}
         />
-        {segments.map((seg, idx) => {
+        {effectiveSegments.map((seg, idx) => {
           const val = Math.max(0, seg.value);
           if (val <= 0) return null;
           const span = (val / total) * Math.PI * 2;
@@ -1218,6 +1225,79 @@ export function DonutChart({
         })}
       </svg>
       {centerContent && <div className="t-donut-center">{centerContent}</div>}
+    </div>
+  );
+}
+
+/**
+ * Precision 12-o'clock clockwise SVG Score Ring calibrated 1:1 to a 0–100 percentage.
+ * Ensures e.g. 99.9% renders a virtually closed circle (0.1% offset) with zero misleading sector gaps.
+ */
+export function ScoreRing({
+  value,
+  size = 40,
+  thickness = 4.2,
+  color = '#10b981',
+  className,
+  'data-testid': testId,
+}: {
+  value: number;
+  size?: number;
+  thickness?: number;
+  color?: string;
+  className?: string;
+  'data-testid'?: string;
+}) {
+  const clamped = Math.min(100, Math.max(0, Number.isFinite(value) ? value : 0));
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = (size - thickness) / 2 - 0.5;
+  const circumference = 2 * Math.PI * r;
+  const dashOffset = circumference * (1 - clamped / 100);
+
+  return (
+    <div
+      data-testid={testId}
+      data-score={clamped.toFixed(1)}
+      className={cn('relative inline-flex items-center justify-center shrink-0', className)}
+      style={{ width: size, height: size }}
+    >
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        className="block"
+        aria-hidden="true"
+      >
+        <circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          className="text-slate-200/80 dark:text-slate-800"
+          strokeWidth={thickness}
+        />
+        {clamped > 0 && (
+          <circle
+            data-testid={testId ? `${testId}-progress` : undefined}
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth={thickness}
+            strokeLinecap={clamped >= 99.5 ? 'butt' : 'round'}
+            strokeDasharray={circumference.toFixed(3)}
+            strokeDashoffset={dashOffset.toFixed(3)}
+            transform={`rotate(-90 ${cx} ${cy})`}
+            style={{
+              transition:
+                'stroke-dashoffset 420ms cubic-bezier(0.22, 1, 0.36, 1), stroke 240ms ease',
+            }}
+          />
+        )}
+      </svg>
     </div>
   );
 }

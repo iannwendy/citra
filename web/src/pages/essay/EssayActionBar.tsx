@@ -16,25 +16,26 @@ import { useRole } from '@/hooks/useRole';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { BibliographyRemediationModal } from '@/components/BibliographyRemediationModal';
 import { Button } from '@/components/ui/button';
+import { useSlidingPill } from '@/components/ui/transitions';
+
+export type ReportWorkspaceMode = 'debugger' | 'document' | 'consistency' | 'graph';
 
 interface EssayActionBarProps {
   essayId: string;
   filename?: string;
   issueCount?: number;
   consistencyOk?: boolean;
-  workspaceMode?: 'debugger' | 'graph';
-  onChangeWorkspaceMode?: (mode: 'debugger' | 'graph') => void;
+  workspaceMode?: ReportWorkspaceMode;
+  onChangeWorkspaceMode?: (mode: ReportWorkspaceMode) => void;
   hideRemediationButton?: boolean;
   onOpenRemediation?: () => void;
 }
 
 /**
  * Single-purpose View Switcher Bar beneath the report header.
- * Presents 3 clear human-friendly views:
- * 1. Danh mục trích dẫn (Citations)
- * 2. Xem trong bài viết (In Document)
- * 3. Kiểm tra thiếu / thừa (In-Text Check)
- * Plus optional Network Graph toggle on the main report workspace.
+ * When `onChangeWorkspaceMode` is provided (Unified Single-Page Report), all 4 views
+ * (`Citations`, `In Document`, `In-Text Check`, `Network`) stay pinned in one fixed
+ * container and glide at 120fps via GPU-composited `useSlidingPill`.
  */
 export function EssayActionBar({
   essayId,
@@ -63,48 +64,104 @@ export function EssayActionBar({
   const basePath = `/verification/report/${essayId}`;
   const currentPath = location.pathname;
 
-  const isReportRoot = currentPath === basePath || currentPath === `/essay/${essayId}`;
-  const isIssues = currentPath.endsWith('/issues');
-  const isDocument = currentPath.endsWith('/document');
-  const isConsistency = currentPath.endsWith('/consistency');
-  const isTrace = currentPath.endsWith('/trace');
+  const isUnifiedMode = Boolean(onChangeWorkspaceMode);
+  const isIssues = !isUnifiedMode && currentPath.endsWith('/issues');
+  const isDocument = isUnifiedMode
+    ? workspaceMode === 'document'
+    : currentPath.endsWith('/document');
+  const isConsistency = isUnifiedMode
+    ? workspaceMode === 'consistency'
+    : currentPath.endsWith('/consistency');
+  const isTrace = !isUnifiedMode && currentPath.endsWith('/trace');
+  const isGraphTabActive = isUnifiedMode && workspaceMode === 'graph';
+  const isCitationsTabActive = isUnifiedMode
+    ? workspaceMode === 'debugger'
+    : !isIssues && !isDocument && !isConsistency && !isTrace;
 
-  const isCitationsTabActive = isReportRoot && workspaceMode !== 'graph';
-  const isGraphTabActive = isReportRoot && workspaceMode === 'graph';
+  const activePillKey = isUnifiedMode
+    ? workspaceMode
+    : isDocument
+      ? 'document'
+      : isConsistency
+        ? 'consistency'
+        : isIssues
+          ? 'issues'
+          : isTrace
+            ? 'trace'
+            : 'debugger';
+
+  const { containerRef: tabsRef, pillStyle } = useSlidingPill<HTMLDivElement>(
+    `${activePillKey}-${lang}`,
+  );
 
   const handleLockedClick = (featureTitle: string) => {
     setLockedFeature(featureTitle);
     setUpgradeOpen(true);
   };
 
+  const tabBtnClass = (isActive: boolean) =>
+    `t-tab inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold shrink-0 whitespace-nowrap select-none cursor-pointer transition-colors ${
+      isActive
+        ? pillStyle.ready
+          ? 'text-slate-900 dark:text-white'
+          : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+    }`;
+
   return (
     <>
       <div
+        ref={tabsRef}
         role="tablist"
+        data-testid="report-view-tablist"
         aria-label={isVi ? 'Chế độ xem báo cáo' : 'Report Views'}
-        className="flex flex-wrap sm:inline-flex items-center gap-1 p-1 rounded-xl bg-slate-100/90 dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 max-w-full"
+        className="t-tabs relative flex flex-wrap sm:inline-flex items-center gap-1 p-1 rounded-xl bg-slate-100/90 dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 max-w-full shrink-0"
       >
+        {/* 120fps GPU-Composited Sliding Pill */}
+        <span
+          aria-hidden="true"
+          data-testid="report-tabs-sliding-pill"
+          style={{
+            width: `${pillStyle.width}px`,
+            height: `${pillStyle.height}px`,
+            transform: `translate3d(${pillStyle.left}px, ${pillStyle.top}px, 0)`,
+            opacity: pillStyle.ready ? 1 : 0,
+            transition: pillStyle.animate ? undefined : 'none',
+          }}
+          className="t-tabs-pill rounded-lg bg-white dark:bg-slate-800 shadow-xs"
+        />
+
         {/* View 1: Citations (Default) */}
-        <Button
-          asChild
-          variant={isCitationsTabActive ? 'default' : 'ghost'}
-          size="sm"
-          className={`h-8 rounded-lg text-xs font-semibold shrink-0 whitespace-nowrap transition-all ${
-            isCitationsTabActive
-              ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-white shadow-xs'
-              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-          }`}
-        >
-          <Link
-            to={basePath}
-            onClick={() => {
-              if (onChangeWorkspaceMode) {
-                onChangeWorkspaceMode('debugger');
-              }
-            }}
+        {isUnifiedMode && onChangeWorkspaceMode ? (
+          <button
+            type="button"
+            role="tab"
+            data-testid="mode-citations-btn"
+            aria-selected={isCitationsTabActive}
+            data-pill-active={isCitationsTabActive ? 'true' : 'false'}
+            onClick={() => onChangeWorkspaceMode('debugger')}
+            className={tabBtnClass(isCitationsTabActive)}
           >
             <BookOpen
-              className={`h-3.5 w-3.5 ${
+              className={`h-3.5 w-3.5 shrink-0 ${
+                isCitationsTabActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
+              }`}
+            />
+            <span>{isVi ? 'Danh mục trích dẫn' : 'Citations'}</span>
+            {typeof issueCount === 'number' && issueCount > 0 && (
+              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800">
+                {issueCount}
+              </span>
+            )}
+          </button>
+        ) : (
+          <Link
+            to={basePath}
+            data-pill-active={isCitationsTabActive ? 'true' : 'false'}
+            className={tabBtnClass(isCitationsTabActive)}
+          >
+            <BookOpen
+              className={`h-3.5 w-3.5 shrink-0 ${
                 isCitationsTabActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
               }`}
             />
@@ -115,74 +172,101 @@ export function EssayActionBar({
               </span>
             )}
           </Link>
-        </Button>
+        )}
 
         {/* View 2: In Document */}
         {has('view_document_inspector') ? (
-          <Button
-            asChild
-            variant={isDocument ? 'default' : 'ghost'}
-            size="sm"
-            className={`h-8 rounded-lg text-xs font-semibold shrink-0 whitespace-nowrap transition-all ${
-              isDocument
-                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Link to={`${basePath}/document`}>
+          isUnifiedMode && onChangeWorkspaceMode ? (
+            <button
+              type="button"
+              role="tab"
+              data-testid="mode-document-btn"
+              aria-selected={isDocument}
+              data-pill-active={isDocument ? 'true' : 'false'}
+              onClick={() => onChangeWorkspaceMode('document')}
+              className={tabBtnClass(isDocument)}
+            >
               <FileSearch
-                className={`h-3.5 w-3.5 ${
+                className={`h-3.5 w-3.5 shrink-0 ${
+                  isDocument ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
+                }`}
+              />
+              <span>{isVi ? 'Xem trong bài viết' : 'In Document'}</span>
+            </button>
+          ) : (
+            <Link
+              to={`${basePath}/document`}
+              data-pill-active={isDocument ? 'true' : 'false'}
+              className={tabBtnClass(isDocument)}
+            >
+              <FileSearch
+                className={`h-3.5 w-3.5 shrink-0 ${
                   isDocument ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
                 }`}
               />
               <span>{isVi ? 'Xem trong bài viết' : 'In Document'}</span>
             </Link>
-          </Button>
+          )
         ) : (
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
+            role={isUnifiedMode ? 'tab' : undefined}
+            aria-selected={isUnifiedMode ? false : undefined}
             data-testid="locked-document-inspector-btn"
             onClick={() =>
               handleLockedClick(isVi ? 'Xem trích dẫn trong bài viết' : 'In-Document Citation View')
             }
-            className="h-8 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer"
+            className="t-tab inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer transition-colors"
           >
-            <Lock className="h-3 w-3 text-slate-400" />
+            <Lock className="h-3 w-3 text-slate-400 shrink-0" />
             <span>{isVi ? 'Xem trong bài viết' : 'In Document'}</span>
-          </Button>
+          </button>
         )}
 
         {/* View 3: In-Text <-> Bibliography Check */}
         {has('view_orphan_detection') ? (
-          <Button
-            asChild
-            variant={isConsistency ? 'default' : 'ghost'}
-            size="sm"
-            className={`h-8 rounded-lg text-xs font-semibold shrink-0 whitespace-nowrap transition-all ${
-              isConsistency
-                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <Link to={`${basePath}/consistency`}>
+          isUnifiedMode && onChangeWorkspaceMode ? (
+            <button
+              type="button"
+              role="tab"
+              data-testid="mode-consistency-btn"
+              aria-selected={isConsistency}
+              data-pill-active={isConsistency ? 'true' : 'false'}
+              onClick={() => onChangeWorkspaceMode('consistency')}
+              className={tabBtnClass(isConsistency)}
+            >
               <Link2
-                className={`h-3.5 w-3.5 ${
+                className={`h-3.5 w-3.5 shrink-0 ${
                   isConsistency ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
                 }`}
               />
               <span>{isVi ? 'Kiểm tra thiếu / thừa' : 'In-Text Check'}</span>
               {consistencyOk && (
-                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              )}
+            </button>
+          ) : (
+            <Link
+              to={`${basePath}/consistency`}
+              data-pill-active={isConsistency ? 'true' : 'false'}
+              className={tabBtnClass(isConsistency)}
+            >
+              <Link2
+                className={`h-3.5 w-3.5 shrink-0 ${
+                  isConsistency ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
+                }`}
+              />
+              <span>{isVi ? 'Kiểm tra thiếu / thừa' : 'In-Text Check'}</span>
+              {consistencyOk && (
+                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               )}
             </Link>
-          </Button>
+          )
         ) : (
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
+            role={isUnifiedMode ? 'tab' : undefined}
+            aria-selected={isUnifiedMode ? false : undefined}
             data-testid="locked-consistency-btn"
             onClick={() =>
               handleLockedClick(
@@ -191,20 +275,21 @@ export function EssayActionBar({
                   : 'Citation Consistency & Orphan Analysis',
               )
             }
-            className="h-8 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer"
+            className="t-tab inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer transition-colors"
           >
-            <Lock className="h-3 w-3 text-slate-400" />
+            <Lock className="h-3 w-3 text-slate-400 shrink-0" />
             <span>{isVi ? 'Kiểm tra thiếu / thừa' : 'In-Text Check'}</span>
-          </Button>
+          </button>
         )}
 
-        {/* Optional View 4: Subtle Network Graph Switcher (when inside EssayPage) */}
-        {onChangeWorkspaceMode && (
-          <Button
+        {/* View 4: Network Graph Switcher (Unified Single-Page Report) */}
+        {isUnifiedMode && onChangeWorkspaceMode && (
+          <button
             type="button"
-            variant={isGraphTabActive ? 'default' : 'ghost'}
-            size="sm"
+            role="tab"
             data-testid="mode-graph-btn"
+            aria-selected={isGraphTabActive}
+            data-pill-active={isGraphTabActive ? 'true' : 'false'}
             onClick={() => {
               if (!has('view_logic_trace')) {
                 handleLockedClick(
@@ -214,50 +299,48 @@ export function EssayActionBar({
                 );
                 return;
               }
-              onChangeWorkspaceMode(isGraphTabActive ? 'debugger' : 'graph');
+              onChangeWorkspaceMode('graph');
             }}
-            className={`h-8 rounded-lg text-xs font-semibold shrink-0 whitespace-nowrap cursor-pointer transition-all ${
-              isGraphTabActive
-                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
+            className={
+              has('view_logic_trace')
+                ? tabBtnClass(isGraphTabActive)
+                : 't-tab inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer transition-colors'
+            }
           >
-            <Network
-              className={`h-3.5 w-3.5 ${
-                isGraphTabActive ? 'text-violet-600 dark:text-violet-400' : 'text-slate-500'
-              }`}
-            />
+            {has('view_logic_trace') ? (
+              <Network
+                className={`h-3.5 w-3.5 shrink-0 ${
+                  isGraphTabActive ? 'text-violet-600 dark:text-violet-400' : 'text-slate-500'
+                }`}
+              />
+            ) : (
+              <Lock className="h-3 w-3 text-slate-400 shrink-0" />
+            )}
             <span>{isVi ? 'Sơ đồ' : 'Network'}</span>
-          </Button>
+          </button>
         )}
 
         {/* Contextual indicator ONLY when visiting companion /issues or /trace URL directly */}
         {isIssues && (
-          <Button
-            asChild
-            variant="default"
-            size="sm"
-            className="h-8 rounded-lg text-xs font-semibold shrink-0 whitespace-nowrap bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs"
+          <Link
+            to={`${basePath}/issues`}
+            data-pill-active="true"
+            className={tabBtnClass(true)}
           >
-            <Link to={`${basePath}/issues`}>
-              <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
-              <span>{isVi ? 'Danh sách vấn đề' : 'Issues'}</span>
-            </Link>
-          </Button>
+            <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <span>{isVi ? 'Danh sách vấn đề' : 'Issues'}</span>
+          </Link>
         )}
 
         {isTrace && (
-          <Button
-            asChild
-            variant="default"
-            size="sm"
-            className="h-8 rounded-lg text-xs font-semibold shrink-0 whitespace-nowrap bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs"
+          <Link
+            to={`${basePath}/trace`}
+            data-pill-active="true"
+            className={tabBtnClass(true)}
           >
-            <Link to={`${basePath}/trace`}>
-              <GitBranch className="h-3.5 w-3.5 text-violet-500" />
-              <span>{isVi ? 'Chi tiết kiểm chứng' : 'How We Verified'}</span>
-            </Link>
-          </Button>
+            <GitBranch className="h-3.5 w-3.5 text-violet-500 shrink-0" />
+            <span>{isVi ? 'Chi tiết kiểm chứng' : 'How We Verified'}</span>
+          </Link>
         )}
 
         {/* Standalone Remediation CTA (hidden when EssayHeader already renders Primary CTA above) */}
@@ -273,7 +356,7 @@ export function EssayActionBar({
               onClick={() =>
                 onOpenRemediation ? onOpenRemediation() : setRemediationOpen(true)
               }
-              className="h-8 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 cursor-pointer"
+              className="t-tab h-8 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 cursor-pointer"
             >
               <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
               <span>{remediationLabel}</span>
@@ -287,7 +370,7 @@ export function EssayActionBar({
               title={remediationSubtitle}
               aria-label={`${remediationLabel} — ${remediationSubtitle}`}
               onClick={() => handleLockedClick(`${remediationLabel} — ${remediationSubtitle}`)}
-              className="h-8 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer"
+              className="t-tab h-8 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer"
             >
               <Lock className="h-3 w-3 text-slate-400" />
               <span>{remediationLabel}</span>

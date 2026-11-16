@@ -68,8 +68,6 @@ const ProcessingPage = lazyWithRetry(() => import('./pages/ProcessingPage').then
 const EssayPage = lazyWithRetry(() => import('./pages/EssayPage').then((m) => ({ default: m.EssayPage })));
 const IssuesPage = lazyWithRetry(() => import('./pages/IssuesPage').then((m) => ({ default: m.IssuesPage })));
 const LogicTracePage = lazyWithRetry(() => import('./pages/LogicTracePage').then((m) => ({ default: m.LogicTracePage })));
-const DocumentInspectorPage = lazyWithRetry(() => import('./pages/DocumentInspectorPage').then((m) => ({ default: m.DocumentInspectorPage })));
-const OrphanDetectionPage = lazyWithRetry(() => import('./pages/OrphanDetectionPage').then((m) => ({ default: m.OrphanDetectionPage })));
 const HistoryPage = lazyWithRetry(() => import('./pages/HistoryPage').then((m) => ({ default: m.HistoryPage })));
 const ProfilePage = lazyWithRetry(() => import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
 const AccountManagementPage = lazyWithRetry(() => import('./pages/AccountManagementPage').then((m) => ({ default: m.AccountManagementPage })));
@@ -344,7 +342,7 @@ export const router = createBrowserRouter([
             element: (
               <ProtectedRoute requiredCapabilities={['view_document_inspector']}>
                 <Suspense fallback={<PageSkeleton />}>
-                  <DocumentInspectorPage />
+                  <EssayPage />
                 </Suspense>
               </ProtectedRoute>
             ),
@@ -354,7 +352,7 @@ export const router = createBrowserRouter([
             element: (
               <ProtectedRoute requiredCapabilities={['view_orphan_detection']}>
                 <Suspense fallback={<PageSkeleton />}>
-                  <OrphanDetectionPage />
+                  <EssayPage />
                 </Suspense>
               </ProtectedRoute>
             ),

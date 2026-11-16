@@ -1,12 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ChevronUp,
   ChevronDown,
   GitBranch,
   Database,
-  Brain,
   Link2,
+  Search,
 } from 'lucide-react';
 import type {
   Verdict,
@@ -16,19 +16,21 @@ import type {
 } from '@/api/client';
 import { MappingStatusBadge } from '../MappingStatusBadge';
 import { VerdictBadge } from '../VerdictBadge';
-import { OverrideControls } from '../OverrideControls';
 import {
   CitationGraphControls,
   type ViewMode,
   type CitationGraphStats,
 } from '../graph/CitationGraphControls';
-import { EvidenceGraph } from './EvidenceGraph';
+import { InteractiveDecisionFlowBoard } from './InteractiveDecisionFlowBoard';
+import { DirectionalStageSlide, useSlidingPill } from '@/components/ui/transitions';
 import { getCitationMarkerLabel, isUrlResource } from '@/lib/verdictExplanation';
 
 interface CitationGraphViewProps {
   verdicts: Verdict[];
   linkingSummary?: MappingStatusSummary;
+  selectedCitationId?: string | null;
   onSelect: (v: Verdict) => void;
+  onInspectDetails?: (v: Verdict) => void;
   onOverride?: (
     verdict: Verdict,
     req: Parameters<typeof import('@/api/client').api.overrideVerdict>[1]
@@ -50,28 +52,18 @@ function SortIcon({
   );
 }
 
-function getCardLeftAccent(v: Verdict): string {
-  if (isUrlResource(v)) return 'border-l-violet-500';
-  switch (v.label) {
-    case 'verified':
-      return 'border-l-emerald-500';
-    case 'metadata_error':
-      return 'border-l-amber-500';
-    case 'suspected_hallucination':
-      return 'border-l-red-500';
-    default:
-      return 'border-l-slate-400';
-  }
-}
-
 export function CitationGraphView({
   verdicts,
   linkingSummary: _linkingSummary,
+  selectedCitationId,
   onSelect,
+  onInspectDetails,
   onOverride,
 }: CitationGraphViewProps) {
   const { i18n } = useTranslation();
-  const isVi = i18n.language?.startsWith('vi');
+  const isVi = Boolean(i18n.language?.startsWith('vi'));
+  const isCleanEmbeddedMode = Boolean(onInspectDetails);
+
   const [viewMode, setViewMode] = useState<ViewMode>('combined');
   const [statusFilters, setStatusFilters] = useState<
     Set<CitationMappingStatus>
@@ -79,10 +71,20 @@ export function CitationGraphView({
   const [labelFilters, setLabelFilters] = useState<Set<ValidationLabel>>(
     new Set(),
   );
+  const [cleanFilter, setCleanFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeId, setActiveId] = useState<string | null>(
-    verdicts[0]?.citation_id ?? null,
+    selectedCitationId ?? verdicts[0]?.citation_id ?? null,
   );
+
+  const { containerRef: cleanFilterRef, pillStyle: cleanFilterPill } =
+    useSlidingPill<HTMLDivElement>(`${cleanFilter}-${i18n.language}`);
+
+  useEffect(() => {
+    if (selectedCitationId) {
+      setActiveId(selectedCitationId);
+    }
+  }, [selectedCitationId]);
 
   const indexedVerdicts = useMemo(() => {
     return verdicts.map((v, idx) => ({
@@ -112,22 +114,50 @@ export function CitationGraphView({
           }
         }
       }
+      if (isCleanEmbeddedMode) {
+        if (cleanFilter === 'all') return true;
+        if (cleanFilter === 'attention') {
+          return (
+            effectiveLabel === 'metadata_error' ||
+            effectiveLabel === 'suspected_hallucination' ||
+            effectiveLabel === 'unresolved'
+          );
+        }
+        return effectiveLabel === cleanFilter;
+      }
       const statusOk =
         statusFilters.size === 0 || statusFilters.has(v.mapping_status);
       const labelOk =
         labelFilters.size === 0 || labelFilters.has(effectiveLabel);
       return statusOk && labelOk;
     });
-  }, [indexedVerdicts, searchQuery, statusFilters, labelFilters]);
+  }, [
+    indexedVerdicts,
+    searchQuery,
+    isCleanEmbeddedMode,
+    cleanFilter,
+    statusFilters,
+    labelFilters,
+  ]);
 
-  const activeVerdict = useMemo(() => {
+  const activeEntry = useMemo(() => {
     return (
-      filtered.find((item) => item.verdict.citation_id === activeId)?.verdict ||
-      filtered[0]?.verdict ||
-      verdicts[0] ||
+      filtered.find((item) => item.verdict.citation_id === activeId) ||
+      filtered[0] ||
+      indexedVerdicts[0] ||
       null
     );
-  }, [filtered, verdicts, activeId]);
+  }, [filtered, indexedVerdicts, activeId]);
+
+  const activeVerdict = activeEntry?.verdict ?? null;
+
+  const activeStageIdx = useMemo(() => {
+    if (!activeVerdict) return 0;
+    const idx = indexedVerdicts.findIndex(
+      (item) => item.verdict.citation_id === activeVerdict.citation_id,
+    );
+    return Math.max(0, idx);
+  }, [indexedVerdicts, activeVerdict]);
 
   function toggleStatus(s: CitationMappingStatus) {
     setStatusFilters((prev) => {
@@ -187,194 +217,300 @@ export function CitationGraphView({
   const hasFilters =
     statusFilters.size > 0 || labelFilters.size > 0 || searchQuery.length > 0;
 
+  const cleanAttentionCount =
+    (stats.sourceCounts.metadata_error ?? 0) +
+    (stats.sourceCounts.suspected_hallucination ?? 0) +
+    (stats.sourceCounts.unresolved ?? 0);
+
+  const cleanFilterOptions = [
+    { key: 'all', label: isVi ? `Tất cả (${stats.total})` : `All (${stats.total})`, show: true },
+    {
+      key: 'verified',
+      label: isVi
+        ? `✓ Hợp lệ (${stats.sourceCounts.verified ?? 0})`
+        : `✓ Verified (${stats.sourceCounts.verified ?? 0})`,
+      show: (stats.sourceCounts.verified ?? 0) > 0,
+    },
+    {
+      key: 'attention',
+      label: isVi
+        ? `⚠ Cần kiểm tra (${cleanAttentionCount})`
+        : `⚠ Needs Check (${cleanAttentionCount})`,
+      show: cleanAttentionCount > 0,
+    },
+    {
+      key: 'resource',
+      label: isVi
+        ? `🔗 Nguồn Web (${stats.sourceCounts.resource ?? 0})`
+        : `🔗 Web (${stats.sourceCounts.resource ?? 0})`,
+      show: (stats.sourceCounts.resource ?? 0) > 0,
+    },
+  ].filter((o) => o.show);
+
   return (
     <div
-      className="space-y-4 p-3 sm:p-5 bg-white dark:bg-slate-950 w-full min-w-0 max-w-full overflow-hidden"
+      className="bg-white dark:bg-slate-950 w-full min-w-0 max-w-full overflow-hidden"
       data-testid="citation-graph-view"
     >
-      {/* Top Architecture Header & Controls */}
-      <div className="rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 p-3.5 sm:p-4 w-full min-w-0 overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3 pb-3 border-b border-slate-200/80 dark:border-slate-800">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/90 border border-indigo-200/70 dark:border-indigo-800 shrink-0">
-              <GitBranch className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
-                {isVi
-                  ? 'Trình Khám Phá Mạng Lưới Trích Dẫn & Nguồn 2 Tầng'
-                  : 'Two-Layer Citation & Source Network Explorer'}
-              </h3>
-              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">
-                {isVi
-                  ? 'Chọn trích dẫn bất kỳ để kiểm tra đồ thị bằng chứng Neuro-Symbolic (DAG)'
-                  : 'Select any citation to inspect its Neuro-Symbolic Evidence DAG'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono shrink-0">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800">
-              <Link2 className="h-3 w-3 shrink-0" />
-              <span>
-                {isVi ? 'Tầng 1 Liên kết:' : 'L1 Linked:'} {stats.integrityCounts.matched ?? 0}/{stats.total}
-              </span>
-            </span>
-            <span
-              data-testid="graph-l2-verified-pill"
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800"
-            >
-              <Database className="h-3 w-3 shrink-0" />
-              <span>
-                {isVi ? 'Tầng 2 Xác minh:' : 'L2 Verified:'}{' '}
-                {scholarlyDenom > 0
-                  ? `${l2VerifiedCount}/${scholarlyDenom} (${l2VerifiedPct}%)`
-                  : `${l2VerifiedCount}/0`}
-              </span>
-            </span>
-          </div>
-        </div>
-
-        <CitationGraphControls
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          statusFilters={statusFilters}
-          onToggleStatus={toggleStatus}
-          labelFilters={labelFilters}
-          onToggleLabel={toggleLabel}
-          filteredCount={filtered.length}
-          stats={stats satisfies CitationGraphStats}
-          hasFilters={hasFilters}
-          onClearFilters={clearFilters}
-        />
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="text-center py-12 text-slate-500 dark:text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-          <p className="text-sm italic">
-            {isVi ? 'Không có trích dẫn nào khớp với bộ lọc.' : 'No citations match your filters.'}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start w-full min-w-0">
-          {/* Left Column: Interactive Citation Node Stream (5 cols on desktop) */}
-          <div className="lg:col-span-5 space-y-2.5 lg:max-h-[680px] lg:overflow-y-auto lg:pr-1 w-full min-w-0">
-            {filtered.map(({ verdict: v, marker, effectiveLabel }, i) => {
-              const isSelected = activeVerdict?.citation_id === v.citation_id;
-              const isIncompleteRef = (v.triggered_rules ?? []).includes(
-                'R-INCOMPLETE-METADATA',
-              );
-              const cleanedRawText =
-                v.citation_raw?.replace(/^\s*\[\s*\d+[a-z]?\s*\]\s*/i, '') ||
-                v.citation_raw;
-              return (
-                <div key={v.citation_id ?? i} className="w-full min-w-0 space-y-2">
-                  <div
-                    onClick={() => {
-                      setActiveId(v.citation_id);
-                      onSelect(v);
-                    }}
-                    className={`w-full min-w-0 max-w-full overflow-hidden border border-l-4 rounded-xl p-3 sm:p-3.5 cursor-pointer transition-all ${getCardLeftAccent(
-                      v,
-                    )} ${
-                      isSelected
-                        ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 ring-1 ring-indigo-500/30 shadow-xs'
-                        : 'border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-indigo-300 dark:hover:border-indigo-700'
-                    }`}
-                  >
-                    {/* Top Row: Badges on left, Telemetry pills on right */}
-                    <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
-                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                        <span
-                          data-testid="graph-sidebar-marker"
-                          className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 shrink-0"
-                        >
-                          {marker}
-                        </span>
-                        {viewMode !== 'source' && (
-                          <MappingStatusBadge status={v.mapping_status} size="sm" />
-                        )}
-                        {viewMode !== 'integrity' && (
-                          <VerdictBadge
-                            verdict={effectiveLabel}
-                            triggeredRules={v.triggered_rules}
-                            size="sm"
-                          />
-                        )}
-                        {isIncompleteRef && (
-                          <span
-                            data-testid="graph-incomplete-ref-badge"
-                            className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800"
-                          >
-                            {isVi ? 'Thiếu quy cách' : 'Incomplete Ref'}
-                          </span>
-                        )}
-                        {v.is_overridden && (
-                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
-                            {isVi ? 'ĐÃ GHI ĐÈ' : 'OVERRIDDEN'}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-1 text-[10px] font-mono shrink-0">
-                        <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                          {isVi ? 'nguồn' : 'src'} {(v.confidence * 100).toFixed(0)}%
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                          {isVi ? 'liên kết' : 'link'} {(v.mapping_confidence * 100).toFixed(0)}%
-                        </span>
-                        {v.features?.content_alignment_score !== undefined &&
-                          v.features.content_alignment_score > 0 && (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-950/70 text-violet-700 dark:text-violet-300 font-semibold">
-                              <Brain className="h-2.5 w-2.5 shrink-0" />
-                              {Math.round(v.features.content_alignment_score * 100)}%
-                            </span>
-                          )}
-                      </div>
-                    </div>
-
-                    {/* Bottom Row: Full-width Citation Reference Text */}
-                    <div className="flex items-start justify-between gap-2 w-full min-w-0">
-                      <p
-                        className="text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 font-serif leading-relaxed break-words [overflow-wrap:anywhere] line-clamp-2 flex-1 min-w-0"
-                        title={v.citation_raw}
-                      >
-                        {cleanedRawText}
-                      </p>
-
-                      {onOverride && (
-                        <div
-                          className="shrink-0"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <OverrideControls
-                            verdict={v}
-                            onOverride={(req) => onOverride(v, req)}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Mobile/Tablet Inline Accordion Graph (visible on < lg directly below selected card) */}
-                  {isSelected && activeVerdict && (
-                    <div className="lg:hidden rounded-2xl border border-indigo-200/90 dark:border-indigo-900/80 bg-slate-50/70 dark:bg-slate-900/60 p-3 sm:p-4 w-full min-w-0 max-w-full overflow-hidden shadow-xs">
-                      <EvidenceGraph verdict={activeVerdict} />
-                    </div>
-                  )}
+      {/* Standalone Header & Controls (retained for isolated component renders) */}
+      {!isCleanEmbeddedMode && (
+        <div className="p-3.5 sm:p-5 pb-0">
+          <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 p-3.5 sm:p-4 w-full min-w-0 overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3 pb-3 border-b border-slate-200/80 dark:border-slate-800">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shrink-0 shadow-2xs">
+                  <GitBranch className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                 </div>
-              );
-            })}
-          </div>
+                <div className="min-w-0">
+                  <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">
+                    {isVi
+                      ? 'Trình Khám Phá Mạng Lưới Trích Dẫn & Nguồn 2 Tầng'
+                      : 'Two-Layer Citation & Source Network Explorer'}
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">
+                    {isVi
+                      ? 'Chọn tài liệu bất kỳ ở cột trái để xem sơ đồ luồng kiểm chứng trực quan bên phải'
+                      : 'Select any reference on the left to inspect its Interactive Verification Flow'}
+                  </p>
+                </div>
+              </div>
 
-          {/* Right Column: Sticky Live Evidence Graph DAG on Desktop (7 cols on lg+) */}
-          <div className="hidden lg:block lg:col-span-7 lg:sticky lg:top-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 sm:p-5 w-full min-w-0 overflow-hidden">
-            {activeVerdict && <EvidenceGraph verdict={activeVerdict} />}
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-mono shrink-0">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-emerald-50/90 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800">
+                  <Link2 className="h-3 w-3 shrink-0" />
+                  <span>
+                    {isVi ? 'Tầng 1 Liên kết:' : 'L1 Linked:'}{' '}
+                    {stats.integrityCounts.matched ?? 0}/{stats.total}
+                  </span>
+                </span>
+                <span
+                  data-testid="graph-l2-verified-pill"
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-slate-700"
+                >
+                  <Database className="h-3 w-3 shrink-0 text-indigo-600 dark:text-indigo-400" />
+                  <span>
+                    {isVi ? 'Tầng 2 Xác minh:' : 'L2 Verified:'}{' '}
+                    {scholarlyDenom > 0
+                      ? `${l2VerifiedCount}/${scholarlyDenom} (${l2VerifiedPct}%)`
+                      : `${l2VerifiedCount}/0`}
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <CitationGraphControls
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              statusFilters={statusFilters}
+              onToggleStatus={toggleStatus}
+              labelFilters={labelFilters}
+              onToggleLabel={toggleLabel}
+              filteredCount={filtered.length}
+              stats={stats satisfies CitationGraphStats}
+              hasFilters={hasFilters}
+              onClearFilters={clearFilters}
+            />
           </div>
         </div>
       )}
+
+      {/* Main 2-Column Layout: Clean Compact Selector (4 cols) + Exhibition Flow Board (8 cols) */}
+      <div
+        className={
+          isCleanEmbeddedMode
+            ? 'grid grid-cols-1 lg:grid-cols-12 w-full min-w-0'
+            : 'grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start p-3.5 sm:p-5 w-full min-w-0'
+        }
+      >
+        {/* Left Column: Minimalist, Non-Tech Reference Picker */}
+        <div
+          className={
+            isCleanEmbeddedMode
+              ? 'lg:col-span-4 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col lg:max-h-[730px] min-w-0'
+              : 'lg:col-span-4 space-y-2 lg:max-h-[680px] lg:overflow-y-auto lg:pr-1 w-full min-w-0'
+          }
+        >
+          {isCleanEmbeddedMode && (
+            <div className="p-3.5 sm:px-4 border-b border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2.5 shrink-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-slate-900 dark:text-white">
+                  {isVi
+                    ? 'Chọn tài liệu để xem sơ đồ luồng'
+                    : 'Select a reference to trace'}
+                </span>
+                <span className="text-[11px] font-medium text-slate-400 tabular-nums">
+                  {filtered.length}/{stats.total}
+                </span>
+              </div>
+
+              <div className="relative">
+                <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={
+                    isVi
+                      ? 'Tìm tên bài, tác giả, số [7]...'
+                      : 'Search title, author, [#]...'
+                  }
+                  className="w-full pl-8 pr-3 py-1.5 text-xs sm:text-[13px] rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/25"
+                />
+              </div>
+
+              <div
+                ref={cleanFilterRef}
+                className="t-tabs relative flex flex-wrap gap-1.5"
+              >
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: `${cleanFilterPill.width}px`,
+                    height: `${cleanFilterPill.height}px`,
+                    transform: `translate3d(${cleanFilterPill.left}px, ${cleanFilterPill.top}px, 0)`,
+                    opacity: cleanFilterPill.ready ? 1 : 0,
+                    transition: cleanFilterPill.animate ? undefined : 'none',
+                  }}
+                  className="t-tabs-pill rounded-full bg-slate-900 dark:bg-white shadow-2xs"
+                />
+                {cleanFilterOptions.map((opt) => {
+                  const isActive = cleanFilter === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      data-pill-active={isActive ? 'true' : 'false'}
+                      onClick={() => setCleanFilter(opt.key)}
+                      className={`t-tab px-2.5 py-1 rounded-full text-[11px] font-semibold border transition-colors cursor-pointer ${
+                        isActive
+                          ? cleanFilterPill.ready
+                            ? 'text-white dark:text-slate-900 border-transparent'
+                            : 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white'
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div
+            className={
+              isCleanEmbeddedMode
+                ? 'flex-1 p-3 space-y-2 overflow-y-auto max-h-[340px] lg:max-h-none'
+                : 'space-y-2'
+            }
+          >
+            {filtered.length === 0 ? (
+              <div className="py-10 text-center text-xs text-slate-500 dark:text-slate-400 italic">
+                {isVi
+                  ? 'Không có trích dẫn nào khớp với bộ lọc.'
+                  : 'No citations match your filters.'}
+              </div>
+            ) : (
+              filtered.map(({ verdict: v, marker, effectiveLabel }, i) => {
+                const isSelected = activeVerdict?.citation_id === v.citation_id;
+                const isIncompleteRef = (v.triggered_rules ?? []).includes(
+                  'R-INCOMPLETE-METADATA',
+                );
+                const cleanedRawText =
+                  v.citation_raw?.replace(/^\s*\[\s*\d+[a-z]?\s*\]\s*/i, '') ||
+                  v.citation_raw;
+                return (
+                  <div key={v.citation_id ?? i} className="w-full min-w-0 space-y-2">
+                    <div
+                      data-testid={`graph-ref-card-${i}`}
+                      data-selected={isSelected ? 'true' : 'false'}
+                      onClick={() => {
+                        setActiveId(v.citation_id);
+                        onSelect(v);
+                      }}
+                      className={`group relative w-full min-w-0 max-w-full overflow-hidden border rounded-xl p-3 cursor-pointer transition-all duration-150 ${
+                        isSelected
+                          ? 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800/90 shadow-[0_2px_10px_-3px_rgba(15,23,42,0.08)]'
+                          : 'border-slate-200/80 dark:border-slate-800/90 bg-white/85 dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-white dark:hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span
+                          data-testid="graph-sidebar-marker"
+                          className={`font-mono text-[11px] font-bold px-1.5 py-0.5 rounded-md shrink-0 transition-colors ${
+                            isSelected
+                              ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-2xs'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
+                          }`}
+                        >
+                          {marker}
+                        </span>
+
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end min-w-0">
+                          {!isCleanEmbeddedMode && viewMode !== 'source' && (
+                            <MappingStatusBadge status={v.mapping_status} size="sm" />
+                          )}
+                          {(isCleanEmbeddedMode || viewMode !== 'integrity') && (
+                            <VerdictBadge
+                              verdict={effectiveLabel}
+                              triggeredRules={v.triggered_rules}
+                              size="sm"
+                            />
+                          )}
+                          {isIncompleteRef && !isCleanEmbeddedMode && (
+                            <span
+                              data-testid="graph-incomplete-ref-badge"
+                              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800"
+                            >
+                              {isVi ? 'Thiếu quy cách' : 'Incomplete Ref'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <p
+                        className={`text-xs sm:text-[13px] leading-snug break-words [overflow-wrap:anywhere] line-clamp-2 ${
+                          isSelected
+                            ? 'font-semibold text-slate-900 dark:text-white'
+                            : 'font-normal text-slate-600 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white'
+                        }`}
+                      >
+                        {cleanedRawText}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Exhibition-Grade Interactive Decision Flow Board (8 cols on lg+, single mounted instance for 120fps) */}
+        <div
+          className={
+            isCleanEmbeddedMode
+              ? 'lg:col-span-8 p-4 sm:p-5 bg-white dark:bg-slate-950 min-w-0'
+              : 'lg:col-span-8 lg:sticky lg:top-4 w-full min-w-0'
+          }
+        >
+          {activeVerdict && (
+            <DirectionalStageSlide
+              stageKey={activeStageIdx}
+              distancePx={12}
+              data-testid="network-evidence-stage"
+            >
+              <InteractiveDecisionFlowBoard
+                verdict={activeVerdict}
+                markerLabel={activeEntry?.marker}
+                onInspectDetails={onInspectDetails}
+                onOverride={onOverride}
+              />
+            </DirectionalStageSlide>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

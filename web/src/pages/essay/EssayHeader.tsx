@@ -258,10 +258,11 @@ export function EssayHeader({
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <Link
             to="/history"
+            data-testid="header-back-btn"
             className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 transition-colors shrink-0"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            <span>{isVi ? 'Lịch sử' : t('essay.backToReports').replace(/^←\s*/, '')}</span>
+            <span>{isVi ? 'Quay lại' : 'Back'}</span>
           </Link>
 
           <FileFormatIcon filename={filename} size="md" />

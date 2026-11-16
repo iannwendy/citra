@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { useParams, Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   api,
@@ -9,7 +9,9 @@ import {
   type RevisionDiffData,
 } from '@/api/client';
 import { EssayHeader } from './essay/EssayHeader';
-import { EssayActionBar } from './essay/EssayActionBar';
+import { EssayActionBar, type ReportWorkspaceMode } from './essay/EssayActionBar';
+import { DocumentInspectorWorkspace } from './DocumentInspectorPage';
+import { OrphanConsistencyWorkspace } from './OrphanDetectionPage';
 import { OverrideControls } from '@/components/OverrideControls';
 import { CitationGraphView, EvidenceGraph } from '@/components/CitationGraph';
 import { UpgradeModal } from '@/components/UpgradeModal';
@@ -52,7 +54,9 @@ import {
   SoftTextSwap,
   SubtleNumber,
   StreamingText,
-  DonutChart,
+  ScoreRing,
+  DirectionalStageSlide,
+  useSlidingPill,
 } from '@/components/ui/transitions';
 
 /* ============================================================
@@ -2614,10 +2618,27 @@ export function EssayPage() {
   const overrideMutation = useOverrideVerdict();
   const toast = useToast();
 
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+
+  const resolveInitialMode = (): ReportWorkspaceMode => {
+    if (location.pathname.endsWith('/document') && has('view_document_inspector')) {
+      return 'document';
+    }
+    if (location.pathname.endsWith('/consistency') && has('view_orphan_detection')) {
+      return 'consistency';
+    }
+    const viewParam = searchParams.get('view');
+    if (viewParam === 'document' && has('view_document_inspector')) return 'document';
+    if (viewParam === 'consistency' && has('view_orphan_detection')) return 'consistency';
+    if (viewParam === 'graph' && canViewDeepTrace) return 'graph';
+    return 'debugger';
+  };
+
   const [selectedCitationId, setSelectedCitationId] = useState<string | null>(null);
   const [filterLabel, setFilterLabel] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [workspaceMode, setWorkspaceMode] = useState<'debugger' | 'graph'>('debugger');
+  const [workspaceMode, setWorkspaceMode] = useState<ReportWorkspaceMode>(resolveInitialMode);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [lockedFeatureName, setLockedFeatureName] = useState<string>('');
   const [remediationOpen, setRemediationOpen] = useState(false);
@@ -2625,6 +2646,8 @@ export function EssayPage() {
   const [customRevisionDiff, setCustomRevisionDiff] = useState<RevisionDiffData | null>(null);
   const [revisionExpanded, setRevisionExpanded] = useState(false);
   const [loadingRevisionDiff, setLoadingRevisionDiff] = useState(false);
+  const { containerRef: queueFilterPillRef, pillStyle: queueFilterPill } =
+    useSlidingPill<HTMLDivElement>(`${filterLabel}-${lang}-${workspaceMode}`);
 
   useEffect(() => {
     setCustomRevisionDiff(null);
@@ -2667,7 +2690,6 @@ export function EssayPage() {
 
   // Deep link: /verification/report/:id?citation=<verdict id> (e.g. from the
   // teacher Pending Reviews queue) selects and scrolls to that citation once.
-  const [searchParams] = useSearchParams();
   const citationParam = searchParams.get('citation');
   const appliedCitationParamRef = useRef<string | null>(null);
   useEffect(() => {
@@ -3484,24 +3506,29 @@ export function EssayPage() {
       )}
 
       {/* Zone 2: Unified Summary Health & Single-Purpose View Switcher Bar */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 px-4 py-2.5 sm:px-5 shadow-2xs flex flex-wrap items-center justify-between gap-3.5">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 px-4 py-3 sm:px-5 shadow-2xs flex flex-wrap items-center justify-between gap-3.5">
         <div
           data-testid="report-health-summary"
-          className="flex flex-wrap items-center gap-3 min-w-0"
+          className="flex flex-wrap items-center gap-3.5 min-w-0"
         >
-          <DonutChart
-            size={36}
-            thickness={4}
-            segments={[
-              { value: counts.verified, color: '#10b981', label: 'Verified' },
-              { value: counts.metadata_error, color: '#f59e0b', label: 'Metadata' },
-              { value: counts.suspected_hallucination, color: '#ef4444', label: 'Hallucination' },
-              { value: counts.unresolved, color: '#94a3b8', label: 'Other' },
-            ]}
+          <ScoreRing
+            data-testid="cis-score-ring"
+            value={cisScore}
+            size={40}
+            thickness={4.2}
+            color={
+              cisScore >= 90
+                ? '#10b981'
+                : cisScore >= 75
+                  ? '#6366f1'
+                  : cisScore >= 50
+                    ? '#f59e0b'
+                    : '#ef4444'
+            }
           />
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
+          <div className="flex flex-col justify-center">
+            <div className="flex items-center gap-2 flex-wrap leading-none">
+              <span className="text-lg sm:text-[19px] font-extrabold tracking-tight tabular-nums text-slate-900 dark:text-white leading-none">
                 <SubtleNumber value={report.cis.score.toFixed(1)} suffix="%" />
               </span>
               <span
@@ -3511,7 +3538,7 @@ export function EssayPage() {
                 {cisHealthPill.text}
               </span>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 mt-1 leading-tight">
               <span>
                 <strong className="text-slate-900 dark:text-slate-200">{counts.verified}</strong>{' '}
                 {lang === 'vi' ? 'hợp lệ' : 'verified'}
@@ -3530,7 +3557,13 @@ export function EssayPage() {
                   <span>•</span>
                   <span>
                     {counts.unresolved}{' '}
-                    {lang === 'vi' ? 'nguồn web / cần rà soát' : 'other / web'}
+                    {enrichedItems.some((i) => i.verdict.label === 'unresolved')
+                      ? lang === 'vi'
+                        ? 'nguồn web / cần rà soát'
+                        : 'other / web'
+                      : lang === 'vi'
+                        ? 'nguồn web trực tuyến'
+                        : 'web sources'}
                   </span>
                 </>
               )}
@@ -3593,109 +3626,166 @@ export function EssayPage() {
       </div>
 
       {/* ============================================================
-          Zone 3: Clean 2-Column Workspace (Zero Fake Window Chrome)
+          Zone 3: Unified 4-View Stage (120fps Causal Directional Slide)
           ============================================================ */}
       <section>
-        <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-xs overflow-hidden">
-          {enrichedItems.length === 0 ? (
-            <div className="p-12 text-center bg-white dark:bg-slate-950">
-              <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                {lang === 'vi'
-                  ? 'Không phát hiện trích dẫn nào trong tài liệu này.'
-                  : 'No citations were extracted from this document.'}
-              </p>
-            </div>
-          ) : workspaceMode === 'graph' && canViewDeepTrace ? (
-            <CitationGraphView
-              verdicts={report.verdicts}
-              linkingSummary={report.linking_summary}
-              onSelect={(v) => {
-                setSelectedCitationId(v.citation_id);
+        <DirectionalStageSlide
+          stageKey={
+            workspaceMode === 'debugger'
+              ? 0
+              : workspaceMode === 'document'
+                ? 1
+                : workspaceMode === 'consistency'
+                  ? 2
+                  : 3
+          }
+          distancePx={16}
+          data-testid="report-view-stage"
+        >
+          {workspaceMode === 'document' && has('view_document_inspector') ? (
+            <DocumentInspectorWorkspace
+              essayId={id ?? String(report.essay_id)}
+              report={report}
+              embedded={true}
+              onSelectVerdictInCitations={(cid) => {
+                setSelectedCitationId(cid);
                 setWorkspaceMode('debugger');
               }}
-              onOverride={canOverride ? handleOverride : undefined}
+            />
+          ) : workspaceMode === 'consistency' && has('view_orphan_detection') ? (
+            <OrphanConsistencyWorkspace
+              report={report}
+              embedded={true}
+              onSelectVerdictInCitations={(cid) => {
+                setSelectedCitationId(cid);
+                setWorkspaceMode('debugger');
+              }}
             />
           ) : (
-            <div className="grid lg:grid-cols-12">
-              {/* Left Pane: Exception-First Citation Queue (5 cols) */}
-              <div className="lg:col-span-5 min-w-0 lg:relative lg:min-h-[680px] border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40">
-                <div className="lg:absolute lg:inset-0 flex flex-col min-w-0">
-                  {/* Sticky Search & Filter Header */}
-                  <div className="p-3.5 sm:px-4 sm:py-3.5 border-b border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2.5 shrink-0">
-                    <div className="flex items-center gap-2">
-                      <div className="relative flex-1">
-                        <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          placeholder={
-                            lang === 'vi'
-                              ? 'Tìm tên bài, tác giả, số [7]...'
-                              : 'Search by title, author, [#]...'
-                          }
-                          className="w-full pl-8 pr-3 py-1.5 text-xs sm:text-[13px] rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
-                        />
-                      </div>
-                      <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 shrink-0">
-                        {filteredItems.length}/{enrichedItems.length}
-                      </span>
-                    </div>
+            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-xs overflow-hidden">
+              {enrichedItems.length === 0 ? (
+                <div className="p-12 text-center bg-white dark:bg-slate-950">
+                  <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                    {lang === 'vi'
+                      ? 'Không phát hiện trích dẫn nào trong tài liệu này.'
+                      : 'No citations were extracted from this document.'}
+                  </p>
+                </div>
+              ) : workspaceMode === 'graph' && canViewDeepTrace ? (
+                <CitationGraphView
+                  verdicts={report.verdicts}
+                  linkingSummary={report.linking_summary}
+                  selectedCitationId={selectedCitationId}
+                  onSelect={(v) => {
+                    setSelectedCitationId(v.citation_id);
+                  }}
+                  onInspectDetails={(v) => {
+                    setSelectedCitationId(v.citation_id);
+                    setWorkspaceMode('debugger');
+                  }}
+                  onOverride={canOverride ? handleOverride : undefined}
+                />
+              ) : (
+                <div className="grid lg:grid-cols-12">
+                  {/* Left Pane: Exception-First Citation Queue (5 cols) */}
+                  <div className="lg:col-span-5 min-w-0 lg:relative lg:min-h-[680px] border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40">
+                    <div className="lg:absolute lg:inset-0 flex flex-col min-w-0">
+                      {/* Sticky Search & Filter Header */}
+                      <div className="p-3.5 sm:px-4 sm:py-3.5 border-b border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2.5 shrink-0">
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                            <input
+                              type="text"
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              placeholder={
+                                lang === 'vi'
+                                  ? 'Tìm tên bài, tác giả, số [7]...'
+                                  : 'Search by title, author, [#]...'
+                              }
+                              className="w-full pl-8 pr-3 py-1.5 text-xs sm:text-[13px] rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                            />
+                          </div>
+                          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 shrink-0">
+                            {filteredItems.length}/{enrichedItems.length}
+                          </span>
+                        </div>
 
-                    <div className="flex flex-wrap gap-1.5">
-                      {(
-                        [
-                          [
-                            'all',
-                            lang === 'vi'
-                              ? `Tất cả (${counts.all})`
-                              : `All (${counts.all})`,
-                          ],
-                          [
-                            'verified',
-                            lang === 'vi'
-                              ? `✓ Hợp lệ (${counts.verified})`
-                              : `✓ Verified (${counts.verified})`,
-                          ],
-                          [
-                            'metadata_error',
-                            lang === 'vi'
-                              ? `⚠ Sai thông tin (${counts.metadata_error})`
-                              : `⚠ Metadata (${counts.metadata_error})`,
-                          ],
-                          [
-                            'suspected_hallucination',
-                            lang === 'vi'
-                              ? `✕ Bịa đặt (${counts.suspected_hallucination})`
-                              : `✕ Hallucination (${counts.suspected_hallucination})`,
-                          ],
-                          ...(counts.unresolved > 0
-                            ? [
-                                [
-                                  'unresolved',
-                                  lang === 'vi'
-                                    ? `— Khác (${counts.unresolved})`
-                                    : `— Other (${counts.unresolved})`,
-                                ] as const,
-                              ]
-                            : []),
-                        ] as const
-                      ).map(([key, labelText]) => (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => setFilterLabel(key)}
-                          className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors border cursor-pointer ${
-                            filterLabel === key
-                              ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white'
-                              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-slate-300'
-                          }`}
+                        <div
+                          ref={queueFilterPillRef}
+                          className="t-tabs relative flex flex-wrap gap-1.5"
                         >
-                          {labelText}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              width: `${queueFilterPill.width}px`,
+                              height: `${queueFilterPill.height}px`,
+                              transform: `translate3d(${queueFilterPill.left}px, ${queueFilterPill.top}px, 0)`,
+                              opacity: queueFilterPill.ready ? 1 : 0,
+                              transition: queueFilterPill.animate ? undefined : 'none',
+                            }}
+                            className="t-tabs-pill rounded-full bg-slate-900 dark:bg-white shadow-2xs"
+                          />
+                          {(
+                            [
+                              [
+                                'all',
+                                lang === 'vi'
+                                  ? `Tất cả (${counts.all})`
+                                  : `All (${counts.all})`,
+                              ],
+                              [
+                                'verified',
+                                lang === 'vi'
+                                  ? `✓ Hợp lệ (${counts.verified})`
+                                  : `✓ Verified (${counts.verified})`,
+                              ],
+                              [
+                                'metadata_error',
+                                lang === 'vi'
+                                  ? `⚠ Sai thông tin (${counts.metadata_error})`
+                                  : `⚠ Metadata (${counts.metadata_error})`,
+                              ],
+                              [
+                                'suspected_hallucination',
+                                lang === 'vi'
+                                  ? `✕ Bịa đặt (${counts.suspected_hallucination})`
+                                  : `✕ Hallucination (${counts.suspected_hallucination})`,
+                              ],
+                              ...(counts.unresolved > 0
+                                ? [
+                                    [
+                                      'unresolved',
+                                      lang === 'vi'
+                                        ? `— Khác (${counts.unresolved})`
+                                        : `— Other (${counts.unresolved})`,
+                                    ] as const,
+                                  ]
+                                : []),
+                            ] as const
+                          ).map(([key, labelText]) => {
+                            const isActive = filterLabel === key;
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                data-pill-active={isActive ? 'true' : 'false'}
+                                onClick={() => setFilterLabel(key)}
+                                className={`t-tab px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors border cursor-pointer ${
+                                  isActive
+                                    ? queueFilterPill.ready
+                                      ? 'text-white dark:text-slate-900 border-transparent'
+                                      : 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white'
+                                    : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                                }`}
+                              >
+                                {labelText}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
 
                   {/* Full-Height Citation Queue List */}
                   <div
@@ -3721,16 +3811,6 @@ export function EssayPage() {
                         const isHallucination =
                           cit.verdict.label === 'suspected_hallucination';
                         const isMetadataError = cit.verdict.label === 'metadata_error';
-                        const isVerified = cit.verdict.label === 'verified';
-                        const leftAccentClass = isSelected
-                          ? 'border-l-indigo-600 dark:border-l-indigo-400'
-                          : isHallucination
-                            ? 'border-l-red-500'
-                            : isMetadataError
-                              ? 'border-l-amber-500'
-                              : isVerified
-                                ? 'border-l-emerald-500'
-                                : 'border-l-slate-400';
 
                         return (
                           <button
@@ -3741,21 +3821,23 @@ export function EssayPage() {
                             data-verdict-label={cit.verdict.label}
                             data-citation-id={cit.verdict.citation_id}
                             onClick={() => setSelectedCitationId(cit.verdict.citation_id)}
-                            className={`w-full text-left px-3.5 py-3 rounded-xl border border-l-[3.5px] transition-all duration-150 cursor-pointer ${leftAccentClass} ${
+                            className={`w-full text-left px-3.5 py-3 rounded-xl border transition-all duration-150 cursor-pointer ${
                               isSelected
-                                ? 'bg-indigo-50/70 dark:bg-indigo-950/50 border-indigo-400 dark:border-indigo-500 shadow-2xs'
-                                : 'bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                                ? 'bg-slate-50/95 dark:bg-slate-800/75 border-slate-300 dark:border-slate-600 shadow-[0_2px_10px_-3px_rgba(15,23,42,0.08)]'
+                                : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50/40 dark:hover:bg-slate-800/40'
                             }`}
                           >
                             <div className="flex items-center justify-between gap-2 mb-1">
                               <div className="flex items-center gap-2 min-w-0">
                                 <span
-                                  className={`font-mono text-[11px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                                  className={`font-mono text-[11px] font-bold px-1.5 py-0.5 rounded-md shrink-0 transition-colors ${
                                     isHallucination
                                       ? 'bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-red-400'
                                       : isMetadataError
                                         ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
-                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200'
+                                        : isSelected
+                                          ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-2xs'
+                                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
                                   }`}
                                 >
                                   {cit.marker}
@@ -3833,10 +3915,21 @@ export function EssayPage() {
                 </div>
               </div>
 
-              {/* Right Pane: 3-Tier Human-First Detail Inspector (7 cols) */}
+              {/* Right Pane: 3-Tier Human-First Detail Inspector (7 cols, 120fps Slide per Citation Click) */}
               {activeItem && (
-                <div className="lg:col-span-7 min-w-0 p-4 sm:p-6 bg-white dark:bg-slate-950 flex flex-col gap-5">
-                  {/* TIER 1: Clean Identity Header + Plain-Language Diagnosis + Quick Actions */}
+                <DirectionalStageSlide
+                  stageKey={Math.max(
+                    0,
+                    enrichedItems.findIndex(
+                      (it) => it.verdict.citation_id === activeItem.verdict.citation_id,
+                    ),
+                  )}
+                  distancePx={10}
+                  data-testid="citation-detail-stage"
+                  className="lg:col-span-7 min-w-0 bg-white dark:bg-slate-950"
+                >
+                  <div className="p-4 sm:p-6 flex flex-col gap-5">
+                    {/* TIER 1: Clean Identity Header + Plain-Language Diagnosis + Quick Actions */}
                   <div className="flex flex-wrap items-start justify-between gap-3 pb-3.5 border-b border-slate-200 dark:border-slate-800">
                     <div className="min-w-[200px] flex-1">
                       <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
@@ -4778,11 +4871,14 @@ export function EssayPage() {
                       </div>
                     </div>
                   </div>
+                  </div>
+                </DirectionalStageSlide>
+              )}
                 </div>
               )}
             </div>
           )}
-        </div>
+        </DirectionalStageSlide>
       </section>
 
       <UpgradeModal
