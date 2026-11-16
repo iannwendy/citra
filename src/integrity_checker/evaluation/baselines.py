@@ -14,7 +14,185 @@ from dataclasses import asdict
 from typing import Any
 
 from integrity_checker.evaluation.metrics import MetricsCalculator
+from integrity_checker.extraction.patterns.apa import is_vn_legal_reference
 from integrity_checker.logic.calibration import HybridMLScorer
+from integrity_checker.logic.rules import RuleOutcome, SymbolicRules
+from integrity_checker.logic.vn_legal_verifier import verify_vn_legal_citation
+from integrity_checker.models.source import SourceCandidate, SourceResult
+from integrity_checker.models.validation import MatchFeatures, ValidationLabel
+
+
+def evaluate_symbolic_record(
+    rules: SymbolicRules,
+    item: dict[str, Any],
+) -> tuple[MatchFeatures, RuleOutcome]:
+    """Execute production SymbolicRules (+ VNLegalVerifier for statutory refs) on a full record dict."""
+    api_exhausted = bool(item.get("api_exhausted", False))
+    doi_ra_status = str(item.get("doi_ra_status") or "")
+    is_retracted = bool(item.get("is_retracted", False))
+    feat = MatchFeatures(
+        title_sim_fuzzy=float(item.get("title_sim_fuzzy", 0.0) or 0.0),
+        title_sim_semantic=float(item.get("title_sim_semantic", 0.0) or 0.0),
+        author_jaccard=float(item.get("author_jaccard", 0.0) or 0.0),
+        year_distance=int(item.get("year_distance", 0) if item.get("year_distance") is not None else 0),
+        doi_exact_match=bool(item.get("doi_exact_match", False)),
+        source_consensus=int(item.get("source_consensus", 0) or 0),
+        venue_sim=float(item.get("venue_sim", 0.0) or 0.0),
+        content_alignment_score=float(item.get("content_alignment_score", 0.0) or 0.0),
+        content_alignment_confidence=str(item.get("content_alignment_confidence", "") or ""),
+        content_is_aligned=bool(item.get("content_is_aligned", False)),
+        api_exhausted=api_exhausted,
+        doi_ra_status=doi_ra_status,
+    )
+
+    cited_title = item.get("cited_title")
+    cand_title = item.get("cand_title") or "Candidate Title"
+    cited_venue = item.get("cited_venue")
+    cand_venue = item.get("cand_venue")
+    cited_authors = item.get("cited_authors")
+    cand_authors = list(item.get("cand_authors") or [])
+    cited_year = str(item.get("cited_year") or "2021")
+    cand_year = str(item.get("cand_year") or "2021")
+
+    author_prefix = ", ".join(cited_authors[:2]) if cited_authors else "Author A"
+    title_part = cited_title or "Substantive Scholarly Paper Title"
+    venue_part = f" {cited_venue}." if cited_venue else " Proceedings."
+    raw_citation = str(item.get("raw_citation") or f"{author_prefix} ({cited_year}). {title_part}.{venue_part}")
+
+    if item.get("is_vn_legal") or is_vn_legal_reference(raw_citation):
+        legal_res = verify_vn_legal_citation(
+            raw_text=raw_citation,
+            extracted_year=cited_year,
+            extracted_venue=cited_venue,
+        )
+        if "R-VN-LEGAL-FABRICATED" in (legal_res.triggered_rules or []):
+            return feat, RuleOutcome(
+                label=ValidationLabel.SUSPECTED_HALLUCINATION,
+                confidence=0.90,
+                reasoning=legal_res.reasoning,
+                triggered_rules=list(legal_res.triggered_rules),
+                mismatched_fields=list(legal_res.mismatched_fields),
+            )
+        if not legal_res.is_valid:
+            return feat, RuleOutcome(
+                label=ValidationLabel.METADATA_ERROR,
+                confidence=0.85,
+                reasoning=legal_res.reasoning,
+                triggered_rules=list(legal_res.triggered_rules),
+                mismatched_fields=list(legal_res.mismatched_fields),
+            )
+        return feat, RuleOutcome(
+            label=ValidationLabel.RESOURCE,
+            confidence=0.95,
+            reasoning=legal_res.reasoning,
+            triggered_rules=list(legal_res.triggered_rules),
+            mismatched_fields=[],
+        )
+
+    has_cand = bool(item.get("has_candidate", True))
+    doi_ok = bool(item.get("doi_exact_match", False))
+    cand_doi = item.get("cand_doi") or ("10.1000/cand" if doi_ok else None)
+    cited_doi = item.get("cited_doi") or (cand_doi if doi_ok else None)
+    crossref_ok = bool(item.get("crossref_matched", bool(cand_doi)))
+
+    source_pool = (
+        ("crossref", "openalex", "datacite", "dblp", "arxiv")
+        if crossref_ok
+        else ("openalex", "dblp", "arxiv", "datacite", "doaj")
+    )
+    cands: list[SourceCandidate] = []
+    queried_sources = ["crossref", "openalex", "datacite", "arxiv", "dblp"]
+    failed_sources: dict[str, str] = {}
+    ext_ids = {"is_retracted": "true"} if is_retracted else {}
+
+    if has_cand:
+        n_cands = max(1, int(item.get("source_consensus", 1)))
+        for c_idx in range(n_cands):
+            cands.append(
+                SourceCandidate(
+                    source_name=source_pool[c_idx % len(source_pool)],
+                    found=True,
+                    title=cand_title,
+                    authors=cand_authors,
+                    year=cand_year,
+                    venue=cand_venue,
+                    doi=cand_doi,
+                    external_ids=dict(ext_ids),
+                    confidence=0.95,
+                    score=0.95,
+                )
+            )
+        if doi_ra_status == "registered_no_csl" and cited_doi:
+            ra_err = f"DOI RA: CSL metadata unavailable for '{cited_doi}' (RA=JaLC)"
+            queried_sources = ["crossref", "openalex", "doi_ra", "dblp"]
+            failed_sources["doi_ra"] = ra_err
+    elif doi_ra_status == "registered_no_csl" and cited_doi:
+        ra_err = f"DOI RA: CSL metadata unavailable for '{cited_doi}' (RA=JaLC)"
+        cands.append(
+            SourceCandidate(
+                source_name="doi_ra",
+                found=False,
+                doi=cited_doi,
+                url=f"https://doi.org/{cited_doi}",
+                external_ids={
+                    "doi": cited_doi,
+                    "doi_ra": "JaLC",
+                    "doi_ra_status": "registered_no_csl",
+                },
+                error=ra_err,
+            )
+        )
+        queried_sources = ["crossref", "openalex", "doi_ra"]
+        failed_sources = {
+            "crossref": "Crossref: no results for query",
+            "openalex": "OpenAlex: no results for query",
+            "doi_ra": ra_err,
+        }
+    elif api_exhausted:
+        queried_sources = ["crossref", "openalex", "dblp"]
+        failed_sources = {
+            "crossref": "Crossref: HTTP 429 rate limit backoff",
+            "openalex": "OpenAlex: HTTP 429 rate limit exceeded",
+            "dblp": "DBLP: no results for query",
+        }
+    else:
+        failed_sources = {
+            "crossref": "Crossref: no results for query",
+            "openalex": "OpenAlex: no results for query",
+        }
+
+    succeeded_sources = [c.source_name for c in cands if c.found] if has_cand else []
+    source = SourceResult(
+        citation_raw=raw_citation,
+        candidates=cands,
+        sources_queried=queried_sources,
+        sources_succeeded=succeeded_sources,
+        sources_failed=failed_sources,
+        api_exhausted=api_exhausted,
+        url_status=item.get("url_status"),
+        url_status_code=item.get("url_status_code"),
+        is_retracted=is_retracted,
+    )
+    cited_url = item.get("cited_url") or (
+        "http://example.com/fake-paper" if item.get("url_status") == "fake_domain" else None
+    )
+    outcome = rules.apply(
+        feat,
+        source,
+        api_exhausted=api_exhausted,
+        citation_doi=cited_doi,
+        citation_url=cited_url,
+        citation_authors=(
+            cited_authors
+            if cited_authors is not None
+            else (["Author A"] if feat.author_jaccard < 0.4 else None)
+        ),
+        citation_year=cited_year,
+        citation_raw=raw_citation,
+        citation_venue=cited_venue,
+        citation_title=cited_title,
+    )
+    return feat, outcome
 
 
 class BaselineRunner:
@@ -36,8 +214,13 @@ class BaselineRunner:
         "proposed": "proposed",
     }
 
-    def __init__(self, ml_scorer: HybridMLScorer | None = None) -> None:
+    def __init__(
+        self,
+        ml_scorer: HybridMLScorer | None = None,
+        symbolic_rules: SymbolicRules | None = None,
+    ) -> None:
         self.ml_scorer = ml_scorer or HybridMLScorer.load_default()
+        self.symbolic_rules = symbolic_rules or SymbolicRules()
         self.available_baselines = [
             "B0",
             "B1",
@@ -59,6 +242,9 @@ class BaselineRunner:
         """Chuẩn hóa mẫu đầu vào (dict hoặc CitationVerdict) về dict đặc trưng."""
         if isinstance(item, dict):
             features = item.get("features") or item
+            has_full_record = any(
+                k in item for k in ("cited_title", "cand_title", "raw_citation", "is_vn_legal")
+            )
             return {
                 "id": item.get("id") or item.get("citation_id"),
                 "true_label": item.get("true_label") or item.get("gold_label") or item.get("label"),
@@ -77,6 +263,7 @@ class BaselineRunner:
                 "cited_doi": features.get("cited_doi", item.get("cited_doi")),
                 "api_exhausted": bool(features.get("api_exhausted", item.get("api_exhausted", False))),
                 "doi_ra_status": features.get("doi_ra_status", item.get("doi_ra_status")),
+                "is_retracted": bool(features.get("is_retracted", item.get("is_retracted", False))),
                 "crossref_matched": bool(
                     features.get("crossref_matched", item.get("crossref_matched", False))
                     or any(
@@ -84,6 +271,7 @@ class BaselineRunner:
                         for s in (features.get("matched_sources") or item.get("matched_sources") or [])
                     )
                 ),
+                "_raw_record": item if has_full_record else None,
             }
 
         feat_obj = getattr(item, "features", None)
@@ -219,7 +407,13 @@ class BaselineRunner:
             pred_label, _, _ = self.ml_scorer.predict(feat)
             return pred_label
 
-        # proposed: Neuro-symbolic + multi-source consensus + content alignment + link check + abstention calibration
+        # proposed: Full production SymbolicRules (+ VNLegalVerifier) when full record metadata is present,
+        # falling back to feature-level rule projection for bare feature-vector unit tests.
+        raw_rec = feat.get("_raw_record")
+        if isinstance(raw_rec, dict):
+            _, outcome = evaluate_symbolic_record(self.symbolic_rules, raw_rec)
+            return outcome.label.value
+
         title_best = max(tf, ts)
         ca_score = feat.get("content_alignment_score", 0.0)
         ca_conf = feat.get("content_alignment_confidence", "")
@@ -229,10 +423,13 @@ class BaselineRunner:
         has_cand = feat.get("has_candidate")
         api_exhausted = bool(feat.get("api_exhausted", False))
         doi_ra_status = feat.get("doi_ra_status")
+        is_retracted = bool(feat.get("is_retracted", False))
 
-        # Pre-flight & hard symbolic guardrails (fake URL, dead URL with low title, non-existent DOI)
+        # Pre-flight & hard symbolic guardrails (retraction, fake URL, dead URL, non-existent DOI)
         if url_status == "fake_domain":
             return "suspected_hallucination"
+        if is_retracted and (doi_ok or title_best >= 0.60):
+            return "metadata_error"
         if doi_ra_status == "registered_no_csl" and cited_doi and not doi_ok and title_best < 0.60:
             return "unresolved"
         if cited_doi and not doi_ok and title_best < 0.60:

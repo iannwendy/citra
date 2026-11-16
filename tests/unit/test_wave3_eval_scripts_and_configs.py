@@ -283,6 +283,124 @@ class TestTrainNeuroSymbolicIntegrity:
                 assert "R-RATE-LIMITED-ABSTAIN" in outcome.triggered_rules
         assert seen_ra and seen_rate_limit
 
+    def test_four_class_content_alignment_no_toy_strings_and_reviewer2_proofs(self) -> None:
+        import json
+
+        script_path = REPO_ROOT / "scripts" / "train_neuro_symbolic_model.py"
+        script_text = script_path.read_text(encoding="utf-8")
+        for forbidden_toy in (
+            "FabricatedAuthor",
+            "ImaginaryScholar",
+            "GhostWriter",
+            "SyntheticResearcher",
+            "NonExistentName",
+            "Journal of Synthetic AI Hallucinations",
+            "Interplanetary",
+            "UnrelatedCoAuthorX",
+            "Collaborator, R.",
+        ):
+            assert forbidden_toy not in script_text, (
+                f"Toy synthetic template '{forbidden_toy}' must not exist in train_neuro_symbolic_model.py"
+            )
+
+        trainer = _load_script_module(
+            "train_neuro_symbolic_model_r2", "scripts/train_neuro_symbolic_model.py"
+        )
+        pool_papers = [
+            {
+                "paper_id": 3000 + idx,
+                "title": f"Empirical Multilingual Representation Alignment for Syntactic Parsing {idx:03d}",
+                "authors": [
+                    f"ScholarAlpha{idx}, A.",
+                    f"ScholarBeta{idx}, B.",
+                    f"ScholarGamma{idx}, C.",
+                    f"ScholarDelta{idx}, D.",
+                ],
+                "year": 2019 + (idx % 5),
+                "venue": "Proceedings of the Annual Meeting of the Association for Computational Linguistics",
+                "doi": f"10.18653/v1/2021.acl-long.{idx}" if idx % 2 == 0 else "",
+                "abstract": (
+                    f"Paper {idx} proposes multilingual representation alignment for dependency parsing. "
+                    f"Experiments across twelve typologically diverse languages show consistent UAS gains."
+                ),
+                "has_full_abstract": True,
+            }
+            for idx in range(100)
+        ]
+
+        def _fake_encode(texts: list[str], batch_size: int = 256) -> np.ndarray:
+            n_quarter = len(texts) // 4
+            out = np.zeros((len(texts), 4), dtype=np.float32)
+            for i in range(n_quarter):
+                out[i] = [0.38, float(np.sqrt(1.0 - 0.38**2)), 0.0, 0.0]
+                out[n_quarter + i] = [1.0, 0.0, 0.0, 0.0]
+                out[2 * n_quarter + i] = [0.41, float(np.sqrt(1.0 - 0.41**2)), 0.0, 0.0]
+                out[3 * n_quarter + i] = [1.0, 0.0, 0.0, 0.0]
+            return out
+
+        with patch.object(trainer, "_encode_texts_fast", side_effect=_fake_encode):
+            records = trainer.build_split_dataset(pool_papers, split_name="r2", seed=99)
+
+        # (a) Non-zero content_alignment_score MUST exist across ALL 4 canonical classes
+        for cls_name in ("verified", "metadata_error", "suspected_hallucination", "unresolved"):
+            cls_nonzero = [
+                r for r in records if r["true_label"] == cls_name and r["content_alignment_score"] > 0.0
+            ]
+            assert len(cls_nonzero) > 0, (
+                f"Class '{cls_name}' must contain records with content_alignment_score > 0"
+            )
+
+        # (c) BaselineRunner("proposed") MUST match SymbolicRules 100% on full-metadata preview records
+        summary_path = REPO_ROOT / "data" / "models" / "neuro_symbolic_dataset_summary.json"
+        report_path = REPO_ROOT / "data" / "models" / "neuro_symbolic_benchmark_report.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        preview = summary["sample_preview"]
+        assert len(preview) >= 10
+
+        rules = SymbolicRules()
+        runner = BaselineRunner(symbolic_rules=rules)
+        proposed_res = runner.run("proposed", preview)
+        direct_rule_preds = [
+            trainer._run_symbolic_rule_on_item(rules, item)[1].label.value for item in preview
+        ]
+        assert proposed_res["predictions"] == direct_rule_preds
+
+        # (d) Benchmark report JSON MUST include OOD stress suite, paired p-values & CIS sensitivity
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        assert report["baselines_on_test_set"]["proposed"]["accuracy"] == (
+            report["neuro_symbolic_platt_calibrated"]["classification"]["accuracy"]
+        )
+        assert report["baselines_on_test_set"]["proposed"]["macro_f1"] == (
+            report["neuro_symbolic_platt_calibrated"]["classification"]["macro_f1"]
+        )
+
+        ood = report["ood_guardrail_stress_test"]
+        assert ood["total_samples"] == 2400
+        assert ood["zero_train_val_overlap_verified"] is True
+        assert (
+            ood["overall"]["neuro_symbolic_proposed"]["accuracy"]
+            > ood["overall"]["pure_ml_b5"]["accuracy"] + 0.50
+        )
+        assert ood["categories"]["retracted_papers"]["neuro_symbolic_accuracy"] == 1.0
+        assert ood["categories"]["retracted_papers"]["pure_ml_b5_accuracy"] < 0.05
+        assert ood["categories"]["vn_statutory_authority_mismatch"]["neuro_symbolic_accuracy"] == 1.0
+
+        sig = report["statistical_significance_tests"]
+        for b_key in ("B0", "B1", "B2", "B3", "B4"):
+            pair = sig["pairwise_vs_baselines"][f"proposed_vs_{b_key}"]
+            assert pair["mcnemar_test"]["p_value"] < 0.001
+            assert pair["paired_bootstrap"]["one_sided_p_value_macro_f1"] <= 0.001
+        platt_sig = sig["platt_calibration_vs_uncalibrated"]
+        assert platt_sig["delta_ece"] < 0.0
+        assert platt_sig["delta_brier"] < 0.0
+        assert platt_sig["ece_one_sided_bootstrap_p_value"] <= 0.001
+
+        cis_sens = report["cis_weight_sensitivity"]
+        assert cis_sens["n_manuscripts"] == 300
+        assert cis_sens["n_weight_perturbations"] == 20
+        assert cis_sens["summary"]["mean_spearman_rho"] >= 0.98
+        assert cis_sens["summary"]["min_kendall_tau"] >= 0.90
+
 
 class TestEvaluationReportAndBaselines:
     """Unit coverage for EvaluationReport and CitationVerdict feature extraction in BaselineRunner."""

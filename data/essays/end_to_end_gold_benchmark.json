@@ -1,0 +1,1202 @@
+[
+  {
+    "id": "E2E-001",
+    "raw_reference": "Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L., & Polosukhin, I. (2017). Attention is all you need. Advances in Neural Information Processing Systems, 30, 5998-6008. https://doi.org/10.48550/arXiv.1706.03762",
+    "style": "APA 7th",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": "The Transformer architecture replaces recurrent layers entirely with multi-head self-attention mechanisms for sequence transduction (Vaswani et al., 2017).",
+    "notes": "Canonical Transformer NeurIPS 2017 paper with arXiv DOI and aligned in-text context."
+  },
+  {
+    "id": "E2E-002",
+    "raw_reference": "[1] K. He, X. Zhang, S. Ren, and J. Sun, \"Deep residual learning for image recognition,\" in Proc. IEEE Conf. Comput. Vis. Pattern Recognit. (CVPR), Las Vegas, NV, USA, Jun. 2016, pp. 770-778, doi: 10.1109/CVPR.2016.90.",
+    "style": "IEEE",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": "Residual skip connections reformulate deep convolutional layers to ease gradient propagation in image classification networks [1].",
+    "notes": "Canonical ResNet CVPR 2016 citation formatted in IEEE bracketed style."
+  },
+  {
+    "id": "E2E-003",
+    "raw_reference": "Reimers, Nils, and Iryna Gurevych. 2019. \"Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks.\" In Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing, 3982-3992. https://doi.org/10.18653/v1/D19-1410.",
+    "style": "Chicago",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": "Siamese BERT encoders produce fixed-size sentence embeddings suitable for fast cosine-similarity semantic retrieval.",
+    "notes": "Real ACL Anthology paper in local_papers.db (D19-1410) formatted in Chicago author-date."
+  },
+  {
+    "id": "E2E-004",
+    "raw_reference": "Sennrich, R., Haddow, B. and Birch, A., 2016. Neural machine translation of rare words with subword units. Proceedings of the 54th Annual Meeting of the Association for Computational Linguistics, pp.1715-1725. Available at: https://doi.org/10.18653/v1/P16-1162.",
+    "style": "Harvard",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Real ACL 2016 Byte-Pair Encoding NMT paper in local_papers.db formatted in Harvard style."
+  },
+  {
+    "id": "E2E-005",
+    "raw_reference": "Bender, Emily M., et al. \"On the Dangers of Stochastic Parrots: Can Language Models Be Too Big?\" Proceedings of the 2021 ACM Conference on Fairness, Accountability, and Transparency, ACM, 2021, pp. 610-623, https://doi.org/10.1145/3442188.3445922.",
+    "style": "MLA 9th",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "abbreviated_et_al",
+    "expected_label": "verified",
+    "citation_context": "Scaling language models without curated documentation introduces environmental costs and training-data bias risks (Bender et al. 612).",
+    "notes": "MLA 9th citation using 'et al.' author abbreviation for multi-author ACM FAccT paper."
+  },
+  {
+    "id": "E2E-006",
+    "raw_reference": "1. Brown TB, Mann B, Ryder N, Subbiah M, Kaplan J, Dhariwal P, et al. Language models are few-shot learners. Advances in Neural Information Processing Systems. 2020;33:1877-1901. doi:10.48550/arXiv.2005.14165",
+    "style": "Vancouver",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "abbreviated_et_al",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "GPT-3 NeurIPS 2020 citation formatted in numbered Vancouver style with 'et al.'."
+  },
+  {
+    "id": "E2E-007",
+    "raw_reference": "[2] J. Howard and S. Ruder, \"Universal language model fine-tuning for text classification,\" in Proc. 56th Annu. Meeting Assoc. Comput. Linguistics (ACL), Melbourne, Australia, 2021, pp. 328-339, doi: 10.18653/v1/P18-1031.",
+    "style": "IEEE",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "year_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Publication year error on ULMFiT ACL paper (cited 2021 vs canonical 2018)."
+  },
+  {
+    "id": "E2E-008",
+    "raw_reference": "Sutskever, I., Vinyals, O., & Le, Q. V. (2016). Deep residual learning for image recognition. Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition, 770-778. https://doi.org/10.1109/CVPR.2016.90",
+    "style": "APA 7th",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "author_swap",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Author swap attributing Seq2Seq authors to He et al. (2016) ResNet paper and DOI."
+  },
+  {
+    "id": "E2E-009",
+    "raw_reference": "Devlin, J., Chang, M. W., Lee, K., & Toutanova, K. (2019). BERT: Pre-training of deep bidirectional transformers for language understanding. International Journal of Quantum Chemistry, 119(4), 4171-4186. https://doi.org/10.18653/v1/N19-1423",
+    "style": "APA 7th",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "venue_swap",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Venue swap: real BERT authors, year, title, and DOI paired with unrelated chemistry journal."
+  },
+  {
+    "id": "E2E-010",
+    "raw_reference": "LeCun, Yann, Yoshua Bengio, and Geoffrey Hinton. 2015. \"Deep Learning.\" Nature 521 (7553): 436-444. https://doi.org/10.1038/nature14538.",
+    "style": "Chicago",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "doi_typo_conflict",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "1-digit adjacent DOI typo (10.1038/nature14538 vs canonical 10.1038/nature14539) in Chicago style."
+  },
+  {
+    "id": "E2E-011",
+    "raw_reference": "[3] Vaswani, A., Shazeer, N., & Parmar, N. (2017). Chú ý là tất cả những gì bạn cần. Advances in Neural Information Processing Systems, 30, 5998-6008.",
+    "style": "TDTU Vietnamese",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "cross_lingual_translated_title",
+    "expected_label": "metadata_error",
+    "citation_context": "Mô hình Transformer sử dụng cơ chế tự chú ý đa đầu thay cho mạng hồi quy (Vaswani và cộng sự, 2017).",
+    "notes": "TDTU violation: English title 'Attention Is All You Need' translated into Vietnamese."
+  },
+  {
+    "id": "E2E-012",
+    "raw_reference": "Kowalski, M., & Vandenberg, L. (2017). Hyperbolic graph message passing for autonomous underwater vehicle localization. Journal of Field Robotics, 34(2), 112-124. https://doi.org/10.1109/CVPR.2016.90",
+    "style": "APA 7th",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "chimeric_spliced_doi",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Chimeric citation splicing fabricated robotics paper metadata onto real ResNet CVPR DOI."
+  },
+  {
+    "id": "E2E-013",
+    "raw_reference": "[4] J. Devlin and M.-W. Chang, \"Magnetohydrodynamic turbulence modeling in circumstellar accretion disks,\" Astrophysical Journal Letters, vol. 875, no. 2, pp. 14-29, May 2019, doi: 10.18653/v1/N19-1423.",
+    "style": "IEEE",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "same_author_chimeric_doi",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Same-author chimeric trap splicing real BERT authors & DOI onto unrelated astrophysics title."
+  },
+  {
+    "id": "E2E-014",
+    "raw_reference": "Martinez, C. R. and Takahashi, K., 2024. Contrastive attribution calibration for multi-hop retrieval-augmented language generation. Transactions of the Association for Computational Linguistics, 12, pp.415-432. Available at: https://doi.org/10.1162/tacl_a_09981.",
+    "style": "Harvard",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "llm_fabricated_citation",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Plausible LLM hallucination combining real scholar names, real TACL venue, and non-existent DOI."
+  },
+  {
+    "id": "E2E-015",
+    "raw_reference": "Lindqvist, Anders, and Priya Subramanian. \"Sparse Mixture-of-Adapters Routing for Low-Resource Cross-Lingual Summarization.\" Journal of Artificial Intelligence Research, vol. 79, 2024, pp. 881-914, https://doi.org/10.1613/jair.1.99874.",
+    "style": "MLA 9th",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "llm_fabricated_citation",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Plausible LLM-generated NLP hallucination in MLA 9th with realistic JAIR DOI prefix."
+  },
+  {
+    "id": "E2E-016",
+    "raw_reference": "Nguyen, H. T., and Q. M. Tran. \"Automated Rubric Verification for Vietnamese Undergraduate Computer Science Theses.\" Journal of Applied Computing Systems, vol. 18, no. 1, 2024, pp. 10-25, https://vietnam-computing-journal.invalid/2024/rubric-verification.",
+    "style": "MLA 9th",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "fake_placeholder_url",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Fabricated CS article in MLA 9th using RFC 2606 reserved '.invalid' TLD."
+  },
+  {
+    "id": "E2E-017",
+    "raw_reference": "[5] H. Yamamoto and K. Sato, \"Morphological disambiguation for classical Japanese historical corpora,\" Journal of Natural Language Processing (Japan), vol. 29, no. 3, pp. 512-528, 2022, doi: 10.11501/jnlp.29.512.",
+    "style": "IEEE",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "regional_doi_no_csl",
+    "expected_label": "unresolved",
+    "citation_context": null,
+    "notes": "Regional JaLC DOI registered in Handle without public Crossref CSL-JSON metadata (abstain to unresolved)."
+  },
+  {
+    "id": "E2E-018",
+    "raw_reference": "[6] Lê Hoàng Thái, Nguyễn Minh Tâm (2022). Phân loại văn bản tiếng Việt trên dữ liệu mạng xã hội bằng mô hình học sâu kết hợp. Kỷ yếu Hội nghị Quốc gia lần thứ XXV về Điện tử, Truyền thông và Công nghệ Thông tin (REV-ECIT), tr. 145-152.",
+    "style": "TDTU Vietnamese",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "domestic_unindexed_vn_journal",
+    "expected_label": "unresolved",
+    "citation_context": null,
+    "notes": "Domestic Vietnamese conference proceedings without international DOI; system safely abstains."
+  },
+  {
+    "id": "E2E-019",
+    "raw_reference": "Okafor, Chinedu. 2021. Neural Program Repair for Statically Typed Functional Languages. Unpublished Master's thesis, Department of Computer Science, University of Waterloo.",
+    "style": "Chicago",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "unindexed_thesis_or_monograph",
+    "expected_label": "unresolved",
+    "citation_context": null,
+    "notes": "Unpublished university master's thesis without DOI; abstains rather than false hallucination."
+  },
+  {
+    "id": "E2E-020",
+    "raw_reference": "Semantic Scholar Academic Graph API (2024). REST API Documentation for Paper and Citation Lookups. Retrieved from https://api.semanticscholar.org/api-docs/graph",
+    "style": "APA 7th",
+    "domain": "Computer Science & AI/NLP",
+    "error_subtype": "valid_web_api_resource",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Legitimate developer API documentation resource (classified as RESOURCE, never conflated with VERIFIED)."
+  },
+  {
+    "id": "E2E-021",
+    "raw_reference": "2. Page MJ, McKenzie JE, Bossuyt PM, Boutron I, Hoffmann TC, Mulrow CD, et al. The PRISMA 2020 statement: an updated guideline for reporting systematic reviews. BMJ. 2021;372:n71. doi:10.1136/bmj.n71",
+    "style": "Vancouver",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": "Systematic review screening and study inclusion followed the 27-item PRISMA 2020 reporting checklist and flow diagram [2].",
+    "notes": "Canonical PRISMA 2020 BMJ guideline in standard biomedical Vancouver style."
+  },
+  {
+    "id": "E2E-022",
+    "raw_reference": "3. Polack FP, Thomas SJ, Kitchin N, Absalon J, Gurtman A, Lockhart S, et al. Safety and efficacy of the BNT162b2 mRNA Covid-19 vaccine. N Engl J Med. 2020;383(27):2603-2615. doi:10.1056/NEJMoa2034577",
+    "style": "Vancouver",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "abbreviated_et_al",
+    "expected_label": "verified",
+    "citation_context": "Two doses of the BNT162b2 mRNA vaccine conferred 95% efficacy against symptomatic Covid-19 in participants aged 16 years or older.",
+    "notes": "Landmark NEJM BNT162b2 clinical trial in Vancouver style with 'et al.'."
+  },
+  {
+    "id": "E2E-023",
+    "raw_reference": "Jumper, J., Evans, R., Pritzel, A., Green, T., Figurnov, M., Ronneberger, O., & Hassabis, D. (2021). Highly accurate protein structure prediction with AlphaFold. Nature, 596(7873), 583-589. https://doi.org/10.1038/s41586-021-03819-2",
+    "style": "APA 7th",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": "AlphaFold predicts three-dimensional protein structures at near-experimental atomic accuracy directly from primary amino-acid sequences (Jumper et al., 2021).",
+    "notes": "AlphaFold Nature 2021 paper in APA 7th style with aligned biomedical context."
+  },
+  {
+    "id": "E2E-024",
+    "raw_reference": "Jinek, Martin, Krzysztof Chylinski, Ines Fonfara, Michael Hauer, Jennifer A. Doudna, and Emmanuelle Charpentier. 2012. \"A Programmable Dual-RNA-Guided DNA Endonuclease in Adaptive Bacterial Immunity.\" Science 337 (6096): 816-821. https://doi.org/10.1126/science.1225829.",
+    "style": "Chicago",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Foundational CRISPR-Cas9 Science 2012 paper in Chicago author-date style."
+  },
+  {
+    "id": "E2E-025",
+    "raw_reference": "Schulz, K.F., Altman, D.G. and Moher, D., 2010. CONSORT 2010 Statement: updated guidelines for reporting parallel group randomised trials. BMJ, 340, p.c332. Available at: https://doi.org/10.1136/bmj.c332.",
+    "style": "Harvard",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "CONSORT 2010 randomized controlled trial guideline in Harvard style."
+  },
+  {
+    "id": "E2E-026",
+    "raw_reference": "Topol, Eric J. \"High-Performance Medicine: The Convergence of Human and Artificial Intelligence.\" Nature Medicine, vol. 25, no. 1, 2019, pp. 44-56, https://doi.org/10.1038/s41591-018-0300-7.",
+    "style": "MLA 9th",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Topol (2019) Nature Medicine clinical AI review in MLA 9th style."
+  },
+  {
+    "id": "E2E-027",
+    "raw_reference": "4. Mehra MR, Desai SS, Ruschitzka F, Patel AN. Hydroxychloroquine or chloroquine with or without a macrolide for treatment of COVID-19: a multinational registry analysis. The Lancet. 2020;395(10240):1820-1829. doi:10.1016/S0140-6736(20)31180-6",
+    "style": "Vancouver",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "retracted_paper",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Retracted Lancet Surgisphere COVID-19 study caught by R-RETRACTED-PAPER symbolic guardrail."
+  },
+  {
+    "id": "E2E-028",
+    "raw_reference": "Polack, F. P., Thomas, S. J., Kitchin, N., Absalon, J., Gurtman, A., & Lockhart, S. (2023). Safety and efficacy of the BNT162b2 mRNA Covid-19 vaccine. New England Journal of Medicine, 383(27), 2603-2615. https://doi.org/10.1056/NEJMoa2034577",
+    "style": "APA 7th",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "year_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "3-year publication year error (cited 2023 vs canonical 2020) on NEJM vaccine trial."
+  },
+  {
+    "id": "E2E-029",
+    "raw_reference": "5. Topol EJ, Hassabis D. Dexamethasone in hospitalized patients with Covid-19. N Engl J Med. 2021;384(8):693-704. doi:10.1056/NEJMoa2021436",
+    "style": "Vancouver",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "author_swap",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Author swap attributing RECOVERY Collaborative Group (Horby et al.) trial to Topol & Hassabis."
+  },
+  {
+    "id": "E2E-030",
+    "raw_reference": "[7] M. Jinek, K. Chylinski, I. Fonfara, M. Hauer, J. A. Doudna, and E. Charpentier, \"A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity,\" Science, vol. 337, no. 6096, pp. 816-821, Aug. 2012, doi: 10.1126/science.1225820.",
+    "style": "IEEE",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "doi_typo_conflict",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "1-digit DOI typo (1225820 vs canonical 1225829) on CRISPR Science paper."
+  },
+  {
+    "id": "E2E-031",
+    "raw_reference": "Schulz, Kenneth F., Douglas G. Altman, and David Moher. 2010. \"CONSORT 2010 Statement: Updated Guidelines for Reporting Parallel Group Randomised Trials.\" IEEE Transactions on Medical Imaging 340: c332. https://doi.org/10.1136/bmj.c332.",
+    "style": "Chicago",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "venue_swap",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Venue swap: BMJ CONSORT 2010 guideline attributed to IEEE Transactions on Medical Imaging."
+  },
+  {
+    "id": "E2E-032",
+    "raw_reference": "6. Castellanos R, Lindholm P, Vermeer H. Phase III randomized trial of targeted kinase inhibition in metastatic pancreatic adenocarcinoma. The Lancet Oncology. 2021;22(9):1142-1154. doi:10.1038/s41586-021-03819-2",
+    "style": "Vancouver",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "chimeric_spliced_doi",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Chimeric clinical citation splicing AlphaFold Nature DOI onto fabricated oncology trial."
+  },
+  {
+    "id": "E2E-033",
+    "raw_reference": "Sorensen, H. K., & Al-Mansoor, R. (2024). Longitudinal biomarker stratification for early-onset sepsis in neonatal intensive care units: A multicenter cohort study. JAMA Pediatrics, 178(6), 588-599. https://doi.org/10.1001/jamapediatrics.2024.99412",
+    "style": "APA 7th",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "llm_fabricated_citation",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Realistic LLM-fabricated JAMA Pediatrics clinical study with non-existent DOI."
+  },
+  {
+    "id": "E2E-034",
+    "raw_reference": "Delgado, M.A. and Rossi, G.P., 2023. Single-cell spatial proteomics of drug-resistant glioblastoma microenvironment. Nature Medicine, 29(11), pp.2810-2824. Available at: https://doi.org/10.1038/s41591-023-99881-x.",
+    "style": "Harvard",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "llm_fabricated_citation",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Realistic LLM-fabricated Nature Medicine oncology article in Harvard style."
+  },
+  {
+    "id": "E2E-035",
+    "raw_reference": "Bianchi, Lorenzo, and Mei-Ling Zhou. \"mRNA Lipid Nanoparticle Thermostability in Tropical Cold-Chain Distribution.\" Clinical Vaccine Review, vol. 14, no. 2, 2024, pp. 45-59, https://clinical-vaccine-portal.example.com/2024/mrna-stability.",
+    "style": "MLA 9th",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "fake_placeholder_url",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Biomedical citation pointing to RFC 2606 reserved example.com domain."
+  },
+  {
+    "id": "E2E-036",
+    "raw_reference": "7. Watanabe T, Morales J. Transcriptomic profiling of CRISPR base-editing off-targets in primary hepatocytes. bioRxiv. 2024. doi:10.1101/2024.99.99.999999",
+    "style": "Vancouver",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "llm_fabricated_citation",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Fabricated bioRxiv preprint with non-existent DOI suffix."
+  },
+  {
+    "id": "E2E-037",
+    "raw_reference": "8. Conti F, Lombardi S, Greco M. Epidemiological surveillance of nosocomial respiratory infections in regional Italian hospitals. Epidemiologia Clinica Italiana. 2022;46(2):88-96. doi:10.19282/eci.2022.46.02.088",
+    "style": "Vancouver",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "regional_doi_no_csl",
+    "expected_label": "unresolved",
+    "citation_context": null,
+    "notes": "Regional mEDRA clinical DOI registered without Crossref CSL metadata (abstains to unresolved)."
+  },
+  {
+    "id": "E2E-038",
+    "raw_reference": "[8] Nguyễn Thị Lan Hương, Trần Quốc Bảo (2023). Đánh giá kết quả điều trị tăng huyết áp ở bệnh nhân cao tuổi có đái tháo đường típ 2 tại Bệnh viện Thống Nhất. Tạp chí Y học Việt Nam, 526(1B), 112-119.",
+    "style": "TDTU Vietnamese",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "domestic_unindexed_vn_journal",
+    "expected_label": "unresolved",
+    "citation_context": null,
+    "notes": "Domestic Vietnamese clinical periodical without international DOI; safely abstains."
+  },
+  {
+    "id": "E2E-039",
+    "raw_reference": "[9] Phạm Minh Đức (2021). Nghiên cứu đặc điểm lâm sàng và đột biến gen EGFR ở bệnh nhân ung thư phổi không tế bào nhỏ. Luận án tiến sĩ Y học, Trường Đại học Y Hà Nội.",
+    "style": "TDTU Vietnamese",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "unindexed_thesis_or_monograph",
+    "expected_label": "unresolved",
+    "citation_context": null,
+    "notes": "Vietnamese medical doctoral dissertation without international DOI."
+  },
+  {
+    "id": "E2E-040",
+    "raw_reference": "World Health Organization (2023). Antimicrobial resistance fact sheet. Retrieved from https://www.who.int/news-room/fact-sheets/detail/antimicrobial-resistance",
+    "style": "APA 7th",
+    "domain": "Biomedical & Clinical",
+    "error_subtype": "valid_web_api_resource",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Valid WHO public-health fact sheet web resource (classified as RESOURCE)."
+  },
+  {
+    "id": "E2E-041",
+    "raw_reference": "Kahneman, D., & Tversky, A. (1979). Prospect theory: An analysis of decision under risk. Econometrica, 47(2), 263-291. https://doi.org/10.2307/1914185",
+    "style": "APA 7th",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": "Behavioral decision makers evaluate outcomes relative to a reference point with asymmetric loss aversion rather than terminal wealth states (Kahneman & Tversky, 1979).",
+    "notes": "Foundational Prospect Theory Econometrica 1979 paper in APA 7th with aligned context."
+  },
+  {
+    "id": "E2E-042",
+    "raw_reference": "Acemoglu, Daron, Simon Johnson, and James A. Robinson. 2001. \"The Colonial Origins of Comparative Development: An Empirical Investigation.\" American Economic Review 91 (5): 1369-1401. https://doi.org/10.1257/aer.91.5.1369.",
+    "style": "Chicago",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": "Historical settler mortality instruments institutional quality to estimate long-run effects on per capita economic output.",
+    "notes": "Acemoglu, Johnson & Robinson (2001) AER paper in Chicago author-date style."
+  },
+  {
+    "id": "E2E-043",
+    "raw_reference": "Fama, E.F. and French, K.R., 1993. Common risk factors in the returns on stocks and bonds. Journal of Financial Economics, 33(1), pp.3-56. Available at: https://doi.org/10.1016/0304-405X(93)90023-5.",
+    "style": "Harvard",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Fama & French (1993) JFE classic with legacy Elsevier SICI parenthesis DOI in Harvard style."
+  },
+  {
+    "id": "E2E-044",
+    "raw_reference": "Autor, David H., et al. \"The China Syndrome: Local Labor Market Effects of Import Competition in the United States.\" American Economic Review, vol. 103, no. 6, 2013, pp. 2121-2168, https://doi.org/10.1257/aer.103.6.2121.",
+    "style": "MLA 9th",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "abbreviated_et_al",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Autor, Dorn & Hanson (2013) AER trade-shock study in MLA 9th with 'et al.'."
+  },
+  {
+    "id": "E2E-045",
+    "raw_reference": "[10] J. D. Angrist and G. W. Imbens, \"Identification and estimation of local average treatment effects,\" Econometrica, vol. 62, no. 2, pp. 467-475, Mar. 1994, doi: 10.2307/2951620.",
+    "style": "IEEE",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Angrist & Imbens (1994) LATE econometrics paper formatted in IEEE style."
+  },
+  {
+    "id": "E2E-046",
+    "raw_reference": "[11] Bộ Giáo dục và Đào tạo (2021). Giáo trình Kinh tế chính trị Mác - Lênin. Hà Nội: NXB Chính trị Quốc gia Sự thật.",
+    "style": "TDTU Vietnamese",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Curated Vietnamese national university textbook verified via TechStandardClient registry."
+  },
+  {
+    "id": "E2E-047",
+    "raw_reference": "Kahneman, D., & Tversky, A. (1984). Prospect theory: An analysis of decision under risk. Econometrica, 47(2), 263-291. https://doi.org/10.2307/1914185",
+    "style": "APA 7th",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "year_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "5-year publication year error (1984 vs canonical 1979) on Kahneman & Tversky."
+  },
+  {
+    "id": "E2E-048",
+    "raw_reference": "Autor, D. H., & Dorn, D. (2001). The colonial origins of comparative development: An empirical investigation. American Economic Review, 91(5), 1369-1401. https://doi.org/10.1257/aer.91.5.1369",
+    "style": "APA 7th",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "author_swap",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Author swap attributing Acemoglu, Johnson & Robinson (2001) to Autor & Dorn."
+  },
+  {
+    "id": "E2E-049",
+    "raw_reference": "Chetty, Raj, Nathaniel Hendren, Patrick Kline, and Emmanuel Saez. 2014. \"Where Is the Land of Opportunity? The Geography of Intergenerational Mobility in the United States.\" The Quarterly Journal of Economics 129 (4): 1553-1623. https://doi.org/10.1093/qje/qju029.",
+    "style": "Chicago",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "doi_typo_conflict",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "1-digit DOI typo (qju029 vs canonical qju022) on Chetty et al. (2014) QJE paper."
+  },
+  {
+    "id": "E2E-050",
+    "raw_reference": "Fama, E.F. and French, K.R., 2015. A five-factor asset pricing model. Journal of Medicinal Chemistry, 116(1), pp.1-22. Available at: https://doi.org/10.1016/j.jfineco.2014.10.010.",
+    "style": "Harvard",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "venue_swap",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Venue swap: Fama & French (2015) JFE paper paired with Journal of Medicinal Chemistry."
+  },
+  {
+    "id": "E2E-051",
+    "raw_reference": "[12] Bộ Giáo dục và Đào tạo (2012). Giáo trình Kinh tế chính trị Mác - Lênin. Hà Nội: NXB Chính trị Quốc gia Sự thật.",
+    "style": "TDTU Vietnamese",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "year_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Edition year outside curated range (2012 vs valid 2019-2023) on national Political Economy textbook."
+  },
+  {
+    "id": "E2E-052",
+    "raw_reference": "Henderson, P. L., & Kowalczyk, T. (2022). Decentralized stablecoin liquidity cascades under algorithmic collateralization. Journal of Monetary Digital Markets, 15(3), 201-234. https://doi.org/10.1257/aer.103.6.2121",
+    "style": "APA 7th",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "chimeric_spliced_doi",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Chimeric finance citation splicing Autor et al. (2013) AER DOI onto fabricated crypto study."
+  },
+  {
+    "id": "E2E-053",
+    "raw_reference": "Bergstrom, L. E., & Ndiaye, M. (2024). Sovereign green bond yield premia and central bank climate collateral haircuts across emerging markets. The Journal of Finance, 79(4), 2411-2452. https://doi.org/10.1111/jofi.99841",
+    "style": "APA 7th",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "llm_fabricated_citation",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Plausible LLM-fabricated Journal of Finance article with non-existent DOI."
+  },
+  {
+    "id": "E2E-054",
+    "raw_reference": "van der Berg, H. and Mukherjee, S., 2023. Algorithmic wage-setting tacit collusion in gig-economy labor platforms. The Quarterly Journal of Economics, 138(4), pp.2105-2148. Available at: https://doi.org/10.1093/qje/qjad999.",
+    "style": "Harvard",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "llm_fabricated_citation",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Plausible LLM-fabricated QJE labor economics paper in Harvard style."
+  },
+  {
+    "id": "E2E-055",
+    "raw_reference": "Lindquist, Henrik, and Clara Ferreira. \"Microprudential Stress Testing of Tokenized Commercial Real Estate Debt.\" Review of Banking Analytics, vol. 11, no. 1, 2024, pp. 33-61, https://ssrn-workingpapers.invalid/abstract=9948120.",
+    "style": "MLA 9th",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "fake_placeholder_url",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Fabricated finance working paper pointing to reserved '.invalid' domain."
+  },
+  {
+    "id": "E2E-056",
+    "raw_reference": "9. Almeida R, Petrovic D. Cross-border CBDC settlement latency and foreign exchange volatility. Journal of International Money and Finance. 2024;142:109999. doi:10.9999/jimf.2024.109999",
+    "style": "Vancouver",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "llm_fabricated_citation",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Fabricated finance paper with placeholder 10.9999/ DOI prefix."
+  },
+  {
+    "id": "E2E-057",
+    "raw_reference": "Park, J. H., and S. Y. Kim. \"Household Mortgage Deleveraging and Regional Consumption Elasticity in South Korea.\" Korean Economic Review, vol. 38, no. 2, 2022, pp. 189-216, https://doi.org/10.9728/ker.2022.38.2.189.",
+    "style": "MLA 9th",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "regional_doi_no_csl",
+    "expected_label": "unresolved",
+    "citation_context": null,
+    "notes": "Regional KISTI Korean DOI in MLA 9th registered without Crossref CSL metadata (abstains to unresolved)."
+  },
+  {
+    "id": "E2E-058",
+    "raw_reference": "[13] Nguyễn Văn Minh, Trần Thị Thu Hà (2022). Nghiên cứu các nhân tố ảnh hưởng đến ý định sử dụng ngân hàng số của sinh viên tại Thành phố Hồ Chí Minh. Tạp chí Kinh tế và Phát triển, số 302, tr. 45-56.",
+    "style": "TDTU Vietnamese",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "domestic_unindexed_vn_journal",
+    "expected_label": "unresolved",
+    "citation_context": null,
+    "notes": "Domestic Vietnamese economics journal article in TDTU format without international DOI."
+  },
+  {
+    "id": "E2E-059",
+    "raw_reference": "Mensah, Kwame. 2020. Informal Microcredit Networks and Rural Household Resilience in Northern Ghana. Working Paper Series WP-2020-14, Department of Economics, University of Ghana.",
+    "style": "Chicago",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "unindexed_thesis_or_monograph",
+    "expected_label": "unresolved",
+    "citation_context": null,
+    "notes": "Institutional working paper without DOI; system abstains to UNRESOLVED."
+  },
+  {
+    "id": "E2E-060",
+    "raw_reference": "[14] Cổng thông tin điện tử Bộ Kế hoạch và Đầu tư (2024). Báo cáo tình hình thu hút đầu tư trực tiếp nước ngoài năm 2024. Truy cập ngày 15/10/2024 tại https://www.mpi.gov.vn",
+    "style": "TDTU Vietnamese",
+    "domain": "Economics, Finance & Social Sciences",
+    "error_subtype": "valid_web_api_resource",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Vietnamese government ministry portal web resource classified as RESOURCE."
+  },
+  {
+    "id": "E2E-061",
+    "raw_reference": "[15] M. Raissi, P. Perdikaris, and G. E. Karniadakis, \"Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations,\" Journal of Computational Physics, vol. 378, pp. 686-707, Feb. 2019, doi: 10.1016/j.jcp.2018.10.045.",
+    "style": "IEEE",
+    "domain": "Engineering & Physics",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": "Physics-informed neural networks embed partial differential equation residuals directly into the training loss function [15].",
+    "notes": "Canonical PINNs JCP 2019 paper in IEEE style with aligned context."
+  },
+  {
+    "id": "E2E-062",
+    "raw_reference": "Novoselov, K. S., Geim, A. K., Morozov, S. V., Jiang, D., Zhang, Y., Dubonos, S. V., Grigorieva, I. V., & Firsov, A. A. (2004). Electric field effect in atomically thin carbon films. Science, 306(5696), 666-669. https://doi.org/10.1126/science.1102896",
+    "style": "APA 7th",
+    "domain": "Engineering & Physics",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Nobel-winning Graphene Science 2004 paper in APA 7th style."
+  },
+  {
+    "id": "E2E-063",
+    "raw_reference": "10. Abbott BP, Abbott R, Abbott TD, Abernathy MR, Acernese F, Ackley K, et al. Observation of gravitational waves from a binary black hole merger. Phys Rev Lett. 2016;116(6):061102. doi:10.1103/PhysRevLett.116.061102",
+    "style": "Vancouver",
+    "domain": "Engineering & Physics",
+    "error_subtype": "abbreviated_et_al",
+    "expected_label": "verified",
+    "citation_context": "Laser interferometry detected the GW150914 transient gravitational-wave strain generated by two coalescing stellar-mass black holes [10].",
+    "notes": "LIGO GW150914 Physical Review Letters 2016 discovery paper with 'et al.'."
+  },
+  {
+    "id": "E2E-064",
+    "raw_reference": "Shockley, William, and Hans J. Queisser. 1961. \"Detailed Balance Limit of Efficiency of p-n Junction Solar Cells.\" Journal of Applied Physics 32 (3): 510-519. https://doi.org/10.1063/1.1736034.",
+    "style": "Chicago",
+    "domain": "Engineering & Physics",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Shockley-Queisser solar cell limit paper in Chicago author-date style."
+  },
+  {
+    "id": "E2E-065",
+    "raw_reference": "Kalman, R.E., 1960. A new approach to linear filtering and prediction problems. Journal of Basic Engineering, 82(1), pp.35-45. Available at: https://doi.org/10.1115/1.3662552.",
+    "style": "Harvard",
+    "domain": "Engineering & Physics",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Kalman (1960) state-space filter paper in Harvard style."
+  },
+  {
+    "id": "E2E-066",
+    "raw_reference": "Shannon, Claude E. \"A Mathematical Theory of Communication.\" Bell System Technical Journal, vol. 27, no. 3, 1948, pp. 379-423, https://doi.org/10.1002/j.1538-7305.1948.tb01338.x.",
+    "style": "MLA 9th",
+    "domain": "Engineering & Physics",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Shannon (1948) information theory classic in MLA 9th style."
+  },
+  {
+    "id": "E2E-067",
+    "raw_reference": "Snider, E., Dasenbrock-Gammon, N., McBride, R., Debessai, M., Vindana, H., Vencatasamy, K., Lawler, K. V., Salamat, A., & Dias, R. P. (2020). Room-temperature superconductivity in a carbonaceous sulfur hydride. Nature, 586(7829), 373-377. https://doi.org/10.1038/s41586-020-2801-z",
+    "style": "APA 7th",
+    "domain": "Engineering & Physics",
+    "error_subtype": "retracted_paper",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Retracted Nature 2020 room-temperature superconductivity paper caught by R-RETRACTED-PAPER."
+  },
+  {
+    "id": "E2E-068",
+    "raw_reference": "[16] M. Raissi, P. Perdikaris, and G. E. Karniadakis, \"Physics-informed neural networks: A deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations,\" Journal of Computational Physics, vol. 378, pp. 686-707, Feb. 2022, doi: 10.1016/j.jcp.2018.10.045.",
+    "style": "IEEE",
+    "domain": "Engineering & Physics",
+    "error_subtype": "year_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "3-year publication year error (cited 2022 vs canonical 2019) on PINNs paper."
+  },
+  {
+    "id": "E2E-069",
+    "raw_reference": "Shockley, W. and Queisser, H.J., 2004. Electric field effect in atomically thin carbon films. Science, 306(5696), pp.666-669. Available at: https://doi.org/10.1126/science.1102896.",
+    "style": "Harvard",
+    "domain": "Engineering & Physics",
+    "error_subtype": "author_swap",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Author swap attributing Novoselov & Geim (2004) graphene paper to Shockley & Queisser."
+  },
+  {
+    "id": "E2E-070",
+    "raw_reference": "[17] B. P. Abbott et al., \"Observation of gravitational waves from a binary black hole merger,\" IEEE Transactions on Power Systems, vol. 116, no. 6, p. 061102, Feb. 2016, doi: 10.1103/PhysRevLett.116.061102.",
+    "style": "IEEE",
+    "domain": "Engineering & Physics",
+    "error_subtype": "venue_swap",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Venue swap: Physical Review Letters LIGO paper cited in IEEE Transactions on Power Systems."
+  },
+  {
+    "id": "E2E-071",
+    "raw_reference": "Kalman, Rudolf E. 1960. \"A New Approach to Linear Filtering and Prediction Problems.\" Journal of Basic Engineering 82 (1): 35-45. https://doi.org/10.1115/1.3662559.",
+    "style": "Chicago",
+    "domain": "Engineering & Physics",
+    "error_subtype": "doi_typo_conflict",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "1-digit DOI typo (1.3662559 vs canonical 1.3662552) on Kalman (1960)."
+  },
+  {
+    "id": "E2E-072",
+    "raw_reference": "[18] V. K. Subramaniam and D. H. Richter, \"Ambient-pressure topological superconductivity in twisted vanadium diselenide bilayers,\" Applied Physics Letters, vol. 124, no. 8, pp. 102-109, 2024, doi: 10.1103/PhysRevLett.116.061102.",
+    "style": "IEEE",
+    "domain": "Engineering & Physics",
+    "error_subtype": "chimeric_spliced_doi",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Chimeric physics citation splicing LIGO gravitational-wave PRL DOI onto fabricated condensed-matter paper."
+  },
+  {
+    "id": "E2E-073",
+    "raw_reference": "[19] R. K. Krishnan and M. Al-Harbi, \"Model-predictive harmonic suppression for grid-forming silicon-carbide inverters under asymmetrical faults,\" IEEE Transactions on Industrial Electronics, vol. 71, no. 9, pp. 10812-10824, Sep. 2024, doi: 10.1109/TIE.2024.9998712.",
+    "style": "IEEE",
+    "domain": "Engineering & Physics",
+    "error_subtype": "llm_fabricated_citation",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Realistic LLM-fabricated power-electronics IEEE TIE paper with non-existent DOI."
+  },
+  {
+    "id": "E2E-074",
+    "raw_reference": "Bauer, F. M., & Lindstrom, E. (2024). Thermo-mechanical fatigue modeling of solid-state lithium-metal anodes under fast-charging regimes. Applied Energy, 362, 122999. https://doi.org/10.1016/j.apenergy.2024.999991",
+    "style": "APA 7th",
+    "domain": "Engineering & Physics",
+    "error_subtype": "llm_fabricated_citation",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Realistic LLM-fabricated Applied Energy battery engineering paper with non-existent DOI."
+  },
+  {
+    "id": "E2E-075",
+    "raw_reference": "Hassan, Tariq, and Elena Petrova. \"Aerodynamic Flutter Mitigation in Morphing Composite Wind Turbine Blades.\" Journal of Wind Structural Engineering, vol. 19, 2024, pp. 77-95, https://fake-aerospace-archive.invalid/2024/flutter-mitigation.",
+    "style": "MLA 9th",
+    "domain": "Engineering & Physics",
+    "error_subtype": "fake_placeholder_url",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Engineering citation with reserved '.invalid' fake URL domain."
+  },
+  {
+    "id": "E2E-076",
+    "raw_reference": "11. Gomez-Perez A, Liu W. Metamaterial acoustic cloaking for sub-wavelength marine sonar arrays. Physical Review Applied. 2024;21(4):044999. doi:10.0000/PhysRevApplied.21.044999",
+    "style": "Vancouver",
+    "domain": "Engineering & Physics",
+    "error_subtype": "llm_fabricated_citation",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Fabricated physics citation using invalid 10.0000/ DOI prefix."
+  },
+  {
+    "id": "E2E-077",
+    "raw_reference": "[20] Z. Chen, L. Wang, and H. Zhou, \"Seismic fragility assessment of high-pier prestressed concrete bridges in mountainous fault zones,\" Chinese Journal of Civil Engineering, vol. 56, no. 4, pp. 62-74, 2023, doi: 10.13334/j.0253-374x.2023.04.007.",
+    "style": "IEEE",
+    "domain": "Engineering & Physics",
+    "error_subtype": "regional_doi_no_csl",
+    "expected_label": "unresolved",
+    "citation_context": null,
+    "notes": "Regional CNKI civil-engineering DOI registered without Crossref CSL metadata."
+  },
+  {
+    "id": "E2E-078",
+    "raw_reference": "[21] Đặng Hoàng Anh, Vũ Đình Tuấn (2023). Tối ưu hóa thông số điều khiển mờ trượt cho tay máy robot công nghiệp ba bậc tự do. Tạp chí Khoa học và Công nghệ các Trường Đại học Kỹ thuật, 148, 34-41.",
+    "style": "TDTU Vietnamese",
+    "domain": "Engineering & Physics",
+    "error_subtype": "domestic_unindexed_vn_journal",
+    "expected_label": "unresolved",
+    "citation_context": null,
+    "notes": "Domestic Vietnamese engineering university journal without international DOI."
+  },
+  {
+    "id": "E2E-079",
+    "raw_reference": "[22] Hoàng Minh Quân (2022). Thiết kế hệ thống giám sát trạm biến áp 110kV ứng dụng giao thức IEC 61850. Đồ án tốt nghiệp kỹ sư, Trường Đại học Bách khoa - ĐHQG TP.HCM.",
+    "style": "TDTU Vietnamese",
+    "domain": "Engineering & Physics",
+    "error_subtype": "unindexed_thesis_or_monograph",
+    "expected_label": "unresolved",
+    "citation_context": null,
+    "notes": "Vietnamese undergraduate engineering thesis without international DOI."
+  },
+  {
+    "id": "E2E-080",
+    "raw_reference": "STMicroelectronics (2023). STM32F4 Cortex-M4 CMSIS Microcontroller Peripheral Driver Reference Manual. Retrieved from https://www.st.com/resource/en/reference_manual/rm0090.pdf",
+    "style": "APA 7th",
+    "domain": "Engineering & Physics",
+    "error_subtype": "valid_web_api_resource",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Vendor microcontroller hardware manual classified as RESOURCE."
+  },
+  {
+    "id": "E2E-081",
+    "raw_reference": "Hiến pháp nước Cộng hòa xã hội chủ nghĩa Việt Nam năm 2013.",
+    "style": "TDTU Vietnamese",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "valid_vn_legal_statute",
+    "expected_label": "resource",
+    "citation_context": "Mọi người có quyền bất khả xâm phạm về đời sống riêng tư, bí mật cá nhân và bí mật gia đình theo quy định của Hiến pháp năm 2013.",
+    "notes": "Canonical 2013 Constitution of Vietnam verified by VNLegalVerifier as RESOURCE."
+  },
+  {
+    "id": "E2E-082",
+    "raw_reference": "[23] Bộ luật Dân sự (Bộ luật số 91/2015/QH13) ngày 24/11/2015 của Quốc hội.",
+    "style": "IEEE",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "valid_vn_legal_statute",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Valid Vietnamese Civil Code 2015 (91/2015/QH13) issued by Quốc hội."
+  },
+  {
+    "id": "E2E-083",
+    "raw_reference": "Quốc hội (2020). Luật Doanh nghiệp (Luật số 59/2020/QH14) ngày 17/06/2020.",
+    "style": "APA 7th",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "valid_vn_legal_statute",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Valid Vietnamese Enterprise Law 2020 (59/2020/QH14) in agency-first APA format."
+  },
+  {
+    "id": "E2E-084",
+    "raw_reference": "Chính phủ (2023). Nghị định số 13/2023/NĐ-CP ngày 17/04/2023 về bảo vệ dữ liệu cá nhân.",
+    "style": "APA 7th",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "valid_vn_legal_statute",
+    "expected_label": "resource",
+    "citation_context": "Việc xử lý dữ liệu cá nhân nhạy cảm phải có sự đồng ý rõ ràng của chủ thể dữ liệu theo Nghị định 13/2023/NĐ-CP.",
+    "notes": "Valid Personal Data Protection Decree 13/2023/NĐ-CP issued by Chính phủ."
+  },
+  {
+    "id": "E2E-085",
+    "raw_reference": "Luật Đất đai (Luật số 31/2024/QH15) ngày 18/01/2024 của Quốc hội.",
+    "style": "TDTU Vietnamese",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "valid_vn_legal_statute",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Valid Vietnamese Land Law 2024 (31/2024/QH15) issued by Quốc hội."
+  },
+  {
+    "id": "E2E-086",
+    "raw_reference": "12. Bộ luật Lao động (Bộ luật số 45/2019/QH14) ngày 20/11/2019 của Quốc hội.",
+    "style": "Vancouver",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "valid_vn_legal_statute",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Valid Vietnamese Labor Code 2019 (45/2019/QH14) numbered entry."
+  },
+  {
+    "id": "E2E-087",
+    "raw_reference": "Quốc hội. 2023. Luật Giao dịch điện tử (Luật số 20/2023/QH15) ngày 22/06/2023.",
+    "style": "Chicago",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "valid_vn_legal_statute",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Valid Electronic Transactions Law 2023 (20/2023/QH15) in Chicago agency-year format."
+  },
+  {
+    "id": "E2E-088",
+    "raw_reference": "Quốc hội, 2018. Luật An ninh mạng (Luật số 24/2018/QH14) ngày 12/06/2018.",
+    "style": "Harvard",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "valid_vn_legal_statute",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Valid Cybersecurity Law 2018 (24/2018/QH14) in Harvard agency-year format."
+  },
+  {
+    "id": "E2E-089",
+    "raw_reference": "Chính phủ (2021). Nghị định số 01/2021/NĐ-CP ngày 04/01/2021 về đăng ký doanh nghiệp.",
+    "style": "MLA 9th",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "valid_vn_legal_statute",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Valid Business Registration Decree 01/2021/NĐ-CP."
+  },
+  {
+    "id": "E2E-090",
+    "raw_reference": "[24] Luật Doanh nghiệp (Luật số 59/2020/QH14) ngày 17/06/2020 của Bộ Tài chính.",
+    "style": "TDTU Vietnamese",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "vn_legal_authority_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Corrupted authority: National Assembly Law (QH14) falsely attributed to Bộ Tài chính."
+  },
+  {
+    "id": "E2E-091",
+    "raw_reference": "Luật Đất đai (Luật số 31/2022/QH15) ngày 18/01/2022 của Quốc hội.",
+    "style": "TDTU Vietnamese",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "vn_legal_year_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Invalid promulgation year 2022 for Luật Đất đai (valid years: 1993, 2003, 2013, 2024)."
+  },
+  {
+    "id": "E2E-092",
+    "raw_reference": "Bộ luật Dân sự (Bộ luật số 99/2015/QH13) ngày 24/11/2015 của Quốc hội.",
+    "style": "TDTU Vietnamese",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "vn_legal_code_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Wrong statutory code number (99/2015/QH13 vs official 91/2015/QH13) on Bộ luật Dân sự 2015."
+  },
+  {
+    "id": "E2E-093",
+    "raw_reference": "Nghị định số 13/2023/NĐ-CP ngày 17/04/2023 của Quốc hội về bảo vệ dữ liệu cá nhân.",
+    "style": "APA 7th",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "vn_legal_authority_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Wrong issuing authority: Decree (NĐ-CP) belongs to Chính phủ, not Quốc hội."
+  },
+  {
+    "id": "E2E-094",
+    "raw_reference": "Nghị định số 13/2023/NĐ-CP ngày 17/04/2021 của Chính phủ về bảo vệ dữ liệu cá nhân.",
+    "style": "Harvard",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "vn_legal_year_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Internal code-year vs promulgation-date conflict (13/2023/NĐ-CP vs 17/04/2021)."
+  },
+  {
+    "id": "E2E-095",
+    "raw_reference": "Luật Đầu tư (Luật số 59/2020/QH14) ngày 17/06/2020 của Quốc hội.",
+    "style": "Chicago",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "vn_legal_code_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Cross-statute code swap: Luật Đầu tư 2020 is 61/2020/QH14, whereas 59/2020/QH14 is Luật Doanh nghiệp."
+  },
+  {
+    "id": "E2E-096",
+    "raw_reference": "[25] Bộ luật Trí tuệ Nhân tạo Quốc gia (Bộ luật số 888/2024/QH15) ngày 15/08/2024 của Quốc hội.",
+    "style": "TDTU Vietnamese",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "vn_legal_fabricated_code",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Fabricated 7th Vietnamese 'Bộ luật' with impossible document number 888/2024/QH15."
+  },
+  {
+    "id": "E2E-097",
+    "raw_reference": "Nghị định số 45/2023/NĐ-CP ngày 30/02/2023 của Chính phủ quy định về quản lý giao dịch số.",
+    "style": "TDTU Vietnamese",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "vn_legal_impossible_date",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Impossible calendar promulgation date (30/02/2023) caught by VNLegalVerifier."
+  },
+  {
+    "id": "E2E-098",
+    "raw_reference": "Luật Quản lý Tài sản Ảo (Luật số 999/2024/QH15) ngày 12/06/2024 của Quốc hội.",
+    "style": "IEEE",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "vn_legal_fabricated_code",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Fabricated Vietnamese law with impossible National Assembly sequence code 999/2024/QH15."
+  },
+  {
+    "id": "E2E-099",
+    "raw_reference": "Bộ luật Dân sự (Bộ luật số 91/2015/QH13) ngày 24/11/2015 của Quốc hội. Truy cập tại https://csdl-phapluat-quocgia.invalid/bl-91-2015",
+    "style": "Vancouver",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "fake_placeholder_url",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Legal statute citation poisoned with reserved '.invalid' fake URL domain."
+  },
+  {
+    "id": "E2E-100",
+    "raw_reference": "[26] Đỗ Văn Đại, Nguyễn Trương Tín (2023). Bình luận khoa học một số vấn đề về bồi thường thiệt hại ngoài hợp đồng theo pháp luật hiện hành. Tạp chí Khoa học Pháp lý Việt Nam, số 169, tr. 15-28.",
+    "style": "TDTU Vietnamese",
+    "domain": "Vietnamese Legal Statutes",
+    "error_subtype": "domestic_unindexed_vn_journal",
+    "expected_label": "unresolved",
+    "citation_context": null,
+    "notes": "Domestic Vietnamese legal commentary article in TDTU format without international DOI; abstains to unresolved."
+  },
+  {
+    "id": "E2E-101",
+    "raw_reference": "Fielding, R., Nottingham, M., & Reschke, J. (2022). RFC 9110: HTTP Semantics. IETF Internet Standard. https://doi.org/10.17487/RFC9110",
+    "style": "APA 7th",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": "Idempotent HTTP methods such as PUT and DELETE allow safe automatic request retries under RFC 9110 semantics (Fielding et al., 2022).",
+    "notes": "Canonical IETF RFC 9110 (HTTP Semantics) verified via TechStandardClient."
+  },
+  {
+    "id": "E2E-102",
+    "raw_reference": "[27] E. Rescorla, \"The Transport Layer Security (TLS) Protocol Version 1.3,\" IETF Proposed Standard RFC 8446, Aug. 2018, doi: 10.17487/RFC8446.",
+    "style": "IEEE",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Canonical IETF RFC 8446 (TLS 1.3) in IEEE technical standard format."
+  },
+  {
+    "id": "E2E-103",
+    "raw_reference": "Bộ Khoa học và Công nghệ (2018). TCVN 5574:2018: Thiết kế kết cấu bê tông và bê tông cốt thép. Hà Nội: Tiêu chuẩn Quốc gia Việt Nam.",
+    "style": "TDTU Vietnamese",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Curated Vietnamese national engineering standard TCVN 5574:2018 verified via local registry."
+  },
+  {
+    "id": "E2E-104",
+    "raw_reference": "[28] Bộ Khoa học và Công nghệ (2017). TCVN 11930:2017: Công nghệ thông tin - Các kỹ thuật an toàn - Yêu cầu cơ bản về an toàn hệ thống thông tin theo cấp độ.",
+    "style": "IEEE",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Curated cybersecurity Vietnamese standard TCVN 11930:2017."
+  },
+  {
+    "id": "E2E-105",
+    "raw_reference": "Bộ Xây dựng (2022). QCVN 06:2022/BXD: Quy chuẩn kỹ thuật quốc gia về an toàn cháy cho nhà và công trình.",
+    "style": "TDTU Vietnamese",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "Curated Vietnamese fire-safety national technical regulation QCVN 06:2022/BXD."
+  },
+  {
+    "id": "E2E-106",
+    "raw_reference": "Pedregosa, Fabian, Gael Varoquaux, and Alexandre Gramfort. 2024. \"scikit-learn: Machine Learning in Python.\" Python Package Index (PyPI). https://pypi.org/project/scikit-learn/.",
+    "style": "Chicago",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "PyPI software package citation verified via TechStandardClient."
+  },
+  {
+    "id": "E2E-107",
+    "raw_reference": "Wolf, T., Debut, L., Sanh, V. and Chaumond, J., 2020. Transformers: State-of-the-art Machine Learning for Pytorch, TensorFlow, and JAX. https://github.com/huggingface/transformers.",
+    "style": "Harvard",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "canonical_verified",
+    "expected_label": "verified",
+    "citation_context": null,
+    "notes": "GitHub open-source repository verified via TechStandardClient (R-GITHUB-VERIFIED)."
+  },
+  {
+    "id": "E2E-108",
+    "raw_reference": "Fielding, R., Nottingham, M., & Reschke, J. (2016). RFC 9110: HTTP Semantics. IETF Internet Standard. https://doi.org/10.17487/RFC9110",
+    "style": "APA 7th",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "rfc_year_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "6-year publication year error on IETF RFC 9110 (cited 2016 vs official June 2022)."
+  },
+  {
+    "id": "E2E-109",
+    "raw_reference": "Bộ Khoa học và Công nghệ (2019). TCVN 5574:2019: Thiết kế kết cấu bê tông và bê tông cốt thép. Hà Nội: Tiêu chuẩn Quốc gia Việt Nam.",
+    "style": "TDTU Vietnamese",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "vn_standard_year_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Non-existent standard edition year TCVN 5574:2019 (official editions are 2012 and 2018)."
+  },
+  {
+    "id": "E2E-110",
+    "raw_reference": "[29] Bộ Khoa học và Công nghệ (2017). TCVN 11930:2017: Thiết kế cầu đường bộ bê tông dự ứng lực.",
+    "style": "IEEE",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "vn_standard_subject_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Wrong subject attached to TCVN 11930:2017 (IT security standard cited as highway bridge design)."
+  },
+  {
+    "id": "E2E-111",
+    "raw_reference": "Bộ Xây dựng (2022). QCVN 06:2022/BXD: Quy chuẩn kỹ thuật quốc gia về chất lượng nước sạch sử dụng cho mục đích sinh hoạt.",
+    "style": "Vancouver",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "vn_standard_subject_mismatch",
+    "expected_label": "metadata_error",
+    "citation_context": null,
+    "notes": "Wrong subject attached to QCVN 06:2022/BXD (fire safety code cited as drinking water quality)."
+  },
+  {
+    "id": "E2E-112",
+    "raw_reference": "Keller, Lukas, and Mei Chen. \"Zero-Latency Quantum Mesh Consensus Engine.\" GitHub, 2024, https://github.com/nonexistent-org-2099/quantum-mesh-consensus.",
+    "style": "MLA 9th",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "dead_repository_url",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Non-existent GitHub repository confirmed HTTP 404 by TechStandardClient & LinkValidator."
+  },
+  {
+    "id": "E2E-113",
+    "raw_reference": "Varga, M., & Lindholm, S. (2024). tensor-causal-verifier: Automated theorem proving for deep symbolic graphs. Python Package Index. https://pypi.org/project/nonexistent-tensor-causal-verifier/",
+    "style": "APA 7th",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "dead_repository_url",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Non-existent PyPI package URL returning 404 nonexistent package status."
+  },
+  {
+    "id": "E2E-114",
+    "raw_reference": "13. Hoffman P, Draeger K. RFC 99871: Autonomous Neural Congestion Control for Optical Backbones. IETF. 2024. doi:10.17487/RFC99871",
+    "style": "Vancouver",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "llm_fabricated_citation",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Fabricated 5-digit IETF RFC 99871 with non-existent RFC Editor DOI."
+  },
+  {
+    "id": "E2E-115",
+    "raw_reference": "CloudScale Systems, 2024. Distributed Ledger Telemetry SDK Reference Guide. Available at: https://sdk-docs.example.com/telemetry/v4.",
+    "style": "Harvard",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "fake_placeholder_url",
+    "expected_label": "suspected_hallucination",
+    "citation_context": null,
+    "notes": "Software SDK reference pointing to reserved RFC 2606 example.com placeholder URL."
+  },
+  {
+    "id": "E2E-116",
+    "raw_reference": "Viện Nghiên cứu Điện tử và Tự động hóa. 2021. Báo cáo tổng kết thử nghiệm giao thức truyền thông công nghiệp nội bộ cho nhà máy thông minh. Hà Nội.",
+    "style": "Chicago",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "unindexed_thesis_or_monograph",
+    "expected_label": "unresolved",
+    "citation_context": null,
+    "notes": "Internal domestic technical report without DOI or URL; system abstains to UNRESOLVED."
+  },
+  {
+    "id": "E2E-117",
+    "raw_reference": "OpenAI, \"Chat Completions API Reference,\" Developer Documentation, 2024. https://platform.openai.com/docs/api-reference/chat",
+    "style": "IEEE",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "valid_web_api_resource",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Official OpenAI developer API documentation classified as RESOURCE."
+  },
+  {
+    "id": "E2E-118",
+    "raw_reference": "Google, \"YouTube Data API v3,\" Google for Developers, 2024. https://developers.google.com/youtube/v3",
+    "style": "MLA 9th",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "valid_web_api_resource",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Google for Developers API documentation classified as RESOURCE."
+  },
+  {
+    "id": "E2E-119",
+    "raw_reference": "Crossref REST API Documentation (2024). Works and Prefix Endpoints. Retrieved from https://api.crossref.org/swagger-ui/index.html",
+    "style": "Chicago",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "valid_web_api_resource",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Crossref REST API technical documentation classified as RESOURCE."
+  },
+  {
+    "id": "E2E-120",
+    "raw_reference": "14. Python Software Foundation. asyncio — Asynchronous I/O Standard Library Documentation. Retrieved from https://docs.python.org/3/library/asyncio.html",
+    "style": "Harvard",
+    "domain": "Technical Standards & Software",
+    "error_subtype": "valid_web_api_resource",
+    "expected_label": "resource",
+    "citation_context": null,
+    "notes": "Online programming language documentation resource classified as RESOURCE."
+  }
+]

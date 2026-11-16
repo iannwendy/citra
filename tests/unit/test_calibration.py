@@ -328,14 +328,18 @@ class TestPlattCalibratorAndHybridMLScorer:
 
         ns_cal = report["neuro_symbolic_platt_calibrated"]
         assert "bootstrap_95_ci" in ns_cal
-        assert ns_cal["classification"]["accuracy"] == pytest.approx(0.9779)
-        assert ns_cal["classification"]["macro_f1"] == pytest.approx(0.9722)
-        assert ns_cal["classification"]["per_class"]["suspected_hallucination"]["recall"] == 1.0
-        assert ns_cal["classification"]["per_class"]["unresolved"]["f1"] == pytest.approx(0.9600)
-        assert ns_cal["calibration"]["ece"] == pytest.approx(0.0326)
-        assert ns_cal["calibration"]["brier"] == pytest.approx(0.0184)
-        assert report["baselines_on_test_set"]["B5"]["macro_f1"] == pytest.approx(0.9965)
-        assert report["baselines_on_test_set"]["proposed"]["macro_f1"] == pytest.approx(0.9807)
+        assert ns_cal["classification"]["accuracy"] == pytest.approx(0.9619)
+        assert ns_cal["classification"]["macro_f1"] == pytest.approx(0.9497)
+        assert ns_cal["classification"]["per_class"]["suspected_hallucination"]["recall"] == pytest.approx(0.9928)
+        assert ns_cal["classification"]["per_class"]["unresolved"]["f1"] == pytest.approx(0.9082)
+        assert ns_cal["calibration"]["ece"] == pytest.approx(0.0382)
+        assert ns_cal["calibration"]["brier"] == pytest.approx(0.0265)
+        assert report["baselines_on_test_set"]["B5"]["macro_f1"] == pytest.approx(0.9952)
+        assert report["baselines_on_test_set"]["proposed"]["macro_f1"] == pytest.approx(0.9497)
+        assert (
+            report["baselines_on_test_set"]["proposed"]["accuracy"]
+            == ns_cal["classification"]["accuracy"]
+        )
 
         # Enforce 100% verbatim numeric parity with README.md & BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md
         repo_root = DEFAULT_WEIGHTS_PATH.parents[2]
@@ -344,16 +348,20 @@ class TestPlattCalibratorAndHybridMLScorer:
             repo_root / "docs" / "reports" / "BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md"
         ).read_text(encoding="utf-8")
         for expected_token in (
-            "0.9965",
-            "0.9807",
-            "0.9722",
-            "97.79%",
-            "0.0326",
-            "0.0184",
-            "1.799982",
-            "0.898759",
+            "0.9952",
+            "0.9497",
+            "96.19%",
+            "0.0382",
+            "0.0265",
+            "1.882781",
+            "0.780221",
+            "97.17%",
+            "40.58%",
+            "0.9987",
         ):
-            assert expected_token in readme_text
-            assert expected_token in bench_doc_text
+            assert expected_token in readme_text, f"{expected_token} missing in README.md"
+            assert expected_token in bench_doc_text, (
+                f"{expected_token} missing in BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md"
+            )
 
 
