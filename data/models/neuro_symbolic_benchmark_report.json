@@ -10,10 +10,10 @@
       "NLP Statistical Significance Testing (Dror et al., ACL 2018; Efron & Tibshirani, 1993): 1,000-resample non-parametric 95% bootstrap confidence intervals"
     ],
     "corpus_provenance": {
-      "total_papers_in_db": 128717,
-      "total_valid_scholarly_papers": 127980,
-      "eligible_with_full_abstract": 82577,
-      "eligible_metadata_only": 45403,
+      "total_papers_in_db": 129105,
+      "total_valid_scholarly_papers": 128085,
+      "eligible_with_full_abstract": 82855,
+      "eligible_metadata_only": 45230,
       "sampled_with_full_abstract": 80000,
       "sampled_metadata_only": 40000,
       "sampled_total": 120000
@@ -28,13 +28,16 @@
       "train_val_overlap": 0,
       "train_test_overlap": 0,
       "val_test_overlap": 0,
+      "train_val_title_overlap": 0,
+      "train_test_title_overlap": 0,
+      "val_test_title_overlap": 0,
       "zero_leakage_verified": true
     },
     "class_distribution": {
       "verified": 43200,
-      "unresolved": 14400,
       "metadata_error": 26400,
-      "suspected_hallucination": 36000
+      "suspected_hallucination": 36000,
+      "unresolved": 14400
     },
     "sub_taxonomy_distribution": {
       "H1": 9000,
@@ -90,111 +93,111 @@
       10.0
     ],
     "val_macro_f1_by_c": {
-      "0.1": 0.9938,
-      "0.25": 0.9952,
-      "0.5": 0.9964,
-      "1.0": 0.9969,
-      "2.0": 0.9972,
-      "5.0": 0.9976,
-      "10.0": 0.9976
+      "0.1": 0.9916,
+      "0.25": 0.9922,
+      "0.5": 0.9928,
+      "1.0": 0.9932,
+      "2.0": 0.9933,
+      "5.0": 0.9939,
+      "10.0": 0.9941
     },
-    "selected_best_c": 5.0,
+    "selected_best_c": 10.0,
     "symbolic_blend_alpha": 0.72
   },
   "baselines_on_test_set": {
     "B0": {
-      "accuracy": 0.3019,
-      "macro_precision": 0.2233,
-      "macro_recall": 0.3764,
-      "macro_f1": 0.2184
+      "accuracy": 0.3018,
+      "macro_precision": 0.2372,
+      "macro_recall": 0.3762,
+      "macro_f1": 0.2216
     },
     "B1": {
-      "accuracy": 0.6966,
-      "macro_precision": 0.5559,
-      "macro_recall": 0.5684,
-      "macro_f1": 0.5339
+      "accuracy": 0.6676,
+      "macro_precision": 0.5505,
+      "macro_recall": 0.5532,
+      "macro_f1": 0.5226
     },
     "B2": {
-      "accuracy": 0.7828,
-      "macro_precision": 0.5959,
-      "macro_recall": 0.6472,
-      "macro_f1": 0.6131
+      "accuracy": 0.8094,
+      "macro_precision": 0.6073,
+      "macro_recall": 0.6703,
+      "macro_f1": 0.632
     },
     "B3": {
-      "accuracy": 0.6485,
-      "macro_precision": 0.45,
-      "macro_recall": 0.5078,
-      "macro_f1": 0.4559
+      "accuracy": 0.6834,
+      "macro_precision": 0.4874,
+      "macro_recall": 0.5387,
+      "macro_f1": 0.4848
     },
     "B4": {
-      "accuracy": 0.7729,
-      "macro_precision": 0.577,
-      "macro_recall": 0.6359,
-      "macro_f1": 0.5996
+      "accuracy": 0.7919,
+      "macro_precision": 0.5864,
+      "macro_recall": 0.6503,
+      "macro_f1": 0.6113
     },
     "B5": {
-      "accuracy": 0.9986,
-      "macro_precision": 0.9982,
-      "macro_recall": 0.9976,
-      "macro_f1": 0.9979
+      "accuracy": 0.9944,
+      "macro_precision": 0.9927,
+      "macro_recall": 0.9928,
+      "macro_f1": 0.9928
     },
     "proposed": {
-      "accuracy": 0.9858,
-      "macro_precision": 0.9848,
-      "macro_recall": 0.9704,
-      "macro_f1": 0.9764
+      "accuracy": 0.8654,
+      "macro_precision": 0.7961,
+      "macro_recall": 0.7762,
+      "macro_f1": 0.7719
     }
   },
   "neuro_symbolic_uncalibrated": {
     "classification": {
-      "accuracy": 0.9718,
-      "macro_precision": 0.9571,
-      "macro_recall": 0.9668,
-      "macro_f1": 0.9617,
+      "accuracy": 0.8842,
+      "macro_precision": 0.8638,
+      "macro_recall": 0.7789,
+      "macro_f1": 0.7806,
       "per_class": {
         "verified": {
-          "precision": 1.0,
-          "recall": 0.9742,
-          "f1": 0.9869,
+          "precision": 0.9903,
+          "recall": 0.9963,
+          "f1": 0.9933,
           "support": 6480
         },
         "metadata_error": {
-          "precision": 0.9337,
-          "recall": 0.9394,
-          "f1": 0.9366,
+          "precision": 0.9934,
+          "recall": 0.9116,
+          "f1": 0.9508,
           "support": 3960
         },
         "suspected_hallucination": {
-          "precision": 1.0,
+          "precision": 0.7472,
           "recall": 1.0,
-          "f1": 1.0,
+          "f1": 0.8553,
           "support": 5400
         },
         "unresolved": {
-          "precision": 0.8945,
-          "recall": 0.9537,
-          "f1": 0.9231,
+          "precision": 0.7242,
+          "recall": 0.2079,
+          "f1": 0.323,
           "support": 2160
         }
       },
       "support": {
-        "suspected_hallucination": 5400,
-        "metadata_error": 3960,
         "verified": 6480,
-        "unresolved": 2160
+        "suspected_hallucination": 5400,
+        "unresolved": 2160,
+        "metadata_error": 3960
       },
       "confusion_matrix": {
         "verified": {
-          "verified": 6313,
-          "metadata_error": 164,
+          "verified": 6456,
+          "metadata_error": 23,
           "suspected_hallucination": 0,
-          "unresolved": 3
+          "unresolved": 1
         },
         "metadata_error": {
-          "verified": 0,
-          "metadata_error": 3720,
-          "suspected_hallucination": 0,
-          "unresolved": 240
+          "verified": 63,
+          "metadata_error": 3610,
+          "suspected_hallucination": 117,
+          "unresolved": 170
         },
         "suspected_hallucination": {
           "verified": 0,
@@ -204,80 +207,80 @@
         },
         "unresolved": {
           "verified": 0,
-          "metadata_error": 100,
-          "suspected_hallucination": 0,
-          "unresolved": 2060
+          "metadata_error": 1,
+          "suspected_hallucination": 1710,
+          "unresolved": 449
         }
       }
     },
     "calibration": {
-      "ece": 0.2135,
-      "brier": 0.0794,
-      "coverage": 0.9742,
+      "ece": 0.1979,
+      "brier": 0.1239,
+      "coverage": 0.9671,
       "n_samples": 18000,
       "coverage_accuracy": {
-        "0.5": 1.0,
-        "0.7": 0.9814,
-        "0.9": 0.9837,
-        "0.95": 0.9846,
-        "1.0": 0.9718
+        "0.5": 0.8611,
+        "0.7": 0.8983,
+        "0.9": 0.9197,
+        "0.95": 0.9044,
+        "1.0": 0.8842
       },
       "abstention_band": [
         0.5,
-        1.0
+        0.8611
       ]
     }
   },
   "neuro_symbolic_platt_calibrated": {
     "classification": {
-      "accuracy": 0.9718,
-      "macro_precision": 0.9571,
-      "macro_recall": 0.9668,
-      "macro_f1": 0.9617,
+      "accuracy": 0.8842,
+      "macro_precision": 0.8638,
+      "macro_recall": 0.7789,
+      "macro_f1": 0.7806,
       "per_class": {
         "verified": {
-          "precision": 1.0,
-          "recall": 0.9742,
-          "f1": 0.9869,
+          "precision": 0.9903,
+          "recall": 0.9963,
+          "f1": 0.9933,
           "support": 6480
         },
         "metadata_error": {
-          "precision": 0.9337,
-          "recall": 0.9394,
-          "f1": 0.9366,
+          "precision": 0.9934,
+          "recall": 0.9116,
+          "f1": 0.9508,
           "support": 3960
         },
         "suspected_hallucination": {
-          "precision": 1.0,
+          "precision": 0.7472,
           "recall": 1.0,
-          "f1": 1.0,
+          "f1": 0.8553,
           "support": 5400
         },
         "unresolved": {
-          "precision": 0.8945,
-          "recall": 0.9537,
-          "f1": 0.9231,
+          "precision": 0.7242,
+          "recall": 0.2079,
+          "f1": 0.323,
           "support": 2160
         }
       },
       "support": {
-        "suspected_hallucination": 5400,
-        "metadata_error": 3960,
         "verified": 6480,
-        "unresolved": 2160
+        "suspected_hallucination": 5400,
+        "unresolved": 2160,
+        "metadata_error": 3960
       },
       "confusion_matrix": {
         "verified": {
-          "verified": 6313,
-          "metadata_error": 164,
+          "verified": 6456,
+          "metadata_error": 23,
           "suspected_hallucination": 0,
-          "unresolved": 3
+          "unresolved": 1
         },
         "metadata_error": {
-          "verified": 0,
-          "metadata_error": 3720,
-          "suspected_hallucination": 0,
-          "unresolved": 240
+          "verified": 63,
+          "metadata_error": 3610,
+          "suspected_hallucination": 117,
+          "unresolved": 170
         },
         "suspected_hallucination": {
           "verified": 0,
@@ -287,60 +290,60 @@
         },
         "unresolved": {
           "verified": 0,
-          "metadata_error": 100,
-          "suspected_hallucination": 0,
-          "unresolved": 2060
+          "metadata_error": 1,
+          "suspected_hallucination": 1710,
+          "unresolved": 449
         }
       }
     },
     "calibration": {
-      "ece": 0.0433,
-      "brier": 0.0095,
-      "coverage": 0.9859,
+      "ece": 0.1123,
+      "brier": 0.0791,
+      "coverage": 0.9563,
       "n_samples": 18000,
       "coverage_accuracy": {
-        "0.5": 1.0,
-        "0.7": 1.0,
-        "0.9": 0.9999,
-        "0.95": 0.9999,
-        "1.0": 0.9718
+        "0.5": 0.9973,
+        "0.7": 0.901,
+        "0.9": 0.9222,
+        "0.95": 0.9239,
+        "1.0": 0.8842
       },
       "abstention_band": [
         0.5,
-        1.0
+        0.9973
       ]
     },
     "bootstrap_95_ci": {
       "n_bootstraps": 1000,
       "accuracy": {
-        "mean": 0.9718,
-        "std_error": 0.0012,
-        "ci_95_lower": 0.9693,
-        "ci_95_upper": 0.9741
+        "mean": 0.8842,
+        "std_error": 0.0024,
+        "ci_95_lower": 0.8799,
+        "ci_95_upper": 0.8888
       },
       "macro_f1": {
-        "mean": 0.9617,
-        "std_error": 0.0016,
-        "ci_95_lower": 0.9583,
-        "ci_95_upper": 0.9648
+        "mean": 0.7806,
+        "std_error": 0.0034,
+        "ci_95_lower": 0.7739,
+        "ci_95_upper": 0.7876
       },
       "ece": {
-        "mean": 0.0433,
-        "std_error": 0.0007,
-        "ci_95_lower": 0.0421,
-        "ci_95_upper": 0.0448
+        "mean": 0.1124,
+        "std_error": 0.0019,
+        "ci_95_lower": 0.1086,
+        "ci_95_upper": 0.116
       },
       "brier": {
-        "mean": 0.0095,
-        "std_error": 0.0004,
-        "ci_95_lower": 0.0087,
-        "ci_95_upper": 0.0102
+        "mean": 0.0791,
+        "std_error": 0.0017,
+        "ci_95_lower": 0.0755,
+        "ci_95_upper": 0.0824
       }
     }
   },
   "platt_parameters": {
-    "a": 2.162054,
-    "b": 0.629903,
+    "a": 1.908573,
+    "b": -0.318666,
     "min_prob": 0.01,
     "max_prob": 0.99
   }

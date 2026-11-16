@@ -8,8 +8,8 @@ Engineering reference and architectural guide for AI coding assistants and contr
 
 **CITRA (`SourceLogic`)** is an explainable **Neuro-Symbolic Citation & Source Integrity Verification Platform** for academic manuscripts, theses, and research papers.
 
-- **Version:** v2.3 (9 Free Scholarly & Technical APIs + Retraction Watch + Wayback Machine Complete — 2026-10-28)
-- **Unit & Integration Tests:** `1,350+ backend passed · 58 frontend passed, 0 failed`
+- **Version:** v3.77.0 (15+ Scholarly & Technical APIs, Multilingual ONNX INT8, Classroom Cohort CRUD/ZIP, 3-Wave Audit Remediation & Leak-Free 120K Calibration — 2026-11-16)
+- **Unit & Integration Tests:** `2,100+ backend passed · 340+ frontend Vitest passed, 0 failed`
 - **Role-Based Web Workspace:** Student / Researcher (`Workspace`), Teacher (`Classroom`), Administrator (`Control`)
 - **Decision-Support Principle:** All outputs are strictly decision-support signals for academic reviewers; the system never automatically concludes academic misconduct.
 
@@ -18,23 +18,27 @@ Engineering reference and architectural guide for AI coding assistants and contr
 ```text
 essay-integrity-checker/
 ├── src/integrity_checker/
-│   ├── api/                  # FastAPI backend routes (auth, essays, report, verdicts, classes, admin)
+│   ├── api/                  # FastAPI backend routes (auth, billing, essays, report, verdicts, teacher, users, audit, system, cache, export, health)
+│   ├── billing/              # Plan quotas (Basic/Pro/Ultra), Stripe & VNPay HMAC-SHA512 payment verification
 │   ├── config.py             # Centralized Pydantic settings (YAML + environment variables)
-│   ├── database/             # Local SQLite + FTS5 paper knowledge base (127K+ ACL & scholarly papers)
-│   ├── db/                   # Application database (SQLAlchemy: Users, Classes, Essays, Citations, Verdicts, AuditLogs)
-│   ├── evaluation/           # Metrics, Baselines (B0–B5), 120,000-sample Paper-Disjoint Benchmark & Ablation Runner
-│   ├── export/               # Multi-format report exporters (JSON, CSV, PDF, DOCX, Class CSV/ZIP)
-│   ├── extraction/           # Hybrid PDF parsing (PyMuPDF + GROBID TEI XML + 11 modular regex styles)
+│   ├── database/             # Local SQLite + FTS5 paper knowledge base (128K+ ACL & scholarly papers)
+│   ├── db/                   # Application database (SQLAlchemy 2.0 + SQLite WAL / PostgreSQL: Users, Classes, Essays, Citations, Verdicts, AuditLogs)
+│   ├── evaluation/           # Metrics, Baselines (B0–B5), EvaluationReport & Chapter-5 Performance/Load Benchmarks
+│   ├── export/               # Multi-format report exporters (JSON, CSV, PDF, DOCX, Auto-Healed DOCX, Class CSV/ZIP)
+│   ├── extraction/           # Hybrid parsing (GROBID 0.9.1 TEI XML + PyMuPDF + TCVN3/VNI + DOCX/BibTeX/RIS + 12 styles)
 │   ├── linking/              # Bidirectional in-text <-> bibliography CitationLinker (7 link statuses)
-│   ├── logic/                # NeuroSymbolicChecker, SymbolicRules, HybridMLScorer, PlattCalibration, CISCalculator
-│   ├── matching/             # RapidFuzz lexical, Sentence-BERT semantic, AuthorMatcher, VenueNormalizer
+│   ├── logging.py            # Structured application logging configuration
+│   ├── logic/                # NeuroSymbolicChecker, SymbolicRules (R01–R30+), VNLegalVerifier, HybridMLScorer, PlattCalibrator, CISCalculator
+│   ├── matching/             # RapidFuzz lexical, Sentence-BERT + Multilingual MiniLM ONNX INT8, VI<->EN Bridge, AuthorMatcher, VenueNormalizer
 │   ├── models/               # Pydantic & dataclass domain models
-│   ├── pipeline/             # IntegrityPipeline end-to-end orchestrator
-│   └── retrieval/            # Domain-routed multi-source retrieval + Active HTTP/DOI LinkValidator
-├── web/                      # React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui frontend
-├── configs/                  # YAML configurations (default, Docker, production)
+│   ├── pipeline/             # IntegrityPipeline end-to-end async orchestrator & report cache
+│   ├── retrieval/            # Domain-routed 15+ scholarly/technical APIs + SSRF-safe HTML/Wayback LinkValidator
+│   └── worker.py             # Standalone background verification worker process
+├── web/                      # React 18 + TypeScript + Vite + Tailwind CSS frontend (340+ Vitest tests)
+├── scripts/                  # Corpus ingestion, 120K Neuro-Symbolic training, NFR benchmarks & maintenance utilities
+├── configs/                  # YAML configurations (config.yaml, config.example.yaml, config.docker.yaml)
 ├── docs/                     # Categorized docs (architecture/, reference/, reports/, plans/, screenshots/) — see docs/README.md
-└── tests/                    # 1,251 unit, integration & E2E tests
+└── tests/                    # 2,100+ unit & integration tests
 ```
 
 ## Two-Layer Orthogonal Output Model
@@ -93,11 +97,17 @@ essay-integrity-checker/
 ## Common Commands
 
 ```bash
-# Run full unit test suite (1,251 tests)
-.venv/bin/python -m pytest tests/unit/ -q
+# Lint backend, tests, and scripts (0 errors required)
+.venv/bin/python -m ruff check src/ tests/ scripts/
 
-# Run pipeline on a PDF and output JSON report to reports/<stem>.json
-.venv/bin/python -m integrity_checker.pipeline.integrity_pipeline thesis.pdf
+# Run full backend unit & integration test suite (2,100+ tests)
+.venv/bin/python -m pytest tests/ -q
+
+# Run frontend ESLint, TypeScript check, Vitest suite (340+ tests), and production build
+cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build
+
+# Run pipeline on a manuscript (.pdf / .docx / .bib / .ris)
+.venv/bin/python -m integrity_checker.pipeline.integrity_pipeline thesis.pdf --output reports/thesis.json
 
 # Launch full Docker stack (GROBID :8070 + FastAPI :8000 + React Web :5173)
 docker compose up -d --build

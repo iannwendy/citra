@@ -24,8 +24,8 @@ const VIEWPORTS = [
 function setupAllResponsiveMocks(page: Page): void {
   setupAuthenticatedPage(page);
 
-  // Mock Teacher endpoints
-  page.route('**/api/classes/dashboard/summary', (route) =>
+  // Mock Teacher endpoints (/api/teacher/*)
+  page.route('**/api/teacher/dashboard', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -40,6 +40,7 @@ function setupAllResponsiveMocks(page: Page): void {
             name: 'CS101 Academic Writing',
             description: 'Fall 2026 Research Methods Cohort',
             teacher_id: 1,
+            join_code: 'CITRA-1010',
             created_at: '2026-09-01T00:00:00Z',
             student_count: 18,
             essay_count: 42,
@@ -49,6 +50,7 @@ function setupAllResponsiveMocks(page: Page): void {
             name: 'AI402 Deep Learning Seminar',
             description: 'Graduate seminar on neural citation verification',
             teacher_id: 1,
+            join_code: 'CITRA-1011',
             created_at: '2026-09-05T00:00:00Z',
             student_count: 10,
             essay_count: 22,
@@ -58,7 +60,7 @@ function setupAllResponsiveMocks(page: Page): void {
     })
   );
 
-  page.route('**/api/classes', (route) => {
+  page.route('**/api/teacher/classes', (route) => {
     if (route.request().method() === 'GET') {
       route.fulfill({
         status: 200,
@@ -69,6 +71,7 @@ function setupAllResponsiveMocks(page: Page): void {
             name: 'CS101 Academic Writing',
             description: 'Fall 2026 Research Methods Cohort',
             teacher_id: 1,
+            join_code: 'CITRA-1010',
             created_at: '2026-09-01T00:00:00Z',
             student_count: 18,
             essay_count: 42,
@@ -80,7 +83,15 @@ function setupAllResponsiveMocks(page: Page): void {
     }
   });
 
-  page.route('**/api/classes/10/students', (route) =>
+  page.route('**/api/teacher/enrolled-classes', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([]),
+    })
+  );
+
+  page.route('**/api/teacher/classes/10/students', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -90,7 +101,7 @@ function setupAllResponsiveMocks(page: Page): void {
     })
   );
 
-  page.route('**/api/classes/10/essays', (route) =>
+  page.route('**/api/teacher/classes/10/essays', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -107,7 +118,29 @@ function setupAllResponsiveMocks(page: Page): void {
     })
   );
 
-  page.route('**/api/classes/10/pending-reviews', (route) =>
+  page.route('**/api/teacher/classes/10/analytics', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        class_id: 10,
+        class_name: 'CS101 Academic Writing',
+        total_students: 18,
+        total_essays: 42,
+        average_cis: 91.4,
+        verdict_breakdown: {
+          verified: 310,
+          metadata_error: 24,
+          suspected_hallucination: 5,
+          unresolved: 8,
+          resource: 12,
+        },
+        shared_hallucinations: [],
+      }),
+    })
+  );
+
+  page.route('**/api/teacher/classes/10/pending-reviews', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -164,25 +197,44 @@ function setupAllResponsiveMocks(page: Page): void {
     }
   });
 
-  page.route('**/api/admin/audit-log*', (route) =>
+  const auditEntries = [
+    {
+      id: 1,
+      verdict_id: 101,
+      user: 'admin',
+      original_label: 'suspected_hallucination',
+      new_label: 'metadata_error',
+      note: 'Verified conference preprint year discrepancy',
+      logged_at: '2026-01-15T12:00:00Z',
+    },
+  ];
+  page.route('**/api/audit/logs*', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify([
-        {
-          id: 1,
-          verdict_id: 101,
-          user: 'admin',
-          original_label: 'suspected_hallucination',
-          new_label: 'metadata_error',
-          note: 'Verified conference preprint year discrepancy',
-          logged_at: '2026-01-15T12:00:00Z',
-        },
-      ]),
+      body: JSON.stringify(auditEntries),
+    })
+  );
+  page.route('**/api/audit/log*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(auditEntries),
+    })
+  );
+  page.route('**/api/audit/stats*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        total_overrides: 1,
+        by_user: { admin: 1 },
+        by_new_label: { metadata_error: 1 },
+      }),
     })
   );
 
-  page.route('**/api/admin/system-health', (route) =>
+  page.route('**/api/system/health', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',

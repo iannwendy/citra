@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { encodeQrMatrix } from '@/lib/qrCode';
 import {
   ArrowLeft,
   Lock,
@@ -510,6 +511,15 @@ export function StripeDemoCheckoutPage() {
   const handlePaySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sessionId) return;
+
+    if (details && (details.amount_usd <= 0 || details.payment_mode === 'promo_waiver')) {
+      await executePaymentVerification({
+        method: 'card',
+        brand: 'promo_waiver',
+        last4: 'FREE',
+      });
+      return;
+    }
 
     const digits = cardNumber.replace(/\D/g, '');
     if (digits === '4000000000000002') {
@@ -1305,7 +1315,7 @@ export function StripeDemoCheckoutPage() {
                       autoComplete="cc-number"
                       inputMode="numeric"
                       className="font-mono text-sm h-11 rounded-xl pr-24"
-                      required
+                      required={!(details.amount_usd <= 0 || details.payment_mode === 'promo_waiver')}
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
                       {cardBrand === 'visa' && <VisaLogo active />}
@@ -1337,7 +1347,7 @@ export function StripeDemoCheckoutPage() {
                       inputMode="numeric"
                       maxLength={5}
                       className="font-mono text-sm h-11 rounded-xl"
-                      required
+                      required={!(details.amount_usd <= 0 || details.payment_mode === 'promo_waiver')}
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
@@ -1359,7 +1369,7 @@ export function StripeDemoCheckoutPage() {
                       inputMode="numeric"
                       maxLength={4}
                       className="font-mono text-sm h-11 rounded-xl"
-                      required
+                      required={!(details.amount_usd <= 0 || details.payment_mode === 'promo_waiver')}
                     />
                   </div>
                 </div>
@@ -1384,7 +1394,7 @@ export function StripeDemoCheckoutPage() {
                     placeholder="FULL NAME ON CARD"
                     autoComplete="cc-name"
                     className="text-sm h-11 rounded-xl uppercase"
-                    required
+                    required={!(details.amount_usd <= 0 || details.payment_mode === 'promo_waiver')}
                   />
                 </div>
 
@@ -1435,7 +1445,7 @@ export function StripeDemoCheckoutPage() {
                       placeholder="700000"
                       autoComplete="postal-code"
                       className="font-mono text-sm h-11 rounded-xl"
-                      required
+                      required={!(details.amount_usd <= 0 || details.payment_mode === 'promo_waiver')}
                     />
                   </div>
                 </div>
@@ -2147,38 +2157,47 @@ export function StripeDemoCheckoutPage() {
                     <span>VietQR · VNPAY-QR EMVCo Dynamic Code</span>
                   </div>
 
-                  {/* Stylized QR Code Frame */}
-                  <div className="w-44 h-44 mx-auto p-3 rounded-2xl bg-white border-2 border-[#005BAA] shadow-md flex flex-col items-center justify-center relative">
-                    <svg
-                      viewBox="0 0 120 120"
-                      className="w-full h-full text-slate-900"
-                      aria-label="VNPAY-QR Code"
-                    >
-                      {/* Top-left finder */}
-                      <rect x="6" y="6" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="6" />
-                      <rect x="14" y="14" width="14" height="14" fill="currentColor" />
-                      {/* Top-right finder */}
-                      <rect x="84" y="6" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="6" />
-                      <rect x="92" y="14" width="14" height="14" fill="currentColor" />
-                      {/* Bottom-left finder */}
-                      <rect x="6" y="84" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="6" />
-                      <rect x="14" y="92" width="14" height="14" fill="currentColor" />
-                      {/* Data modules */}
-                      <rect x="44" y="10" width="8" height="8" fill="currentColor" />
-                      <rect x="60" y="10" width="12" height="8" fill="currentColor" />
-                      <rect x="44" y="24" width="12" height="8" fill="currentColor" />
-                      <rect x="64" y="24" width="8" height="12" fill="currentColor" />
-                      <rect x="10" y="44" width="12" height="8" fill="currentColor" />
-                      <rect x="28" y="48" width="8" height="12" fill="currentColor" />
-                      <rect x="84" y="46" width="10" height="10" fill="currentColor" />
-                      <rect x="100" y="52" width="12" height="8" fill="currentColor" />
-                      <rect x="12" y="64" width="16" height="8" fill="currentColor" />
-                      <rect x="44" y="84" width="12" height="8" fill="currentColor" />
-                      <rect x="64" y="88" width="8" height="16" fill="currentColor" />
-                      <rect x="84" y="80" width="14" height="10" fill="currentColor" />
-                      <rect x="102" y="96" width="12" height="14" fill="currentColor" />
-                      <rect x="46" y="102" width="14" height="10" fill="currentColor" />
-                    </svg>
+                  {/* Real ISO/IEC 18004 QR Code Frame */}
+                  <div className="w-44 h-44 mx-auto p-2.5 rounded-2xl bg-white border-2 border-[#005BAA] shadow-md flex flex-col items-center justify-center relative">
+                    {(() => {
+                      const rawUrl = vnpayGatewayData?.payment_url ?? '';
+                      const qrPayload =
+                        rawUrl && new TextEncoder().encode(rawUrl).length <= 390
+                          ? rawUrl
+                          : `https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_TxnRef=${encodeURIComponent(
+                              vnpayGatewayData?.vnp_txn_ref || sessionId,
+                            )}&vnp_Amount=${encodeURIComponent(
+                              String(vnpayGatewayData?.vnp_amount || 0),
+                            )}`;
+                      const qrMatrix = encodeQrMatrix(qrPayload);
+                      const quietZone = 2;
+                      const viewSize = qrMatrix.length + quietZone * 2;
+                      return (
+                        <svg
+                          data-testid="vnpay-iso-qr-svg"
+                          viewBox={`0 0 ${viewSize} ${viewSize}`}
+                          shapeRendering="crispEdges"
+                          className="w-full h-full text-slate-900"
+                          aria-label="VNPAY-QR Code"
+                        >
+                          <rect x="0" y="0" width={viewSize} height={viewSize} fill="#ffffff" />
+                          {qrMatrix.map((row, rIdx) =>
+                            row.map((cell, cIdx) =>
+                              cell === 1 ? (
+                                <rect
+                                  key={`${rIdx}-${cIdx}`}
+                                  x={cIdx + quietZone}
+                                  y={rIdx + quietZone}
+                                  width={1}
+                                  height={1}
+                                  fill="#0f172a"
+                                />
+                              ) : null,
+                            ),
+                          )}
+                        </svg>
+                      );
+                    })()}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <span className="px-1.5 py-0.5 rounded bg-white border border-[#005BAA] text-[9px] font-black shadow-xs">
                         <span className="text-[#ED1C24]">VN</span>

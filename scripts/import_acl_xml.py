@@ -14,10 +14,11 @@ import sys
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from integrity_checker.database import LocalDatabase, Paper
+from integrity_checker.database import LocalDatabase, Paper  # noqa: E402
 
 
 def parse_acl_xml(

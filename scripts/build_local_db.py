@@ -21,10 +21,13 @@ import argparse
 import sys
 from pathlib import Path
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from integrity_checker.database import LocalDatabase
+from integrity_checker.database import LocalDatabase  # noqa: E402
 
 
 def build_acl_database(db_path: Path, limit: int | None = None) -> int:

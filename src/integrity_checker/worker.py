@@ -15,12 +15,8 @@ from typing import TYPE_CHECKING
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from integrity_checker.api import job_recovery
 from integrity_checker.api.deps import get_pipeline
-from integrity_checker.api.job_recovery import (
-    recover_orphaned_essay_jobs,
-    refund_upload_quota_once,
-    resolve_persisted_upload_path,
-)
 from integrity_checker.api.progress import get_tracker
 from integrity_checker.db import session as db_session
 from integrity_checker.db.models import EssayRecord
@@ -73,6 +69,7 @@ async def run_worker_loop(
     max_iterations: int | None = None,
     recover_on_startup: bool = True,
     stale_heartbeat_seconds: float = 300.0,
+    heartbeat_interval: float = 30.0,
 ) -> dict[str, int]:
     """Continuously claim and execute queued essay analysis jobs until stopped."""
     from integrity_checker.api.routes import essays as essays_routes
@@ -82,7 +79,7 @@ async def run_worker_loop(
     pipeline_instance: IntegrityPipeline | None = None
 
     if recover_on_startup:
-        recovery_stats = recover_orphaned_essay_jobs(
+        recovery_stats = job_recovery.recover_orphaned_essay_jobs(
             pipe_factory,
             session_factory=sess_factory,
             uploads_dir=uploads_dir,
@@ -128,13 +125,13 @@ async def run_worker_loop(
             continue
 
         essay_id, user_id, filename = claimed_info
-        upload_path = resolve_persisted_upload_path(
+        upload_path = job_recovery.resolve_persisted_upload_path(
             essay_id, filename=filename, uploads_dir=uploads_dir
         )
         if upload_path is None:
             err_sess = sess_factory()
             try:
-                refund_upload_quota_once(
+                job_recovery.refund_upload_quota_once(
                     err_sess,
                     essay_id,
                     "Uploaded document file missing on disk.",
@@ -148,13 +145,40 @@ async def run_worker_loop(
             pipeline_instance = pipe_factory()
 
         get_tracker().init(essay_id)
-        await essays_routes._run_pipeline_task(
-            essay_id,
-            str(upload_path),
-            user_id,
-            pipeline_instance,
-            cleanup_file=False,
-        )
+        hb_stop = asyncio.Event()
+
+        async def _heartbeat_pump(
+            target_eid: int,
+            stop_ev_hb: asyncio.Event,
+        ) -> None:
+            interval_s = max(0.01, float(heartbeat_interval))
+            while not stop_ev_hb.is_set():
+                try:
+                    await asyncio.wait_for(stop_ev_hb.wait(), timeout=interval_s)
+                    break
+                except TimeoutError:
+                    await asyncio.to_thread(
+                        job_recovery.refresh_job_heartbeat,
+                        target_eid,
+                        session_factory=sess_factory,
+                    )
+
+        hb_task = asyncio.create_task(_heartbeat_pump(essay_id, hb_stop))
+        try:
+            await essays_routes._run_pipeline_task(
+                essay_id,
+                str(upload_path),
+                user_id,
+                pipeline_instance,
+                cleanup_file=False,
+            )
+        finally:
+            hb_stop.set()
+            hb_task.cancel()
+            try:
+                await hb_task
+            except asyncio.CancelledError:
+                pass
 
         check_sess = sess_factory()
         try:

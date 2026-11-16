@@ -16,13 +16,10 @@ import argparse
 import concurrent.futures
 import hashlib
 import json
-import os
 import re
-import subprocess
 import sys
 import unicodedata
 from pathlib import Path
-from urllib.parse import quote
 
 import fitz  # PyMuPDF
 import requests

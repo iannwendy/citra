@@ -1,23 +1,25 @@
-.PHONY: help setup sample demo api web test lint format clean
+.PHONY: help setup sample demo api web test test-unit test-integration lint format clean
 
 # --- Default ---
 help:
-	@echo "Essay Integrity Checker — common commands"
+	@echo "CITRA (Essay Integrity Checker) — common commands"
 	@echo ""
-	@echo "  make setup    Tạo venv + install dependencies"
-	@echo "  make sample   Generate sample essays"
-	@echo "  make demo     Run CLI demo trên 1 PDF mẫu"
-	@echo "  make api      Run FastAPI backend (uvicorn --reload)"
-	@echo "  make web      Run Vite dev server (frontend)"
-	@echo "  make test     Run pytest"
-	@echo "  make lint     Run ruff + black check"
-	@echo "  make format   Auto-format code"
-	@echo "  make clean    Remove caches + generated data"
+	@echo "  make setup            Create .venv + install runtime & dev dependencies"
+	@echo "  make sample           Generate sample essays"
+	@echo "  make demo             Run CLI demo on a sample PDF"
+	@echo "  make api              Run FastAPI backend (uvicorn --reload)"
+	@echo "  make web              Run Vite dev server (frontend)"
+	@echo "  make test             Run full pytest suite"
+	@echo "  make test-unit        Run unit pytest suite"
+	@echo "  make test-integration Run integration pytest suite"
+	@echo "  make lint             Run ruff lint across src/, tests/, and scripts/"
+	@echo "  make format           Auto-fix & format code with ruff"
+	@echo "  make clean            Remove caches + generated temporary artifacts"
 
 # --- Setup ---
 setup:
-	python -m venv .venv
-	. .venv/bin/activate && pip install --upgrade pip && pip install -r requirements-dev.txt
+	python3 -m venv .venv
+	. .venv/bin/activate && pip install --upgrade pip && pip install -r requirements-dev.txt && pip install --no-build-isolation --no-deps -e .
 	cp -n .env.example .env || true
 	cp -n configs/config.example.yaml configs/config.yaml || true
 
@@ -45,17 +47,15 @@ test-unit:
 	. .venv/bin/activate && pytest tests/unit/ -v
 
 test-integration:
-	. .venv/bin/activate && pytest tests/integration/ -v -m integration
+	. .venv/bin/activate && pytest tests/integration/ -v
 
-# --- Lint ---
+# --- Lint & Format (Ruff) ---
 lint:
-	. .venv/bin/activate && ruff check src/ tests/
-	. .venv/bin/activate && black --check src/ tests/
+	. .venv/bin/activate && ruff check src/ tests/ scripts/
 
 format:
-	. .venv/bin/activate && ruff check --fix src/ tests/
-	. .venv/bin/activate && black src/ tests/
-	. .venv/bin/activate && isort src/ tests/
+	. .venv/bin/activate && ruff check --fix src/ tests/ scripts/
+	. .venv/bin/activate && ruff format src/ tests/ scripts/
 
 # --- Cleanup ---
 clean:

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import UTC, datetime
 from io import BytesIO
-from typing import Any, Literal
+from typing import IO, Any, Literal
 
 from defusedxml.ElementTree import fromstring as safe_fromstring
 from docx import Document
@@ -15,26 +16,61 @@ from docx.oxml.ns import nsdecls
 from docx.shared import Pt, RGBColor
 
 _MAX_DOCX_PART_BYTES = 50 * 1024 * 1024
+_MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
 _HEX_COLOR_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
+_XML_ILLEGAL_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]")
 
 
-def _docx_xml_is_safe(docx_path: str) -> bool:
+def _sanitize_xml_text(val: Any) -> str:
+    """Strip XML 1.0 illegal ASCII control chars (e.g. PDF \\x0c form-feed) before lxml writes."""
+    if val is None:
+        return ""
+    return _XML_ILLEGAL_CTRL_RE.sub("", str(val))
+
+
+def _sanitize_xml_value(obj: Any) -> Any:
+    """Recursively strip XML-illegal control characters from strings/dicts/lists."""
+    if isinstance(obj, str):
+        return _XML_ILLEGAL_CTRL_RE.sub("", obj)
+    if isinstance(obj, dict):
+        return {_sanitize_xml_value(k): _sanitize_xml_value(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_xml_value(item) for item in obj]
+    if isinstance(obj, tuple):
+        return tuple(_sanitize_xml_value(item) for item in obj)
+    return obj
+
+
+def _docx_xml_is_safe(docx_path: str | os.PathLike[str] | IO[bytes]) -> bool:
     """Validate every XML part of an untrusted .docx with defusedxml.
 
-    Rejects packages whose parts declare DTDs/entities (billion laughs, XXE),
-    are malformed, or are oversized (zip bomb) before python-docx opens them.
+    Rejects packages missing word/document.xml, declaring DTDs/entities (billion laughs, XXE),
+    malformed XML, or oversized parts/archives (zip bomb) before python-docx opens them.
     """
     import zipfile
 
     try:
         with zipfile.ZipFile(docx_path, "r") as zf:
-            for info in zf.infolist():
+            infos = zf.infolist()
+            lower_names = {info.filename.replace("\\", "/").lower() for info in infos}
+            if "word/document.xml" not in lower_names:
+                return False
+            total_uncompressed = 0
+            for info in infos:
+                total_uncompressed += max(0, int(info.file_size or 0))
+                if total_uncompressed > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES:
+                    return False
                 name = info.filename.lower()
                 if not (name.endswith(".xml") or name.endswith(".rels")):
                     continue
                 if info.file_size > _MAX_DOCX_PART_BYTES:
                     return False
-                safe_fromstring(zf.read(info), forbid_dtd=True)
+                safe_fromstring(
+                    zf.read(info),
+                    forbid_dtd=True,
+                    forbid_entities=True,
+                    forbid_external=True,
+                )
     except Exception:
         return False
     return True
@@ -116,6 +152,13 @@ def export_report_to_docx(
     Returns:
         bytes: DOCX file content
     """
+    filename = _sanitize_xml_text(filename)
+    generated_at = _sanitize_xml_text(generated_at) if generated_at is not None else None
+    verdicts = _sanitize_xml_value(verdicts) or []
+    linking_summary = _sanitize_xml_value(linking_summary)
+    style_profile = _sanitize_xml_value(style_profile)
+    document_diagnostics = _sanitize_xml_value(document_diagnostics)
+
     doc = Document()
 
     # Title
@@ -507,7 +550,9 @@ def export_report_to_docx(
                 build_remediated_bibliography,
             )
 
-            rem_data = build_remediated_bibliography(essay_id=0, verdicts=verdicts, style="apa")
+            rem_data = _sanitize_xml_value(
+                build_remediated_bibliography(essay_id=0, verdicts=verdicts, style="apa")
+            )
             rem_entries = rem_data.get("entries") or []
             if rem_entries:
                 doc.add_heading("Auto-Remediated Bibliography & BibTeX Studio", level=1)
@@ -519,7 +564,7 @@ def export_report_to_docx(
                     disp_idx = e.get("display_index") or e.get("composite_label") or e.get("index")
                     if e.get("is_hallucination") or e_lbl == "suspected_hallucination":
                         r_warn = p_rem.add_run(
-                            f"[{disp_idx}] [CẢNH BÁO ĐỎ — SUSPECTED HALLUCINATION / NGUỒN BỊA ĐẶT: CẦN LOẠI BỎ]\n"
+                            f"[{disp_idx}] [CẢNH BÁO ĐỎ — SUSPECTED HALLUCINATION / NGHI VẤN NGUỒN BỊA ĐẶT: CẦN KIỂM TRA]\n"
                         )
                         r_warn.bold = True
                         r_warn.font.color.rgb = RGBColor(220, 38, 38)
@@ -694,9 +739,13 @@ def export_auto_healed_docx(
 
     from integrity_checker.export.bibliography_formatter import build_remediated_bibliography
 
+    essay_filename = _sanitize_xml_text(essay_filename)
+    verdicts = _sanitize_xml_value(verdicts) or []
     s_low = (style or "apa").strip().lower()
     norm_style = s_low if s_low in ("apa", "ieee", "tdtu") else "apa"
-    rem_data = build_remediated_bibliography(essay_id=0, verdicts=verdicts, style=norm_style)
+    rem_data = _sanitize_xml_value(
+        build_remediated_bibliography(essay_id=0, verdicts=verdicts, style=norm_style)
+    )
     entries: list[dict[str, Any]] = rem_data.get("entries") or []
 
     def _select_style_text(e: dict[str, Any]) -> str:
@@ -738,7 +787,7 @@ def export_auto_healed_docx(
     else:
         processed_entry_idxs: set[int] = set()
         for para in doc.paragraphs:
-            p_text = (para.text or "").strip()
+            p_text = _sanitize_xml_text(para.text or "").strip()
             if len(p_text) < 12:
                 continue
             p_lower = p_text.lower()
@@ -972,7 +1021,7 @@ def export_auto_healed_docx(
             row_cells[2].text = ", ".join(str(f) for f in diff_fields) if diff_fields else "—"
             row_cells[3].text = str(e.get("original_raw") or "")
             if e.get("is_hallucination"):
-                after_text = "[DO NOT CITE — UNVERIFIED / FABRICATED SOURCE]"
+                after_text = "[REVIEW REQUIRED — SUSPECTED HALLUCINATION / UNVERIFIED SOURCE]"
             elif inline_badge in (
                 "[INCOMPLETE METADATA — MANUAL COMPLETION REQUIRED]",
                 "[UNRESOLVED — MANUAL CHECK]",

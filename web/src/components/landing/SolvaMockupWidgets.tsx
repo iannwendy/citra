@@ -542,14 +542,14 @@ export function HeroVerificationMockup({
             </div>
             <div className="flex items-center justify-between">
               <span style={{ color: 'var(--solva-muted)' }} className="font-mono">
-                {lang === 'vi' ? 'Ngữ cảnh NLI:' : 'NLI Stance:'}
+                {lang === 'vi' ? 'Đối sánh ngữ nghĩa:' : 'Semantic Align:'}
               </span>
               <span className="font-mono text-emerald-700 dark:text-emerald-300 font-medium">
                 {selected.tone === 'red' ? (
                   lang === 'vi' ? 'KHÔNG THỂ XÁC THỰC (Thiếu bài gốc)' : 'UNVERIFIABLE (No Abstract)'
                 ) : (
                   <>
-                    {lang === 'vi' ? 'ĐỒNG THUẬN (DeBERTa ' : 'SUPPORTS (DeBERTa '}
+                    {lang === 'vi' ? 'TƯƠNG ĐỒNG (MiniLM ONNX ' : 'ALIGNED (MiniLM ONNX '}
                     <SubtleNumber value={selected.nliScore.toFixed(2)} />
                     )
                   </>
@@ -850,7 +850,7 @@ export function FeatureCardWidget({
     );
   }
 
-  // Widget 3: Neuro-Symbolic + DeBERTa NLI Stance
+  // Widget 3: Neuro-Symbolic + Sentence-BERT / Multilingual MiniLM ONNX INT8
   const simScores = [0.97, 0.98, 0.97];
   const stancePercents = [94, 96, 94];
   const currentSim = simScores[cycleStep % simScores.length];
@@ -871,7 +871,7 @@ export function FeatureCardWidget({
           className="text-[12px] font-medium flex items-center gap-1.5"
         >
           <Scale className="w-3.5 h-3.5" />
-          {lang === 'vi' ? 'Suy luận Logic & Ngữ nghĩa NLI' : 'Neuro-Symbolic & NLI'}
+          {lang === 'vi' ? 'Suy luận Logic & Ngữ nghĩa' : 'Neuro-Symbolic & Semantic'}
         </span>
         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:text-[#1C1A15]">
           {SYMBOLIC_RULES_RANGE}
@@ -911,10 +911,10 @@ export function FeatureCardWidget({
         >
           <div className="flex items-center justify-between text-[10px] font-mono">
             <span style={{ color: 'var(--solva-muted)' }}>
-              {lang === 'vi' ? 'NGỮ CẢNH DeBERTa-v3 NLI' : 'DeBERTa-v3 CLAIM STANCE'}
+              {lang === 'vi' ? 'NGỮ NGHĨA MINILM ONNX INT8' : 'MINILM ONNX INT8 ALIGNMENT'}
             </span>
             <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
-              {lang === 'vi' ? 'ĐỒNG THUẬN (' : 'SUPPORTS ('}
+              {lang === 'vi' ? 'KHỚP (' : 'ALIGNED ('}
               <SubtleNumber value={currentStance} suffix="%" />)
             </span>
           </div>
@@ -934,7 +934,7 @@ export function FeatureCardWidget({
         }}
         className="pt-2 border-t flex items-center justify-between text-[11px]"
       >
-        <span style={{ color: 'var(--solva-muted)' }}>MiniLM-L6 + CrossEncoder</span>
+        <span style={{ color: 'var(--solva-muted)' }}>Sentence-BERT + MiniLM ONNX INT8</span>
         <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
           {lang === 'vi' ? 'AI Giải thích được' : 'Explainable AI'}
         </span>
@@ -1414,24 +1414,24 @@ export function PipelineStageVisual({
     {
       badge:
         lang === 'vi'
-          ? 'GIAI ĐOẠN 04 · NGỮ NGHĨA SENTENCE-BERT & DeBERTa-v3 NLI'
-          : 'STAGE 04 · SENTENCE-BERT & DeBERTa-v3 NLI STANCE',
+          ? 'GIAI ĐOẠN 04 · SENTENCE-BERT & MULTILINGUAL MINILM ONNX INT8'
+          : 'STAGE 04 · SENTENCE-BERT & MULTILINGUAL MINILM ONNX INT8',
       title:
         lang === 'vi'
-          ? 'Thẩm định sự tương thích ngữ nghĩa & Mức độ đồng thuận của bài gốc'
-          : 'Contextual Claim-to-Abstract Semantic & Stance Verification',
+          ? 'Thẩm định sự tương thích ngữ nghĩa xuyên ngôn ngữ của bài gốc'
+          : 'Cross-Lingual Claim-to-Abstract Semantic Alignment',
       metrics: [
         {
-          k: 'Bi-Encoder',
+          k: 'Sentence-BERT',
           v: lang === 'vi' ? 'Độ tương đồng Cosine sâu all-MiniLM-L6-v2' : 'all-MiniLM-L6-v2 Dense Cosine Similarity',
         },
         {
-          k: 'Cross-Encoder',
-          v: lang === 'vi' ? 'Bộ tái xếp hạng chuẩn xác ms-marco-MiniLM-L-6-v2' : 'ms-marco-MiniLM-L-6-v2 Precision Re-ranker',
+          k: 'Multilingual ONNX',
+          v: lang === 'vi' ? 'Mô hình đa ngôn ngữ MiniLM-L12-v2 ONNX INT8' : 'paraphrase-multilingual-MiniLM-L12-v2 ONNX INT8',
         },
         {
-          k: lang === 'vi' ? 'Phân tích ngữ cảnh NLI' : 'Stance Classifier',
-          v: lang === 'vi' ? 'DeBERTa-v3 NLI (ĐỒNG THUẬN / BÁC BỎ / TRUNG LẬP)' : 'DeBERTa-v3 NLI (SUPPORTS / REFUTES / NEUTRAL)',
+          k: lang === 'vi' ? 'Đối sánh ngữ cảnh' : 'Claim Alignment',
+          v: lang === 'vi' ? 'So khớp ngữ nghĩa câu trích dẫn ↔ tóm tắt bài gốc' : 'Focal In-Text Sentence ↔ Source Abstract Alignment',
         },
       ],
     },

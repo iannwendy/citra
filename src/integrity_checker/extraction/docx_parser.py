@@ -13,6 +13,7 @@ import unicodedata
 import zipfile
 from pathlib import Path
 
+from defusedxml import DefusedXmlException
 from defusedxml.ElementTree import fromstring as safe_fromstring
 
 from integrity_checker.extraction.base import BasePDFParser, Document, Page
@@ -22,6 +23,12 @@ from integrity_checker.logging import get_logger
 logger = get_logger(__name__)
 
 _WORD_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+# Upper bounds against crafted DOCX ZIP bombs / oversized XML parts before python-docx loads XML
+_MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
+_MAX_DOCX_XML_MEMBER_BYTES = 50 * 1024 * 1024
+_MAX_DOCX_ARCHIVE_ENTRIES = 5000
+_NOTES_XML_MEMBERS = frozenset({"word/footnotes.xml", "word/endnotes.xml"})
 
 # Upper bound for word/footnotes.xml / endnotes.xml (uncompressed) — real notes
 # parts are a few hundred KB; anything bigger is treated as a zip bomb.
@@ -51,10 +58,68 @@ class DocxParser(BasePDFParser):
     # Approximate characters per logical page when explicit page breaks are absent
     CHARS_PER_PAGE = 3200
 
+    @staticmethod
+    def _validate_docx_archive(path: Path) -> None:
+        """Reject ZIP bombs (> 100 MB uncompressed) and core DTD/XXE payloads before python-docx opens the archive."""
+        try:
+            with zipfile.ZipFile(path, "r") as zf:
+                infos = zf.infolist()
+                if len(infos) > _MAX_DOCX_ARCHIVE_ENTRIES:
+                    raise ValueError(
+                        f"DOCX archive has too many entries ({len(infos)} > {_MAX_DOCX_ARCHIVE_ENTRIES})"
+                    )
+                declared_total = sum(max(0, info.file_size) for info in infos)
+                if declared_total > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES:
+                    raise ValueError(
+                        f"DOCX archive uncompressed size ({declared_total} bytes) exceeds 100 MB limit"
+                    )
+                streamed_total = 0
+                for info in infos:
+                    member_lower = info.filename.lower()
+                    is_xml = member_lower.endswith((".xml", ".rels"))
+                    if is_xml and info.file_size > _MAX_DOCX_XML_MEMBER_BYTES:
+                        raise ValueError(
+                            f"DOCX XML member '{info.filename}' ({info.file_size} bytes) exceeds 50 MB limit"
+                        )
+                    # Stream-verify actual uncompressed size on XML/rels parts (defends against spoofed file_size headers)
+                    if is_xml and member_lower not in _NOTES_XML_MEMBERS:
+                        xml_buf = bytearray()
+                        with zf.open(info, "r") as member_fp:
+                            while True:
+                                chunk = member_fp.read(65536)
+                                if not chunk:
+                                    break
+                                xml_buf.extend(chunk)
+                                streamed_total += len(chunk)
+                                if (
+                                    len(xml_buf) > _MAX_DOCX_XML_MEMBER_BYTES
+                                    or streamed_total > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES
+                                ):
+                                    raise ValueError(
+                                        "DOCX archive uncompressed stream exceeds 100 MB limit (possible ZIP bomb)"
+                                    )
+                        if xml_buf:
+                            try:
+                                safe_fromstring(bytes(xml_buf), forbid_dtd=True)
+                            except DefusedXmlException as exc:
+                                raise ValueError(
+                                    f"Unsafe XML entity/DTD in DOCX member '{info.filename}'"
+                                ) from exc
+                    else:
+                        streamed_total += max(0, info.file_size)
+                        if streamed_total > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES:
+                            raise ValueError(
+                                "DOCX archive uncompressed size exceeds 100 MB limit"
+                            )
+        except zipfile.BadZipFile as exc:
+            raise ValueError(f"Invalid or corrupted DOCX ZIP archive: {path}") from exc
+
     def parse(self, file_path: str | Path) -> Document:
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"DOCX file not found: {path}")
+
+        self._validate_docx_archive(path)
 
         try:
             import docx  # type: ignore

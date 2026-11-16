@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from integrity_checker.api.deps import get_current_user, get_db
-from integrity_checker.db.models import AuditLog, ClassMembership, User
+from integrity_checker.db.models import AuditLog, User
 from integrity_checker.db.repository import Repository
 from integrity_checker.linking.statuses import CitationMappingStatus
 from integrity_checker.models.api_schemas import VerdictSchema
@@ -156,7 +156,9 @@ def _build_verdict_schema(
     if ovr_note is None:
         ovr_note = getattr(r, "override_reason", None)
     if ovr_note is None and audit_info:
-        ovr_note = audit_info.get("note")
+        raw_audit_note = audit_info.get("note")
+        if isinstance(raw_audit_note, str):
+            ovr_note = re.sub(r"\s*\[mapping_status:[^\]]+\]\s*$", "", raw_audit_note).strip() or None
 
     ovr_by = getattr(r, "overridden_by", None)
     if ovr_by is None and audit_info:
@@ -178,9 +180,21 @@ def _build_verdict_schema(
             or getattr(r, "original_label", None)
             or r.label
         )
+        orig_status = (
+            features.get("original_mapping_status")
+            or getattr(r, "original_mapping_status", None)
+            or (r.mapping_status or "matched")
+        )
+        cur_status = str(r.mapping_status or "matched")
         override_record = {
             "original_label": str(orig_lbl),
             "overridden_label": str(r.label),
+            "previous_label": str(orig_lbl),
+            "new_label": str(r.label),
+            "original_status": str(orig_status),
+            "overridden_status": cur_status,
+            "previous_status": str(orig_status),
+            "new_status": cur_status,
             "reason": ovr_note or "",
             "overridden_by": ovr_by or "",
             "overridden_at": ovr_at,
@@ -370,19 +384,8 @@ def override_verdict(
     if current_user.role == "admin":
         pass  # admins override anything
     elif current_user.role == "teacher":
-        if essay.user_id == current_user.id:
-            pass  # teacher's own uploaded essay
-        else:
-            # Teacher may override if essay belongs to a student in one of
-            # their classes.
-            teacher_class_ids = {c.id for c in repo.list_classes_for_teacher(current_user.id)}
-            student_class_ids = {
-                m.class_id for m in repo.session.query(ClassMembership).filter(
-                    ClassMembership.student_id == essay.user_id,
-                ).all()
-            } if essay.user_id else set()
-            if not (teacher_class_ids & student_class_ids):
-                raise HTTPException(status_code=403, detail="Access denied")
+        if not repo.can_user_access_essay(current_user, essay):
+            raise HTTPException(status_code=403, detail="Access denied")
     else:
         raise HTTPException(status_code=403, detail="Students are not permitted to override verdicts")
 
@@ -400,8 +403,9 @@ def override_verdict(
     if existing_verdict is None:
         raise HTTPException(status_code=404, detail="Verdict not found for this essay")
 
+    was_already_overridden = bool(getattr(existing_verdict, "is_overridden", False))
     original_label = existing_verdict.label
-    original_mapping_status = existing_verdict.mapping_status
+    original_mapping_status = existing_verdict.mapping_status or "matched"
     now_dt = datetime.now(UTC)
     now_iso = now_dt.isoformat()
 
@@ -424,25 +428,33 @@ def override_verdict(
     updated_features = _load_features_dict(getattr(updated, "features", None))
     if original_label and not updated_features.get("original_label"):
         updated_features["original_label"] = original_label
+    if original_mapping_status and not updated_features.get("original_mapping_status"):
+        updated_features["original_mapping_status"] = original_mapping_status
     updated_features["overridden_at"] = now_iso
     updated.features = json.dumps(updated_features, ensure_ascii=False)
 
     # Recalculate essay CIS score so report reflects the override immediately
     repo.recalculate_essay_cis(essay_id)
 
-    # AuditLog: capture original label/status so the override trail is auditable.
+    # AuditLog: capture original label & mapping_status transitions so the override trail is auditable.
     label_changed = original_label is not None and original_label != body.new_label
     mapping_changed = (
         body.new_mapping_status is not None
         and original_mapping_status != body.new_mapping_status
     )
-    if original_label is not None and (label_changed or mapping_changed):
+    if original_label is not None and (
+        label_changed or mapping_changed or not was_already_overridden
+    ):
+        audit_note = body.reason
+        if mapping_changed:
+            mapping_tag = f"[mapping_status: {original_mapping_status} -> {body.new_mapping_status}]"
+            audit_note = f"{body.reason} {mapping_tag}".strip() if body.reason else mapping_tag
         repo.log_audit(
             verdict_id=v_id,
             original_label=original_label,
             new_label=body.new_label,
             user=current_user.username,
-            note=body.reason,
+            note=audit_note,
         )
 
     # Commit

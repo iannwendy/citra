@@ -600,6 +600,59 @@ class Settings(BaseSettings):
                 elif norm_bool in {"0", "false", "no", "off"}:
                     setattr(self.matching, attr_name, False)
 
+        # Paths & config file env overrides (.env.example parity)
+        env_data_dir = (os.getenv("DATA_DIR") or "").strip()
+        env_cache_dir = (os.getenv("CACHE_DIR") or "").strip()
+        env_essays_dir = (os.getenv("ESSAYS_DIR") or "").strip()
+        env_grobid_dir = (os.getenv("GROBID_OUTPUT_DIR") or "").strip()
+        if env_data_dir:
+            new_data_dir = Path(env_data_dir)
+            if not env_essays_dir and self.paths.essays_dir == Path("./data/essays"):
+                self.paths.essays_dir = new_data_dir / "essays"
+            if not env_cache_dir and self.paths.cache_dir == Path("./data/cache"):
+                self.paths.cache_dir = new_cache_dir_default = new_data_dir / "cache"
+                if not env_grobid_dir and self.paths.grobid_output_dir == Path("./data/cache/grobid"):
+                    self.paths.grobid_output_dir = new_cache_dir_default / "grobid"
+            self.paths.data_dir = new_data_dir
+        if env_essays_dir:
+            self.paths.essays_dir = Path(env_essays_dir)
+        if env_cache_dir:
+            new_cache_dir = Path(env_cache_dir)
+            if not env_grobid_dir and self.paths.grobid_output_dir == Path("./data/cache/grobid"):
+                self.paths.grobid_output_dir = new_cache_dir / "grobid"
+            self.paths.cache_dir = new_cache_dir
+        if env_grobid_dir:
+            self.paths.grobid_output_dir = Path(env_grobid_dir)
+        if self.config_file is None:
+            raw_cfg_env = (os.getenv("CONFIG_FILE") or "").strip()
+            if raw_cfg_env:
+                self.config_file = Path(raw_cfg_env)
+
+        # Threshold env overrides (.env.example parity)
+        for env_key, target_obj, attr_name in (
+            ("ABSTENTION_LOW", self.logic, "abstention_low"),
+            ("ABSTENTION_HIGH", self.logic, "abstention_high"),
+            ("TITLE_SIM_VERIFIED", self.matching, "title_sim_verified"),
+            ("TITLE_SIM_METADATA_ERROR", self.matching, "title_sim_metadata_error"),
+            ("AUTHOR_JACCARD_VERIFIED", self.matching, "author_jaccard_verified"),
+        ):
+            raw_thresh = os.getenv(env_key)
+            if raw_thresh and raw_thresh.strip():
+                try:
+                    parsed_thresh = float(raw_thresh.strip())
+                    if 0.0 <= parsed_thresh <= 1.0:
+                        setattr(target_obj, attr_name, parsed_thresh)
+                except ValueError:
+                    pass
+        raw_yr_tol = os.getenv("YEAR_TOLERANCE")
+        if raw_yr_tol and raw_yr_tol.strip():
+            try:
+                parsed_yr = int(raw_yr_tol.strip())
+                if parsed_yr >= 0:
+                    self.matching.year_tolerance = parsed_yr
+            except ValueError:
+                pass
+
         is_explicit_prod = self.app.env.strip().lower() in ("production", "prod", "live")
         if is_test_runtime():
             if not is_explicit_prod:
@@ -644,21 +697,35 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Lazy singleton — load .env + YAML nếu có, merge với env."""
     # Load .env file first
+    import os
+
     from dotenv import load_dotenv
+
     # Respect process-level overrides (pytest, Docker, CI) over the local
     # developer .env file.  The previous ``override=True`` made APP_ENV=test
     # ineffective and accidentally enabled production report/local-db caches
     # during tests.
+
     env_path = Path(".env") if Path(".env").exists() else (PROJECT_ROOT / ".env")
     load_dotenv(env_path, override=False)
 
-    config_file = Path("configs/config.yaml")
-    if not config_file.exists():
-        config_file = PROJECT_ROOT / "configs/config.yaml"
-    if not config_file.exists():
-        config_file = Path("configs/config.example.yaml")
-    if not config_file.exists():
-        config_file = PROJECT_ROOT / "configs/config.example.yaml"
+    config_file: Path | None = None
+    env_cfg = (os.getenv("CONFIG_FILE") or "").strip()
+    if env_cfg:
+        cand_cfg = Path(env_cfg)
+        if cand_cfg.exists():
+            config_file = cand_cfg
+        elif not cand_cfg.is_absolute() and (PROJECT_ROOT / cand_cfg).exists():
+            config_file = PROJECT_ROOT / cand_cfg
+
+    if config_file is None:
+        config_file = Path("configs/config.yaml")
+        if not config_file.exists():
+            config_file = PROJECT_ROOT / "configs/config.yaml"
+        if not config_file.exists():
+            config_file = Path("configs/config.example.yaml")
+        if not config_file.exists():
+            config_file = PROJECT_ROOT / "configs/config.example.yaml"
 
     yaml_data: dict[str, Any] = {}
     if config_file.exists():

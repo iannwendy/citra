@@ -17,6 +17,8 @@ import asyncio
 import os
 import random
 import re
+import threading
+import time
 from contextvars import ContextVar
 from typing import Any
 
@@ -93,8 +95,12 @@ class SerpApiClient(BaseScholarClient):
     SERPER_SCHOLAR_URL = "https://google.serper.dev/scholar"
     name = "serpapi"
     MAX_NEGATIVE_CACHE_SIZE = 2048
+    QUOTA_COOLDOWN_SECONDS: float = 900.0
+    _state_lock = threading.Lock()
     _quota_exhausted: bool = False
     _serper_quota_exhausted: bool = False
+    _quota_exhausted_until: float = 0.0
+    _serper_quota_exhausted_until: float = 0.0
     _negative_query_cache: set[tuple[str, str]] = set()
 
     def __init__(
@@ -151,20 +157,77 @@ class SerpApiClient(BaseScholarClient):
     @classmethod
     def reset_circuit_breakers(cls) -> None:
         """Reset both Serper and SerpApi quota circuit breakers and negative query cache."""
-        SerpApiClient._quota_exhausted = False
-        SerpApiClient._serper_quota_exhausted = False
-        SerpApiClient._negative_query_cache.clear()
+        with SerpApiClient._state_lock:
+            SerpApiClient._quota_exhausted = False
+            SerpApiClient._serper_quota_exhausted = False
+            SerpApiClient._quota_exhausted_until = 0.0
+            SerpApiClient._serper_quota_exhausted_until = 0.0
+            SerpApiClient._negative_query_cache.clear()
+
+    @classmethod
+    def _trip_serper_quota(cls) -> None:
+        with SerpApiClient._state_lock:
+            SerpApiClient._serper_quota_exhausted = True
+            SerpApiClient._serper_quota_exhausted_until = (
+                time.monotonic() + cls.QUOTA_COOLDOWN_SECONDS
+            )
+
+    @classmethod
+    def _trip_serpapi_quota(cls) -> None:
+        with SerpApiClient._state_lock:
+            SerpApiClient._quota_exhausted = True
+            SerpApiClient._quota_exhausted_until = (
+                time.monotonic() + cls.QUOTA_COOLDOWN_SECONDS
+            )
+
+    @classmethod
+    def _is_serper_quota_exhausted(cls) -> bool:
+        with SerpApiClient._state_lock:
+            if not SerpApiClient._serper_quota_exhausted:
+                SerpApiClient._serper_quota_exhausted_until = 0.0
+                return False
+            now = time.monotonic()
+            if SerpApiClient._serper_quota_exhausted_until <= 0.0:
+                SerpApiClient._serper_quota_exhausted_until = now + cls.QUOTA_COOLDOWN_SECONDS
+                return True
+            if now >= SerpApiClient._serper_quota_exhausted_until:
+                SerpApiClient._serper_quota_exhausted = False
+                SerpApiClient._serper_quota_exhausted_until = 0.0
+                return False
+            return True
+
+    @classmethod
+    def _is_serpapi_quota_exhausted(cls) -> bool:
+        with SerpApiClient._state_lock:
+            if not SerpApiClient._quota_exhausted:
+                SerpApiClient._quota_exhausted_until = 0.0
+                return False
+            now = time.monotonic()
+            if SerpApiClient._quota_exhausted_until <= 0.0:
+                SerpApiClient._quota_exhausted_until = now + cls.QUOTA_COOLDOWN_SECONDS
+                return True
+            if now >= SerpApiClient._quota_exhausted_until:
+                SerpApiClient._quota_exhausted = False
+                SerpApiClient._quota_exhausted_until = 0.0
+                return False
+            return True
+
+    @classmethod
+    def _has_negative_cache(cls, cache_key: tuple[str, str]) -> bool:
+        with SerpApiClient._state_lock:
+            return cache_key in SerpApiClient._negative_query_cache
 
     @classmethod
     def _record_negative_cache(cls, cache_key: tuple[str, str]) -> None:
-        if len(SerpApiClient._negative_query_cache) >= cls.MAX_NEGATIVE_CACHE_SIZE:
-            # Evict an arbitrary half when full to bound memory in long-lived workers
-            for _ in range(cls.MAX_NEGATIVE_CACHE_SIZE // 2):
-                try:
-                    SerpApiClient._negative_query_cache.pop()
-                except KeyError:
-                    break
-        SerpApiClient._negative_query_cache.add(cache_key)
+        with SerpApiClient._state_lock:
+            if len(SerpApiClient._negative_query_cache) >= cls.MAX_NEGATIVE_CACHE_SIZE:
+                # Evict an arbitrary half when full to bound memory in long-lived workers
+                for _ in range(cls.MAX_NEGATIVE_CACHE_SIZE // 2):
+                    try:
+                        SerpApiClient._negative_query_cache.pop()
+                    except KeyError:
+                        break
+            SerpApiClient._negative_query_cache.add(cache_key)
 
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Lookup paper trên Google Scholar qua Serper.dev (ưu tiên 1) -> SerpApi (dự phòng 2)."""
@@ -179,8 +242,8 @@ class SerpApiClient(BaseScholarClient):
                 error="SerpApi: No API key configured",
             )
 
-        serper_available = has_serper and not SerpApiClient._serper_quota_exhausted
-        serpapi_available = has_serpapi and not SerpApiClient._quota_exhausted
+        serper_available = has_serper and not self._is_serper_quota_exhausted()
+        serpapi_available = has_serpapi and not self._is_serpapi_quota_exhausted()
 
         if not serper_available and not serpapi_available:
             return SourceCandidate(
@@ -205,7 +268,7 @@ class SerpApiClient(BaseScholarClient):
             )
 
         cache_key = (query.strip().lower(), str(citation.year or "").strip())
-        if cache_key in SerpApiClient._negative_query_cache:
+        if self._has_negative_cache(cache_key):
             return SourceCandidate(
                 source_name=self.name,
                 found=False,
@@ -243,13 +306,13 @@ class SerpApiClient(BaseScholarClient):
                 return self._serper_result_to_candidate(serper_item)
 
             # Serper encountered quota exhaustion or HTTP/network error -> try SerpApi if available
-            if has_serpapi and not SerpApiClient._quota_exhausted:
+            if has_serpapi and not self._is_serpapi_quota_exhausted():
                 logger.warning(
                     f"Serper Scholar unavailable ({self._last_serper_error or 'quota/error'}); "
                     f"falling back to SerpApi for '{query[:60]}'"
                 )
             else:
-                if SerpApiClient._serper_quota_exhausted:
+                if self._is_serper_quota_exhausted():
                     return SourceCandidate(
                         source_name=self.name,
                         found=False,
@@ -269,7 +332,7 @@ class SerpApiClient(BaseScholarClient):
                 error="SerpApi: Quota exhausted (circuit breaker active)",
             )
 
-        if SerpApiClient._quota_exhausted:
+        if self._is_serpapi_quota_exhausted():
             return SourceCandidate(
                 source_name=self.name,
                 found=False,
@@ -279,7 +342,7 @@ class SerpApiClient(BaseScholarClient):
         self._last_api_error = None
         result = await self._search_with_retry(query, citation)
 
-        if SerpApiClient._quota_exhausted:
+        if self._is_serpapi_quota_exhausted():
             return SourceCandidate(
                 source_name=self.name,
                 found=False,
@@ -412,7 +475,7 @@ class SerpApiClient(BaseScholarClient):
                         if ("message" in data or "error" in data) and "organic" not in data and "organic_results" not in data:
                             err_msg = str(data.get("message") or data.get("error") or "Serper error")
                             if any(kw in err_msg.lower() for kw in _SERPER_QUOTA_KEYWORDS):
-                                SerpApiClient._serper_quota_exhausted = True
+                                self._trip_serper_quota()
                                 logger.warning(f"Serper Scholar quota circuit breaker tripped: {err_msg}")
                             self._last_serper_error = err_msg
                             return None, False
@@ -447,7 +510,7 @@ class SerpApiClient(BaseScholarClient):
                         if status in (401, 402, 403) or any(
                             kw in err_summary.lower() for kw in _SERPER_QUOTA_KEYWORDS
                         ):
-                            SerpApiClient._serper_quota_exhausted = True
+                            self._trip_serper_quota()
                             logger.warning(
                                 f"Serper Scholar circuit breaker tripped (HTTP {status}): {err_summary}"
                             )
@@ -458,9 +521,9 @@ class SerpApiClient(BaseScholarClient):
                         kw in err_summary.lower()
                         for kw in ("not enough credits", "out of credits", "insufficient credits", "quota exceeded")
                     ):
-                        SerpApiClient._serper_quota_exhausted = True
+                        self._trip_serper_quota()
                         logger.warning(
-                            f"Serper Scholar quota exhausted (HTTP 429): {err_summary}"
+                            f"Serper Scholar quota exhausted (HTTP {status}): {err_summary}"
                         )
                         self._last_serper_error = f"Serper HTTP 429: {err_summary}"
                         return None, False
@@ -610,7 +673,7 @@ class SerpApiClient(BaseScholarClient):
                 err_str = str(data.get("error") or "")
                 err_lower = err_str.lower()
                 if any(kw in err_lower for kw in _SERPAPI_QUOTA_KEYWORDS):
-                    SerpApiClient._quota_exhausted = True
+                    self._trip_serpapi_quota()
                     logger.warning(f"SerpApi quota circuit breaker tripped: {err_str}")
                 elif "hasn't returned any results" not in err_lower and "no results" not in err_lower:
                     self._last_api_error = err_str
@@ -621,7 +684,7 @@ class SerpApiClient(BaseScholarClient):
                 if status != "Success":
                     error_msg = str(data.get("error", "Unknown SerpApi error"))
                     if any(kw in error_msg.lower() for kw in _SERPAPI_QUOTA_KEYWORDS):
-                        SerpApiClient._quota_exhausted = True
+                        self._trip_serpapi_quota()
                     else:
                         self._last_api_error = error_msg
                     logger.warning(f"SerpApi status={status}: {error_msg}")

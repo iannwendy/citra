@@ -557,7 +557,7 @@ export function SystemHealthPage() {
             </span>
           </div>
           <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
-            {data.totals.teachers}
+            {data.totals.teachers ?? 0}
           </p>
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">
             {t('admin.teachers')}

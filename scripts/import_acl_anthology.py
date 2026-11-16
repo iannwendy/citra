@@ -13,10 +13,11 @@ import re
 import sys
 from pathlib import Path
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from integrity_checker.database import LocalDatabase, Paper
+from integrity_checker.database import LocalDatabase, Paper  # noqa: E402
 
 
 def parse_bibtex(bibtex_text: str) -> list[Paper]:
@@ -41,7 +42,6 @@ def parse_bibtex(bibtex_text: str) -> list[Paper]:
 
     for match in entry_pattern.finditer(bibtex_text):
         entry_type = match.group(1).lower()
-        entry_id = match.group(2).strip()
         fields_text = match.group(3)
 
         # Skip non-paper entries
@@ -132,14 +132,16 @@ def download_acl_anthology(output_path: Path) -> Path:
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         total = 0
-        with urllib.request.urlopen(url, timeout=timeout) as response:
-            with open(output_path, 'wb') as f:
-                while True:
-                    chunk = response.read(chunk_size)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    total += len(chunk)
+        with (
+            urllib.request.urlopen(url, timeout=timeout) as response,
+            open(output_path, 'wb') as f,
+        ):
+            while True:
+                chunk = response.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+                total += len(chunk)
 
         if total == 0:
             raise OSError("downloaded 0 bytes")

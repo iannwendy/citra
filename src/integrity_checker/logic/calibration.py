@@ -648,12 +648,16 @@ class HybridMLScorer:
         *,
         has_candidate: bool | None = None,
         style_penalty: float = 0.0,
+        triggered_rules: Sequence[str] | None = None,
     ) -> float:
         """Blend symbolic confidence with ML class probability and apply Platt scaling.
 
         Preserves deterministic boundary invariants:
             - Zero confidence (e.g. R-FAIL-ALL) stays 0.0.
             - Style penalty strictly reduces confidence compared to unpenalized baseline.
+            - Pure absence-of-evidence (R-NO-SCHOLARLY-RECORD without positive fabrication
+              indicators) is capped at <= 0.88 so unindexed legitimate works are never
+              reported with near-certain 98.9% hallucination confidence.
         """
         if symbolic_confidence <= 0.0:
             return 0.0
@@ -675,6 +679,31 @@ class HybridMLScorer:
 
         if style_penalty > 0.0:
             calibrated = max(0.05, calibrated - style_penalty)
+
+        if label_key == "suspected_hallucination":
+            _positive_fabrication_rules = {
+                "R-FAKE-URL",
+                "R-FABRICATED-DOI",
+                "R-NONEXISTENT-DOI",
+                "R-DEAD-URL",
+                "R-CHIMERIC-DOI-MISMATCH",
+                "R-DOI-METADATA-MISMATCH",
+                "R-FAKE-AUTHOR",
+                "R-FUTURE-YEAR",
+                "R-VN-LEGAL-FABRICATED",
+            }
+            if triggered_rules is not None:
+                rules_set = set(triggered_rules)
+                is_absence_only = "R-NO-SCHOLARLY-RECORD" in rules_set and not (
+                    rules_set & _positive_fabrication_rules
+                )
+            else:
+                vec = self.extract_feature_vector(features, has_candidate=has_candidate)
+                is_absence_only = (
+                    vec[8] == 0.0 and vec[2] == 0.0 and vec[5] == 0.0 and base_sym <= 0.85
+                )
+            if is_absence_only:
+                calibrated = min(calibrated, max(0.05, 0.88 - max(0.0, style_penalty)))
 
         return round(calibrated, 4)
 

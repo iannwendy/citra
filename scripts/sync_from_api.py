@@ -12,21 +12,24 @@ Or use as a module:
     sync_paper_to_db(db, source_candidate)
 """
 
+from __future__ import annotations
+
 import argparse
 import sys
 from pathlib import Path
 from typing import Any
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from integrity_checker.database import LocalDatabase, Paper
+from integrity_checker.database import LocalDatabase, Paper  # noqa: E402
 
 
 def sync_paper_to_db(
     db: LocalDatabase,
     source_candidate: Any,
-    source: str = "api"
+    source: str = "api",
 ) -> bool:
     """Sync a paper from API result to local database.
 
@@ -38,70 +41,50 @@ def sync_paper_to_db(
     Returns:
         True if paper was added, False if already exists or failed
     """
-    # Check if already exists
+    ext_ids = dict(getattr(source_candidate, "external_ids", None) or {})
+    arxiv_id = getattr(source_candidate, "arxiv_id", None) or ext_ids.get("arxiv")
+
     if source_candidate.doi:
         existing = db.find_by_doi(source_candidate.doi)
         if existing:
-            return False  # Already exists
+            return False
 
-    if source_candidate.arxiv_id:
-        existing = db.find_by_arxiv_id(source_candidate.arxiv_id)
+    if arxiv_id:
+        existing = db.find_by_arxiv_id(arxiv_id)
         if existing:
-            return False  # Already exists
+            return False
 
-    # Create paper
     paper = Paper(
         doi=source_candidate.doi,
-        arxiv_id=source_candidate.arxiv_id if hasattr(source_candidate, 'arxiv_id') else None,
+        arxiv_id=arxiv_id,
         title=source_candidate.title or "",
         authors=source_candidate.authors or [],
         year=int(source_candidate.year) if source_candidate.year else None,
         venue=source_candidate.venue,
-        abstract=None,  # External APIs may not provide abstract
+        abstract=getattr(source_candidate, "abstract", None),
         categories=[],
-        external_ids=source_candidate.external_ids or {},
+        external_ids=ext_ids,
         source=source,
     )
 
-    # Add to database
     paper_id = db.add_paper(paper)
     return paper_id is not None
 
 
 def sync_from_query_log(db: LocalDatabase, source: str = "api") -> int:
-    """Sync papers from recent query logs that weren't found.
-
-    This looks at query_log entries where found=0 and tries to
-    resolve them via the API.
-
-    Args:
-        db: LocalDatabase instance
-        source: Default source for synced papers
-
-    Returns:
-        Number of papers synced
-    """
+    """Sync papers from recent query logs that weren't found."""
+    _ = (db, source)
     print("Syncing from query log is not yet implemented.")
     print("This requires API access.")
     return 0
 
 
 def export_to_bibtex(db: LocalDatabase, output_path: Path, limit: int = 1000) -> int:
-    """Export papers from database to BibTeX format.
-
-    Args:
-        db: LocalDatabase instance
-        output_path: Path to output BibTeX file
-        limit: Maximum papers to export
-
-    Returns:
-        Number of papers exported
-    """
+    """Export papers from database to BibTeX format."""
     papers = db.get_all_papers(limit=limit)
 
     lines = []
-    for i, paper in enumerate(papers):
-        # Generate citation key
+    for paper in papers:
         first_author = paper.authors[0].split()[-1] if paper.authors else "Unknown"
         year = paper.year or "nd"
         key = f"{first_author}{year}"
@@ -127,50 +110,46 @@ def export_to_bibtex(db: LocalDatabase, output_path: Path, limit: int = 1000) ->
 
         lines.append("}")
 
-    # Write to file
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, 'w', encoding='utf-8') as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
     print(f"Exported {len(papers)} papers to {output_path}")
     return len(papers)
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Sync papers from API to local database"
-    )
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Sync papers from API to local database")
     parser.add_argument(
-        '--db-path',
+        "--db-path",
         type=Path,
-        default=Path('./data/local_papers.db'),
-        help='Path to local database'
+        default=Path("./data/local_papers.db"),
+        help="Path to local database",
     )
     parser.add_argument(
-        '--stats',
-        action='store_true',
-        help='Show database statistics'
+        "--stats",
+        action="store_true",
+        help="Show database statistics",
     )
     parser.add_argument(
-        '--export-bibtex',
+        "--export-bibtex",
         type=Path,
-        metavar='OUTPUT',
-        help='Export to BibTeX file'
+        metavar="OUTPUT",
+        help="Export to BibTeX file",
     )
     parser.add_argument(
-        '--export-limit',
+        "--export-limit",
         type=int,
         default=1000,
-        help='Maximum papers to export'
+        help="Maximum papers to export",
     )
     parser.add_argument(
-        '--delete-all',
-        action='store_true',
-        help='Delete all papers (for testing)'
+        "--delete-all",
+        action="store_true",
+        help="Delete all papers (for testing)",
     )
 
     args = parser.parse_args()
-
     db = LocalDatabase(args.db_path)
 
     if args.stats:
@@ -180,8 +159,8 @@ def main():
         print(f"  Total queries: {stats['total_queries']}")
         print(f"  Hit rate: {stats['hit_rate_percent']:.1f}%")
         print("\nPapers by source:")
-        for source, count in stats['source_counts'].items():
-            print(f"    {source}: {count}")
+        for src_name, count in stats["source_counts"].items():
+            print(f"    {src_name}: {count}")
 
     if args.export_bibtex:
         export_to_bibtex(db, args.export_bibtex, args.export_limit)
@@ -191,5 +170,5 @@ def main():
         print(f"Deleted {count} papers")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

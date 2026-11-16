@@ -312,21 +312,107 @@ def get_vnpay_response_message(code: str) -> tuple[str, str]:
     return entry["en"], entry["vi"]
 
 
-def validate_vnpay_production_secret(app_env: str | None = None) -> None:
-    """Raise ValueError in production when VNPAY_HASH_SECRET uses VNPAY_DEFAULT_HASH_SECRET with VNPAY_EXTERNAL_REDIRECT=true."""
+_INSECURE_VNPAY_SECRETS: frozenset[str] = frozenset(
+    {
+        "",
+        VNPAY_DEFAULT_HASH_SECRET,
+        "change-me-in-production",
+        "change-me-in-production-use-env-var",
+        "your-vnpay-hash-secret",
+        "your-vnpay-hmac-sha512-secret",
+        "changeme",
+        "secret",
+    }
+)
+
+
+def is_insecure_vnpay_secret(secret: str | None) -> bool:
+    """Return True if a VNPay HMAC-SHA512 secret is empty, default sandbox, placeholder, or too short."""
+    cleaned = (secret or "").strip()
+    if not cleaned or cleaned in _INSECURE_VNPAY_SECRETS:
+        return True
+    low = cleaned.lower()
+    if "change-me" in low or "your-vnpay" in low or "placeholder" in low:
+        return True
+    return len(cleaned) < 16
+
+
+def validate_vnpay_production_secret(
+    app_env: str | None = None,
+    hash_secret: str | None = None,
+) -> None:
+    """Raise ValueError in production when VNPAY_HASH_SECRET is missing, default, or weak."""
     effective_env = (app_env or os.getenv("APP_ENV", "")).strip().lower()
     is_prod = effective_env in ("production", "prod", "live")
-    env_ext = os.getenv("VNPAY_EXTERNAL_REDIRECT", "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
+    raw_secret = (
+        hash_secret.strip()
+        if hash_secret is not None
+        else os.getenv("VNPAY_HASH_SECRET", "").strip()
     )
-    raw_secret = os.getenv("VNPAY_HASH_SECRET", "").strip()
-    if is_prod and env_ext and (not raw_secret or raw_secret == VNPAY_DEFAULT_HASH_SECRET):
+    if is_prod and is_insecure_vnpay_secret(raw_secret):
         raise ValueError(
-            "VNPAY_HASH_SECRET cannot use VNPAY_DEFAULT_HASH_SECRET in production when VNPAY_EXTERNAL_REDIRECT=true."
+            "VNPAY_HASH_SECRET must be explicitly configured with a strong non-default "
+            "secret in production (cannot be empty or use VNPAY_DEFAULT_HASH_SECRET)."
         )
+
+
+def validate_vnpay_return_url(
+    return_url: str,
+    *,
+    frontend_url: str | None = None,
+) -> str:
+    """Validate that vnp_ReturnUrl belongs to the allowlisted FRONTEND_URL origin."""
+    raw = (return_url or "").strip()
+    if not raw or "\r" in raw or "\n" in raw or "\\" in raw:
+        raise ValueError("Invalid VNPay return_url.")
+
+    base_frontend = (
+        frontend_url
+        or os.getenv("FRONTEND_URL", "http://localhost:5173")
+        or "http://localhost:5173"
+    ).strip().rstrip("/")
+    frontend_split = urllib.parse.urlsplit(base_frontend)
+    if frontend_split.scheme.lower() not in ("http", "https") or not frontend_split.netloc:
+        base_frontend = "http://localhost:5173"
+        frontend_split = urllib.parse.urlsplit(base_frontend)
+
+    # Allow clean single-slash relative paths resolved onto FRONTEND_URL
+    if raw.startswith("/") and not raw.startswith("//"):
+        raw = f"{base_frontend}{raw}"
+
+    parsed = urllib.parse.urlsplit(raw)
+    scheme = parsed.scheme.lower()
+    netloc = parsed.netloc.lower()
+    if scheme not in ("http", "https") or not netloc:
+        raise ValueError("VNPay return_url must use http or https with a valid host.")
+    if parsed.username is not None or parsed.password is not None or "@" in parsed.netloc:
+        raise ValueError("VNPay return_url must not contain userinfo credentials.")
+
+    allowed_origins: set[tuple[str, str]] = {
+        (frontend_split.scheme.lower(), frontend_split.netloc.lower())
+    }
+    env_vnp_ret = os.getenv("VNPAY_RETURN_URL", "").strip()
+    if env_vnp_ret:
+        vnp_split = urllib.parse.urlsplit(env_vnp_ret)
+        if vnp_split.scheme.lower() in ("http", "https") and vnp_split.netloc:
+            allowed_origins.add((vnp_split.scheme.lower(), vnp_split.netloc.lower()))
+
+    cors_raw = os.getenv("CORS_ALLOWED_ORIGINS", "").strip()
+    if cors_raw:
+        for origin_item in cors_raw.split(","):
+            item = origin_item.strip()
+            if not item or item == "*":
+                continue
+            c_split = urllib.parse.urlsplit(item)
+            if c_split.scheme.lower() in ("http", "https") and c_split.netloc:
+                allowed_origins.add((c_split.scheme.lower(), c_split.netloc.lower()))
+
+    if (scheme, netloc) not in allowed_origins:
+        raise ValueError(
+            f"Untrusted VNPay return_url origin '{scheme}://{netloc}'. "
+            f"Must match FRONTEND_URL ({frontend_split.scheme}://{frontend_split.netloc})."
+        )
+    return raw
 
 
 class VNPayService:
@@ -347,11 +433,12 @@ class VNPayService:
             or os.getenv("VNPAY_TMN_CODE", "").strip()
             or VNPAY_DEFAULT_TMN_CODE
         )
-        self.hash_secret = (
-            hash_secret
-            or os.getenv("VNPAY_HASH_SECRET", "").strip()
-            or VNPAY_DEFAULT_HASH_SECRET
+        self._explicit_hash_secret = (
+            hash_secret.strip()
+            if hash_secret is not None
+            else os.getenv("VNPAY_HASH_SECRET", "").strip()
         )
+        self.hash_secret = self._explicit_hash_secret or VNPAY_DEFAULT_HASH_SECRET
         self.payment_url = (
             payment_url
             or os.getenv("VNPAY_PAYMENT_URL", "").strip()
@@ -427,6 +514,7 @@ class VNPayService:
         expire_minutes: int = 15,
     ) -> dict[str, Any]:
         """Build a signed VNPay v2.1.0 payment URL and return full metadata."""
+        validate_vnpay_production_secret(hash_secret=self._explicit_hash_secret)
         now_vn = (create_date or datetime.now(VN_TZ)).astimezone(VN_TZ)
         expire_vn = now_vn + timedelta(minutes=max(5, expire_minutes))
 
@@ -437,7 +525,9 @@ class VNPayService:
         clean_locale = "en" if (locale or "").strip().lower() == "en" else "vn"
         clean_ip = sanitize_client_ip(ip_addr)
         clean_info = sanitize_order_info(order_info)
-        effective_return_url = (return_url or self.return_url).strip()
+        effective_return_url = validate_vnpay_return_url(
+            (return_url or self.return_url).strip()
+        )
 
         vnp_params: dict[str, str] = {
             "vnp_Version": VNPAY_VERSION,
@@ -511,6 +601,28 @@ class VNPayService:
         except ValueError:
             raw_vnp_amount = -1
         amount_vnd = raw_vnp_amount // 100 if raw_vnp_amount >= 0 else -1
+
+        try:
+            validate_vnpay_production_secret(hash_secret=self._explicit_hash_secret)
+        except ValueError as exc:
+            return VNPayVerifyResult(
+                is_verified=False,
+                is_success=False,
+                response_code=response_code,
+                transaction_status=transaction_status,
+                txn_ref=txn_ref,
+                amount_vnd=amount_vnd,
+                raw_vnp_amount=raw_vnp_amount,
+                bank_code=bank_code,
+                bank_tran_no=bank_tran_no,
+                card_type=card_type,
+                transaction_no=transaction_no,
+                pay_date=pay_date,
+                order_info=order_info,
+                tmn_code=tmn_code,
+                message_en=str(exc),
+                message_vi="Khoá bí mật VNPay trên môi trường Production chưa được cấu hình an toàn.",
+            )
 
         # Reject missing signature or downgraded hash algorithm (must be SHA512 / HMACSHA512)
         if not received_hash or len(received_hash) != 128:

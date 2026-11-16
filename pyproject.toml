@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "essay-integrity-checker"
-version = "3.76.0"
+version = "3.77.0"
 description = "Neuro-Symbolic system for citation integrity scoring and hallucinated reference detection in student essays"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -24,6 +24,9 @@ dependencies = [
     "aiofiles>=23.2,<25.0",
     "PyMuPDF>=1.24,<2.0",
     "pdfplumber>=0.10,<1.0",
+    "numpy>=1.26,<3.0",
+    "scipy>=1.11,<2.0",
+    "scikit-learn>=1.4,<2.0",
     "sentence-transformers>=3.2,<4.0",
     "rapidfuzz>=3.6,<4.0",
     "arxiv>=2.0,<3.0",
@@ -49,7 +52,7 @@ authors = [
 ]
 keywords = ["citation", "hallucination", "neuro-symbolic", "nlp", "education"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Education",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.11",
@@ -61,6 +64,16 @@ classifiers = [
 onnx = [
     "onnxruntime>=1.18,<2.0",
     "optimum[onnxruntime]>=2.0,<3.0",
+]
+dev = [
+    "pytest>=8.0,<10.0",
+    "pytest-asyncio>=0.23,<2.0",
+    "pytest-cov>=4.1,<8.0",
+    "ruff>=0.3,<1.0",
+    "mypy>=1.8,<2.0",
+    "types-PyYAML>=6.0",
+    "fonttools[woff]>=4.50,<5.0",
+    "ipykernel>=6.29,<7.0",
 ]
 
 [project.scripts]

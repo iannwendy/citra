@@ -137,6 +137,7 @@ def get_report(
             repo.get_citations(essay_id),
             repo=repo,
             compare_with=compare_with,
+            current_user=current_user,
         )
     if format == "pdf":
         return _pdf_response(essay.filename, essay, verdicts)
@@ -207,7 +208,13 @@ def get_revision_diff(
         raise HTTPException(status_code=403, detail="Access denied")
 
     verdicts = repo.get_verdicts(essay_id)
-    diff = _compute_revision_diff(repo, essay, verdicts, compare_with_id=compare_with)
+    diff = _compute_revision_diff(
+        repo,
+        essay,
+        verdicts,
+        compare_with_id=compare_with,
+        current_user=current_user,
+    )
     if diff is None:
         return {
             "has_previous_revision": False,
@@ -372,12 +379,21 @@ def _compute_in_text_citation_index(
     return in_text_by_ref, ref_link_by_record_id
 
 
-_CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+_CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@", "|", "\t", "\r", "\n")
+
+
+def _is_csv_formula_string(val: str) -> bool:
+    if not val:
+        return False
+    stripped = val.lstrip(" \t\r\n")
+    return val.startswith(_CSV_DANGEROUS_PREFIXES) or (
+        bool(stripped) and stripped.startswith(("=", "+", "-", "@", "|"))
+    )
 
 
 def _sanitize_csv_cell(val: Any) -> Any:
-    """Neutralize spreadsheet formula injection in CSV string cells."""
-    if isinstance(val, str) and val.startswith(_CSV_DANGEROUS_PREFIXES):
+    """Neutralize spreadsheet formula / DDE injection in CSV string cells (including leading whitespace)."""
+    if isinstance(val, str) and _is_csv_formula_string(val):
         return f"'{val}"
     return val
 
@@ -470,6 +486,7 @@ def _extract_verdict_composite_label(v: Any) -> str | None:
 
 def _csv_response(filename: str, verdicts: list) -> StreamingResponse:
     buf = io.StringIO()
+    buf.write("\ufeff")
     writer = csv.writer(buf)
     # v1.2 CSV: include both integrity + source layers (+ trailing composite_label)
     writer.writerow([
@@ -485,7 +502,7 @@ def _csv_response(filename: str, verdicts: list) -> StreamingResponse:
         if (
             comp_lbl
             and raw_cit
-            and not raw_cit.startswith(_CSV_DANGEROUS_PREFIXES)
+            and not _is_csv_formula_string(raw_cit)
             and not raw_cit.lstrip().startswith(f"[{comp_lbl}]")
         ):
             raw_cit_cell = f"[{comp_lbl}] {raw_cit}"
@@ -696,19 +713,27 @@ def _compute_revision_diff(
     essay,
     current_verdicts: list,
     compare_with_id: int | None = None,
+    *,
+    current_user: User | None = None,
 ) -> dict[str, Any] | None:
     """Compute v1 -> v2 revision delta against a prior essay submission of the same manuscript."""
     # Synthetic Live Sandbox runs are standalone test manuscripts, not v1 -> v2 revisions
     if compare_with_id is None and _is_sandbox_manuscript(getattr(essay, "filename", None)):
         return None
 
+    # SECURITY: Never load all users' essays when essay.user_id is None!
+    if getattr(essay, "user_id", None) is None:
+        return None
+
     try:
-        if essay.user_id is not None:
-            candidates = repo.get_user_essays(essay.user_id)
-        else:
-            candidates = repo.get_all_essays()
+        candidates = repo.get_user_essays(essay.user_id)
     except Exception:
         return None
+
+    if current_user is not None and hasattr(repo, "can_user_access_essay"):
+        candidates = [
+            cand for cand in candidates if repo.can_user_access_essay(current_user, cand)
+        ]
 
     other_essays = [e for e in candidates if e.id != essay.id]
     if not other_essays:
@@ -1006,6 +1031,7 @@ def _json_response(
     citations: list | None = None,
     repo: Repository | None = None,
     compare_with: int | None = None,
+    current_user: User | None = None,
 ) -> StreamingResponse:
     import re as _re
 
@@ -1185,7 +1211,11 @@ def _json_response(
         if ovr_note is None:
             ovr_note = getattr(v, "override_reason", None)
         if ovr_note is None and audit_info:
-            ovr_note = audit_info.get("note")
+            raw_audit_note = audit_info.get("note")
+            if isinstance(raw_audit_note, str):
+                ovr_note = _re.sub(
+                    r"\s*\[mapping_status:[^\]]+\]\s*$", "", raw_audit_note
+                ).strip() or None
 
         ovr_by = getattr(v, "overridden_by", None)
         if ovr_by is None and audit_info:
@@ -1212,9 +1242,20 @@ def _json_response(
                 or getattr(v, "original_label", None)
                 or v.label
             )
+            orig_status = (
+                features_dict.get("original_mapping_status")
+                or getattr(v, "original_mapping_status", None)
+                or status
+            )
             override_record = {
                 "original_label": str(orig_lbl),
                 "overridden_label": str(v.label),
+                "previous_label": str(orig_lbl),
+                "new_label": str(v.label),
+                "original_status": str(orig_status),
+                "overridden_status": str(status),
+                "previous_status": str(orig_status),
+                "new_status": str(status),
                 "reason": ovr_note or "",
                 "overridden_by": ovr_by or "",
                 "overridden_at": ovr_at,
@@ -1378,7 +1419,13 @@ def _json_response(
             essay, style_profile_dict, citations, verdicts
         ),
         "revision_diff": (
-            _compute_revision_diff(repo, essay, verdicts, compare_with_id=compare_with)
+            _compute_revision_diff(
+                repo,
+                essay,
+                verdicts,
+                compare_with_id=compare_with,
+                current_user=current_user,
+            )
             if repo is not None
             else None
         ),
@@ -1969,12 +2016,13 @@ def _healed_docx_response(
 
     orig_docx_path: str | None = None
     try:
+        from integrity_checker.api.routes import essays as essays_routes
         from integrity_checker.config import PROJECT_ROOT
 
         for candidate_path in (
+            essays_routes.UPLOADS_DIR / f"{essay.id}.docx",
             PROJECT_ROOT / "data" / "essays" / "uploads" / f"{essay.id}.docx",
             Path("data/essays/uploads") / f"{essay.id}.docx",
-            Path("data/uploads") / f"{essay.id}_{essay.filename}",
         ):
             if candidate_path.is_file() and candidate_path.suffix.lower() == ".docx":
                 orig_docx_path = str(candidate_path)

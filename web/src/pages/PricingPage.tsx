@@ -79,15 +79,15 @@ interface ComparisonRow {
 
 const COMPARISON_MATRIX: ComparisonRow[] = [
   {
-    category_en: 'Monthly PDF & Word (.docx) Checks',
-    category_vi: 'Số lượt tải & kiểm tra PDF / Word (.docx) / tháng',
+    category_en: 'Monthly Checks (.pdf / .docx / .bib / .ris)',
+    category_vi: 'Số lượt tải & kiểm tra (.pdf / .docx / .bib / .ris) / tháng',
     basic: '3 docs / mo',
     pro: '50 docs / mo',
     ultra: 'Unlimited (1,000/mo)',
   },
   {
-    category_en: 'Maximum File Size (.pdf / .docx)',
-    category_vi: 'Dung lượng file tối đa (.pdf / .docx)',
+    category_en: 'Maximum File Size (.pdf / .docx / .bib / .ris)',
+    category_vi: 'Dung lượng file tối đa (.pdf / .docx / .bib / .ris)',
     basic: '5 MB',
     pro: '25 MB',
     ultra: '100 MB',
@@ -691,20 +691,20 @@ export function PricingPage() {
                       <ul className="space-y-[9px]">
                         {(lang === 'vi'
                           ? [
-                              '3 lượt tải & kiểm tra PDF / tháng',
-                              'Dung lượng tối đa 5 MB / file PDF',
+                              '3 lượt kiểm tra (.PDF, .DOCX, .BIB, .RIS) / tháng',
+                              'Dung lượng tối đa 5 MB / tệp tải lên',
                               'Giới hạn tối đa 15 trang & 30 trích dẫn / bài',
                               'Layer 1: Đối chiếu trích dẫn trong bài & Danh mục',
                               'Tra cứu Local 127K papers, Crossref & OpenAlex',
-                              'Xem điểm CIS tổng quát & Bảng kết luận cơ bản',
+                              'Hệ phân loại 2 tầng 13 trạng thái & Điểm CIS',
                             ]
                           : [
-                              '3 PDF manuscript checks per month',
+                              '3 manuscript checks (.PDF, .DOCX, .BIB, .RIS) / month',
                               'Maximum 5 MB file size per upload',
                               'Up to 15 pages & 30 citations per document',
                               'Layer 1 In-text <-> Bibliography Linking',
                               'Local 127K DB, Crossref & OpenAlex lookup',
-                              'Overall CIS Integrity Score & Verdict Table',
+                              '13-state Two-Layer Taxonomy & CIS Score',
                             ]
                         ).map((feat) => (
                           <li
@@ -912,24 +912,24 @@ export function PricingPage() {
                       <ul className="space-y-[9px]">
                         {(lang === 'vi'
                           ? [
-                              '50 lượt tải & kiểm tra PDF mỗi tháng (Gấp 16 lần)',
+                              '50 lượt kiểm tra (.PDF, .DOCX, .BIB, .RIS) mỗi tháng (Gấp 16 lần)',
                               'Tối đa 25 MB & 100 trang / bài (Đủ cho Khóa luận & Luận văn ThS)',
                               'Kiểm chứng tới 200 trích dẫn / bài + Batch Upload 10 files',
                               'Đầy đủ 15+ nguồn học thuật & kỹ thuật (+DataCite, DOAJ, HAL, NCBI/bioRxiv, HF, RFC)',
                               'Phát hiện bài báo bị rút hồi (Retraction Watch) & cứu hộ Link Rot qua Wayback Machine',
-                              'Deep Neural Sentence-BERT đối chiếu câu bằng chứng & Stance',
+                              'Sentence-BERT + Multilingual MiniLM ONNX INT8 đối chiếu câu bằng chứng',
                               'Cầu nối ngữ nghĩa đa ngôn ngữ (Tiếng Việt ↔ Tiếng Anh)',
                               'Mở khóa Document Inspector, Logic Trace & Đồ thị trích dẫn',
                               'Xuất báo cáo chuẩn học thuật ra PDF, DOCX (Word), CSV & JSON',
                               'Quản lý tới 3 Lớp học (Classrooms) & Ghi đè kết luận (Override)',
                             ]
                           : [
-                              '50 PDF manuscript checks per month (16x Basic)',
+                              '50 manuscript checks (.PDF, .DOCX, .BIB, .RIS) / month (16x Basic)',
                               'Up to 25 MB & 100 pages per document (Full Master/BS Theses)',
                               'Up to 200 citations / doc + 10-file concurrent Batch Upload',
                               'All 15+ Scholarly & Technical APIs (+DataCite, DOAJ, HAL, NCBI/bioRxiv, HF, RFC)',
                               'Retraction Watch Detection & Wayback Machine Link-Rot Rescue',
-                              'Deep Neural Sentence-BERT Evidence & Claim Stance verification',
+                              'Sentence-BERT + Multilingual MiniLM ONNX INT8 semantic alignment',
                               'Cross-lingual semantic bridging (Vietnamese ↔ English)',
                               'Unlock Document Inspector, Logic Trace & Evidence Graph',
                               'Export academic reports in PDF, DOCX (Word), CSV & JSON',
@@ -1600,8 +1600,8 @@ export function PricingPage() {
                           className="font-solva-sans text-[16px] font-normal leading-[23.2px] max-w-[420px]"
                         >
                           {lang === 'vi'
-                            ? 'Bắt đầu miễn phí ngay hôm nay với 3 lượt kiểm tra PDF mỗi tháng, hoặc mở khóa toàn bộ sức mạnh Neuro-Symbolic với gói Pro.'
-                            : 'Start free today with 3 PDF checks per month, or unlock the full Neuro-Symbolic pipeline with CITRA Pro.'}
+                            ? 'Bắt đầu miễn phí ngay hôm nay với 3 lượt kiểm tra (.PDF, .DOCX, .BIB, .RIS) mỗi tháng, hoặc mở khóa toàn bộ sức mạnh Neuro-Symbolic với gói Pro.'
+                            : 'Start free today with 3 checks (.PDF, .DOCX, .BIB, .RIS) per month, or unlock the full Neuro-Symbolic pipeline with CITRA Pro.'}
                         </p>
                       </div>
 
@@ -1710,7 +1710,7 @@ function PricingSolvaHeader({
           },
           {
             title: 'Quy trình 4 giai đoạn',
-            desc: 'Từ GROBID TEI tới DeBERTa NLI',
+            desc: 'Từ GROBID TEI tới Sentence-BERT + MiniLM ONNX',
             href: '/#how-it-works',
             icon: GitBranch,
           },
@@ -1742,7 +1742,7 @@ function PricingSolvaHeader({
           },
           {
             title: 'Verification Pipeline',
-            desc: 'GROBID TEI to DeBERTa NLI stance',
+            desc: 'GROBID TEI to Sentence-BERT + MiniLM ONNX INT8',
             href: '/#how-it-works',
             icon: GitBranch,
           },
@@ -2049,8 +2049,8 @@ function PricingSolvaFAQSection({
           : 'Is the Basic ($0) tier really free forever?',
       a:
         lang === 'vi'
-          ? 'Hoàn toàn miễn phí trọn đời và không yêu cầu thẻ tín dụng. Mỗi tháng tài khoản Basic được cấp mới 3 lượt kiểm tra bản thảo PDF/DOCX (tối đa 15 trang và 30 trích dẫn mỗi bài) cùng đầy đủ phân loại 2 tầng L1 × L2.'
-          : 'Yes — Basic is free forever with no credit card required. Your quota automatically resets every month with 3 PDF/DOCX manuscript checks (up to 15 pages and 30 citations per document).',
+          ? 'Hoàn toàn miễn phí trọn đời và không yêu cầu thẻ tín dụng. Mỗi tháng tài khoản Basic được cấp mới 3 lượt kiểm tra bản thảo (.PDF, .DOCX, .BIB, .RIS — tối đa 15 trang và 30 trích dẫn mỗi bài) cùng đầy đủ phân loại 2 tầng 13 trạng thái (L1 × L2).'
+          : 'Yes — Basic is free forever with no credit card required. Your quota automatically resets every month with 3 manuscript checks (.PDF, .DOCX, .BIB, .RIS — up to 15 pages and 30 citations per document).',
     },
     {
       id: 'pfaq-1',
@@ -2060,8 +2060,8 @@ function PricingSolvaFAQSection({
           : 'What unlocks immediately when I upgrade to Pro ($16/mo)?',
       a:
         lang === 'vi'
-          ? 'Gói Pro nâng hạn mức lên 50 tài liệu/tháng (tối đa 100 trang, 200 trích dẫn/bài), mở khóa toàn bộ 15+ API học thuật & kỹ thuật (PubMed, arXiv, DBLP, DOAJ, DataCite, Retraction Watch, Wayback Machine), đối chiếu câu bằng chứng Sentence-BERT & DeBERTa NLI, 1-Click Auto-Fix Studio, Document Inspector và xuất báo cáo ra PDF/DOCX/CSV.'
-          : 'Pro unlocks 50 manuscripts/month (up to 100 pages & 200 citations each), all 15+ federated scholarly APIs, Sentence-BERT & DeBERTa-v3 NLI claim verification, 1-Click Auto-Fix Studio, interactive PDF bounding-box Document Inspector, and full PDF/DOCX/CSV exports.',
+          ? 'Gói Pro nâng hạn mức lên 50 tài liệu/tháng (tối đa 100 trang, 200 trích dẫn/bài), mở khóa toàn bộ 15+ API học thuật & kỹ thuật (PubMed, arXiv, DBLP, DOAJ, DataCite, Retraction Watch, Wayback Machine), đối chiếu câu bằng chứng Sentence-BERT & Multilingual MiniLM ONNX INT8, 1-Click Auto-Fix Studio, Document Inspector và xuất báo cáo ra PDF/DOCX/CSV.'
+          : 'Pro unlocks 50 manuscripts/month (up to 100 pages & 200 citations each), all 15+ federated scholarly APIs, Sentence-BERT + Multilingual MiniLM ONNX INT8 semantic alignment, 1-Click Auto-Fix Studio, interactive PDF bounding-box Document Inspector, and full PDF/DOCX/CSV exports.',
     },
     {
       id: 'pfaq-2',
@@ -2260,7 +2260,7 @@ function PricingSolvaFooter({ lang }: { lang: Lang }) {
         { label: 'GROBID TEI-XML', href: '/#how-it-works' },
         { label: '15+ Scholarly APIs', href: '/#architecture' },
         { label: 'Neuro-Symbolic Rules', href: '/#interactive-demo' },
-        { label: 'DeBERTa-v3 NLI Stance', href: '/#how-it-works' },
+        { label: 'Sentence-BERT + MiniLM ONNX INT8', href: '/#how-it-works' },
       ],
     },
     {

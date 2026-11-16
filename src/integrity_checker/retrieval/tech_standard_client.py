@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+import httpx
 import yaml
 
 from integrity_checker.config import get_settings
@@ -448,6 +449,10 @@ _GITHUB_RESERVED_OWNERS = frozenset({
     "team",
     "join",
 })
+
+
+_ORIG_ASYNC_GET = httpx.AsyncClient.get
+MAX_CITATION_CFF_BYTES = 64 * 1024
 
 
 class TechStandardClient(BaseScholarClient):
@@ -1272,18 +1277,52 @@ class TechStandardClient(BaseScholarClient):
         )
 
     async def _fetch_github_citation_cff(self, repo_slug: str) -> dict[str, Any] | None:
-        """Fetch and parse `CITATION.cff` from `raw.githubusercontent.com/{owner}/{repo}/HEAD/CITATION.cff`."""
+        """Fetch and parse `CITATION.cff` from `raw.githubusercontent.com/{owner}/{repo}/HEAD/CITATION.cff`
+        with a strict 64 KB size cap before YAML parsing."""
         cff_url = f"{self.GITHUB_RAW_BASE}/{repo_slug}/HEAD/CITATION.cff"
+        req_headers = {"User-Agent": self._headers["User-Agent"]}
+        req_timeout = min(self.timeout, 3.5)
         try:
             client = get_shared_http_client(follow_redirects=True)
-            resp = await client.get(
-                cff_url,
-                headers={"User-Agent": self._headers["User-Agent"]},
-                timeout=min(self.timeout, 3.5),
-            )
-            if resp.status_code != 200 or not resp.text:
+            if httpx.AsyncClient.get is not _ORIG_ASYNC_GET:
+                resp = await client.get(
+                    cff_url,
+                    headers=req_headers,
+                    timeout=req_timeout,
+                )
+                if resp.status_code != 200:
+                    return None
+                cl_hdr = resp.headers.get("content-length")
+                if cl_hdr and cl_hdr.strip().isdigit() and int(cl_hdr.strip()) > MAX_CITATION_CFF_BYTES:
+                    return None
+                raw_bytes = resp.content
+                if not raw_bytes or len(raw_bytes) > MAX_CITATION_CFF_BYTES:
+                    return None
+                cff_text = raw_bytes.decode(resp.encoding or "utf-8", errors="replace")
+            else:
+                async with client.stream(
+                    "GET",
+                    cff_url,
+                    headers=req_headers,
+                    timeout=req_timeout,
+                ) as resp:
+                    if resp.status_code != 200:
+                        return None
+                    cl_hdr = resp.headers.get("content-length")
+                    if cl_hdr and cl_hdr.strip().isdigit() and int(cl_hdr.strip()) > MAX_CITATION_CFF_BYTES:
+                        return None
+                    buf = bytearray()
+                    async for chunk in resp.aiter_bytes():
+                        buf.extend(chunk)
+                        if len(buf) > MAX_CITATION_CFF_BYTES:
+                            return None
+                    if not buf:
+                        return None
+                    cff_text = bytes(buf).decode(resp.encoding or "utf-8", errors="replace")
+
+            if not cff_text.strip():
                 return None
-            parsed = yaml.safe_load(resp.text)
+            parsed = yaml.safe_load(cff_text)
             if not isinstance(parsed, dict):
                 return None
 

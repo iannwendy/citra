@@ -52,9 +52,7 @@ log_err() { printf "${RED}[ERROR]${NC} %s\n" "$*" >&2; }
 # --- Helpers ---
 docker_cmd() {
     if command -v docker >/dev/null 2>&1; then
-        # Always target Docker Desktop.  A stale DOCKER_CONTEXT=colima in the
-        # shell must not silently route this project to a dead Colima socket.
-        DOCKER_CONTEXT=desktop-linux docker "$@"
+        docker "$@"
     else
         log_err "docker not found in PATH. Install Docker Desktop or docker-ce."
         exit 1
@@ -66,7 +64,7 @@ check_docker() {
         log_err "Docker chưa cài. Cài Docker Desktop (https://www.docker.com/products/docker-desktop/) hoặc docker-ce."
         exit 1
     fi
-    if ! DOCKER_CONTEXT=desktop-linux docker info >/dev/null 2>&1; then
+    if ! docker_cmd info >/dev/null 2>&1; then
         log_err "Docker daemon không chạy. Khởi động Docker và thử lại."
         exit 1
     fi

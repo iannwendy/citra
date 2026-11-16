@@ -35,16 +35,16 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from sqlalchemy import text  # noqa: E402
 
-from src.integrity_checker.db.session import get_session  # noqa: E402
-from src.integrity_checker.extraction.reference_parser import (  # noqa: E402
+from integrity_checker.db.session import get_session  # noqa: E402
+from integrity_checker.extraction.reference_parser import (  # noqa: E402
     _estimate_reference_confidence,
 )
-from src.integrity_checker.models.citation import Citation  # noqa: E402
+from integrity_checker.models.citation import Citation  # noqa: E402
 
 # arXiv references appear as "arXiv:1911.09339" or "arxiv.org/abs/1911.09339".
 _ARXIV_RE = re.compile(r"arxiv(?:\.org/abs/|[:/\s]+)(\d{4}\.\d{4,5})", re.IGNORECASE)

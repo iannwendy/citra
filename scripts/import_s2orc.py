@@ -26,10 +26,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from integrity_checker.database import LocalDatabase, Paper
+from integrity_checker.database import LocalDatabase, Paper  # noqa: E402
 
 # arXiv categories to include
 ARXIV_CS_CATEGORIES = {
@@ -131,6 +132,8 @@ def s2orc_to_paper(s2orc_data: dict[str, Any]) -> Paper | None:
 
     # Check S2ORC ID
     s2orc_id = s2orc_data.get('paper_id')
+    if s2orc_id:
+        external_ids['s2orc'] = str(s2orc_id)
 
     return Paper(
         doi=doi,

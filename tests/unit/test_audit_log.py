@@ -168,11 +168,14 @@ def test_list_audit_log_requires_admin(clean_db):
     from integrity_checker.db.repository import Repository
     from integrity_checker.db.session import get_session
 
+    owner_id = _make_user(username="audit_seed_owner", role="user", email="seed_o@example.com")
+    _, verdict_id = _create_essay_with_verdict(owner_id, label="metadata_error")
+
     # Seed one audit row so the test would pass if auth were bypassed.
     session = get_session()
     repo = Repository(session)
     repo.log_audit(
-        verdict_id=1, original_label="metadata_error", new_label="verified",
+        verdict_id=verdict_id, original_label="metadata_error", new_label="verified",
         user="admin", note="seed",
     )
     session.commit()
@@ -192,20 +195,25 @@ def test_list_audit_log_returns_recent_first(clean_db):
     from integrity_checker.db.repository import Repository
     from integrity_checker.db.session import get_session
 
+    owner_id = _make_user(username="audit_recent_owner", role="user", email="recent_o@example.com")
+    _, vid1 = _create_essay_with_verdict(owner_id, label="metadata_error")
+    _, vid2 = _create_essay_with_verdict(owner_id, label="suspected_hallucination")
+    _, vid3 = _create_essay_with_verdict(owner_id, label="metadata_error")
+
     # Seed three audit rows with explicit, distinct logged_at values.
     session = get_session()
     base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
     repo = Repository(session)
     repo.session.add(AuditLog(
-        verdict_id=1, original_label="metadata_error", new_label="verified",
+        verdict_id=vid1, original_label="metadata_error", new_label="verified",
         user="admin", note="oldest", logged_at=base,
     ))
     repo.session.add(AuditLog(
-        verdict_id=2, original_label="suspected_hallucination", new_label="verified",
+        verdict_id=vid2, original_label="suspected_hallucination", new_label="verified",
         user="admin", note="middle", logged_at=base + timedelta(minutes=10),
     ))
     repo.session.add(AuditLog(
-        verdict_id=3, original_label="metadata_error", new_label="suspected_hallucination",
+        verdict_id=vid3, original_label="metadata_error", new_label="suspected_hallucination",
         user="teacher1", note="newest", logged_at=base + timedelta(minutes=20),
     ))
     session.commit()

@@ -56,7 +56,7 @@ class ExplanationGenerator:
         "uncited_reference": "Reference entry không được in-text nào trích dẫn",
         "in_text_mismatch": "In-text và reference entry không khớp (author/year đúng nhưng title khác)",
         "duplicate_reference": "Nhiều reference entry trỏ cùng một nguồn",
-        "ambiguous_mapping": "Nhiều in-text trỏ cùng một reference entry",
+        "ambiguous_mapping": "Một in-text khớp với nhiều mục reference khác nhau nhưng chưa thể phân giải duy nhất",
         "style_inconsistent": "Style trích dẫn không nhất quán trong tài liệu",
         "unresolved": "Chưa đủ thông tin để xác định",
     }
@@ -160,8 +160,8 @@ class ExplanationGenerator:
             "Đảm bảo tất cả in-text trỏ đến cùng một entry sau khi gộp.",
         ],
         "ambiguous_mapping": [
-            "Cần giảng viên xác định in-text nào trỏ đến reference nào.",
-            "Có thể cần hỏi sinh viên để làm rõ.",
+            "Kiểm tra hậu tố năm (ví dụ 2020a, 2020b) hoặc đồng tác giả để xác định in-text trỏ đến mục reference nào.",
+            "Đề nghị sinh viên bổ sung ký hiệu phân biệt năm trong in-text và danh mục tham khảo.",
         ],
         "style_inconsistent": [
             "Kiểm tra xem tài liệu có copy từ nhiều nguồn với style khác nhau không.",

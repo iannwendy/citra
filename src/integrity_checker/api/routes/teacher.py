@@ -13,12 +13,14 @@ import csv
 import io
 import json
 import re
+import zipfile
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from integrity_checker.api.deps import get_current_user, get_db, require_teacher
@@ -36,6 +38,11 @@ router = APIRouter()
 
 class ClassCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class ClassUpdate(BaseModel):
+    name: str | None = Field(default=None, max_length=120)
     description: str | None = Field(default=None, max_length=1000)
 
 
@@ -317,8 +324,11 @@ def create_class(
     teacher: User = Depends(require_teacher),
     db: Session = Depends(get_db),
 ):
-    """Teacher tạo class mới (admin cũng OK)."""
+    """Teacher tạo class mới (admin cũng OK). Duplicate check scoped per teacher."""
     repo = Repository(db)
+    clean_name = (request.name or "").strip()
+    if not clean_name:
+        raise HTTPException(status_code=400, detail="Class name cannot be empty")
     policy = get_user_plan_policy(teacher)
     if teacher.role != "admin" and len(repo.list_teacher_classes(teacher.id)) >= policy.max_classes:
         raise HTTPException(
@@ -334,15 +344,96 @@ def create_class(
                 "required_tier": "ultra",
             },
         )
-    if repo.get_class_by_name(request.name):
+    if repo.get_class_by_name(clean_name, teacher_id=teacher.id):
         raise HTTPException(status_code=400, detail="Class name already exists")
-    cls = repo.create_class(
-        name=request.name,
-        teacher_id=teacher.id,
-        description=request.description,
-    )
-    repo.commit()
+    try:
+        cls = repo.create_class(
+            name=clean_name,
+            teacher_id=teacher.id,
+            description=request.description,
+        )
+        repo.commit()
+    except IntegrityError as exc:
+        repo.rollback()
+        raise HTTPException(status_code=400, detail="Class name already exists") from exc
     return _class_to_response(cls, repo)
+
+
+@router.patch("/classes/{class_id}", response_model=ClassResponse)
+def update_class(
+    class_id: int,
+    request: ClassUpdate,
+    teacher: User = Depends(require_teacher),
+    db: Session = Depends(get_db),
+):
+    """Rename a class or update its description (scoped uniqueness per teacher)."""
+    repo = Repository(db)
+    cls = repo.get_class(class_id)
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+    _ensure_teacher_owns_class(teacher, cls)
+
+    new_name: str | None = None
+    if "name" in request.model_fields_set:
+        if request.name is None or not request.name.strip():
+            raise HTTPException(status_code=400, detail="Class name cannot be empty")
+        new_name = request.name.strip()
+        existing = repo.get_class_by_name(new_name, teacher_id=cls.teacher_id)
+        if existing is not None and existing.id != cls.id:
+            raise HTTPException(status_code=400, detail="Class name already exists")
+
+    update_desc = "description" in request.model_fields_set
+    new_desc = (
+        request.description.strip() or None
+        if isinstance(request.description, str)
+        else None
+    )
+    try:
+        updated = repo.update_class(
+            class_id,
+            name=new_name,
+            description=new_desc,
+            update_description=update_desc,
+        )
+        repo.commit()
+    except IntegrityError as exc:
+        repo.rollback()
+        raise HTTPException(status_code=400, detail="Class name already exists") from exc
+    return _class_to_response(updated or cls, repo)
+
+
+@router.delete("/classes/{class_id}")
+def delete_class(
+    class_id: int,
+    teacher: User = Depends(require_teacher),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Delete a class, detaching submitted essays and freeing the teacher's class quota slot."""
+    repo = Repository(db)
+    cls = repo.get_class(class_id)
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+    _ensure_teacher_owns_class(teacher, cls)
+    repo.delete_class(class_id)
+    repo.commit()
+    return {"status": "deleted", "id": class_id}
+
+
+@router.delete("/classes/{class_id}/leave")
+def leave_class(
+    class_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Allow an enrolled student to leave a class while keeping prior class submissions intact."""
+    repo = Repository(db)
+    cls = repo.get_class(class_id)
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+    if not repo.remove_student_from_class(class_id, current_user.id):
+        raise HTTPException(status_code=404, detail="Not enrolled in this class")
+    repo.commit()
+    return {"status": "left", "class_id": class_id}
 
 
 @router.post("/classes/{class_id}/regenerate-code", response_model=ClassResponse)
@@ -669,12 +760,17 @@ def list_pending_reviews(
     return out
 
 
-_CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+_CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@", "|", "\t", "\r", "\n")
 
 
-def _sanitize_csv_cell(val):
-    """Neutralize spreadsheet formula injection in CSV string cells."""
-    if isinstance(val, str) and val.startswith(_CSV_DANGEROUS_PREFIXES):
+def _sanitize_csv_cell(val: Any) -> Any:
+    """Neutralize spreadsheet formula / DDE injection in CSV string cells (including leading whitespace)."""
+    if not isinstance(val, str) or not val:
+        return val
+    stripped = val.lstrip(" \t\r\n")
+    if val.startswith(_CSV_DANGEROUS_PREFIXES) or (
+        stripped and stripped.startswith(("=", "+", "-", "@", "|"))
+    ):
         return f"'{val}"
     return val
 
@@ -766,6 +862,284 @@ def export_class_csv(
     )
 
 
+def _compute_essay_cis_for_export(essay: Any, verdicts: list) -> float | None:
+    e_job_status = (getattr(essay, "job_status", None) or "completed").strip().lower()
+    if e_job_status in ("failed", "queued", "processing") and getattr(essay, "cis_json", None) is None:
+        return None
+    e_cis = _extract_cis_score_from_json(getattr(essay, "cis_json", None))
+    if e_cis is None and verdicts:
+        acad = [v for v in verdicts if v.label != "resource"]
+        if acad:
+            ver_cnt = sum(1 for v in acad if (v.label or "").strip().lower() == "verified")
+            e_cis = round((ver_cnt / len(acad)) * 100.0, 1)
+    return e_cis
+
+
+@router.get("/classes/{class_id}/export.zip")
+def export_class_zip(
+    class_id: int,
+    teacher: User = Depends(require_teacher),
+    db: Session = Depends(get_db),
+):
+    """Export full Classroom Gradebook & Audit ZIP archive for a cohort.
+
+    Contains:
+    - ``gradebook_summary.csv`` (UTF-8 with BOM): per-student CIS & verdict breakdown.
+    - ``verdicts_detail.csv`` (UTF-8 with BOM): all (essay, verdict) rows with ``cis_score``.
+    - ``essays/{essay_id}_summary.json``: structured per-manuscript summary JSON.
+    """
+    repo = Repository(db)
+    cls = repo.get_class(class_id)
+    if not cls:
+        raise HTTPException(status_code=404, detail="Class not found")
+    _ensure_teacher_owns_class(teacher, cls)
+
+    essays = repo.get_class_essays(class_id)
+    enrolled_students = repo.list_students_in_class(class_id)
+    all_student_ids = {s.id for s in enrolled_students} | {
+        e.user_id for e in essays if e.user_id is not None
+    }
+    students_by_id = repo.get_users_by_ids(all_student_ids)
+    for s in enrolled_students:
+        students_by_id.setdefault(s.id, s)
+
+    verdicts_by_essay = repo.get_verdicts_by_essay_ids([e.id for e in essays])
+    essays_by_student: dict[int | None, list[Any]] = {}
+    for e in essays:
+        essays_by_student.setdefault(e.user_id, []).append(e)
+
+    # 1. Build UTF-8-BOM gradebook_summary.csv
+    gb_buf = io.StringIO()
+    gb_buf.write("\ufeff")
+    gb_writer = csv.writer(gb_buf)
+    gb_writer.writerow(
+        [
+            "student_id",
+            "student_username",
+            "full_name",
+            "email",
+            "essay_count",
+            "completed_essays",
+            "avg_cis_score",
+            "total_verdicts",
+            "verified",
+            "metadata_error",
+            "suspected_hallucination",
+            "unresolved",
+            "resource",
+        ]
+    )
+
+    ordered_sids: list[int | None] = [
+        s.id for s in sorted(students_by_id.values(), key=lambda u: (u.username or "").lower())
+    ]
+    if None in essays_by_student:
+        ordered_sids.append(None)
+
+    for sid in ordered_sids:
+        stu_obj = students_by_id.get(sid) if sid is not None else None
+        stu_essays = essays_by_student.get(sid, [])
+        stu_cis_vals: list[float] = []
+        lbl_totals = {
+            "verified": 0,
+            "metadata_error": 0,
+            "suspected_hallucination": 0,
+            "unresolved": 0,
+            "resource": 0,
+        }
+        completed_cnt = 0
+        total_v_cnt = 0
+        for e in stu_essays:
+            e_vs = verdicts_by_essay.get(e.id, [])
+            e_st = (getattr(e, "job_status", None) or "completed").strip().lower()
+            if e_st == "completed":
+                completed_cnt += 1
+            e_cis_val = _compute_essay_cis_for_export(e, e_vs)
+            if e_cis_val is not None:
+                stu_cis_vals.append(e_cis_val)
+            for v in e_vs:
+                total_v_cnt += 1
+                norm_lbl = (v.label or "unresolved").strip().lower()
+                if norm_lbl == "unverified":
+                    norm_lbl = "unresolved"
+                if norm_lbl in lbl_totals:
+                    lbl_totals[norm_lbl] += 1
+
+        avg_stu_cis = (
+            f"{round(sum(stu_cis_vals) / len(stu_cis_vals), 2):.2f}"
+            if stu_cis_vals
+            else ""
+        )
+        gb_writer.writerow(
+            [
+                sid if sid is not None else "",
+                _sanitize_csv_cell(stu_obj.username if stu_obj else ""),
+                _sanitize_csv_cell((stu_obj.full_name or "") if stu_obj else ""),
+                _sanitize_csv_cell((stu_obj.email or "") if stu_obj else ""),
+                len(stu_essays),
+                completed_cnt,
+                avg_stu_cis,
+                total_v_cnt,
+                lbl_totals["verified"],
+                lbl_totals["metadata_error"],
+                lbl_totals["suspected_hallucination"],
+                lbl_totals["unresolved"],
+                lbl_totals["resource"],
+            ]
+        )
+
+    # 2. Build UTF-8-BOM verdicts_detail.csv (with cis_score) & per-essay JSON summaries
+    vd_buf = io.StringIO()
+    vd_buf.write("\ufeff")
+    vd_writer = csv.writer(vd_buf)
+    vd_writer.writerow(
+        [
+            "essay_id",
+            "filename",
+            "student",
+            "cis_score",
+            "verdict_id",
+            "label",
+            "confidence",
+            "mapping_status",
+            "validated_at",
+            "is_overridden",
+            "job_status",
+            "composite_label",
+            "triggered_rules",
+            "citation_raw",
+        ]
+    )
+
+    essay_json_entries: list[tuple[str, str]] = []
+    for essay in essays:
+        stu_obj = students_by_id.get(essay.user_id) if essay.user_id else None
+        stu_name = stu_obj.username if stu_obj else ""
+        e_job_status = getattr(essay, "job_status", None) or "completed"
+        verdicts = verdicts_by_essay.get(essay.id, [])
+        e_cis = _compute_essay_cis_for_export(essay, verdicts)
+        cis_cell = f"{e_cis:.2f}" if e_cis is not None else ""
+
+        if not verdicts:
+            vd_writer.writerow(
+                [
+                    essay.id,
+                    _sanitize_csv_cell(essay.filename),
+                    _sanitize_csv_cell(stu_name),
+                    cis_cell,
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    _sanitize_csv_cell(e_job_status),
+                    "",
+                    "",
+                    "",
+                ]
+            )
+        else:
+            for v in verdicts:
+                v_features = _parse_verdict_features(v)
+                comp_lbl = str(v_features.get("composite_label") or "")
+                rules_str = "; ".join(_parse_str_list(getattr(v, "triggered_rules", None)))
+                vd_writer.writerow(
+                    [
+                        essay.id,
+                        _sanitize_csv_cell(essay.filename),
+                        _sanitize_csv_cell(stu_name),
+                        cis_cell,
+                        v.id,
+                        _sanitize_csv_cell(v.label),
+                        v.confidence,
+                        _sanitize_csv_cell(v.mapping_status or "matched"),
+                        v.validated_at.isoformat() if v.validated_at else "",
+                        "yes" if v.is_overridden else "no",
+                        _sanitize_csv_cell(e_job_status),
+                        _sanitize_csv_cell(comp_lbl),
+                        _sanitize_csv_cell(rules_str),
+                        _sanitize_csv_cell(v.citation_raw or ""),
+                    ]
+                )
+
+        cis_obj = None
+        if getattr(essay, "cis_json", None):
+            try:
+                cis_obj = json.loads(essay.cis_json)
+            except (json.JSONDecodeError, TypeError):
+                cis_obj = None
+
+        v_counts = {
+            "total": len(verdicts),
+            "verified": sum(1 for v in verdicts if (v.label or "").lower() == "verified"),
+            "metadata_error": sum(
+                1 for v in verdicts if (v.label or "").lower() == "metadata_error"
+            ),
+            "suspected_hallucination": sum(
+                1
+                for v in verdicts
+                if (v.label or "").lower() == "suspected_hallucination"
+            ),
+            "unresolved": sum(
+                1
+                for v in verdicts
+                if (v.label or "unresolved").lower() in ("unresolved", "unverified")
+            ),
+            "resource": sum(1 for v in verdicts if (v.label or "").lower() == "resource"),
+        }
+        summary_payload = {
+            "essay_id": essay.id,
+            "class_id": cls.id,
+            "class_name": cls.name,
+            "filename": essay.filename,
+            "student_id": essay.user_id,
+            "student_username": stu_name or None,
+            "uploaded_at": essay.uploaded_at.isoformat() if essay.uploaded_at else None,
+            "num_pages": essay.num_pages,
+            "job_status": e_job_status,
+            "cis_score": e_cis,
+            "cis": cis_obj,
+            "verdict_counts": v_counts,
+            "verdicts": [
+                {
+                    "verdict_id": v.id,
+                    "citation_raw": v.citation_raw,
+                    "label": v.label,
+                    "confidence": v.confidence,
+                    "mapping_status": v.mapping_status or "matched",
+                    "is_overridden": bool(v.is_overridden),
+                    "overridden_by": getattr(v, "overridden_by", None),
+                    "override_note": getattr(v, "override_note", None),
+                    "triggered_rules": _parse_str_list(getattr(v, "triggered_rules", None)),
+                }
+                for v in verdicts
+            ],
+        }
+        essay_json_entries.append(
+            (
+                f"essays/{essay.id}_summary.json",
+                json.dumps(summary_payload, ensure_ascii=False, indent=2),
+            )
+        )
+
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("gradebook_summary.csv", gb_buf.getvalue().encode("utf-8"))
+        zf.writestr("verdicts_detail.csv", vd_buf.getvalue().encode("utf-8"))
+        for arc_name, json_str in essay_json_entries:
+            zf.writestr(arc_name, json_str.encode("utf-8"))
+
+    zip_bytes = zip_buf.getvalue()
+    return StreamingResponse(
+        iter([zip_bytes]),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="class_{class_id}_export.zip"',
+        },
+    )
+
+
 @router.get("/classes/{class_id}/analytics", response_model=ClassAnalyticsResponse)
 def get_class_analytics(
     class_id: int,
@@ -828,7 +1202,7 @@ def get_class_analytics(
             if e_cis is None and verdicts:
                 acad = [v for v in verdicts if v.label != "resource"]
                 if acad:
-                    ver_cnt = sum(1 for v in acad if v.label == "verified" or v.is_overridden)
+                    ver_cnt = sum(1 for v in acad if (v.label or "").strip().lower() == "verified")
                     e_cis = round((ver_cnt / len(acad)) * 100.0, 1)
 
         if e_cis is not None:
@@ -843,7 +1217,7 @@ def get_class_analytics(
                 cis_dist["poor"] += 1
 
         for v in verdicts:
-            raw_lbl = "verified" if v.is_overridden else (v.label or "unresolved").strip().lower()
+            raw_lbl = (v.label or "unresolved").strip().lower()
             lbl = "unresolved" if raw_lbl == "unverified" else raw_lbl
             verdict_breakdown[lbl] = verdict_breakdown.get(lbl, 0) + 1
 
@@ -858,7 +1232,7 @@ def get_class_analytics(
             rules = _parse_str_list(getattr(v, "triggered_rules", None))
             for r_str in rules:
                 rule_counts[r_str] = rule_counts.get(r_str, 0) + 1
-            if not v.is_overridden and "R-INCOMPLETE-METADATA" in rules:
+            if lbl == "metadata_error" and "R-INCOMPLETE-METADATA" in rules:
                 verdict_breakdown["incomplete_metadata"] += 1
 
             # Flagged citations for shared hallucination detector

@@ -1105,7 +1105,15 @@ def run_deadline_burst_benchmark(
     db_dir: Path | None = None,
     seed: int = 42,
 ) -> list[DeadlineBurstStressResult]:
-    """Run the DeadlineQueueManager + file-backed SQLite burst benchmark across concurrency levels."""
+    """Run the DeadlineQueueManager + file-backed SQLite WAL admission & I/O burst benchmark.
+
+    Methodological Scope:
+        Isolates FIFO queue admission (`DeadlineQueueManager`), HTTP 429 recovery, and
+        concurrent SQLite WAL persistence under `ControlledDeterministicOrchestrator`
+        (without GROBID TEI-XML or live Sentence-BERT neural encoding). Full 8-step
+        Neuro-Symbolic inference latency is benchmarked separately in
+        `run_document_scale_benchmark` and `run_cold_vs_warm_cache_benchmark`.
+    """
     results: list[DeadlineBurstStressResult] = []
     base_dir = db_dir or Path(tempfile.mkdtemp(prefix="citra_deadline_stress_"))
     base_dir.mkdir(parents=True, exist_ok=True)
@@ -1663,7 +1671,14 @@ def run_http_multipart_burst_benchmark(
     db_dir: Path | None = None,
     seed: int = 42,
 ) -> list[HttpMultipartBurstResult]:
-    """Run FastAPI HTTP Multipart upload (`POST /api/essays`) & status polling stress test."""
+    """Run FastAPI HTTP Multipart upload (`POST /api/essays`) & status polling I/O stress test.
+
+    Methodological Scope:
+        By default (`use_real_sbert=False` and `grobid.enabled=False`), this benchmark
+        stresses the FastAPI ASGI multipart upload handler, quota claim, `DeadlineQueueManager`
+        admission, and SQLite WAL background persistence rather than full neural SBERT +
+        GROBID CRF throughput. Pass `use_real_sbert=True` to include live Sentence-BERT encoding.
+    """
     results: list[HttpMultipartBurstResult] = []
     base_dir = db_dir or Path(tempfile.mkdtemp(prefix="citra_http_burst_"))
     base_dir.mkdir(parents=True, exist_ok=True)
@@ -1758,9 +1773,11 @@ def format_benchmark_markdown(report: FullPerformanceBenchmarkReport) -> str:
         [
             "---",
             "",
-            "## 2. Kiểm Thử Chịu Tải `DeadlineQueueManager` & SQLite Khi 20–50 Sinh Viên Nộp Bài Đồng Thời",
+            "## 2. Kiểm Thử Chịu Tải Tầng Hàng Đợi `DeadlineQueueManager` & Ghi Đồng Thời `SQLite WAL` (20–50 Sinh Viên Nộp Bài Đồng Thời)",
             "",
-            "| Số SV đồng thời ($N$) | Worker tối đa | Tỷ lệ hoàn thành | Peak Active / Queue | FIFO chuẩn | Queue Wait $P_{50}/P_{90}/P_{99}$ (ms) | Processing $P_{50}/P_{90}/P_{99}$ (ms) | Throughput (bài/s · trích dẫn/s) | Lỗi `SQLite locked` | Lỗi `HTTP 502/429` |",
+            "> **Lưu ý phương pháp luận (Methodological Scope):** Bảng dưới đây đo **thông lượng tầng điều phối hàng đợi (`DeadlineQueueManager`), khôi phục lỗi `HTTP 429` và ghi đồng thời `SQLite WAL` (I/O & Queue Admission Stress Test)** với `ControlledDeterministicOrchestrator` (tách biệt GROBID và SBERT để cô lập tranh chấp khóa DB/queue). Thông lượng suy luận AI toàn trình 8 bước (`GROBID Cache + FTS5 + Sentence-BERT`) được trình bày riêng tại Mục 1 và Mục 3 (~`0.76` khóa luận 50 trang/giây ở chế độ Warm-Cache, $P_{50} = 1.31\\text{s}$).",
+            "",
+            "| Số SV đồng thời ($N$) | Worker tối đa | Tỷ lệ hoàn thành | Peak Active / Queue | FIFO chuẩn | Queue Wait $P_{50}/P_{90}/P_{99}$ (ms) | Processing $P_{50}/P_{90}/P_{99}$ (ms) | Queue/WAL Throughput (bài/s · trích dẫn/s) | Lỗi `SQLite locked` | Lỗi `HTTP 502/429` |",
             "| :---: | :---: | :---: | :---: | :---: | ---: | ---: | ---: | :---: | :---: |",
         ]
     )
@@ -1800,9 +1817,11 @@ def format_benchmark_markdown(report: FullPerformanceBenchmarkReport) -> str:
             [
                 "---",
                 "",
-                "## 4. Kiểm Thử Chịu Tải Tầng HTTP Multipart (`POST /api/essays` + `GET /api/essays/{id}/status`) Qua FastAPI Stack",
+                "## 4. Kiểm Thử Chịu Tải Tầng HTTP Multipart (`POST /api/essays` + `GET /api/essays/{id}/status`) & `SQLite WAL` Qua FastAPI Stack",
                 "",
-                "| Số SV đồng thời ($N$) | HTTP 200 Upload | Background Hoàn tất | Bản ghi Verdict lưu DB | HTTP Upload $P_{50}/P_{90}/P_{99}$ (ms) | HTTP Status Poll $P_{50}/P_{90}/P_{99}$ (ms) | HTTP E2E $P_{50}/P_{90}/P_{99}$ (ms) | Throughput (HTTP uploads/s) | Lỗi `SQLite locked` / `HTTP 5xx,429` |",
+                "> **Lưu ý phương pháp luận:** Chế độ mặc định (`use_real_sbert=False`, `grobid.enabled=False`) đo thông lượng tiếp nhận HTTP Multipart, kiểm tra hạn ngạch nguyên tử và ghi `SQLite WAL` dưới tải đồng thời cao, tách biệt khỏi độ trễ suy luận mô hình ngôn ngữ.",
+                "",
+                "| Số SV đồng thời ($N$) | HTTP 200 Upload | Background Hoàn tất | Bản ghi Verdict lưu DB | HTTP Upload $P_{50}/P_{90}/P_{99}$ (ms) | HTTP Status Poll $P_{50}/P_{90}/P_{99}$ (ms) | HTTP E2E $P_{50}/P_{90}/P_{99}$ (ms) | HTTP/Queue Admission Throughput (uploads/s) | Lỗi `SQLite locked` / `HTTP 5xx,429` |",
                 "| :---: | :---: | :---: | :---: | ---: | ---: | ---: | ---: | :---: |",
             ]
         )
@@ -1890,7 +1909,7 @@ def format_benchmark_latex_tables(report: FullPerformanceBenchmarkReport) -> str
             "",
             r"{\setlength{\tabcolsep}{3.5pt}",
             r"\begin{longtable}{|C{0.11}|C{0.11}|C{0.13}|C{0.18}|C{0.18}|C{0.14}|C{0.15}|}",
-            r"\caption{Concurrent deadline upload stress test on \texttt{DeadlineQueueManager} and file-backed SQLite}\label{tab:nfr-deadline-stress}\\",
+            r"\caption{Concurrent deadline upload I/O and queue admission stress test on \texttt{DeadlineQueueManager} and file-backed SQLite WAL (stubbed NLP orchestration; full neural pipeline latency reported in Table~\ref{tab:nfr-step-latency})}\label{tab:nfr-deadline-stress}\\",
             r"\hline",
             r"\textbf{Students ($N$)} & \textbf{Active / Queue} & \textbf{Success Rate} & \textbf{Queue Wait $P_{50}/P_{90}/P_{99}$ (ms)} & \textbf{Processing $P_{50}/P_{90}/P_{99}$ (ms)} & \textbf{Throughput (essays/s)} & \textbf{SQLite Lock / HTTP 502,429} \\",
             r"\hline",

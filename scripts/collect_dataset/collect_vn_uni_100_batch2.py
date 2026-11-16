@@ -850,7 +850,7 @@ def main() -> int:
 
         if len(collected) < args.n:
             print(f"\n=== Phase 2B: Top-Up Pass ({len(collected)}/{args.n} -> {args.n}) ===", flush=True)
-            for dgroup, quota, queries in DISCIPLINE_QUERY_GROUPS:
+            for dgroup, _quota, queries in DISCIPLINE_QUERY_GROUPS:
                 if len(collected) >= args.n:
                     break
                 for q in queries:

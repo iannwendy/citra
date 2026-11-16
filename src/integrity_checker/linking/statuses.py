@@ -30,9 +30,10 @@ DUPLICATE_REFERENCE (integrity issue):
     similarity > threshold). → Gộp thành 1 entry.
 
 AMBIGUOUS_MAPPING (integrity issue):
-    ≥2 in-text occurrences refer cùng 1 reference entry (1 entry được cite
-    bởi nhiều in-text occurrence, nhưng không phải DOIs khác nhau).
-    → Có thể hợp lệ (cùng nguồn, nhiều trang) hoặc duplicate.
+    1 in-text occurrence khớp ≥2 candidate reference entries khác nhau trong
+    bibliography nhưng không thể phân giải duy nhất (ví dụ trích `(Smith, 2020)`
+    khi danh mục có cả `Smith (2020a)` và `Smith (2020b)`).
+    → Cần bổ sung hậu tố phân biệt năm hoặc thông tin định danh nguồn.
 
 STYLE_INCONSISTENT (integrity issue):
     In-text style (APA vs IEEE) không match reference list style trong cùng
@@ -149,7 +150,7 @@ class CitationMappingStatus(str, Enum):
     """≥2 reference entries trỏ cùng 1 source (DOI/arXiv/similarity)."""
 
     AMBIGUOUS_MAPPING = "ambiguous_mapping"
-    """≥2 in-text occurrences refer cùng 1 reference entry."""
+    """1 in-text occurrence khớp ≥2 candidate reference entries không thể phân giải duy nhất."""
 
     STYLE_INCONSISTENT = "style_inconsistent"
     """In-text style không match bibliography style trong document."""
@@ -274,6 +275,9 @@ class LinkingResult:
         self.status_counts[status] = self.status_counts.get(status, 0) + 1
         if status == CitationMappingStatus.MATCHED:
             self.matched_count += 1
+        elif status == CitationMappingStatus.MISSING_REFERENCE:
+            if link.occurrence_id and link.occurrence_id not in self.unmatched_in_text:
+                self.unmatched_in_text.append(link.occurrence_id)
 
     @property
     def match_rate(self) -> float:

@@ -16,20 +16,22 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from integrity_checker.extraction.document_parser import DocumentParser
-from integrity_checker.linking.citation_linker import CitationLinker
-from integrity_checker.logic.neuro_symbolic_checker import NeuroSymbolicChecker
-from integrity_checker.matching.features import FeatureCalculator
-from integrity_checker.matching.semantic import SemanticMatcher
-from integrity_checker.matching.vn_en_academic_bridge import (
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from integrity_checker.extraction.document_parser import DocumentParser  # noqa: E402
+from integrity_checker.linking.citation_linker import CitationLinker  # noqa: E402
+from integrity_checker.logic.neuro_symbolic_checker import NeuroSymbolicChecker  # noqa: E402
+from integrity_checker.matching.semantic import SemanticMatcher  # noqa: E402
+from integrity_checker.matching.vn_en_academic_bridge import (  # noqa: E402
     VN_EN_ACADEMIC_BRIDGE,
     bridge_vn_to_en,
-    compute_cross_lingual_concept_overlap,
     is_vietnamese_text,
 )
-from integrity_checker.models.citation import Citation
-from integrity_checker.models.source import SourceCandidate, SourceResult
-from integrity_checker.models.validation import ValidationLabel
+from integrity_checker.models.citation import Citation  # noqa: E402
+from integrity_checker.models.source import SourceCandidate, SourceResult  # noqa: E402
+from integrity_checker.models.validation import ValidationLabel  # noqa: E402
 
 
 def run_multi_domain_benchmark() -> tuple[int, int]:
@@ -361,10 +363,12 @@ def evaluate_real_vietnamese_pdfs() -> tuple[int, int]:
         for p in getattr(parsed.document, "pages", []) or []:
             page_text_map[p.page_num] = p.text or ""
 
-        def _get_surrounding_window(cit: Citation) -> str:
+        def _get_surrounding_window(
+            cit: Citation, page_map: dict[int, str] = page_text_map
+        ) -> str:
             if getattr(cit, "context", None):
                 return str(cit.context)
-            ptxt = page_text_map.get(cit.page_num, "")
+            ptxt = page_map.get(cit.page_num, "")
             if not ptxt or not cit.raw_text:
                 return cit.raw_text or ""
             idx = ptxt.find(cit.raw_text)

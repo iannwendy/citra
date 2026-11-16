@@ -192,12 +192,14 @@ class TestRegisterAndActivateFlow:
         assert new_act.status_code == 200
         assert new_act.json()["activated"] is True
 
-        # Resending when already active returns 400
+        # Resending when already active returns uniform 200 without sending another email
+        outbox_before = len(email_svc.outbox)
         already_resp = client.post(
             "/api/auth/resend-activation",
             json={"identifier": "resend@example.com"},
         )
-        assert already_resp.status_code == 400
+        assert already_resp.status_code == 200
+        assert len(email_svc.outbox) == outbox_before
 
     def test_expired_or_invalid_activation_token_rejected(self):
         client = TestClient(app)
@@ -530,7 +532,10 @@ class TestGoogleOAuthFlow:
         self, monkeypatch
     ):
         client = TestClient(app)
-        # Register local user (unactivated)
+        email_svc = get_email_service()
+        email_svc.clear_outbox()
+
+        # 1. Pre-registered UNVERIFIED local user -> Google sign-in wipes unverified password
         reg = client.post(
             "/api/auth/register",
             json={
@@ -560,20 +565,56 @@ class TestGoogleOAuthFlow:
         )
         assert g_resp.status_code == 200, g_resp.text
         g_user = g_resp.json()["user"]
-        # Preserves original username, activates account, and links Google
+        # Wipes pre-hijack password, switches auth_provider to 'google', and activates account
         assert g_user["username"] == "custom_handle"
         assert g_user["is_active"] is True
         assert g_user["email_verified"] is True
         assert g_user["google_linked"] is True
-        assert g_user["auth_provider"] == "local,google"
+        assert g_user["auth_provider"] == "google"
+        assert g_user["has_password"] is False
         assert g_user["full_name"] == "Linked Scholar"
 
-        # Original local password still works after Google account linking
+        # Unverified local password MUST fail with 401 (OAuth Pre-Hijacking blocked)
         local_login = client.post(
             "/api/auth/login",
             json={"username": "custom_handle", "password": "LocalPassword123"},
         )
-        assert local_login.status_code == 200
+        assert local_login.status_code == 401
+
+        # 2. Already email_verified=True local user -> preserves 'local,google' and password
+        email_svc.clear_outbox()
+        reg_verified = client.post(
+            "/api/auth/register",
+            json={
+                "username": "verified_handle",
+                "email": "verified_linked@tdtu.edu.vn",
+                "password": "VerifiedPassword123!",
+                "privacy_consent": True,
+            },
+        )
+        assert reg_verified.status_code == 200
+        act_tok = email_svc.outbox[-1].token
+        assert client.post("/api/auth/activate", json={"token": act_tok}).status_code == 200
+
+        monkeypatch.setattr(
+            "integrity_checker.api.routes.auth._verify_google_payload",
+            lambda req, cid, csec: {
+                "sub": "google-sub-linked-002",
+                "email": "verified_linked@tdtu.edu.vn",
+                "email_verified": True,
+                "name": "Verified Scholar",
+            },
+        )
+        g_ver = client.post("/api/auth/google", json={"credential": "valid_google_id_token_2"})
+        assert g_ver.status_code == 200
+        assert g_ver.json()["user"]["auth_provider"] == "local,google"
+        assert (
+            client.post(
+                "/api/auth/login",
+                json={"username": "verified_handle", "password": "VerifiedPassword123!"},
+            ).status_code
+            == 200
+        )
 
     def test_google_login_blocks_deactivated_user(self, monkeypatch):
         client = TestClient(app)

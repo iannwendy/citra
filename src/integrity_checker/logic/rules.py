@@ -368,6 +368,10 @@ def _is_fake_url(url: str | None) -> tuple[bool, str]:
         for fake in _KNOWN_FAKE_DOMAINS:
             if domain == fake or domain.endswith("." + fake):
                 return True, fake
+        # Check RFC 2606 / RFC 6761 non-routable fake TLDs (excluding .example used by HTTP transport mocks)
+        for fake_tld in (".invalid", ".fake", ".localhost"):
+            if domain.endswith(fake_tld) or domain == fake_tld.lstrip("."):
+                return True, domain
         # Check obvious placeholder domain prefixes like fake-academic-portal.*
         host_bare = domain[4:] if domain.startswith("www.") else domain
         if host_bare.startswith(("fake-", "placeholder-")):
@@ -378,6 +382,22 @@ def _is_fake_url(url: str | None) -> tuple[bool, str]:
             if fake in url_lower and ("://" + fake in url_lower or url_lower.startswith(fake)):
                 return True, fake
     return False, ""
+
+
+def _extract_registered_no_csl_ra(source: SourceResult) -> str | None:
+    """Return non-Crossref RA name when DoiRaClient confirmed DOI registration without CSL metadata."""
+    all_cands = list(getattr(source, "candidates", None) or []) + list(
+        getattr(source, "_pristine_candidates", None) or []
+    )
+    for cand in all_cands:
+        ext_ids = getattr(cand, "external_ids", None) or {}
+        if ext_ids.get("doi_ra_status") == "registered_no_csl":
+            return str(ext_ids.get("doi_ra") or "non-Crossref RA")
+    doi_ra_err = str((getattr(source, "sources_failed", None) or {}).get("doi_ra", "")).strip()
+    if "csl metadata unavailable" in doi_ra_err.lower():
+        m_ra = re.search(r"\(RA=([^)]+)\)", doi_ra_err)
+        return m_ra.group(1).strip() if m_ra else "non-Crossref RA"
+    return None
 
 
 # Known fabricated DOI patterns — these DOIs look suspicious and should be flagged
@@ -1520,8 +1540,8 @@ class SymbolicRules:
                     label=ValidationLabel.SUSPECTED_HALLUCINATION,
                     confidence=0.95,
                     reasoning=(
-                        f"Author name matches fake/fabricated pattern: '{fake_author_pattern}'. "
-                        f"This appears to be a fabricated citation."
+                        f"Author name matches fake/placeholder pattern: '{fake_author_pattern}'. "
+                        f"Suspected synthetic or placeholder reference requiring instructor review."
                     ),
                     triggered_rules=triggered_rules,
                     mismatched_fields=["author"],
@@ -1550,7 +1570,7 @@ class SymbolicRules:
                     pass
                 else:
                     cited_year = int(year_match.group())
-                    if cited_year > current_year:
+                    if cited_year > current_year + 1:
                         has_matched_paper = bool(
                             source.best_candidate()
                             and (features.doi_exact_match or features.title_sim_fuzzy >= 0.85)
@@ -1558,7 +1578,7 @@ class SymbolicRules:
 
                         if is_known_author or has_matched_paper:
                             # Known author or matched paper + future year → likely METADATA_ERROR (wrong year)
-                            # Example: "Velickovic et al. (2027)" → real paper but wrong year
+                            # Example: "Velickovic et al. (2029)" → real paper but wrong year
                             triggered_rules = ["R-FUTURE-YEAR-KNOWN-AUTHOR"]
                             return RuleOutcome(
                                 label=ValidationLabel.METADATA_ERROR,
@@ -1573,14 +1593,15 @@ class SymbolicRules:
                                 style_penalty=style_penalty,
                             )
                         else:
-                            # Unknown author + future year → SUSPECTED_HALLUCINATION
+                            # Unknown author + implausible future year (> current_year + 1) → SUSPECTED_HALLUCINATION
                             triggered_rules = ["R-FUTURE-YEAR"]
                             return RuleOutcome(
                                 label=ValidationLabel.SUSPECTED_HALLUCINATION,
                                 confidence=0.95,
                                 reasoning=(
-                                    f"Citation year {cited_year} is in the future (current year: {current_year}). "
-                                    f"Unknown author with impossible year → fabricated citation."
+                                    f"Citation year {cited_year} exceeds the advance cover-date window "
+                                    f"(current year: {current_year} + 1). Suspected implausible publication year "
+                                    f"requiring manual verification."
                                 ),
                                 triggered_rules=triggered_rules,
                                 mismatched_fields=["year"],
@@ -1590,8 +1611,31 @@ class SymbolicRules:
                 # FIX: Log exceptions instead of silent pass
                 logger.debug(f"Error parsing year from '{citation_year}': {exc}")
 
+        registered_no_csl_ra = _extract_registered_no_csl_ra(source)
+        found_candidates = [
+            c for c in (source.candidates or []) if getattr(c, "found", True)
+        ]
+        best_probe = source.best_candidate()
+
         # --- Rule 5: No candidates returned ---
-        if not source.candidates or not source.best_candidate():
+        if (
+            not found_candidates
+            or not best_probe
+            or not getattr(best_probe, "found", True)
+        ):
+            if registered_no_csl_ra and citation_doi and str(citation_doi).strip():
+                return RuleOutcome(
+                    label=ValidationLabel.UNRESOLVED,
+                    confidence=max(0.0, 0.50 - style_penalty),
+                    reasoning=(
+                        f"DOI '{citation_doi}' is registered with {registered_no_csl_ra}, "
+                        f"but bibliographic CSL metadata is unavailable and no secondary "
+                        f"scholarly index confirmed title/author metadata. Manual verification required."
+                    ),
+                    triggered_rules=["R-DOI-RA-NO-CSL"],
+                    mismatched_fields=[],
+                    style_penalty=style_penalty,
+                )
             if url_status == "dead_link" and not is_known_author:
                 status_detail = f"HTTP {url_status_code}" if url_status_code else "unreachable/DNS error"
                 return RuleOutcome(
@@ -2732,6 +2776,20 @@ class SymbolicRules:
                 and not has_non_live_missing_abstract
             ):
                 triggered_rules.append("R-CONTENT-MISMATCH")
+                if features.title_sim_fuzzy >= 0.85 and author_sim >= 0.50 and year_dist <= 1:
+                    return RuleOutcome(
+                        label=ValidationLabel.METADATA_ERROR,
+                        confidence=max(0.0, 0.75 - style_penalty),
+                        reasoning=(
+                            f"Real scholarly work matched (title sim={features.title_sim_fuzzy:.2f}, "
+                            f"author overlap={author_sim:.2f}), but in-text claim is poorly aligned "
+                            f"with source content (Neural score={content_alignment_score:.2f}). "
+                            f"Possible misattribution or unsupported citation context."
+                        ),
+                        triggered_rules=triggered_rules,
+                        mismatched_fields=["content"],
+                        style_penalty=style_penalty,
+                    )
                 return RuleOutcome(
                     label=ValidationLabel.SUSPECTED_HALLUCINATION,
                     confidence=max(0.0, 0.80 - style_penalty),
@@ -2906,6 +2964,21 @@ class SymbolicRules:
             and (title_sim < 0.60 or _is_zero_author_doi_neighbor)
             and not is_known_author
         ):
+            if registered_no_csl_ra:
+                triggered_rules.append("R-DOI-RA-NO-CSL")
+                return RuleOutcome(
+                    label=ValidationLabel.UNRESOLVED,
+                    confidence=max(0.0, 0.50 - style_penalty),
+                    reasoning=(
+                        f"DOI '{citation_doi}' is registered with {registered_no_csl_ra}, "
+                        f"but bibliographic CSL metadata is unavailable and title-search candidates "
+                        f"did not match the cited work (fuzzy_title_sim={features.title_sim_fuzzy:.2f}). "
+                        f"Manual verification required."
+                    ),
+                    triggered_rules=triggered_rules,
+                    mismatched_fields=[],
+                    style_penalty=style_penalty,
+                )
             triggered_rules.append("R-NONEXISTENT-DOI")
             mismatched_doi_fields = ["doi", "title"]
             if bool(citation_authors) and author_sim < 0.20:
@@ -3130,6 +3203,19 @@ class SymbolicRules:
                         f"Non-periodical source ({non_journal_kind.replace('_', ' ')}) is not indexed "
                         f"in academic paper databases (best paper candidate title_sim={title_sim:.2f}) — "
                         f"abstaining from hallucination verdict."
+                    ),
+                    triggered_rules=triggered_rules,
+                    mismatched_fields=[],
+                    style_penalty=style_penalty,
+                )
+            if registered_no_csl_ra and citation_doi and str(citation_doi).strip():
+                triggered_rules.append("R-DOI-RA-NO-CSL")
+                return RuleOutcome(
+                    label=ValidationLabel.UNRESOLVED,
+                    confidence=max(0.0, 0.50 - style_penalty),
+                    reasoning=(
+                        f"DOI '{citation_doi}' is registered with {registered_no_csl_ra}, "
+                        f"but bibliographic CSL metadata is unavailable; abstaining from hallucination verdict."
                     ),
                     triggered_rules=triggered_rules,
                     mismatched_fields=[],

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { api, type BillingCycle } from '@/api/client';
 import { SCHOLARLY_APIS_LABEL } from '@/lib/productFacts';
+import { useRole } from '@/hooks/useRole';
 import {
   Dialog,
   DialogContent,
@@ -41,7 +42,9 @@ export function UpgradeModal({
 }: UpgradeModalProps) {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
+  const { isPro, isUltra } = useRole();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const highlightUltra = isPro || isUltra;
 
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('annual');
   const [loadingTier, setLoadingTier] = useState<'pro' | 'ultra' | null>(null);
@@ -100,15 +103,23 @@ export function UpgradeModal({
               <DialogHeader className="text-left">
                 <DialogTitle className="font-display text-xl sm:text-2xl font-bold text-white">
                   {reasonTitle ||
-                    (lang === 'vi'
-                      ? 'Mở khóa toàn bộ sức mạnh kiểm chứng học thuật'
-                      : 'Unlock Full Academic Verification Power')}
+                    (highlightUltra
+                      ? lang === 'vi'
+                        ? 'Nâng cấp lên CITRA Ultra cho Phòng Lab & Bộ môn'
+                        : 'Upgrade to CITRA Ultra for Labs & Departments'
+                      : lang === 'vi'
+                        ? 'Mở khóa toàn bộ sức mạnh kiểm chứng học thuật'
+                        : 'Unlock Full Academic Verification Power')}
                 </DialogTitle>
                 <DialogDescription className="text-indigo-100/90 text-sm">
                   {reasonDescription ||
-                    (lang === 'vi'
-                      ? 'Gói Basic miễn phí giới hạn 3 tài liệu/tháng (tối đa 5MB, 15 trang) và không hỗ trợ xuất PDF/DOCX hay phân tích sâu.'
-                      : 'The free Basic plan is limited to 3 documents/month (max 5MB, 15 pages) without PDF/DOCX exports or deep inspection.')}
+                    (highlightUltra
+                      ? lang === 'vi'
+                        ? 'Bạn đang sử dụng gói CITRA Pro. Nâng cấp lên Ultra để mở khóa 1.000 bài/tháng (tối đa 100MB, 500 trang), SerpAPI Google Scholar Fallback, Không giới hạn Lớp học & Xuất Class ZIP.'
+                        : 'You are currently on CITRA Pro. Upgrade to Ultra for 1,000 checks/month (up to 100MB, 500 pages), SerpAPI Google Scholar Fallback, Unlimited Classrooms & Full Class ZIP Export.'
+                      : lang === 'vi'
+                        ? 'Gói Basic miễn phí giới hạn 3 tài liệu/tháng (tối đa 5MB, 15 trang) và không hỗ trợ xuất PDF/DOCX hay phân tích sâu.'
+                        : 'The free Basic plan is limited to 3 documents/month (max 5MB, 15 pages) without PDF/DOCX exports or deep inspection.')}
                 </DialogDescription>
               </DialogHeader>
             </div>
@@ -170,7 +181,13 @@ export function UpgradeModal({
           {/* Plan Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* PRO PLAN */}
-            <div className="rounded-2xl border-2 border-indigo-600 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 p-5 flex flex-col justify-between relative shadow-md">
+            <div
+              className={`rounded-2xl p-5 flex flex-col justify-between relative ${
+                highlightUltra
+                  ? 'border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 shadow-xs'
+                  : 'border-2 border-indigo-600 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 shadow-md'
+              }`}
+            >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -188,8 +205,25 @@ export function UpgradeModal({
                       </p>
                     </div>
                   </div>
-                  <Badge className="bg-indigo-600 text-white text-[10px] font-mono">
-                    {lang === 'vi' ? 'PHỔ BIẾN NHẤT' : 'MOST POPULAR'}
+                  <Badge
+                    variant={highlightUltra ? 'secondary' : 'default'}
+                    className={
+                      highlightUltra
+                        ? 'text-[10px] font-mono'
+                        : 'bg-indigo-600 text-white text-[10px] font-mono'
+                    }
+                  >
+                    {isPro
+                      ? lang === 'vi'
+                        ? 'GÓI HIỆN TẠI'
+                        : 'CURRENT PLAN'
+                      : isUltra
+                        ? lang === 'vi'
+                          ? 'ĐÃ BAO GỒM'
+                          : 'INCLUDED'
+                        : lang === 'vi'
+                          ? 'PHỔ BIẾN NHẤT'
+                          : 'MOST POPULAR'}
                   </Badge>
                 </div>
 
@@ -221,18 +255,18 @@ export function UpgradeModal({
                 <ul className="space-y-2 text-xs text-slate-700 dark:text-slate-300 pt-2 border-t border-slate-200/80 dark:border-slate-800">
                   {(lang === 'vi'
                     ? [
-                        '50 tài liệu PDF / tháng (Tối đa 25MB, 100 trang/bài)',
+                        '50 tài liệu (.PDF, .DOCX, .BIB, .RIS) / tháng (Tối đa 25MB, 100 trang)',
                         'Kiểm chứng tới 200 trích dẫn / bài + Batch 10 files',
                         'Mở khóa Document Inspector, Logic Trace & Đồ thị',
                         'Xuất báo cáo chuẩn học thuật PDF, DOCX (Word), CSV',
-                        `Đầy đủ ${SCHOLARLY_APIS_LABEL} nguồn học thuật + Deep Neural Sentence-BERT`,
+                        `Đầy đủ ${SCHOLARLY_APIS_LABEL} nguồn học thuật + Sentence-BERT & MiniLM ONNX INT8`,
                       ]
                     : [
-                        '50 PDF checks / month (Up to 25MB, 100 pages/doc)',
+                        '50 checks (.PDF, .DOCX, .BIB, .RIS) / month (Up to 25MB, 100 pages)',
                         'Up to 200 citations / doc + 10-file Batch Upload',
                         'Unlock Document Inspector, Logic Trace & Evidence Graph',
                         'Export academic reports in PDF, DOCX (Word) & CSV',
-                        `All ${SCHOLARLY_APIS_LABEL} Scholarly APIs + Deep Neural Sentence-BERT`,
+                        `All ${SCHOLARLY_APIS_LABEL} Scholarly APIs + Sentence-BERT & MiniLM ONNX INT8`,
                       ]
                   ).map((item) => (
                     <li key={item} className="flex items-start gap-2">
@@ -245,24 +279,43 @@ export function UpgradeModal({
 
               <Button
                 type="button"
+                variant={highlightUltra ? 'outline' : 'default'}
                 data-testid="modal-upgrade-pro-btn"
                 onClick={() => handleCheckout('pro')}
-                disabled={loadingTier !== null}
-                className="w-full mt-5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl h-10 cursor-pointer"
+                disabled={highlightUltra || loadingTier !== null}
+                className={`w-full mt-5 font-semibold rounded-xl h-10 ${
+                  highlightUltra
+                    ? 'opacity-70 cursor-not-allowed'
+                    : 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer'
+                }`}
               >
                 {loadingTier === 'pro' ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : (
                   <CreditCard className="h-4 w-4 mr-2" />
                 )}
-                {lang === 'vi'
-                  ? `Nâng cấp Pro · $${billingCycle === 'annual' ? '192/năm' : '20/tháng'}`
-                  : `Upgrade to Pro · $${billingCycle === 'annual' ? '192/yr' : '20/mo'}`}
+                {isPro
+                  ? lang === 'vi'
+                    ? 'Đang sử dụng gói CITRA Pro'
+                    : 'Current Plan · CITRA Pro'
+                  : isUltra
+                    ? lang === 'vi'
+                      ? 'Đã mở khóa trong CITRA Ultra'
+                      : 'Included in CITRA Ultra'
+                    : lang === 'vi'
+                      ? `Nâng cấp Pro · $${billingCycle === 'annual' ? '192/năm' : '20/tháng'}`
+                      : `Upgrade to Pro · $${billingCycle === 'annual' ? '192/yr' : '20/mo'}`}
               </Button>
             </div>
 
             {/* ULTRA PLAN */}
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 flex flex-col justify-between relative shadow-xs">
+            <div
+              className={`rounded-2xl p-5 flex flex-col justify-between relative ${
+                highlightUltra
+                  ? 'border-2 border-violet-600 dark:border-violet-500 bg-violet-50/30 dark:bg-violet-950/20 shadow-md'
+                  : 'border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs'
+              }`}
+            >
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -280,8 +333,25 @@ export function UpgradeModal({
                       </p>
                     </div>
                   </div>
-                  <Badge variant="secondary" className="text-[10px] font-mono">
-                    {lang === 'vi' ? 'PHÒNG LAB' : 'LABS & INSTITUTION'}
+                  <Badge
+                    variant={highlightUltra ? 'default' : 'secondary'}
+                    className={
+                      highlightUltra
+                        ? 'bg-violet-600 text-white text-[10px] font-mono'
+                        : 'text-[10px] font-mono'
+                    }
+                  >
+                    {isUltra
+                      ? lang === 'vi'
+                        ? 'GÓI HIỆN TẠI'
+                        : 'CURRENT PLAN'
+                      : highlightUltra
+                        ? lang === 'vi'
+                          ? 'KHUYÊN DÙNG NÂNG CẤP'
+                          : 'RECOMMENDED UPGRADE'
+                        : lang === 'vi'
+                          ? 'PHÒNG LAB'
+                          : 'LABS & INSTITUTION'}
                   </Badge>
                 </div>
 
@@ -315,14 +385,14 @@ export function UpgradeModal({
                     ? [
                         'Không giới hạn lượt kiểm tra (1.000 bài/tháng)',
                         'Tối đa 100MB & 500 trang (Luận án Tiến sĩ & Sách)',
-                        'Batch Upload công suất lớn tới 50 PDF cùng lúc',
+                        'Batch Upload công suất lớn tới 50 tài liệu cùng lúc',
                         'Mở khóa SerpAPI Google Scholar Fallback & Active Link Check',
                         'Không giới hạn Lớp học, Sinh viên & Xuất Class ZIP',
                       ]
                     : [
                         'Unlimited monthly checks (1,000 manuscripts/mo)',
                         'Up to 100MB & 500 pages (Dissertations & Monographs)',
-                        'High-throughput Batch Upload up to 50 PDFs at once',
+                        'High-throughput Batch Upload up to 50 files at once',
                         'SerpAPI Google Scholar Fallback & Live DOI Reachability',
                         'Unlimited Classrooms, Students & Full Class ZIP Export',
                       ]
@@ -337,20 +407,30 @@ export function UpgradeModal({
 
               <Button
                 type="button"
-                variant="outline"
+                variant={highlightUltra && !isUltra ? 'default' : 'outline'}
                 data-testid="modal-upgrade-ultra-btn"
                 onClick={() => handleCheckout('ultra')}
-                disabled={loadingTier !== null}
-                className="w-full mt-5 border-violet-600/40 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/40 font-semibold rounded-xl h-10 cursor-pointer"
+                disabled={isUltra || loadingTier !== null}
+                className={`w-full mt-5 font-semibold rounded-xl h-10 ${
+                  isUltra
+                    ? 'opacity-70 cursor-not-allowed'
+                    : highlightUltra
+                      ? 'bg-violet-600 hover:bg-violet-700 text-white cursor-pointer'
+                      : 'border-violet-600/40 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/40 cursor-pointer'
+                }`}
               >
                 {loadingTier === 'ultra' ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : (
                   <CreditCard className="h-4 w-4 mr-2" />
                 )}
-                {lang === 'vi'
-                  ? `Nâng cấp Ultra · $${billingCycle === 'annual' ? '1,920/năm' : '200/tháng'}`
-                  : `Upgrade to Ultra · $${billingCycle === 'annual' ? '1,920/yr' : '200/mo'}`}
+                {isUltra
+                  ? lang === 'vi'
+                    ? 'Đang sử dụng gói CITRA Ultra'
+                    : 'Current Plan · CITRA Ultra'
+                  : lang === 'vi'
+                    ? `Nâng cấp Ultra · $${billingCycle === 'annual' ? '1,920/năm' : '200/tháng'}`
+                    : `Upgrade to Ultra · $${billingCycle === 'annual' ? '1,920/yr' : '200/mo'}`}
               </Button>
             </div>
           </div>

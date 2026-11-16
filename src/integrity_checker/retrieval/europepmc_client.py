@@ -11,6 +11,7 @@ from __future__ import annotations
 import html
 import os
 import re
+import threading
 import time
 from typing import Any
 
@@ -51,6 +52,7 @@ class EuropePMCClient(BaseScholarClient):
 
     BASE_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
     name = "europepmc"
+    _backoff_lock = threading.Lock()
     _backoff_until: float = 0.0
 
     def __init__(
@@ -69,8 +71,9 @@ class EuropePMCClient(BaseScholarClient):
         )
         self.max_retries = max_retries or min(settings.retrieval.retry.max_attempts, 3)
         self._backoff = settings.retrieval.retry.backoff
-        self._last_status_code: int | None = None
-        EuropePMCClient._backoff_until = 0.0
+        self._reset_http_telemetry()
+        with EuropePMCClient._backoff_lock:
+            EuropePMCClient._backoff_until = 0.0
         self._headers = {
             "User-Agent": (
                 f"EssayIntegrityChecker/0.2 (mailto:{self.contact_email})"
@@ -307,6 +310,38 @@ class EuropePMCClient(BaseScholarClient):
         if item.get("id"):
             ext_ids["europepmc_id"] = str(item["id"])
 
+        pub_types: list[str] = []
+        pub_type_list = item.get("pubTypeList")
+        if isinstance(pub_type_list, dict):
+            raw_pts = pub_type_list.get("pubType")
+            if isinstance(raw_pts, list):
+                pub_types.extend(str(pt).strip().lower() for pt in raw_pts if pt)
+            elif isinstance(raw_pts, str) and raw_pts.strip():
+                pub_types.append(raw_pts.strip().lower())
+        raw_top_pt = item.get("pubType")
+        if isinstance(raw_top_pt, list):
+            pub_types.extend(str(pt).strip().lower() for pt in raw_top_pt if pt)
+        elif isinstance(raw_top_pt, str) and raw_top_pt.strip():
+            pub_types.append(raw_top_pt.strip().lower())
+
+        has_retraction_in = False
+        cc_list = item.get("commentCorrectionList")
+        if isinstance(cc_list, dict) and isinstance(cc_list.get("commentCorrection"), list):
+            has_retraction_in = any(
+                isinstance(cc, dict)
+                and str(cc.get("type") or "").strip().lower() == "retraction in"
+                for cc in cc_list["commentCorrection"]
+            )
+
+        raw_title_str = str(item.get("title") or "")
+        if (
+            "retracted publication" in pub_types
+            or has_retraction_in
+            or str(item.get("isRetracted") or "").strip().lower() in {"y", "yes", "true", "1"}
+            or bool(re.match(r"^\s*(?:\[\s*retracted\s*\]|retracted\s*:)", raw_title_str, re.IGNORECASE))
+        ):
+            ext_ids["is_retracted"] = "true"
+
         url = None
         if item.get("pmid"):
             url = f"https://europepmc.org/article/MED/{item['pmid']}"
@@ -332,7 +367,9 @@ class EuropePMCClient(BaseScholarClient):
 
         from integrity_checker.retrieval.http_pool import get_shared_http_client
 
-        if time.monotonic() < EuropePMCClient._backoff_until:
+        with EuropePMCClient._backoff_lock:
+            in_backoff = time.monotonic() < EuropePMCClient._backoff_until
+        if in_backoff:
             self._last_status_code = 503
             return None
 
@@ -361,7 +398,8 @@ class EuropePMCClient(BaseScholarClient):
                     if resp.status_code == 404:
                         return None
                     if resp.status_code == 503:
-                        EuropePMCClient._backoff_until = time.monotonic() + 30.0
+                        with EuropePMCClient._backoff_lock:
+                            EuropePMCClient._backoff_until = time.monotonic() + 30.0
                         return None
                     if resp.status_code == 429:
                         seen_429 += 1

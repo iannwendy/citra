@@ -67,6 +67,47 @@ def _as_utc_naive(dt: datetime | None) -> datetime | None:
     return dt
 
 
+def refresh_job_heartbeat(
+    essay_id: int,
+    *,
+    session: Session | None = None,
+    session_factory: Callable[[], Session] | None = None,
+) -> bool:
+    """Atomically advance ``job_heartbeat_at`` for an active ``processing`` essay job.
+
+    Returns True when a matching ``job_status = 'processing'`` row was updated.
+    """
+    now_utc_str = datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S.%f")
+    owns_session = session is None
+    sess = (
+        session
+        if session is not None
+        else (session_factory() if session_factory is not None else db_session.get_session())
+    )
+    try:
+        res = sess.execute(
+            text(
+                "UPDATE essays "
+                "SET job_heartbeat_at = :now "
+                "WHERE id = :essay_id AND job_status = 'processing'"
+            ),
+            {"now": now_utc_str, "essay_id": int(essay_id)},
+        )
+        if owns_session:
+            sess.commit()
+        else:
+            sess.flush()
+        return (res.rowcount or 0) == 1
+    except Exception as exc:
+        if owns_session:
+            sess.rollback()
+        logger.debug(f"Could not refresh job_heartbeat_at for essay {essay_id}: {exc}")
+        return False
+    finally:
+        if owns_session:
+            sess.close()
+
+
 def refund_upload_quota_once(session: Session, essay_id: int, reason: str) -> bool:
     """Atomically mark an incomplete essay job as failed and refund its charged slot once.
 

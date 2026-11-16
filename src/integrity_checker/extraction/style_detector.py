@@ -332,9 +332,11 @@ class StyleDetector:
                 f"{self.config.mixed_threshold}",
             )
 
+        bib_sample_bonus = 0.1 * min(f.bib_total_entries, 10) / 10.0
+
         # APA-like
         if apa > ieee and apa > 0.5:
-            confidence = min(1.0, apa + 0.1 * f.bib_total_entries / max(f.bib_total_entries, 1))
+            confidence = min(1.0, apa + bib_sample_bonus)
             return (
                 "APA-like",
                 float(confidence),
@@ -343,7 +345,7 @@ class StyleDetector:
 
         # IEEE-like
         if ieee > apa and ieee > 0.5:
-            confidence = min(1.0, ieee + 0.1 * f.bib_total_entries / max(f.bib_total_entries, 1))
+            confidence = min(1.0, ieee + bib_sample_bonus)
             return (
                 "IEEE-like",
                 float(confidence),

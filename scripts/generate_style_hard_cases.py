@@ -22,7 +22,6 @@ Deliverables:
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -35,18 +34,18 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 SRC_DIR = ROOT_DIR / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from integrity_checker.config import get_settings
-from integrity_checker.extraction.document_parser import DocumentParser
-from integrity_checker.extraction.style_detector import StyleDetector
-from integrity_checker.linking.citation_linker import CitationLinker
-from integrity_checker.linking.duplicate_detector import DuplicateDetector
+from integrity_checker.config import get_settings  # noqa: E402
+from integrity_checker.extraction.document_parser import DocumentParser  # noqa: E402
+from integrity_checker.extraction.style_detector import StyleDetector  # noqa: E402
+from integrity_checker.linking.citation_linker import CitationLinker  # noqa: E402
+from integrity_checker.linking.duplicate_detector import DuplicateDetector  # noqa: E402
 
 STYLES: list[str] = [
     "APA",

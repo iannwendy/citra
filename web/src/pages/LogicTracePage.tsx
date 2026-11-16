@@ -881,7 +881,7 @@ export function LogicTracePage() {
 
       {/* Shared Multi-Tab Diagnostic Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <EssayActionBar essayId={id ?? ''} />
+        <EssayActionBar essayId={id ?? ''} filename={report.filename} />
         <div className="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
           <Scale className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
           <span>{lang === 'vi' ? `${totalCount} trích dẫn được truy vết` : `${totalCount} citations traced`}</span>

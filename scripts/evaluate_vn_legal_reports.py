@@ -14,12 +14,16 @@ from pathlib import Path
 
 import fitz  # PyMuPDF
 
-from integrity_checker.extraction.document_parser import DocumentParser
-from integrity_checker.extraction.patterns.apa import is_vn_legal_reference
-from integrity_checker.extraction.section_segmenter import SectionType
-from integrity_checker.linking.citation_linker import CitationLinker
-from integrity_checker.linking.statuses import CitationMappingStatus
-from integrity_checker.logic.rules import _is_non_journal_or_unindexed_source
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from integrity_checker.extraction.document_parser import DocumentParser  # noqa: E402
+from integrity_checker.extraction.patterns.apa import is_vn_legal_reference  # noqa: E402
+from integrity_checker.extraction.section_segmenter import SectionType  # noqa: E402
+from integrity_checker.linking.citation_linker import CitationLinker  # noqa: E402
+from integrity_checker.linking.statuses import CitationMappingStatus  # noqa: E402
+from integrity_checker.logic.rules import _is_non_journal_or_unindexed_source  # noqa: E402
 
 
 def inspect_pdf_raw_bib(pdf_path: Path) -> str:

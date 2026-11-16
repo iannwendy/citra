@@ -222,6 +222,8 @@ function CitraFilmPlayer({ lang }: { lang: Lang }) {
   const filmRef = useRef<HTMLVideoElement>(null);
   const visibleRef = useRef(false);
   const autoPausedRef = useRef(false);
+  const modeRef = useRef<Mode>('poster');
+  const probedFilmSrcRef = useRef<string | null>(null);
 
   const [mode, setMode] = useState<Mode>('poster');
   const [near, setNear] = useState(false);
@@ -261,15 +263,19 @@ function CitraFilmPlayer({ lang }: { lang: Lang }) {
   }, []);
 
   useEffect(() => {
-    if (!near) return;
+    if (!near && !warm) return;
     let cancelled = false;
     const physical = (boxRef.current?.clientWidth ?? 1120) * Math.min(window.devicePixelRatio || 1, 2);
     const constrained = isConstrainedNetwork();
     void pickVariant(
       constrained ? FILM_VARIANTS.filter((v) => v.width <= 1280) : FILM_VARIANTS,
       physical,
-    ).then((v) => !cancelled && setFilmSrc(v.src));
-    if (!constrained && !prefersReducedMotion()) {
+    ).then((v) => {
+      if (cancelled) return;
+      probedFilmSrcRef.current = v.src;
+      setFilmSrc((prev) => (modeRef.current === 'film' && prev ? prev : v.src));
+    });
+    if (near && !constrained && !prefersReducedMotion()) {
       void pickVariant(TEASER_VARIANTS, physical).then((v) =>
         whenIdle(() => !cancelled && setTeaserSrc(v.src)),
       );
@@ -277,7 +283,7 @@ function CitraFilmPlayer({ lang }: { lang: Lang }) {
     return () => {
       cancelled = true;
     };
-  }, [near]);
+  }, [near, warm]);
 
   useEffect(() => {
     if (typeof import.meta !== 'undefined' && import.meta.env?.MODE === 'test') {
@@ -321,7 +327,8 @@ function CitraFilmPlayer({ lang }: { lang: Lang }) {
 
   const startFilm = () => {
     teaserRef.current?.pause();
-    if (!filmSrc) setFilmSrc(`${FILM_MEDIA_BASE}/film-1080p.h264.mp4`);
+    modeRef.current = 'film';
+    setFilmSrc((prev) => prev ?? probedFilmSrcRef.current ?? `${FILM_MEDIA_BASE}/film-1080p.h264.mp4`);
     setMode('film');
   };
 
@@ -446,7 +453,11 @@ function CitraFilmPlayer({ lang }: { lang: Lang }) {
           playsInline
           preload="auto"
           aria-label={label}
-          onEnded={() => setMode('ended')}
+          onEnded={() => {
+            modeRef.current = 'ended';
+            if (probedFilmSrcRef.current) setFilmSrc(probedFilmSrcRef.current);
+            setMode('ended');
+          }}
           className="absolute inset-0 w-full h-full bg-[#FAF8F3] object-contain"
         />
       )}

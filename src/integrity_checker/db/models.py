@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from sqlalchemy import (
     DateTime,
@@ -13,9 +13,25 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    TypeDecorator,
     UniqueConstraint,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
+
+
+class IntFlag(TypeDecorator[int]):
+    """0/1 INTEGER flag column that coerces Python bools to int for PostgreSQL & SQLite."""
+
+    impl = Integer
+    cache_ok = True
+
+    def process_bind_param(self, value: int | bool | None, dialect: Any) -> int | None:
+        _ = dialect
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return 1 if value else 0
+        return int(value)
 
 # Role literals (v1.15 — Phase 3 teacher role).
 # Backward compat: giữ "user" cho student, thêm "teacher" mới.
@@ -40,7 +56,7 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
     full_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     avatar_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    is_active: Mapped[bool] = mapped_column(Integer, default=1)
+    is_active: Mapped[bool] = mapped_column(IntFlag, default=1)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
@@ -50,14 +66,14 @@ class User(Base):
     )
     # v1.15 (Phase 3) — teacher-specific fields
     institution: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    can_override_verdicts: Mapped[bool] = mapped_column(Integer, default=0)
+    can_override_verdicts: Mapped[bool] = mapped_column(IntFlag, default=0)
     # v1.17 — email verification status (1 for admin/demo/verified, 0 for pending activation)
-    email_verified: Mapped[bool] = mapped_column(Integer, default=1)
+    email_verified: Mapped[bool] = mapped_column(IntFlag, default=1)
     # v2.3 — Google OAuth2 account linking & onboarding state
     google_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
     auth_provider: Mapped[str] = mapped_column(String(30), default="local")
-    username_customized: Mapped[bool] = mapped_column(Integer, default=1)
-    google_onboarded: Mapped[bool] = mapped_column(Integer, default=1)
+    username_customized: Mapped[bool] = mapped_column(IntFlag, default=1)
+    google_onboarded: Mapped[bool] = mapped_column(IntFlag, default=1)
     # v2.2 — Premium Subscription & Quota fields
     plan_tier: Mapped[str] = mapped_column(String(20), default="basic")
     billing_cycle: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -66,7 +82,7 @@ class User(Base):
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     current_period_start: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     current_period_end: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    cancel_at_period_end: Mapped[bool] = mapped_column(Integer, default=0)
+    cancel_at_period_end: Mapped[bool] = mapped_column(IntFlag, default=0)
     monthly_uploads_used: Mapped[int] = mapped_column(Integer, default=0)
     quota_reset_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # v2.4 — Personal data protection consent proof (Luật 91/2025/QH15 & Nghị định 356/2025/NĐ-CP)
@@ -91,6 +107,19 @@ class User(Base):
         "ClassMembership", back_populates="student", foreign_keys="ClassMembership.student_id",
         cascade="all, delete-orphan",
     )
+
+    @validates(
+        "is_active",
+        "can_override_verdicts",
+        "email_verified",
+        "username_customized",
+        "google_onboarded",
+        "cancel_at_period_end",
+    )
+    def _coerce_user_int_flags(self, _key: str, value: int | bool | None) -> int | None:
+        if value is None:
+            return None
+        return (1 if value else 0) if isinstance(value, bool) else int(value)
 
 
 class Session(Base):
@@ -143,9 +172,15 @@ class ApiKey(Base):
         DateTime, default=lambda: datetime.now(UTC)
     )
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    is_active: Mapped[bool] = mapped_column(Integer, default=1)
+    is_active: Mapped[bool] = mapped_column(IntFlag, default=1)
 
     user: Mapped[User] = relationship(back_populates="api_keys")
+
+    @validates("is_active")
+    def _coerce_api_key_int_flag(self, _key: str, value: int | bool | None) -> int | None:
+        if value is None:
+            return None
+        return (1 if value else 0) if isinstance(value, bool) else int(value)
 
 
 class CitationCache(Base):
@@ -198,7 +233,7 @@ class EssayRecord(Base):
     job_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     job_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     quota_charged: Mapped[int] = mapped_column(
-        Integer,
+        IntFlag,
         nullable=False,
         default=0,
         server_default="0",
@@ -212,6 +247,12 @@ class EssayRecord(Base):
     verdicts: Mapped[list[VerdictRecord]] = relationship(
         back_populates="essay", cascade="all, delete-orphan", passive_deletes=True
     )
+
+    @validates("quota_charged")
+    def _coerce_essay_int_flag(self, _key: str, value: int | bool | None) -> int | None:
+        if value is None:
+            return None
+        return (1 if value else 0) if isinstance(value, bool) else int(value)
 
 
 class CitationRecord(Base):
@@ -270,10 +311,10 @@ class VerdictRecord(Base):
     mapping_status: Mapped[str | None] = mapped_column(String, nullable=True, default="matched")
     mapping_confidence: Mapped[float] = mapped_column(Float, default=0.0)
     style_penalty: Mapped[float | None] = mapped_column(Float, nullable=True)
-    domain_exception: Mapped[bool] = mapped_column(Integer, default=0)  # SQLite bool
+    domain_exception: Mapped[bool] = mapped_column(IntFlag, default=0)  # SQLite bool
 
     # v1.2 — Override
-    is_overridden: Mapped[bool] = mapped_column(Integer, default=0)
+    is_overridden: Mapped[bool] = mapped_column(IntFlag, default=0)
     override_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     overridden_by: Mapped[str | None] = mapped_column(String, nullable=True)
 
@@ -282,6 +323,12 @@ class VerdictRecord(Base):
     context: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     essay: Mapped[EssayRecord] = relationship(back_populates="verdicts")
+
+    @validates("domain_exception", "is_overridden")
+    def _coerce_verdict_int_flags(self, _key: str, value: int | bool | None) -> int | None:
+        if value is None:
+            return None
+        return (1 if value else 0) if isinstance(value, bool) else int(value)
 
 
 class AuditLog(Base):
@@ -307,9 +354,12 @@ class Class(Base):
     """Một lớp học do 1 teacher phụ trách, có nhiều students (qua ClassMembership)."""
 
     __tablename__ = "classes"
+    __table_args__ = (
+        UniqueConstraint("teacher_id", "name", name="uq_classes_teacher_name"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     join_code: Mapped[str | None] = mapped_column(String(20), unique=True, nullable=True, index=True)
     teacher_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -399,7 +449,7 @@ class PromoCode(Base):
     max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_uses_per_user: Mapped[int] = mapped_column(Integer, default=1)
     used_count: Mapped[int] = mapped_column(Integer, default=0)
-    is_active: Mapped[bool] = mapped_column(Integer, default=1)
+    is_active: Mapped[bool] = mapped_column(IntFlag, default=1)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -416,6 +466,12 @@ class PromoCode(Base):
     redemptions: Mapped[list[PromoRedemption]] = relationship(
         back_populates="promo", cascade="all, delete-orphan"
     )
+
+    @validates("is_active")
+    def _coerce_promo_int_flag(self, _key: str, value: int | bool | None) -> int | None:
+        if value is None:
+            return None
+        return (1 if value else 0) if isinstance(value, bool) else int(value)
 
 
 class PromoRedemption(Base):

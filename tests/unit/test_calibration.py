@@ -306,5 +306,8 @@ class TestPlattCalibratorAndHybridMLScorer:
         assert audit["train_val_overlap"] == 0
         assert audit["train_test_overlap"] == 0
         assert audit["val_test_overlap"] == 0
+        assert audit["train_val_title_overlap"] == 0
+        assert audit["train_test_title_overlap"] == 0
+        assert audit["val_test_title_overlap"] == 0
         assert "bootstrap_95_ci" in report["neuro_symbolic_platt_calibrated"]
 

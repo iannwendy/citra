@@ -855,6 +855,17 @@ export const RULE_DEFINITIONS: Record<string, RuleDefinition> = {
     ],
     conclusion: "VERIFIED",
   },
+  "R-DOI-RA-NO-CSL": {
+    id: "R-DOI-RA-NO-CSL",
+    name: "Regional DOI Registered Without Public CSL-JSON Metadata",
+    nameVi: "Mã DOI đã đăng ký tại Cơ quan DOI Khu vực nhưng chưa có CSL-JSON công khai",
+    description: "DOI resolves at a regional Registration Agency (e.g. Airiti, JaLC, KISTI, CNKI) that does not expose public CSL-JSON metadata — manual bibliographic verification required",
+    descriptionVi: "Mã DOI đã đăng ký tại Cơ quan Quản lý DOI khu vực nhưng chưa cung cấp metadata CSL-JSON công khai — cần đối chiếu thủ công thông tin thư mục",
+    conditions: [
+      { field: "doi_ra_status", operator: "=", value: "registered_no_csl" },
+    ],
+    conclusion: "UNRESOLVED",
+  },
   "R-INCOMPLETE-METADATA": {
     id: "R-INCOMPLETE-METADATA",
     name: "Incomplete Bibliographic Reference",

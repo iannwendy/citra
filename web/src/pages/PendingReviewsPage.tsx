@@ -55,23 +55,38 @@ export function PendingReviewsPage() {
     try {
       const data = await api.listMyClasses();
       setClasses(data);
-      if (data.length > 0 && selectedClassId === null) {
-        setSelectedClassId(data[0].id);
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load classes');
     } finally {
       setLoadingClasses(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadReviews = useCallback(async (cid: number) => {
+  const loadReviews = useCallback(async (cid: number | null, classList: Class[]) => {
+    if (classList.length === 0) {
+      setReviews([]);
+      return;
+    }
     setLoadingReviews(true);
     setError('');
     try {
-      const data = await api.listPendingReviews(cid);
-      setReviews(data);
+      if (cid === null) {
+        const lists = await Promise.all(classList.map((c) => api.listPendingReviews(c.id)));
+        const seen = new Set<number>();
+        const merged: PendingVerdict[] = [];
+        for (const list of lists) {
+          for (const item of list) {
+            if (!seen.has(item.verdict_id)) {
+              seen.add(item.verdict_id);
+              merged.push(item);
+            }
+          }
+        }
+        setReviews(merged);
+      } else {
+        const data = await api.listPendingReviews(cid);
+        setReviews(data);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load reviews');
     } finally {
@@ -80,12 +95,14 @@ export function PendingReviewsPage() {
   }, []);
 
   useEffect(() => {
-    loadClasses();
+    void loadClasses();
   }, [loadClasses]);
 
   useEffect(() => {
-    if (selectedClassId !== null) loadReviews(selectedClassId);
-  }, [selectedClassId, loadReviews]);
+    if (!loadingClasses && classes.length > 0) {
+      void loadReviews(selectedClassId, classes);
+    }
+  }, [loadingClasses, classes, selectedClassId, loadReviews]);
 
   const hallucinationCount = reviews.filter(
     (r) => r.label === 'suspected_hallucination'
@@ -261,10 +278,24 @@ export function PendingReviewsPage() {
                 className="flex flex-wrap items-center gap-1.5"
               >
                 <Filter className="h-3.5 w-3.5 text-slate-400 mr-1" />
+                <button
+                  type="button"
+                  data-testid="pending-filter-all-classes"
+                  onClick={() => setSelectedClassId(null)}
+                  aria-pressed={selectedClassId === null}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    selectedClassId === null
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  {lang === 'vi' ? 'Tất cả lớp' : 'All Classes'}
+                </button>
                 {classes.map((c) => {
                   const isActive = selectedClassId === c.id;
                   return (
                     <button
+                      type="button"
                       key={c.id}
                       onClick={() => setSelectedClassId(c.id)}
                       aria-pressed={isActive}

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -49,9 +50,16 @@ class DiskCache:
             return
         path = self._key_to_path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = path.with_suffix(".tmp")
-        temp_path.write_text(
-            json.dumps(value, ensure_ascii=False, default=str),
-            encoding="utf-8",
-        )
-        temp_path.replace(path)
+        temp_path = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temp_path.write_text(
+                json.dumps(value, ensure_ascii=False, default=str),
+                encoding="utf-8",
+            )
+            temp_path.replace(path)
+        finally:
+            if temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass

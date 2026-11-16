@@ -253,16 +253,17 @@ PLAN_CATALOG: dict[str, PlanPolicy] = {
 
 def default_plan_for_role(role: str | None) -> PlanTierLiteral:
     """Return the default subscription tier when a user is created."""
-    if role == "admin":
+    clean_role = role if isinstance(role, str) else "user"
+    if clean_role == "admin":
         return "ultra"
-    if role == "teacher":
+    if clean_role == "teacher":
         return "pro"
     return "basic"
 
 
 def get_plan_policy(tier: str | None) -> PlanPolicy:
     """Lookup PlanPolicy by tier name, falling back to ``basic``."""
-    normalized = (tier or "basic").strip().lower()
+    normalized = tier.strip().lower() if isinstance(tier, str) and tier.strip() else "basic"
     return PLAN_CATALOG.get(normalized, PLAN_CATALOG["basic"])
 
 
@@ -270,17 +271,25 @@ def get_user_plan_policy(user: Any) -> PlanPolicy:
     """Return the effective PlanPolicy for a User ORM instance."""
     if user is None:
         return PLAN_CATALOG["basic"]
-    role = getattr(user, "role", "user")
+    raw_role = getattr(user, "role", "user")
+    role = raw_role if isinstance(raw_role, str) else "user"
     if role == "admin":
         return PLAN_CATALOG["ultra"]
     raw_tier = getattr(user, "plan_tier", None)
-    if not raw_tier:
+    if not isinstance(raw_tier, str) or not raw_tier.strip():
         raw_tier = default_plan_for_role(role)
+    period_end = _ensure_utc(getattr(user, "current_period_end", None))
+    if (
+        period_end is not None
+        and datetime.now(UTC) >= period_end
+        and raw_tier.strip().lower() != "basic"
+    ):
+        return PLAN_CATALOG["basic"]
     return get_plan_policy(raw_tier)
 
 
 def _ensure_utc(dt: datetime | None) -> datetime | None:
-    if dt is None:
+    if not isinstance(dt, datetime):
         return None
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC)
@@ -290,30 +299,39 @@ def _ensure_utc(dt: datetime | None) -> datetime | None:
 def ensure_user_quota_current(user: Any) -> bool:
     """Lazy-reset monthly upload counter if quota window has elapsed.
 
-    Also handles automatic downgrade to ``basic`` if a canceled subscription's
-    billing period has ended.
+    Also handles automatic downgrade to ``basic`` once a paid subscription's
+    billing period has ended (even when ``cancel_at_period_end == 0``, such as
+    one-time VNPay or promo-waiver periods).
     Returns True if any field on ``user`` was mutated.
     """
     now = datetime.now(UTC)
     mutated = False
+    raw_role = getattr(user, "role", "user")
+    role = raw_role if isinstance(raw_role, str) else "user"
 
     # Ensure plan_tier is populated
-    if not getattr(user, "plan_tier", None):
-        user.plan_tier = default_plan_for_role(getattr(user, "role", "user"))
+    raw_tier = getattr(user, "plan_tier", None)
+    if not isinstance(raw_tier, str) or not raw_tier.strip():
+        user.plan_tier = default_plan_for_role(role)
+        raw_tier = user.plan_tier
         mutated = True
 
-    # Check if paid subscription expired after cancel_at_period_end
+    # Expire paid subscriptions once current_period_end has elapsed
     period_end = _ensure_utc(getattr(user, "current_period_end", None))
     if (
         period_end is not None
         and now >= period_end
-        and getattr(user, "plan_tier", "basic") != "basic"
-        and bool(getattr(user, "cancel_at_period_end", 0))
+        and raw_tier.strip().lower() != "basic"
+        and role != "admin"
     ):
+        cancel_raw = getattr(user, "cancel_at_period_end", 0)
+        was_canceled = bool(cancel_raw) if isinstance(cancel_raw, (int, bool)) else False
         user.plan_tier = "basic"
         user.billing_cycle = None
-        user.subscription_status = "canceled"
+        user.subscription_status = "canceled" if was_canceled else "expired"
         user.cancel_at_period_end = 0
+        user.current_period_end = None
+        user.stripe_subscription_id = None
         mutated = True
 
     reset_at = _ensure_utc(getattr(user, "quota_reset_at", None))

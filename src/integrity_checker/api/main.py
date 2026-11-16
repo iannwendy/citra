@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import threading
+from typing import Any
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -148,7 +151,7 @@ def create_app() -> FastAPI:
     logger.info("Database initialized")
 
     worker_mode = os.getenv("CITRA_WORKER_MODE", "inline").strip().lower() or "inline"
-    if not is_test_runtime() and worker_mode != "web_only":
+    if not is_test_runtime() and worker_mode == "inline":
         import threading
 
         def _startup_background_maintenance() -> None:
@@ -214,5 +217,22 @@ def create_app() -> FastAPI:
     return app
 
 
-# Module-level app cho uvicorn
-app = create_app()
+_app_instance: FastAPI | None = None
+_app_lock = threading.Lock()
+
+
+def get_app() -> FastAPI:
+    """Return lazily created module-level FastAPI app singleton."""
+    global _app_instance
+    if _app_instance is None:
+        with _app_lock:
+            if _app_instance is None:
+                _app_instance = create_app()
+                globals()["app"] = _app_instance
+    return _app_instance
+
+
+def __getattr__(name: str) -> Any:
+    if name == "app":
+        return get_app()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

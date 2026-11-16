@@ -10,6 +10,7 @@ import {
 } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
+import { useVerificationProgress } from '@/contexts/VerificationProgressContext';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { VerdictBadge } from '@/components/VerdictBadge';
 import { Button } from '@/components/ui/button';
@@ -58,6 +59,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
   const lang: 'vi' | 'en' = langProp ?? i18nLang;
   const isVi = lang === 'vi';
   const { user, refreshUser } = useAuth();
+  const { syncSingleCheckFromStatus } = useVerificationProgress();
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -310,6 +312,27 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
         items,
         run_verification: true,
       });
+      syncSingleCheckFromStatus(
+        res.essay_id,
+        {
+          status: res.status === 'completed' ? 'completed' : 'queued',
+          step: 'parsing',
+          step_index: 0,
+          total_steps: 8,
+          message:
+            lang === 'vi'
+              ? 'Đang tổng hợp & kiểm chứng bản thảo PDF Sandbox...'
+              : 'Synthesizing & verifying sandbox PDF manuscript...',
+          citations_found: res.in_text_count ?? 0,
+          references_found: res.references_count ?? 0,
+          linked: 0,
+          sources_queried: {},
+          elapsed_seconds: 0,
+          finished_at: null,
+          error: null,
+        },
+        res.filename || manuscriptTitle,
+      );
       void refreshUser();
       toast.success(
         lang === 'vi'
@@ -1318,7 +1341,9 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                           </span>
                         </div>
                         <span className="font-mono text-[11px] text-slate-500">
-                          {lang === 'vi' ? 'Luật' : 'Rules'}: {(r.triggered_rules || []).join(', ') || 'R01'}
+                          {lang === 'vi' ? 'Luật' : 'Rules'}:{' '}
+                          {(r.triggered_rules || []).join(', ') ||
+                            (r.label === 'verified' ? 'R01' : '—')}
                         </span>
                       </div>
                       <p className="font-mono text-[11px] text-slate-800 dark:text-slate-200 break-words [overflow-wrap:anywhere]">

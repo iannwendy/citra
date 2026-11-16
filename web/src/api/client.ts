@@ -100,9 +100,13 @@ export interface MappingStatusSummary {
 export interface OverrideRecord {
   overridden_at: string;
   previous_label?: ValidationLabel;
+  original_label?: ValidationLabel;
   previous_status?: CitationMappingStatus;
-  new_label: ValidationLabel;
+  original_status?: CitationMappingStatus;
+  new_label?: ValidationLabel;
+  overridden_label?: ValidationLabel;
   new_status?: CitationMappingStatus;
+  overridden_status?: CitationMappingStatus;
   reason?: string;
   overridden_by?: string;
 }
@@ -631,6 +635,21 @@ export interface CacheClearResponse {
 
 // --- Helpers ---
 
+const PUBLIC_AUTH_PATH_RE =
+  /^\/auth\/(login|google|register|activate|forgot-password|reset-password|resend-activation|verify-reset-token)(\b|\/|\?|$)/;
+
+function notifyUnauthorizedIfProtected(path: string, status: number): void {
+  if (status !== 401 || PUBLIC_AUTH_PATH_RE.test(path)) return;
+  try {
+    localStorage.removeItem('token');
+  } catch {
+    // Ignore storage errors
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('citra:unauthorized'));
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem('token');
   const headers: Record<string, string> = {
@@ -644,6 +663,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers,
   });
   if (!resp.ok) {
+    notifyUnauthorizedIfProtected(path, resp.status);
     const text = await resp.text();
     let parsedDetail: string | null = null;
     try {
@@ -675,6 +695,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const resp = await fetch(`${BASE_URL}${path}`, init);
   if (!resp.ok) {
+    notifyUnauthorizedIfProtected(path, resp.status);
     let detail = `Request failed (HTTP ${resp.status})`;
     try {
       const contentType = resp.headers.get('content-type') ?? '';
@@ -724,7 +745,8 @@ async function getReportOrNull(
   options?: { signal?: AbortSignal },
 ): Promise<AnalysisReport | null> {
   const token = localStorage.getItem('token');
-  const resp = await fetch(`${BASE_URL}/essays/${id}/report`, {
+  const path = `/essays/${id}/report`;
+  const resp = await fetch(`${BASE_URL}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     signal: options?.signal,
   });
@@ -732,6 +754,7 @@ async function getReportOrNull(
     return null;  // still processing
   }
   if (!resp.ok) {
+    notifyUnauthorizedIfProtected(path, resp.status);
     throw new Error(`API ${resp.status}: ${await resp.text()}`);
   }
   return resp.json();
@@ -908,7 +931,7 @@ export interface BillingTransactionItem {
 export interface CheckoutSessionResponse {
   session_id: string;
   checkout_url: string;
-  mode: 'stripe_test' | 'stripe_demo';
+  mode: 'stripe_live' | 'stripe_test' | 'stripe_demo' | 'promo_waiver';
   plan_tier: PlanTier;
   plan_name: string;
   billing_cycle: BillingCycle;
@@ -1065,6 +1088,7 @@ export interface UserCreate {
   email?: string | null;
   full_name?: string | null;
   role?: 'user' | 'teacher' | 'admin';
+  plan_tier?: PlanTier | null;
   is_active?: boolean;
   institution?: string | null;
   can_override_verdicts?: boolean;
@@ -1076,6 +1100,7 @@ export interface UserUpdate {
   email?: string | null;
   full_name?: string | null;
   role?: 'user' | 'teacher' | 'admin' | null;
+  plan_tier?: PlanTier | null;
   is_active?: boolean | null;
   institution?: string | null;
   can_override_verdicts?: boolean | null;
@@ -1182,6 +1207,11 @@ export interface ClassAnalytics {
 
 export interface ClassCreate {
   name: string;
+  description?: string;
+}
+
+export interface ClassUpdate {
+  name?: string;
   description?: string;
 }
 
@@ -1292,7 +1322,7 @@ export interface SystemHealth {
 
 export interface AuditLogEntry {
   id: number;
-  verdict_id: number;
+  verdict_id: number | null;
   /** Essay owning the verdict (newer backends); enables deep links to the report. */
   essay_id?: number | null;
   original_label: string;
@@ -1463,6 +1493,43 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }),
+  updateClass: (classId: number, data: ClassUpdate) =>
+    request<Class>(`/teacher/classes/${classId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+  deleteClass: (classId: number) =>
+    request<{ status: string; id: number }>(`/teacher/classes/${classId}`, {
+      method: 'DELETE',
+    }),
+  leaveClass: (classId: number) =>
+    request<{ status: string; class_id: number }>(`/teacher/classes/${classId}/leave`, {
+      method: 'DELETE',
+    }),
+  downloadClassZipExport: async (classId: number): Promise<void> => {
+    const token = localStorage.getItem('token');
+    const path = `/teacher/classes/${classId}/export.zip`;
+    const resp = await fetch(`${BASE_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!resp.ok) {
+      notifyUnauthorizedIfProtected(path, resp.status);
+      throw new Error(`API ${resp.status}: ${await resp.text()}`);
+    }
+    const blob = await resp.blob();
+    const disposition = resp.headers.get('content-disposition') ?? '';
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    const filename = match?.[1] || `class_${classId}_export.zip`;
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
   regenerateClassCode: (classId: number) =>
     request<Class>(`/teacher/classes/${classId}/regenerate-code`, {
       method: 'POST',
@@ -1603,13 +1670,12 @@ export const api = {
   ): Promise<string> => {
     const token = localStorage.getItem('token');
     const qs = highlight ? `?highlight=${encodeURIComponent(highlight)}` : '';
-    const resp = await fetch(
-      `${BASE_URL}/essays/${id}/page-preview/${Math.max(1, pageNum)}${qs}`,
-      {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      },
-    );
+    const path = `/essays/${id}/page-preview/${Math.max(1, pageNum)}${qs}`;
+    const resp = await fetch(`${BASE_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!resp.ok) {
+      notifyUnauthorizedIfProtected(path, resp.status);
       throw new Error(`API ${resp.status}: ${await resp.text()}`);
     }
     const blob = await resp.blob();
@@ -1622,10 +1688,12 @@ export const api = {
     baseFilename?: string,
   ): Promise<void> => {
     const token = localStorage.getItem('token');
-    const resp = await fetch(`${BASE_URL}/essays/${id}/report?format=${format}`, {
+    const path = `/essays/${id}/report?format=${format}`;
+    const resp = await fetch(`${BASE_URL}${path}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!resp.ok) {
+      notifyUnauthorizedIfProtected(path, resp.status);
       throw new Error(`API ${resp.status}: ${await resp.text()}`);
     }
     const blob = await resp.blob();
@@ -1646,13 +1714,12 @@ export const api = {
     baseFilename?: string,
   ): Promise<void> => {
     const token = localStorage.getItem('token');
-    const resp = await fetch(
-      `${BASE_URL}/essays/${id}/export-healed-docx?style=${encodeURIComponent(style)}`,
-      {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      },
-    );
+    const path = `/essays/${id}/export-healed-docx?style=${encodeURIComponent(style)}`;
+    const resp = await fetch(`${BASE_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!resp.ok) {
+      notifyUnauthorizedIfProtected(path, resp.status);
       throw new Error(`API ${resp.status}: ${await resp.text()}`);
     }
     const blob = await resp.blob();
@@ -1713,6 +1780,7 @@ export const api = {
       }),
     });
     if (!resp.ok) {
+      notifyUnauthorizedIfProtected('/essays/sandbox/generate-pdf', resp.status);
       throw new Error(`API ${resp.status}: ${await resp.text()}`);
     }
     const blob = await resp.blob();

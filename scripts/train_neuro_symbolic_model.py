@@ -64,25 +64,34 @@ import numpy as np
 import torch
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT / "src"))
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from integrity_checker.evaluation.baselines import BaselineRunner
-from integrity_checker.evaluation.metrics import MetricsCalculator
-from integrity_checker.logic.calibration import (
+from integrity_checker.evaluation.baselines import BaselineRunner  # noqa: E402
+from integrity_checker.evaluation.metrics import MetricsCalculator  # noqa: E402
+from integrity_checker.logic.calibration import (  # noqa: E402
     CalibrationCalculator,
     HybridMLScorer,
     PlattCalibrator,
 )
-from integrity_checker.logic.rules import SymbolicRules
-from integrity_checker.matching.author_matcher import author_match_score
-from integrity_checker.matching.fuzzy import FuzzyMatcher
-from integrity_checker.matching.venue_normalizer import VenueNormalizer
-from integrity_checker.models.source import SourceCandidate, SourceResult
-from integrity_checker.models.validation import MatchFeatures
+from integrity_checker.logic.rules import SymbolicRules  # noqa: E402
+from integrity_checker.matching.author_matcher import author_match_score  # noqa: E402
+from integrity_checker.matching.fuzzy import FuzzyMatcher  # noqa: E402
+from integrity_checker.matching.venue_normalizer import VenueNormalizer  # noqa: E402
+from integrity_checker.models.source import SourceCandidate, SourceResult  # noqa: E402
+from integrity_checker.models.validation import MatchFeatures  # noqa: E402
 
 TOTAL_SAMPLES = 120_000
 FULL_ABSTRACT_QUOTA = 80_000
 METADATA_ONLY_QUOTA = TOTAL_SAMPLES - FULL_ABSTRACT_QUOTA  # 40,000
+
+
+def _normalize_title_key(title: str) -> str:
+    """Case/punctuation-insensitive normalized title key for strict zero-overlap deduplication."""
+    cleaned = "".join(
+        ch if (ch.isalnum() or ch.isspace()) else " " for ch in str(title or "").casefold()
+    )
+    return " ".join(cleaned.split())
 
 
 def _parse_paper_row(
@@ -149,19 +158,38 @@ def _load_db_papers_stratified(
     rows = cur.fetchall()
     conn.close()
 
-    with_abs_pool: list[dict[str, Any]] = []
-    meta_only_pool: list[dict[str, Any]] = []
+    parsed_rows: list[dict[str, Any]] = []
     seen_ids: set[int] = set()
-
     for row in rows:
         parsed = _parse_paper_row(*row)
         if parsed is None or parsed["paper_id"] in seen_ids:
             continue
         seen_ids.add(parsed["paper_id"])
+        parsed_rows.append(parsed)
+
+    # Prioritize full-abstract papers during normalized-title deduplication so duplicate
+    # proceedings/preprint entries never shadow full-abstract records nor leak across splits.
+    with_abs_pool: list[dict[str, Any]] = []
+    meta_only_pool: list[dict[str, Any]] = []
+    seen_norm_titles: set[str] = set()
+
+    for parsed in parsed_rows:
+        if not parsed["has_full_abstract"]:
+            continue
+        norm_title = _normalize_title_key(parsed["title"])
+        if not norm_title or norm_title in seen_norm_titles:
+            continue
+        seen_norm_titles.add(norm_title)
+        with_abs_pool.append(parsed)
+
+    for parsed in parsed_rows:
         if parsed["has_full_abstract"]:
-            with_abs_pool.append(parsed)
-        else:
-            meta_only_pool.append(parsed)
+            continue
+        norm_title = _normalize_title_key(parsed["title"])
+        if not norm_title or norm_title in seen_norm_titles:
+            continue
+        seen_norm_titles.add(norm_title)
+        meta_only_pool.append(parsed)
 
     rng = random.Random(seed)
     rng.shuffle(with_abs_pool)
@@ -195,25 +223,50 @@ def _partition_stratified_pools(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Partition papers into strictly disjoint 70/15/15 Train/Val/Test pools.
 
+    Deduplicates both `paper_id` and normalized title BEFORE splitting so Train, Val,
+    and Test have strictly zero paper-ID overlap and zero normalized-title overlap.
     Within each split, papers with full abstracts (66.7% of each pool) are placed
     first so that `VERIFIED` (36%), `METADATA_ERROR` (22%), and `H4` (7.5%) — which
     total 65.5% of each split — are 100% backed by full-length abstracts (>80 chars).
     """
-    n_abs = len(with_abs_papers)
+    seen_ids: set[int] = set()
+    seen_titles: set[str] = set()
+    dedup_abs: list[dict[str, Any]] = []
+    dedup_meta: list[dict[str, Any]] = []
+
+    for p in with_abs_papers:
+        pid = int(p["paper_id"])
+        nt = _normalize_title_key(p["title"])
+        if pid in seen_ids or not nt or nt in seen_titles:
+            continue
+        seen_ids.add(pid)
+        seen_titles.add(nt)
+        dedup_abs.append(p)
+
+    for p in meta_only_papers:
+        pid = int(p["paper_id"])
+        nt = _normalize_title_key(p["title"])
+        if pid in seen_ids or not nt or nt in seen_titles:
+            continue
+        seen_ids.add(pid)
+        seen_titles.add(nt)
+        dedup_meta.append(p)
+
+    n_abs = len(dedup_abs)
     n_abs_train = int(round(n_abs * 0.70))
     n_abs_val = int(round(n_abs * 0.15))
 
-    abs_train = with_abs_papers[:n_abs_train]
-    abs_val = with_abs_papers[n_abs_train : n_abs_train + n_abs_val]
-    abs_test = with_abs_papers[n_abs_train + n_abs_val :]
+    abs_train = dedup_abs[:n_abs_train]
+    abs_val = dedup_abs[n_abs_train : n_abs_train + n_abs_val]
+    abs_test = dedup_abs[n_abs_train + n_abs_val :]
 
-    n_meta = len(meta_only_papers)
+    n_meta = len(dedup_meta)
     n_meta_train = int(round(n_meta * 0.70))
     n_meta_val = int(round(n_meta * 0.15))
 
-    meta_train = meta_only_papers[:n_meta_train]
-    meta_val = meta_only_papers[n_meta_train : n_meta_train + n_meta_val]
-    meta_test = meta_only_papers[n_meta_train + n_meta_val :]
+    meta_train = dedup_meta[:n_meta_train]
+    meta_val = dedup_meta[n_meta_train : n_meta_train + n_meta_val]
+    meta_test = dedup_meta[n_meta_train + n_meta_val :]
 
     # Order each pool so full-abstract papers cover VERIFIED (36%) + METADATA_ERROR (22%)
     # + first portion of SUSPECTED_HALLUCINATION (including H4), and metadata-only papers
@@ -226,12 +279,19 @@ def _partition_stratified_pools(
     val_ids = {p["paper_id"] for p in val_pool}
     test_ids = {p["paper_id"] for p in test_pool}
 
+    train_titles = {_normalize_title_key(p["title"]) for p in train_pool}
+    val_titles = {_normalize_title_key(p["title"]) for p in val_pool}
+    test_titles = {_normalize_title_key(p["title"]) for p in test_pool}
+
     assert len(train_ids) == len(train_pool), "Duplicate paper IDs in train_pool"
     assert len(val_ids) == len(val_pool), "Duplicate paper IDs in val_pool"
     assert len(test_ids) == len(test_pool), "Duplicate paper IDs in test_pool"
     assert len(train_ids & val_ids) == 0, "Data leakage between Train and Val"
     assert len(train_ids & test_ids) == 0, "Data leakage between Train and Test"
     assert len(val_ids & test_ids) == 0, "Data leakage between Val and Test"
+    assert len(train_titles & val_titles) == 0, "Title leakage between Train and Val"
+    assert len(train_titles & test_titles) == 0, "Title leakage between Train and Test"
+    assert len(val_titles & test_titles) == 0, "Title leakage between Val and Test"
 
     leakage_audit = {
         "train_distinct_papers": len(train_ids),
@@ -243,6 +303,9 @@ def _partition_stratified_pools(
         "train_val_overlap": len(train_ids & val_ids),
         "train_test_overlap": len(train_ids & test_ids),
         "val_test_overlap": len(val_ids & test_ids),
+        "train_val_title_overlap": len(train_titles & val_titles),
+        "train_test_title_overlap": len(train_titles & test_titles),
+        "val_test_title_overlap": len(val_titles & test_titles),
         "zero_leakage_verified": True,
     }
     return train_pool, val_pool, test_pool, leakage_audit
@@ -429,9 +492,12 @@ def build_split_dataset(
                 "cand_title": p["title"],
                 "cited_authors": c_authors,
                 "cand_authors": p["authors"],
+                "cited_year": int(p["year"]) + yd,
+                "cand_year": int(p["year"]),
                 "year_distance": yd,
                 "cited_venue": c_venue,
                 "cand_venue": p["venue"],
+                "cand_doi": p["doi"] or None,
                 "doi_exact_match": has_doi,
                 "source_consensus": rng.choices([1, 2, 3, 4], weights=[0.25, 0.45, 0.20, 0.10])[0],
                 "has_candidate": True,
@@ -485,7 +551,7 @@ def build_split_dataset(
             c_title = _corrupt_title_moderate(p["title"], other_p["title"], rng)
             c_authors = list(p["authors"])
             yd = rng.choice([0, 1])
-            doi_ok = True
+            doi_ok = bool(p["doi"])
             consensus = rng.choice([1, 2])
             use_context = False
             ctx_mode = "none"
@@ -513,7 +579,7 @@ def build_split_dataset(
                 c_title = _corrupt_title_moderate(p["title"], other_p["title"], rng)
                 c_authors = list(p["authors"])
                 yd = rng.choice([1, 2])
-                doi_ok = True
+                doi_ok = bool(p["doi"])
                 consensus = rng.choice([2, 3])
                 url_status, url_code = "dead_link", 404
             use_context = False
@@ -529,9 +595,12 @@ def build_split_dataset(
                 "cand_title": p["title"],
                 "cited_authors": c_authors,
                 "cand_authors": p["authors"],
+                "cited_year": int(p["year"]) + yd,
+                "cand_year": int(p["year"]),
                 "year_distance": yd,
                 "cited_venue": p["venue"],
                 "cand_venue": other_p["venue"] if err_mode == 1 else p["venue"],
+                "cand_doi": p["doi"] or None,
                 "doi_exact_match": doi_ok,
                 "source_consensus": consensus,
                 "has_candidate": True,
@@ -609,9 +678,12 @@ def build_split_dataset(
                 "cand_title": cand_title,
                 "cited_authors": c_authors,
                 "cand_authors": p2["authors"],
+                "cited_year": 2024 if yd >= 100 else int(p2["year"]) + yd,
+                "cand_year": int(p2["year"]),
                 "year_distance": yd,
                 "cited_venue": "Journal of Synthetic AI Hallucinations",
                 "cand_venue": p2["venue"],
+                "cand_doi": (p2["doi"] or None) if has_cand else None,
                 "doi_exact_match": False,
                 "cited_doi": c_doi,
                 "source_consensus": consensus,
@@ -641,6 +713,7 @@ def build_split_dataset(
         keep_n = max(2, int(len(w1) * 0.38))
         c_title = f"{' '.join(w1[:keep_n])} and {' '.join(w2[:max(3, len(w2)//2)])}"
         c_authors = [p1["authors"][0], "UnknownColleague, R."] if (m % 2 == 0) else ["AmbiguousAuthor, T."]
+        unr_yd = rng.choice([1, 2, 3, 4])
 
         raw_Specs.append(
             {
@@ -652,9 +725,12 @@ def build_split_dataset(
                 "cand_title": p1["title"],
                 "cited_authors": c_authors,
                 "cand_authors": p1["authors"],
-                "year_distance": rng.choice([1, 2, 3, 4]),
+                "cited_year": int(p1["year"]) + unr_yd,
+                "cand_year": int(p1["year"]),
+                "year_distance": unr_yd,
                 "cited_venue": p2["venue"],
                 "cand_venue": p1["venue"],
+                "cand_doi": p1["doi"] or None,
                 "doi_exact_match": False,
                 "source_consensus": rng.choice([0, 1]),
                 "has_candidate": True,
@@ -685,7 +761,7 @@ def build_split_dataset(
     records: list[dict[str, Any]] = []
     for idx_item, spec in enumerate(raw_Specs):
         lbl = spec["true_label"]
-        has_cand = spec["has_candidate"]
+        has_cand = bool(spec["has_candidate"])
 
         if not has_cand:
             tf = 0.0
@@ -693,119 +769,48 @@ def build_split_dataset(
             aj = 0.0
             v_sim = 0.0
         else:
-            tf = fuzzy.token_set_ratio(spec["cited_title"].lower(), spec["cand_title"].lower())
-            ts = float(np.clip(raw_title_sems[idx_item], 0.0, 1.0))
-            aj = author_match_score(spec["cited_authors"], spec["cand_authors"])
-            v_sim = venue_norm.similarity(spec["cited_venue"], spec["cand_venue"]) if spec["cited_venue"] else 0.5
+            tf = float(fuzzy.token_set_ratio(spec["cited_title"].lower(), spec["cand_title"].lower()))
+            ts = max(0.0, min(1.0, float(raw_title_sems[idx_item])))
+            aj = float(author_match_score(spec["cited_authors"], spec["cand_authors"]))
+            v_sim = (
+                float(venue_norm.similarity(spec["cited_venue"], spec["cand_venue"]))
+                if spec["cited_venue"]
+                else 0.5
+            )
 
-            # Enforce realistic taxonomic distributions with Neuro-Symbolic exception cases
-            sub = spec["sub_type"]
-            if lbl == "verified":
-                if sub == "V4" and (idx_item % 3 == 0):
-                    # R-CONTENT-ALIGNMENT rescue: subtitle truncated [0.64, 0.78], but neural context aligns with abstract
-                    tf = float(np.clip(tf, 0.64, 0.78))
-                    ts = float(np.clip(ts, 0.65, 0.79))
-                    aj = float(np.clip(max(aj, 0.55), 0.55, 0.95))
-                    spec["source_consensus"] = max(2, spec["source_consensus"])
-                    spec["context_aligned_mode"] = "aligned"
-                else:
-                    tf = float(np.clip(tf, 0.85, 1.0))
-                    ts = float(np.clip(max(ts, tf - 0.03), 0.86, 1.0))
-                    aj = float(np.clip(max(aj, 0.55), 0.55, 1.0))
-            elif lbl == "metadata_error":
-                if sub == "M1":
-                    tf = float(np.clip(max(tf, 0.88), 0.88, 1.0))
-                    ts = float(np.clip(max(ts, 0.88), 0.88, 1.0))
-                    aj = float(np.clip(max(aj, 0.55), 0.55, 1.0))
-                elif sub == "M2":
-                    tf = float(np.clip(max(tf, 0.90), 0.90, 1.0))
-                    ts = float(np.clip(max(ts, 0.90), 0.90, 1.0))
-                    aj = float(np.clip(aj, 0.12, 0.42))
-                elif sub == "M3":
-                    tf = float(np.clip(tf, 0.61, 0.82))
-                    ts = float(np.clip(ts, 0.61, 0.83))
-                elif sub == "M4":
-                    tf = float(np.clip(tf, 0.62, 0.83))
-                    ts = float(np.clip(ts, 0.61, 0.83))
-                    aj = float(np.clip(max(aj, 0.35), 0.35, 0.85))
-                elif sub == "M5":
-                    if spec["doi_exact_match"]:
-                        # R-DOMAIN-EXCEPTION: Exact DOI across >=2 sources, but title below abstention_low [0.25, 0.39]
-                        tf = float(np.clip(tf, 0.25, 0.39))
-                        ts = float(np.clip(ts, 0.25, 0.39))
-                        aj = float(np.clip(aj, 0.25, 0.48))
-                        spec["source_consensus"] = max(2, spec["source_consensus"])
-                    else:
-                        tf = float(np.clip(tf, 0.62, 0.83))
-                        ts = float(np.clip(ts, 0.61, 0.83))
-                        aj = float(np.clip(aj, 0.25, 0.48))
-            elif lbl == "suspected_hallucination":
-                if sub == "H3" and spec["has_candidate"]:
-                    # R-NONEXISTENT-DOI with candidate in abstention zone [0.42, 0.56]
-                    tf = float(np.clip(tf, 0.42, 0.56))
-                    ts = float(np.clip(ts, 0.42, 0.56))
-                    aj = float(np.clip(min(aj, 0.28), 0.10, 0.28))
-                    spec["cited_doi"] = "10.1016/j.nonexistent.2099.99999"
-                elif sub == "H4" and spec["has_candidate"]:
-                    # R-CONTENT-MISMATCH: high title/author match [0.76, 0.84] on single source without DOI,
-                    # but neural in-text claim contradicts abstract
-                    tf = float(np.clip(tf, 0.76, 0.84))
-                    ts = float(np.clip(ts, 0.76, 0.84))
-                    aj = float(np.clip(max(aj, 0.55), 0.55, 0.78))
-                    spec["year_distance"] = 0
-                    spec["source_consensus"] = 1
-                    spec["doi_exact_match"] = False
-                    spec["url_status"] = "alive"
-                    spec["url_status_code"] = 200
-                    spec["context_aligned_mode"] = "mismatch_high_title"
-                elif sub == "H4" and not spec["has_candidate"] and spec["url_status"] == "dead_link":
-                    # R-DEAD-URL with weak candidate in abstention zone [0.42, 0.55]
-                    spec["has_candidate"] = True
-                    has_cand = True
-                    spec["source_consensus"] = 1
-                    tf = float(np.clip(raw_title_sems[idx_item], 0.42, 0.55))
-                    ts = float(np.clip(raw_title_sems[idx_item], 0.42, 0.55))
-                    aj = 0.20
-                    v_sim = 0.20
-                else:
-                    tf = float(np.clip(min(tf, 0.37), 0.02, 0.38))
-                    ts = float(np.clip(min(ts, 0.37), 0.02, 0.38))
-                    aj = float(np.clip(min(aj, 0.22), 0.0, 0.25))
-            elif lbl == "unresolved":
-                if sub == "U2" and (idx_item % 6 == 0):
-                    # Hard borderline unresolved straddling boundary [0.38, 0.62]
-                    tf = float(np.clip(tf, 0.38, 0.62))
-                    ts = float(np.clip(ts, 0.38, 0.62))
-                else:
-                    tf = float(np.clip(tf, 0.41, 0.58))
-                    ts = float(np.clip(ts, 0.40, 0.58))
-                aj = float(np.clip(min(aj, 0.48), 0.10, 0.48))
-
-        # Content alignment score from real Sentence-BERT abstract vs context cosine
-        ctx_mode = spec["context_aligned_mode"]
-        if ctx_mode == "aligned":
-            ca_score = float(np.clip(max(raw_ctx_sems[idx_item], 0.68), 0.65, 0.96))
-            ca_conf = "high"
-            ca_aligned = True
-        elif ctx_mode == "mismatch_high_title":
-            ca_score = float(np.clip(raw_ctx_sems[idx_item], 0.32, 0.44))
-            ca_conf = "medium"
-            ca_aligned = False
-        elif ctx_mode == "contradict":
-            ca_score = float(np.clip(min(raw_ctx_sems[idx_item], 0.21), 0.03, 0.23))
-            ca_conf = "high"
-            ca_aligned = False
+        # Authentic content alignment score from Sentence-BERT abstract vs context cosine
+        # mapped through the exact production SemanticMatcher._determine_alignment thresholds
+        if has_cand and spec["use_context"]:
+            ca_score = max(0.0, min(1.0, float(raw_ctx_sems[idx_item])))
+            if ca_score >= 0.70:
+                ca_conf, ca_aligned = "high", True
+            elif ca_score >= 0.50:
+                ca_conf, ca_aligned = "medium", True
+            elif ca_score >= 0.30:
+                ca_conf, ca_aligned = "medium", False
+            else:
+                ca_conf, ca_aligned = "low", False
         else:
             ca_score = 0.0
             ca_conf = ""
             ca_aligned = False
 
+        cand_doi = spec.get("cand_doi")
         records.append(
             {
                 "id": spec["id"],
                 "paper_id": spec["paper_id"],
                 "true_label": lbl,
                 "sub_type": spec["sub_type"],
+                "cited_title": spec["cited_title"],
+                "cand_title": spec["cand_title"],
+                "cited_authors": list(spec["cited_authors"]),
+                "cand_authors": list(spec["cand_authors"]),
+                "cited_year": spec["cited_year"],
+                "cand_year": spec["cand_year"],
+                "cited_venue": spec["cited_venue"],
+                "cand_venue": spec["cand_venue"],
+                "cand_doi": cand_doi,
                 "doi_exact_match": spec["doi_exact_match"],
                 "title_sim_fuzzy": round(float(tf), 4),
                 "title_sim_semantic": round(float(ts), 4),
@@ -820,7 +825,7 @@ def build_split_dataset(
                 "url_status": spec["url_status"],
                 "url_status_code": spec["url_status_code"],
                 "cited_doi": spec.get("cited_doi"),
-                "crossref_matched": spec["source_consensus"] >= 2 or spec["doi_exact_match"],
+                "crossref_matched": bool(has_cand and (cand_doi or spec["doi_exact_match"])),
             }
         )
 
@@ -843,23 +848,50 @@ def _run_symbolic_rule_on_item(rules: SymbolicRules, item: dict[str, Any]) -> tu
         content_is_aligned=item.get("content_is_aligned", False),
     )
     has_cand = bool(item.get("has_candidate", True))
-    cands = []
+    cited_title = item.get("cited_title")
+    cand_title = item.get("cand_title") or "Candidate Title"
+    cited_venue = item.get("cited_venue")
+    cand_venue = item.get("cand_venue")
+    cited_authors = item.get("cited_authors")
+    cand_authors = list(item.get("cand_authors") or [])
+    cited_year = str(item.get("cited_year") or "2021")
+    cand_year = str(item.get("cand_year") or "2021")
+    cand_doi = item.get("cand_doi") or ("10.1000/cand" if item["doi_exact_match"] else None)
+    crossref_ok = bool(item.get("crossref_matched", bool(cand_doi)))
+
+    source_pool = (
+        ("crossref", "openalex", "datacite", "dblp", "arxiv")
+        if crossref_ok
+        else ("openalex", "dblp", "arxiv", "datacite", "doaj")
+    )
+    cands: list[SourceCandidate] = []
     if has_cand:
         n_cands = max(1, int(item.get("source_consensus", 1)))
         for c_idx in range(n_cands):
             cands.append(
                 SourceCandidate(
-                    source_name=f"source_{c_idx}",
+                    source_name=source_pool[c_idx % len(source_pool)],
                     found=True,
-                    title="Candidate Title",
-                    doi="10.1000/cand" if item["doi_exact_match"] else "10.1000/other",
+                    title=cand_title,
+                    authors=cand_authors,
+                    year=cand_year,
+                    venue=cand_venue,
+                    doi=cand_doi,
+                    confidence=0.95,
+                    score=0.95,
                 )
             )
+    author_prefix = ", ".join(cited_authors[:2]) if cited_authors else "Author A"
+    title_part = cited_title or "Substantive Scholarly Paper Title"
+    venue_part = f" {cited_venue}." if cited_venue else " Proceedings."
+    raw_citation = f"{author_prefix} ({cited_year}). {title_part}.{venue_part}"
+
+    succeeded_sources = [c.source_name for c in cands] if has_cand else []
     source = SourceResult(
-        citation_raw="Author A (2021). Substantive Scholarly Paper Title in Proceedings.",
+        citation_raw=raw_citation,
         candidates=cands,
         sources_queried=["crossref", "openalex", "datacite", "arxiv", "dblp"],
-        sources_succeeded=["crossref", "openalex"] if has_cand else [],
+        sources_succeeded=succeeded_sources,
         sources_failed=(
             {}
             if has_cand
@@ -872,16 +904,18 @@ def _run_symbolic_rule_on_item(rules: SymbolicRules, item: dict[str, Any]) -> tu
         url_status=item.get("url_status"),
         url_status_code=item.get("url_status_code"),
     )
-    cited_doi = item.get("cited_doi") or ("10.1000/cand" if item["doi_exact_match"] else None)
+    cited_doi = item.get("cited_doi") or (cand_doi if item["doi_exact_match"] else None)
     cited_url = "http://example.com/fake-paper" if item.get("url_status") == "fake_domain" else None
     outcome = rules.apply(
         feat,
         source,
         citation_doi=cited_doi,
         citation_url=cited_url,
-        citation_authors=["Author A"] if item["author_jaccard"] < 0.4 else None,
-        citation_year="2021",
-        citation_raw="Author A (2021). Substantive Scholarly Paper Title in Proceedings.",
+        citation_authors=cited_authors if cited_authors is not None else (["Author A"] if item["author_jaccard"] < 0.4 else None),
+        citation_year=cited_year,
+        citation_raw=raw_citation,
+        citation_venue=cited_venue,
+        citation_title=cited_title,
     )
     return feat, outcome
 
@@ -928,8 +962,6 @@ def _compute_bootstrap_ci(
     f1_samples = np.empty(n_bootstraps, dtype=np.float64)
     brier_samples = np.empty(n_bootstraps, dtype=np.float64)
     ece_samples = np.empty(n_bootstraps, dtype=np.float64)
-
-    bin_edges = np.linspace(0.0, 1.0, 11)
 
     for b in range(n_bootstraps):
         idx = rng.integers(0, n, size=n)
@@ -1016,7 +1048,7 @@ def evaluate_neuro_symbolic_with_calibrator(
         is_correct.append(1 if pred_lbl == true_lbl else 0)
 
     cls_metrics = MetricsCalculator.compute(gold_labels, predictions)
-    cal_metrics = CalibrationCalculator.compute(list(zip(confidences, is_correct)))
+    cal_metrics = CalibrationCalculator.compute(list(zip(confidences, is_correct, strict=True)))
     per_class = _compute_per_class_metrics(cls_metrics.confusion_matrix)
 
     result: dict[str, Any] = {

@@ -94,12 +94,85 @@ class SourceResult:
     is_retracted: bool = False
     html_meta: HtmlPageMeta | None = None
 
+    @staticmethod
+    def _normalize_doi_key(doi: str | None) -> str:
+        if not doi:
+            return ""
+        d = doi.strip().lower()
+        for prefix in (
+            "https://doi.org/",
+            "http://doi.org/",
+            "https://dx.doi.org/",
+            "http://dx.doi.org/",
+            "doi:",
+        ):
+            if d.startswith(prefix):
+                d = d[len(prefix) :].strip()
+                break
+        return d.rstrip(".")
+
+    @staticmethod
+    def _normalize_title_key(title: str | None) -> str:
+        if not title:
+            return ""
+        return "".join(c for c in title.lower() if c.isalnum())[:120]
+
+    @staticmethod
+    def _normalize_arxiv_key(cand: SourceCandidate) -> str:
+        raw_ax = (cand.external_ids or {}).get("arxiv") or (cand.external_ids or {}).get("ArXiv") or ""
+        ax = str(raw_ax).strip().lower()
+        if ax.startswith("arxiv:"):
+            ax = ax[6:].strip()
+        if "v" in ax:
+            head, _, tail = ax.rpartition("v")
+            if head and tail.isdigit():
+                ax = head
+        return ax
+
+    @classmethod
+    def _candidates_match(cls, best: SourceCandidate, other: SourceCandidate) -> bool:
+        """Return True iff ``other`` refers to the same scholarly work as ``best``."""
+        if other is best:
+            return True
+        if not other.found:
+            return False
+
+        best_doi = cls._normalize_doi_key(best.doi)
+        other_doi = cls._normalize_doi_key(other.doi)
+        best_ax = cls._normalize_arxiv_key(best)
+        other_ax = cls._normalize_arxiv_key(other)
+        best_title = cls._normalize_title_key(best.title)
+        other_title = cls._normalize_title_key(other.title)
+
+        if best_doi and other_doi:
+            if best_doi == other_doi:
+                return True
+            if best_ax and other_ax and best_ax == other_ax:
+                return True
+            # Published conference DOI <-> arXiv preprint DOI for the exact same paper title
+            if (
+                best_doi.startswith("10.48550/arxiv") != other_doi.startswith("10.48550/arxiv")
+                and best_title
+                and best_title == other_title
+            ):
+                return True
+            return False
+
+        if best_ax and other_ax and best_ax == other_ax:
+            return True
+        if best_title and other_title and best_title == other_title:
+            return True
+        return False
+
     def has_retracted_candidate(self) -> bool:
-        """True if this result or any found candidate is marked as retracted."""
+        """True if this result or a found candidate matching ``best_candidate()`` is retracted."""
         if self.is_retracted:
             return True
+        best = self.best_candidate()
+        if best is None:
+            return False
         for c in self.candidates:
-            if c.found and c.external_ids and str(c.external_ids.get("is_retracted", "")).lower() == "true":
+            if c.found and c.is_retracted and self._candidates_match(best, c):
                 return True
         return False
 
@@ -114,30 +187,18 @@ class SourceResult:
         return max(found, key=lambda c: c.confidence)
 
     def consensus_count(self) -> int:
-        """Số nguồn đồng thuận trên cùng một paper.
+        """Số nguồn đồng thuận trên cùng một paper với ``best_candidate()``.
 
-        Đếm số nguồn TRÙNG NHAU trên cùng fingerprint (DOI hoặc title).
-        - 3 nguồn cùng trả về DOI giống nhau → consensus = 3
-        - 3 nguồn trả về 3 papers khác nhau → consensus = 1
-        - Không có nguồn nào → consensus = 0
+        Chỉ cộng các nguồn khớp với ``best_candidate()`` (theo DOI, arXiv ID, hoặc normalized title)
+        để tránh ứng viên nhiễu không liên quan làm phồng điểm đồng thuận.
         """
-        from collections import Counter
-
-        fingerprints: list[str] = []
-        for c in self.candidates:
-            if c.found and (c.doi or c.title):
-                fingerprints.append(c.fingerprint())
-
-        if not fingerprints:
+        best = self.best_candidate()
+        if best is None or not (best.doi or best.title):
             return 0
 
-        # Đếm số nguồn trùng nhau trên mỗi fingerprint (cộng thêm các nguồn đã được merge qua _dedupe_candidates)
-        count_by_fp: Counter[str] = Counter()
+        total = 0
         for c in self.candidates:
-            if c.found and (c.doi or c.title):
+            if c.found and (c.doi or c.title) and self._candidates_match(best, c):
                 merged_n = int(getattr(c, "_consensus_count", 1) or 1)
-                count_by_fp[c.fingerprint()] += merged_n
-
-        # Consensus = số nguồn đồng thuận trên paper được nhiều nguồn nhất
-        # Nếu tất cả đều khác nhau → max count = 1
-        return max(count_by_fp.values())
+                total += merged_n
+        return total

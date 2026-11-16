@@ -188,10 +188,10 @@ const DEMO_CITATIONS: DemoCitation[] = [
         status: 'passed',
       },
       {
-        code: 'R09_NLI_STANCE',
-        name: 'DeBERTa-v3 Claim-Abstract Entailment',
-        nameVi: 'Thẩm định sự đồng thuận ngữ nghĩa (DeBERTa-v3)',
-        condition: 'stance(context, abstract) == SUPPORTS (0.96)',
+        code: 'R09_SEMANTIC_ALIGN',
+        name: 'Sentence-BERT + Multilingual MiniLM ONNX INT8 Alignment',
+        nameVi: 'Đối sánh ngữ nghĩa (Sentence-BERT + Multilingual MiniLM ONNX INT8)',
+        condition: 'cosine_sim(context, abstract) == ALIGNED (0.96)',
         status: 'passed',
       },
     ],
@@ -550,7 +550,7 @@ function SolvaHeader({
           },
           {
             title: 'Verification Pipeline',
-            desc: 'GROBID TEI to DeBERTa NLI stance',
+            desc: 'GROBID TEI to Sentence-BERT + MiniLM ONNX INT8',
             href: '#how-it-works',
             icon: GitBranch,
           },
@@ -2119,8 +2119,8 @@ function SolvaFeaturesSection({ lang }: { lang: Lang }) {
           : 'Combine symbolic rules with neural stance',
       desc:
         lang === 'vi'
-          ? `Kết hợp ${SYMBOLIC_RULES_COUNT} quy tắc suy diễn hình thức (${SYMBOLIC_RULES_RANGE}) cùng mô hình Sentence-BERT và DeBERTa-v3 NLI để làm rõ liệu nội dung bài báo gốc có thực sự hậu thuẫn cho nhận định đang trích dẫn hay không.`
-          : `Pairs ${SYMBOLIC_RULES_COUNT} formal symbolic rules (${SYMBOLIC_RULES_RANGE}) with Sentence-BERT embeddings and DeBERTa-v3 NLI to verify whether cited abstracts actually support the claim.`,
+          ? `Kết hợp ${SYMBOLIC_RULES_COUNT} quy tắc suy diễn hình thức (${SYMBOLIC_RULES_RANGE}) cùng mô hình Sentence-BERT và Multilingual MiniLM ONNX INT8 để làm rõ liệu nội dung bài báo gốc có thực sự phù hợp với nhận định đang trích dẫn hay không.`
+          : `Pairs ${SYMBOLIC_RULES_COUNT} formal symbolic rules (${SYMBOLIC_RULES_RANGE}) with Sentence-BERT and Multilingual MiniLM ONNX INT8 embeddings to verify whether cited abstracts align with the claim.`,
     },
   ];
 
@@ -2459,8 +2459,8 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
               className="font-solva-sans text-[16px] leading-[23.2px] max-w-[400px]"
             >
               {lang === 'vi'
-                ? 'Chọn bất kỳ trích dẫn mẫu nào bên dưới để quan sát cách CITRA đối sánh siêu dữ liệu song song, đo độ trễ truy vấn đa nguồn và kích hoạt chuỗi luật R01–R16.'
-                : 'Select any sample citation below to inspect live side-by-side metadata diffs, multi-source latency, and formal symbolic rule triggers.'}
+                ? `Chọn bất kỳ trích dẫn mẫu nào bên dưới để quan sát cách CITRA đối sánh siêu dữ liệu song song, đo độ trễ truy vấn đa nguồn và kích hoạt chuỗi luật ${SYMBOLIC_RULES_RANGE}.`
+                : `Select any sample citation below to inspect live side-by-side metadata diffs, multi-source latency, and formal symbolic rule triggers (${SYMBOLIC_RULES_RANGE}).`}
             </p>
           </SolvaScrollReveal>
         </div>
@@ -3246,22 +3246,22 @@ function SolvaUseCasesSection({
         {
           title:
             lang === 'vi'
-              ? 'So khớp ngữ nghĩa sâu 2 giai đoạn (Bi-Encoder & Cross-Encoder)'
-              : 'Two-stage neural semantic matching',
+              ? 'So khớp ngữ nghĩa sâu hai mô hình (Sentence-BERT & MiniLM ONNX INT8)'
+              : 'Dual-model neural semantic matching',
           desc:
             lang === 'vi'
-              ? 'Kết hợp không gian nhúng all-MiniLM-L6-v2 cùng cơ chế xếp hạng chéo ms-marco-MiniLM-L-6-v2 để đo lường sát sao mức độ tương đồng học thuật.'
-              : 'Pairs all-MiniLM-L6-v2 embeddings with ms-marco-MiniLM-L-6-v2 cross-attention re-ranking.',
+              ? 'Kết hợp không gian nhúng all-MiniLM-L6-v2 cùng mô hình đa ngôn ngữ paraphrase-multilingual-MiniLM-L12-v2 ONNX INT8 để đo lường sát sao mức độ tương đồng học thuật.'
+              : 'Pairs all-MiniLM-L6-v2 embeddings with paraphrase-multilingual-MiniLM-L12-v2 ONNX INT8 cross-lingual semantic scoring.',
         },
         {
           title:
             lang === 'vi'
-              ? 'Suy luận quan hệ ngữ nghĩa bằng DeBERTa-v3 NLI'
-              : 'DeBERTa-v3 claim stance detection',
+              ? 'Đối sánh ngữ nghĩa đa ngôn ngữ (Multilingual MiniLM ONNX INT8)'
+              : 'Multilingual MiniLM ONNX INT8 claim alignment',
           desc:
             lang === 'vi'
-              ? 'Phân định rõ ràng liệu tóm tắt công trình gốc Ủng hộ (SUPPORTS), Bác bỏ (REFUTES) hay Trung lập (NEUTRAL) trước câu văn trong bản thảo.'
-              : 'Classifies whether the retrieved abstract SUPPORTS, REFUTES, or is NEUTRAL to the in-text claim.',
+              ? 'Đánh giá mức độ tương thích ngữ nghĩa giữa câu trích dẫn trong bản thảo (Tiếng Việt / Tiếng Anh) và tóm tắt công trình gốc với độ trễ mili-giây.'
+              : 'Evaluates cross-lingual semantic alignment between the in-text claim and retrieved abstract in milliseconds.',
         },
         {
           title:
@@ -3606,17 +3606,17 @@ function SolvaTaxonomyPricingSection({
         lang === 'vi'
           ? [
               '3 bản thảo / tháng (tối đa 15 trang, 5 MB / tệp)',
-              'Thẩm định tối đa 30 trích dẫn trên mỗi bản thảo',
+              'Hỗ trợ đầy đủ .PDF, .DOCX, .BIB & .RIS (tối đa 30 trích dẫn / bài)',
               'Bóc tách cấu trúc GROBID TEI-XML & Đa quy chuẩn (IEEE, APA 7th)',
               'Kho đệm 127K FTS5 cục bộ + Crossref, OpenAlex & Văn bản Pháp luật VN',
-              'Trọn bộ 15 nhãn phán quyết 2 tầng trực giao (L1 × L2)',
+              'Hệ phân loại 2 tầng trực giao 13 trạng thái (8 L1 × 5 L2)',
             ]
           : [
               '3 manuscripts / month (up to 15 pages, 5 MB)',
-              'Up to 30 citations verified per manuscript',
+              'Supports .PDF, .DOCX, .BIB & .RIS (up to 30 citations / doc)',
               'GROBID TEI-XML & Multi-Style Cross-Validator',
               '127K Local FTS5 + Crossref, OpenAlex & VN Legal',
-              'Full 15-verdict Two-Layer Orthogonal Taxonomy',
+              'Full 13-state Two-Layer Orthogonal Taxonomy (8 L1 × 5 L2)',
             ],
       cta: lang === 'vi' ? 'Bắt đầu miễn phí' : 'Get started free',
       to: isAuthenticated ? '/upload' : '/register',
@@ -3648,15 +3648,15 @@ function SolvaTaxonomyPricingSection({
               '50 bản thảo / tháng (tối đa 100 trang, 25 MB / tệp)',
               'Tối đa 200 trích dẫn / bản thảo + Tải lên hàng loạt (10 tệp)',
               'Mở khóa toàn bộ 15+ CSDL học thuật (PubMed, arXiv, DBLP, DOAJ...)',
-              'So khớp ngữ nghĩa sâu Sentence-BERT & Thẩm định đồng thuận DeBERTa NLI',
-              'Chuẩn hóa tự động 1-Click (APA, IEEE, BibTeX) & Xuất báo cáo PDF',
+              'So khớp ngữ nghĩa sâu Sentence-BERT & Multilingual MiniLM ONNX INT8',
+              'Chuẩn hóa tự động 1-Click (APA, IEEE, BibTeX) & Xuất báo cáo PDF/DOCX',
             ]
           : [
               '50 manuscripts / month (up to 100 pages, 25 MB)',
               'Up to 200 citations / doc + Batch Upload (10 files)',
               'All 15+ Scholarly APIs (PubMed, arXiv, DBLP, DOAJ...)',
-              'Sentence-BERT Deep Neural & DeBERTa-v3 NLI Stance',
-              '1-Click Bibliography Auto-Fix (APA, IEEE, BibTeX) & PDF Export',
+              'Sentence-BERT & Multilingual MiniLM ONNX INT8 Alignment',
+              '1-Click Bibliography Auto-Fix (APA, IEEE, BibTeX) & PDF/DOCX Export',
             ],
       cta: lang === 'vi' ? 'Nâng cấp gói Pro' : 'Start Pro trial',
       to: '/pricing',
@@ -4124,11 +4124,11 @@ function SolvaRoleTestimonialsSection({ lang }: { lang: Lang }) {
             : 'Senior Lecturer in Computational Linguistics',
       },
       {
-        roleBadge: lang === 'vi' ? 'THẨM ĐỊNH ĐỒNG THUẬN NLI' : 'DeBERTa-v3 NLI STANCE',
+        roleBadge: lang === 'vi' ? 'ĐỐI SÁNH NGỮ NGHĨA ĐA NGÔN NGỮ' : 'SEMANTIC ALIGNMENT',
         quote:
           lang === 'vi'
-            ? '“Điểm đắt giá nhất đối với người làm phản biện là mô-đun DeBERTa NLI: hệ thống chỉ ra ngay những vị trí bài báo được trích dẫn có thật, nhưng kết luận trong tóm tắt gốc lại bác bỏ hoàn toàn nhận định của người viết.”'
-            : '“DeBERTa NLI stance detection is a game changer — it flags cases where a real paper is cited, but the abstract actually refutes the student’s claim.”',
+            ? '“Điểm đắt giá nhất đối với người làm phản biện là mô-đun Sentence-BERT & Multilingual MiniLM ONNX INT8: hệ thống chỉ ra ngay những vị trí bài báo được trích dẫn có thật nhưng nội dung tóm tắt gốc lại lệch hẳn nhận định của người viết.”'
+            : '“Sentence-BERT + Multilingual MiniLM ONNX INT8 alignment is a game changer — it flags cases where a real paper is cited, yet its abstract diverges from the student’s claim.”',
         author: lang === 'vi' ? 'TS. Nguyễn Hoàng' : 'Dr. Liam O’Connor',
         role:
           lang === 'vi'
@@ -4288,8 +4288,8 @@ function SolvaFAQSection({ lang }: { lang: Lang }) {
           : 'How is CITRA different from traditional plagiarism checkers like Turnitin?',
       a:
         lang === 'vi'
-          ? 'Các phần mềm đạo văn truyền thống chỉ dừng ở việc so khớp tỷ lệ trùng lặp câu chữ bề mặt. Ngược lại, CITRA đi sâu thẩm định tính chân thực của từng tài liệu tham khảo: phân giải định danh DOI, đối chiếu chéo trên hơn 15 cơ sở dữ liệu khoa học quốc tế để vạch trần các trích dẫn ngụy tạo do AI sinh ra (Hallucinated Citations), đồng thời sử dụng mô hình DeBERTa NLI để kiểm chứng xem tóm tắt bài báo gốc có thực sự hậu thuẫn cho nhận định trong bài viết hay không.'
-          : 'Traditional tools only check text overlap. CITRA verifies bibliographic truth: resolving DOIs, cross-checking 15+ scholarly indexes to catch AI-hallucinated references, and running DeBERTa NLI to verify whether cited abstracts actually support the in-text claim.',
+          ? 'Các phần mềm đạo văn truyền thống chỉ dừng ở việc so khớp tỷ lệ trùng lặp câu chữ bề mặt. Ngược lại, CITRA đi sâu thẩm định tính chân thực của từng tài liệu tham khảo: phân giải định danh DOI, đối chiếu chéo trên hơn 15 cơ sở dữ liệu khoa học quốc tế để phát hiện các trích dẫn nghi vấn do AI sinh ra (Hallucinated Citations), đồng thời sử dụng mô hình Sentence-BERT & Multilingual MiniLM ONNX INT8 để kiểm chứng mức độ tương thích ngữ nghĩa giữa tóm tắt bài báo gốc và nhận định trong bài viết.'
+          : 'Traditional tools only check text overlap. CITRA verifies bibliographic truth: resolving DOIs, cross-checking 15+ scholarly indexes to flag AI-hallucinated references, and running Sentence-BERT + Multilingual MiniLM ONNX INT8 to verify semantic alignment between cited abstracts and in-text claims.',
     },
     {
       id: 'faq-1',
@@ -4299,8 +4299,8 @@ function SolvaFAQSection({ lang }: { lang: Lang }) {
           : 'How does the Two-Layer Orthogonal Output Model work?',
       a:
         lang === 'vi'
-          ? 'CITRA tách biệt hai chiều thẩm định hoàn toàn độc lập: Tầng 1 kiểm tra tính nhất quán nội bộ giữa ký hiệu trích dẫn trong bài và danh mục tài liệu cuối bài (với 7 trạng thái như MATCHED, MISSING_REFERENCE, UNCITED_REFERENCE). Tầng 2 độc lập xác minh sự tồn tại thực tế của công trình trên các cơ sở dữ liệu học thuật toàn cầu (với 8 nhãn phán quyết như VERIFIED, METADATA_ERROR, SUSPECTED_HALLUCINATION).'
-          : 'Layer 1 audits internal manuscript consistency between in-text markers and the bibliography (7 states including MATCHED, MISSING_REFERENCE, UNCITED_REFERENCE). Layer 2 independently audits external bibliographic existence across 15+ APIs (8 verdicts including VERIFIED, METADATA_ERROR, SUSPECTED_HALLUCINATION).',
+          ? 'CITRA tách biệt hai chiều thẩm định hoàn toàn độc lập trong hệ phân loại 13 trạng thái: Tầng 1 kiểm tra tính nhất quán nội bộ giữa ký hiệu trích dẫn trong bài và danh mục tài liệu cuối bài (với 8 trạng thái như MATCHED, MISSING_REFERENCE, UNCITED_REFERENCE). Tầng 2 độc lập xác minh sự tồn tại thực tế của công trình trên các cơ sở dữ liệu học thuật toàn cầu (với 5 nhãn xác thực như VERIFIED, METADATA_ERROR, SUSPECTED_HALLUCINATION, UNRESOLVED, RESOURCE).'
+          : 'Layer 1 audits internal manuscript consistency between in-text markers and the bibliography (8 mapping states including MATCHED, MISSING_REFERENCE, UNCITED_REFERENCE). Layer 2 independently audits external bibliographic existence across 15+ APIs (5 validation labels: VERIFIED, METADATA_ERROR, SUSPECTED_HALLUCINATION, UNRESOLVED, RESOURCE) — forming a 13-state Two-Layer Orthogonal Taxonomy.',
     },
     {
       id: 'faq-2',
@@ -4505,8 +4505,8 @@ function SolvaBottomCTASection({
                   className="font-solva-sans text-[16px] font-normal leading-[23.2px] max-w-[420px]"
                 >
                   {lang === 'vi'
-                    ? 'Tải lên bản thảo PDF hoặc dán danh mục tài liệu tham khảo vào Live Sandbox. Nhận ngay báo cáo thẩm định 2 tầng trực giao kèm chuỗi lập luận Neuro-Symbolic chỉ sau vài giây.'
-                    : 'Upload your PDF manuscript or paste references into the Live Sandbox. Get a complete two-layer verification report in seconds.'}
+                    ? 'Tải lên bản thảo (.PDF, .DOCX, .BIB, .RIS) hoặc dán danh mục tài liệu tham khảo vào Live Sandbox. Nhận ngay báo cáo thẩm định 2 tầng trực giao kèm chuỗi lập luận Neuro-Symbolic chỉ sau vài giây.'
+                    : 'Upload your manuscript (.PDF, .DOCX, .BIB, .RIS) or paste references into the Live Sandbox. Get a complete two-layer verification report in seconds.'}
                 </p>
               </div>
 
@@ -4579,7 +4579,7 @@ function SolvaFooter({ lang }: { lang: Lang }) {
         { label: 'GROBID TEI-XML', href: '#how-it-works' },
         { label: lang === 'vi' ? 'Liên hợp 15+ API Khoa học' : '15+ Scholarly APIs', href: '#architecture' },
         { label: lang === 'vi' ? 'Hệ quy tắc Neuro-Symbolic' : 'Neuro-Symbolic Rules', href: '#interactive-demo' },
-        { label: lang === 'vi' ? 'Thẩm định ngữ nghĩa DeBERTa NLI' : 'DeBERTa-v3 NLI Stance', href: '#how-it-works' },
+        { label: lang === 'vi' ? 'Ngữ nghĩa Sentence-BERT + MiniLM ONNX' : 'Sentence-BERT + MiniLM ONNX INT8', href: '#how-it-works' },
       ],
     },
     {

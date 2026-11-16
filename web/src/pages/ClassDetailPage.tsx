@@ -20,6 +20,8 @@ import {
   BarChart3,
   AlertTriangle,
   Sparkles,
+  Pencil,
+  Archive,
 } from 'lucide-react';
 import {
   api,
@@ -32,9 +34,13 @@ import { getRuleDisplayName } from '@/lib/verdictExplanation';
 import { useToast } from '@/contexts/ToastContext';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { AddStudentDialog } from '@/components/AddStudentDialog';
+import { UpgradeModal } from '@/components/UpgradeModal';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -62,6 +68,13 @@ export function ClassDetailPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [pendingRemove, setPendingRemove] = useState<ClassStudent | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [exportingZip, setExportingZip] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!cid || Number.isNaN(cid)) {
@@ -170,6 +183,68 @@ export function ClassDetailPage() {
     }
   };
 
+  const handleExportZip = async () => {
+    setExportingZip(true);
+    try {
+      await api.downloadClassZipExport(cid);
+      toast.success(
+        lang === 'vi'
+          ? 'Đã tải xuống gói ZIP báo cáo toàn lớp'
+          : 'Downloaded class ZIP archive',
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to export class ZIP';
+      if (/API\s+(402|403)\b|HTTP\s+(402|403)\b|Ultra|upgrade/i.test(msg)) {
+        setUpgradeOpen(true);
+      } else {
+        toast.error(msg);
+      }
+    } finally {
+      setExportingZip(false);
+    }
+  };
+
+  const handleOpenEdit = () => {
+    if (!cls) return;
+    setEditName(cls.name);
+    setEditDescription(cls.description ?? '');
+    setEditOpen(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cls || !editName.trim()) return;
+    setSavingEdit(true);
+    try {
+      const updated = await api.updateClass(cid, {
+        name: editName.trim(),
+        description: editDescription.trim(),
+      });
+      setCls(updated);
+      setEditOpen(false);
+      toast.success(
+        lang === 'vi' ? 'Đã cập nhật thông tin lớp học' : 'Updated class details',
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update class');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteClass = async () => {
+    setConfirmDeleteOpen(false);
+    try {
+      await api.deleteClass(cid);
+      toast.success(
+        lang === 'vi' ? 'Đã xóa lớp học' : 'Class deleted successfully',
+      );
+      navigate('/teacher/classes');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete class');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -258,14 +333,55 @@ export function ClassDetailPage() {
             )}
           </div>
 
-          <Button
-            variant="outline"
-            onClick={handleExport}
-            className="gap-2 rounded-xl font-mono text-xs h-9 shrink-0"
-          >
-            <Download className="h-3.5 w-3.5" />
-            {t('teacher.exportCsv')}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              data-testid="edit-class-btn"
+              onClick={handleOpenEdit}
+              className="gap-1.5 rounded-xl font-mono text-xs h-9"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              {lang === 'vi' ? 'Đổi tên' : 'Edit Class'}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleExport}
+              className="gap-2 rounded-xl font-mono text-xs h-9"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {t('teacher.exportCsv')}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              data-testid="export-class-zip-btn"
+              disabled={exportingZip}
+              onClick={() => void handleExportZip()}
+              className="gap-1.5 rounded-xl font-mono text-xs h-9 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/50"
+            >
+              {exportingZip ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Archive className="h-3.5 w-3.5" />
+              )}
+              {lang === 'vi' ? 'Xuất ZIP Lớp' : 'Export ZIP'}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              data-testid="delete-class-btn"
+              onClick={() => setConfirmDeleteOpen(true)}
+              className="gap-1.5 rounded-xl font-mono text-xs h-9 border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {lang === 'vi' ? 'Xóa lớp' : 'Delete'}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -858,6 +974,92 @@ export function ClassDetailPage() {
         variant="danger"
         onConfirm={handleRemove}
         onCancel={() => setPendingRemove(null)}
+      />
+
+      {editOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-class-modal-title"
+          onClick={() => setEditOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full p-5 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2
+              id="edit-class-modal-title"
+              className="font-display text-lg font-bold text-slate-900 dark:text-white"
+            >
+              {lang === 'vi' ? 'Chỉnh sửa lớp học' : 'Edit Class'}
+            </h2>
+            <form onSubmit={(e) => void handleSaveEdit(e)} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-class-name">
+                  {t('teacher.classNameLabel')} <span className="text-rose-500">*</span>
+                </Label>
+                <Input
+                  id="edit-class-name"
+                  data-testid="edit-class-name-input"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  required
+                  maxLength={120}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-class-desc">{t('teacher.classDescriptionLabel')}</Label>
+                <Textarea
+                  id="edit-class-desc"
+                  data-testid="edit-class-desc-input"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  maxLength={1000}
+                  rows={3}
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditOpen(false)}
+                  disabled={savingEdit}
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Button
+                  type="submit"
+                  data-testid="save-edit-class-btn"
+                  disabled={savingEdit || !editName.trim()}
+                >
+                  {savingEdit ? t('common.loading') : t('common.save')}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <ConfirmationModal
+        isOpen={confirmDeleteOpen}
+        title={lang === 'vi' ? 'Xóa lớp học' : 'Delete Class'}
+        message={
+          lang === 'vi'
+            ? `Bạn có chắc muốn xóa vĩnh viễn lớp "${cls.name}"? Các bài luận đã nộp của sinh viên vẫn được bảo toàn.`
+            : `Permanently delete "${cls.name}"? Student essays remain intact.`
+        }
+        confirmLabel={t('common.delete')}
+        cancelLabel={t('common.cancel')}
+        variant="danger"
+        onConfirm={() => void handleDeleteClass()}
+        onCancel={() => setConfirmDeleteOpen(false)}
+      />
+
+      <UpgradeModal
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        featureName="Class ZIP Export"
       />
     </div>
   );

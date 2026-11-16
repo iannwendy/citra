@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import secrets
+import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -20,7 +21,7 @@ from integrity_checker.api.deps import (
     get_db,
     require_admin,
 )
-from integrity_checker.api.routes.auth import _to_response_dict
+from integrity_checker.api.routes.auth import _extract_client_ip, _to_response_dict
 from integrity_checker.billing.plans import (
     BILLING_CYCLES,
     PLAN_CATALOG,
@@ -43,6 +44,8 @@ from integrity_checker.billing.vnpay import (
     IpnUnknownError,
     VNPayService,
     get_vnpay_response_message,
+    validate_vnpay_production_secret,
+    validate_vnpay_return_url,
 )
 from integrity_checker.config import get_settings, is_test_runtime
 from integrity_checker.db.models import BillingTransaction, PromoCode, User
@@ -51,6 +54,8 @@ from integrity_checker.db.repository import Repository
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_PROMO_REDEMPTION_LOCK = threading.Lock()
 
 PROMO_CODE_RE = re.compile(r"^[A-Z0-9]{6}$")
 VALID_PAYMENT_METHODS = ("card", "apple_pay", "google_pay", "vnpay")
@@ -669,6 +674,42 @@ def create_checkout_session(
         except Exception as exc:
             logger.warning(f"Stripe SDK fallback to built-in demo checkout: {exc}")
 
+    # Full 100% promotional fee waiver ($0.00): safe in production without Stripe or demo mode
+    if applied_promo_code and amount_usd <= 0.0:
+        session_id = f"cs_promo_waiver_{secrets.token_hex(16)}"
+        vnpay = VNPayService()
+        tx = repo.create_billing_transaction(
+            user_id=current_user.id,
+            stripe_session_id=session_id,
+            plan_tier=tier,
+            billing_cycle=cycle,
+            subtotal_usd=subtotal_usd,
+            discount_usd=discount_usd,
+            promo_code=applied_promo_code,
+            amount_usd=0.0,
+            amount_vnd=0,
+            status="pending",
+            payment_mode="promo_waiver",
+            card_brand="promo_waiver",
+            card_last4="FREE",
+        )
+        repo.commit()
+        return {
+            "session_id": session_id,
+            "checkout_url": f"/billing/checkout?session_id={session_id}",
+            "mode": "promo_waiver",
+            "plan_tier": tier,
+            "plan_name": policy.name,
+            "billing_cycle": cycle,
+            "subtotal_usd": subtotal_usd,
+            "discount_usd": discount_usd,
+            "promo_code": applied_promo_code,
+            "amount_usd": 0.0,
+            "amount_vnd": 0,
+            "usd_to_vnd_rate": vnpay.usd_to_vnd_rate,
+            "transaction_id": tx.id,
+        }
+
     # Built-in Interactive Stripe Demo Checkout Session (works 100% offline/local without external keys)
     session_id = f"cs_test_demo_{secrets.token_hex(16)}"
     vnpay = VNPayService()
@@ -754,6 +795,8 @@ def apply_or_remove_session_promo(
         tx.discount_usd = 0.0
         tx.amount_usd = subtotal_usd
         tx.amount_vnd = vnpay.usd_to_vnd(subtotal_usd)
+        if tx.payment_mode == "promo_waiver":
+            tx.payment_mode = "stripe_demo"
         repo.commit()
         db.refresh(tx)
     else:
@@ -770,6 +813,10 @@ def apply_or_remove_session_promo(
         tx.discount_usd = discount_usd
         tx.amount_usd = final_amount_usd
         tx.amount_vnd = vnpay.usd_to_vnd(final_amount_usd)
+        if final_amount_usd <= 0.0:
+            tx.payment_mode = "promo_waiver"
+        elif tx.payment_mode == "promo_waiver":
+            tx.payment_mode = "stripe_demo"
         repo.commit()
         db.refresh(tx)
 
@@ -798,111 +845,132 @@ def _activate_paid_transaction(
     amount_vnd: int | None = None,
 ) -> None:
     """Idempotently activate a paid BillingTransaction, redeem promo code, and upgrade user subscription."""
-    if tx.status == "succeeded":
-        return
+    tx_id = tx.id
+    user_id = target_user.id
 
-    now = datetime.now(UTC)
-    vnpay = VNPayService()
-    policy = get_plan_policy(tx.plan_tier)
-    subtotal_usd = float(
-        tx.subtotal_usd
-        if tx.subtotal_usd is not None and tx.subtotal_usd > 0
-        else (policy.annual_price_usd if tx.billing_cycle == "annual" else policy.monthly_price_usd)
-    )
-    tx.subtotal_usd = subtotal_usd
+    with _PROMO_REDEMPTION_LOCK:
+        # Release any stale SQLite WAL read snapshot opened before acquiring _PROMO_REDEMPTION_LOCK
+        # so concurrent redemption checks see committed rows and never hit SQLITE_BUSY_SNAPSHOT.
+        if not (db.new or db.dirty or db.deleted) and db.in_transaction():
+            db.commit()
+        db.expire_all()
 
-    effective_promo_code = (
-        promo_code_override.strip().upper()
-        if promo_code_override and promo_code_override.strip()
-        else tx.promo_code
-    )
-    if effective_promo_code:
-        promo, discount_usd, final_amount_usd = _validate_and_calculate_promo(
-            repo=repo,
-            raw_code=effective_promo_code,
-            user_id=target_user.id,
-            plan_tier=tx.plan_tier,
-            billing_cycle=tx.billing_cycle,
-            subtotal_usd=subtotal_usd,
-            current_tx_id=tx.id,
+        fresh_tx = db.get(BillingTransaction, tx_id)
+        fresh_user = db.get(User, user_id)
+        if fresh_tx is None or fresh_user is None:
+            return
+        tx = fresh_tx
+        target_user = fresh_user
+
+        if tx.status == "succeeded":
+            return
+
+        now = datetime.now(UTC)
+        vnpay = VNPayService()
+        policy = get_plan_policy(tx.plan_tier)
+        subtotal_usd = float(
+            tx.subtotal_usd
+            if tx.subtotal_usd is not None and tx.subtotal_usd > 0
+            else (policy.annual_price_usd if tx.billing_cycle == "annual" else policy.monthly_price_usd)
         )
-        tx.promo_code = promo.code
-        tx.discount_usd = discount_usd
-        tx.amount_usd = final_amount_usd
-        repo.record_promo_redemption(
-            promo=promo,
-            user_id=target_user.id,
-            transaction_id=tx.id,
-            discount_usd=discount_usd,
+        tx.subtotal_usd = subtotal_usd
+
+        effective_promo_code = (
+            promo_code_override.strip().upper()
+            if promo_code_override and promo_code_override.strip()
+            else tx.promo_code
         )
-    else:
-        tx.discount_usd = 0.0
-        tx.amount_usd = subtotal_usd
+        if effective_promo_code:
+            promo, discount_usd, final_amount_usd = _validate_and_calculate_promo(
+                repo=repo,
+                raw_code=effective_promo_code,
+                user_id=target_user.id,
+                plan_tier=tx.plan_tier,
+                billing_cycle=tx.billing_cycle,
+                subtotal_usd=subtotal_usd,
+                current_tx_id=tx.id,
+            )
+            tx.promo_code = promo.code
+            tx.discount_usd = discount_usd
+            tx.amount_usd = final_amount_usd
+            try:
+                repo.record_promo_redemption(
+                    promo=promo,
+                    user_id=target_user.id,
+                    transaction_id=tx.id,
+                    discount_usd=discount_usd,
+                )
+            except ValueError as exc:
+                db.rollback()
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+        else:
+            tx.discount_usd = 0.0
+            tx.amount_usd = subtotal_usd
 
-    tx.amount_vnd = (
-        int(amount_vnd)
-        if amount_vnd is not None
-        else vnpay.usd_to_vnd(float(tx.amount_usd))
-    )
-    tx.status = "succeeded"
-    tx.paid_at = now
-    if payment_mode:
-        tx.payment_mode = payment_mode
-    tx.payment_method = payment_method
-
-    if payment_method == "vnpay":
-        tx.stripe_payment_intent_id = (
-            f"vnp_{vnp_transaction_no}"
-            if vnp_transaction_no
-            else f"vnp_{secrets.token_hex(8)}"
+        tx.amount_vnd = (
+            int(amount_vnd)
+            if amount_vnd is not None
+            else vnpay.usd_to_vnd(float(tx.amount_usd))
         )
-    elif not tx.stripe_payment_intent_id:
-        tx.stripe_payment_intent_id = f"pi_demo_{secrets.token_hex(12)}"
+        tx.status = "succeeded"
+        tx.paid_at = now
+        if payment_mode:
+            tx.payment_mode = payment_mode
+        tx.payment_method = payment_method
 
-    raw_last4 = (card_last4 or "4242").strip().upper()
-    if raw_last4 in ("VNQR", "QR00", "FREE"):
-        tx.card_last4 = raw_last4
-    else:
-        clean_digits = "".join(ch for ch in raw_last4 if ch.isdigit())[-4:]
-        tx.card_last4 = clean_digits if len(clean_digits) == 4 else "4242"
+        if payment_method == "vnpay":
+            tx.stripe_payment_intent_id = (
+                f"vnp_{vnp_transaction_no}"
+                if vnp_transaction_no
+                else f"vnp_{secrets.token_hex(8)}"
+            )
+        elif not tx.stripe_payment_intent_id:
+            tx.stripe_payment_intent_id = f"pi_demo_{secrets.token_hex(12)}"
 
-    raw_brand = (card_brand or "visa").strip().lower()[:20]
-    tx.card_brand = raw_brand if raw_brand in VALID_CARD_BRANDS else "visa"
-    tx.billing_country = (billing_country or "VN").strip().upper()[:10]
-    if billing_zip is not None:
-        tx.billing_zip = billing_zip.strip()[:20] or None
+        raw_last4 = (card_last4 or "4242").strip().upper()
+        if raw_last4 in ("VNQR", "QR00", "FREE"):
+            tx.card_last4 = raw_last4
+        else:
+            clean_digits = "".join(ch for ch in raw_last4 if ch.isdigit())[-4:]
+            tx.card_last4 = clean_digits if len(clean_digits) == 4 else "4242"
 
-    if vnp_txn_ref:
-        tx.vnp_txn_ref = vnp_txn_ref[:120]
-    if vnp_transaction_no:
-        tx.vnp_transaction_no = vnp_transaction_no[:64]
-    if vnp_bank_code:
-        tx.vnp_bank_code = vnp_bank_code.strip().upper()[:32]
-    if vnp_card_type:
-        tx.vnp_card_type = vnp_card_type.strip().upper()[:32]
-    if vnp_response_code:
-        tx.vnp_response_code = vnp_response_code.strip()[:10]
+        raw_brand = (card_brand or "visa").strip().lower()[:20]
+        tx.card_brand = raw_brand if raw_brand in VALID_CARD_BRANDS else "visa"
+        tx.billing_country = (billing_country or "VN").strip().upper()[:10]
+        if billing_zip is not None:
+            tx.billing_zip = billing_zip.strip()[:20] or None
 
-    period_days = 365 if tx.billing_cycle == "annual" else 30
-    target_user.plan_tier = tx.plan_tier
-    target_user.billing_cycle = tx.billing_cycle
-    target_user.subscription_status = "active"
-    target_user.cancel_at_period_end = 0
-    target_user.current_period_start = now
-    target_user.current_period_end = now + timedelta(days=period_days)
-    if not target_user.stripe_customer_id:
-        target_user.stripe_customer_id = f"cus_demo_{target_user.id}"
-    target_user.stripe_subscription_id = (
-        f"sub_vnp_{secrets.token_hex(8)}"
-        if payment_method == "vnpay"
-        else f"sub_demo_{secrets.token_hex(8)}"
-    )
-    if target_user.quota_reset_at is None:
-        target_user.quota_reset_at = now + timedelta(days=30)
+        if vnp_txn_ref:
+            tx.vnp_txn_ref = vnp_txn_ref[:120]
+        if vnp_transaction_no:
+            tx.vnp_transaction_no = vnp_transaction_no[:64]
+        if vnp_bank_code:
+            tx.vnp_bank_code = vnp_bank_code.strip().upper()[:32]
+        if vnp_card_type:
+            tx.vnp_card_type = vnp_card_type.strip().upper()[:32]
+        if vnp_response_code:
+            tx.vnp_response_code = vnp_response_code.strip()[:10]
 
-    repo.commit()
-    db.refresh(target_user)
-    db.refresh(tx)
+        period_days = 365 if tx.billing_cycle == "annual" else 30
+        target_user.plan_tier = tx.plan_tier
+        target_user.billing_cycle = tx.billing_cycle
+        target_user.subscription_status = "active"
+        target_user.cancel_at_period_end = 0
+        target_user.current_period_start = now
+        target_user.current_period_end = now + timedelta(days=period_days)
+        if not target_user.stripe_customer_id:
+            target_user.stripe_customer_id = f"cus_demo_{target_user.id}"
+        target_user.stripe_subscription_id = (
+            f"sub_vnp_{secrets.token_hex(8)}"
+            if payment_method == "vnpay"
+            else f"sub_demo_{secrets.token_hex(8)}"
+        )
+        if target_user.quota_reset_at is None:
+            target_user.quota_reset_at = now + timedelta(days=30)
+
+        repo.commit()
+        db.refresh(target_user)
+        db.refresh(tx)
 
 
 def _is_production_runtime() -> bool:
@@ -910,6 +978,17 @@ def _is_production_runtime() -> bool:
     settings = get_settings()
     env_val = (os.getenv("APP_ENV") or settings.app.env or "").strip().lower()
     return env_val in ("production", "prod", "live") and not is_test_runtime()
+
+
+def _enforce_vnpay_secret_for_env() -> None:
+    """Reject missing/default/weak VNPay hash secrets unconditionally in production."""
+    settings = get_settings()
+    env_val = (os.getenv("APP_ENV") or settings.app.env or "").strip().lower()
+    if env_val in ("production", "prod", "live"):
+        try:
+            validate_vnpay_production_secret(env_val)
+        except ValueError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 def _verify_stripe_session_paid(session_id: str, stripe_secret: str) -> dict[str, Any]:
@@ -956,13 +1035,47 @@ def verify_checkout_session(
     if tx.user_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Access denied")
 
+    target_user = repo.get_user_by_id(tx.user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Verify whether a genuine 100% promo waiver reduces the payable amount to $0.00
+    is_promo_waiver = False
+    candidate_promo = (
+        request.promo_code.strip().upper()
+        if request.promo_code and request.promo_code.strip()
+        else tx.promo_code
+    )
+    if candidate_promo:
+        policy = get_plan_policy(tx.plan_tier)
+        subtotal_check = float(
+            tx.subtotal_usd
+            if tx.subtotal_usd is not None and tx.subtotal_usd > 0
+            else (
+                policy.annual_price_usd
+                if tx.billing_cycle == "annual"
+                else policy.monthly_price_usd
+            )
+        )
+        _, _, verified_final_usd = _validate_and_calculate_promo(
+            repo=repo,
+            raw_code=candidate_promo,
+            user_id=target_user.id,
+            plan_tier=tx.plan_tier,
+            billing_cycle=tx.billing_cycle,
+            subtotal_usd=subtotal_check,
+            current_tx_id=tx.id,
+        )
+        if verified_final_usd <= 0.0:
+            is_promo_waiver = True
+
     is_prod = _is_production_runtime()
     allow_demo_in_prod = os.getenv("ALLOW_DEMO_CHECKOUT_IN_PROD", "").strip().lower() in (
         "1",
         "true",
         "yes",
     )
-    is_demo_session = (
+    is_demo_session = not is_promo_waiver and (
         request.session_id.startswith(("cs_test_demo_", "cs_demo_"))
         or (tx.payment_mode or "").lower() in ("demo", "stripe_demo")
     )
@@ -973,17 +1086,14 @@ def verify_checkout_session(
         )
 
     stripe_secret = os.getenv("STRIPE_SECRET_KEY", "").strip()
-    if stripe_secret.startswith(("sk_live_", "sk_test_")) and not is_demo_session:
-        _verify_stripe_session_paid(request.session_id, stripe_secret)
-    elif is_prod and not is_demo_session:
-        raise HTTPException(
-            status_code=503,
-            detail="STRIPE_SECRET_KEY is not configured in production.",
-        )
-
-    target_user = repo.get_user_by_id(tx.user_id)
-    if not target_user:
-        raise HTTPException(status_code=404, detail="User not found")
+    if not is_promo_waiver:
+        if stripe_secret.startswith(("sk_live_", "sk_test_")) and not is_demo_session:
+            _verify_stripe_session_paid(request.session_id, stripe_secret)
+        elif is_prod and not is_demo_session:
+            raise HTTPException(
+                status_code=503,
+                detail="STRIPE_SECRET_KEY is not configured in production.",
+            )
 
     _activate_paid_transaction(
         repo=repo,
@@ -991,12 +1101,23 @@ def verify_checkout_session(
         tx=tx,
         target_user=target_user,
         payment_method=request.payment_method,
-        card_brand=request.card_brand,
-        card_last4=request.card_last4,
+        payment_mode="promo_waiver" if is_promo_waiver else None,
+        card_brand=(
+            "promo_waiver"
+            if is_promo_waiver and request.card_brand == "visa"
+            else request.card_brand
+        ),
+        card_last4=(
+            "FREE"
+            if is_promo_waiver and request.card_last4 == "4242"
+            else request.card_last4
+        ),
         billing_country=request.billing_country,
         billing_zip=request.billing_zip,
         promo_code_override=request.promo_code,
     )
+    db.refresh(tx)
+    db.refresh(target_user)
 
     return {
         "status": "succeeded",
@@ -1018,6 +1139,7 @@ def create_vnpay_payment_url(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """Build a cryptographically signed VNPay v2.1.0 Payment URL (HMAC-SHA512) for a checkout session."""
+    _enforce_vnpay_secret_for_env()
     repo = Repository(db)
     tx = repo.get_billing_transaction_by_session(payload.session_id)
     if not tx:
@@ -1034,6 +1156,14 @@ def create_vnpay_payment_url(
             detail=f"Unsupported VNPay bank_code '{bank_code}'. Supported codes: {sorted(VNPAY_VALID_BANK_CODES)}",
         )
 
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+    default_return_url = f"{frontend_url}/billing/success?session_id={tx.stripe_session_id}"
+    raw_return_url = (payload.return_url or "").strip() or default_return_url
+    try:
+        return_url = validate_vnpay_return_url(raw_return_url, frontend_url=frontend_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     vnpay = VNPayService()
     policy = get_plan_policy(tx.plan_tier)
     amount_usd = float(tx.amount_usd)
@@ -1047,31 +1177,26 @@ def create_vnpay_payment_url(
     repo.commit()
     db.refresh(tx)
 
-    forwarded_for = http_request.headers.get("x-forwarded-for")
-    client_ip = (
-        forwarded_for.split(",")[0].strip()
-        if forwarded_for
-        else (http_request.client.host if http_request.client else "127.0.0.1")
-    )
-
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
-    default_return_url = f"{frontend_url}/billing/success?session_id={tx.stripe_session_id}"
-    return_url = (payload.return_url or "").strip() or default_return_url
+    extracted_ip = _extract_client_ip(http_request)
+    client_ip = extracted_ip if extracted_ip != "unknown" else "127.0.0.1"
 
     order_info = (
         f"Thanh toan goi CITRA {policy.name} {tx.billing_cycle} "
         f"Ref {tx.vnp_txn_ref}"
     )
 
-    built = vnpay.build_payment_url(
-        txn_ref=tx.vnp_txn_ref,
-        amount_usd=amount_usd,
-        order_info=order_info,
-        ip_addr=client_ip,
-        bank_code=bank_code,
-        locale=payload.locale,
-        return_url=return_url,
-    )
+    try:
+        built = vnpay.build_payment_url(
+            txn_ref=tx.vnp_txn_ref,
+            amount_usd=amount_usd,
+            order_info=order_info,
+            ip_addr=client_ip,
+            bank_code=bank_code,
+            locale=payload.locale,
+            return_url=return_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return {
         "session_id": tx.stripe_session_id,
@@ -1271,6 +1396,7 @@ def _process_vnpay_return_verification(
     db: Session,
 ) -> dict[str, Any]:
     """Cryptographically verify VNPay ReturnURL parameters via HMAC-SHA512 and finalize subscription."""
+    _enforce_vnpay_secret_for_env()
     vnpay = VNPayService()
     verify_result = vnpay.verify_return_url(query_params)
     if not verify_result.is_verified:
@@ -1467,7 +1593,7 @@ def vnpay_ipn_webhook(
                 tx=tx,
                 target_user=target_user,
                 payment_method="vnpay",
-                payment_mode="vnpay_sandbox",
+                payment_mode="vnpay_live" if vnpay.external_redirect else "vnpay_sandbox",
                 card_brand=brand_key,
                 card_last4="VNQR" if brand_key == "vnpay_qr" else "2198",
                 billing_country="VN",

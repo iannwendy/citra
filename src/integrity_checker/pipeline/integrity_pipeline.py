@@ -22,7 +22,8 @@ import inspect
 import json
 import re
 import threading
-from collections import deque
+import uuid
+from collections import Counter, deque
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -532,9 +533,26 @@ class IntegrityPipeline:
             return None
         return digest.hexdigest()
 
-    def _report_cache_key(self, pdf_path: str) -> str | None:
+    def _report_cache_key(
+        self,
+        pdf_path: str,
+        *,
+        max_citations: int | None = None,
+        allow_serpapi: bool | None = True,
+    ) -> str | None:
         digest = self._pdf_sha256(pdf_path)
-        return f"{_REPORT_CACHE_VERSION}-{digest}" if digest else None
+        if not digest:
+            return None
+        max_tok = "all" if max_citations is None else str(int(max_citations))
+        if allow_serpapi is None:
+            try:
+                serp_enabled = bool(get_settings().retrieval.sources.serpapi)
+            except Exception:
+                serp_enabled = True
+        else:
+            serp_enabled = bool(allow_serpapi)
+        serp_tok = "1" if serp_enabled else "0"
+        return f"{_REPORT_CACHE_VERSION}-{digest}-mc_{max_tok}-sp_{serp_tok}"
 
     def _report_cache_path(self, cache_key: str) -> Path:
         return self._report_cache_dir / f"{cache_key}.json"
@@ -552,9 +570,9 @@ class IntegrityPipeline:
 
     def _save_report_cache(self, cache_key: str, report: AnalysisReport) -> None:
         path = self._report_cache_path(cache_key)
+        temp_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            temp_path = path.with_suffix(".tmp")
             temp_path.write_text(
                 json.dumps(report.to_dict(), ensure_ascii=False, indent=2),
                 encoding="utf-8",
@@ -562,6 +580,12 @@ class IntegrityPipeline:
             temp_path.replace(path)
         except OSError as exc:
             logger.warning(f"Could not write report cache {path}: {exc}")
+        finally:
+            try:
+                if temp_path.exists():
+                    temp_path.unlink()
+            except OSError:
+                pass
 
     # -- sync entry (CLI / tests) --
 
@@ -572,6 +596,7 @@ class IntegrityPipeline:
         max_citations: int | None = None,
         allow_serpapi: bool | None = None,
         progress_callback: Any | None = None,
+        bypass_report_cache: bool = False,
     ) -> AnalysisReport:
         """Sync wrapper quanh async run_async."""
         return asyncio.run(
@@ -581,6 +606,7 @@ class IntegrityPipeline:
                 progress_callback=progress_callback,
                 max_citations=max_citations,
                 allow_serpapi=allow_serpapi,
+                bypass_report_cache=bypass_report_cache,
             )
         )
 
@@ -593,6 +619,7 @@ class IntegrityPipeline:
         progress_callback: Any | None = None,
         max_citations: int | None = None,
         allow_serpapi: bool | None = None,
+        bypass_report_cache: bool = False,
     ) -> AnalysisReport:
         """Full pipeline async.
 
@@ -630,8 +657,12 @@ class IntegrityPipeline:
             # explicitly opt into DocumentParser's graceful empty-report mode.
             raise FileNotFoundError(pdf_path)
 
-        cache_key = self._report_cache_key(pdf_path)
-        if cache_key and self._use_report_cache:
+        cache_key = self._report_cache_key(
+            pdf_path,
+            max_citations=max_citations,
+            allow_serpapi=allow_serpapi,
+        )
+        if cache_key and self._use_report_cache and not bypass_report_cache:
             cached_report = self._load_report_cache(cache_key)
             if cached_report is not None:
                 cached_report.essay_id = essay_id
@@ -1063,7 +1094,7 @@ class IntegrityPipeline:
                     if citation.reference_id
                     and lnk.reference_id == citation.reference_id
                     and getattr(lnk.status, "value", lnk.status)
-                    in ("matched", "in_text_mismatch", "ambiguous_mapping")
+                    in ("matched", "in_text_mismatch", "ambiguous_mapping", "style_inconsistent")
                 ]
                 if citation.reference_id and citation.reference_id in duplicate_ref_ids:
                     # Non-canonical member of a duplicate group (DuplicateDetector).
@@ -1072,9 +1103,32 @@ class IntegrityPipeline:
                     citation_link = ref_links[0] if ref_links else None
                     citation_links_verdict: list = list(ref_links)
                 elif ref_links:
-                    mapping_status = CitationMappingStatus.MATCHED
-                    mapping_confidence = max(lnk.confidence for lnk in ref_links)
-                    citation_link = ref_links[0]
+                    clean_matched = [
+                        lnk
+                        for lnk in ref_links
+                        if getattr(lnk.status, "value", lnk.status) == "matched"
+                    ]
+                    if clean_matched:
+                        mapping_status = CitationMappingStatus.MATCHED
+                        mapping_confidence = max(lnk.confidence for lnk in clean_matched)
+                        citation_link = clean_matched[0]
+                    else:
+                        _issue_prio = {
+                            "in_text_mismatch": 3,
+                            "ambiguous_mapping": 2,
+                            "style_inconsistent": 1,
+                        }
+                        top_link = max(
+                            ref_links,
+                            key=lambda lnk: _issue_prio.get(
+                                str(getattr(lnk.status, "value", lnk.status)),
+                                0,
+                            ),
+                        )
+                        top_status_val = str(getattr(top_link.status, "value", top_link.status))
+                        mapping_status = CitationMappingStatus(top_status_val)
+                        mapping_confidence = float(top_link.confidence)
+                        citation_link = top_link
                     citation_links_verdict = list(ref_links)
                 elif (
                     not in_text_citations
@@ -1752,7 +1806,7 @@ class IntegrityPipeline:
         try:
             from integrity_checker.extraction.style_detector import StyleDetector
 
-            detector = StyleDetector()
+            detector = StyleDetector(get_settings().style_detection)
             ext_profile = detector.detect(in_text, references)
             # Map label (e.g. 'APA-like') → linking style 'APA-LIKE'
             style_value = (ext_profile.label or "UNKNOWN").upper()
@@ -1770,6 +1824,7 @@ class IntegrityPipeline:
             return StyleProfile(
                 style=style_value,
                 confidence=ext_profile.confidence,
+                ratios=dict(ratios),
                 apa_count=apa_count,
                 numeric_count=numeric_count,
                 evidence={"ratios": dict(ratios), "explanation": ext_profile.explanation},
@@ -2008,7 +2063,19 @@ class IntegrityPipeline:
             c.reference_id = f"ref-{idx + 1:04d}"
             bib_with_ids.append(c)
 
-        return self.linker.link(body_with_ids, bib_with_ids)
+        link_params = inspect.signature(self.linker.link).parameters
+        if "style_profile" in link_params or any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in link_params.values()
+        ):
+            res = self.linker.link(body_with_ids, bib_with_ids, style_profile=style_profile)
+        else:
+            res = self.linker.link(body_with_ids, bib_with_ids)
+        if (
+            style_profile is not None
+            and res.status_counts.get(CitationMappingStatus.STYLE_INCONSISTENT, 0) > 0
+        ):
+            style_profile.evidence["style_inconsistent"] = True
+        return res
 
     @staticmethod
     def _build_link_lookup(
@@ -2099,6 +2166,7 @@ class IntegrityPipeline:
         prefixed with 'ref_' to distinguish from in-text 'matched'/'missing_reference'.
         """
         counts: dict[str, int] = {s.value: 0 for s in CitationMappingStatus}
+        ref_issue_seen: Counter[tuple[str, str]] = Counter()
 
         # Reference statuses from verdicts (only REFERENCE_LIST have verdicts)
         for v in verdicts:
@@ -2109,6 +2177,13 @@ class IntegrityPipeline:
                     else str(v.mapping_status)
                 )
                 counts[status_value] = counts.get(status_value, 0) + 1
+                ref_id = getattr(v.citation, "reference_id", None)
+                if ref_id and status_value in (
+                    "in_text_mismatch",
+                    "ambiguous_mapping",
+                    "style_inconsistent",
+                ):
+                    ref_issue_seen[(ref_id, status_value)] += 1
 
         # In-text mapping from linking_result.links
         # (only for non-reference links, to avoid double-counting)
@@ -2120,8 +2195,11 @@ class IntegrityPipeline:
                     else str(link.status)
                 )
                 # Only count non-MATCHED in-text links separately to avoid double-counting
-                # MATCHED is already counted from verdicts for references
+                # MATCHED (and per-reference non-matched statuses already recorded on verdicts)
                 if status_value != "matched":
+                    if link.reference_id and ref_issue_seen[(link.reference_id, status_value)] > 0:
+                        ref_issue_seen[(link.reference_id, status_value)] -= 1
+                        continue
                     counts[status_value] = counts.get(status_value, 0) + 1
 
         return counts
@@ -2634,19 +2712,22 @@ def _format_candidate_authors(raw_authors: Any) -> list[str]:
 
 
 _LIGHT_TITLE_CALC: Any | None = None
+_LIGHT_TITLE_CALC_LOCK = threading.Lock()
 
 
 def _get_light_title_calc() -> Any:
     global _LIGHT_TITLE_CALC
     if _LIGHT_TITLE_CALC is None:
-        from integrity_checker.matching.features import FeatureCalculator
-        from integrity_checker.matching.fuzzy import FuzzyMatcher
+        with _LIGHT_TITLE_CALC_LOCK:
+            if _LIGHT_TITLE_CALC is None:
+                from integrity_checker.matching.features import FeatureCalculator
+                from integrity_checker.matching.fuzzy import FuzzyMatcher
 
-        calc = FeatureCalculator.__new__(FeatureCalculator)
-        calc.fuzzy = FuzzyMatcher()
-        calc.semantic = None  # type: ignore[assignment]
-        calc.enable_content_alignment = False
-        _LIGHT_TITLE_CALC = calc
+                calc = FeatureCalculator.__new__(FeatureCalculator)
+                calc.fuzzy = FuzzyMatcher()
+                calc.semantic = None  # type: ignore[assignment]
+                calc.enable_content_alignment = False
+                _LIGHT_TITLE_CALC = calc
     return _LIGHT_TITLE_CALC
 
 

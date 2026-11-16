@@ -276,8 +276,8 @@ export function BibliographyRemediationModal({
                     <XCircle className="h-3.5 w-3.5" />
                     <span>
                       {lang === 'vi'
-                        ? `Nguồn Lỗi & Bịa đặt (${flaggedRedCount})`
-                        : `Flagged Errors & Fabricated (${flaggedRedCount})`}
+                        ? `Nguồn Lỗi & Nghi vấn (${flaggedRedCount})`
+                        : `Flagged Errors & Suspected (${flaggedRedCount})`}
                     </span>
                   </button>
                 )}
@@ -473,8 +473,8 @@ export function BibliographyRemediationModal({
                         <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold text-red-600 dark:text-red-400">
                           <XCircle className="h-3.5 w-3.5" />
                           {lang === 'vi'
-                            ? 'NGUỒN BỊA ĐẶT / ẢO GIÁC AI — CẦN LOẠI BỎ'
-                            : 'SUSPECTED HALLUCINATION — FABRICATED SOURCE'}
+                            ? 'NGHI VẤN NGUỒN BỊA ĐẶT / ẢO GIÁC AI — CẦN KIỂM TRA'
+                            : 'SUSPECTED HALLUCINATION — MANUAL VERIFICATION REQUIRED'}
                         </span>
                       ) : isManualReview ? (
                         <>
@@ -590,14 +590,14 @@ export function BibliographyRemediationModal({
                       <div>
                         <span className="font-bold">
                           {lang === 'vi'
-                            ? 'Cảnh báo Đỏ — Nguồn Bịa đặt / Không tồn tại: '
-                            : 'Red Alert — Fabricated / Non-Existent Source: '}
+                            ? 'Cảnh báo hỗ trợ quyết định — Nghi vấn nguồn không tồn tại: '
+                            : 'Decision-Support Alert — Suspected Unverifiable Source: '}
                         </span>
                         <span>
                           {entry.reasoning ||
                             (lang === 'vi'
-                              ? 'Tài liệu tham khảo này không tồn tại trong bất kỳ cơ sở dữ liệu học thuật nào hoặc có dấu hiệu bịa đặt (Fake DOI / Chimera). Tuyệt đối không sử dụng nguồn này trong bài nộp chính thức.'
-                              : 'This reference was not found in any scholarly database or exhibits fabrication indicators. Remove this source from your manuscript.')}
+                              ? 'Chưa tìm thấy bản ghi khớp trong các cơ sở dữ liệu học thuật hoặc phát hiện dấu hiệu bất thường (DOI không hợp lệ / Chimera). Vui lòng kiểm tra thủ công nguồn gốc trước khi sử dụng.'
+                              : 'No matching scholarly record was found or metadata anomalies were detected. Please manually verify the original publication before citing.')}
                         </span>
                       </div>
                     </div>
@@ -619,8 +619,8 @@ export function BibliographyRemediationModal({
                       >
                         {isHallucination
                           ? lang === 'vi'
-                            ? '✕ Bản gốc bị phát hiện Bịa đặt / Không tồn tại (Before)'
-                            : '✕ Fabricated Source in Manuscript (Before)'
+                            ? '✕ Bản gốc có dấu hiệu nghi vấn cần kiểm tra (Before)'
+                            : '✕ Flagged Reference Pending Verification (Before)'
                           : isManualReview
                             ? lang === 'vi'
                               ? '⚠ Mục tham khảo thiếu thông tin trong bài nộp (Before)'
@@ -682,8 +682,8 @@ export function BibliographyRemediationModal({
                         <span>
                           {isHallucination
                             ? lang === 'vi'
-                              ? `✕ CẢNH BÁO ĐỎ — Khuyến nghị xóa bỏ (${selectedStyle.toUpperCase()})`
-                              : `✕ RED ALERT — Remove Fabricated Entry (${selectedStyle.toUpperCase()})`
+                              ? `✕ NGHI VẤN NGUỒN — Cần kiểm tra / xem xét loại bỏ (${selectedStyle.toUpperCase()})`
+                              : `✕ SUSPECTED ENTRY — Verify Manually Before Citing (${selectedStyle.toUpperCase()})`
                             : isManualReview
                               ? lang === 'vi'
                                 ? `⚠ Cần bổ sung thủ công (${selectedStyle.toUpperCase()})`

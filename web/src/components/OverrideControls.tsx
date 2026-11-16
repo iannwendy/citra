@@ -180,7 +180,11 @@ export function OverrideControls({
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen(false);
+      }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
@@ -195,6 +199,14 @@ export function OverrideControls({
     verdict.override_note || verdict.override_record?.reason || null;
   const overriddenAt =
     verdict.overridden_at || verdict.override_record?.overridden_at || null;
+  const previousOverrideLabel =
+    verdict.override_record?.previous_label ??
+    verdict.override_record?.original_label ??
+    null;
+  const resolvedOverrideLabel =
+    verdict.override_record?.new_label ??
+    verdict.override_record?.overridden_label ??
+    null;
 
   const attributionLabel = overriddenBy
     ? isVi
@@ -202,9 +214,15 @@ export function OverrideControls({
       : `by ${overriddenBy}`
     : null;
 
+  const transitionSummary =
+    previousOverrideLabel && resolvedOverrideLabel
+      ? `${previousOverrideLabel} → ${resolvedOverrideLabel}`
+      : null;
+
   const tooltipText = verdict.is_overridden
     ? [
         t('override.overriddenBtn'),
+        transitionSummary,
         attributionLabel,
         overrideNote ? `"${overrideNote}"` : null,
       ]
@@ -216,6 +234,7 @@ export function OverrideControls({
     <>
       <button
         type="button"
+        data-testid="override-badge"
         onClick={() => setOpen(true)}
         className={cn(
           verdict.is_overridden

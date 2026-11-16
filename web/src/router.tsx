@@ -318,7 +318,7 @@ export const router = createBrowserRouter([
           {
             path: '/batch-upload',
             element: (
-              <ProtectedRoute requiredCapabilities={['view_class_history']}>
+              <ProtectedRoute requiredCapabilities={['batch_upload']}>
                 <Suspense fallback={<PageSkeleton />}>
                   <BatchUploadPage />
                 </Suspense>
@@ -405,11 +405,14 @@ export const router = createBrowserRouter([
           { path: '/settings', element: withSuspense(SettingsPage) },
           { path: '/billing/checkout', element: withSuspense(StripeDemoCheckoutPage) },
           { path: '/billing/success', element: withSuspense(BillingSuccessPage) },
-          // Teacher (v1.15 / Phase 3) — gated by view_class_history capability
+          // Teacher (v1.15 / Phase 3) — gated by teacher/admin role + view_class_history capability
           {
             path: '/teacher/classes',
             element: (
-              <ProtectedRoute requiredCapabilities={['view_class_history']}>
+              <ProtectedRoute
+                requiredRoles={['teacher', 'admin']}
+                requiredCapabilities={['view_class_history']}
+              >
                 <Suspense fallback={<PageSkeleton />}>
                   <MyClassesPage />
                 </Suspense>
@@ -419,7 +422,10 @@ export const router = createBrowserRouter([
           {
             path: '/teacher/classes/:classId',
             element: (
-              <ProtectedRoute requiredCapabilities={['view_class_history']}>
+              <ProtectedRoute
+                requiredRoles={['teacher', 'admin']}
+                requiredCapabilities={['view_class_history']}
+              >
                 <Suspense fallback={<PageSkeleton />}>
                   <ClassDetailPage />
                 </Suspense>
@@ -429,7 +435,10 @@ export const router = createBrowserRouter([
           {
             path: '/teacher/reviews',
             element: (
-              <ProtectedRoute requiredCapabilities={['override_verdict']}>
+              <ProtectedRoute
+                requiredRoles={['teacher', 'admin']}
+                requiredCapabilities={['override_verdict']}
+              >
                 <Suspense fallback={<PageSkeleton />}>
                   <PendingReviewsPage />
                 </Suspense>

@@ -128,6 +128,7 @@ def apply_sqlite_connection_pragmas(
     if requested_mode not in VALID_JOURNAL_MODES:
         requested_mode = "DELETE"
 
+    _exec_pragma(conn, "PRAGMA foreign_keys=ON")
     _exec_pragma(conn, "PRAGMA busy_timeout=30000")
     _exec_pragma(conn, "PRAGMA synchronous=NORMAL")
 

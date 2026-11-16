@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import io
 import json
+import math
 import os
 import re
-import tempfile
+import threading
 import time
+import urllib.parse
+import zipfile
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,11 +51,21 @@ from integrity_checker.retrieval.http_pool import close_loop_http_clients
 router = APIRouter()
 
 UPLOADS_DIR = PROJECT_ROOT / "data" / "essays" / "uploads"
+_DEFAULT_UPLOADS_DIR = UPLOADS_DIR
 
 
 ALLOWED_UPLOAD_EXTENSIONS = (".pdf", ".docx", ".bib", ".ris")
 
 _QUOTA_CLAIM_LOCK = QUOTA_LEDGER_LOCK
+
+SANDBOX_VERIFY_MAX_REQUESTS: int = int(
+    os.getenv("CITRA_SANDBOX_VERIFY_MAX_REQUESTS", "10")
+)
+SANDBOX_VERIFY_WINDOW_SECONDS: float = float(
+    os.getenv("CITRA_SANDBOX_VERIFY_WINDOW_SECONDS", "60")
+)
+_sandbox_verify_rate_lock = threading.Lock()
+_sandbox_verify_rate_buckets: dict[tuple[int, str], list[float]] = {}
 
 SSE_POLL_INTERVAL_SECONDS: float = 1.0
 SSE_HEARTBEAT_INTERVAL_SECONDS: float = 15.0
@@ -79,11 +93,14 @@ def _claim_monthly_upload_slot_and_create_essay(
     num_pages: int,
     class_id: int | None = None,
     structured_error: bool = False,
+    upload_content: bytes | None = None,
+    upload_ext: str = ".pdf",
 ) -> Any:
-    """Atomically enforce & increment monthly_uploads_used and insert the EssayRecord.
+    """Atomically enforce & increment monthly_uploads_used, persist upload bytes, and insert EssayRecord.
 
     Prevents concurrent uploads (e.g. Batch Check BATCH_CONCURRENCY=3) from reading a
-    stale monthly_uploads_used snapshot, losing increments, or bypassing plan limits.
+    stale monthly_uploads_used snapshot, losing increments, bypassing plan limits, or
+    charging quota if persisting upload bytes to disk fails.
     """
     with _QUOTA_CLAIM_LOCK:
         # Release any stale implicit read snapshot opened by get_current_user
@@ -143,6 +160,23 @@ def _claim_monthly_upload_slot_and_create_essay(
         essay.job_attempt_count = 0
         essay.job_heartbeat_at = datetime.now(UTC)
         essay.job_error = None
+
+        if upload_content is not None:
+            try:
+                _persist_upload_bytes(essay.id, upload_ext, upload_content)
+            except Exception:
+                failed_eid = essay.id
+                db.rollback()
+                db.expire_all()
+                if failed_eid is not None:
+                    try:
+                        _get_persisted_upload_path(failed_eid, ext=upload_ext).unlink(
+                            missing_ok=True
+                        )
+                    except OSError:
+                        pass
+                raise
+
         repo.commit()
         db.refresh(essay)
         db.refresh(current_user)
@@ -193,6 +227,8 @@ async def _run_pipeline_task(
     user_id: int,
     pipeline: IntegrityPipeline,
     cleanup_file: bool = True,
+    *,
+    bypass_report_cache: bool = False,
 ) -> None:
     """Background task: run full pipeline and persist results to DB.
 
@@ -206,10 +242,13 @@ async def _run_pipeline_task(
 
     logger = get_logger(__name__)
     tracker = get_tracker()
+    last_hb_mono = 0.0
+    last_hb_step: str | None = None
 
     def _progress_to_threadlocal(step_key: str, step_index: int, stats: dict) -> None:
         """Called from the worker thread — tracker.update is thread-safe via
         its own lock, so cross-thread updates are fine."""
+        nonlocal last_hb_mono, last_hb_step
         tracker.update(
             essay_id,
             status="processing",
@@ -218,6 +257,32 @@ async def _run_pipeline_task(
             step_index=step_index,
             **stats,
         )
+        now_mono = time.monotonic()
+        if step_key != last_hb_step or (now_mono - last_hb_mono) >= 5.0:
+            last_hb_step = step_key
+            last_hb_mono = now_mono
+            hb_session = None
+            try:
+                hb_session = get_session()
+                hb_session.execute(
+                    update(EssayRecord)
+                    .where(EssayRecord.id == essay_id)
+                    .values(job_heartbeat_at=datetime.now(UTC))
+                    .execution_options(synchronize_session=False)
+                )
+                hb_session.commit()
+            except Exception:
+                if hb_session is not None:
+                    try:
+                        hb_session.rollback()
+                    except Exception:
+                        pass
+            finally:
+                if hb_session is not None:
+                    try:
+                        hb_session.close()
+                    except Exception:
+                        pass
 
     try:
         async with get_pipeline_admission_controller().acquire(essay_id, tracker=tracker) as admitted:
@@ -268,10 +333,22 @@ async def _run_pipeline_task(
                     call_kwargs["max_citations"] = max_citations
                 if "allow_serpapi" in sig_params or has_var_kw:
                     call_kwargs["allow_serpapi"] = allow_serpapi
+                if bypass_report_cache and ("bypass_report_cache" in sig_params or has_var_kw):
+                    call_kwargs["bypass_report_cache"] = True
 
                 async def _runner() -> Any:
                     try:
-                        return await pipeline.run_async(tmp_path, **call_kwargs)
+                        try:
+                            return await pipeline.run_async(tmp_path, **call_kwargs)
+                        except TypeError as type_exc:
+                            if (
+                                "bypass_report_cache" in call_kwargs
+                                and "bypass_report_cache" in str(type_exc)
+                            ):
+                                fallback_kwargs = dict(call_kwargs)
+                                fallback_kwargs.pop("bypass_report_cache", None)
+                                return await pipeline.run_async(tmp_path, **fallback_kwargs)
+                            raise
                     finally:
                         await close_loop_http_clients()
 
@@ -444,9 +521,53 @@ async def _run_pipeline_task(
             Path(tmp_path).unlink(missing_ok=True)  # noqa: ASYNC240 - tiny local unlink in cleanup
 
 
-# ---------------------------------------------------------------------------
-# Upload security constants & helpers
-# ---------------------------------------------------------------------------
+def _estimate_docx_pages(content: bytes) -> int:
+    """Estimate page count of a safe .docx archive from app.xml, explicit breaks, and text length."""
+    from defusedxml.ElementTree import fromstring as safe_fromstring
+
+    word_ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    app_pages = 1
+    break_pages = 1
+    char_pages = 1
+    try:
+        with zipfile.ZipFile(io.BytesIO(content), "r") as zf:
+            names = set(zf.namelist())
+            if "docProps/app.xml" in names:
+                app_root = safe_fromstring(
+                    zf.read("docProps/app.xml"),
+                    forbid_dtd=True,
+                    forbid_entities=True,
+                    forbid_external=True,
+                )
+                for elem in app_root.iter():
+                    if elem.tag.endswith("Pages") and elem.text and elem.text.strip().isdigit():
+                        app_pages = max(1, int(elem.text.strip()))
+                        break
+            if "word/document.xml" in names:
+                doc_root = safe_fromstring(
+                    zf.read("word/document.xml"),
+                    forbid_dtd=True,
+                    forbid_entities=True,
+                    forbid_external=True,
+                )
+                page_breaks = 0
+                total_chars = 0
+                for elem in doc_root.iter():
+                    if elem.tag == f"{word_ns}br":
+                        br_type = (
+                            elem.attrib.get(f"{word_ns}type")
+                            or elem.attrib.get("type")
+                            or ""
+                        ).lower()
+                        if br_type == "page":
+                            page_breaks += 1
+                    elif elem.tag == f"{word_ns}t" and elem.text:
+                        total_chars += len(elem.text)
+                break_pages = 1 + page_breaks
+                char_pages = max(1, math.ceil(total_chars / 3200)) if total_chars > 0 else 1
+    except Exception:
+        return 1
+    return max(1, app_pages, break_pages, char_pages)
 
 MAX_PDF_UPLOAD_BYTES = int(os.getenv("MAX_PDF_UPLOAD_BYTES", str(25 * 1024 * 1024)))
 _UPLOAD_CHUNK_SIZE = 64 * 1024
@@ -572,6 +693,14 @@ async def upload_essay(
                 status_code=400,
                 detail="Invalid DOCX file: missing OOXML PK archive header",
             )
+        from integrity_checker.export.docx_exporter import _docx_xml_is_safe
+
+        if not _docx_xml_is_safe(io.BytesIO(content)):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid or unsafe DOCX file: failed OOXML security validation",
+            )
+        detected_pages = _estimate_docx_pages(content)
     elif upload_ext == ".bib":
         try:
             bib_text = content.decode("utf-8").strip()
@@ -622,7 +751,7 @@ async def upload_essay(
             if class_id not in enrolled_ids:
                 raise HTTPException(status_code=403, detail="Not enrolled in this class")
 
-    # Atomically claim 1 monthly upload slot and create essay record
+    # Atomically claim 1 monthly upload slot, persist upload bytes, and create essay record
     essay = _claim_monthly_upload_slot_and_create_essay(
         db,
         current_user,
@@ -630,10 +759,12 @@ async def upload_essay(
         num_pages=detected_pages,
         class_id=class_id,
         structured_error=False,
+        upload_content=content,
+        upload_ext=upload_ext,
     )
 
+    persisted_path = _get_persisted_upload_path(essay.id, ext=upload_ext)
     if _get_worker_mode() == "web_only":
-        _persist_upload_bytes(essay.id, upload_ext, content)
         get_tracker().clear(essay.id)
         return EssayUploadResponse(
             essay_id=essay.id,
@@ -644,15 +775,8 @@ async def upload_essay(
             summary={"status": "queued"},
         )
 
-    if is_test_runtime():
-        with tempfile.NamedTemporaryFile(delete=False, suffix=upload_ext) as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-        cleanup_file = True
-    else:
-        persisted_path = _persist_upload_bytes(essay.id, upload_ext, content)
-        tmp_path = str(persisted_path)
-        cleanup_file = False
+    tmp_path = str(persisted_path)
+    cleanup_file = bool(is_test_runtime() and UPLOADS_DIR == _DEFAULT_UPLOADS_DIR)
 
     # Initialize real-time progress tracker so GET /status returns something useful
     tracker = get_tracker()
@@ -1076,19 +1200,24 @@ async def reanalyze_essay(
                 and not bool(getattr(fresh_essay, "quota_charged", True))
                 and getattr(fresh_essay, "cis_json", None) is None
             ):
-                fresh_user = db.get(User, current_user.id)
-                if fresh_user is None:
+                quota_owner_id = (
+                    fresh_essay.user_id
+                    if fresh_essay.user_id is not None
+                    else current_user.id
+                )
+                quota_user = db.get(User, quota_owner_id) or db.get(User, current_user.id)
+                if quota_user is None:
                     raise HTTPException(status_code=401, detail="User not found")
-                if fresh_user.role != "admin":
-                    if ensure_user_quota_current(fresh_user):
+                if quota_user.role != "admin":
+                    if ensure_user_quota_current(quota_user):
                         db.commit()
-                        db.refresh(fresh_user)
-                    policy = get_user_plan_policy(fresh_user)
+                        db.refresh(quota_user)
+                    policy = get_user_plan_policy(quota_user)
                     limit = int(policy.max_uploads_per_month)
                     res = db.execute(
                         update(User)
                         .where(
-                            User.id == fresh_user.id,
+                            User.id == quota_user.id,
                             func.coalesce(User.monthly_uploads_used, 0) < limit,
                         )
                         .values(monthly_uploads_used=func.coalesce(User.monthly_uploads_used, 0) + 1)
@@ -1096,8 +1225,8 @@ async def reanalyze_essay(
                     )
                     if (res.rowcount or 0) != 1:
                         db.rollback()
-                        db.refresh(fresh_user)
-                        used_now = int(fresh_user.monthly_uploads_used or limit)
+                        db.refresh(quota_user)
+                        used_now = int(quota_user.monthly_uploads_used or limit)
                         msg = (
                             f"Monthly upload quota reached ({used_now}/{limit} documents "
                             f"on the {policy.name} plan). Please upgrade to Pro or Ultra to continue analyzing manuscripts."
@@ -1115,7 +1244,9 @@ async def reanalyze_essay(
                 fresh_essay.quota_charged = 1
                 db.commit()
                 db.refresh(fresh_essay)
-                db.refresh(current_user)
+                db.refresh(quota_user)
+                if quota_user.id != current_user.id:
+                    db.refresh(current_user)
             essay = fresh_essay
 
     if _get_worker_mode() in {"web_only", "worker_only"}:
@@ -1149,6 +1280,7 @@ async def reanalyze_essay(
             essay.user_id or current_user.id,
             pipeline,
             False,
+            bypass_report_cache=True,
         )
         db.refresh(essay)
         return {"status": essay.job_status or "completed", "essay_id": essay.id}
@@ -1160,6 +1292,7 @@ async def reanalyze_essay(
         essay.user_id or current_user.id,
         pipeline,
         False,
+        bypass_report_cache=True,
     )
     return {"status": essay.job_status, "essay_id": essay.id}
 
@@ -1186,7 +1319,7 @@ def _serialize_essay_summary(
         in_text_count = sum(1 for c in citations if c.citation_type in {"in_text", "numeric"})
     num_citations = in_text_count or len(verdicts)
     num_verdicts = len(verdicts)
-    num_verified = sum(1 for v in verdicts if v.label == "verified" or v.is_overridden)
+    num_verified = sum(1 for v in verdicts if v.label == "verified")
 
     cis_score: float | None = None
     if e.cis_json:
@@ -1276,22 +1409,12 @@ def list_essays(
     The underlying duplicate ids are returned in ``duplicate_ids`` so the UI
     can offer cleanup without hiding the fact that they exist.
     """
-    from integrity_checker.db.models import Class, ClassMembership
-
     repo = Repository(db)
 
     if current_user.role == "admin":
         grouped = repo.get_all_essays_deduped()
     elif current_user.role == "teacher":
-        visible_ids = {current_user.id}
-        for (student_id,) in (
-            db.query(ClassMembership.student_id)
-            .join(Class, Class.id == ClassMembership.class_id)
-            .filter(Class.teacher_id == current_user.id)
-            .all()
-        ):
-            visible_ids.add(student_id)
-        grouped = repo.get_all_essays_deduped(user_ids=list(visible_ids))
+        grouped = repo.get_all_essays_deduped(teacher_id=current_user.id)
     else:
         grouped = repo.get_all_essays_deduped(user_id=current_user.id)
 
@@ -1318,22 +1441,12 @@ def get_essay_stats(
     """Return aggregated essay & citation verdict stats for current_user (Contract C2)."""
     from sqlalchemy import func
 
-    from integrity_checker.db.models import Class, ClassMembership
-
     repo = Repository(db)
     if current_user.role == "admin":
         grouped = repo.get_all_essays_deduped(completed_only=True)
     elif current_user.role == "teacher":
-        visible_ids = {current_user.id}
-        for (student_id,) in (
-            db.query(ClassMembership.student_id)
-            .join(Class, Class.id == ClassMembership.class_id)
-            .filter(Class.teacher_id == current_user.id)
-            .all()
-        ):
-            visible_ids.add(student_id)
         grouped = repo.get_all_essays_deduped(
-            user_ids=list(visible_ids), completed_only=True
+            teacher_id=current_user.id, completed_only=True
         )
     else:
         grouped = repo.get_all_essays_deduped(
@@ -1772,7 +1885,9 @@ def delete_essay(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Xóa essay (owner hoặc admin)."""
+    """Xóa essay (owner hoặc admin), hoàn trả quota nếu bài đang queued chưa xử lý."""
+    from integrity_checker.db.models import AuditLog
+
     repo = Repository(db)
     essay = repo.get_essay(essay_id)
     if not essay:
@@ -1785,10 +1900,39 @@ def delete_essay(
     # Clean up queued admission slot, progress tracker, and persisted PDF / DOCX / BIB / RIS
     get_pipeline_admission_controller().cancel(essay_id)
     get_tracker().clear(essay_id)
+
+    # Refund monthly upload slot if deleting an unstarted queued essay that charged quota
+    if (
+        getattr(essay, "job_status", None) == "queued"
+        and bool(getattr(essay, "quota_charged", 0))
+        and getattr(essay, "cis_json", None) is None
+    ):
+        refund_upload_quota_once(
+            db, essay_id, "Queued upload cancelled and deleted by user."
+        )
+        essay = repo.get_essay(essay_id)
+
     for ext_to_clean in ALLOWED_UPLOAD_EXTENSIONS:
         _get_persisted_upload_path(essay_id, ext=ext_to_clean).unlink(missing_ok=True)
 
-    db.delete(essay)
+    verdict_ids = [
+        row[0]
+        for row in db.query(VerdictRecord.id)
+        .filter(VerdictRecord.essay_id == essay_id)
+        .all()
+    ]
+    if verdict_ids:
+        db.query(AuditLog).filter(AuditLog.verdict_id.in_(verdict_ids)).delete(
+            synchronize_session=False
+        )
+    db.query(VerdictRecord).filter(VerdictRecord.essay_id == essay_id).delete(
+        synchronize_session=False
+    )
+    db.query(CitationRecord).filter(CitationRecord.essay_id == essay_id).delete(
+        synchronize_session=False
+    )
+    if essay is not None:
+        db.delete(essay)
     db.commit()
 
     return {"message": f"Essay {essay_id} deleted"}
@@ -1813,27 +1957,8 @@ def get_essay_page_preview(
     if not repo.can_user_access_essay(current_user, essay):
         raise HTTPException(status_code=403, detail="Access denied")
 
+    # SECURITY: Strictly load ONLY the persisted file keyed by essay_id; never search disk by untrusted filename.
     pdf_path = _get_persisted_upload_path(essay_id, ext=".pdf")
-    if not pdf_path.is_file() and essay.filename:
-        fname_only = Path(essay.filename).name
-        direct_root = PROJECT_ROOT / fname_only
-        if direct_root.is_file() and direct_root.suffix.lower() == ".pdf":
-            pdf_path = direct_root
-        else:
-            for candidate_dir in (
-                PROJECT_ROOT / "data" / "demo",
-                PROJECT_ROOT / "data" / "essays",
-                PROJECT_ROOT / "style_corpora",
-                PROJECT_ROOT / "vn_legal_reports",
-                PROJECT_ROOT / "20-theses",
-                PROJECT_ROOT / "tdtu_github_reports",
-                PROJECT_ROOT / "TDTU-MidtermReport",
-            ):
-                if candidate_dir.is_dir():
-                    matches = list(candidate_dir.rglob(fname_only))
-                    if matches and matches[0].suffix.lower() == ".pdf":
-                        pdf_path = matches[0]
-                        break
 
     import html as _html
     import re as _re
@@ -2057,7 +2182,7 @@ def get_essay_page_preview(
 
             # Only color the text in red — do NOT draw any box or border frame around it
             if is_halluc:
-                badge_html = '<span style="color: #dc2626; font-weight: bold;">[NGUỒN BỊA ĐẶT / SUSPECTED HALLUCINATION]</span> '
+                badge_html = '<span style="color: #dc2626; font-weight: bold;">[NGHI VẤN NGUỒN BỊA ĐẶT / SUSPECTED HALLUCINATION]</span> '
                 text_color = "#dc2626"
                 font_weight = "600"
             elif is_meta_err:
@@ -2307,6 +2432,41 @@ def sample_acl_papers_for_sandbox(
     }
 
 
+def _sanitize_sandbox_pdf_filename(raw_name: str, fallback_name: str) -> str:
+    """Sanitize untrusted sandbox custom_filename against path traversal, CR/LF, and quote injection."""
+    cleaned_input = (raw_name or "").replace("\\", "/").strip()
+    if not cleaned_input:
+        return fallback_name
+    base = Path(cleaned_input).name
+    safe = "".join(
+        ch
+        for ch in base
+        if ch >= " " and ch != "\x7f" and ch not in ('"', "'", "\\", "/", ";", ":", "\r", "\n")
+    ).strip(" .")
+    if not safe:
+        return fallback_name
+    if safe.lower().endswith(".pdf"):
+        stem = safe[:-4].strip(" .")
+    else:
+        stem = safe
+    if not stem:
+        return fallback_name
+    stem = stem[:160]
+    return f"{stem}.pdf"
+
+
+def _rfc5987_pdf_content_disposition(filename: str) -> str:
+    """Build RFC 5987 Content-Disposition header with safe ASCII fallback and UTF-8 filename*."""
+    ascii_safe = "".join(
+        ch if (32 <= ord(ch) < 127 and ch not in ('"', "\\", ";", "\r", "\n")) else "_"
+        for ch in (filename or "sandbox.pdf")
+    ).strip(" _") or "sandbox.pdf"
+    if not ascii_safe.lower().endswith(".pdf"):
+        ascii_safe = f"{ascii_safe}.pdf"
+    encoded_utf8 = urllib.parse.quote(filename or ascii_safe, safe="")
+    return f"attachment; filename=\"{ascii_safe}\"; filename*=UTF-8''{encoded_utf8}"
+
+
 def _synthesize_academic_manuscript_pdf(
     title: str,
     author_name: str,
@@ -2314,13 +2474,19 @@ def _synthesize_academic_manuscript_pdf(
     items: list[dict[str, Any]],
 ) -> tuple[bytes, int, list[str], list[str]]:
     """Build a multi-page academic PDF manuscript containing body sections with in-text citations + References."""
-    import io
     from html import escape
 
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import cm
+    from reportlab.pdfbase import pdfmetrics
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
+    from integrity_checker.api.routes.report import _register_unicode_pdf_fonts
+
+    font_reg, font_bold = _register_unicode_pdf_fonts()
+    registered = set(pdfmetrics.getRegisteredFontNames())
+    font_italic = "CitraSans-Italic" if "CitraSans-Italic" in registered else font_reg
 
     norm_style = "ieee" if (style or "").strip().lower() == "ieee" else "apa"
     buf = io.BytesIO()
@@ -2336,7 +2502,7 @@ def _synthesize_academic_manuscript_pdf(
     title_st = ParagraphStyle(
         "MsTitle",
         parent=styles["Heading1"],
-        fontName="Times-Bold",
+        fontName=font_bold,
         fontSize=15,
         leading=19,
         spaceAfter=8,
@@ -2344,7 +2510,7 @@ def _synthesize_academic_manuscript_pdf(
     meta_st = ParagraphStyle(
         "MsMeta",
         parent=styles["Normal"],
-        fontName="Times-Italic",
+        fontName=font_italic,
         fontSize=10,
         leading=13,
         spaceAfter=12,
@@ -2352,7 +2518,7 @@ def _synthesize_academic_manuscript_pdf(
     h1_st = ParagraphStyle(
         "MsH1",
         parent=styles["Heading2"],
-        fontName="Times-Bold",
+        fontName=font_bold,
         fontSize=12,
         leading=15,
         spaceBefore=12,
@@ -2361,7 +2527,7 @@ def _synthesize_academic_manuscript_pdf(
     body_st = ParagraphStyle(
         "MsBody",
         parent=styles["Normal"],
-        fontName="Times-Roman",
+        fontName=font_reg,
         fontSize=10.5,
         leading=15,
         spaceAfter=8,
@@ -2369,7 +2535,7 @@ def _synthesize_academic_manuscript_pdf(
     ref_st = ParagraphStyle(
         "MsRef",
         parent=styles["Normal"],
-        fontName="Times-Roman",
+        fontName=font_reg,
         fontSize=10,
         leading=14,
         leftIndent=14,
@@ -2526,31 +2692,31 @@ async def generate_sandbox_pdf_manuscript(
         items=items[:25],
     )
 
-    if not custom_filename:
-        safe_style = "IEEE" if style == "ieee" else "APA"
-        custom_filename = f"CITRA_ACL_Sandbox_{safe_style}_{len(items)}refs.pdf"
-    elif not custom_filename.lower().endswith(".pdf"):
-        custom_filename = f"{custom_filename}.pdf"
+    safe_style = "IEEE" if style == "ieee" else "APA"
+    default_sandbox_name = f"CITRA_ACL_Sandbox_{safe_style}_{len(items)}refs.pdf"
+    custom_filename = _sanitize_sandbox_pdf_filename(custom_filename, default_sandbox_name)
 
     if download_only and not run_verification:
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="{custom_filename}"',
+                "Content-Disposition": _rfc5987_pdf_content_disposition(custom_filename),
             },
         )
 
-    # Atomically claim 1 monthly upload slot & launch full IntegrityPipeline
+    # Atomically claim 1 monthly upload slot, persist PDF bytes, & launch full IntegrityPipeline
     essay = _claim_monthly_upload_slot_and_create_essay(
         db,
         current_user,
         filename=custom_filename,
         num_pages=num_pages,
         structured_error=True,
+        upload_content=pdf_bytes,
+        upload_ext=".pdf",
     )
 
-    persisted_path = _persist_upload_bytes(essay.id, ".pdf", pdf_bytes)
+    persisted_path = _get_persisted_upload_path(essay.id, ext=".pdf")
 
     if _get_worker_mode() == "web_only":
         get_tracker().clear(essay.id)
@@ -2581,6 +2747,31 @@ async def generate_sandbox_pdf_manuscript(
     }
 
 
+def _enforce_sandbox_verify_rate_limit(current_user: User) -> None:
+    """Enforce sliding-window per-user rate limit on /sandbox/verify."""
+    max_reqs = max(1, int(SANDBOX_VERIFY_MAX_REQUESTS))
+    window_s = max(1.0, float(SANDBOX_VERIFY_WINDOW_SECONDS))
+    bucket_key = (int(current_user.id or 0), str(current_user.username or ""))
+    now = time.monotonic()
+    with _sandbox_verify_rate_lock:
+        timestamps = _sandbox_verify_rate_buckets.get(bucket_key, [])
+        cutoff = now - window_s
+        timestamps = [ts for ts in timestamps if ts > cutoff]
+        if len(timestamps) >= max_reqs:
+            retry_after = max(1, int(math.ceil(window_s - (now - timestamps[0]))))
+            _sandbox_verify_rate_buckets[bucket_key] = timestamps
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"Sandbox verification rate limit exceeded ({max_reqs} requests per "
+                    f"{int(window_s)}s). Please wait before running another live check."
+                ),
+                headers={"Retry-After": str(retry_after)},
+            )
+        timestamps.append(now)
+        _sandbox_verify_rate_buckets[bucket_key] = timestamps
+
+
 @router.post("/sandbox/verify")
 async def verify_sandbox_citations_instant(
     payload: dict[str, Any],
@@ -2588,11 +2779,13 @@ async def verify_sandbox_citations_instant(
     pipeline: IntegrityPipeline = Depends(get_pipeline),
 ) -> dict[str, Any]:
     """Instant 3-second live citation & Layer-1/Layer-2 verification without leaving UploadPage."""
-    import time
-
     from integrity_checker.export.bibliography_formatter import build_remediated_bibliography
     from integrity_checker.extraction.base import Document, Page
     from integrity_checker.models.citation import Citation, CitationStyle, CitationType
+
+    _enforce_sandbox_verify_rate_limit(current_user)
+    policy = get_user_plan_policy(current_user)
+    allow_serpapi_flag = bool(policy.allow_serpapi_fallback)
 
     t0 = time.monotonic()
     style = str(payload.get("style") or "apa").strip().lower()
@@ -2796,7 +2989,17 @@ async def verify_sandbox_citations_instant(
                 except Exception:
                     pass
             try:
-                return await asyncio.wait_for(pipeline.orchestrator.retrieve(c), timeout=25.0)
+                retrieve_fn = pipeline.orchestrator.retrieve
+                ret_params = inspect.signature(retrieve_fn).parameters
+                accepts_serpapi = "allow_serpapi" in ret_params or any(
+                    p.kind == inspect.Parameter.VAR_KEYWORD for p in ret_params.values()
+                )
+                ret_coro = (
+                    retrieve_fn(c, allow_serpapi=allow_serpapi_flag)
+                    if accepts_serpapi
+                    else retrieve_fn(c)
+                )
+                return await asyncio.wait_for(ret_coro, timeout=25.0)
             except TimeoutError:
                 u_st, u_code, u_arch, u_meta = None, None, None, None
                 if getattr(c, "url", None) or (
@@ -3139,11 +3342,13 @@ async def verify_sandbox_citations_instant(
         verdict_items.append(v_dict)
         raw_verdict_dicts_for_remediation.append(v_dict)
 
-    remediation = build_remediated_bibliography(
-        essay_id=0,
-        verdicts=raw_verdict_dicts_for_remediation,
-        style=style,
-    )
+    remediation: dict[str, Any] | None = None
+    if not (policy.tier == "basic" and current_user.role == "user"):
+        remediation = build_remediated_bibliography(
+            essay_id=0,
+            verdicts=raw_verdict_dicts_for_remediation,
+            style=style,
+        )
     elapsed = round(time.monotonic() - t0, 2)
 
     verified_cnt = sum(1 for v in verdict_items if v["label"] == "verified")

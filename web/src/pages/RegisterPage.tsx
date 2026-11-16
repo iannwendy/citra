@@ -72,20 +72,33 @@ export function RegisterPage() {
     setError('');
 
     const trimmedUsername = username.trim();
-    if (!/^[a-zA-Z0-9._-]{3,50}$/.test(trimmedUsername)) {
+    if (
+      !/^[a-zA-Z0-9._-]{3,50}$/.test(trimmedUsername) ||
+      /^[._-]|[._-]$/.test(trimmedUsername) ||
+      trimmedUsername.includes('..')
+    ) {
       setError(
         lang === 'vi'
-          ? 'Tên đăng nhập phải từ 3–50 ký tự và chỉ chứa chữ cái, chữ số, dấu chấm, gạch dưới hoặc gạch ngang.'
-          : 'Username must be 3–50 characters and contain only letters, numbers, dots, underscores, or hyphens.',
+          ? 'Tên đăng nhập phải từ 3–50 ký tự (chữ cái, chữ số, ., _, -), không bắt đầu/kết thúc bằng dấu câu hoặc lặp dấu chấm.'
+          : 'Username must be 3–50 characters (letters, numbers, ., _, -), without leading/trailing punctuation or consecutive dots.',
       );
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length < 6 || !password.trim()) {
       setError(
         lang === 'vi'
-          ? 'Mật khẩu phải có tối thiểu 6 ký tự.'
-          : 'Password must be at least 6 characters.',
+          ? 'Mật khẩu phải có tối thiểu 6 ký tự và không chỉ gồm khoảng trắng.'
+          : 'Password must be at least 6 characters and not whitespace-only.',
+      );
+      return;
+    }
+
+    if (new TextEncoder().encode(password).length > 72) {
+      setError(
+        lang === 'vi'
+          ? 'Mật khẩu không được vượt quá 72 byte UTF-8.'
+          : 'Password must not exceed 72 UTF-8 bytes.',
       );
       return;
     }

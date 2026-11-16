@@ -10,14 +10,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
-from integrity_checker.extraction.document_parser import DocumentParser
-from integrity_checker.extraction.section_segmenter import SectionType
-from integrity_checker.extraction.style_detector import StyleDetector
-from integrity_checker.linking.citation_linker import CitationLinker
-from integrity_checker.linking.duplicate_detector import DuplicateDetector
-from integrity_checker.linking.statuses import CitationMappingStatus
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from integrity_checker.extraction.document_parser import DocumentParser  # noqa: E402
+from integrity_checker.extraction.section_segmenter import SectionType  # noqa: E402
+from integrity_checker.extraction.style_detector import StyleDetector  # noqa: E402
+from integrity_checker.linking.citation_linker import CitationLinker  # noqa: E402
+from integrity_checker.linking.duplicate_detector import DuplicateDetector  # noqa: E402
+from integrity_checker.linking.statuses import CitationMappingStatus  # noqa: E402
 
 STYLES = [
     "APA",

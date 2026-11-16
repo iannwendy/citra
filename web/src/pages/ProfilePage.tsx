@@ -12,11 +12,12 @@ import {
   UserCheck,
   Mail,
   Sparkles,
+  LogOut,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { AvatarUpload } from '@/components/AvatarUpload';
-import { api } from '@/api/client';
+import { api, type Class } from '@/api/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,8 +46,13 @@ export function ProfilePage() {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [emailLinkSending, setEmailLinkSending] = useState(false);
+  const [enrolledClasses, setEnrolledClasses] = useState<Class[]>([]);
 
   const canSetUsername = Boolean(authUser?.can_set_username);
+  const isGoogleEmailLocked = Boolean(
+    (authUser?.google_linked || authUser?.auth_provider?.includes('google')) &&
+      authUser?.email,
+  );
   const hasPassword =
     authUser?.has_password !== undefined
       ? authUser.has_password
@@ -61,6 +67,32 @@ export function ProfilePage() {
     }
   }, [authUser]);
 
+  useEffect(() => {
+    if (!authUser || typeof api.listEnrolledClasses !== 'function') return;
+    let cancelled = false;
+    void api
+      .listEnrolledClasses()
+      .then((list) => {
+        if (!cancelled && Array.isArray(list)) setEnrolledClasses(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser]);
+
+  const handleLeaveClass = async (cls: Class) => {
+    try {
+      await api.leaveClass(cls.id);
+      setEnrolledClasses((prev) => prev.filter((c) => c.id !== cls.id));
+      toast.success(
+        lang === 'vi' ? `Đã rời khỏi lớp ${cls.name}` : `Left class ${cls.name}`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to leave class');
+    }
+  };
+
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setProfileError('');
@@ -71,12 +103,14 @@ export function ProfilePage() {
       if (
         trimmedUsername.length < 3 ||
         trimmedUsername.length > 50 ||
-        !/^[a-zA-Z0-9._-]+$/.test(trimmedUsername)
+        !/^[a-zA-Z0-9._-]+$/.test(trimmedUsername) ||
+        /^[._-]|[._-]$/.test(trimmedUsername) ||
+        trimmedUsername.includes('..')
       ) {
         setProfileError(
           lang === 'vi'
-            ? 'Tên đăng nhập phải từ 3–50 ký tự và chỉ chứa chữ cái, chữ số, dấu chấm (.), gạch dưới (_) hoặc gạch ngang (-).'
-            : 'Username must be 3–50 characters and contain only letters, numbers, dots, underscores, or hyphens.'
+            ? 'Tên đăng nhập phải từ 3–50 ký tự (chữ cái, chữ số, ., _, -), không bắt đầu/kết thúc bằng dấu câu hoặc lặp dấu chấm.'
+            : 'Username must be 3–50 characters (letters, numbers, ., _, -), without leading/trailing punctuation or consecutive dots.',
         );
         return;
       }
@@ -87,7 +121,7 @@ export function ProfilePage() {
       const updated = await api.updateMe({
         ...(canSetUsername ? { username: trimmedUsername } : {}),
         full_name: fullName || undefined,
-        email: email || undefined,
+        ...(!isGoogleEmailLocked ? { email: email || undefined } : {}),
       });
       await refreshUser();
       setUsername(updated.username ?? '');
@@ -118,8 +152,16 @@ export function ProfilePage() {
     setPasswordError('');
     setPasswordSuccess('');
 
-    if (newPassword.length < 6) {
+    if (newPassword.length < 6 || !newPassword.trim()) {
       setPasswordError(t('profile.passwordMinLengthError'));
+      return;
+    }
+    if (new TextEncoder().encode(newPassword).length > 72) {
+      setPasswordError(
+        lang === 'vi'
+          ? 'Mật khẩu không được vượt quá 72 byte UTF-8.'
+          : 'Password must not exceed 72 UTF-8 bytes.',
+      );
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -385,11 +427,23 @@ export function ProfilePage() {
                   <Label className="input-label">{t('profile.email')}</Label>
                   <Input
                     type="email"
+                    data-testid="profile-email-input"
                     value={email}
+                    readOnly={isGoogleEmailLocked}
+                    disabled={isGoogleEmailLocked}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="mt-1.5 rounded-xl"
+                    className={`mt-1.5 rounded-xl ${
+                      isGoogleEmailLocked ? 'opacity-65 cursor-not-allowed' : ''
+                    }`}
                     placeholder={t('profile.emailPlaceholder')}
                   />
+                  {isGoogleEmailLocked && (
+                    <p className="text-xs text-slate-400 mt-1">
+                      {lang === 'vi'
+                        ? 'Email đã liên kết Google OAuth được khóa bảo mật.'
+                        : 'Google-linked email address is verified and locked.'}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -597,6 +651,53 @@ export function ProfilePage() {
           </form>
         </div>
       </div>
+
+      {enrolledClasses.length > 0 && (
+        <div
+          data-testid="profile-enrolled-classes"
+          className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <Terminal className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <h2 className="font-display text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {lang === 'vi' ? 'Lớp học đã tham gia' : 'Enrolled Classes'}
+              </h2>
+            </div>
+            <span className="text-[11px] font-mono text-slate-400">
+              {enrolledClasses.length}
+            </span>
+          </div>
+          <div className="p-4 sm:p-6 space-y-2.5">
+            {enrolledClasses.map((cls) => (
+              <div
+                key={cls.id}
+                className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                    {cls.name}
+                  </p>
+                  <p className="text-xs font-mono text-slate-500">
+                    {lang === 'vi' ? 'Giảng viên:' : 'Instructor:'} {cls.teacher_username}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  data-testid={`profile-leave-class-${cls.id}`}
+                  onClick={() => void handleLeaveClass(cls)}
+                  className="gap-1.5 rounded-xl text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-800 dark:hover:bg-rose-950/50 text-xs font-mono"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  {lang === 'vi' ? 'Rời lớp' : 'Leave Class'}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Personal Data Rights & Account Deletion IDE Container (DLCN-03) */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">

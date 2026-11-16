@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { User, UserCreate, UserUpdate } from '@/api/client';
+import type { PlanTier, User, UserCreate, UserUpdate } from '@/api/client';
 import { api } from '@/api/client';
 import {
   Dialog,
@@ -29,7 +29,8 @@ export function UserFormDialog({
   user,
   onSuccess,
 }: UserFormDialogProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const isEdit = Boolean(user);
 
   const [username, setUsername] = useState('');
@@ -38,6 +39,8 @@ export function UserFormDialog({
   const [institution, setInstitution] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'user' | 'teacher' | 'admin'>('user');
+  const [planTier, setPlanTier] = useState<PlanTier>('basic');
+  const [planTierTouched, setPlanTierTouched] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const [canOverrideVerdicts, setCanOverrideVerdicts] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -53,6 +56,11 @@ export function UserFormDialog({
         setInstitution(user.institution ?? '');
         setPassword('');
         setRole(user.role as 'user' | 'teacher' | 'admin');
+        setPlanTier(
+          user.plan_tier ??
+            (user.role === 'admin' ? 'ultra' : user.role === 'teacher' ? 'pro' : 'basic'),
+        );
+        setPlanTierTouched(false);
         setIsActive(user.is_active);
         setCanOverrideVerdicts(Boolean(user.can_override_verdicts));
       } else {
@@ -62,6 +70,8 @@ export function UserFormDialog({
         setInstitution('');
         setPassword('');
         setRole('user');
+        setPlanTier('basic');
+        setPlanTierTouched(false);
         setIsActive(true);
         setCanOverrideVerdicts(false);
       }
@@ -73,6 +83,25 @@ export function UserFormDialog({
     e.preventDefault();
     setError('');
 
+    if (password) {
+      if (!password.trim() || password.length < 6) {
+        setError(
+          lang === 'vi'
+            ? 'Mật khẩu phải có ít nhất 6 ký tự và không chỉ gồm khoảng trắng.'
+            : 'Password must be at least 6 characters and not whitespace-only.',
+        );
+        return;
+      }
+      if (new TextEncoder().encode(password).length > 72) {
+        setError(
+          lang === 'vi'
+            ? 'Mật khẩu không được vượt quá 72 byte UTF-8.'
+            : 'Password must not exceed 72 UTF-8 bytes.',
+        );
+        return;
+      }
+    }
+
     const payload: UserCreate | UserUpdate = isEdit
       ? {
           username: username || undefined,
@@ -80,6 +109,7 @@ export function UserFormDialog({
           full_name: fullName || undefined,
           institution: institution.trim() || undefined,
           role: role || undefined,
+          plan_tier: planTier,
           is_active: isActive ?? undefined,
           can_override_verdicts: role === 'user' ? false : canOverrideVerdicts,
           ...(password ? { password } : {}),
@@ -91,6 +121,7 @@ export function UserFormDialog({
           full_name: fullName || undefined,
           institution: institution.trim() || undefined,
           role,
+          plan_tier: planTier,
           is_active: isActive,
           can_override_verdicts: role === 'user' ? false : canOverrideVerdicts,
         };
@@ -141,21 +172,32 @@ export function UserFormDialog({
             />
           </div>
 
-          {!isEdit && (
-            <div className="space-y-1.5">
-              <Label>{t('admin.passwordRequiredLabel')}</Label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required={!isEdit}
-                minLength={6}
-                maxLength={128}
-                disabled={loading}
-                placeholder={t('admin.passwordMinPlaceholder')}
-              />
-            </div>
-          )}
+          <div className="space-y-1.5">
+            <Label>
+              {isEdit
+                ? lang === 'vi'
+                  ? 'Đặt lại mật khẩu (tùy chọn)'
+                  : 'Reset Password (optional)'
+                : t('admin.passwordRequiredLabel')}
+            </Label>
+            <Input
+              type="password"
+              data-testid="user-form-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required={!isEdit}
+              minLength={6}
+              maxLength={72}
+              disabled={loading}
+              placeholder={
+                isEdit
+                  ? lang === 'vi'
+                    ? 'Để trống nếu giữ nguyên mật khẩu hiện tại'
+                    : 'Leave blank to keep current password'
+                  : t('admin.passwordMinPlaceholder')
+              }
+            />
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -204,6 +246,11 @@ export function UserFormDialog({
                   setRole(nextRole);
                   if (!isEdit) {
                     setCanOverrideVerdicts(nextRole !== 'user');
+                    if (!planTierTouched) {
+                      setPlanTier(
+                        nextRole === 'admin' ? 'ultra' : nextRole === 'teacher' ? 'pro' : 'basic',
+                      );
+                    }
                   }
                 }}
                 disabled={loading}
@@ -215,30 +262,48 @@ export function UserFormDialog({
               </Select>
             </div>
 
-            <div className="flex flex-col justify-end gap-2 sm:pt-4">
+            <div className="space-y-1.5">
+              <Label>{lang === 'vi' ? 'Gói dịch vụ (Plan Tier)' : 'Plan Tier'}</Label>
+              <Select
+                data-testid="user-form-plan-tier"
+                value={planTier}
+                onChange={(e) => {
+                  setPlanTier(e.target.value as PlanTier);
+                  setPlanTierTouched(true);
+                }}
+                disabled={loading}
+                wrapperClassName="w-full"
+              >
+                <option value="basic">CITRA Basic</option>
+                <option value="pro">CITRA Pro</option>
+                <option value="ultra">CITRA Ultra</option>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-6 pt-1">
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={isActive}
+                onCheckedChange={setIsActive}
+                disabled={loading}
+              />
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                {isActive ? t('admin.active') : t('admin.inactive')}
+              </span>
+            </div>
+            {role !== 'user' && (
               <div className="flex items-center gap-3">
                 <Switch
-                  checked={isActive}
-                  onCheckedChange={setIsActive}
+                  checked={canOverrideVerdicts}
+                  onCheckedChange={setCanOverrideVerdicts}
                   disabled={loading}
                 />
-                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {isActive ? t('admin.active') : t('admin.inactive')}
+                <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                  {t('admin.canOverrideVerdictsLabel')}
                 </span>
               </div>
-              {role !== 'user' && (
-                <div className="flex items-center gap-3">
-                  <Switch
-                    checked={canOverrideVerdicts}
-                    onCheckedChange={setCanOverrideVerdicts}
-                    disabled={loading}
-                  />
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                    {t('admin.canOverrideVerdictsLabel')}
-                  </span>
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-2.5 pt-2">

@@ -58,7 +58,7 @@ pull_grobid() {
 # Start all services
 start_services() {
     log_info "Starting Essay Integrity Checker..."
-    docker-compose up -d
+    docker compose up -d
 
     log_info "Waiting for services to be healthy..."
     sleep 5
@@ -68,7 +68,7 @@ start_services() {
     echo "=========================================="
     echo "  Services Status"
     echo "=========================================="
-    docker-compose ps
+    docker compose ps
 
     echo ""
     echo "=========================================="
@@ -86,12 +86,9 @@ start_services() {
 # Rebuild and start
 rebuild_and_start() {
     log_info "Rebuilding Docker images..."
-    docker-compose build --no-cache
+    docker compose build --no-cache
 
     pull_grobid
-
-    log_info "Starting services..."
-    docker-compose up -d
 
     start_services
 }
@@ -99,19 +96,19 @@ rebuild_and_start() {
 # Stop all services
 stop_services() {
     log_info "Stopping services..."
-    docker-compose stop
+    docker compose stop
     log_success "Services stopped."
 }
 
 # Show logs
 show_logs() {
-    docker-compose logs -f --tail=100
+    docker compose logs -f --tail=100
 }
 
 # Run tests
 run_tests() {
     log_info "Running tests in API container..."
-    docker-compose exec -T api pytest tests/ -v --tb=short
+    docker compose exec -T api pytest tests/ -v --tb=short
 }
 
 # Clean up everything
@@ -121,7 +118,7 @@ clean_all() {
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         log_info "Removing containers..."
-        docker-compose down -v --remove-orphans
+        docker compose down -v --remove-orphans
         log_info "Removing build cache..."
         docker builder prune -f
         log_success "Clean complete."
@@ -155,14 +152,14 @@ show_status() {
     echo "=========================================="
     echo "  Services Status"
     echo "=========================================="
-    docker-compose ps
+    docker compose ps
     echo ""
     echo "=========================================="
     echo "  Health Status"
     echo "=========================================="
 
     # Check API
-    if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+    if curl -sf http://localhost:8000/api/health > /dev/null 2>&1; then
         echo -e "  API:    ${GREEN}healthy${NC}"
     else
         echo -e "  API:    ${RED}unhealthy${NC}"

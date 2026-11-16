@@ -10,8 +10,9 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Header, HTTPException, UploadFile
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy.orm import Session as SqlSession
 
 from integrity_checker.api.deps import get_current_user, get_db, require_admin
 from integrity_checker.api.routes.auth import (
@@ -26,9 +27,14 @@ from integrity_checker.api.routes.auth import (
 )
 from integrity_checker.api.services.avatar_service import get_avatar_service
 from integrity_checker.api.services.email_service import get_email_service
-from integrity_checker.billing.plans import PLAN_TIERS, get_user_subscription_summary
+from integrity_checker.billing.plans import (
+    PLAN_TIERS,
+    ensure_user_quota_current,
+    get_user_subscription_summary,
+)
 from integrity_checker.config import get_settings, is_test_runtime
 from integrity_checker.db.models import VALID_USER_ROLES, User
+from integrity_checker.db.models import Session as SessionModel
 from integrity_checker.db.repository import Repository
 
 logger = logging.getLogger(__name__)
@@ -341,6 +347,7 @@ def update_user(
         request.is_active is False
         or request.password is not None
         or request.role is not None
+        or "email" in update_data
     ):
         repo.delete_user_sessions(user_id)
     repo.commit()
@@ -430,8 +437,13 @@ def delete_user(
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)):
+def get_me(
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+):
     """Get current user full profile."""
+    if isinstance(db, SqlSession) and ensure_user_quota_current(current_user):
+        db.commit()
     return _to_response(current_user)
 
 
@@ -439,6 +451,7 @@ def get_me(current_user: User = Depends(get_current_user)):
 def update_me(
     request: UserSelfUpdate,
     background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
+    authorization: str | None = Header(None),
     current_user: User = Depends(get_current_user),
     db=Depends(get_db),
 ):
@@ -512,6 +525,20 @@ def update_me(
         user = repo.update_user(current_user.id, **update_data)
         raw_activation_token: str | None = None
         if email_changed_to is not None:
+            current_bearer = (
+                authorization[7:].strip()
+                if isinstance(authorization, str)
+                and authorization.startswith("Bearer ")
+                and not authorization[7:].strip().startswith("citra_live_")
+                else None
+            )
+            sess_query = db.query(SessionModel).filter(
+                SessionModel.user_id == current_user.id
+            )
+            if current_bearer:
+                sess_query = sess_query.filter(SessionModel.token != current_bearer)
+            sess_query.delete(synchronize_session=False)
+
             settings = get_settings()
             expires_at = datetime.now(UTC) + timedelta(
                 hours=settings.auth.activation_expire_hours

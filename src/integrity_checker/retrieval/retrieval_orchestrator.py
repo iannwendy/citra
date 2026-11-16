@@ -104,12 +104,13 @@ _LAST_HTML_META: contextvars.ContextVar[HtmlPageMeta | None] = contextvars.Conte
 class _InFlightEntry:
     """Shared state for a single coalesced in-flight citation lookup across event loops."""
 
-    __slots__ = ("waiters", "result", "error", "done")
+    __slots__ = ("waiters", "result", "error", "cancelled", "done")
 
     def __init__(self) -> None:
         self.waiters: list[tuple[asyncio.AbstractEventLoop, asyncio.Event]] = []
         self.result: SourceResult | None = None
         self.error: BaseException | None = None
+        self.cancelled: bool = False
         self.done: bool = False
 
 
@@ -142,62 +143,93 @@ class _CrossLoopSingleflight:
     ) -> tuple[SourceResult, bool]:
         """Execute ``coro_fn`` once per concurrent ``key``.
 
+        If the leader task is cancelled (``asyncio.CancelledError``), followers are never
+        poisoned with ``CancelledError``; instead one surviving follower is promoted to
+        leader and completes ``coro_fn()`` while remaining followers coalesce behind it.
+
         Returns:
             Tuple ``(result, was_coalesced_follower)``.
         """
         loop = asyncio.get_running_loop()
-        wait_event: asyncio.Event | None = None
-        with self._lock:
-            existing = self._inflight.get(key)
-            if existing is not None and not existing.done:
-                wait_event = asyncio.Event()
-                existing.waiters.append((loop, wait_event))
-                self.coalesced_hits += 1
-                entry = existing
-                is_leader = False
-            else:
-                entry = _InFlightEntry()
-                self._inflight[key] = entry
-                is_leader = True
-
-        if not is_leader:
-            assert wait_event is not None
-            await wait_event.wait()
-            if entry.error is not None:
-                raise entry.error
-            assert entry.result is not None
-            return copy.deepcopy(entry.result), True
-
-        try:
-            res = await coro_fn()
-            snapshot = copy.deepcopy(res)
+        while True:
+            wait_event: asyncio.Event | None = None
             with self._lock:
-                entry.result = snapshot
-                entry.done = True
-                if self._inflight.get(key) is entry:
-                    self._inflight.pop(key, None)
-                waiters = list(entry.waiters)
-                entry.waiters.clear()
-            for w_loop, w_ev in waiters:
+                existing = self._inflight.get(key)
+                if existing is not None and not existing.done:
+                    wait_event = asyncio.Event()
+                    existing.waiters.append((loop, wait_event))
+                    self.coalesced_hits += 1
+                    entry = existing
+                    is_leader = False
+                else:
+                    entry = _InFlightEntry()
+                    self._inflight[key] = entry
+                    is_leader = True
+
+            if not is_leader:
+                assert wait_event is not None
                 try:
-                    w_loop.call_soon_threadsafe(w_ev.set)
-                except RuntimeError:
-                    pass
-            return res, False
-        except BaseException as exc:
-            with self._lock:
-                entry.error = exc
-                entry.done = True
-                if self._inflight.get(key) is entry:
-                    self._inflight.pop(key, None)
-                waiters = list(entry.waiters)
-                entry.waiters.clear()
-            for w_loop, w_ev in waiters:
-                try:
-                    w_loop.call_soon_threadsafe(w_ev.set)
-                except RuntimeError:
-                    pass
-            raise
+                    await wait_event.wait()
+                except asyncio.CancelledError:
+                    with self._lock:
+                        try:
+                            entry.waiters.remove((loop, wait_event))
+                        except ValueError:
+                            pass
+                    raise
+                if entry.cancelled:
+                    with self._lock:
+                        self.coalesced_hits = max(0, self.coalesced_hits - 1)
+                    continue
+                if entry.error is not None:
+                    raise entry.error
+                assert entry.result is not None
+                return copy.deepcopy(entry.result), True
+
+            try:
+                res = await coro_fn()
+                snapshot = copy.deepcopy(res)
+                with self._lock:
+                    entry.result = snapshot
+                    entry.done = True
+                    if self._inflight.get(key) is entry:
+                        self._inflight.pop(key, None)
+                    waiters = list(entry.waiters)
+                    entry.waiters.clear()
+                for w_loop, w_ev in waiters:
+                    try:
+                        w_loop.call_soon_threadsafe(w_ev.set)
+                    except RuntimeError:
+                        pass
+                return res, False
+            except asyncio.CancelledError:
+                with self._lock:
+                    entry.cancelled = True
+                    entry.done = True
+                    if self._inflight.get(key) is entry:
+                        self._inflight.pop(key, None)
+                    waiters = list(entry.waiters)
+                    entry.waiters.clear()
+                for w_loop, w_ev in waiters:
+                    try:
+                        w_loop.call_soon_threadsafe(w_ev.set)
+                    except RuntimeError:
+                        pass
+                raise
+            except BaseException as exc:
+                with self._lock:
+                    entry.error = exc
+                    entry.done = True
+                    if self._inflight.get(key) is entry:
+                        self._inflight.pop(key, None)
+                    waiters = list(entry.waiters)
+                    entry.waiters.clear()
+                for w_loop, w_ev in waiters:
+                    try:
+                        w_loop.call_soon_threadsafe(w_ev.set)
+                    except RuntimeError:
+                        pass
+                raise
 
 
 class _TTLNegativeCache:
@@ -2024,18 +2056,19 @@ class RetrievalOrchestrator:
 
             # Fallback for ACL Anthology DOIs (10.18653/v1/<id>): fetch abstract directly from aclanthology.org
             if ref_doi and ref_doi.lower().startswith("10.18653/v1/"):
-                acl_id = ref_doi.split("10.18653/v1/", 1)[1].strip("/")
+                acl_id = ref_doi[len("10.18653/v1/") :].strip("/")
+                if re.match(r"^[a-z]\d{2}-\d{3,4}$", acl_id):
+                    acl_id = acl_id.upper()
                 if acl_id:
-                    client = get_shared_http_client(
-                        "acl_anthology",
+                    client = get_shared_http_client(follow_redirects=True)
+                    resp = await client.get(
+                        f"https://aclanthology.org/{acl_id}/",
                         timeout=4.0,
-                        follow_redirects=True,
                     )
-                    resp = await client.get(f"https://aclanthology.org/{acl_id}/")
                     if resp.status_code == 200:
                         m = re.search(
                             r'<div class="card-body acl-abstract">.*?<span>(.*?)</span>',
-                            resp.text,
+                            resp.text[:262_144],
                             re.S | re.I,
                         )
                         if m:
@@ -2467,7 +2500,7 @@ class RetrievalOrchestrator:
             succ_pool,
             citation,
         )
-        if not quality_cands:
+        if not any(c.found for c in quality_cands):
             return None
         if is_shared_id_key:
             if effective_key.startswith(("doi:", "arxiv:")):
@@ -2475,23 +2508,13 @@ class RetrievalOrchestrator:
                     self._candidate_confirms_identifier(effective_key, c)
                     and self._candidate_matches_citation_title(citation, c)
                     for c in quality_cands
+                    if c.found
                 ):
                     return None
             elif not self._candidates_match_citation_title(citation, quality_cands):
                 return None
 
-        retracted_from_cands = any(
-            c.found
-            and c.external_ids
-            and str(c.external_ids.get("is_retracted", "")).lower() == "true"
-            for c in quality_cands
-        )
-        is_retracted = (
-            retracted_from_cands
-            if (is_shared_id_key and effective_key.startswith(("doi:", "arxiv:")))
-            else (bool(cloned.is_retracted) or retracted_from_cands)
-        )
-        return SourceResult(
+        materialized = SourceResult(
             citation_raw=citation.raw_text,
             candidates=quality_cands,
             sources_queried=list(cloned.sources_queried or []),
@@ -2501,9 +2524,22 @@ class RetrievalOrchestrator:
             url_status=None if is_shared_id_key else cloned.url_status,
             url_status_code=None if is_shared_id_key else cloned.url_status_code,
             archive_url=None if is_shared_id_key else cloned.archive_url,
-            is_retracted=is_retracted,
+            is_retracted=False,
             html_meta=None if is_shared_id_key else getattr(cloned, "html_meta", None),
         )
+        retracted_from_best = materialized.has_retracted_candidate()
+        had_explicit_cand_retraction = any(
+            c.is_retracted for c in (cloned.candidates or [])
+        )
+        materialized.is_retracted = (
+            retracted_from_best
+            if (
+                (is_shared_id_key and effective_key.startswith(("doi:", "arxiv:")))
+                or had_explicit_cand_retraction
+            )
+            else (bool(cloned.is_retracted) or retracted_from_best)
+        )
+        return materialized
 
     def _persist_verification_result(self, citation: Citation, result: SourceResult) -> None:
         """Persist ``result`` using shared identifier keys ONLY for pure, conjunctive hits."""
@@ -3105,30 +3141,26 @@ class RetrievalOrchestrator:
             quality_candidates, quality_succeeded = self._filter_quality_candidates(
                 deduped, list(pristine_succeeded), cit
             )
-            if not quality_candidates:
+            if not any(c.found for c in quality_candidates):
                 continue
 
             if not all(
                 self._candidate_matches_citation_title(cit, c)
                 and self._candidates_titles_agree(wave0_anchor, c)
                 for c in quality_candidates
+                if c.found
             ):
                 continue
 
-            is_retracted = any(
-                c.found
-                and c.external_ids
-                and str(c.external_ids.get("is_retracted", "")).lower() == "true"
-                for c in quality_candidates
-            )
             result = SourceResult(
                 citation_raw=cit.raw_text,
                 candidates=quality_candidates,
                 sources_queried=queried,
                 sources_succeeded=quality_succeeded,
                 sources_failed=failed,
-                is_retracted=is_retracted,
+                is_retracted=False,
             )
+            result.is_retracted = result.has_retracted_candidate()
             result._pristine_candidates = [copy.deepcopy(c) for c in pristine_cands]  # type: ignore[attr-defined]
             result._pristine_succeeded = list(pristine_succeeded)  # type: ignore[attr-defined]
             if result.consensus_count() < 2:
@@ -3784,6 +3816,13 @@ class RetrievalOrchestrator:
                 _is_clean_miss_error(_strip_quoted_query(err))
                 for err in failed.values()
             )
+            sentinel_candidates = [
+                c
+                for c in deduped
+                if not c.found
+                and (getattr(c, "external_ids", None) or {}).get("doi_ra_status")
+                == "registered_no_csl"
+            ]
             logger.warning(
                 f"UNRESOLVED: citation='{citation.raw_text[:50]}', "
                 f"failed={list(failed.keys())}"
@@ -3798,11 +3837,13 @@ class RetrievalOrchestrator:
                 )
             return SourceResult(
                 citation_raw=citation.raw_text,
-                candidates=[],
+                candidates=sentinel_candidates,
                 sources_queried=sources_queried,
                 sources_succeeded=[],
                 sources_failed=failed,
-                api_exhausted=not has_clean_search_response,
+                api_exhausted=(
+                    False if sentinel_candidates else (not has_clean_search_response)
+                ),
                 url_status=url_status,
                 url_status_code=url_status_code,
                 archive_url=archive_url,
@@ -3836,12 +3877,6 @@ class RetrievalOrchestrator:
                     ),
                 )
 
-        is_retracted = any(
-            c.found
-            and c.external_ids
-            and str(c.external_ids.get("is_retracted", "")).lower() == "true"
-            for c in quality_candidates
-        )
         final_res = SourceResult(
             citation_raw=citation.raw_text,
             candidates=quality_candidates,
@@ -3851,9 +3886,10 @@ class RetrievalOrchestrator:
             url_status=url_status,
             url_status_code=url_status_code,
             archive_url=archive_url,
-            is_retracted=is_retracted,
+            is_retracted=False,
             html_meta=html_meta,
         )
+        final_res.is_retracted = final_res.has_retracted_candidate()
         final_res._pristine_candidates = pristine_found  # type: ignore[attr-defined]
         final_res._pristine_succeeded = pristine_succeeded  # type: ignore[attr-defined]
         return final_res
@@ -4392,8 +4428,13 @@ class RetrievalOrchestrator:
         }
 
         for cand in candidates:
-            # Skip if not found
+            # Skip if not found, EXCEPT registered_no_csl sentinel candidates needed by SymbolicRules
             if not cand.found:
+                if (
+                    (getattr(cand, "external_ids", None) or {}).get("doi_ra_status")
+                    == "registered_no_csl"
+                ):
+                    filtered.append(cand)
                 continue
 
             # Check 1: Title is not just a year
@@ -5212,7 +5253,9 @@ class RetrievalOrchestrator:
                     api_key=serpapi_key,
                 )
                 rate_cfg = settings.retrieval.rate_limits
-                use_serper_rate = bool(serper_key and not SerpApiClient._serper_quota_exhausted)
+                use_serper_rate = bool(
+                    serper_key and not SerpApiClient._is_serper_quota_exhausted()
+                )
                 active_rate = (
                     getattr(rate_cfg, "serper_per_sec", 5.0)
                     if use_serper_rate
@@ -5227,7 +5270,7 @@ class RetrievalOrchestrator:
                 )
             elif (
                 self._serpapi_limiter_mode == "serper"
-                and SerpApiClient._serper_quota_exhausted
+                and SerpApiClient._is_serper_quota_exhausted()
                 and getattr(self.serpapi, "api_key", "")
             ):
                 # Dynamically step down rate limit if Serper exhausted credits mid-run and fell back to SerpApi
@@ -5235,6 +5278,16 @@ class RetrievalOrchestrator:
                     get_settings().retrieval.rate_limits.serpapi_per_sec
                 )
                 self._serpapi_limiter_mode = "serpapi"
+            elif (
+                self._serpapi_limiter_mode == "serpapi"
+                and not SerpApiClient._is_serper_quota_exhausted()
+                and getattr(self.serpapi, "serper_api_key", "")
+            ):
+                # Restore Serper rate limit once bounded quota cooldown expires
+                self._serpapi_limiter = RateLimiter(
+                    getattr(get_settings().retrieval.rate_limits, "serper_per_sec", 5.0)
+                )
+                self._serpapi_limiter_mode = "serper"
 
             # Apply rate limit & backoff guard
             if self._serpapi_limiter:

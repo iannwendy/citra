@@ -33,6 +33,7 @@ from integrity_checker.linking.duplicate_detector import DuplicateDetector
 from integrity_checker.linking.statuses import (
     CitationMappingStatus,
     LinkingResult,
+    StyleProfile,
 )
 from integrity_checker.models.citation import Citation, CitationType
 from integrity_checker.models.validation import CitationLink, MappingMethod
@@ -159,12 +160,17 @@ class CitationLinker:
         self,
         body_citations: list[Citation],
         bib_citations: list[Citation],
+        style_profile: StyleProfile | None = None,
+        dominant_style: str | None = None,
     ) -> LinkingResult:
         """Link in-text occurrences ↔ reference entries.
 
         Args:
             body_citations: Citation[] từ body (IN_TEXT / NUMERIC type).
             bib_citations: Citation[] từ bibliography (REFERENCE_LIST type).
+            style_profile: Optional pre-computed document StyleProfile.
+            dominant_style: Optional explicit dominant style override
+                (e.g. ``"IEEE-like"``, ``"APA-like"``).
 
         Returns:
             LinkingResult với:
@@ -176,6 +182,12 @@ class CitationLinker:
         result = LinkingResult(
             total_citations=len(body_citations),
             total_references=len(bib_citations),
+        )
+        effective_dominant = self._resolve_effective_dominant_style(
+            body_citations,
+            bib_citations,
+            style_profile=style_profile,
+            dominant_style=dominant_style,
         )
 
         # Index bib citations by different keys
@@ -241,9 +253,26 @@ class CitationLinker:
                     bib_citations,
                 )
 
+            if effective_dominant:
+                links = self._apply_style_consistency_to_occurrence(
+                    cit=cit,
+                    occ_id=occ_id,
+                    links=links,
+                    bib_citations=bib_citations,
+                    effective_dominant=effective_dominant,
+                )
+
             if links:
-                if any(lnk.status == CitationMappingStatus.MATCHED for lnk in links):
-                    prev_matched_links = [lnk for lnk in links if lnk.status == CitationMappingStatus.MATCHED]
+                if any(
+                    lnk.status in (CitationMappingStatus.MATCHED, CitationMappingStatus.STYLE_INCONSISTENT)
+                    for lnk in links
+                ):
+                    prev_matched_links = [
+                        lnk
+                        for lnk in links
+                        if lnk.status
+                        in (CitationMappingStatus.MATCHED, CitationMappingStatus.STYLE_INCONSISTENT)
+                    ]
                 for link in links:
                     # Populate evidence['raw'] so downstream lookups can find
                     # this link by the in-text citation's raw_text (the pipeline
@@ -304,7 +333,7 @@ class CitationLinker:
                 for lnk in result.links
                 if lnk.reference_id == ref_id
                 and getattr(lnk.status, "value", lnk.status)
-                in ("matched", "in_text_mismatch", "ambiguous_mapping")
+                in ("matched", "in_text_mismatch", "ambiguous_mapping", "style_inconsistent")
             ]
             if i in bib_matched and matched_links:
                 bib.mapping_status = CitationMappingStatus.MATCHED.value
@@ -384,6 +413,214 @@ class CitationLinker:
         ]
 
     # -- internal helpers --
+
+    def _resolve_effective_dominant_style(
+        self,
+        body_citations: list[Citation],
+        bib_citations: list[Citation],
+        *,
+        style_profile: StyleProfile | None = None,
+        dominant_style: str | None = None,
+    ) -> str | None:
+        """Resolve document dominant style family ('IEEE' or 'APA') when clear."""
+        if dominant_style:
+            ds = str(dominant_style).strip().lower()
+            if any(tok in ds for tok in ("ieee", "numeric", "vancouver", "acm", "nature", "acs", "ama")):
+                return "IEEE"
+            if any(tok in ds for tok in ("apa", "author", "harvard", "mla", "chicago")):
+                return "APA"
+            return None
+
+        sp = style_profile
+        if sp is None and (len(body_citations) + len(bib_citations)) >= 5:
+            try:
+                from integrity_checker.config import get_settings
+                from integrity_checker.extraction.style_detector import StyleDetector
+
+                sp = StyleDetector(get_settings().style_detection).detect(
+                    body_citations, bib_citations
+                )
+            except Exception as exc:  # pragma: no cover
+                logger.debug("StyleDetector unavailable in CitationLinker (%s)", exc)
+                sp = None
+
+        if sp is None:
+            return None
+
+        lbl = (getattr(sp, "label", "") or getattr(sp, "style", "") or "").strip().lower()
+        conf = float(getattr(sp, "confidence", 0.0) or 0.0)
+        ratios = (
+            getattr(sp, "ratios", None)
+            or (getattr(sp, "evidence", None) or {}).get("ratios")
+            or {}
+        )
+        if conf < 0.75:
+            return None
+        if "ieee" in lbl or "numeric" in lbl:
+            if not ratios or (
+                ratios.get("body_ieee", 0.0) >= 0.60 and ratios.get("bib_ieee", 0.0) >= 0.60
+            ):
+                return "IEEE"
+        if "apa" in lbl:
+            if not ratios or (
+                ratios.get("body_apa", 0.0) >= 0.60 and ratios.get("bib_apa", 0.0) >= 0.60
+            ):
+                return "APA"
+        return None
+
+    def _apply_style_consistency_to_occurrence(
+        self,
+        *,
+        cit: Citation,
+        occ_id: str,
+        links: list[CitationLink] | None,
+        bib_citations: list[Citation],
+        effective_dominant: str,
+    ) -> list[CitationLink] | None:
+        """Convert stray style mismatches to STYLE_INCONSISTENT when dominant style is clear."""
+        raw_stripped = (cit.raw_text or "").strip()
+        if not raw_stripped:
+            return links
+
+        is_ibid = bool(
+            re.match(r"^[\(\[]?\s*(?:ibid\.?|id\.?)\b", raw_stripped, re.IGNORECASE)
+        )
+        has_doi_or_url = bool(
+            self._extract_doi(raw_stripped)
+            or re.search(r"https?://", raw_stripped, re.IGNORECASE)
+        )
+        if is_ibid or has_doi_or_url:
+            return links
+
+        pre_targets = self._extract_numeric_targets(
+            raw_stripped,
+            allow_parenthetical=(cit.citation_type == CitationType.NUMERIC),
+        )
+        # Do not treat a standalone bracketed 4-digit year like "[2020]" as numeric index
+        if (
+            len(pre_targets) == 1
+            and pre_targets[0][1] is None
+            and 1800 <= pre_targets[0][0] <= 2099
+            and len(bib_citations) < 1800
+        ):
+            pre_targets = []
+
+        is_numeric_surface = (
+            cit.citation_type == CitationType.NUMERIC
+            or bool(pre_targets)
+            or bool(_IEEE_NUM_RE.search(raw_stripped))
+            or bool(re.search(r"\^\d", raw_stripped))
+        )
+        auth_chk, yr_chk, _ = self._extract_author_year(raw_stripped)
+        is_author_year_surface = (
+            not is_numeric_surface
+            and (bool(auth_chk and yr_chk) or bool(_MLA_AUTHOR_PAGE_RE.match(raw_stripped)))
+        )
+
+        if effective_dominant == "IEEE" and is_author_year_surface and links:
+            converted: list[CitationLink] = []
+            for lnk in links:
+                if lnk.status == CitationMappingStatus.MATCHED:
+                    converted.append(
+                        CitationLink(
+                            occurrence_id=lnk.occurrence_id,
+                            reference_id=lnk.reference_id,
+                            status=CitationMappingStatus.STYLE_INCONSISTENT,
+                            confidence=lnk.confidence,
+                            method=lnk.method,
+                            evidence=dict(lnk.evidence or {}),
+                        )
+                    )
+                else:
+                    converted.append(lnk)
+            return converted
+
+        is_pure_numeric_surface = is_numeric_surface and not (auth_chk and yr_chk)
+        if effective_dominant == "APA" and is_pure_numeric_surface:
+            if links:
+                converted_apa: list[CitationLink] = []
+                for lnk in links:
+                    if lnk.status == CitationMappingStatus.MATCHED:
+                        converted_apa.append(
+                            CitationLink(
+                                occurrence_id=lnk.occurrence_id,
+                                reference_id=lnk.reference_id,
+                                status=CitationMappingStatus.STYLE_INCONSISTENT,
+                                confidence=lnk.confidence,
+                                method=lnk.method,
+                                evidence=dict(lnk.evidence or {}),
+                            )
+                        )
+                    else:
+                        converted_apa.append(lnk)
+                return converted_apa
+            if pre_targets:
+                positional_links: list[CitationLink] = []
+                for num_idx, sub_lbl in pre_targets:
+                    if sub_lbl is None and 1 <= num_idx <= len(bib_citations):
+                        bib_ref = bib_citations[num_idx - 1]
+                        positional_links.append(
+                            CitationLink(
+                                occurrence_id=occ_id,
+                                reference_id=bib_ref.reference_id or f"ref-{num_idx - 1:04d}",
+                                status=CitationMappingStatus.STYLE_INCONSISTENT,
+                                confidence=0.60,
+                                method=MappingMethod.NUMERIC_INDEX,
+                            )
+                        )
+                    else:
+                        positional_links.append(
+                            CitationLink(
+                                occurrence_id=occ_id,
+                                reference_id=None,
+                                status=CitationMappingStatus.MISSING_REFERENCE,
+                                confidence=0.0,
+                                method=MappingMethod.NO_KEYS,
+                                evidence={"missing_index": num_idx},
+                            )
+                        )
+                return positional_links
+
+        return links
+
+    def _collapse_duplicate_candidates(
+        self, candidates: list[Citation]
+    ) -> tuple[list[Citation], bool]:
+        """Group same-work duplicate candidates and return ``(distinct_works, all_same_work)``."""
+        if len(candidates) <= 1:
+            return candidates, False
+        detector = self.duplicate_detector or self._build_default_duplicate_detector()
+        try:
+            groups = detector.detect(candidates)
+        except Exception:
+            return candidates, False
+        if not groups:
+            return candidates, False
+        non_canonical_ids: set[int] = set()
+        for grp in groups:
+            for dup_member in list(grp.citations)[1:]:
+                non_canonical_ids.add(id(dup_member))
+        if not non_canonical_ids:
+            return candidates, False
+        collapsed = [c for c in candidates if id(c) not in non_canonical_ids]
+        distinct = collapsed or [candidates[0]]
+        if len(distinct) == 1:
+            if self.duplicate_detector is None:
+                return candidates, True
+            return distinct, True
+        return distinct, False
+
+    @staticmethod
+    def _is_composite_sub_group(candidates: list[Citation]) -> bool:
+        """True if all candidates are composite sub-references of one numbered parent entry."""
+        if len(candidates) <= 1:
+            return False
+        if not all(
+            c.numeric_index is not None and getattr(c, "sub_index", None) is not None
+            for c in candidates
+        ):
+            return False
+        return len({c.numeric_index for c in candidates}) == 1
 
     def _try_match(
         self,
@@ -511,6 +748,16 @@ class CitationLinker:
                     comp_key = f"{num_idx}{sub_lbl.lower()}"
                     bib_ref = bib_by_composite_label.get(comp_key)
                     if bib_ref is None:
+                        links.append(
+                            CitationLink(
+                                occurrence_id=occ_id,
+                                reference_id=None,
+                                status=CitationMappingStatus.MISSING_REFERENCE,
+                                confidence=0.0,
+                                method=MappingMethod.NO_KEYS,
+                                evidence={"sub_citation": f"[{comp_key}]", "missing_index": comp_key},
+                            )
+                        )
                         continue
                     bib_idx = self._find_bib_index(bib_ref, bib_citations)
                     ref_id = bib_ref.reference_id or f"ref-{bib_idx:04d}"
@@ -528,6 +775,16 @@ class CitationLinker:
                 else:
                     bibs_at_idx = bib_by_index.get(num_idx) or []
                     if not bibs_at_idx:
+                        links.append(
+                            CitationLink(
+                                occurrence_id=occ_id,
+                                reference_id=None,
+                                status=CitationMappingStatus.MISSING_REFERENCE,
+                                confidence=0.0,
+                                method=MappingMethod.NO_KEYS,
+                                evidence={"sub_citation": f"[{num_idx}]", "missing_index": num_idx},
+                            )
+                        )
                         continue
                     comp_bibs = [
                         b for b in bibs_at_idx if getattr(b, "sub_index", None) is not None
@@ -547,7 +804,7 @@ class CitationLinker:
                                     method=MappingMethod.NUMERIC_INDEX,
                                 )
                             )
-            if links:
+            if any(lnk.status == CitationMappingStatus.MATCHED for lnk in links):
                 return links
             if has_explicit_sub_target:
                 return None
@@ -641,14 +898,41 @@ class CitationLinker:
                     candidates = self._disambiguate_candidates(
                         candidates, part, year_suffix=suffix_part
                     )
-                    bib_idx = self._find_bib_index(candidates[0], bib_citations)
-                    multi_links.append(CitationLink(
-                        occurrence_id=occ_id,
-                        reference_id=candidates[0].reference_id or f"ref-{bib_idx:04d}",
-                        status=CitationMappingStatus.MATCHED,
-                        confidence=self.author_year_confidence,
-                        method=MappingMethod.AUTHOR_YEAR,
-                    ))
+                    distinct_cands, all_same_work = self._collapse_duplicate_candidates(candidates)
+                    if (
+                        not suffix_part
+                        and len(distinct_cands) > 1
+                        and not all_same_work
+                        and not self._is_composite_sub_group(distinct_cands)
+                    ):
+                        for c in distinct_cands:
+                            bib_idx = self._find_bib_index(c, bib_citations)
+                            multi_links.append(
+                                CitationLink(
+                                    occurrence_id=occ_id,
+                                    reference_id=c.reference_id or f"ref-{bib_idx:04d}",
+                                    status=CitationMappingStatus.AMBIGUOUS_MAPPING,
+                                    confidence=0.50,
+                                    method=MappingMethod.AUTHOR_YEAR,
+                                )
+                            )
+                    else:
+                        target_cands = (
+                            distinct_cands
+                            if (all_same_work or self._is_composite_sub_group(distinct_cands))
+                            else [distinct_cands[0]]
+                        )
+                        for c in target_cands:
+                            bib_idx = self._find_bib_index(c, bib_citations)
+                            multi_links.append(
+                                CitationLink(
+                                    occurrence_id=occ_id,
+                                    reference_id=c.reference_id or f"ref-{bib_idx:04d}",
+                                    status=CitationMappingStatus.MATCHED,
+                                    confidence=self.author_year_confidence,
+                                    method=MappingMethod.AUTHOR_YEAR,
+                                )
+                            )
                 else:
                     fuzzy_semi = self._try_fuzzy_author_year(occ_id, author_part, year_part, bib_citations)
                     if fuzzy_semi is None:
@@ -664,7 +948,10 @@ class CitationLinker:
                             method=MappingMethod.NO_KEYS,
                             evidence={"sub_citation": part.strip("()")},
                         ))
-            if any(lnk.status == CitationMappingStatus.MATCHED for lnk in multi_links):
+            if any(
+                lnk.status in (CitationMappingStatus.MATCHED, CitationMappingStatus.AMBIGUOUS_MAPPING)
+                for lnk in multi_links
+            ):
                 return multi_links
 
         # 3a. Secondary citation (trích dẫn gián tiếp): "(Smith, 2005, dẫn theo Tran, 2016)"
@@ -742,21 +1029,33 @@ class CitationLinker:
                     cit_title=cit.title,
                     year_suffix=year_suffix,
                 )
-                if not year_suffix and len(candidates) > 1 and (
-                    year == "n.d." or not any(self._resolve_bib_year_and_suffix(c)[1] for c in candidates)
-                ):
+                distinct_cands, all_same_work = self._collapse_duplicate_candidates(candidates)
+                if not year_suffix and len(distinct_cands) > 1:
+                    if all_same_work or self._is_composite_sub_group(distinct_cands):
+                        return [
+                            CitationLink(
+                                occurrence_id=occ_id,
+                                reference_id=c.reference_id
+                                or f"ref-{self._find_bib_index(c, bib_citations):04d}",
+                                status=CitationMappingStatus.MATCHED,
+                                confidence=self.author_year_confidence,
+                                method=MappingMethod.AUTHOR_YEAR,
+                            )
+                            for c in distinct_cands
+                        ]
                     return [
                         CitationLink(
                             occurrence_id=occ_id,
-                            reference_id=c.reference_id or f"ref-{self._find_bib_index(c, bib_citations):04d}",
-                            status=CitationMappingStatus.MATCHED,
-                            confidence=self.author_year_confidence,
+                            reference_id=c.reference_id
+                            or f"ref-{self._find_bib_index(c, bib_citations):04d}",
+                            status=CitationMappingStatus.AMBIGUOUS_MAPPING,
+                            confidence=0.50,
                             method=MappingMethod.AUTHOR_YEAR,
                         )
-                        for c in candidates
+                        for c in distinct_cands
                     ]
                 return _bib_link(
-                    candidates[0],
+                    distinct_cands[0],
                     self.author_year_confidence,
                     MappingMethod.AUTHOR_YEAR,
                 )
@@ -1038,6 +1337,16 @@ class CitationLinker:
                 )
 
             if is_multi_word:
+                if re.match(r"^t[oò]a\s+án\b", token) and re.match(
+                    r"^bản\s+án\b", (bib.raw_text or "").strip(), re.IGNORECASE
+                ):
+                    return CitationLink(
+                        occurrence_id=occ_id,
+                        reference_id=bib.reference_id or f"ref-{bib_idx:04d}",
+                        status=CitationMappingStatus.MATCHED,
+                        confidence=self.author_year_confidence,
+                        method=MappingMethod.AUTHOR_YEAR,
+                    )
                 if token in haystack or self._org_token_in_haystack(token, haystack):
                     return CitationLink(
                         occurrence_id=occ_id,

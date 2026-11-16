@@ -300,8 +300,8 @@ class Repository:
                     mapping_status=v.mapping_status.value if hasattr(v.mapping_status, "value") else (v.mapping_status or "matched"),
                     mapping_confidence=v.mapping_confidence,
                     style_penalty=getattr(v, "style_penalty", None),
-                    domain_exception=getattr(v, "domain_exception", False),
-                    is_overridden=v.is_overridden,
+                    domain_exception=1 if getattr(v, "domain_exception", False) else 0,
+                    is_overridden=1 if v.is_overridden else 0,
                     # NEW v1.16 — surrounding PDF text of the citation, carried
                     # over from the Citation object the verdict was built from.
                     context=getattr(v.citation, "context", None),
@@ -364,6 +364,8 @@ class Repository:
 
     def recalculate_essay_cis(self, essay_id: int) -> dict | None:
         """Recalculate and persist essay.cis_json after verdict overrides."""
+        import re as _re
+
         from integrity_checker.config import get_settings
         from integrity_checker.logic.cis import rubric_penalties
 
@@ -372,9 +374,6 @@ class Repository:
             return None
 
         verdicts = self.get_verdicts(essay_id)
-        academic_verdicts = [v for v in verdicts if v.label != "resource"]
-        n_academic = len(academic_verdicts)
-
         existing_cis: dict = {}
         if essay.cis_json:
             try:
@@ -386,7 +385,7 @@ class Repository:
         w = get_settings().cis.weights
         penalty_table = rubric_penalties(get_settings())
 
-        if n_academic == 0:
+        if not verdicts:
             cis_dict = {
                 "score": 0.0,
                 "components": {
@@ -396,27 +395,235 @@ class Repository:
                     "format_consistency": 0.0,
                     "identifier_validity": 0.0,
                 },
-                "weights_used": w.model_dump(),
+                "weights_used": existing_cis.get("weights_used") or w.model_dump(),
                 "num_citations": 0,
                 "num_unresolved": 0,
                 "disclaimer": existing_cis.get("disclaimer", ""),
             }
-        else:
-            def _verdict_record_rules(rec: object) -> list[str]:
-                raw_rules = getattr(rec, "triggered_rules", None)
-                if raw_rules is None:
-                    raw_rules = getattr(rec, "triggered_rules_json", None)
-                if isinstance(raw_rules, list):
-                    return [str(x) for x in raw_rules]
-                if isinstance(raw_rules, str) and raw_rules.strip():
-                    try:
-                        parsed = json.loads(raw_rules)
-                        if isinstance(parsed, list):
-                            return [str(x) for x in parsed]
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-                return []
+            essay.cis_json = json.dumps(cis_dict, ensure_ascii=False)
+            self.session.flush()
+            return cis_dict
 
+        def _verdict_record_rules(rec: object) -> list[str]:
+            raw_rules = getattr(rec, "triggered_rules", None)
+            if raw_rules is None:
+                raw_rules = getattr(rec, "triggered_rules_json", None)
+            if isinstance(raw_rules, list):
+                return [str(x) for x in raw_rules]
+            if isinstance(raw_rules, str) and raw_rules.strip():
+                try:
+                    parsed = json.loads(raw_rules)
+                    if isinstance(parsed, list):
+                        return [str(x) for x in parsed]
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            return []
+
+        def _verdict_record_features(rec: object) -> dict[str, Any]:
+            raw_feats = getattr(rec, "features", None)
+            if raw_feats is None:
+                raw_feats = getattr(rec, "features_json", None)
+            if isinstance(raw_feats, dict):
+                return dict(raw_feats)
+            if isinstance(raw_feats, str) and raw_feats.strip():
+                try:
+                    parsed = json.loads(raw_feats)
+                    if isinstance(parsed, dict):
+                        return parsed
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            return {}
+
+        all_citations = (
+            self.session.query(CitationRecord)
+            .filter(CitationRecord.essay_id == essay_id)
+            .all()
+        )
+        in_text_citations = [
+            c for c in all_citations if c.citation_type != "reference_list"
+        ]
+        doi_by_raw = {c.raw_text: c.doi for c in all_citations if c.raw_text and c.doi}
+        url_by_raw = {c.raw_text: c.url for c in all_citations if c.raw_text and c.url}
+
+        invalid_id_rules = {
+            "R-FAKE-URL",
+            "R-FABRICATED-DOI",
+            "R-NONEXISTENT-DOI",
+            "R-DEAD-URL",
+            "R-BROKEN-LINK",
+            "R-DOI-CONFLICT",
+            "R-DOI-METADATA-MISMATCH",
+            "R-CHIMERIC-DOI-MISMATCH",
+        }
+
+        def _compute_link_consistency_for_records(target_verdicts: list[VerdictRecord]) -> float:
+            if in_text_citations:
+                in_text_statuses: list[str] = []
+                for c in in_text_citations:
+                    parsed_edges: list[str] = []
+                    if getattr(c, "citation_link_json", None):
+                        try:
+                            raw_links = json.loads(c.citation_link_json)
+                            if isinstance(raw_links, dict):
+                                raw_links = [raw_links]
+                            if isinstance(raw_links, list):
+                                parsed_edges = [
+                                    str(edge.get("status") or "matched")
+                                    for edge in raw_links
+                                    if isinstance(edge, dict)
+                                ]
+                        except (json.JSONDecodeError, TypeError):
+                            parsed_edges = []
+                    if parsed_edges:
+                        in_text_statuses.extend(parsed_edges)
+                    else:
+                        in_text_statuses.append(c.mapping_status or "matched")
+
+                uncited_cnt = sum(
+                    1
+                    for v in target_verdicts
+                    if (v.mapping_status or "matched") == "uncited_reference"
+                )
+                dup_cnt = sum(
+                    1
+                    for v in target_verdicts
+                    if (v.mapping_status or "matched") == "duplicate_reference"
+                )
+                total_links = len(in_text_statuses) + uncited_cnt + dup_cnt
+                if total_links <= 0:
+                    return 1.0
+                pen_sum = (
+                    sum(penalty_table.get(st, 0.0) for st in in_text_statuses)
+                    + uncited_cnt * penalty_table.get("uncited_reference", 0.0)
+                    + dup_cnt * penalty_table.get("duplicate_reference", 0.0)
+                )
+                res_val = max(0.0, 1.0 - pen_sum / total_links)
+                if (
+                    target_verdicts
+                    and uncited_cnt == len(target_verdicts)
+                    and "matched" not in in_text_statuses
+                ):
+                    res_val = min(res_val, 0.50)
+                return res_val
+
+            if not target_verdicts:
+                return 1.0
+            total_penalty = sum(
+                penalty_table.get(v.mapping_status or "matched", 0.0)
+                for v in target_verdicts
+            )
+            return max(0.0, 1.0 - total_penalty / len(target_verdicts))
+
+        def _compute_format_consistency_fallback(target_verdicts: list[VerdictRecord]) -> float:
+            if "format_consistency" in existing_comps and existing_comps["format_consistency"] is not None:
+                return float(existing_comps["format_consistency"])
+            if essay.style_profile_json:
+                try:
+                    sp = json.loads(essay.style_profile_json)
+                    if isinstance(sp, dict) and sp.get("style"):
+                        st_val = str(sp.get("style") or "").upper()
+                        conf_val = float(sp.get("confidence", 0.0) or 0.0)
+                        if "MIXED" in st_val:
+                            return 0.4
+                        if "UNKNOWN" in st_val:
+                            return 0.5
+                        return min(1.0, max(0.0, 0.8 + 0.2 * conf_val))
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    pass
+            inconsistent_cnt = sum(
+                1
+                for v in target_verdicts
+                if (v.mapping_status or "matched") == "style_inconsistent"
+            )
+            if inconsistent_cnt > 0 and target_verdicts:
+                return max(0.3, 1.0 - inconsistent_cnt / len(target_verdicts))
+            return 0.8
+
+        def _verdict_has_identifier(v: VerdictRecord, feats: dict[str, Any]) -> bool:
+            if doi_by_raw.get(v.citation_raw) or url_by_raw.get(v.citation_raw):
+                return True
+            if feats.get("checked_url") or feats.get("cited_url") or feats.get("url"):
+                return True
+            raw_txt = v.citation_raw or ""
+            return bool(
+                _re.search(r"\b10\.\d{4,9}/\S+", raw_txt)
+                or _re.search(r"https?://\S+", raw_txt, _re.IGNORECASE)
+            )
+
+        def _verdict_identifier_is_broken(
+            v: VerdictRecord, rules_set: set[str], feats: dict[str, Any]
+        ) -> bool:
+            if bool(getattr(v, "is_overridden", False)) and v.label == "verified":
+                return False
+            url_stat = feats.get("url_status")
+            return bool(
+                (rules_set & invalid_id_rules)
+                or bool(getattr(v, "domain_exception", False))
+                or url_stat in ("dead_link", "fake_domain")
+            )
+
+        academic_verdicts = [v for v in verdicts if v.label != "resource"]
+        n_academic = len(academic_verdicts)
+
+        if n_academic == 0:
+            # Resource-only bibliography (e.g. Vietnamese legal statutes or web resources):
+            # align with CISCalculator.compute so overriding never crashes CIS to 0.0%!
+            res_link_consistency = _compute_link_consistency_for_records(verdicts)
+            res_format_consistency = _compute_format_consistency_fallback(verdicts)
+
+            with_id = 0
+            valid_id = 0
+            for v in verdicts:
+                feats = _verdict_record_features(v)
+                if not _verdict_has_identifier(v, feats):
+                    continue
+                with_id += 1
+                rules_set = set(_verdict_record_rules(v))
+                if not _verdict_identifier_is_broken(v, rules_set, feats):
+                    valid_id += 1
+            res_id_validity = (valid_id / with_id) if with_id > 0 else 1.0
+
+            has_mapping_info = any(v.mapping_status is not None for v in verdicts)
+            if in_text_citations and len(verdicts) >= 3 and has_mapping_info:
+                cited_res = sum(
+                    1
+                    for v in verdicts
+                    if (v.mapping_status or "")
+                    in ("matched", "in_text_mismatch", "ambiguous_mapping")
+                )
+                cited_ratio = cited_res / len(verdicts)
+                res_verified = (0.5 + 0.5 * cited_ratio) * res_id_validity
+                res_meta = (0.5 + 0.5 * cited_ratio) * res_id_validity
+            else:
+                res_verified = res_id_validity
+                res_meta = res_id_validity
+
+            res_score = round(
+                (
+                    res_verified * w.verified_ratio
+                    + res_meta * w.metadata_accuracy
+                    + res_link_consistency * w.in_text_bib_consistency
+                    + res_format_consistency * w.format_consistency
+                    + res_id_validity * w.identifier_validity
+                )
+                * 100.0,
+                2,
+            )
+            cis_dict = {
+                "score": res_score,
+                "components": {
+                    "verified_ratio": round(res_verified, 4),
+                    "metadata_accuracy": round(res_meta, 4),
+                    "in_text_bib_consistency": round(res_link_consistency, 4),
+                    "format_consistency": round(res_format_consistency, 4),
+                    "identifier_validity": round(res_id_validity, 4),
+                },
+                "weights_used": existing_cis.get("weights_used") or w.model_dump(),
+                "num_citations": len(verdicts),
+                "num_unresolved": 0,
+                "disclaimer": existing_cis.get("disclaimer", ""),
+            }
+        else:
             verified = sum(1 for v in academic_verdicts if v.label == "verified")
             incomplete_meta_err = sum(
                 1
@@ -439,63 +646,28 @@ class Repository:
             )
             metadata_accuracy = max(0.0, 1.0 - effective_meta_penalty / n_academic)
 
-            # Include both in-text CitationRecords and reference VerdictRecords for link consistency
-            all_citations = (
-                self.session.query(CitationRecord)
-                .filter(CitationRecord.essay_id == essay_id)
-                .all()
+            in_text_bib_consistency = _compute_link_consistency_for_records(academic_verdicts)
+            format_consistency = _compute_format_consistency_fallback(academic_verdicts)
+
+            with_identifier = 0
+            with_identifier_valid = 0
+            for v in academic_verdicts:
+                feats = _verdict_record_features(v)
+                if not _verdict_has_identifier(v, feats):
+                    continue
+                with_identifier += 1
+                rules_set = set(_verdict_record_rules(v))
+                if not _verdict_identifier_is_broken(v, rules_set, feats) and v.label in (
+                    "verified",
+                    "metadata_error",
+                ):
+                    with_identifier_valid += 1
+
+            identifier_validity = (
+                (with_identifier_valid / with_identifier)
+                if with_identifier > 0
+                else float(existing_comps.get("identifier_validity", 1.0))
             )
-            in_text_citations = [
-                c for c in all_citations if c.citation_type != "reference_list"
-            ]
-            if in_text_citations:
-                in_text_penalty = sum(
-                    penalty_table.get(c.mapping_status or "matched", 0.0)
-                    for c in in_text_citations
-                )
-                ref_non_matched = [
-                    v
-                    for v in academic_verdicts
-                    if (v.mapping_status or "matched") != "matched"
-                ]
-                ref_penalty = sum(
-                    penalty_table.get(v.mapping_status or "matched", 0.0)
-                    for v in ref_non_matched
-                )
-                total_links = len(in_text_citations) + len(ref_non_matched)
-                in_text_bib_consistency = (
-                    max(0.0, 1.0 - (in_text_penalty + ref_penalty) / total_links)
-                    if total_links > 0
-                    else 1.0
-                )
-            else:
-                total_penalty = sum(
-                    penalty_table.get(v.mapping_status or "matched", 0.0)
-                    for v in academic_verdicts
-                )
-                in_text_bib_consistency = max(0.0, 1.0 - total_penalty / n_academic)
-
-            format_consistency = float(existing_comps.get("format_consistency", 1.0))
-
-            # Recalculate identifier_validity from verdicts that have DOIs
-            import re as _re
-            doi_by_raw = {c.raw_text: c.doi for c in all_citations if c.doi}
-
-            def _verdict_has_doi(v: VerdictRecord) -> bool:
-                if doi_by_raw.get(v.citation_raw):
-                    return True
-                return bool(_re.search(r"\b10\.\d{4,9}/\S+", v.citation_raw or ""))
-
-            verdicts_with_doi = [v for v in academic_verdicts if _verdict_has_doi(v)]
-            if verdicts_with_doi:
-                valid_doi_count = sum(
-                    1
-                    for v in verdicts_with_doi
-                    if v.label in ("verified", "metadata_error")
-                )
-                identifier_validity = valid_doi_count / len(verdicts_with_doi)
-            else:
-                identifier_validity = float(existing_comps.get("identifier_validity", 1.0))
 
             score = round(
                 (
@@ -1295,6 +1467,7 @@ class Repository:
         user_id: int | None = None,
         user_ids: list[int] | None = None,
         completed_only: bool = False,
+        teacher_id: int | None = None,
     ) -> list[tuple[EssayRecord, list[int]]]:
         """Group essays by filename (scoped per user), keeping the best copy.
 
@@ -1307,14 +1480,37 @@ class Repository:
             list of ``(canonical_essay, duplicate_ids)`` ordered by the
             canonical essay's ``uploaded_at`` descending.
         """
-        from sqlalchemy import or_
+        from sqlalchemy import and_, or_
 
         query = self.session.query(EssayRecord)
         if completed_only:
             query = query.filter(
                 or_(EssayRecord.job_status == "completed", EssayRecord.job_status.is_(None))
             )
-        if user_ids is not None:
+        if teacher_id is not None:
+            teacher_class_ids = [
+                c.id for c in self.list_classes_for_teacher(teacher_id) if c.id is not None
+            ]
+            teacher_conds = [EssayRecord.user_id == teacher_id]
+            if teacher_class_ids:
+                teacher_conds.append(EssayRecord.class_id.in_(teacher_class_ids))
+                enrolled_student_ids = [
+                    sid
+                    for (sid,) in self.session.query(ClassMembership.student_id)
+                    .filter(ClassMembership.class_id.in_(teacher_class_ids))
+                    .distinct()
+                    .all()
+                    if sid is not None
+                ]
+                if enrolled_student_ids:
+                    teacher_conds.append(
+                        and_(
+                            EssayRecord.class_id.is_(None),
+                            EssayRecord.user_id.in_(enrolled_student_ids),
+                        )
+                    )
+            query = query.filter(or_(*teacher_conds))
+        elif user_ids is not None:
             if not user_ids:
                 return []
             query = query.filter(EssayRecord.user_id.in_(user_ids))
@@ -1356,15 +1552,22 @@ class Repository:
         return result
 
     def can_user_access_essay(self, user: User, essay: EssayRecord) -> bool:
-        """Return True if ``user`` owns ``essay``, is admin, or teaches the owner/class."""
-        if user.role == "admin" or essay.user_id == user.id:
+        """Return True if ``user`` owns ``essay``, is admin, or teaches the scoped class/student.
+
+        When ``essay.class_id`` is set, access for teachers is strictly restricted to the
+        teacher owning ``essay.class_id`` (even if the student later left that class, and
+        never leaking to another teacher whose class also has the student).
+        When ``essay.class_id`` is None, enrolled students' essays remain visible to their
+        enrolled class teachers.
+        """
+        if user.role == "admin" or (essay.user_id is not None and essay.user_id == user.id):
             return True
         if user.role == "teacher":
             teacher_class_ids = {c.id for c in self.list_classes_for_teacher(user.id)}
             if not teacher_class_ids:
                 return False
-            if essay.class_id is not None and essay.class_id in teacher_class_ids:
-                return True
+            if essay.class_id is not None:
+                return essay.class_id in teacher_class_ids
             if essay.user_id is not None:
                 student_class_ids = {
                     m.class_id
@@ -1609,8 +1812,46 @@ class Repository:
     def get_class(self, class_id: int) -> Class | None:
         return self.session.get(Class, class_id)
 
-    def get_class_by_name(self, name: str) -> Class | None:
-        return self.session.query(Class).filter(Class.name == name).first()
+    def get_class_by_name(self, name: str, teacher_id: int | None = None) -> Class | None:
+        clean_name = (name or "").strip()
+        if not clean_name:
+            return None
+        query = self.session.query(Class).filter(func.lower(Class.name) == clean_name.lower())
+        if teacher_id is not None:
+            query = query.filter(Class.teacher_id == teacher_id)
+        return query.first()
+
+    def update_class(
+        self,
+        class_id: int,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        update_description: bool = False,
+    ) -> Class | None:
+        cls = self.get_class(class_id)
+        if not cls:
+            return None
+        if name is not None:
+            cls.name = name.strip()
+        if update_description:
+            cls.description = description
+        self.session.flush()
+        return cls
+
+    def delete_class(self, class_id: int) -> bool:
+        cls = self.get_class(class_id)
+        if not cls:
+            return False
+        self.session.query(EssayRecord).filter(EssayRecord.class_id == class_id).update(
+            {EssayRecord.class_id: None}, synchronize_session=False
+        )
+        self.session.query(ClassMembership).filter(
+            ClassMembership.class_id == class_id
+        ).delete(synchronize_session=False)
+        self.session.delete(cls)
+        self.session.flush()
+        return True
 
     def get_class_by_join_code(self, join_code: str) -> Class | None:
         normalized = (join_code or "").strip().upper()
@@ -1789,7 +2030,7 @@ class Repository:
             .filter(
                 VerdictRecord.essay_id.in_(ids),
                 VerdictRecord.is_overridden == 0,
-                VerdictRecord.label.in_(["metadata_error", "suspected_hallucination"]),
+                VerdictRecord.label.in_(self._PENDING_REVIEW_LABELS),
             )
             .count()
         )

@@ -91,7 +91,7 @@ async def test_link_validator_connect_error_treated_as_dead_link() -> None:
 
     validator = LinkValidator()
     with patch.object(httpx.AsyncClient, "head", mock_head):
-        res = await validator.validate_url("https://nonexistent-scholar-domain.invalid/paper")
+        res = await validator.validate_url("https://nonexistent-scholar-domain.org/paper")
 
     assert res.status == LinkStatus.DEAD_LINK
     assert res.is_broken is True

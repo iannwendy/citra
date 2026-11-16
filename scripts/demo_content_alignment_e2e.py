@@ -6,12 +6,19 @@ This script demonstrates the Neural layer integration:
 2. Decision making combining Neural + Symbolic layers
 """
 
-import asyncio
+from __future__ import annotations
 
-from integrity_checker.logic.rules import SymbolicRules
-from integrity_checker.matching.semantic import SemanticAlignmentResult, SemanticMatcher
-from integrity_checker.models.source import SourceCandidate, SourceResult
-from integrity_checker.models.validation import MatchFeatures
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from integrity_checker.logic.rules import SymbolicRules  # noqa: E402
+from integrity_checker.matching.semantic import SemanticMatcher  # noqa: E402
+from integrity_checker.models.source import SourceCandidate, SourceResult  # noqa: E402
+from integrity_checker.models.validation import MatchFeatures  # noqa: E402
 
 
 def demo_semantic_content_alignment():
@@ -82,7 +89,7 @@ def demo_neuro_symbolic_rules():
         candidates=[candidate],
         sources_queried=["crossref", "openalex"],
         sources_succeeded=["crossref"],
-        sources_failed=[],
+        sources_failed={},
     )
 
     # Test case 1: Title matches but content NOT aligned

@@ -25,7 +25,6 @@ import os
 import re
 import sys
 import threading
-import time
 from pathlib import Path
 
 import fitz  # PyMuPDF
@@ -292,7 +291,9 @@ def fetch_dspace7_candidates(
                         m.get("value", "")
                         for m in metadata.get("dc.language.iso", []) + metadata.get("dc.language", [])
                     ]
-                    if lang_vals and not any(l.lower().startswith("en") for l in lang_vals):
+                    if lang_vals and not any(
+                        lang.lower().startswith("en") for lang in lang_vals
+                    ):
                         continue
                     title = (item.get("name") or "Thesis").strip()
                     authors = [
@@ -720,7 +721,7 @@ def main() -> int:
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = [pool.submit(process_candidate, c) for c in interleaved]
-        for fut in concurrent.futures.as_completed(futures):
+        for _fut in concurrent.futures.as_completed(futures):
             if stop_event.is_set():
                 break
 

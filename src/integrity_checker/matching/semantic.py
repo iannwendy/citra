@@ -155,6 +155,7 @@ class SemanticMatcher:
 
     _instance_lock = threading.Lock()
     _encode_lock = threading.Lock()
+    _intent_cache_lock = threading.Lock()
     _model_cache: dict[str, object] = {}
     _intent_emb_cache: dict[str, Any] = {}
     _text_emb_cache: OrderedDict[tuple[int, str], Any] = OrderedDict()
@@ -316,18 +317,18 @@ class SemanticMatcher:
             if self.onnx_quantized
             else self.multilingual_model_name
         )
-        if cache_key in self._model_cache:
-            cached = self._model_cache[cache_key]
-            if cached is None:
-                return self._get_model()
-            self._multilingual_model = cached
-            return self._multilingual_model
-        if self.multilingual_model_name in self._model_cache and not self.onnx_quantized:
-            self._multilingual_model = self._model_cache[self.multilingual_model_name]
-            return self._multilingual_model
         if not self.enable_multilingual_encoder:
             return self._get_model()
         with self._instance_lock:
+            if cache_key in self._model_cache:
+                cached = self._model_cache[cache_key]
+                if cached is None:
+                    return self._get_model()
+                self._multilingual_model = cached
+                return self._multilingual_model
+            if self.multilingual_model_name in self._model_cache and not self.onnx_quantized:
+                self._multilingual_model = self._model_cache[self.multilingual_model_name]
+                return self._multilingual_model
             if cache_key not in self._model_cache:
                 try:
                     logger.info(
@@ -1543,19 +1544,23 @@ class SemanticMatcher:
     def _get_intent_embeddings(self, model: object) -> Any:
         """Lazy-compute and cache embeddings for the 3 citation intent prototypes."""
         key = self.model_name
-        if key not in self._intent_emb_cache:
-            try:
-                proto_texts = list(_INTENT_PROTOTYPES.values())
-                self._intent_emb_cache[key] = self._encode(
-                    model,
-                    proto_texts,
-                    convert_to_tensor=True,
-                    normalize_embeddings=True,
-                    show_progress_bar=False,
-                )
-            except Exception:  # noqa: BLE001
-                return None
-        return self._intent_emb_cache.get(key)
+        with self._intent_cache_lock:
+            if key in self._intent_emb_cache:
+                return self._intent_emb_cache.get(key)
+        try:
+            proto_texts = list(_INTENT_PROTOTYPES.values())
+            encoded = self._encode(
+                model,
+                proto_texts,
+                convert_to_tensor=True,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+            )
+        except Exception:  # noqa: BLE001
+            return None
+        with self._intent_cache_lock:
+            self._intent_emb_cache.setdefault(key, encoded)
+            return self._intent_emb_cache.get(key)
 
     def _compute_similarity(
         self,

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { api, type Class, type ClassCreate } from '@/api/client';
+import { UpgradeModal } from '@/components/UpgradeModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -30,6 +31,7 @@ export function CreateClassDialog({
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   // Reset when dialog opens/closes
   useEffect(() => {
@@ -37,18 +39,19 @@ export function CreateClassDialog({
       setName('');
       setDescription('');
       setError('');
+      setUpgradeOpen(false);
     }
   }, [open]);
 
   // Escape to close
   useEffect(() => {
-    if (!open) return;
+    if (!open || upgradeOpen) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [open, onClose]);
+  }, [open, upgradeOpen, onClose]);
 
   if (!open) return null;
 
@@ -65,7 +68,15 @@ export function CreateClassDialog({
       onCreated(cls);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('teacher.createClassFailed'));
+      const msg = err instanceof Error ? err.message : t('teacher.createClassFailed');
+      setError(msg);
+      if (
+        /API\s+(402|403)\b|HTTP\s+(402|403)\b|CLASS_LIMIT|limit|upgrade|max_classes|tối đa|giới hạn/i.test(
+          msg,
+        )
+      ) {
+        setUpgradeOpen(true);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -145,6 +156,12 @@ export function CreateClassDialog({
           </div>
         </form>
       </div>
+      <UpgradeModal
+        open={upgradeOpen}
+        onOpenChange={setUpgradeOpen}
+        featureName="Classroom Cohorts"
+        reasonDescription={error || undefined}
+      />
     </div>
   );
 }

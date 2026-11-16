@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
 import re
@@ -17,12 +18,16 @@ import httpx
 import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy.orm import Session as SqlSession
 
 from integrity_checker.api.deps import get_current_user, get_db
 from integrity_checker.api.services.email_service import get_email_service
-from integrity_checker.billing.plans import get_user_subscription_summary
+from integrity_checker.billing.plans import (
+    ensure_user_quota_current,
+    get_user_subscription_summary,
+)
 from integrity_checker.config import get_settings, is_test_runtime
-from integrity_checker.db.models import User
+from integrity_checker.db.models import ApiKey, AuthToken, User
 from integrity_checker.db.repository import Repository
 
 logger = logging.getLogger(__name__)
@@ -117,9 +122,20 @@ class _SlidingWindowRateLimiter:
         while len(self._attempts) > self.max_keys:
             self._attempts.popitem(last=False)
 
+    def _is_enforced(self) -> bool:
+        if self.enforce_in_tests:
+            return True
+        if (
+            "_login_rate_limiter" in globals()
+            and _login_rate_limiter is not self
+            and _login_rate_limiter.enforce_in_tests
+        ):
+            return True
+        return not is_test_runtime()
+
     def check(self, key: str) -> None:
         """Raise HTTP 429 if key has exceeded max_attempts within window_seconds."""
-        if is_test_runtime() and not self.enforce_in_tests:
+        if not self._is_enforced():
             return
         now = time.monotonic()
         cutoff = now - self.window_seconds
@@ -138,12 +154,33 @@ class _SlidingWindowRateLimiter:
 
     def record_failure(self, key: str) -> None:
         """Record a failed attempt for key."""
-        if is_test_runtime() and not self.enforce_in_tests:
+        if not self._is_enforced():
             return
         now = time.monotonic()
         cutoff = now - self.window_seconds
         with self._lock:
             history = [t for t in self._attempts.get(key, []) if t > cutoff]
+            history.append(now)
+            self._attempts[key] = history
+            self._attempts.move_to_end(key)
+            if len(self._attempts) > self.max_keys:
+                self._evict_expired_and_cap_unlocked(cutoff)
+
+    def hit(self, key: str) -> None:
+        """Atomically check and consume one attempt for endpoints where every request counts."""
+        if not self._is_enforced():
+            return
+        now = time.monotonic()
+        cutoff = now - self.window_seconds
+        with self._lock:
+            history = [t for t in self._attempts.get(key, []) if t > cutoff]
+            if len(history) >= self.max_attempts:
+                self._attempts[key] = history
+                self._attempts.move_to_end(key)
+                raise HTTPException(
+                    status_code=429,
+                    detail="Too many authentication attempts. Please try again in a minute.",
+                )
             history.append(now)
             self._attempts[key] = history
             self._attempts.move_to_end(key)
@@ -158,23 +195,83 @@ class _SlidingWindowRateLimiter:
     def clear_all(self) -> None:
         with self._lock:
             self._attempts.clear()
+        if "_login_rate_limiter" in globals() and self is _login_rate_limiter:
+            for sibling in (
+                globals().get("_register_rate_limiter"),
+                globals().get("_resend_activation_rate_limiter"),
+                globals().get("_forgot_password_rate_limiter"),
+            ):
+                if sibling is not None and sibling is not self:
+                    sibling.clear_all()
 
 
 _login_rate_limiter = _SlidingWindowRateLimiter(max_attempts=10, window_seconds=60.0)
+_register_rate_limiter = _SlidingWindowRateLimiter(max_attempts=5, window_seconds=60.0)
+_resend_activation_rate_limiter = _SlidingWindowRateLimiter(max_attempts=5, window_seconds=60.0)
+_forgot_password_rate_limiter = _SlidingWindowRateLimiter(max_attempts=5, window_seconds=60.0)
+
+
+def _normalize_valid_ip(raw_ip: str | None) -> str | None:
+    """Return normalized IP string if ``raw_ip`` is a valid IPv4/IPv6 address, else None."""
+    if not raw_ip:
+        return None
+    cand = raw_ip.strip()
+    if not cand:
+        return None
+    try:
+        return str(ipaddress.ip_address(cand))
+    except ValueError:
+        return None
+
+
+def _is_trusted_proxy_peer(host: str) -> bool:
+    """Return True if ``host`` is a local/Docker reverse proxy or Starlette testclient."""
+    if not host or host in ("testclient", "localhost"):
+        return True
+    try:
+        addr = ipaddress.ip_address(host)
+        return bool(addr.is_loopback or addr.is_private)
+    except ValueError:
+        return False
 
 
 def _extract_client_ip(http_request: Request | None) -> str:
-    """Extract client IP from X-Forwarded-For or request.client.host."""
+    """Extract client IP using spoof-resistant X-Real-IP / trusted-proxy semantics."""
     if http_request is None or not hasattr(http_request, "headers"):
         return "unknown"
-    forwarded = (http_request.headers.get("x-forwarded-for") or "").strip()
-    if forwarded:
-        first_ip = forwarded.split(",", 1)[0].strip()
-        if first_ip:
-            return first_ip
+
     client_obj = getattr(http_request, "client", None)
-    if client_obj and getattr(client_obj, "host", None):
-        return str(client_obj.host)
+    client_host = (
+        str(client_obj.host).strip()
+        if client_obj and getattr(client_obj, "host", None)
+        else ""
+    )
+
+    # Only inspect forwarded headers when the immediate socket peer is a trusted proxy
+    if _is_trusted_proxy_peer(client_host):
+        real_ip = _normalize_valid_ip(http_request.headers.get("x-real-ip"))
+        if real_ip:
+            return real_ip
+
+        trust_xff = (
+            client_host in ("", "testclient")
+            or os.getenv("TRUST_X_FORWARDED_FOR", "").strip().lower()
+            in ("1", "true", "yes", "on")
+        )
+        if trust_xff:
+            forwarded = (http_request.headers.get("x-forwarded-for") or "").strip()
+            if forwarded:
+                valid_ips = [
+                    norm
+                    for part in forwarded.split(",")
+                    if (norm := _normalize_valid_ip(part)) is not None
+                ]
+                if valid_ips:
+                    # Take the rightmost IP appended by the nearest reverse proxy, never ips[0]
+                    return valid_ips[-1]
+
+    if client_host:
+        return client_host
     return "unknown"
 
 
@@ -354,6 +451,8 @@ def _hash_password(password: str) -> str:
 
 
 def _verify_password(password: str, hashed: str) -> bool:
+    if not hashed:
+        return False
     try:
         return bcrypt.checkpw(password.encode(), hashed.encode())
     except (ValueError, TypeError):
@@ -536,6 +635,7 @@ def login(
 _DEFAULT_GOOGLE_CLIENT_ID = (
     "429053368516-7uia3j5uavajvbkhd7hq6lih9a65n22u.apps.googleusercontent.com"
 )
+_DISABLED_GOOGLE_SENTINELS = frozenset({"disabled", "false", "none", "off", "0"})
 
 
 def _get_google_client_config() -> tuple[str, str]:
@@ -545,6 +645,9 @@ def _get_google_client_config() -> tuple[str, str]:
         client_id = os.environ["GOOGLE_CLIENT_ID"].strip()
     else:
         client_id = (settings.auth.google_client_id or "").strip()
+
+    if client_id.lower() in _DISABLED_GOOGLE_SENTINELS:
+        return "", ""
 
     if "GOOGLE_CLIENT_SECRET" in os.environ:
         client_secret = os.environ["GOOGLE_CLIENT_SECRET"].strip()
@@ -562,6 +665,8 @@ def _get_google_client_config() -> tuple[str, str]:
                     vals = dotenv_values(candidate_env)
                     file_cid = (vals.get("GOOGLE_CLIENT_ID") or "").strip()
                     file_csec = (vals.get("GOOGLE_CLIENT_SECRET") or "").strip()
+                    if file_cid.lower() in _DISABLED_GOOGLE_SENTINELS:
+                        return "", ""
                     if file_cid and not file_cid.startswith("your-google-client-id"):
                         client_id = file_cid
                     if file_csec and not file_csec.startswith("your-google-client-secret"):
@@ -803,20 +908,38 @@ def google_login(
                 detail="ACCOUNT_DEACTIVATED: Your account has been deactivated by an administrator.",
             )
 
-        # Link Google identity and auto-activate if previously pending email activation
+        # Prevent OAuth Pre-Hijacking: if local email was never verified, wipe local password
+        # and revoke any prior sessions, API keys, and pending auth tokens on that row.
+        was_unverified = not bool(getattr(user, "email_verified", True))
         updates: dict = {}
         if existing_gid != google_id:
             updates["google_id"] = google_id
         current_provider = getattr(user, "auth_provider", None) or "local"
-        if "google" not in current_provider:
-            updates["auth_provider"] = (
-                f"{current_provider},google" if current_provider else "google"
-            )
-        if not user.is_active or not getattr(user, "email_verified", True):
+        if was_unverified:
+            updates["password_hash"] = ""
+            updates["auth_provider"] = "google"
             updates["is_active"] = True
             updates["email_verified"] = True
-        if not user.full_name and full_name:
-            updates["full_name"] = full_name[:120]
+            updates["username_customized"] = False
+            updates["google_onboarded"] = False
+            if full_name:
+                updates["full_name"] = full_name[:120]
+            repo.delete_user_sessions(user.id)
+            db.query(ApiKey).filter(ApiKey.user_id == user.id).delete(
+                synchronize_session=False
+            )
+            db.query(AuthToken).filter(
+                AuthToken.user_id == user.id,
+            ).delete(synchronize_session=False)
+        else:
+            if "google" not in current_provider:
+                updates["auth_provider"] = (
+                    f"{current_provider},google" if current_provider else "google"
+                )
+            if not user.is_active:
+                updates["is_active"] = True
+            if not user.full_name and full_name:
+                updates["full_name"] = full_name[:120]
         if not user.avatar_path and picture and picture.startswith("https://"):
             updates["avatar_path"] = picture[:500]
         if request.privacy_consent and not getattr(user, "privacy_consented_at", None):
@@ -899,9 +1022,13 @@ def google_login(
 def register(
     request: RegisterRequest,
     background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
+    http_request: Request = None,  # type: ignore[assignment]
     db=Depends(get_db),
 ):
     """Self-register a new account (creates inactive user and sends HTML activation email)."""
+    client_ip = _extract_client_ip(http_request)
+    _register_rate_limiter.hit(f"register:{client_ip}")
+
     if not request.privacy_consent:
         raise HTTPException(
             status_code=400,
@@ -1029,36 +1156,39 @@ def activate_account_get(token: str = Query(..., min_length=1), db=Depends(get_d
 def resend_activation(
     request: ResendActivationRequest,
     background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
+    http_request: Request = None,  # type: ignore[assignment]
     db=Depends(get_db),
 ):
-    """Resend the account activation email by email or username."""
+    """Resend the account activation email by email or username without enumerating accounts."""
+    client_ip = _extract_client_ip(http_request)
+    _resend_activation_rate_limiter.hit(f"resend:{client_ip}")
+
+    generic_msg = (
+        "If an unactivated account matches that username or email, "
+        "a new activation email has been sent."
+    )
     identifier = request.identifier.strip()
     repo = Repository(db)
 
-    user = repo.get_user_by_email(identifier) if "@" in identifier else repo.get_user_by_username(identifier)
+    user = (
+        repo.get_user_by_email(identifier)
+        if "@" in identifier
+        else repo.get_user_by_username(identifier)
+    )
     if not user:
         user = repo.get_user_by_username(identifier) or repo.get_user_by_email(identifier)
 
     if not user or not user.email:
-        raise HTTPException(
-            status_code=404,
-            detail="No account found matching that username or email.",
-        )
+        return MessageResponse(message=generic_msg)
 
-    if user.is_active and getattr(user, "email_verified", True):
-        raise HTTPException(
-            status_code=400,
-            detail="Account is already activated. You can sign in now.",
-        )
+    if getattr(user, "email_verified", True):
+        return MessageResponse(message=generic_msg)
 
     now = datetime.now(UTC)
     if not is_test_runtime():
         latest = repo.get_latest_auth_token_for_user(user.id, "activation")
         if latest and (now - _ensure_utc(latest.created_at)).total_seconds() < 60:
-            raise HTTPException(
-                status_code=429,
-                detail="Please wait 60 seconds before requesting another activation email.",
-            )
+            return MessageResponse(message=generic_msg)
 
     settings = get_settings()
     expires_at = now + timedelta(hours=settings.auth.activation_expire_hours)
@@ -1076,18 +1206,20 @@ def resend_activation(
         lang=request.lang,
     )
 
-    return MessageResponse(
-        message="A new activation email has been sent. Please check your inbox."
-    )
+    return MessageResponse(message=generic_msg)
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
 def forgot_password(
     request: ForgotPasswordRequest,
     background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
+    http_request: Request = None,  # type: ignore[assignment]
     db=Depends(get_db),
 ):
     """Issue a one-time password reset token and send the HTML reset email."""
+    client_ip = _extract_client_ip(http_request)
+    _forgot_password_rate_limiter.hit(f"forgot:{client_ip}")
+
     email = request.email.strip().lower()
     repo = Repository(db)
     user = repo.get_user_by_email(email)
@@ -1244,8 +1376,13 @@ def logout(
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)):
+def get_me(
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
+):
     """Get current user info (full profile)."""
+    if isinstance(db, SqlSession) and ensure_user_quota_current(current_user):
+        db.commit()
     return UserResponse(**_to_response_dict(current_user))
 
 

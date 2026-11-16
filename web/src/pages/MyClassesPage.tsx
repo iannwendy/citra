@@ -11,9 +11,13 @@ import {
   AlertCircle,
   Terminal,
   ShieldCheck,
+  LogOut,
+  Trash2,
 } from 'lucide-react';
 import { api, type Class, type TeacherDashboard } from '@/api/client';
+import { useToast } from '@/contexts/ToastContext';
 import { CreateClassDialog } from '@/components/CreateClassDialog';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,19 +34,67 @@ export function MyClassesPage() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const navigate = useNavigate();
+  const toast = useToast();
   const [dashboard, setDashboard] = useState<TeacherDashboard | null>(null);
+  const [enrolledClasses, setEnrolledClasses] = useState<Class[]>([]);
+  const [pendingLeaveClass, setPendingLeaveClass] = useState<Class | null>(null);
+  const [pendingDeleteClass, setPendingDeleteClass] = useState<Class | null>(null);
   const [error, setError] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
+    const enrolledPromise =
+      typeof api.listEnrolledClasses === 'function'
+        ? api.listEnrolledClasses().catch(() => [])
+        : Promise.resolve([]);
     try {
-      const data = await api.getTeacherDashboard();
+      const [data, enrolled] = await Promise.all([
+        api.getTeacherDashboard(),
+        enrolledPromise,
+      ]);
       setDashboard(data);
+      setEnrolledClasses(Array.isArray(enrolled) ? enrolled : []);
       setError('');
     } catch (e) {
+      const enrolled = await enrolledPromise;
+      setEnrolledClasses(Array.isArray(enrolled) ? enrolled : []);
       setError(e instanceof Error ? e.message : 'Failed to load dashboard');
     }
   }, []);
+
+  const handleConfirmLeave = async () => {
+    if (!pendingLeaveClass) return;
+    const target = pendingLeaveClass;
+    setPendingLeaveClass(null);
+    try {
+      await api.leaveClass(target.id);
+      setEnrolledClasses((prev) => prev.filter((c) => c.id !== target.id));
+      toast.success(
+        lang === 'vi'
+          ? `Đã rời khỏi lớp ${target.name}`
+          : `Left class ${target.name}`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to leave class');
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDeleteClass) return;
+    const target = pendingDeleteClass;
+    setPendingDeleteClass(null);
+    try {
+      await api.deleteClass(target.id);
+      toast.success(
+        lang === 'vi'
+          ? `Đã xóa lớp ${target.name}`
+          : `Deleted class ${target.name}`,
+      );
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete class');
+    }
+  };
 
   useEffect(() => {
     load();
@@ -279,12 +331,138 @@ export function MyClassesPage() {
                     </div>
                   </div>
                 </div>
-                <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-indigo-500 shrink-0 transition-transform group-hover:translate-x-0.5" />
+                <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    data-testid={`delete-class-card-btn-${c.id}`}
+                    title={lang === 'vi' ? 'Xóa lớp học' : 'Delete class'}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPendingDeleteClass(c);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setPendingDeleteClass(c);
+                      }
+                    }}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </span>
+                  <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-indigo-500 shrink-0 transition-transform group-hover:translate-x-0.5" />
+                </div>
               </button>
             ))
           )}
         </div>
       </div>
+
+      {enrolledClasses.length > 0 && (
+        <div
+          data-testid="enrolled-classes-section"
+          className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
+        >
+          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <Terminal className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-200">
+                {lang === 'vi' ? 'Lớp học đã tham gia' : 'Enrolled Cohorts'}
+              </span>
+            </div>
+            <span className="text-[11px] font-mono text-slate-400">
+              {enrolledClasses.length}
+            </span>
+          </div>
+          <div className="p-4 sm:p-5 space-y-3">
+            {enrolledClasses.map((c) => (
+              <div
+                key={c.id}
+                className="rounded-xl bg-slate-50/60 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-800 p-4 flex flex-wrap items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <h3 className="font-display font-semibold text-sm sm:text-base text-slate-900 dark:text-white">
+                    {c.name}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+                    {lang === 'vi' ? 'Giảng viên:' : 'Instructor:'} {c.teacher_username}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  data-testid={`leave-class-btn-${c.id}`}
+                  onClick={() => setPendingLeaveClass(c)}
+                  className="gap-1.5 rounded-xl text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-800 dark:hover:bg-rose-950/50 text-xs font-mono"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  {lang === 'vi' ? 'Rời lớp' : 'Leave Class'}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {pendingLeaveClass && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setPendingLeaveClass(null)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full p-5 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
+              {lang === 'vi' ? 'Xác nhận rời lớp học' : 'Leave Cohort?'}
+            </h3>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              {lang === 'vi'
+                ? `Bạn có chắc muốn rời khỏi lớp "${pendingLeaveClass.name}"?`
+                : `Are you sure you want to leave "${pendingLeaveClass.name}"?`}
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPendingLeaveClass(null)}
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                data-testid="confirm-leave-class-btn"
+                onClick={() => void handleConfirmLeave()}
+              >
+                {lang === 'vi' ? 'Rời lớp' : 'Leave Class'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmationModal
+        isOpen={pendingDeleteClass !== null}
+        title={lang === 'vi' ? 'Xóa lớp học' : 'Delete Class'}
+        message={
+          pendingDeleteClass
+            ? lang === 'vi'
+              ? `Xóa vĩnh viễn lớp "${pendingDeleteClass.name}"? Các bài luận đã nộp vẫn được giữ nguyên cho sinh viên.`
+              : `Permanently delete "${pendingDeleteClass.name}"? Student essays remain intact.`
+            : ''
+        }
+        confirmLabel={t('common.delete')}
+        cancelLabel={t('common.cancel')}
+        variant="danger"
+        onConfirm={() => void handleConfirmDelete()}
+        onCancel={() => setPendingDeleteClass(null)}
+      />
 
       <CreateClassDialog
         open={createOpen}

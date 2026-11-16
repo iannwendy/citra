@@ -16,6 +16,7 @@ import re
 import socket
 import threading
 import time
+import weakref
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
@@ -98,13 +99,20 @@ def clean_extracted_url(text_or_url: str | None) -> str:
             break
     return candidate.strip()
 
-_WAYBACK_SEMS: dict[int, asyncio.Semaphore] = {}
-_WAYBACK_LOCKS: dict[int, asyncio.Lock] = {}
-_WAYBACK_LAST_AT: dict[int, float] = {}
+_WAYBACK_SEMS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
+    weakref.WeakKeyDictionary()
+)
+_WAYBACK_LOCKS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = (
+    weakref.WeakKeyDictionary()
+)
+_WAYBACK_LAST_AT: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, float] = (
+    weakref.WeakKeyDictionary()
+)
 _WAYBACK_GLOBAL_LOCK = threading.Lock()
 _WAYBACK_GLOBAL_LAST_AT: float = 0.0
 _WAYBACK_MIN_INTERVAL = 0.25
 # Cache confirmed Wayback lookups: url -> (archive_url, archive_timestamp)
+_WAYBACK_CACHE_LOCK = threading.Lock()
 _WAYBACK_CACHE: dict[str, tuple[str | None, str | None]] = {}
 _WAYBACK_META_CACHE: dict[str, HtmlPageMeta] = {}
 _WAYBACK_CACHE_MAX = 1024
@@ -113,12 +121,47 @@ _LAST_WAYBACK_OK: contextvars.ContextVar[bool] = contextvars.ContextVar(
 )
 
 
-def _get_wayback_concurrency() -> tuple[asyncio.Semaphore, asyncio.Lock, int]:
-    loop_id = id(asyncio.get_running_loop())
-    if loop_id not in _WAYBACK_SEMS:
-        _WAYBACK_SEMS[loop_id] = asyncio.Semaphore(2)
-        _WAYBACK_LOCKS[loop_id] = asyncio.Lock()
-    return _WAYBACK_SEMS[loop_id], _WAYBACK_LOCKS[loop_id], loop_id
+def _get_wayback_concurrency() -> tuple[
+    asyncio.Semaphore, asyncio.Lock, asyncio.AbstractEventLoop
+]:
+    loop = asyncio.get_running_loop()
+    with _WAYBACK_GLOBAL_LOCK:
+        sem = _WAYBACK_SEMS.get(loop)
+        lock = _WAYBACK_LOCKS.get(loop)
+        if sem is None or lock is None:
+            sem = asyncio.Semaphore(2)
+            lock = asyncio.Lock()
+            _WAYBACK_SEMS[loop] = sem
+            _WAYBACK_LOCKS[loop] = lock
+    return sem, lock, loop
+
+
+def _get_wayback_cached(key: str) -> tuple[bool, str | None, str | None]:
+    with _WAYBACK_CACHE_LOCK:
+        if key in _WAYBACK_CACHE:
+            u, ts = _WAYBACK_CACHE[key]
+            return True, u, ts
+        return False, None, None
+
+
+def _set_wayback_cached(key: str, val: tuple[str | None, str | None]) -> None:
+    with _WAYBACK_CACHE_LOCK:
+        if key not in _WAYBACK_CACHE and len(_WAYBACK_CACHE) >= _WAYBACK_CACHE_MAX:
+            _WAYBACK_CACHE.pop(next(iter(_WAYBACK_CACHE)), None)
+        _WAYBACK_CACHE[key] = val
+
+
+def _get_wayback_meta_cached(raw_wb_url: str) -> HtmlPageMeta | None:
+    with _WAYBACK_CACHE_LOCK:
+        return _WAYBACK_META_CACHE.get(raw_wb_url)
+
+
+def _set_wayback_meta_cached(raw_wb_url: str, meta: HtmlPageMeta) -> None:
+    with _WAYBACK_CACHE_LOCK:
+        if raw_wb_url not in _WAYBACK_META_CACHE and len(_WAYBACK_META_CACHE) >= _WAYBACK_CACHE_MAX:
+            oldest_key = next(iter(_WAYBACK_META_CACHE))
+            _WAYBACK_META_CACHE.pop(oldest_key, None)
+        _WAYBACK_META_CACHE[raw_wb_url] = meta
 
 
 class LinkStatus(str, Enum):
@@ -271,8 +314,9 @@ class LinkValidator:
     @classmethod
     def clear_wayback_cache(cls) -> None:
         """Clear session-level Wayback Machine lookup cache (primarily for tests)."""
-        _WAYBACK_CACHE.clear()
-        _WAYBACK_META_CACHE.clear()
+        with _WAYBACK_CACHE_LOCK:
+            _WAYBACK_CACHE.clear()
+            _WAYBACK_META_CACHE.clear()
 
     async def _check_wayback_machine_status(
         self, url: str
@@ -292,12 +336,12 @@ class LinkValidator:
             return None, None, True
 
         cache_key = url.strip()
-        if cache_key in _WAYBACK_CACHE:
-            cached_url, cached_ts = _WAYBACK_CACHE[cache_key]
+        hit, cached_url, cached_ts = _get_wayback_cached(cache_key)
+        if hit:
             return cached_url, cached_ts, True
 
         global _WAYBACK_GLOBAL_LAST_AT
-        sem, lock, loop_id = _get_wayback_concurrency()
+        sem, lock, loop_ref = _get_wayback_concurrency()
         backoffs = (0.0, 0.08)
         wb_timeout = (
             min(self.timeout, 3.0)
@@ -313,10 +357,10 @@ class LinkValidator:
                 async with lock:
                     with _WAYBACK_GLOBAL_LOCK:
                         now = time.monotonic()
-                        last_at = max(_WAYBACK_GLOBAL_LAST_AT, _WAYBACK_LAST_AT.get(loop_id, 0.0))
+                        last_at = max(_WAYBACK_GLOBAL_LAST_AT, _WAYBACK_LAST_AT.get(loop_ref, 0.0))
                         scheduled = max(now, last_at + _WAYBACK_MIN_INTERVAL)
                         _WAYBACK_GLOBAL_LAST_AT = scheduled
-                        _WAYBACK_LAST_AT[loop_id] = scheduled
+                        _WAYBACK_LAST_AT[loop_ref] = scheduled
                         wait_sec = scheduled - now
                 if wait_sec > 0:
                     await asyncio.sleep(wait_sec)
@@ -351,9 +395,7 @@ class LinkValidator:
                             ):
                                 found_url = str(closest["url"])
                                 found_ts = str(closest.get("timestamp") or "") or None
-                                if len(_WAYBACK_CACHE) >= _WAYBACK_CACHE_MAX:
-                                    _WAYBACK_CACHE.pop(next(iter(_WAYBACK_CACHE)))
-                                _WAYBACK_CACHE[cache_key] = (found_url, found_ts)
+                                _set_wayback_cached(cache_key, (found_url, found_ts))
                                 return found_url, found_ts, True
 
                         # Fallback to Wayback CDX API when availability endpoint has lag or empty index
@@ -382,15 +424,11 @@ class LinkValidator:
                                 orig = str(rows[1][1]).strip() or url
                                 if ts:
                                     found_url = f"https://web.archive.org/web/{ts}/{orig}"
-                                    if len(_WAYBACK_CACHE) >= _WAYBACK_CACHE_MAX:
-                                        _WAYBACK_CACHE.pop(next(iter(_WAYBACK_CACHE)))
-                                    _WAYBACK_CACHE[cache_key] = (found_url, ts)
+                                    _set_wayback_cached(cache_key, (found_url, ts))
                                     return found_url, ts, True
 
                         if avail_ok or cdx_resp.status_code == 200:
-                            if len(_WAYBACK_CACHE) >= _WAYBACK_CACHE_MAX:
-                                _WAYBACK_CACHE.pop(next(iter(_WAYBACK_CACHE)))
-                            _WAYBACK_CACHE[cache_key] = (None, None)
+                            _set_wayback_cached(cache_key, (None, None))
                             return None, None, True
                 except httpx.TimeoutException as exc:
                     last_exc = exc
@@ -448,8 +486,9 @@ class LinkValidator:
             if not raw_wb_url:
                 return None
 
-            if raw_wb_url in _WAYBACK_META_CACHE:
-                return _WAYBACK_META_CACHE[raw_wb_url]
+            cached_meta = _get_wayback_meta_cached(raw_wb_url)
+            if cached_meta is not None:
+                return cached_meta
 
             head_is_patched = httpx.AsyncClient.head is not _ORIG_ASYNC_HEAD
             stream_is_patched = httpx.AsyncClient.stream is not _ORIG_ASYNC_STREAM
@@ -503,10 +542,7 @@ class LinkValidator:
                             source_url=original_url or wb_url,
                         )
                         if self._is_nonempty_html_meta(meta):
-                            if len(_WAYBACK_META_CACHE) >= _WAYBACK_CACHE_MAX:
-                                oldest_key = next(iter(_WAYBACK_META_CACHE))
-                                _WAYBACK_META_CACHE.pop(oldest_key, None)
-                            _WAYBACK_META_CACHE[raw_wb_url] = meta  # type: ignore[assignment]
+                            _set_wayback_meta_cached(raw_wb_url, meta)  # type: ignore[arg-type]
                             return meta
                         return None
                 return None
@@ -761,7 +797,7 @@ class LinkValidator:
                         is LinkValidator._check_wayback_machine
                         and getattr(self._check_wayback_machine_status, "__func__", None)
                         is LinkValidator._check_wayback_machine_status
-                        and clean_url.strip() not in _WAYBACK_CACHE
+                        and not _get_wayback_cached(clean_url.strip())[0]
                     )
                     if self.enable_wayback_fallback and wb_is_mocked_or_live:
                         wb_url, wb_ts = await self._check_wayback_machine(clean_url)

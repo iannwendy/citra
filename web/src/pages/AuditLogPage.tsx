@@ -295,19 +295,25 @@ export function AuditLogPage() {
                       {e.user}
                     </TableCell>
                     <TableCell className="block sm:table-cell p-0 sm:px-4 sm:py-3 text-slate-500 font-mono text-xs">
-                      {e.essay_id ? (
-                        <Link
-                          to={`/verification/report/${e.essay_id}?citation=${e.verdict_id}`}
-                          data-testid={`audit-verdict-link-${e.id}`}
-                          className="hover:underline"
-                        >
-                          <Badge variant="outline" className="font-mono text-xs text-indigo-600 dark:text-indigo-400">
+                      {e.verdict_id != null && e.verdict_id > 0 ? (
+                        e.essay_id ? (
+                          <Link
+                            to={`/verification/report/${e.essay_id}?citation=${e.verdict_id}`}
+                            data-testid={`audit-verdict-link-${e.id}`}
+                            className="hover:underline"
+                          >
+                            <Badge variant="outline" className="font-mono text-xs text-indigo-600 dark:text-indigo-400">
+                              #{e.verdict_id}
+                            </Badge>
+                          </Link>
+                        ) : (
+                          <Badge variant="outline" className="font-mono text-xs">
                             #{e.verdict_id}
                           </Badge>
-                        </Link>
+                        )
                       ) : (
-                        <Badge variant="outline" className="font-mono text-xs">
-                          #{e.verdict_id}
+                        <Badge variant="secondary" className="font-mono text-xs">
+                          ADMIN
                         </Badge>
                       )}
                     </TableCell>

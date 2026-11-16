@@ -13,10 +13,11 @@ import json
 import sys
 from pathlib import Path
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from integrity_checker.database import LocalDatabase, Paper
+from integrity_checker.database import LocalDatabase, Paper  # noqa: E402
 
 
 def import_acl_from_json(
@@ -36,8 +37,6 @@ def import_acl_from_json(
     Returns:
         Number of papers imported
     """
-    import re
-
     json_dir = data_dir / "data" / "json"
     if not json_dir.exists():
         print(f"JSON directory not found: {json_dir}")
@@ -63,7 +62,7 @@ def import_acl_from_json(
                 data = json.load(f)
 
             # Process each volume
-            for volume_id, volume_data in data.get('volumes', {}).items():
+            for _volume_id, volume_data in data.get('volumes', {}).items():
                 for paper_data in volume_data.get('papers', []):
                     paper = _parse_paper(paper_data, volume_data)
                     if paper:
@@ -103,8 +102,6 @@ def import_acl_from_json(
 
 def _parse_paper(paper_data: dict, volume_data: dict) -> Paper | None:
     """Parse a paper from ACL Anthology JSON format."""
-    import re
-
     # Extract title
     title = paper_data.get('title', '')
     if not title:

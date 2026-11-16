@@ -2645,13 +2645,23 @@ export function EssayPage() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setSelectedCitationId(null);
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (
+        upgradeOpen ||
+        remediationOpen ||
+        Boolean(
+          document.querySelector(
+            '[role="dialog"], [data-testid="bibliography-remediation-modal"], [data-testid="upgrade-modal"]',
+          ),
+        )
+      ) {
+        return;
       }
+      setSelectedCitationId(null);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [upgradeOpen, remediationOpen]);
 
   // Deep link: /verification/report/:id?citation=<verdict id> (e.g. from the
   // teacher Pending Reviews queue) selects and scrolls to that citation once.
@@ -3375,7 +3385,7 @@ export function EssayPage() {
 
       {/* Quick Diagnostic Sub-Pages Navigation + #35 DonutChart + #36 SubtleNumber */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <EssayActionBar essayId={id ?? ''} />
+        <EssayActionBar essayId={id ?? ''} filename={report.filename} />
         <div className="inline-flex items-center gap-2.5 text-xs font-mono text-slate-500 dark:text-slate-400">
           <DonutChart
             size={28}

@@ -245,7 +245,7 @@ _STATUTE_REGISTRY: list[dict] = [
         "canonical_name": "Nghị định về đăng ký doanh nghiệp",
         "authority": "Chính phủ",
         "valid_years": {"2006", "2010", "2015", "2018", "2021", "2025"},
-        "active_years": {"2021"},
+        "active_years": {"2021", "2025"},
         "superseded_map": {
             "2006": "Nghị định 01/2021/NĐ-CP về đăng ký doanh nghiệp",
             "2010": "Nghị định 01/2021/NĐ-CP về đăng ký doanh nghiệp",
@@ -258,6 +258,17 @@ _STATUTE_REGISTRY: list[dict] = [
             "2018": "108/2018/NĐ-CP",
             "2021": "01/2021/NĐ-CP",
             "2025": "168/2025/NĐ-CP",
+        },
+    },
+    {
+        "pattern": re.compile(r"\bnghị\s+định\b.*?\bbảo\s+vệ\s+dữ\s+liệu\s+cá\s+nhân\b", re.IGNORECASE),
+        "canonical_name": "Nghị định về bảo vệ dữ liệu cá nhân",
+        "authority": "Chính phủ",
+        "valid_years": {"2023"},
+        "active_years": {"2023"},
+        "superseded_map": {},
+        "codes_by_year": {
+            "2023": "13/2023/NĐ-CP",
         },
     },
 ]
@@ -330,6 +341,17 @@ def verify_vn_legal_citation(
         valid_years: set[str] = entry["valid_years"]
         codes_by_year: dict[str, str] = entry["codes_by_year"]
         superseded_map: dict[str, str] = entry["superseded_map"]
+
+        if (
+            not name_matched
+            and code_matched
+            and canonical_name.startswith("Luật ")
+            and re.search(r"\bluật\s+(?!số\b)[A-ZÀ-Ỹa-zà-ỹ]{2,}", text, re.IGNORECASE)
+        ):
+            mismatches.append("title")
+            reasons.append(
+                f"Tên văn bản không khớp với số hiệu {code_str} (số hiệu chuẩn thuộc về {canonical_name})"
+            )
 
         # Check if any valid year is cited
         cited_years = set(years_in_text) | ({primary_year} if primary_year else set())
@@ -456,8 +478,6 @@ def verify_vn_legal_citation(
         )
 
     rules = ["R-LEGAL-DOCUMENT"]
-    if code_str:
-        rules.append("R-VN-LEGAL-VERIFIED")
     inferred_authority = extracted_venue
     if not inferred_authority and code_suffix:
         if code_suffix == "NĐ-CP":
@@ -466,13 +486,13 @@ def verify_vn_legal_citation(
             inferred_authority = "Quốc hội"
     return VNLegalVerificationResult(
         is_valid=True,
-        is_verified_statute=bool(code_str),
+        is_verified_statute=False,
         canonical_code=code_str,
         canonical_authority=inferred_authority,
         mismatched_fields=[],
         triggered_rules=rules,
         reasoning=(
-            f"Vietnamese legal document verified ({code_str or 'statutory/regulatory source'}): "
-            f"{text[:90]}..."
+            f"Ghi nhận tài liệu quy phạm pháp luật / hành chính Việt Nam ({code_str or 'nguồn pháp lý'}): "
+            f"hợp lệ về cấu trúc số hiệu nhưng ngoài danh mục đạo luật trọng tâm đối chiếu tự động — {text[:90]}..."
         ),
     )

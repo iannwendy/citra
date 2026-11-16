@@ -169,6 +169,47 @@ class GrobidOutput:
 # --- HTTP client (caller wrap requests/httpx) ---
 
 
+def _resolve_consolidate_header(raw_value: object) -> str:
+    """Normalize ``GrobidConfig.consolidate_header`` into GROBID's ``"0".."3"`` code.
+
+    - Legacy section-name lists (``["abstract", "body", ...]``) map to ``"0"`` so GROBID
+      does not make redundant outbound Crossref calls while CITRA runs its own retrieval.
+    - Explicit numeric codes in a list or scalar (``["1"].."["3"]``, ``0..3``, ``"0".."3"``)
+      are preserved.
+    - Booleans / boolean strings map ``True`` -> ``"1"`` and ``False`` / empty -> ``"0"``.
+    """
+    if raw_value is None or raw_value is False:
+        return "0"
+    if raw_value is True:
+        return "1"
+    if isinstance(raw_value, int):
+        s_int = str(raw_value)
+        return s_int if s_int in {"0", "1", "2", "3"} else "0"
+    if isinstance(raw_value, str):
+        s = raw_value.strip().lower()
+        if s in {"0", "1", "2", "3"}:
+            return s
+        if s in {"true", "yes", "on"}:
+            return "1"
+        return "0"
+    if isinstance(raw_value, (list, tuple, set)):
+        items = list(raw_value)
+        if not items:
+            return "0"
+        first = items[0]
+        if first is True:
+            return "1"
+        if first is False or first is None:
+            return "0"
+        s_first = str(first).strip()
+        if s_first in {"0", "1", "2", "3"}:
+            return s_first
+        if len(items) == 1 and s_first.lower() in {"true", "yes", "on"}:
+            return "1"
+        return "0"
+    return "0"
+
+
 def call_grobid_fulltext(
     pdf_path: str,
     config: GrobidConfig,
@@ -202,12 +243,7 @@ def call_grobid_fulltext(
         http_post_fn = _default_post
 
     max_attempts = 3 if is_default_http else 1
-    raw_consol = (
-        str(config.consolidate_header[0]).strip()
-        if config.consolidate_header
-        else "0"
-    )
-    consol_header = raw_consol if raw_consol in {"0", "1", "2", "3"} else "0"
+    consol_header = _resolve_consolidate_header(getattr(config, "consolidate_header", None))
     data = {
         "consolidateHeader": consol_header,
         "consolidateCitations": "0",

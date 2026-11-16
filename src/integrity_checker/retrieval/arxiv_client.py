@@ -14,6 +14,7 @@ import random
 import re
 import threading
 import time
+import weakref
 from contextvars import ContextVar
 from typing import Any
 
@@ -68,30 +69,46 @@ _STOPWORDS = frozenset({
     "their", "there", "then", "than", "our", "you", "your",
 })
 
-_ARXIV_LOOP_SEMS: dict[int, asyncio.Semaphore] = {}
-_ARXIV_SLOT_LOCKS: dict[int, asyncio.Lock] = {}
+_ARXIV_LOOP_SEMS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
+    weakref.WeakKeyDictionary()
+)
+_ARXIV_SLOT_LOCKS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = (
+    weakref.WeakKeyDictionary()
+)
 _ARXIV_GLOBAL_SLOT_LOCK = threading.Lock()
-_LAST_ARXIV_REQ_AT: dict[int, float] = {}
+_LAST_ARXIV_REQ_AT: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, float] = (
+    weakref.WeakKeyDictionary()
+)
+_LAST_ARXIV_GLOBAL_AT: float = 0.0
 _ARXIV_MIN_INTERVAL = 1.0
-_ARXIV_CONSECUTIVE_TIMEOUTS: dict[int, int] = {}
-_ARXIV_CIRCUIT_OPEN_UNTIL: dict[int, float] = {}
+_ARXIV_CONSECUTIVE_TIMEOUTS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, int] = (
+    weakref.WeakKeyDictionary()
+)
+_ARXIV_CIRCUIT_OPEN_UNTIL: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, float] = (
+    weakref.WeakKeyDictionary()
+)
 _ARXIV_CIRCUIT_COOLDOWN_SEC = 45.0
 _ARXIV_TIMED_OUT: ContextVar[bool] = ContextVar("_ARXIV_TIMED_OUT", default=False)
 
 
 def _get_arxiv_sem() -> asyncio.Semaphore:
     loop = asyncio.get_running_loop()
-    loop_id = id(loop)
-    if loop_id not in _ARXIV_LOOP_SEMS:
-        _ARXIV_LOOP_SEMS[loop_id] = asyncio.Semaphore(2)
-    return _ARXIV_LOOP_SEMS[loop_id]
+    with _ARXIV_GLOBAL_SLOT_LOCK:
+        sem = _ARXIV_LOOP_SEMS.get(loop)
+        if sem is None:
+            sem = asyncio.Semaphore(2)
+            _ARXIV_LOOP_SEMS[loop] = sem
+        return sem
 
 
 def _get_arxiv_slot_lock() -> asyncio.Lock:
-    loop_id = id(asyncio.get_running_loop())
-    if loop_id not in _ARXIV_SLOT_LOCKS:
-        _ARXIV_SLOT_LOCKS[loop_id] = asyncio.Lock()
-    return _ARXIV_SLOT_LOCKS[loop_id]
+    loop = asyncio.get_running_loop()
+    with _ARXIV_GLOBAL_SLOT_LOCK:
+        lock = _ARXIV_SLOT_LOCKS.get(loop)
+        if lock is None:
+            lock = asyncio.Lock()
+            _ARXIV_SLOT_LOCKS[loop] = lock
+        return lock
 
 
 class ArxivClient(BaseScholarClient):
@@ -469,11 +486,12 @@ class ArxivClient(BaseScholarClient):
         return candidates
 
     async def _fetch_xml_with_retry(self, params: dict[str, Any]) -> str | None:
+        global _LAST_ARXIV_GLOBAL_AT
         self._last_timed_out = False
-        loop_id = id(asyncio.get_running_loop())
+        loop = asyncio.get_running_loop()
         now = time.monotonic()
         with _ARXIV_GLOBAL_SLOT_LOCK:
-            open_until = _ARXIV_CIRCUIT_OPEN_UNTIL.get(loop_id, 0.0)
+            open_until = _ARXIV_CIRCUIT_OPEN_UNTIL.get(loop, 0.0)
         if open_until > now:
             self._last_timed_out = True
             logger.debug("arXiv circuit breaker open — skipping request")
@@ -499,17 +517,22 @@ class ArxivClient(BaseScholarClient):
                         async with slot_lock:
                             with _ARXIV_GLOBAL_SLOT_LOCK:
                                 now_slot = time.monotonic()
-                                if loop_id in _LAST_ARXIV_REQ_AT and _LAST_ARXIV_REQ_AT[loop_id] == 0.0:
+                                if loop in _LAST_ARXIV_REQ_AT and _LAST_ARXIV_REQ_AT[loop] == 0.0:
                                     _LAST_ARXIV_REQ_AT.clear()
+                                    _LAST_ARXIV_GLOBAL_AT = 0.0
                                     last_at = 0.0
                                 else:
-                                    last_at = max(_LAST_ARXIV_REQ_AT.values(), default=0.0)
+                                    last_at = max(
+                                        _LAST_ARXIV_GLOBAL_AT,
+                                        _LAST_ARXIV_REQ_AT.get(loop, 0.0),
+                                    )
                                 scheduled = (
                                     max(now_slot, last_at + _ARXIV_MIN_INTERVAL)
                                     if last_at > 0
                                     else now_slot
                                 )
-                                _LAST_ARXIV_REQ_AT[loop_id] = scheduled
+                                _LAST_ARXIV_GLOBAL_AT = scheduled
+                                _LAST_ARXIV_REQ_AT[loop] = scheduled
                                 wait_sec = scheduled - now_slot
                         if wait_sec > 0:
                             await asyncio.sleep(wait_sec)
@@ -522,7 +545,7 @@ class ArxivClient(BaseScholarClient):
                         )
                     retry_after = self._record_http_response(resp)
                     with _ARXIV_GLOBAL_SLOT_LOCK:
-                        _ARXIV_CONSECUTIVE_TIMEOUTS[loop_id] = 0
+                        _ARXIV_CONSECUTIVE_TIMEOUTS[loop] = 0
                     if resp.status_code == 404:
                         return None
                     if resp.status_code == 429:
@@ -544,10 +567,12 @@ class ArxivClient(BaseScholarClient):
             self._last_timed_out = True
             self._record_transport_error(exc)
             with _ARXIV_GLOBAL_SLOT_LOCK:
-                fails = _ARXIV_CONSECUTIVE_TIMEOUTS.get(loop_id, 0) + 1
-                _ARXIV_CONSECUTIVE_TIMEOUTS[loop_id] = fails
+                fails = _ARXIV_CONSECUTIVE_TIMEOUTS.get(loop, 0) + 1
+                _ARXIV_CONSECUTIVE_TIMEOUTS[loop] = fails
                 if fails >= 2:
-                    _ARXIV_CIRCUIT_OPEN_UNTIL[loop_id] = time.monotonic() + _ARXIV_CIRCUIT_COOLDOWN_SEC
+                    _ARXIV_CIRCUIT_OPEN_UNTIL[loop] = (
+                        time.monotonic() + _ARXIV_CIRCUIT_COOLDOWN_SEC
+                    )
                     logger.warning(
                         f"arXiv retry exhausted ({fails} consecutive failures); opening circuit breaker for {_ARXIV_CIRCUIT_COOLDOWN_SEC:.0f}s: {exc}"
                     )

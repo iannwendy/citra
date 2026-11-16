@@ -48,11 +48,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libmupdf-dev mupdf-tools libsqlite3-0
 
-      - name: Install Python dependencies (CPU-only PyTorch)
+      - name: Install Python dependencies (CPU-only PyTorch + ONNX Runtime)
         run: |
           python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements-dev.txt
+          pip install "onnxruntime>=1.18,<2.0" "optimum[onnxruntime]>=2.0,<3.0"
           pip install --no-build-isolation --no-deps -e .
 
       - name: Prepare test configuration & sample essays
@@ -61,13 +62,13 @@ jobs:
           cp -n configs/config.example.yaml configs/config.yaml || true
           python scripts/gen_sample_essays.py
 
-      - name: Lint backend (ruff)
+      - name: Lint backend & scripts (ruff)
         run: |
-          ruff check src/ tests/
+          ruff check src/ tests/ scripts/
 
-      - name: Run Backend Unit Test Suite
+      - name: Run Backend Test Suite
         run: |
-          pytest tests/unit/ -q
+          pytest tests/ -q
 
   # ============================================================================
   # STAGE 2: Frontend Typecheck, Production Build & Vitest Suite (React 18 / TS)
@@ -91,6 +92,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Lint frontend (ESLint)
+        run: npm run lint
 
       - name: Typecheck & build production SPA bundle
         run: npm run build
@@ -135,6 +139,18 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build API Production Image (PR / non-main verification)
+        if: ${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: ghcr.io/${{ steps.meta.outputs.owner }}/citra-api:ci
+          cache-from: type=gha,scope=citra-api
+          cache-to: type=gha,scope=citra-api,mode=max
 
       - name: Build Web Production Image (PR / non-main verification)
         if: ${{ !(github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')) }}

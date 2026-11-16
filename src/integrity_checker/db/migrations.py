@@ -737,6 +737,126 @@ def _downgrade_0011(conn: Connection, op: Operations) -> None:
         )
 
 
+def _upgrade_0012(conn: Connection, op: Operations) -> None:
+    if not _table_exists(conn, "classes"):
+        return
+
+    inspector = inspect(conn)
+    for idx in inspector.get_indexes("classes"):
+        idx_name = idx.get("name")
+        idx_cols = list(idx.get("column_names") or ())
+        if (
+            idx_name
+            and not idx_name.startswith("sqlite_autoindex_")
+            and idx_cols == ["name"]
+        ):
+            _drop_index_if_exists(conn, idx_name)
+
+    inspector = inspect(conn)
+    uqs = inspector.get_unique_constraints("classes")
+    has_scoped_uq = any(
+        uq.get("name") == "uq_classes_teacher_name"
+        or list(uq.get("column_names") or ()) == ["teacher_id", "name"]
+        for uq in uqs
+    )
+    single_name_uqs = [
+        uq for uq in uqs if list(uq.get("column_names") or ()) == ["name"]
+    ]
+
+    if conn.dialect.name == "sqlite":
+        if single_name_uqs:
+            existing_cols = {c["name"] for c in inspector.get_columns("classes")}
+            has_join_code = "join_code" in existing_cols
+            join_code_col_ddl = "join_code VARCHAR(20), " if has_join_code else ""
+            copy_cols_order = [
+                c
+                for c in (
+                    "id",
+                    "name",
+                    "description",
+                    "join_code",
+                    "teacher_id",
+                    "created_at",
+                    "updated_at",
+                )
+                if c in existing_cols
+            ]
+            cols_csv = ", ".join(copy_cols_order)
+            conn.exec_driver_sql("DROP TABLE IF EXISTS _classes_mig0012_new")
+            conn.exec_driver_sql(
+                "CREATE TABLE _classes_mig0012_new ("
+                "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "
+                "name VARCHAR(120) NOT NULL, "
+                "description TEXT, "
+                f"{join_code_col_ddl}"
+                "teacher_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, "
+                "created_at DATETIME, "
+                "updated_at DATETIME, "
+                "CONSTRAINT uq_classes_teacher_name UNIQUE (teacher_id, name)"
+                ")"
+            )
+            conn.exec_driver_sql(
+                f"INSERT INTO _classes_mig0012_new ({cols_csv}) "
+                f"SELECT {cols_csv} FROM classes"
+            )
+            conn.exec_driver_sql("DROP TABLE classes")
+            conn.exec_driver_sql("ALTER TABLE _classes_mig0012_new RENAME TO classes")
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_classes_teacher_id ON classes(teacher_id)"
+            )
+            if has_join_code:
+                conn.exec_driver_sql(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_classes_join_code "
+                    "ON classes(join_code) WHERE join_code IS NOT NULL"
+                )
+            return
+
+        if not has_scoped_uq:
+            with op.batch_alter_table("classes") as batch_op:
+                batch_op.create_unique_constraint(
+                    "uq_classes_teacher_name", ["teacher_id", "name"]
+                )
+    else:
+        for uq in single_name_uqs:
+            uq_name = uq.get("name")
+            if uq_name:
+                op.drop_constraint(uq_name, "classes", type_="unique")
+        if not has_scoped_uq:
+            op.create_unique_constraint(
+                "uq_classes_teacher_name", "classes", ["teacher_id", "name"]
+            )
+
+
+def _downgrade_0012(conn: Connection, op: Operations) -> None:
+    if not _table_exists(conn, "classes"):
+        return
+
+    _drop_index_if_exists(conn, "uq_classes_teacher_name")
+    inspector = inspect(conn)
+    uqs = inspector.get_unique_constraints("classes")
+    scoped_names = [
+        uq["name"]
+        for uq in uqs
+        if uq.get("name")
+        and (
+            uq["name"] == "uq_classes_teacher_name"
+            or list(uq.get("column_names") or ()) == ["teacher_id", "name"]
+        )
+    ]
+    if scoped_names:
+        with op.batch_alter_table("classes") as batch_op:
+            for uq_name in scoped_names:
+                batch_op.drop_constraint(uq_name, type_="unique")
+
+    dup_row = conn.execute(
+        text("SELECT name FROM classes GROUP BY name HAVING COUNT(*) > 1 LIMIT 1")
+    ).first()
+    if dup_row is None:
+        conn.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_classes_name ON classes(name)"
+        )
+
+
 MIGRATIONS: tuple[MigrationStep, ...] = (
     MigrationStep(
         version="0001",
@@ -814,6 +934,13 @@ MIGRATIONS: tuple[MigrationStep, ...] = (
         description="Add numeric_index, sub_index, and composite_label columns to citations",
         upgrade=_upgrade_0011,
         downgrade=_downgrade_0011,
+    ),
+    MigrationStep(
+        version="0012",
+        name="v3_76_classes_scoped_teacher_name_unique",
+        description="Scope classes name uniqueness per teacher via uq_classes_teacher_name",
+        upgrade=_upgrade_0012,
+        downgrade=_downgrade_0012,
     ),
 )
 
@@ -1006,38 +1133,54 @@ def run_migrations(engine: Engine, target_version: str | None = None) -> list[st
             raise MigrationError(f"Unknown target migration version: {target_version!r}")
 
     applied_now: list[str] = []
-    with engine.begin() as conn:
-        _ensure_core_tables_exist(conn)
-        SchemaMigrationRecord.__table__.create(bind=conn, checkfirst=True)
+    with engine.connect() as conn:
+        raw_dbapi = (
+            conn.connection.dbapi_connection if conn.dialect.name == "sqlite" else None
+        )
+        fk_was_on = False
+        if raw_dbapi is not None:
+            cur = raw_dbapi.execute("PRAGMA foreign_keys")
+            fk_row = cur.fetchone()
+            cur.close()
+            fk_was_on = bool(fk_row and fk_row[0])
+            if fk_was_on:
+                raw_dbapi.execute("PRAGMA foreign_keys=OFF")
+        try:
+            with conn.begin():
+                _ensure_core_tables_exist(conn)
+                SchemaMigrationRecord.__table__.create(bind=conn, checkfirst=True)
 
-        rows = _read_ledger_rows(conn)
-        _verify_ledger_rows(rows)
-        applied_set = {r[0] for r in rows}
+                rows = _read_ledger_rows(conn)
+                _verify_ledger_rows(rows)
+                applied_set = {r[0] for r in rows}
 
-        mc = MigrationContext.configure(conn)
-        op = Operations(mc)
+                mc = MigrationContext.configure(conn)
+                op = Operations(mc)
 
-        for step in MIGRATIONS:
-            if target_version is not None and step.version > target_version:
-                break
-            if step.version in applied_set:
-                continue
+                for step in MIGRATIONS:
+                    if target_version is not None and step.version > target_version:
+                        break
+                    if step.version in applied_set:
+                        continue
 
-            t0 = time.perf_counter()
-            step.upgrade(conn, op)
-            elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 3)
+                    t0 = time.perf_counter()
+                    step.upgrade(conn, op)
+                    elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 3)
 
-            conn.execute(
-                sa.insert(SchemaMigrationRecord.__table__).values(
-                    version=step.version,
-                    name=step.name,
-                    checksum=step.checksum,
-                    execution_ms=elapsed_ms,
-                    # Store naive UTC datetime to match SQLite DATETIME column representation
-                    applied_at=datetime.now(UTC).replace(tzinfo=None),
-                )
-            )
-            applied_now.append(step.version)
+                    conn.execute(
+                        sa.insert(SchemaMigrationRecord.__table__).values(
+                            version=step.version,
+                            name=step.name,
+                            checksum=step.checksum,
+                            execution_ms=elapsed_ms,
+                            # Store naive UTC datetime to match SQLite DATETIME column representation
+                            applied_at=datetime.now(UTC).replace(tzinfo=None),
+                        )
+                    )
+                    applied_now.append(step.version)
+        finally:
+            if raw_dbapi is not None and fk_was_on:
+                raw_dbapi.execute("PRAGMA foreign_keys=ON")
 
     if applied_now:
         _invalidate_engine_inspectors(engine)
@@ -1078,27 +1221,43 @@ def downgrade_migrations(
         )
 
     reverted: list[str] = []
-    with engine.begin() as conn:
-        _ensure_core_tables_exist(conn)
-        rows = _read_ledger_rows(conn)
-        _verify_ledger_rows(rows)
-        tx_applied_set = {r[0] for r in rows}
-        tx_steps_to_revert = [
-            step
-            for step in reversed(MIGRATIONS)
-            if step.version in tx_applied_set and step.version > target_version
-        ]
+    with engine.connect() as conn:
+        raw_dbapi = (
+            conn.connection.dbapi_connection if conn.dialect.name == "sqlite" else None
+        )
+        fk_was_on = False
+        if raw_dbapi is not None:
+            cur = raw_dbapi.execute("PRAGMA foreign_keys")
+            fk_row = cur.fetchone()
+            cur.close()
+            fk_was_on = bool(fk_row and fk_row[0])
+            if fk_was_on:
+                raw_dbapi.execute("PRAGMA foreign_keys=OFF")
+        try:
+            with conn.begin():
+                _ensure_core_tables_exist(conn)
+                rows = _read_ledger_rows(conn)
+                _verify_ledger_rows(rows)
+                tx_applied_set = {r[0] for r in rows}
+                tx_steps_to_revert = [
+                    step
+                    for step in reversed(MIGRATIONS)
+                    if step.version in tx_applied_set and step.version > target_version
+                ]
 
-        mc = MigrationContext.configure(conn)
-        op = Operations(mc)
+                mc = MigrationContext.configure(conn)
+                op = Operations(mc)
 
-        for step in tx_steps_to_revert:
-            step.downgrade(conn, op)
-            conn.execute(
-                text("DELETE FROM schema_migrations WHERE version = :version"),
-                {"version": step.version},
-            )
-            reverted.append(step.version)
+                for step in tx_steps_to_revert:
+                    step.downgrade(conn, op)
+                    conn.execute(
+                        text("DELETE FROM schema_migrations WHERE version = :version"),
+                        {"version": step.version},
+                    )
+                    reverted.append(step.version)
+        finally:
+            if raw_dbapi is not None and fk_was_on:
+                raw_dbapi.execute("PRAGMA foreign_keys=ON")
 
     if reverted:
         _invalidate_engine_inspectors(engine)

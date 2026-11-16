@@ -23,6 +23,7 @@ from integrity_checker.db.models import (  # noqa: F401
     User,
 )
 from integrity_checker.db.sqlite_tuning import (
+    _exec_pragma,
     apply_sqlite_connection_pragmas,
     detect_sqlite_filesystem_type,
     resolve_sqlite_journal_mode,
@@ -44,6 +45,7 @@ class SqliteTuningReport:
     synchronous: str = "NORMAL"
     mmap_bytes: int = 0
     wal_autocheckpoint: int = 1000
+    foreign_keys: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -58,6 +60,7 @@ class SqliteTuningReport:
             "synchronous": self.synchronous,
             "mmap_bytes": self.mmap_bytes,
             "wal_autocheckpoint": self.wal_autocheckpoint,
+            "foreign_keys": self.foreign_keys,
         }
 
 
@@ -131,6 +134,8 @@ def get_engine() -> Engine:
         url = "sqlite:///:memory:"
 
     if _engine is None or _engine_url != url:
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url.removeprefix("postgres://")
         is_sqlite = url.startswith("sqlite")
         is_memory = url in ("sqlite://", "sqlite:///", "sqlite:///:memory:") or ":memory:" in url
         raw_path = ""
@@ -143,6 +148,7 @@ def get_engine() -> Engine:
         kwargs: dict = {
             "echo": settings.database.echo,
             "connect_args": connect_args,
+            "pool_pre_ping": True,
         }
         if is_memory:
             kwargs["poolclass"] = StaticPool
@@ -152,6 +158,11 @@ def get_engine() -> Engine:
             kwargs["poolclass"] = NullPool
         _engine = create_engine(url, **kwargs)
         if is_sqlite and is_memory:
+            @event.listens_for(_engine, "connect")
+            def _set_memory_sqlite_pragma(dbapi_connection, _connection_record) -> None:
+                _exec_pragma(dbapi_connection, "PRAGMA foreign_keys=ON")
+                _exec_pragma(dbapi_connection, "PRAGMA busy_timeout=30000")
+
             _LAST_APP_DB_TUNING_REPORT = SqliteTuningReport(
                 db_path=":memory:",
                 filesystem_type="memory",

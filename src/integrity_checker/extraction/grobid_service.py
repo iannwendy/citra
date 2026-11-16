@@ -28,7 +28,9 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import threading
 import time
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -500,7 +502,7 @@ class GrobidServiceManager:
         return None
 
     def save_to_cache(self, pdf_path: str, tei_xml: str) -> bool:
-        """Save TEI XML to cache.
+        """Save TEI XML to cache atomically via unique temp file.
 
         Args:
             pdf_path: Path to PDF file.
@@ -513,13 +515,22 @@ class GrobidServiceManager:
             return False
 
         cache_path = self.get_cache_path(pdf_path)
+        temp_path = cache_path.with_name(f"{cache_path.name}.{uuid.uuid4().hex}.tmp")
         try:
-            cache_path.write_text(tei_xml, encoding="utf-8")
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path.write_text(tei_xml, encoding="utf-8")
+            temp_path.replace(cache_path)
             logger.debug("Cached TEI XML for: %s", pdf_path)
             return True
         except Exception as exc:
             logger.warning("Failed to save cache: %s", exc)
             return False
+        finally:
+            if temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass
 
     def invalidate_cache(self, pdf_path: str | None = None) -> int:
         """Invalidate cache.
@@ -578,6 +589,7 @@ class GrobidServiceManager:
 
 # --- Singleton ---
 
+_grobid_manager_lock = threading.Lock()
 _grobid_manager: GrobidServiceManager | None = None
 
 
@@ -596,21 +608,24 @@ def get_grobid_manager(
     """
     global _grobid_manager
 
-    if _grobid_manager is None:
-        if config is None:
-            settings = get_settings()
-            config = settings.extraction.grobid
+    with _grobid_manager_lock:
+        if _grobid_manager is None:
+            resolved_cfg = config
+            if resolved_cfg is None:
+                settings = get_settings()
+                resolved_cfg = settings.extraction.grobid
+            _grobid_manager = GrobidServiceManager(config=resolved_cfg)
+        manager = _grobid_manager
 
-        _grobid_manager = GrobidServiceManager(config=config)
+    if auto_start and not manager.is_available:
+        if manager.start():
+            manager.wait_until_ready()
 
-    if auto_start and not _grobid_manager.is_available:
-        if _grobid_manager.start():
-            _grobid_manager.wait_until_ready()
-
-    return _grobid_manager
+    return manager
 
 
 def reset_grobid_manager() -> None:
     """Reset singleton (for testing)."""
     global _grobid_manager
-    _grobid_manager = None
+    with _grobid_manager_lock:
+        _grobid_manager = None

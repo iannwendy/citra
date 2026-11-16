@@ -17,6 +17,8 @@ export type UserCapability =
   // student
   | 'upload_essay'
   | 'view_own_history'
+  // paid user + teacher + admin
+  | 'batch_upload'
   // teacher + admin
   | 'view_class_history'
   | 'override_verdict'
@@ -35,6 +37,7 @@ const ROLE_CAPABILITIES: Record<UserRole, UserCapability[]> = {
   teacher: [
     'upload_essay',
     'view_own_history',
+    'batch_upload',
     'view_class_history',
     'override_verdict',
     'view_logic_trace',
@@ -45,6 +48,7 @@ const ROLE_CAPABILITIES: Record<UserRole, UserCapability[]> = {
   admin: [
     'upload_essay',
     'view_own_history',
+    'batch_upload',
     'view_class_history',
     'override_verdict',
     'view_logic_trace',
@@ -140,26 +144,30 @@ export function useRole(): UseRoleResult {
   const isUltra = planTier === 'ultra';
   const isPaid = isPro || isUltra;
 
+  const quota: UserQuota = user?.quota ?? DEFAULT_QUOTA_BY_TIER[planTier];
+  const canBatchUpload =
+    role === 'teacher' || role === 'admin' || quota.allow_batch_upload === true;
+
   const baseCapabilities = [...(ROLE_CAPABILITIES[role] ?? [])];
   if (isPaid && role === 'user') {
     for (const paidCap of [
       'view_logic_trace',
       'view_document_inspector',
       'view_orphan_detection',
-      'view_class_history',
     ] as UserCapability[]) {
       if (!baseCapabilities.includes(paidCap)) {
         baseCapabilities.push(paidCap);
       }
     }
   }
+  if (canBatchUpload && !baseCapabilities.includes('batch_upload')) {
+    baseCapabilities.push('batch_upload');
+  }
 
   const capabilities =
     user?.can_override_verdicts === false
       ? baseCapabilities.filter((c) => c !== 'override_verdict')
       : baseCapabilities;
-
-  const quota: UserQuota = user?.quota ?? DEFAULT_QUOTA_BY_TIER[planTier];
 
   return {
     role,
@@ -172,7 +180,7 @@ export function useRole(): UseRoleResult {
     isUltra,
     isPaid,
     quota,
-    canBatchUpload: role === 'teacher' || role === 'admin' || quota.allow_batch_upload === true,
+    canBatchUpload,
     capabilities,
     has: (cap) => capabilities.includes(cap),
     hasAny: (caps) => caps.some((c) => capabilities.includes(c)),

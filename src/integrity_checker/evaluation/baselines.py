@@ -85,30 +85,68 @@ class BaselineRunner:
             }
 
         feat_obj = getattr(item, "features", None)
-        matched_sources = getattr(item, "matched_source", None) or []
-        if not isinstance(matched_sources, list):
-            matched_sources = [matched_sources]
+        matched_source_raw = getattr(item, "matched_source", None)
+        has_candidate: bool | None = None
+        url_status: str | None = getattr(item, "url_status", None)
+        crossref_matched = False
+
+        if matched_source_raw is not None:
+            if hasattr(matched_source_raw, "sources_succeeded") or hasattr(
+                matched_source_raw, "candidates"
+            ):
+                cands = getattr(matched_source_raw, "candidates", None) or []
+                succeeded = getattr(matched_source_raw, "sources_succeeded", None) or []
+                has_candidate = any(getattr(c, "found", False) for c in cands)
+                url_status = url_status or getattr(matched_source_raw, "url_status", None)
+                crossref_matched = ("crossref" in succeeded) or any(
+                    getattr(c, "found", False) and getattr(c, "source_name", "") == "crossref"
+                    for c in cands
+                )
+            else:
+                matched_list = (
+                    matched_source_raw
+                    if isinstance(matched_source_raw, list)
+                    else [matched_source_raw]
+                )
+                has_candidate = len(matched_list) > 0
+                crossref_matched = any(
+                    (s.get("source") if isinstance(s, dict) else getattr(s, "source", ""))
+                    == "crossref"
+                    for s in matched_list
+                )
+
+        if not crossref_matched:
+            extra_sources = getattr(item, "matched_sources", None) or []
+            crossref_matched = any(
+                (s.get("source") if isinstance(s, dict) else getattr(s, "source", "")) == "crossref"
+                for s in extra_sources
+            )
+
         label_val = getattr(item, "label", None)
         if hasattr(label_val, "value"):
             label_val = label_val.value
 
+        citation_obj = getattr(item, "citation", None)
+        cited_doi = getattr(item, "cited_doi", None) or getattr(citation_obj, "doi", None)
+        raw_yd = getattr(feat_obj, "year_distance", 0)
+
         return {
-            "id": getattr(item, "citation_id", None),
+            "id": getattr(item, "citation_id", None) or getattr(citation_obj, "id", None),
             "true_label": getattr(item, "true_label", None) or label_val,
             "doi_exact_match": bool(getattr(feat_obj, "doi_exact_match", False)),
             "title_sim_fuzzy": float(getattr(feat_obj, "title_sim_fuzzy", 0.0) or 0.0),
             "title_sim_semantic": float(getattr(feat_obj, "title_sim_semantic", 0.0) or 0.0),
             "author_jaccard": float(getattr(feat_obj, "author_jaccard", 0.0) or 0.0),
-            "year_distance": int(getattr(feat_obj, "year_distance", 0) or 0),
+            "year_distance": int(raw_yd if raw_yd is not None else 0),
             "source_consensus": int(getattr(feat_obj, "source_consensus", 0) or 0),
             "venue_sim": float(getattr(feat_obj, "venue_sim", 0.0) or 0.0),
             "content_alignment_score": float(getattr(feat_obj, "content_alignment_score", 0.0) or 0.0),
             "content_alignment_confidence": str(getattr(feat_obj, "content_alignment_confidence", "") or ""),
             "content_is_aligned": bool(getattr(feat_obj, "content_is_aligned", False)),
-            "has_candidate": None,
-            "crossref_matched": any(
-                getattr(s, "source", "") == "crossref" for s in matched_sources
-            ),
+            "has_candidate": has_candidate,
+            "url_status": url_status,
+            "cited_doi": cited_doi,
+            "crossref_matched": crossref_matched,
         }
 
     def _predict_single(self, canonical: str, feat: dict[str, Any]) -> str:
@@ -183,7 +221,11 @@ class BaselineRunner:
             return "suspected_hallucination"
 
         # Content alignment contradiction check (R-CONTENT-MISMATCH)
+        # Decision-support guardrail: strongly matched real papers (title >= 0.85, author >= 0.50, yd <= 1)
+        # route to metadata_error rather than suspected_hallucination.
         if not ca_aligned and ca_score >= 0.30 and tf >= 0.75 and aj >= 0.50 and not doi_ok and consensus <= 1:
+            if title_best >= 0.85 and yd <= 1:
+                return "metadata_error"
             return "suspected_hallucination"
         if ca_conf == "high" and not ca_aligned and 0.0 < ca_score < 0.25 and title_best >= 0.85:
             return "metadata_error"

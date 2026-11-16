@@ -11,6 +11,7 @@ alignment giữa đoạn văn được trích dẫn và paper nguồn.
 from __future__ import annotations
 
 import re
+import threading
 from typing import TYPE_CHECKING
 
 from integrity_checker.extraction.patterns.apa import is_vn_legal_reference
@@ -149,6 +150,7 @@ class NeuroSymbolicChecker:
 
     _feature_calculator: FeatureCalculator | None = None
     _hybrid_scorer: HybridMLScorer | None = None
+    _init_lock = threading.Lock()
 
     def __init__(
         self,
@@ -163,9 +165,11 @@ class NeuroSymbolicChecker:
             self.feature_calculator = feature_calculator
         elif enable_content_alignment:
             if NeuroSymbolicChecker._feature_calculator is None:
-                NeuroSymbolicChecker._feature_calculator = FeatureCalculator(
-                    enable_content_alignment=True
-                )
+                with NeuroSymbolicChecker._init_lock:
+                    if NeuroSymbolicChecker._feature_calculator is None:
+                        NeuroSymbolicChecker._feature_calculator = FeatureCalculator(
+                            enable_content_alignment=True
+                        )
             self.feature_calculator = NeuroSymbolicChecker._feature_calculator
         else:
             self.feature_calculator = FeatureCalculator(
@@ -179,7 +183,9 @@ class NeuroSymbolicChecker:
             self.hybrid_scorer = hybrid_scorer
         else:
             if NeuroSymbolicChecker._hybrid_scorer is None:
-                NeuroSymbolicChecker._hybrid_scorer = HybridMLScorer.load_default()
+                with NeuroSymbolicChecker._init_lock:
+                    if NeuroSymbolicChecker._hybrid_scorer is None:
+                        NeuroSymbolicChecker._hybrid_scorer = HybridMLScorer.load_default()
             self.hybrid_scorer = NeuroSymbolicChecker._hybrid_scorer
 
     @property
@@ -597,13 +603,39 @@ class NeuroSymbolicChecker:
         # --- Check 3: Vietnamese legal documents (TDTU §2.6.1 & Sprint 3.2 Legal Verifier) ---
         if citation.matched_pattern == "vn_legal_document" or is_vn_legal_reference(raw_text):
             logger.debug(f"Vietnamese legal document detected: raw='{raw_text[:80]}'")
+            inline_url_m = re.search(r"https?://[^\s\])\"'>]+", raw_text, re.IGNORECASE)
+            legal_url_probe = citation.url or (
+                inline_url_m.group(0).rstrip(".,;:") if inline_url_m else None
+            )
+            is_fake_legal_url, fake_legal_domain = _is_fake_url(legal_url_probe)
+            if is_fake_legal_url:
+                return CitationVerdict(
+                    citation=citation,
+                    label=ValidationLabel.SUSPECTED_HALLUCINATION,
+                    confidence=0.95,
+                    matched_source=source,
+                    features=MatchFeatures(
+                        has_scholarly_candidate=False,
+                        html_meta=hm_dict_early,
+                        html_meta_title_sim=hm_title_sim_early,
+                    ),
+                    reasoning=(
+                        f"Placeholder or reserved fake URL domain ('{fake_legal_domain}') detected "
+                        f"in Vietnamese legal citation: {legal_url_probe}"
+                    ),
+                    triggered_rules=["R-LEGAL-DOCUMENT", "R-FAKE-URL"],
+                    mismatched_fields=["url"],
+                )
             legal_res = verify_vn_legal_citation(
                 raw_text=raw_text,
                 extracted_year=str(citation.year) if citation.year else None,
                 extracted_venue=citation.venue,
             )
             is_fabricated_legal = "R-VN-LEGAL-FABRICATED" in (legal_res.triggered_rules or [])
-            has_statute_entry = bool(legal_res.canonical_name or legal_res.canonical_code)
+            has_statute_entry = bool(
+                (legal_res.is_verified_statute or not legal_res.is_valid)
+                and (legal_res.canonical_name or legal_res.canonical_code)
+            )
             if has_statute_entry and not is_fabricated_legal:
                 canon_year = None
                 if legal_res.canonical_code:
@@ -742,15 +774,18 @@ class NeuroSymbolicChecker:
                     triggered_rules=legal_rules,
                     mismatched_fields=legal_res.mismatched_fields,
                 )
-            return CitationVerdict(
-                citation=citation,
-                label=ValidationLabel.RESOURCE,
-                confidence=0.95,
-                matched_source=source,
-                features=legal_features,
-                reasoning=legal_reasoning,
-                triggered_rules=legal_rules,
-                mismatched_fields=[],
+            return self._apply_dead_link_exception(
+                CitationVerdict(
+                    citation=citation,
+                    label=ValidationLabel.RESOURCE,
+                    confidence=0.95 if legal_res.is_verified_statute else 0.85,
+                    matched_source=source,
+                    features=legal_features,
+                    reasoning=legal_reasoning,
+                    triggered_rules=legal_rules,
+                    mismatched_fields=[],
+                ),
+                source,
             )
 
         # --- Check 4: Unified RetrievalOrchestrator web/documentation resource check ---
@@ -1417,6 +1452,7 @@ class NeuroSymbolicChecker:
                 features=features,
                 has_candidate=has_cand,
                 style_penalty=outcome.style_penalty,
+                triggered_rules=final_rules,
             )
             if "R-AMBIGUOUS-MAPPING" in final_rules:
                 final_confidence = min(final_confidence, self.rules.ambiguous_confidence_cap)

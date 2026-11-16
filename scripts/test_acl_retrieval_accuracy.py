@@ -28,14 +28,15 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from integrity_checker.database import LocalDatabase
-from integrity_checker.models.citation import Citation
-from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
+from integrity_checker.database import LocalDatabase  # noqa: E402
+from integrity_checker.models.citation import Citation  # noqa: E402
+from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator  # noqa: E402
 
 
 @dataclass
@@ -114,7 +115,7 @@ def parse_authors(authors_str: str) -> list[str]:
     try:
         authors_list = json.loads(authors_str)
         return [str(name) for name in authors_list] if authors_list else []
-    except:
+    except Exception:
         return ["Unknown"]
 
 

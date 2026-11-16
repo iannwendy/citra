@@ -453,9 +453,41 @@ function IssueCard({
                             })}
                       </span>
                     </span>
-                    <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                      MATCH
-                    </span>
+                    {(() => {
+                      const conf =
+                        typeof source.confidence === 'number' ? source.confidence : null;
+                      const isHighMatch =
+                        verdict.label === 'verified' ||
+                        (verdict.label !== 'suspected_hallucination' &&
+                          (conf === null || conf >= 0.8) &&
+                          (source.matched_fields?.length ?? 0) >= 2);
+                      const isLowCandidate =
+                        verdict.label === 'suspected_hallucination' ||
+                        (conf !== null && conf < 0.6);
+                      if (isHighMatch) {
+                        return (
+                          <span className="font-mono text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                            MATCH
+                          </span>
+                        );
+                      }
+                      return (
+                        <span
+                          data-testid="issue-source-candidate-badge"
+                          className={`font-mono text-[11px] font-semibold px-1.5 py-0.5 rounded ${
+                            isLowCandidate
+                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                              : 'bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300'
+                          }`}
+                        >
+                          {isLowCandidate
+                            ? conf !== null
+                              ? `LOW CONFIDENCE (${Math.round(conf * 100)}%)`
+                              : 'CANDIDATE'
+                            : 'PARTIAL MATCH'}
+                        </span>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
@@ -637,7 +669,7 @@ export function IssuesPage() {
 
       {/* Shared Multi-Tab Diagnostic Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <EssayActionBar essayId={id ?? ''} />
+        <EssayActionBar essayId={id ?? ''} filename={report.filename} />
         <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
           {lang === 'vi' ? 'Tổng vấn đề phát hiện:' : 'Total Flagged Issues:'}{' '}
           <strong className="text-amber-600 dark:text-amber-400">{totalIssues}</strong> /{' '}

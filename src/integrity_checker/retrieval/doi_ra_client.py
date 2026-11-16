@@ -105,7 +105,7 @@ class DoiRaClient(BaseScholarClient):
 
         # Fetch canonical bibliographic metadata via CSL-JSON content negotiation
         csl_cand = await self._fetch_csl_json(doi_norm, ra_name=ra_name)
-        if csl_cand and (csl_cand.title or csl_cand.doi):
+        if csl_cand and csl_cand.title:
             # Guard against mismatched work if citation has a substantive title
             if (
                 citation.title
@@ -122,24 +122,25 @@ class DoiRaClient(BaseScholarClient):
                     )
             csl_cand.found = True
             if not csl_cand.authors:
-                csl_cand.authors = list(citation.authors or [ra_name])
+                csl_cand.authors = [ra_name]
             csl_cand.confidence = 0.96
             return csl_cand
 
-        # Even if CSL-JSON is not supported by a regional agency (e.g. CNKI/JaLC HTML landing),
-        # return a verified RA record when the agency is a recognized non-Crossref regional registrar
+        # When a recognized non-Crossref RA confirms DOI registration via doi.org/doiRA,
+        # but CSL-JSON metadata is unavailable, NEVER echo student-supplied metadata:
+        # return found=False with doi_ra_status="registered_no_csl" so SymbolicRules abstains (UNRESOLVED).
         if ra_name not in ("Crossref",):
             return SourceCandidate(
                 source_name=self.name,
-                found=True,
+                found=False,
                 doi=doi_norm,
-                title=citation.title or f"DOI {doi_norm} ({ra_name})",
-                authors=list(citation.authors or [ra_name]),
-                year=str(citation.year)[:4] if citation.year else None,
-                venue=citation.venue or f"{ra_name} Registered Publication",
                 url=f"https://doi.org/{doi_norm}",
-                external_ids={"doi": doi_norm, "doi_ra": ra_name},
-                confidence=0.88,
+                external_ids={
+                    "doi": doi_norm,
+                    "doi_ra": ra_name,
+                    "doi_ra_status": "registered_no_csl",
+                },
+                error=f"DOI RA: CSL metadata unavailable for '{doi_norm}' (RA={ra_name})",
             )
 
         if self._last_status_code == 429 or (

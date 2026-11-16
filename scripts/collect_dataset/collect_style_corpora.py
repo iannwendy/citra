@@ -25,7 +25,6 @@ import re
 import subprocess
 import sys
 import threading
-import time
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -876,7 +875,7 @@ def main() -> int:
                                     cands.append((u, style, t))
                                     break
                         with ThreadPoolExecutor(max_workers=args.workers) as pool:
-                            for f in as_completed([pool.submit(download_and_ingest, c) for c in cands]):
+                            for _f in as_completed([pool.submit(download_and_ingest, c) for c in cands]):
                                 if not collector.needs_more(style):
                                     break
                     except Exception:
