@@ -42,17 +42,24 @@ htmlcov/
 !README.md
 docs/
 
-# Frontend (sẽ được mount hoặc build riêng)
+# Frontend & Marketing (build riêng)
 node_modules/
 web/
-design-system/
+marketing/
 
-# Local data (được mount từ host)
+# Local data & corpora (được mount từ host hoặc chỉ dùng thực nghiệm local)
 data/
 reports/
 test-results/
 evaluation/
 20-theses/
+200-theses/
+TDTU_PDF/
+VN_UNI_PDF_BATCH2/
+style_corpora/
+tdtu_github_reports/
+vn_legal_reports/
+6_ICCIES_2027/
 TDTU-MidtermReport/
 *.pdf
 *.docx

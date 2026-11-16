@@ -8,7 +8,7 @@
 
 **Tech Stack:** React 18.3, TypeScript 5.4, Tailwind CSS 3.4, `motion` (`motion/react`), Radix UI Dialog & DropdownMenu, React Router v6.30 (`viewTransition`), Vitest + Testing Library, Playwright E2E.
 
-**Spec:** `docs/superpowers/specs/2026-11-14-hybrid-motion-system-design.md`
+**Spec:** `docs/plans/2026-11-14-hybrid-motion-system-design.md`
 
 ## Global Constraints
 

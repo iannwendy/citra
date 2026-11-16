@@ -68,8 +68,8 @@ data/*.truncated.bak
 data/acl_anthology.bib
 logs/
 
-# Reports
-reports/
+# Reports (generated pipeline JSON outputs at root /reports/)
+/reports/
 *.log
 
 # Spec / reference docx — không commit (tham chiếu nội bộ, có ở ../docs)

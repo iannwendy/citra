@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+, SQLAlchemy 2.0 (`Engine`, `Connection`, `inspect`, `text`), Alembic 1.13+ (`MigrationContext`, `Operations`, `batch_alter_table`), SQLite3 online backup API (`sqlite3.Connection.backup`), `pytest`, `ruff`.
 
-**Spec:** `docs/superpowers/specs/2026-11-10-db-schema-migration-design.md`
+**Spec:** `docs/plans/2026-11-10-db-schema-migration-design.md`
 
 ## Global Constraints
 

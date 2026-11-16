@@ -33,7 +33,7 @@ essay-integrity-checker/
 │   └── retrieval/            # Domain-routed multi-source retrieval + Active HTTP/DOI LinkValidator
 ├── web/                      # React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui frontend
 ├── configs/                  # YAML configurations (default, Docker, production)
-├── docs/                     # Architectural specs, test plans, research reports & UI screenshots
+├── docs/                     # Categorized docs (architecture/, reference/, reports/, plans/, screenshots/) — see docs/README.md
 └── tests/                    # 1,251 unit, integration & E2E tests
 ```
 

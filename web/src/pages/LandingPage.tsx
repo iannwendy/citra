@@ -3580,7 +3580,7 @@ function SolvaSecuritySection({ lang }: { lang: Lang }) {
 /* ============================================================
    SECTION 7: PRICING PLANS & ACADEMIC BENEFITS (`#taxonomy`)
    3 Cards (`Basic`, `Pro Popular`, `Ultra`) + Squircle Billing Toggle
-   + Radial-Masked Watercolor Floral Card (`/solva/pricing-floral.png`)
+   + Radial-Masked Watercolor Floral Card (`/solva/pricing-floral.webp`)
    ============================================================ */
 function SolvaTaxonomyPricingSection({
   lang,

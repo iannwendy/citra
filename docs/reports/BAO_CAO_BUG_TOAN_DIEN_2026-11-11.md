@@ -239,7 +239,7 @@
 
 ## 5. Kết Quả Khắc Phục & Hậu Kiểm Toàn Diện (`100% Đã Khắc Phục`)
 
-Toàn bộ **11/11 nhóm bug (`BUG-01` → `BUG-11`)** đã được triển khai sửa triệt để theo kế hoạch chi tiết tại `docs/superpowers/plans/2026-11-11-full-bugfix-plan.md` và vượt qua 100% cổng kiểm định tự động + trình duyệt thực tế:
+Toàn bộ **11/11 nhóm bug (`BUG-01` → `BUG-11`)** đã được triển khai sửa triệt để theo kế hoạch chi tiết tại `docs/plans/2026-11-11-full-bugfix-plan.md` và vượt qua 100% cổng kiểm định tự động + trình duyệt thực tế:
 
 | Hạng mục hậu kiểm | Lệnh / Công cụ kiểm chứng | Kết quả sau khi sửa | So với Baseline |
 | :--- | :--- | :--- | :--- |

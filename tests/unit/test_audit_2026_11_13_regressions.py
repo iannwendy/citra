@@ -1,7 +1,7 @@
 """Regression tests for the comprehensive 1,064-PDF live-stack audit (2026-11-13).
 
 Covers P0 -> P1 -> P2 system bugs documented in:
-docs/BAO_CAO_AUDIT_PARSING_LINKING_TOAN_DIEN_2026-11-13.md
+docs/reports/BAO_CAO_AUDIT_PARSING_LINKING_TOAN_DIEN_2026-11-13.md
 """
 
 from __future__ import annotations

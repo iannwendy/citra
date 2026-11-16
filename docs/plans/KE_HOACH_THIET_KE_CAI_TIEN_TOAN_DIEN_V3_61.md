@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+ / FastAPI / SQLAlchemy 2.0 / Alembic (`MigrationStep` SHA-256) / PyMuPDF 1.28 (`get_textpage_ocr` + `tessdata_fast`) / `sentence-transformers` (`backend="onnx"` INT8 qua `optimum[onnxruntime]`) / `httpx` Async / SQLite FTS5 & WAL / React 18 / TypeScript / TanStack Query / Nginx.
 
-**Spec:** Tài liệu này đóng vai trò vừa là **Đặc tả Kiến trúc Chi tiết (Phần I & II)** vừa là **Kế hoạch Thực thi TDD Từng Bước (Phần III & IV)** dựa trên kết quả kiểm toán 1,064 PDF ([BAO_CAO_AUDIT_PARSING_LINKING_TOAN_DIEN_2026-11-13.md](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/docs/BAO_CAO_AUDIT_PARSING_LINKING_TOAN_DIEN_2026-11-13.md)) và đợt kiểm thử toàn diện Priority 1–2–3 trên `v3.60.3`.
+**Spec:** Tài liệu này đóng vai trò vừa là **Đặc tả Kiến trúc Chi tiết (Phần I & II)** vừa là **Kế hoạch Thực thi TDD Từng Bước (Phần III & IV)** dựa trên kết quả kiểm toán 1,064 PDF ([BAO_CAO_AUDIT_PARSING_LINKING_TOAN_DIEN_2026-11-13.md](../reports/BAO_CAO_AUDIT_PARSING_LINKING_TOAN_DIEN_2026-11-13.md)) và đợt kiểm thử toàn diện Priority 1–2–3 trên `v3.60.3`.
 
 ---
 

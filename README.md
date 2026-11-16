@@ -275,7 +275,7 @@ $$\text{CIS} = 100 \times \left( 0.35 \cdot S_{\text{validity}} + 0.25 \cdot S_{
 
 ### 1. Large-Scale 120,000-Sample Neuro-Symbolic Benchmark & Ablation Study
 
-> 📄 **Full Thesis-Ready Benchmark Report (Vietnamese & English Tables):** [**`docs/BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md`**](./docs/BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md) · Raw JSON Report: [**`data/models/neuro_symbolic_benchmark_report.json`**](./data/models/neuro_symbolic_benchmark_report.json) · Model Weights: [**`data/models/neuro_symbolic_weights.json`**](./data/models/neuro_symbolic_weights.json)
+> 📄 **Full Thesis-Ready Benchmark Report (Vietnamese & English Tables):** [**`docs/reports/BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md`**](./docs/reports/BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md) · Raw JSON Report: [**`data/models/neuro_symbolic_benchmark_report.json`**](./data/models/neuro_symbolic_benchmark_report.json) · Model Weights: [**`data/models/neuro_symbolic_weights.json`**](./data/models/neuro_symbolic_weights.json)
 
 To rigorously evaluate the **Neuro-Symbolic Logic Checker**, **HybridMLScorer**, and **PlattCalibrator** without data leakage, we constructed a **120,000-sample scholarly benchmark** ([`scripts/train_neuro_symbolic_model.py`](./scripts/train_neuro_symbolic_model.py)) aligned with international scientific fact-verification and calibration standards:
 
@@ -442,7 +442,11 @@ essay-integrity-checker/
 │   ├── unit/                           # 1,350+ fast isolated backend unit & integration tests
 │   ├── integration/                    # Full-pipeline integration tests
 │   └── evaluation/                     # 120,000-sample benchmark evaluation suite & baseline comparators
-├── docs/                               # Deep-dive architecture, roadmap, and TDTU reference standards
+├── docs/                               # Organized documentation hub (see docs/README.md)
+│   ├── architecture/                   # System concepts, RBAC, SaaS, performance & format guides
+│   ├── reference/                      # TDTU & 12 international citation style specifications
+│   ├── reports/                        # 120K benchmark, live audits & thesis progress reports
+│   ├── plans/                          # Design specs & phased implementation plans
 │   └── screenshots/                    # High-resolution live UI screenshots
 └── reports/                            # Verified JSON audit reports for the 5 benchmark PDFs
 ```
@@ -595,15 +599,16 @@ cd web && npx tsc --noEmit && npm test -- --run && npm run build
 
 ## Documentation Index & Contributors
 
-### Architectural & Engineering Documentation (`docs/`)
-- [**`docs/BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md`**](./docs/BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md) — Complete 120,000-sample Neuro-Symbolic benchmark methodology, international standards alignment, ablation study, confusion matrix, and 95% bootstrap confidence intervals (ready for thesis/publication inclusion).
-- [**`docs/BAO_CAO_TIEN_DO_TUAN_25_10_01_11.md`**](./docs/BAO_CAO_TIEN_DO_TUAN_25_10_01_11.md) — Production v3.5.0 engineering report covering the 284-concept VI↔EN Cross-Lingual Bridge, 15+ federated scholarly APIs, and stress-test evaluations across 848 real-world PDFs.
+### Architectural & Engineering Documentation ([`docs/README.md`](./docs/README.md))
+- [**`docs/README.md`**](./docs/README.md) — Complete categorized index of architecture guides, citation standards, audit/benchmark reports, and implementation plans.
+- [**`docs/reports/BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md`**](./docs/reports/BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md) — Complete 120,000-sample Neuro-Symbolic benchmark methodology, international standards alignment, ablation study, confusion matrix, and 95% bootstrap confidence intervals (ready for thesis/publication inclusion).
+- [**`docs/reports/BAO_CAO_TIEN_DO_TUAN_25_10_01_11.md`**](./docs/reports/BAO_CAO_TIEN_DO_TUAN_25_10_01_11.md) & [**`docs/reports/BAO_CAO_TIEN_DO_01_11_15_11.md`**](./docs/reports/BAO_CAO_TIEN_DO_01_11_15_11.md) — Engineering & thesis progress reports covering the VI↔EN Cross-Lingual Bridge, 15+ federated scholarly APIs, and 1,064-PDF stress-test audits.
 - [**`CLAUDE.md`**](./CLAUDE.md) — Developer & AI Agent quick-reference guide to the CITRA Neuro-Symbolic architecture.
-- [**`docs/SOURCELOGIC_CONCEPT.md`**](./docs/SOURCELOGIC_CONCEPT.md) — Design system specification for the *SourceLogic Scholarly* UI.
-- [**`docs/TEACHER_SYSTEM.md`**](./docs/TEACHER_SYSTEM.md) — Role-Based Access Control (`user` / `teacher` / `admin`), classroom cohort management, and pending review workflows.
-- [**`docs/PREMIUM_SUBSCRIPTION_PLAN.md`**](./docs/PREMIUM_SUBSCRIPTION_PLAN.md) — SaaS tier architecture (`Basic` / `Pro` / `Ultra`), quota gating, and dual-mode Stripe billing specification.
-- [**`docs/PERFORMANCE_AND_SEO_OPTIMIZATION.md`**](./docs/PERFORMANCE_AND_SEO_OPTIMIZATION.md) — 5-layer production performance optimization (TanStack Query cache sharing, SQLite FTS5 RAM cache, composite B-Tree indexes, N+1 batch loading, and Technical SEO).
-- [**`docs/format_development_guide.md`**](./docs/format_development_guide.md) — Developer guide for extending modular citation format patterns in `src/integrity_checker/extraction/patterns/`.
+- [**`docs/architecture/SOURCELOGIC_CONCEPT.md`**](./docs/architecture/SOURCELOGIC_CONCEPT.md) — Design system specification for the *SourceLogic Scholarly* UI.
+- [**`docs/architecture/TEACHER_SYSTEM.md`**](./docs/architecture/TEACHER_SYSTEM.md) — Role-Based Access Control (`user` / `teacher` / `admin`), classroom cohort management, and pending review workflows.
+- [**`docs/architecture/PREMIUM_SUBSCRIPTION_PLAN.md`**](./docs/architecture/PREMIUM_SUBSCRIPTION_PLAN.md) — SaaS tier architecture (`Basic` / `Pro` / `Ultra`), quota gating, and dual-mode Stripe billing specification.
+- [**`docs/architecture/PERFORMANCE_AND_SEO_OPTIMIZATION.md`**](./docs/architecture/PERFORMANCE_AND_SEO_OPTIMIZATION.md) — 5-layer production performance optimization (TanStack Query cache sharing, SQLite FTS5 RAM cache, composite B-Tree indexes, N+1 batch loading, and Technical SEO).
+- [**`docs/architecture/format_development_guide.md`**](./docs/architecture/format_development_guide.md) — Developer guide for extending modular citation format patterns in `src/integrity_checker/extraction/patterns/`.
 - [**`docs/reference/tai_lieu_tham_khao_TDTU.md`**](./docs/reference/tai_lieu_tham_khao_TDTU.md) & [**`docs/reference/citation-styles.md`**](./docs/reference/citation-styles.md) — Ton Duc Thang University (TDTU) official citation guidelines and 12 international citation style specifications.
 
 ### Contributors — Capstone Graduation Thesis (ĐATN)

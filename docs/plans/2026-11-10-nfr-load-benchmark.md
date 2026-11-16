@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.11+ standard profiling (`time.perf_counter`, `tracemalloc`, `resource`), `asyncio`, SQLAlchemy 2.0 (`NullPool`, SQLite `busy_timeout=30000`), SQLite FTS5 (`LocalDatabase`), PyMuPDF (`fitz`), GROBID TEI cache, Sentence-BERT (`all-MiniLM-L6-v2`), `pytest`, `ruff`.
 
-**Spec:** `docs/superpowers/specs/2026-11-10-nfr-load-benchmark-design.md`
+**Spec:** `docs/plans/2026-11-10-nfr-load-benchmark-design.md`
 
 ## Global Constraints
 

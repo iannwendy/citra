@@ -8,7 +8,7 @@
 
 **Tech Stack:** Remotion `4.0.539`, React 18, TypeScript, Node 24 (`node --test`), Python 3 (`numpy`, `scipy`, `Pillow`), Homebrew `ffmpeg` (`libsvtav1`, `libx265`, `libx264`, `aac_at`), Vite + Vitest (`web/`).
 
-**Spec:** `docs/superpowers/specs/2026-11-15-citra-promo-90s-120fps-design.md`
+**Spec:** `docs/plans/2026-11-15-citra-promo-90s-120fps-design.md`
 
 ## Global Constraints
 
