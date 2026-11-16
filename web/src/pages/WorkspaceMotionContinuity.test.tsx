@@ -284,9 +284,10 @@ describe('Task 7 — Core Workspace Continuity', () => {
     // Footer must live inside scrollable #main-content (only visible when scrolled to the bottom, not pinned)
     expect(mainEl.contains(footerEl)).toBe(true);
 
-    // Default expanded state
+    // Default expanded state uses sleek balanced 232px width (eliminating bloated 288px w-72 dead space)
     expect(sidebar.getAttribute('data-collapsed')).toBe('false');
-    expect(sidebar.className).toContain('lg:w-72');
+    expect(sidebar.className).toContain('lg:w-[232px]');
+    expect(sidebar.className).not.toContain('lg:w-72');
     expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
     // Main content container must NOT be clamped to old max-w-6xl (1152px)
     expect(mainContainer.className).not.toContain('max-w-6xl');
@@ -337,12 +338,16 @@ describe('Task 7 — Core Workspace Continuity', () => {
 
     // Outer sidebar does NOT clutter nav with standalone /settings link or standalone Sign out button
     expect(sidebar.querySelector('nav a[href="/settings"]')).toBeNull();
-    expect(screen.queryByTestId('sidebar-account-popover')).toBeNull();
+    const initialPopover = screen.getByTestId('sidebar-account-popover');
+    expect(initialPopover.className).toContain('citra-account-popover-gpu');
+    expect(initialPopover.getAttribute('data-open')).toBe('false');
+    expect(initialPopover.getAttribute('aria-hidden')).toBe('true');
 
-    // Admin Console uses #21 AccordionExpand (.t-acc-panel) so it animates smoothly both opening AND closing
+    // Admin Console uses pure 120fps GPU compositor animation (.citra-admin-accordion-gpu, zero blur/grid-row layout thrash)
     const adminToggle = screen.getByTestId('sidebar-admin-console-toggle');
     const adminPanel = screen.getByTestId('sidebar-admin-console-panel');
-    expect(adminPanel.className).toContain('t-acc-panel');
+    expect(adminPanel.className).toContain('citra-admin-accordion-gpu');
+    expect(adminPanel.className).not.toContain('t-acc-panel');
     expect(adminToggle.getAttribute('aria-expanded')).toBe('false');
     expect(adminPanel.getAttribute('data-open')).toBe('false');
     expect(adminPanel.getAttribute('aria-hidden')).toBe('true');
@@ -364,14 +369,19 @@ describe('Task 7 — Core Workspace Continuity', () => {
     expect(adminPanel.getAttribute('data-open')).toBe('false');
     expect(screen.getByTestId('sidebar-admin-console-panel')).toBeDefined();
 
-    // Clicking bottom Account Pill opens ChatGPT-style Account Popover with personal & preference controls
+    // Clicking bottom Account Pill opens ChatGPT-style Account Popover smoothly at 120fps, and clicking again animates closed
     const accountTrigger = screen.getByTestId('sidebar-account-trigger');
     fireEvent.click(accountTrigger);
     const popover = screen.getByTestId('sidebar-account-popover');
-    expect(popover).toBeDefined();
+    expect(popover.getAttribute('data-open')).toBe('true');
+    expect(popover.getAttribute('aria-hidden')).toBe('false');
     expect(popover.querySelector('a[href="/profile"]')).not.toBeNull();
     expect(popover.querySelector('a[href="/pricing"]')).not.toBeNull();
     expect(popover.querySelector('a[href="/settings"]')).not.toBeNull();
     expect(screen.getByTestId('account-popover-signout')).toBeDefined();
+
+    fireEvent.click(accountTrigger);
+    expect(popover.getAttribute('data-open')).toBe('false');
+    expect(popover.getAttribute('aria-hidden')).toBe('true');
   });
 });

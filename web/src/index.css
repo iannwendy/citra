@@ -1549,3 +1549,116 @@ html[lang='vi'] .font-solva-serif,
     max-width: 88rem;
   }
 }
+
+/* ============================================================================
+   120Hz ProMotion GPU-Composited Sidebar Accordion (.citra-admin-accordion-gpu)
+   Zero per-frame grid-row layout thrashing & zero Gaussian blur rasterization.
+   ============================================================================ */
+.citra-admin-accordion-gpu {
+  overflow: hidden;
+  contain: layout style paint;
+}
+
+.citra-admin-accordion-gpu[data-open="false"] {
+  max-height: 0px;
+  pointer-events: none;
+  transition: max-height 0ms linear 175ms;
+}
+
+.citra-admin-accordion-gpu[data-open="true"] {
+  max-height: 220px;
+  pointer-events: auto;
+  transition: max-height 0ms linear 0ms;
+}
+
+.citra-admin-accordion-gpu-inner {
+  will-change: transform, opacity, clip-path;
+  backface-visibility: hidden;
+  transform-origin: top center;
+}
+
+.citra-admin-accordion-gpu[data-open="false"] > .citra-admin-accordion-gpu-inner {
+  opacity: 0;
+  transform: translate3d(0, -8px, 0) scale3d(0.985, 0.96, 1);
+  clip-path: inset(0% 0% 100% 0% round 10px);
+  transition:
+    transform 170ms cubic-bezier(0.32, 0, 0.67, 0),
+    opacity 145ms cubic-bezier(0.32, 0, 0.67, 0),
+    clip-path 170ms cubic-bezier(0.32, 0, 0.67, 0);
+}
+
+.citra-admin-accordion-gpu[data-open="true"] > .citra-admin-accordion-gpu-inner {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+  clip-path: inset(0% 0% 0% 0% round 10px);
+  transition:
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 210ms cubic-bezier(0.16, 1, 0.3, 1),
+    clip-path 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.citra-admin-item-gpu {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+.citra-admin-accordion-gpu[data-open="false"] .citra-admin-item-gpu {
+  opacity: 0;
+  transform: translate3d(-4px, -5px, 0);
+  transition:
+    transform 140ms cubic-bezier(0.32, 0, 0.67, 0) 0ms,
+    opacity 120ms linear 0ms;
+}
+
+.citra-admin-accordion-gpu[data-open="true"] .citra-admin-item-gpu {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform 250ms cubic-bezier(0.16, 1, 0.3, 1) var(--stagger-ms, 0ms),
+    opacity 200ms cubic-bezier(0.16, 1, 0.3, 1) var(--stagger-ms, 0ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .citra-admin-accordion-gpu,
+  .citra-admin-accordion-gpu > .citra-admin-accordion-gpu-inner,
+  .citra-admin-accordion-gpu .citra-admin-item-gpu,
+  .citra-account-popover-gpu {
+    transition: none !important;
+  }
+}
+
+/* ============================================================================
+   120Hz ProMotion GPU-Composited Account Popover (.citra-account-popover-gpu)
+   Warm-mounted GPU layer: springs up from Avatar on open, glides down on close.
+   ============================================================================ */
+.citra-account-popover-gpu {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  transform-origin: 24px 100%;
+}
+
+.citra-account-popover-gpu[data-rail="true"] {
+  transform-origin: 0% 92%;
+}
+
+.citra-account-popover-gpu[data-open="false"] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate3d(0, 10px, 0) scale3d(0.95, 0.95, 1);
+  transition:
+    transform 165ms cubic-bezier(0.32, 0, 0.67, 0) 0ms,
+    opacity 135ms cubic-bezier(0.32, 0, 0.67, 0) 0ms,
+    visibility 0ms linear 170ms;
+}
+
+.citra-account-popover-gpu[data-open="true"] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+  transition:
+    transform 235ms cubic-bezier(0.16, 1, 0.3, 1) 0ms,
+    opacity 180ms cubic-bezier(0.16, 1, 0.3, 1) 0ms,
+    visibility 0ms linear 0ms;
+}

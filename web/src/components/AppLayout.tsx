@@ -359,16 +359,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — Tailored 232px desktop width (no dead right whitespace) <-> 72px Slim Icon Rail */}
       <aside
         data-testid="app-sidebar"
         data-collapsed={isDesktopCollapsed ? 'true' : 'false'}
         style={{ viewTransitionName: 'citra-app-sidebar' }}
         className={`
           fixed lg:static inset-y-0 left-0 z-50
-          w-72 ${isDesktopCollapsed ? 'lg:w-[72px]' : 'lg:w-72'} max-w-[85vw] h-screen supports-[height:100dvh]:h-dvh shrink-0 overflow-hidden bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800/80
-          transform transition-[transform,width] ease-[cubic-bezier(0.22,1,0.36,1)]
-          lg:transform-none lg:duration-250
+          w-64 ${isDesktopCollapsed ? 'lg:w-[72px]' : 'lg:w-[232px]'} max-w-[85vw] h-screen supports-[height:100dvh]:h-dvh shrink-0 overflow-hidden bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800/80
+          transform transition-[transform,width] ease-[cubic-bezier(0.16,1,0.3,1)]
+          lg:transform-none lg:duration-[240ms]
           ${mobileOpen ? 'translate-x-0 shadow-2xl duration-[var(--panel-open-dur)]' : '-translate-x-full lg:translate-x-0 duration-[var(--panel-close-dur)]'}
         `}
       >
@@ -422,7 +422,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <NotificationCenterButton lang={currentLang} />
             </div>
           ) : (
-            <div className="px-4 py-3.5 border-b border-slate-200/80 dark:border-slate-800/80 bg-gradient-to-b from-slate-50/60 to-transparent dark:from-slate-950/40 flex items-center justify-between gap-2 shrink-0">
+            <div className="px-3.5 py-3 border-b border-slate-200/80 dark:border-slate-800/80 bg-gradient-to-b from-slate-50/60 to-transparent dark:from-slate-950/40 flex items-center justify-between gap-2 shrink-0">
               <Link
                 to="/dashboard"
                 onClick={() => setMobileOpen(false)}
@@ -440,7 +440,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     className="object-contain select-none dark:brightness-150 dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.45)]"
                   />
                 </span>
-                <span className="font-solva-sans text-[20px] font-medium tracking-[-0.02em] leading-none text-[#1C1A15] dark:text-[#FBFAF6]">
+                <span className="font-solva-sans text-[19px] font-medium tracking-[-0.02em] leading-none text-[#1C1A15] dark:text-[#FBFAF6]">
                   CITRA
                 </span>
               </Link>
@@ -466,7 +466,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <nav
             onScroll={hideRailTooltip}
             className={`flex-1 overflow-y-auto scrollbar-none ${
-              isDesktopCollapsed ? 'px-2 py-3 space-y-1' : 'px-3 py-3.5 space-y-1.5'
+              isDesktopCollapsed ? 'px-2 py-3 space-y-1' : 'px-2.5 py-3 space-y-1.5'
             }`}
           >
             {SIDEBAR_GROUPS.map((group, groupIdx) => {
@@ -478,7 +478,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               );
               if (visibleItems.length === 0) return null;
               return (
-                <div key={group.labelKey} className={!isDesktopCollapsed && group.roles ? 'pt-2' : ''}>
+                <div key={group.labelKey} className={!isDesktopCollapsed && group.roles ? 'pt-1.5' : ''}>
                   {isDesktopCollapsed ? (
                     groupIdx > 0 && (
                       <div
@@ -487,7 +487,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                       />
                     )
                   ) : (
-                    <p className="px-[18px] py-1.5 text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                    <p className="px-3.5 py-1 text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                       {t(group.labelKey)}
                     </p>
                   )}
@@ -518,12 +518,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           onFocus={(e) => showRailTooltip(e.currentTarget, itemLabel)}
                           onBlur={hideRailTooltip}
                           className={`
-                            relative flex items-center rounded-xl text-sm font-medium
-                            transition-[background-color,color,box-shadow] duration-200
+                            relative flex items-center rounded-xl text-[13.5px] font-medium
+                            transition-[background-color,color,box-shadow] duration-150
                             ${
                               isDesktopCollapsed
                                 ? 'justify-center h-10 w-10 mx-auto px-0'
-                                : 'gap-3 pl-[18px] pr-3.5 py-2'
+                                : 'gap-2.5 pl-3.5 pr-2.5 py-2'
                             }
                             ${
                               active
@@ -537,9 +537,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                               layoutId="citra-sidebar-active-bar"
                               transition={SPRING_PILL}
                               data-testid="sidebar-active-indicator"
-                              className={`absolute ${
-                                isDesktopCollapsed ? 'left-1' : 'left-1.5'
-                              } top-2 bottom-2 w-1 rounded-full bg-indigo-600 dark:bg-indigo-400`}
+                              className="absolute left-1 top-2 bottom-2 w-1 rounded-full bg-indigo-600 dark:bg-indigo-400"
                             />
                           )}
                           <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-indigo-600 dark:text-indigo-400' : ''}`} />
@@ -610,7 +608,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               const adminLabel = currentLang === 'vi' ? 'Quản trị hệ thống' : 'Admin Console';
 
               return (
-                <div className={isDesktopCollapsed ? '' : 'pt-2'}>
+                <div className={isDesktopCollapsed ? '' : 'pt-1.5'}>
                   {isDesktopCollapsed && (
                     <div
                       aria-hidden="true"
@@ -626,17 +624,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     onClick={() => setAdminConsoleOpen((prev) => !prev)}
                     onMouseEnter={(e) => showRailTooltip(e.currentTarget, adminLabel)}
                     onMouseLeave={hideRailTooltip}
-                    className={`w-full flex items-center rounded-xl text-sm font-medium transition-colors cursor-pointer ${
+                    className={`w-full flex items-center rounded-xl text-[13.5px] font-medium transition-colors duration-150 cursor-pointer ${
                       isDesktopCollapsed
                         ? 'justify-center h-10 w-10 mx-auto px-0'
-                        : 'justify-between gap-2 pl-[18px] pr-3 py-2'
+                        : 'justify-between gap-2 pl-3.5 pr-2.5 py-2'
                     } ${
                       isAdminRouteActive && !adminConsoleOpen
                         ? 'bg-indigo-50/90 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-semibold ring-1 ring-indigo-500/20'
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-800/60'
                     }`}
                   >
-                    <span className="flex items-center gap-3 min-w-0">
+                    <span className="flex items-center gap-2.5 min-w-0">
                       <Shield
                         className={`h-4 w-4 shrink-0 ${
                           isAdminRouteActive ? 'text-indigo-600 dark:text-indigo-400' : ''
@@ -653,25 +651,25 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     )}
                   </button>
 
-                  {/* #21 Smooth 120fps Accordion Expand/Collapse + Staggered Item Cascade */}
+                  {/* Pure 120Hz ProMotion GPU-Composited Accordion (0ms Layout / 0ms Blur Paint) */}
                   <div
                     data-testid="sidebar-admin-console-panel"
                     data-open={adminConsoleOpen ? 'true' : 'false'}
                     aria-hidden={!adminConsoleOpen}
-                    className="t-acc-panel"
+                    className="citra-admin-accordion-gpu"
                   >
-                    <div className="t-acc-panel-inner">
+                    <div className="citra-admin-accordion-gpu-inner">
                       <div
                         className={
                           isDesktopCollapsed
                             ? 'pt-1 space-y-0.5'
-                            : 'relative mt-1 ml-5 pl-2.5 space-y-0.5'
+                            : 'relative mt-1 ml-4 pl-2.5 space-y-0.5'
                         }
                       >
                         {!isDesktopCollapsed && (
                           <span
                             aria-hidden="true"
-                            className={`pointer-events-none absolute left-0 top-1 bottom-1 w-px bg-slate-200/90 dark:bg-slate-800 origin-top transition-[transform,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                            className={`pointer-events-none absolute left-0 top-1 bottom-1 w-px bg-slate-200/90 dark:bg-slate-800 origin-top transition-[transform,opacity] duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)] ${
                               adminConsoleOpen ? 'scale-y-100 opacity-100' : 'scale-y-50 opacity-0'
                             }`}
                           />
@@ -696,17 +694,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                               }}
                               onMouseEnter={(e) => showRailTooltip(e.currentTarget, itemLabel)}
                               onMouseLeave={hideRailTooltip}
-                              style={{
-                                transitionDelay: adminConsoleOpen ? `${idx * 30}ms` : '0ms',
-                              }}
-                              className={`relative flex items-center rounded-xl text-[13px] font-medium transition-[transform,opacity,background-color,color] ${
-                                adminConsoleOpen
-                                  ? 'opacity-100 translate-y-0 duration-220 ease-[cubic-bezier(0.22,1,0.36,1)]'
-                                  : 'opacity-0 -translate-y-1.5 pointer-events-none duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]'
-                              } ${
+                              style={
+                                {
+                                  '--stagger-ms': `${idx * 22}ms`,
+                                } as React.CSSProperties
+                              }
+                              className={`citra-admin-item-gpu relative flex items-center rounded-xl text-[13px] font-medium ${
                                 isDesktopCollapsed
                                   ? 'justify-center h-9 w-10 mx-auto px-0'
-                                  : 'gap-2.5 px-3 py-1.5'
+                                  : 'gap-2.5 px-2.5 py-1.5'
                               } ${
                                 active
                                   ? 'bg-indigo-50/90 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-semibold'
@@ -740,7 +736,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <div
             data-testid="sidebar-quota-card"
             className={`border-t border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-900/50 shrink-0 ${
-              isDesktopCollapsed ? 'p-2 flex flex-col items-center gap-1.5' : 'p-2.5 space-y-1.5'
+              isDesktopCollapsed ? 'p-2 flex flex-col items-center gap-1.5' : 'p-2 space-y-1.5'
             }`}
           >
             {isBasic && (
@@ -761,15 +757,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 className={
                   isDesktopCollapsed
                     ? 'h-9 w-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white inline-flex items-center justify-center transition-colors shadow-2xs'
-                    : 'w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shadow-2xs'
+                    : 'w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shadow-2xs'
                 }
               >
                 <Sparkles className="h-3.5 w-3.5 shrink-0" />
                 {!isDesktopCollapsed && (
-                  <span>
+                  <span className="truncate">
                     {currentLang === 'vi'
                       ? 'Nâng cấp Pro · $16/th'
-                      : 'Upgrade to Pro · $16/mo'}
+                      : 'Upgrade Pro · $16/mo'}
                   </span>
                 )}
               </Link>
@@ -795,31 +791,31 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               className={`w-full flex items-center rounded-xl transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                 isDesktopCollapsed
                   ? 'justify-center p-1 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  : 'gap-2.5 px-2.5 py-2 hover:bg-white dark:hover:bg-slate-800/90 border border-transparent hover:border-slate-200/90 dark:hover:border-slate-700'
+                  : 'gap-2.5 px-2 py-1.5 hover:bg-white dark:hover:bg-slate-800/90 border border-transparent hover:border-slate-200/90 dark:hover:border-slate-700'
               } ${
                 accountMenuOpen
                   ? 'bg-white dark:bg-slate-800 border-slate-200/90 dark:border-slate-700 shadow-2xs'
                   : ''
               }`}
             >
-              <Avatar className="h-9 w-9 border-2 border-indigo-200 dark:border-indigo-800 shrink-0">
+              <Avatar className="h-8 w-8 border-2 border-indigo-200 dark:border-indigo-800 shrink-0">
                 {user?.avatar_url ? (
                   <AvatarImage src={user.avatar_url} alt={user?.username} />
                 ) : (
                   <AvatarFallback>
-                    <User className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                    <User className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
                   </AvatarFallback>
                 )}
               </Avatar>
 
               <div className={isDesktopCollapsed ? 'sr-only' : 'flex-1 min-w-0 text-left'}>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate leading-tight">
+                <p className="text-[13px] font-semibold text-slate-900 dark:text-slate-100 truncate leading-tight">
                   {user?.full_name || user?.username || 'User'}
                 </p>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span
                     data-testid="sidebar-plan-badge"
-                    className={`px-1.5 py-0.2 rounded text-[9.5px] font-mono font-bold uppercase leading-tight ${
+                    className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold uppercase leading-tight ${
                       planTier === 'ultra'
                         ? 'bg-violet-600 text-white'
                         : planTier === 'pro'
@@ -829,10 +825,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   >
                     {planTier.toUpperCase()}
                   </span>
-                  <span className="text-[11px] text-slate-400">·</span>
+                  <span className="text-[10.5px] text-slate-400">·</span>
                   <span
                     data-testid="sidebar-quota-text"
-                    className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate"
+                    className="text-[10.5px] font-mono text-slate-500 dark:text-slate-400 truncate"
                   >
                     {sidebarQuota.uploadsUnlimited
                       ? sidebarQuota.usage
@@ -842,198 +838,220 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
 
               {!isDesktopCollapsed && (
-                <ChevronsUpDown className="h-4 w-4 text-slate-400 shrink-0" />
+                <ChevronsUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
               )}
             </button>
           </div>
         </div>
       </aside>
 
-      {/* ChatGPT-Style Floating Bottom-Left Account Popover Menu */}
-      {accountMenuOpen && (
-        <div
-          ref={accountMenuRef}
-          role="menu"
-          data-testid="sidebar-account-popover"
-          className={`fixed z-[75] rounded-2xl border border-slate-200/90 dark:border-slate-700/90 bg-white dark:bg-slate-900 shadow-2xl p-2 text-sm animate-in fade-in zoom-in-95 duration-150 ${
-            isDesktopCollapsed
-              ? 'bottom-3 left-3 lg:left-[80px] w-[272px]'
-              : 'bottom-16 left-3 w-[264px]'
-          }`}
-        >
-          {/* Identity & Quota Header */}
-          <div className="px-3 py-2.5 rounded-xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-800 mb-1.5 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
-                  {user?.email || user?.username || 'User'}
-                </p>
-                <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 capitalize">
-                  {user?.role || 'user'} · {planTier.toUpperCase()}
-                </p>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
-                <span>{currentLang === 'vi' ? 'Lượt kiểm tra tháng' : 'Monthly Checks'}</span>
-                <span className="font-mono font-semibold text-slate-900 dark:text-white">
-                  {sidebarQuota.uploadsUnlimited
-                    ? sidebarQuota.usage
-                    : `${quota.monthly_uploads_used} / ${quota.monthly_uploads_limit}`}
-                </span>
-              </div>
-              <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${
-                    sidebarQuota.exhausted ? 'bg-red-500' : 'bg-indigo-600 dark:bg-indigo-400'
-                  }`}
-                  style={{
-                    width: `${sidebarQuota.uploadsUnlimited ? 100 : sidebarQuota.percent}%`,
-                  }}
-                />
-              </div>
-            </div>
+      {/* ChatGPT-Style Floating Bottom-Left Account Popover Menu (Warm-mounted 120Hz GPU Open & Close) */}
+      <div
+        ref={accountMenuRef}
+        role="menu"
+        data-testid="sidebar-account-popover"
+        data-open={accountMenuOpen ? 'true' : 'false'}
+        data-rail={isDesktopCollapsed ? 'true' : 'false'}
+        aria-hidden={!accountMenuOpen}
+        className={`citra-account-popover-gpu fixed z-[75] rounded-2xl border border-slate-200/90 dark:border-slate-700/90 bg-white dark:bg-slate-900 shadow-[0_18px_42px_-10px_rgba(15,23,42,0.22)] dark:shadow-[0_20px_48px_-10px_rgba(0,0,0,0.7)] p-1.5 text-sm ${
+          isDesktopCollapsed
+            ? 'bottom-3 left-3 lg:left-[80px] w-[244px]'
+            : 'bottom-[58px] left-2 w-[216px]'
+        }`}
+      >
+        {/* Identity & Quota Header */}
+        <div className="px-2.5 py-2 rounded-xl bg-slate-50/90 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-800 mb-1 space-y-1.5">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
+              {user?.email || user?.username || 'User'}
+            </p>
+            <p className="text-[10.5px] font-mono text-slate-500 dark:text-slate-400 capitalize">
+              {user?.role || 'user'} · {planTier.toUpperCase()}
+            </p>
           </div>
-
-          {/* Personal & Plan Links */}
-          <div className="space-y-0.5">
-            <Link
-              to="/profile"
-              onClick={() => {
-                setAccountMenuOpen(false);
-                setMobileOpen(false);
-              }}
-              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              <User className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
-              <span>{t('nav.viewProfile')}</span>
-            </Link>
-
-            <Link
-              to="/pricing"
-              onClick={() => {
-                setAccountMenuOpen(false);
-                setMobileOpen(false);
-              }}
-              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-              <span>{t('nav.pricing')}</span>
-            </Link>
-
-            <Link
-              to="/settings"
-              onClick={() => {
-                setAccountMenuOpen(false);
-                setMobileOpen(false);
-              }}
-              className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              <Settings className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
-              <span>{t('nav.settings')}</span>
-            </Link>
-          </div>
-
-          <div className="my-1.5 h-px bg-slate-200/80 dark:bg-slate-800" />
-
-          {/* Inline Theme & Language Segmented Controls */}
-          <div className="px-2.5 py-1.5 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                {t('nav.theme')}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[10.5px] text-slate-600 dark:text-slate-400">
+              <span className="truncate">{currentLang === 'vi' ? 'Lượt tháng' : 'Monthly Checks'}</span>
+              <span className="font-mono font-semibold text-slate-900 dark:text-white shrink-0">
+                {sidebarQuota.uploadsUnlimited
+                  ? sidebarQuota.usage
+                  : `${quota.monthly_uploads_used} / ${quota.monthly_uploads_limit}`}
               </span>
-              <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700">
-                {([
-                  { key: 'light', icon: Sun, label: 'Light' },
-                  { key: 'dark', icon: Moon, label: 'Dark' },
-                  { key: 'system', icon: Monitor, label: 'System' },
-                ] as const).map(({ key, icon: ModeIcon, label }) => {
-                  const activeMode = theme === key;
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      title={label}
-                      aria-label={label}
-                      onClick={() => setTheme(key)}
-                      className={`h-6 w-7 rounded-md inline-flex items-center justify-center transition-all cursor-pointer ${
-                        activeMode
-                          ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
-                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                      }`}
-                    >
-                      <ModeIcon className="h-3.5 w-3.5" />
-                    </button>
-                  );
-                })}
-              </div>
             </div>
-
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                <Globe className="h-3.5 w-3.5 text-slate-400" />
-                <span>{currentLang === 'vi' ? 'Ngôn ngữ' : 'Language'}</span>
-              </span>
-              <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[11px] font-mono font-bold">
-                {(['vi', 'en'] as const).map((lng) => {
-                  const isCurr = currentLang === lng;
-                  return (
-                    <button
-                      key={lng}
-                      type="button"
-                      onClick={() => handleSelectLanguage(lng)}
-                      className={`px-2.5 py-0.5 rounded-md uppercase transition-all cursor-pointer ${
-                        isCurr
-                          ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
-                          : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-                      }`}
-                    >
-                      {lng}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-[width] duration-300 ${
+                  sidebarQuota.exhausted ? 'bg-red-500' : 'bg-indigo-600 dark:bg-indigo-400'
+                }`}
+                style={{
+                  width: `${sidebarQuota.uploadsUnlimited ? 100 : sidebarQuota.percent}%`,
+                }}
+              />
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setAccountMenuOpen(false);
-              setHelpOpen(true);
-            }}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-[13px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <span className="flex items-center gap-2.5">
-              <HelpCircle className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
-              <span>{t('nav.helpShortcuts')}</span>
-            </span>
-            <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500">
-              Ctrl+/
-            </kbd>
-          </button>
-
-          <div className="my-1.5 h-px bg-slate-200/80 dark:bg-slate-800" />
-
-          <button
-            type="button"
-            data-testid="account-popover-signout"
-            onClick={() => {
-              setAccountMenuOpen(false);
-              void handleLogout();
-            }}
-            disabled={loggingOut}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/35 transition-colors disabled:opacity-50 cursor-pointer"
-          >
-            {loggingOut ? (
-              <div className="h-4 w-4 border-2 border-red-600/30 border-t-red-600 rounded-full animate-spin" />
-            ) : (
-              <LogOut className="h-4 w-4 shrink-0" />
-            )}
-            <span>{loggingOut ? t('nav.signingOut') : t('nav.signOut')}</span>
-          </button>
         </div>
-      )}
+
+        {/* Personal & Plan Links */}
+        <div className="space-y-0.5">
+          <Link
+            to="/profile"
+            tabIndex={accountMenuOpen ? undefined : -1}
+            onClick={() => {
+              setAccountMenuOpen(false);
+              setMobileOpen(false);
+            }}
+            className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-[13px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <User className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
+            <span className="truncate">{t('nav.viewProfile')}</span>
+          </Link>
+
+          <Link
+            to="/pricing"
+            tabIndex={accountMenuOpen ? undefined : -1}
+            onClick={() => {
+              setAccountMenuOpen(false);
+              setMobileOpen(false);
+            }}
+            className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-[13px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span className="truncate">{t('nav.pricing')}</span>
+          </Link>
+
+          <Link
+            to="/settings"
+            tabIndex={accountMenuOpen ? undefined : -1}
+            onClick={() => {
+              setAccountMenuOpen(false);
+              setMobileOpen(false);
+            }}
+            className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-[13px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <Settings className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
+            <span className="truncate">{t('nav.settings')}</span>
+          </Link>
+        </div>
+
+        <div className="my-1 h-px bg-slate-200/80 dark:bg-slate-800" />
+
+        {/* Inline Theme & Language Segmented Controls with 120fps Sliding Pill Thumb */}
+        <div className="px-2.5 py-1.5 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
+              {t('nav.theme')}
+            </span>
+            <div className="relative grid grid-cols-3 p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shrink-0">
+              <span
+                aria-hidden="true"
+                style={{
+                  transform: `translate3d(${
+                    theme === 'light' ? '0%' : theme === 'dark' ? '100%' : '200%'
+                  }, 0, 0)`,
+                }}
+                className="pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 w-[calc((100%-4px)/3)] rounded-md bg-white dark:bg-slate-900 shadow-2xs transition-transform duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+              />
+              {([
+                { key: 'light', icon: Sun, label: 'Light' },
+                { key: 'dark', icon: Moon, label: 'Dark' },
+                { key: 'system', icon: Monitor, label: 'System' },
+              ] as const).map(({ key, icon: ModeIcon, label }) => {
+                const activeMode = theme === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    tabIndex={accountMenuOpen ? undefined : -1}
+                    title={label}
+                    aria-label={label}
+                    onClick={() => setTheme(key)}
+                    className={`relative z-10 h-6 w-6 rounded-md inline-flex items-center justify-center transition-colors cursor-pointer ${
+                      activeMode
+                        ? 'text-slate-900 dark:text-white'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    <ModeIcon className="h-3.5 w-3.5" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 min-w-0">
+              <Globe className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <span className="truncate">{currentLang === 'vi' ? 'Ngôn ngữ' : 'Language'}</span>
+            </span>
+            <div className="relative grid grid-cols-2 p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[10.5px] font-mono font-bold shrink-0">
+              <span
+                aria-hidden="true"
+                style={{
+                  transform: `translate3d(${currentLang === 'vi' ? '0%' : '100%'}, 0, 0)`,
+                }}
+                className="pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 w-[calc((100%-4px)/2)] rounded-md bg-white dark:bg-slate-900 shadow-2xs transition-transform duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+              />
+              {(['vi', 'en'] as const).map((lng) => {
+                const isCurr = currentLang === lng;
+                return (
+                  <button
+                    key={lng}
+                    type="button"
+                    tabIndex={accountMenuOpen ? undefined : -1}
+                    onClick={() => handleSelectLanguage(lng)}
+                    className={`relative z-10 px-2 py-0.5 rounded-md uppercase transition-colors cursor-pointer ${
+                      isCurr
+                        ? 'text-slate-900 dark:text-white'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    {lng}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          tabIndex={accountMenuOpen ? undefined : -1}
+          onClick={() => {
+            setAccountMenuOpen(false);
+            setHelpOpen(true);
+          }}
+          className="w-full flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-xl text-[12.5px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <HelpCircle className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
+            <span className="truncate">{t('nav.helpShortcuts')}</span>
+          </span>
+          <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500 shrink-0">
+            Ctrl+/
+          </kbd>
+        </button>
+
+        <div className="my-1 h-px bg-slate-200/80 dark:bg-slate-800" />
+
+        <button
+          type="button"
+          tabIndex={accountMenuOpen ? undefined : -1}
+          data-testid="account-popover-signout"
+          onClick={() => {
+            setAccountMenuOpen(false);
+            void handleLogout();
+          }}
+          disabled={loggingOut}
+          className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-[13px] font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/35 transition-colors disabled:opacity-50 cursor-pointer"
+        >
+          {loggingOut ? (
+            <div className="h-4 w-4 border-2 border-red-600/30 border-t-red-600 rounded-full animate-spin" />
+          ) : (
+            <LogOut className="h-4 w-4 shrink-0" />
+          )}
+          <span>{loggingOut ? t('nav.signingOut') : t('nav.signOut')}</span>
+        </button>
+      </div>
 
       {/* Floating ChatGPT-Style Dark Rail Tooltip (Never clipped by overflow-y-auto!) */}
       {isDesktopCollapsed && railTooltip && (
