@@ -11,7 +11,7 @@ export function SandboxPage() {
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
 
   return (
-    <div className="max-w-4xl mx-auto pb-6" data-testid="sandbox-page">
+    <div className="citra-cq-page-narrow w-full max-w-4xl mx-auto pb-6 transition-[max-width] duration-300" data-testid="sandbox-page">
       <LiveCitationSandbox lang={lang} />
     </div>
   );

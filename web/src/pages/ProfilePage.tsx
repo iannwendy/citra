@@ -227,7 +227,7 @@ export function ProfilePage() {
   const dateLocale = i18n.language?.startsWith('vi') ? 'vi-VN' : 'en-US';
 
   return (
-    <div className="space-y-6 w-full max-w-4xl mx-auto pb-10">
+    <div className="citra-cq-page-narrow space-y-6 w-full max-w-4xl mx-auto pb-10 transition-[max-width] duration-300">
       {/* Executive Header Card */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
         <div className="flex flex-wrap items-start justify-between gap-4">

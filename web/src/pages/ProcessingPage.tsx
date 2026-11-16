@@ -606,7 +606,7 @@ export function ProcessingPage() {
   const legacyPagesCount = diagnostics?.legacy_encoding_pages_count ?? null;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-10">
+    <div className="citra-cq-page-narrow w-full max-w-4xl mx-auto space-y-6 pb-10 transition-[max-width] duration-300">
       {/* Executive Header Banner */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1.5 min-w-0">

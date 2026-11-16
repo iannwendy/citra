@@ -323,7 +323,7 @@ export function UploadPage() {
   const effectiveUploading = uploading || isUploadingInBackground;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-8">
+    <div className="citra-cq-page-narrow w-full max-w-4xl mx-auto space-y-6 pb-8 transition-[max-width] duration-300">
       {/* Live banner when HTTP upload is still in-flight after switching tabs */}
       {isUploadingInBackground && activeSingleCheck && (
         <div

@@ -382,7 +382,7 @@ export function BatchUploadPage() {
   ];
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-10">
+    <div className="citra-cq-page-wide w-full max-w-5xl mx-auto space-y-6 pb-10 transition-[max-width] duration-300">
       {/* Executive Header Banner */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1.5">

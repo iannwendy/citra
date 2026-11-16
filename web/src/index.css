@@ -1501,3 +1501,55 @@ html[lang='vi'] .font-solva-serif,
   background-color: #ECE9E0 !important;
   color: #1C1A15 !important;
 }
+
+/* ============================================================================
+   Fluid Container-Query Workspace Reflow (ChatGPT-Style Sidebar Collapse)
+   Dynamically adapts page column ratios & widths whenever #main-content widens.
+   ============================================================================ */
+.citra-main-cq {
+  container-type: inline-size;
+  container-name: citra-main;
+}
+
+@container citra-main (min-width: 1160px) {
+  .citra-cq-citations-left {
+    grid-column: span 4 / span 4;
+  }
+  .citra-cq-citations-right {
+    grid-column: span 8 / span 8;
+  }
+  .citra-cq-network-grid {
+    grid-template-columns: minmax(290px, 3.4fr) minmax(0, 8.6fr);
+  }
+  .citra-cq-network-left,
+  .citra-cq-network-right {
+    grid-column: auto;
+  }
+  .citra-cq-flow-stage {
+    height: 446px;
+  }
+  .citra-cq-doc-left {
+    grid-column: span 8 / span 8;
+  }
+  .citra-cq-doc-right {
+    grid-column: span 4 / span 4;
+  }
+  .citra-cq-page-narrow {
+    max-width: 68rem;
+  }
+  .citra-cq-page-wide {
+    max-width: 80rem;
+  }
+}
+
+@container citra-main (min-width: 1360px) {
+  .citra-cq-network-grid {
+    grid-template-columns: minmax(310px, 3fr) minmax(0, 9fr);
+  }
+  .citra-cq-page-narrow {
+    max-width: 76rem;
+  }
+  .citra-cq-page-wide {
+    max-width: 88rem;
+  }
+}

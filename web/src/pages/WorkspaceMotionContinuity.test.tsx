@@ -245,4 +245,71 @@ describe('Task 7 — Core Workspace Continuity', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(document.documentElement.getAttribute('data-theme-switching')).toBeNull();
   });
+
+  it('AppLayout collapses into a ChatGPT-style 72px Slim Icon Rail via toggle button & Ctrl+B while expanding the fluid main content container', () => {
+    localStorage.removeItem('citra.sidebar.collapsed');
+
+    renderWorkspace(
+      <Routes>
+        <Route
+          path="/upload"
+          element={
+            <AppLayout>
+              <div data-testid="upload-view">Upload View</div>
+            </AppLayout>
+          }
+        />
+        <Route
+          path="/history"
+          element={
+            <AppLayout>
+              <div data-testid="history-view">History View</div>
+            </AppLayout>
+          }
+        />
+      </Routes>,
+      ['/upload'],
+    );
+
+    const sidebar = screen.getByTestId('app-sidebar');
+    const mainEl = document.getElementById('main-content') as HTMLElement;
+    const mainContainer = screen.getByTestId('app-main-container');
+    const footerEl = screen.getByTestId('app-footer');
+    const toggleBtn = screen.getByTestId('sidebar-collapse-toggle');
+
+    // Footer must live inside scrollable #main-content (only visible when scrolled to the bottom, not pinned)
+    expect(mainEl.contains(footerEl)).toBe(true);
+
+    // Default expanded state
+    expect(sidebar.getAttribute('data-collapsed')).toBe('false');
+    expect(sidebar.className).toContain('lg:w-72');
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+    // Main content container must NOT be clamped to old max-w-6xl (1152px)
+    expect(mainContainer.className).not.toContain('max-w-6xl');
+    expect(mainContainer.className).toContain('citra-main-cq');
+    expect(mainContainer.getAttribute('data-sidebar-collapsed')).toBe('false');
+
+    // Click collapse -> Slim 72px Icon Rail + persisted localStorage + expanded main container
+    fireEvent.click(toggleBtn);
+    expect(sidebar.getAttribute('data-collapsed')).toBe('true');
+    expect(sidebar.className).toContain('lg:w-[72px]');
+    expect(localStorage.getItem('citra.sidebar.collapsed')).toBe('true');
+    expect(mainContainer.getAttribute('data-sidebar-collapsed')).toBe('true');
+
+    // Icon rail keeps navigation links, active indicator, and quota metadata functional
+    const collapsedToggle = screen.getByTestId('sidebar-collapse-toggle');
+    expect(collapsedToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByTestId('sidebar-active-indicator')).toBeDefined();
+    expect(screen.getByTestId('sidebar-plan-badge')).toBeDefined();
+
+    // Navigation still works in 1 click while collapsed
+    const historyLink = document.querySelector('aside a[href="/history"]') as HTMLAnchorElement;
+    fireEvent.click(historyLink);
+    expect(screen.getByTestId('history-view')).toBeDefined();
+
+    // Ctrl+B keyboard shortcut expands sidebar back to w-72
+    fireEvent.keyDown(window, { key: 'b', ctrlKey: true });
+    expect(screen.getByTestId('app-sidebar').getAttribute('data-collapsed')).toBe('false');
+    expect(localStorage.getItem('citra.sidebar.collapsed')).toBe('false');
+  });
 });

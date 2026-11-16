@@ -1291,7 +1291,7 @@ export function InteractiveDecisionFlowBoard({
       {/* =================================================================
           LAYER 2: THE MAIN BOARD STAGE — PHYSICALLY CHOREOGRAPHED PER STEP!
           ================================================================= */}
-      <div className="relative z-10 hidden md:block h-[410px] w-full select-none">
+      <div className="citra-cq-flow-stage relative z-10 hidden md:block h-[410px] w-full select-none transition-[height] duration-300">
         {/* LIVE MAIN-BOARD STAGE HUD BANNER (Right where the user's eyes look!) */}
         {activeStepIndex !== null && stages[activeStepIndex] && (
           <div
@@ -1647,7 +1647,7 @@ export function InteractiveDecisionFlowBoard({
             setFocus({ kind: 'hub' });
           }}
           style={{
-            top: boardPhase === 'step-0' ? '220px' : '212px',
+            top: boardPhase === 'step-0' ? '53.6%' : '51.7%',
             borderColor: hubAccentHex,
             boxShadow: isDarkSurface
               ? `0 0 48px -10px ${hubAccentHex}60, 0 18px 36px -12px rgba(0,0,0,0.78)`

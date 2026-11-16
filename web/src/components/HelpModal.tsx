@@ -65,6 +65,12 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
   const shortcuts = [
     { keys: ['Ctrl', 'U'], description: t('help.shortcutUpload') },
+    {
+      keys: ['Ctrl', 'B'],
+      description: isVi
+        ? 'Thu gọn / mở rộng thanh điều hướng bên trái'
+        : 'Collapse / expand left navigation sidebar',
+    },
     { keys: ['Ctrl', '/'], description: t('help.shortcutHelp') },
     { keys: ['Esc'], description: t('help.shortcutClose') },
     { keys: ['Ctrl', 'D'], description: t('help.shortcutDark') },

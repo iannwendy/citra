@@ -3688,7 +3688,7 @@ export function EssayPage() {
               ) : (
                 <div className="grid lg:grid-cols-12">
                   {/* Left Pane: Exception-First Citation Queue (5 cols) */}
-                  <div className="lg:col-span-5 min-w-0 lg:relative lg:min-h-[680px] border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40">
+                  <div className="citra-cq-citations-left lg:col-span-5 min-w-0 lg:relative lg:min-h-[680px] border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40">
                     <div className="lg:absolute lg:inset-0 flex flex-col min-w-0">
                       {/* Sticky Search & Filter Header */}
                       <div className="p-3.5 sm:px-4 sm:py-3.5 border-b border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2.5 shrink-0">
@@ -3926,7 +3926,7 @@ export function EssayPage() {
                   )}
                   distancePx={10}
                   data-testid="citation-detail-stage"
-                  className="lg:col-span-7 min-w-0 bg-white dark:bg-slate-950"
+                  className="citra-cq-citations-right lg:col-span-7 min-w-0 bg-white dark:bg-slate-950"
                 >
                   <div className="p-4 sm:p-6 flex flex-col gap-5">
                     {/* TIER 1: Clean Identity Header + Plain-Language Diagnosis + Quick Actions */}

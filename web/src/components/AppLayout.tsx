@@ -24,8 +24,10 @@ import {
   AlertCircle,
   ArrowRight,
   Clock,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVerificationProgress } from '@/contexts/VerificationProgressContext';
@@ -117,9 +119,48 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const { toggleTheme } = useTheme();
   const toast = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return (
+        typeof window !== 'undefined' &&
+        localStorage.getItem('citra.sidebar.collapsed') === 'true'
+      );
+    } catch {
+      return false;
+    }
+  });
+  const [railTooltip, setRailTooltip] = useState<{ label: string; top: number } | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [dismissedActiveKey, setDismissedActiveKey] = useState<string | null>(null);
+
+  const isDesktopCollapsed = sidebarCollapsed && !mobileOpen;
+
+  const toggleSidebarCollapse = useCallback(() => {
+    setRailTooltip(null);
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('citra.sidebar.collapsed', String(next));
+      } catch {
+        // Ignore storage write errors in private contexts
+      }
+      return next;
+    });
+  }, []);
+
+  const showRailTooltip = useCallback(
+    (el: HTMLElement | null, label: string) => {
+      if (!isDesktopCollapsed || !el) return;
+      const rect = el.getBoundingClientRect();
+      setRailTooltip({ label, top: rect.top + rect.height / 2 });
+    },
+    [isDesktopCollapsed],
+  );
+
+  const hideRailTooltip = useCallback(() => {
+    setRailTooltip(null);
+  }, []);
 
   const currentLang = (i18n.resolvedLanguage || i18n.language || 'en').startsWith('vi')
     ? 'vi'
@@ -150,7 +191,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     );
   };
 
-  // Keyboard shortcuts: Ctrl+/ (help), Ctrl+U (upload), Ctrl+D (toggle theme)
+  // Keyboard shortcuts: Ctrl+/ (help), Ctrl+B (toggle sidebar), Ctrl+U (upload), Ctrl+D (toggle theme)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return;
@@ -163,6 +204,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       if (e.key === '/') {
         e.preventDefault();
         setHelpOpen(true);
+      } else if (!isEditable && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        toggleSidebarCollapse();
       } else if (!isEditable && e.key.toLowerCase() === 'u') {
         e.preventDefault();
         navigate('/upload');
@@ -173,7 +217,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [navigate, toggleTheme]);
+  }, [navigate, toggleTheme, toggleSidebarCollapse]);
 
   const isActive = (path: string) =>
     location.pathname === path ||
@@ -282,12 +326,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Sidebar */}
       <aside
+        data-testid="app-sidebar"
+        data-collapsed={isDesktopCollapsed ? 'true' : 'false'}
         style={{ viewTransitionName: 'citra-app-sidebar' }}
         className={`
           fixed lg:static inset-y-0 left-0 z-50
-          w-72 max-w-[85vw] h-screen supports-[height:100dvh]:h-dvh shrink-0 overflow-hidden bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800/80
-          transform transition-transform ease-[var(--panel-ease)]
-          lg:transform-none
+          w-72 ${isDesktopCollapsed ? 'lg:w-[72px]' : 'lg:w-72'} max-w-[85vw] h-screen supports-[height:100dvh]:h-dvh shrink-0 overflow-hidden bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800/80
+          transform transition-[transform,width] ease-[cubic-bezier(0.22,1,0.36,1)]
+          lg:transform-none lg:duration-250
           ${mobileOpen ? 'translate-x-0 shadow-2xl duration-[var(--panel-open-dur)]' : '-translate-x-full lg:translate-x-0 duration-[var(--panel-close-dur)]'}
         `}
       >
@@ -301,15 +347,32 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </button>
 
         <div className="flex flex-col h-full">
-          {/* Logo & Branding */}
-          <div className="p-5 border-b border-slate-200/80 dark:border-slate-800/80 bg-gradient-to-b from-slate-50/60 to-transparent dark:from-slate-950/40">
-            <Link
-              to="/dashboard"
-              onClick={() => setMobileOpen(false)}
-              aria-label="Go to dashboard"
-              className="inline-flex items-center gap-[8px] rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-            >
-              <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+          {/* Logo & ChatGPT-Style Sidebar Collapse / Expand Header */}
+          {isDesktopCollapsed ? (
+            <div className="py-3.5 px-2 border-b border-slate-200/80 dark:border-slate-800/80 bg-gradient-to-b from-slate-50/60 to-transparent dark:from-slate-950/40 flex items-center justify-center shrink-0">
+              <button
+                type="button"
+                data-testid="sidebar-collapse-toggle"
+                aria-expanded="false"
+                aria-label={currentLang === 'vi' ? 'Mở rộng thanh bên' : 'Expand sidebar'}
+                title={currentLang === 'vi' ? 'Mở thanh bên (Ctrl+B)' : 'Open sidebar (Ctrl+B)'}
+                onClick={toggleSidebarCollapse}
+                onMouseEnter={(e) =>
+                  showRailTooltip(
+                    e.currentTarget,
+                    currentLang === 'vi' ? 'Mở thanh bên · Ctrl+B' : 'Open sidebar · Ctrl+B',
+                  )
+                }
+                onMouseLeave={hideRailTooltip}
+                onFocus={(e) =>
+                  showRailTooltip(
+                    e.currentTarget,
+                    currentLang === 'vi' ? 'Mở thanh bên · Ctrl+B' : 'Open sidebar · Ctrl+B',
+                  )
+                }
+                onBlur={hideRailTooltip}
+                className="group/rail-logo relative h-10 w-10 rounded-xl bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-2xs flex items-center justify-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              >
                 <img
                   src="/citra-logo.png"
                   alt="CITRA Logo"
@@ -317,18 +380,57 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   height={18}
                   loading="eager"
                   decoding="async"
-                  className="object-contain select-none dark:brightness-150 dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.45)]"
+                  className="object-contain select-none dark:brightness-150 dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.45)] opacity-100 scale-100 group-hover/rail-logo:opacity-0 group-hover/rail-logo:scale-75 group-focus-visible/rail-logo:opacity-0 transition-all duration-150"
                 />
-              </span>
-              <span className="font-solva-sans text-[20px] font-medium tracking-[-0.02em] leading-none text-[#1C1A15] dark:text-[#FBFAF6]">
-                CITRA
-              </span>
-            </Link>
-          </div>
+                <PanelLeftOpen className="h-4 w-4 text-slate-700 dark:text-slate-200 absolute opacity-0 scale-75 group-hover/rail-logo:opacity-100 group-hover/rail-logo:scale-100 group-focus-visible/rail-logo:opacity-100 group-focus-visible/rail-logo:scale-100 transition-all duration-150" />
+              </button>
+            </div>
+          ) : (
+            <div className="px-5 py-4 border-b border-slate-200/80 dark:border-slate-800/80 bg-gradient-to-b from-slate-50/60 to-transparent dark:from-slate-950/40 flex items-center justify-between gap-2 shrink-0">
+              <Link
+                to="/dashboard"
+                onClick={() => setMobileOpen(false)}
+                aria-label="Go to dashboard"
+                className="inline-flex items-center gap-[8px] rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              >
+                <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+                  <img
+                    src="/citra-logo.png"
+                    alt="CITRA Logo"
+                    width={18}
+                    height={18}
+                    loading="eager"
+                    decoding="async"
+                    className="object-contain select-none dark:brightness-150 dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.45)]"
+                  />
+                </span>
+                <span className="font-solva-sans text-[20px] font-medium tracking-[-0.02em] leading-none text-[#1C1A15] dark:text-[#FBFAF6]">
+                  CITRA
+                </span>
+              </Link>
+
+              <button
+                type="button"
+                data-testid="sidebar-collapse-toggle"
+                aria-expanded="true"
+                aria-label={currentLang === 'vi' ? 'Thu gọn thanh bên' : 'Collapse sidebar'}
+                title={currentLang === 'vi' ? 'Thu gọn thanh bên (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'}
+                onClick={toggleSidebarCollapse}
+                className="hidden lg:inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            </div>
+          )}
 
           {/* Navigation — capability-driven */}
-          <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1.5">
-            {SIDEBAR_GROUPS.map((group) => {
+          <nav
+            onScroll={hideRailTooltip}
+            className={`flex-1 overflow-y-auto scrollbar-none ${
+              isDesktopCollapsed ? 'px-2 py-3 space-y-1' : 'px-3 py-4 space-y-1.5'
+            }`}
+          >
+            {SIDEBAR_GROUPS.map((group, groupIdx) => {
               if (group.roles && !group.roles.includes(role)) return null;
               const visibleItems = group.items.filter(
                 (item) =>
@@ -337,10 +439,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               );
               if (visibleItems.length === 0) return null;
               return (
-                <div key={group.labelKey} className={group.roles ? 'pt-2' : ''}>
-                  <p className="px-[18px] py-1.5 text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                    {t(group.labelKey)}
-                  </p>
+                <div key={group.labelKey} className={!isDesktopCollapsed && group.roles ? 'pt-2' : ''}>
+                  {isDesktopCollapsed ? (
+                    groupIdx > 0 && (
+                      <div
+                        aria-hidden="true"
+                        className="my-2 mx-auto w-6 h-px bg-slate-200/80 dark:bg-slate-800"
+                      />
+                    )
+                  ) : (
+                    <p className="px-[18px] py-1.5 text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                      {t(group.labelKey)}
+                    </p>
+                  )}
                   <div className="space-y-0.5">
                     {visibleItems.map((item) => {
                       const Icon = item.icon;
@@ -349,6 +460,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                         item.path === '/upload' && isSingleCheckInFlight;
                       const showBatchBadge =
                         item.path === '/batch-upload' && isBatchActive;
+                      const itemLabel = t(item.labelKey);
 
                       return (
                         <Link
@@ -356,13 +468,28 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                           to={item.path}
                           viewTransition
                           data-view-transition="true"
-                          onClick={() => setMobileOpen(false)}
+                          aria-label={isDesktopCollapsed ? itemLabel : undefined}
+                          title={isDesktopCollapsed ? itemLabel : undefined}
+                          onClick={() => {
+                            hideRailTooltip();
+                            setMobileOpen(false);
+                          }}
+                          onMouseEnter={(e) => showRailTooltip(e.currentTarget, itemLabel)}
+                          onMouseLeave={hideRailTooltip}
+                          onFocus={(e) => showRailTooltip(e.currentTarget, itemLabel)}
+                          onBlur={hideRailTooltip}
                           className={`
-                            relative flex items-center gap-3 pl-[18px] pr-3.5 py-2.5 rounded-xl text-sm font-medium
+                            relative flex items-center rounded-xl text-sm font-medium
                             transition-[background-color,color,box-shadow] duration-200
-                            ${active
-                              ? 'bg-indigo-50/90 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-semibold ring-1 ring-indigo-500/20 shadow-2xs'
-                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-800/60'
+                            ${
+                              isDesktopCollapsed
+                                ? 'justify-center h-11 w-11 mx-auto px-0'
+                                : 'gap-3 pl-[18px] pr-3.5 py-2.5'
+                            }
+                            ${
+                              active
+                                ? 'bg-indigo-50/90 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-semibold ring-1 ring-indigo-500/20 shadow-2xs'
+                                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-800/60'
                             }
                           `}
                         >
@@ -371,20 +498,30 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                               layoutId="citra-sidebar-active-bar"
                               transition={SPRING_PILL}
                               data-testid="sidebar-active-indicator"
-                              className="absolute left-1.5 top-2.5 bottom-2.5 w-1 rounded-full bg-indigo-600 dark:bg-indigo-400"
+                              className={`absolute ${
+                                isDesktopCollapsed ? 'left-1' : 'left-1.5'
+                              } top-2.5 bottom-2.5 w-1 rounded-full bg-indigo-600 dark:bg-indigo-400`}
                             />
                           )}
                           <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-indigo-600 dark:text-indigo-400' : ''}`} />
-                          <span className="truncate">{t(item.labelKey)}</span>
+                          <span className={isDesktopCollapsed ? 'sr-only' : 'truncate'}>
+                            {itemLabel}
+                          </span>
                           {showSingleBadge && (
                             <span
                               data-testid="sidebar-single-progress-badge"
                               data-open="true"
                               aria-hidden="true"
-                              className="t-badge ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/70 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-700/70 shrink-0"
+                              className={
+                                isDesktopCollapsed
+                                  ? 'absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-indigo-600 dark:bg-indigo-400 animate-pulse'
+                                  : 't-badge ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/70 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-700/70 shrink-0'
+                              }
                             >
-                              <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                              <span>
+                              {!isDesktopCollapsed && (
+                                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                              )}
+                              <span className={isDesktopCollapsed ? 'sr-only' : undefined}>
                                 {activeSingleCheck?.status === 'queued'
                                   ? activeSingleCheck.queuePosition != null
                                     ? currentLang === 'vi'
@@ -402,10 +539,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                               data-testid="sidebar-batch-progress-badge"
                               data-open="true"
                               aria-hidden="true"
-                              className="t-badge ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/70 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-700/70 shrink-0"
+                              className={
+                                isDesktopCollapsed
+                                  ? 'absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-indigo-600 dark:bg-indigo-400 animate-pulse'
+                                  : 't-badge ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/70 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-700/70 shrink-0'
+                              }
                             >
-                              <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                              <span>
+                              {!isDesktopCollapsed && (
+                                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                              )}
+                              <span className={isDesktopCollapsed ? 'sr-only' : undefined}>
                                 {batchStats.completed}/{batchStats.total}
                               </span>
                             </span>
@@ -420,15 +563,31 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </nav>
 
           {/* Subscription Quota & Upgrade Card */}
-          <div className="px-3.5 pb-2" data-testid="sidebar-quota-card">
-            <div className="rounded-xl p-3 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-800/80 dark:via-slate-900 dark:to-indigo-950/30 border border-slate-200/90 dark:border-slate-800 space-y-2 shadow-2xs">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                  {currentLang === 'vi' ? 'Gói cước' : 'Plan'}
-                </span>
+          {isDesktopCollapsed ? (
+            <div className="px-2 pb-2 flex flex-col items-center gap-1.5" data-testid="sidebar-quota-card">
+              <Link
+                to="/pricing"
+                onClick={() => {
+                  hideRailTooltip();
+                  setMobileOpen(false);
+                }}
+                onMouseEnter={(e) =>
+                  showRailTooltip(
+                    e.currentTarget,
+                    `${planTier.toUpperCase()} · ${
+                      sidebarQuota.uploadsUnlimited
+                        ? sidebarQuota.usage
+                        : `${quota.monthly_uploads_used}/${quota.monthly_uploads_limit}`
+                    }`,
+                  )
+                }
+                onMouseLeave={hideRailTooltip}
+                data-testid={isBasic ? 'sidebar-upgrade-link' : undefined}
+                className="w-12 rounded-xl px-1.5 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-800 flex flex-col items-center gap-1 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors"
+              >
                 <span
                   data-testid="sidebar-plan-badge"
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
+                  className={`px-1.5 py-0.5 rounded-full text-[8.5px] font-mono font-bold uppercase leading-none ${
                     planTier === 'ultra'
                       ? 'bg-violet-600 text-white'
                       : planTier === 'pro'
@@ -438,91 +597,175 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 >
                   {planTier.toUpperCase()}
                 </span>
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-[11px] font-mono text-slate-600 dark:text-slate-400">
-                  <span>
-                    {currentLang === 'vi' ? 'Lượt tải tháng' : 'Monthly Checks'}
-                  </span>
-                  <span data-testid="sidebar-quota-text" className="font-semibold text-slate-900 dark:text-white">
-                    {sidebarQuota.uploadsUnlimited
-                      ? sidebarQuota.usage
-                      : `${quota.monthly_uploads_used} / ${quota.monthly_uploads_limit}`}
-                  </span>
-                </div>
-                <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                <span data-testid="sidebar-quota-text" className="sr-only">
+                  {sidebarQuota.uploadsUnlimited
+                    ? sidebarQuota.usage
+                    : `${quota.monthly_uploads_used} / ${quota.monthly_uploads_limit}`}
+                </span>
+                <div className="h-1 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-[width,background-color] duration-300 ${
-                      sidebarQuota.exhausted
-                        ? 'bg-red-500'
-                        : 'bg-indigo-600 dark:bg-indigo-400'
+                    className={`h-full rounded-full ${
+                      sidebarQuota.exhausted ? 'bg-red-500' : 'bg-indigo-600 dark:bg-indigo-400'
                     }`}
                     style={{
                       width: `${sidebarQuota.uploadsUnlimited ? 100 : sidebarQuota.percent}%`,
                     }}
                   />
                 </div>
-              </div>
-
-              {isBasic && (
-                <Link
-                  to="/pricing"
-                  onClick={() => setMobileOpen(false)}
-                  data-testid="sidebar-upgrade-link"
-                  className="mt-1 w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shadow-2xs"
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  <span>
-                    {currentLang === 'vi'
-                      ? 'Nâng cấp Pro · $16/th'
-                      : 'Upgrade to Pro · $16/mo'}
-                  </span>
-                </Link>
-              )}
+              </Link>
             </div>
-          </div>
+          ) : (
+            <div className="px-3.5 pb-2" data-testid="sidebar-quota-card">
+              <div className="rounded-xl p-3 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 dark:from-slate-800/80 dark:via-slate-900 dark:to-indigo-950/30 border border-slate-200/90 dark:border-slate-800 space-y-2 shadow-2xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                    {currentLang === 'vi' ? 'Gói cước' : 'Plan'}
+                  </span>
+                  <span
+                    data-testid="sidebar-plan-badge"
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
+                      planTier === 'ultra'
+                        ? 'bg-violet-600 text-white'
+                        : planTier === 'pro'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200'
+                    }`}
+                  >
+                    {planTier.toUpperCase()}
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-mono text-slate-600 dark:text-slate-400">
+                    <span>
+                      {currentLang === 'vi' ? 'Lượt tải tháng' : 'Monthly Checks'}
+                    </span>
+                    <span data-testid="sidebar-quota-text" className="font-semibold text-slate-900 dark:text-white">
+                      {sidebarQuota.uploadsUnlimited
+                        ? sidebarQuota.usage
+                        : `${quota.monthly_uploads_used} / ${quota.monthly_uploads_limit}`}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-[width,background-color] duration-300 ${
+                        sidebarQuota.exhausted
+                          ? 'bg-red-500'
+                          : 'bg-indigo-600 dark:bg-indigo-400'
+                      }`}
+                      style={{
+                        width: `${sidebarQuota.uploadsUnlimited ? 100 : sidebarQuota.percent}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {isBasic && (
+                  <Link
+                    to="/pricing"
+                    onClick={() => setMobileOpen(false)}
+                    data-testid="sidebar-upgrade-link"
+                    className="mt-1 w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shadow-2xs"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span>
+                      {currentLang === 'vi'
+                        ? 'Nâng cấp Pro · $16/th'
+                        : 'Upgrade to Pro · $16/mo'}
+                    </span>
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
 
           <Separator />
 
           {/* Theme Toggle, Language & Help */}
-          <div className="px-4 py-2.5 space-y-1">
-            <div className="flex items-center justify-between px-2 py-1 gap-2">
-              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('nav.theme')}</span>
-              <div className="flex items-center gap-1.5">
-                <NotificationCenterButton lang={currentLang} />
-                <button
-                  type="button"
-                  onClick={handleToggleLanguage}
-                  title="Switch language (VI / EN)"
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700 hover:-translate-y-[1px] active:scale-95 transition-[transform,border-color,background-color] duration-200 cursor-pointer"
-                >
-                  <Globe className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
-                  <span>{currentLang === 'vi' ? 'VI' : 'EN'}</span>
-                </button>
-                <ThemeToggle size="sm" showLabel />
-              </div>
-            </div>
-
-            <button
-              onClick={() => setHelpOpen(true)}
-              className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              <span className="flex items-center gap-2">
+          {isDesktopCollapsed ? (
+            <div className="py-2 px-2 flex flex-col items-center gap-1.5">
+              <NotificationCenterButton lang={currentLang} />
+              <button
+                type="button"
+                onClick={handleToggleLanguage}
+                title="Switch language (VI / EN)"
+                onMouseEnter={(e) =>
+                  showRailTooltip(
+                    e.currentTarget,
+                    currentLang === 'vi' ? 'Ngôn ngữ: Tiếng Việt' : 'Language: English',
+                  )
+                }
+                onMouseLeave={hideRailTooltip}
+                className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[10px] font-mono font-bold text-slate-700 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors cursor-pointer"
+              >
+                {currentLang === 'vi' ? 'VI' : 'EN'}
+              </button>
+              <ThemeToggle size="sm" />
+              <button
+                type="button"
+                onClick={() => setHelpOpen(true)}
+                aria-label={t('nav.helpShortcuts')}
+                onMouseEnter={(e) => showRailTooltip(e.currentTarget, `${t('nav.helpShortcuts')} (Ctrl+/)`)}
+                onMouseLeave={hideRailTooltip}
+                className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
                 <HelpCircle className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                {t('nav.helpShortcuts')}
-              </span>
-              <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500">
-                Ctrl+/
-              </kbd>
-            </button>
-          </div>
+              </button>
+            </div>
+          ) : (
+            <div className="px-4 py-2.5 space-y-1">
+              <div className="flex items-center justify-between px-2 py-1 gap-2">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('nav.theme')}</span>
+                <div className="flex items-center gap-1.5">
+                  <NotificationCenterButton lang={currentLang} />
+                  <button
+                    type="button"
+                    onClick={handleToggleLanguage}
+                    title="Switch language (VI / EN)"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700 hover:-translate-y-[1px] active:scale-95 transition-[transform,border-color,background-color] duration-200 cursor-pointer"
+                  >
+                    <Globe className="h-3 w-3 text-indigo-600 dark:text-indigo-400" />
+                    <span>{currentLang === 'vi' ? 'VI' : 'EN'}</span>
+                  </button>
+                  <ThemeToggle size="sm" showLabel />
+                </div>
+              </div>
+
+              <button
+                onClick={() => setHelpOpen(true)}
+                className="w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <HelpCircle className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                  {t('nav.helpShortcuts')}
+                </span>
+                <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-500">
+                  Ctrl+/
+                </kbd>
+              </button>
+            </div>
+          )}
 
           {/* User Info & Logout */}
-          <div className="p-3 border-t border-slate-200/80 dark:border-slate-800/80 space-y-1.5 bg-slate-50/60 dark:bg-slate-900/60">
-            <div className="flex flex-col gap-1 px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-9 w-9 border-2 border-indigo-200 dark:border-indigo-800">
+          {isDesktopCollapsed ? (
+            <div className="p-2 border-t border-slate-200/80 dark:border-slate-800/80 flex flex-col items-center gap-1.5 bg-slate-50/60 dark:bg-slate-900/60">
+              <Link
+                to="/profile"
+                onClick={() => {
+                  hideRailTooltip();
+                  setMobileOpen(false);
+                }}
+                onMouseEnter={(e) =>
+                  showRailTooltip(
+                    e.currentTarget,
+                    `${user?.full_name || user?.username || 'User'} · ${t('nav.viewProfile')}`,
+                  )
+                }
+                onMouseLeave={hideRailTooltip}
+                aria-label="View profile"
+                className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              >
+                <Avatar className="h-9 w-9 border-2 border-indigo-200 dark:border-indigo-800 hover:scale-105 transition-transform">
                   {user?.avatar_url ? (
                     <AvatarImage src={user.avatar_url} alt={user?.username} />
                   ) : (
@@ -531,43 +774,86 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     </AvatarFallback>
                   )}
                 </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                    {user?.full_name || user?.username || 'User'}
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 capitalize flex items-center gap-1.5 font-mono">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                    {user?.role || 'user'}
-                  </p>
-                </div>
-                <Link
-                  to="/profile"
-                  onClick={() => setMobileOpen(false)}
-                  className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline shrink-0"
-                  aria-label="View profile"
-                >
-                  {t('nav.viewProfile')}
-                </Link>
-              </div>
-            </div>
+              </Link>
 
-            {/* Logout Button */}
-            <button
-              onClick={handleLogout}
-              disabled={loggingOut}
-              title="Logout"
-              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-[background-color,color,opacity] duration-200 disabled:opacity-50"
-            >
-              {loggingOut ? (
-                <div className="h-4 w-4 border-2 border-red-600/30 border-t-red-600 rounded-full animate-spin" />
-              ) : (
-                <LogOut className="h-4 w-4" />
-              )}
-              {loggingOut ? t('nav.signingOut') : t('nav.signOut')}
-            </button>
-          </div>
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                aria-label={t('nav.signOut')}
+                title={t('nav.signOut')}
+                onMouseEnter={(e) => showRailTooltip(e.currentTarget, t('nav.signOut'))}
+                onMouseLeave={hideRailTooltip}
+                className="h-9 w-9 inline-flex items-center justify-center rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                {loggingOut ? (
+                  <div className="h-4 w-4 border-2 border-red-600/30 border-t-red-600 rounded-full animate-spin" />
+                ) : (
+                  <LogOut className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+          ) : (
+            <div className="p-3 border-t border-slate-200/80 dark:border-slate-800/80 space-y-1.5 bg-slate-50/60 dark:bg-slate-900/60">
+              <div className="flex flex-col gap-1 px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-9 w-9 border-2 border-indigo-200 dark:border-indigo-800">
+                    {user?.avatar_url ? (
+                      <AvatarImage src={user.avatar_url} alt={user?.username} />
+                    ) : (
+                      <AvatarFallback>
+                        <User className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                      </AvatarFallback>
+                    )}
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                      {user?.full_name || user?.username || 'User'}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 capitalize flex items-center gap-1.5 font-mono">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                      {user?.role || 'user'}
+                    </p>
+                  </div>
+                  <Link
+                    to="/profile"
+                    onClick={() => setMobileOpen(false)}
+                    className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline shrink-0"
+                    aria-label="View profile"
+                  >
+                    {t('nav.viewProfile')}
+                  </Link>
+                </div>
+              </div>
+
+              {/* Logout Button */}
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                title="Logout"
+                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-[background-color,color,opacity] duration-200 disabled:opacity-50"
+              >
+                {loggingOut ? (
+                  <div className="h-4 w-4 border-2 border-red-600/30 border-t-red-600 rounded-full animate-spin" />
+                ) : (
+                  <LogOut className="h-4 w-4" />
+                )}
+                {loggingOut ? t('nav.signingOut') : t('nav.signOut')}
+              </button>
+            </div>
+          )}
         </div>
       </aside>
+
+      {/* Floating ChatGPT-Style Dark Rail Tooltip (Never clipped by overflow-y-auto!) */}
+      {isDesktopCollapsed && railTooltip && (
+        <div
+          role="tooltip"
+          style={{ top: `${railTooltip.top}px` }}
+          className="hidden lg:inline-flex fixed left-[80px] -translate-y-1/2 z-[70] pointer-events-none items-center px-2.5 py-1.5 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-medium shadow-lg whitespace-nowrap animate-fade-in"
+        >
+          {railTooltip.label}
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 h-screen supports-[height:100dvh]:h-dvh overflow-hidden relative">
@@ -587,11 +873,47 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <main
           id="main-content"
           tabIndex={-1}
-          className="relative flex-1 overflow-y-auto overflow-x-hidden px-3.5 sm:px-6 lg:px-10 pb-6 lg:pb-10 pt-[4.5rem] sm:pt-20 lg:pt-8 focus:outline-none"
+          className="relative flex-1 overflow-y-auto overflow-x-hidden flex flex-col pt-[4.5rem] sm:pt-20 lg:pt-8 focus:outline-none"
         >
-          <div className="max-w-6xl mx-auto w-full min-w-0">
+          <div
+            data-testid="app-main-container"
+            data-sidebar-collapsed={isDesktopCollapsed ? 'true' : 'false'}
+            className={`citra-main-cq flex-1 w-full mx-auto min-w-0 px-3.5 sm:px-6 ${
+              isDesktopCollapsed
+                ? 'lg:px-7 xl:px-9 max-w-[1780px] 2xl:max-w-[1960px]'
+                : 'lg:px-8 xl:px-10 max-w-[1440px] 2xl:max-w-[1680px]'
+            } pb-8 lg:pb-12 transition-[max-width,padding] duration-300`}
+          >
             {children}
           </div>
+
+          {/* Footer — flows naturally at the very bottom of the scrollable page */}
+          <footer
+            data-testid="app-footer"
+            className="relative mt-auto shrink-0 border-t border-slate-200/80 dark:border-slate-800/80 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md px-3.5 sm:px-6 lg:px-8 xl:px-10 py-3"
+          >
+            <div
+              className={`mx-auto w-full ${
+                isDesktopCollapsed
+                  ? 'max-w-[1780px] 2xl:max-w-[1960px]'
+                  : 'max-w-[1440px] 2xl:max-w-[1680px]'
+              } flex flex-col sm:flex-row items-center justify-between gap-1 text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 text-center sm:text-left transition-[max-width] duration-300`}
+            >
+              <p className="flex items-center justify-center sm:justify-start gap-2 font-medium">
+                <span className="w-[20px] h-[20px] rounded-[5px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-0.5 shrink-0 transition-colors">
+                  <img
+                    src="/citra-logo.png"
+                    alt="CITRA"
+                    width={13}
+                    height={13}
+                    className="object-contain dark:brightness-150 dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.45)] select-none shrink-0"
+                  />
+                </span>
+                <span className="truncate">{t('nav.footerBrand')}</span>
+              </p>
+              <p className="font-mono text-[10px] sm:text-[11px] truncate max-w-full">{t('nav.footerSystem')}</p>
+            </div>
+          </footer>
         </main>
 
         {/* Floating Background Verification Pill (Desktop & Mobile) */}
@@ -654,7 +976,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             return (
               <div
                 data-testid="floating-verification-pill"
-                className="fixed bottom-14 right-3.5 sm:right-6 z-40 max-w-[calc(100vw-1.75rem)] sm:max-w-sm flex items-center gap-1 rounded-full border border-indigo-200/90 dark:border-indigo-800/90 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md pl-3.5 pr-1.5 py-1.5 shadow-lg ring-1 ring-indigo-500/15"
+                className="fixed bottom-5 sm:bottom-6 right-3.5 sm:right-6 z-40 max-w-[calc(100vw-1.75rem)] sm:max-w-sm flex items-center gap-1 rounded-full border border-indigo-200/90 dark:border-indigo-800/90 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md pl-3.5 pr-1.5 py-1.5 shadow-lg ring-1 ring-indigo-500/15"
               >
                 <button
                   type="button"
@@ -702,7 +1024,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             return (
               <div
                 data-testid="floating-verification-pill"
-                className="fixed bottom-14 right-3.5 sm:right-6 z-40 max-w-[calc(100vw-1.75rem)] sm:max-w-sm flex items-center gap-1 rounded-full border border-indigo-200/90 dark:border-indigo-800/90 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md pl-3.5 pr-1.5 py-1.5 shadow-lg ring-1 ring-indigo-500/15"
+                className="fixed bottom-5 sm:bottom-6 right-3.5 sm:right-6 z-40 max-w-[calc(100vw-1.75rem)] sm:max-w-sm flex items-center gap-1 rounded-full border border-indigo-200/90 dark:border-indigo-800/90 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md pl-3.5 pr-1.5 py-1.5 shadow-lg ring-1 ring-indigo-500/15"
               >
                 <button
                   type="button"
@@ -746,7 +1068,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             return (
               <div
                 data-testid="floating-verification-pill"
-                className={`fixed bottom-14 right-3.5 sm:right-6 z-40 max-w-[calc(100vw-1.75rem)] sm:max-w-md flex items-center gap-1 rounded-full border backdrop-blur-md pl-3.5 pr-1.5 py-1.5 shadow-lg ${
+                className={`fixed bottom-5 sm:bottom-6 right-3.5 sm:right-6 z-40 max-w-[calc(100vw-1.75rem)] sm:max-w-md flex items-center gap-1 rounded-full border backdrop-blur-md pl-3.5 pr-1.5 py-1.5 shadow-lg ${
                   isCompleted
                     ? 'border-emerald-200/90 dark:border-emerald-800/90 bg-white/95 dark:bg-slate-900/95 ring-1 ring-emerald-500/15'
                     : 'border-red-200/90 dark:border-red-800/90 bg-white/95 dark:bg-slate-900/95 ring-1 ring-red-500/15'
@@ -805,25 +1127,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
           return null;
         })()}
-
-        {/* Footer */}
-        <footer className="relative shrink-0 border-t border-slate-200/80 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-3.5 sm:px-6 py-2.5 sm:py-3">
-          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1 text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 text-center sm:text-left">
-            <p className="flex items-center justify-center sm:justify-start gap-2 font-medium">
-              <span className="w-[20px] h-[20px] rounded-[5px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-0.5 shrink-0 transition-colors">
-                <img
-                  src="/citra-logo.png"
-                  alt="CITRA"
-                  width={13}
-                  height={13}
-                  className="object-contain dark:brightness-150 dark:drop-shadow-[0_0_2px_rgba(255,255,255,0.45)] select-none shrink-0"
-                />
-              </span>
-              <span className="truncate">{t('nav.footerBrand')}</span>
-            </p>
-            <p className="font-mono text-[10px] sm:text-[11px] truncate max-w-full">{t('nav.footerSystem')}</p>
-          </div>
-        </footer>
       </div>
 
       {/* Help Modal */}

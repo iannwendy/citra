@@ -320,16 +320,16 @@ export function CitationGraphView({
       <div
         className={
           isCleanEmbeddedMode
-            ? 'grid grid-cols-1 lg:grid-cols-12 w-full min-w-0'
-            : 'grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start p-3.5 sm:p-5 w-full min-w-0'
+            ? 'citra-cq-network-grid grid grid-cols-1 lg:grid-cols-12 w-full min-w-0'
+            : 'citra-cq-network-grid grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start p-3.5 sm:p-5 w-full min-w-0'
         }
       >
         {/* Left Column: Minimalist, Non-Tech Reference Picker */}
         <div
           className={
             isCleanEmbeddedMode
-              ? 'lg:col-span-4 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col lg:max-h-[730px] min-w-0'
-              : 'lg:col-span-4 space-y-2 lg:max-h-[680px] lg:overflow-y-auto lg:pr-1 w-full min-w-0'
+              ? 'citra-cq-network-left lg:col-span-4 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col lg:max-h-[730px] min-w-0'
+              : 'citra-cq-network-left lg:col-span-4 space-y-2 lg:max-h-[680px] lg:overflow-y-auto lg:pr-1 w-full min-w-0'
           }
         >
           {isCleanEmbeddedMode && (
@@ -491,8 +491,8 @@ export function CitationGraphView({
         <div
           className={
             isCleanEmbeddedMode
-              ? 'lg:col-span-8 p-4 sm:p-5 bg-white dark:bg-slate-950 min-w-0'
-              : 'lg:col-span-8 lg:sticky lg:top-4 w-full min-w-0'
+              ? 'citra-cq-network-right lg:col-span-8 p-4 sm:p-5 bg-white dark:bg-slate-950 min-w-0'
+              : 'citra-cq-network-right lg:col-span-8 lg:sticky lg:top-4 w-full min-w-0'
           }
         >
           {activeVerdict && (

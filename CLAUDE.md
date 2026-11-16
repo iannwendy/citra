@@ -8,7 +8,7 @@ Engineering reference and architectural guide for AI coding assistants and contr
 
 **CITRA (`SourceLogic`)** is an explainable **Neuro-Symbolic Citation & Source Integrity Verification Platform** for academic manuscripts, theses, and research papers.
 
-- **Version:** v3.78.0 (15+ Scholarly & Technical APIs, Multilingual ONNX INT8, Classroom Cohort CRUD/ZIP, 3-Wave Audit Remediation & Leak-Free 120K Calibration — 2026-11-16)
+- **Version:** v3.79.0 (15+ Scholarly & Technical APIs, Multilingual ONNX INT8, Classroom Cohort CRUD/ZIP, 3-Wave Audit Remediation & Leak-Free 120K Calibration — 2026-11-16)
 - **Unit & Integration Tests:** `2,100+ backend passed · 340+ frontend Vitest passed, 0 failed`
 - **Role-Based Web Workspace:** Student / Researcher (`Workspace`), Teacher (`Classroom`), Administrator (`Control`)
 - **Decision-Support Principle:** All outputs are strictly decision-support signals for academic reviewers; the system never automatically concludes academic misconduct.

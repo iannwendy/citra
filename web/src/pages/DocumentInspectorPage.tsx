@@ -939,7 +939,7 @@ export function DocumentInspectorWorkspace({
         {/* Dual-Pane Document & Citation List View */}
         <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-200/80 dark:divide-slate-800">
           {/* Document panel */}
-          <div className="lg:col-span-7 min-w-0 p-4 sm:p-6">
+          <div className="citra-cq-doc-left lg:col-span-7 min-w-0 p-4 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-800/80">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
@@ -1161,7 +1161,7 @@ export function DocumentInspectorWorkspace({
           </div>
 
           {/* Citation list panel */}
-          <div className="lg:col-span-5 min-w-0 p-4 sm:p-6 bg-slate-50/30 dark:bg-slate-900/40">
+          <div className="citra-cq-doc-right lg:col-span-5 min-w-0 p-4 sm:p-6 bg-slate-50/30 dark:bg-slate-900/40">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800/80">
               <div className="flex items-center gap-2">
                 <Quote className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
