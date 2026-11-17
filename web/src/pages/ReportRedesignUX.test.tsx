@@ -739,5 +739,84 @@ describe('Report Page UI/UX Redesign (Non-Tech Clarity & Progressive Disclosure)
       fireEvent.doubleClick(resizer);
       expect(splitContainer.style.getPropertyValue('--network-split-pct')).toBe('32%');
     });
+
+    it('prevents bottom text clipping on long titles and unbroken URLs in Play Step-by-Step (step-0) by isolating vertical padding from line-clamp-2', async () => {
+      const longTitle =
+        'Quantifying Mental Health Signals in Twitter: A Longitudinal Multi-Cohort Linguistic Analysis Across Social Platforms';
+      vi.spyOn(api, 'getEssay').mockResolvedValue(
+        makeReport({
+          essay_id: 122,
+          filename: 'Long_Reference_Replay.pdf',
+          num_pages: 14,
+          num_citations: 2,
+          verdicts: [
+            makeVerdict({
+              citation_id: 'cit-2',
+              numeric_index: 2,
+              citation_raw: `[2] Coppersmith, G., Dredze, M., & Harman, C. (2014). ${longTitle}. Workshop on Computational Linguistics and Clinical Psychology.`,
+              mapping_status: 'matched',
+              label: 'verified',
+              confidence: 0.97,
+              matched_sources: [
+                {
+                  source: 'crossref',
+                  title: `${longTitle}.`,
+                  authors: ['Glen Coppersmith', 'Mark Dredze', 'Craig Harman'],
+                  year: '2014',
+                  venue: 'CLPsych',
+                  doi: '10.3115/v1/W14-3207',
+                  confidence: 0.97,
+                  matched_fields: ['title', 'authors', 'year'],
+                  checked_at: '2026-11-17T00:00:00Z',
+                },
+              ],
+            }),
+          ],
+        }),
+      );
+
+      renderWithProviders(
+        <Routes>
+          <Route path="/verification/report/:id" element={<EssayPage />} />
+        </Routes>,
+        { user: makeUser('teacher', 'ultra'), initialRoute: '/verification/report/122' },
+      );
+
+      fireEvent.click(await screen.findByTestId('mode-graph-btn'));
+      const board = await screen.findByTestId('interactive-decision-flow-board');
+      const hub = screen.getByTestId('flow-central-hub');
+
+      // Overview phase title wraps unbroken strings safely
+      const overviewTitle = hub.querySelector('p');
+      expect(overviewTitle?.className).toContain('break-words');
+      expect(overviewTitle?.className).toContain('[overflow-wrap:anywhere]');
+
+      // Enter Play Step-by-Step (step-0: 1/4 · Reading Manuscript)
+      fireEvent.click(screen.getByTestId('flow-replay-btn'));
+      expect(board.getAttribute('data-board-phase')).toBe('step-0');
+
+      // No element inside flow-central-hub may combine line-clamp-* with vertical padding (py-*/p-*/pb-*)
+      const clampedNodes = Array.from(hub.querySelectorAll('[class*="line-clamp-"]'));
+      expect(clampedNodes.length).toBeGreaterThan(0);
+      for (const node of clampedNodes) {
+        expect(node.className).not.toMatch(/\b(?:py-|pb-|pt-|p-\d)/);
+      }
+
+      // Dedicated step-0 title pill uses outer padding + inner line-clamp-2 <p> + full title tooltip
+      const step0TitleBox = screen.getByTestId('flow-step0-title-box');
+      expect(step0TitleBox.getAttribute('title')).toContain(longTitle);
+      const innerClampedP = step0TitleBox.querySelector('p');
+      expect(innerClampedP).not.toBeNull();
+      expect(innerClampedP?.className).toContain('line-clamp-2');
+      expect(innerClampedP?.className).toContain('break-words');
+      expect(innerClampedP?.className).toContain('[overflow-wrap:anywhere]');
+
+      // Left metadata labels in step-0 carry shrink-0 so Vietnamese labels never wrap on long authors
+      const step0Labels = Array.from(hub.querySelectorAll('span.opacity-70'));
+      expect(step0Labels.length).toBe(2);
+      for (const lbl of step0Labels) {
+        expect(lbl.className).toContain('shrink-0');
+      }
+    });
   });
 });

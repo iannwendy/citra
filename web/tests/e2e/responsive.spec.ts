@@ -1126,4 +1126,181 @@ test.describe('Responsive Layout — Authenticated Workspaces (Student, Teacher,
         });
     }
   });
+
+  test('Network Play Step-by-Step (step-0) renders long multi-line titles and unbroken URLs cleanly without bottom text slicing across desktop and laptop viewports', async ({
+    page,
+  }) => {
+    setupAllResponsiveMocks(page);
+
+    const verdicts = [
+      {
+        citation_id: 'cit_coppersmith',
+        numeric_index: 2,
+        citation_raw:
+          '[2] Coppersmith, G., Dredze, M., & Harman, C. (2014). Quantifying Mental Health Signals in Twitter. Workshop on Computational Linguistics and Clinical Psychology.',
+        label: 'verified',
+        confidence: 0.98,
+        mapping_status: 'matched',
+        matched_sources: [
+          {
+            source: 'crossref',
+            title: 'Quantifying Mental Health Signals in Twitter.',
+            authors: ['Glen Coppersmith', 'Mark Dredze', 'Craig Harman'],
+            year: '2014',
+            venue: 'CLPsych',
+            doi: '10.3115/v1/W14-3207',
+            similarity_score: 0.98,
+            matched_fields: ['title', 'authors', 'year', 'doi'],
+          },
+        ],
+        mismatched_fields: [],
+        triggered_rules: ['R-DOI-TITLE-AUTHOR'],
+        reasoning: 'Verified exact match in Crossref.',
+      },
+      {
+        citation_id: 'cit_super_long',
+        numeric_index: 3,
+        citation_raw:
+          '[3] Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L. (2023). Cross-Lingual Neuro-Symbolic Citation Integrity Verification Across Heterogeneous Scholarly Repositories With Calibrated Abstention Guardrails and Multi-Tier Retrieval. Transactions of the Association for Computational Linguistics.',
+        label: 'verified',
+        confidence: 0.99,
+        mapping_status: 'matched',
+        matched_sources: [
+          {
+            source: 'openalex',
+            title:
+              'Cross-Lingual Neuro-Symbolic Citation Integrity Verification Across Heterogeneous Scholarly Repositories With Calibrated Abstention Guardrails and Multi-Tier Retrieval.',
+            authors: ['Ashish Vaswani'],
+            year: '2023',
+            venue: 'TACL',
+            similarity_score: 0.99,
+            matched_fields: ['title', 'authors', 'year'],
+          },
+        ],
+        mismatched_fields: [],
+        triggered_rules: ['R-WELL-LINKED'],
+        reasoning: 'Verified in OpenAlex.',
+      },
+      {
+        citation_id: 'cit_long_url',
+        numeric_index: 4,
+        citation_raw:
+          '[4] https://repository.institutional-archive.example.org/bitstream/handle/123456789/987654321/2026-comprehensive-neuro-symbolic-manuscript-integrity-audit-report-v4.pdf',
+        label: 'resource',
+        confidence: 0.95,
+        mapping_status: 'matched',
+        url_status: 'alive',
+        url_status_code: 200,
+        matched_sources: [],
+        mismatched_fields: [],
+        triggered_rules: ['R-URL-RESOURCE'],
+        reasoning: 'Active web resource.',
+      },
+    ];
+
+    await page.route(/\/api\/essays\/36(\/report)?$/, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          essay_id: 36,
+          filename: 'Network_Step_By_Step_Long_Refs.pdf',
+          num_pages: 18,
+          num_citations: verdicts.length,
+          extracted_citations: verdicts.map((v, idx) => ({
+            id: v.citation_id,
+            raw_text: v.citation_raw,
+            page_num: idx + 1,
+            context: 'Cited in methodology section.',
+          })),
+          references: [],
+          verdicts,
+          cis: {
+            score: 98.5,
+            verified_count: 2,
+            metadata_error_count: 0,
+            suspected_hallucination_count: 0,
+            unresolved_count: 0,
+            resource_count: 1,
+            total_count: 3,
+          },
+        }),
+      })
+    );
+
+    for (const vp of [
+      { name: 'Desktop (1440x900)', width: 1440, height: 900 },
+      { name: 'Laptop (1024x768)', width: 1024, height: 768 },
+    ]) {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await page.goto('/verification/report/36');
+      await page.getByTestId('mode-graph-btn').click();
+      await expect(page.getByTestId('interactive-decision-flow-board')).toBeVisible();
+
+      for (let refIdx = 0; refIdx < verdicts.length; refIdx++) {
+        await page.getByTestId(`graph-ref-card-${refIdx}`).click();
+        await expect(page.getByTestId('interactive-decision-flow-board')).toHaveCount(1);
+        await page.getByTestId('flow-replay-btn').click();
+        await expect(page.getByTestId('interactive-decision-flow-board')).toHaveAttribute(
+          'data-board-phase',
+          'step-0'
+        );
+
+        const geometry = await page.evaluate(() => {
+          const stage = document.querySelector('.citra-cq-flow-stage') as HTMLElement | null;
+          const hub = document.querySelector('[data-testid="flow-central-hub"]') as HTMLElement | null;
+          if (!stage || !hub) return null;
+
+          // Locate the 3rd row (title pill) in step-0 inside flow-central-hub
+          const step0TitlePill =
+            (hub.querySelector('[data-testid="flow-step0-title-box"]') as HTMLElement | null) ??
+            (hub.querySelector('.space-y-1\\.5 > div:last-child') as HTMLElement | null);
+          if (!step0TitlePill) return null;
+
+          const clampedEl =
+            (step0TitlePill.querySelector('p') as HTMLElement | null) ?? step0TitlePill;
+          const pillRect = step0TitlePill.getBoundingClientRect();
+          const clampRect = clampedEl.getBoundingClientRect();
+          const hubRect = hub.getBoundingClientRect();
+          const stageRect = stage.getBoundingClientRect();
+
+          // Measure every rendered text line rect inside clampedEl via Range.getClientRects()
+          const range = document.createRange();
+          range.selectNodeContents(clampedEl);
+          const lineRects = Array.from(range.getClientRects()).filter((r) => r.width > 1 && r.height > 1);
+
+          // A line is "sliced in half" if its top starts inside the visible clip box (above clipBottom - 1.5px)
+          // AND its bottom extends past the visible clip box (below clipBottom + 1.5px)!
+          const clipBottom = clampRect.bottom;
+          const slicedLines = lineRects.filter(
+            (r) => r.top < clipBottom - 1.5 && r.bottom > clipBottom + 1.5
+          );
+
+          return {
+            slicedLineCount: slicedLines.length,
+            bottomPaddingGap: pillRect.bottom - clampRect.bottom,
+            textRightOverflow: clampRect.right - hubRect.right,
+            hubTopWithinStage: hubRect.top - stageRect.top,
+            stageBottomClearance: stageRect.bottom - hubRect.bottom,
+          };
+        });
+
+        expect(geometry, `Missing geometry at ${vp.name} ref #${refIdx}`).not.toBeNull();
+        expect(
+          geometry!.slicedLineCount,
+          `Expected zero sliced text lines in step-0 title box at ${vp.name} ref #${refIdx}`
+        ).toBe(0);
+        expect(
+          geometry!.bottomPaddingGap,
+          `Expected preserved bottom padding inside step-0 title pill at ${vp.name} ref #${refIdx}`
+        ).toBeGreaterThanOrEqual(4);
+        expect(
+          geometry!.textRightOverflow,
+          `Expected zero horizontal overflow from hub card at ${vp.name} ref #${refIdx}`
+        ).toBeLessThanOrEqual(0);
+        expect(geometry!.hubTopWithinStage).toBeGreaterThanOrEqual(70);
+        expect(geometry!.stageBottomClearance).toBeGreaterThanOrEqual(40);
+      }
+    }
+  });
 });

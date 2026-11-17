@@ -318,7 +318,7 @@ export function InteractiveDecisionFlowBoard({
       canonicalVenue: primaryMatched?.venue?.trim() || '',
       cleanTitle:
         primaryMatched?.title && effectiveLabel === 'verified'
-          ? primaryMatched.title
+          ? primaryMatched.title.replace(/^[“"]|[”".,]+$/g, '').trim()
           : parsed.cleanTitle,
     };
   }, [verdict.citation_raw, verdict.matched_sources, effectiveLabel]);
@@ -1706,8 +1706,8 @@ export function InteractiveDecisionFlowBoard({
                   isDarkSurface ? 'bg-white/[0.05]' : 'bg-slate-50 border border-slate-200/70'
                 }`}
               >
-                <span className="opacity-70">{isVi ? 'Ký hiệu & Tác giả' : 'Author'}</span>
-                <span className="font-bold truncate">
+                <span className="opacity-70 shrink-0">{isVi ? 'Ký hiệu & Tác giả' : 'Author'}</span>
+                <span className="font-bold truncate min-w-0">
                   {marker} {identity.authorOnly}
                 </span>
               </div>
@@ -1716,17 +1716,23 @@ export function InteractiveDecisionFlowBoard({
                   isDarkSurface ? 'bg-white/[0.05]' : 'bg-slate-50 border border-slate-200/70'
                 }`}
               >
-                <span className="opacity-70">{isVi ? 'Năm ghi trong bài' : 'Cited Year'}</span>
-                <span className="font-mono font-bold">
+                <span className="opacity-70 shrink-0">{isVi ? 'Năm ghi trong bài' : 'Cited Year'}</span>
+                <span className="font-mono font-bold shrink-0">
                   {identity.citedYear || (isVi ? 'Chưa ghi' : '—')}
                 </span>
               </div>
               <div
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] line-clamp-1 ${
-                  isDarkSurface ? 'bg-white/[0.05] text-slate-300' : 'bg-slate-50 border border-slate-200/70 text-slate-700'
+                data-testid="flow-step0-title-box"
+                title={identity.cleanTitle}
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] ${
+                  isDarkSurface
+                    ? 'bg-white/[0.05] text-slate-300'
+                    : 'bg-slate-50 border border-slate-200/70 text-slate-700'
                 }`}
               >
-                “{identity.cleanTitle}”
+                <p className="line-clamp-2 leading-snug break-words [overflow-wrap:anywhere]">
+                  “{identity.cleanTitle}”
+                </p>
               </div>
             </div>
           ) : boardPhase === 'step-2' ? (
@@ -1818,7 +1824,8 @@ export function InteractiveDecisionFlowBoard({
               </div>
 
               <p
-                className={`text-[11.5px] mt-1 line-clamp-2 leading-snug ${
+                title={identity.cleanTitle}
+                className={`text-[11.5px] mt-1 line-clamp-2 leading-snug break-words [overflow-wrap:anywhere] ${
                   isDarkSurface ? 'text-slate-300/90' : 'text-slate-600'
                 }`}
               >
@@ -2055,7 +2062,9 @@ export function InteractiveDecisionFlowBoard({
               ))}
             </div>
           ) : (
-            <div className="text-xs opacity-80 mt-0.5 line-clamp-2">{identity.cleanTitle}</div>
+            <div className="text-xs opacity-80 mt-0.5 line-clamp-2 break-words [overflow-wrap:anywhere]">
+              {identity.cleanTitle}
+            </div>
           )}
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -2137,7 +2146,7 @@ export function InteractiveDecisionFlowBoard({
               </span>
             </div>
             <p
-              className={`text-xs sm:text-[13px] leading-relaxed ${
+              className={`text-xs sm:text-[13px] leading-relaxed break-words [overflow-wrap:anywhere] ${
                 isDarkSurface ? 'text-slate-300' : 'text-slate-600'
               }`}
             >
