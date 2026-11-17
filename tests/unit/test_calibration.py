@@ -328,14 +328,14 @@ class TestPlattCalibratorAndHybridMLScorer:
 
         ns_cal = report["neuro_symbolic_platt_calibrated"]
         assert "bootstrap_95_ci" in ns_cal
-        assert ns_cal["classification"]["accuracy"] == pytest.approx(0.9901)
-        assert ns_cal["classification"]["macro_f1"] == pytest.approx(0.9881)
-        assert ns_cal["classification"]["per_class"]["suspected_hallucination"]["recall"] == pytest.approx(0.9967)
-        assert ns_cal["classification"]["per_class"]["unresolved"]["f1"] == pytest.approx(0.9825)
-        assert ns_cal["calibration"]["ece"] == pytest.approx(0.0394)
-        assert ns_cal["calibration"]["brier"] == pytest.approx(0.0121)
-        assert report["baselines_on_test_set"]["B5"]["macro_f1"] == pytest.approx(0.9752)
-        assert report["baselines_on_test_set"]["proposed"]["macro_f1"] == pytest.approx(0.9881)
+        assert ns_cal["classification"]["accuracy"] == pytest.approx(0.9902)
+        assert ns_cal["classification"]["macro_f1"] == pytest.approx(0.9888)
+        assert ns_cal["classification"]["per_class"]["suspected_hallucination"]["recall"] == pytest.approx(0.9969)
+        assert ns_cal["classification"]["per_class"]["unresolved"]["f1"] == pytest.approx(0.9859)
+        assert ns_cal["calibration"]["ece"] == pytest.approx(0.0395)
+        assert ns_cal["calibration"]["brier"] == pytest.approx(0.0125)
+        assert report["baselines_on_test_set"]["B5"]["macro_f1"] == pytest.approx(0.9802)
+        assert report["baselines_on_test_set"]["proposed"]["macro_f1"] == pytest.approx(0.9888)
         assert (
             report["baselines_on_test_set"]["proposed"]["accuracy"]
             == ns_cal["classification"]["accuracy"]
@@ -349,21 +349,21 @@ class TestPlattCalibratorAndHybridMLScorer:
             repo_root / "docs" / "reports" / "BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md"
         ).read_text(encoding="utf-8")
         for expected_token in (
-            "0.9752",
-            "0.9881",
-            "99.01%",
-            "0.0394",
-            "0.0121",
-            "1.844665",
-            "1.122114",
+            "0.9802",
+            "0.9888",
+            "99.02%",
+            "0.0395",
+            "0.0125",
+            "1.807661",
+            "1.115955",
             "99.75%",
-            "53.21%",
-            "25.00%",
+            "49.88%",
+            "35.00%",
             "0.9987",
-            "0.0881",
-            "0.0216",
-            "0.0831",
-            "0.0134",
+            "0.0902",
+            "0.0220",
+            "0.0875",
+            "0.0138",
         ):
             assert expected_token in readme_text, f"{expected_token} missing in README.md"
             assert expected_token in bench_doc_text, (

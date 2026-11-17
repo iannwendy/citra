@@ -11,7 +11,7 @@ from integrity_checker.matching.author_matcher import _has_et_al_indicator, auth
 from integrity_checker.matching.fuzzy import FuzzyMatcher
 from integrity_checker.matching.semantic import (
     _DIRECT_REFUTATION_RE,
-    _NEGATION_CUES_RE,
+    _EXPLICIT_CONTRADICTION_NEGATION_RE,
     SemanticMatcher,
 )
 from integrity_checker.models.citation import Citation
@@ -438,16 +438,25 @@ class FeatureCalculator:
                     def _occ_has_explicit_refutation(occ: dict) -> bool:
                         focal_txt = str(occ.get("focal_sentence") or "")
                         return bool(
-                            _NEGATION_CUES_RE.search(focal_txt)
+                            _EXPLICIT_CONTRADICTION_NEGATION_RE.search(focal_txt)
                             or _DIRECT_REFUTATION_RE.search(focal_txt)
                         )
 
+                    def _occ_year_conflicts_with_ref(occ: dict) -> bool:
+                        if not citation.year:
+                            return False
+                        focal_txt = str(occ.get("focal_sentence") or "")
+                        yrs = [int(y) for y in re.findall(r"\b((?:19|20)\d{2})[a-z]?\b", focal_txt)]
+                        return bool(yrs) and all(abs(y - int(citation.year)) >= 3 for y in yrs)
+
                     primary_strongly_supported = bool(
-                        best_occ_score >= 0.65 and best_occ.get("stance") == "supported"
+                        (best_occ_score >= 0.50 or best_occ.get("is_aligned"))
+                        and best_occ.get("stance") == "supported"
                     )
                     if any(
                         o.get("stance") == "contradiction_risk"
                         and float(o.get("score") or 0.0) >= 0.30
+                        and not _occ_year_conflicts_with_ref(o)
                         and (not primary_strongly_supported or _occ_has_explicit_refutation(o))
                         for o in occurrence_alignments
                     ):

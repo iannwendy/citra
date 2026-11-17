@@ -709,8 +709,16 @@ class TestConfigsPackagingCiAndDocsParity:
 
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         claude = (REPO_ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        bench_report_md = (
+            REPO_ROOT / "docs" / "reports" / "BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md"
+        ).read_text(encoding="utf-8")
+        train_script_src = (
+            REPO_ROOT / "scripts" / "train_neuro_symbolic_model.py"
+        ).read_text(encoding="utf-8")
         assert __version__ in readme
         assert __version__ in claude
+        assert __version__ in bench_report_md
+        assert "_extract_distinctive_stems" not in train_script_src
         assert "/api/auth/token" not in readme
         assert "/api/verify" not in readme
         assert "src/integrity_checker/ingestion" not in readme

@@ -17,9 +17,13 @@ from typing import TYPE_CHECKING
 from integrity_checker.extraction.patterns.apa import is_vn_legal_reference
 from integrity_checker.logging import get_logger
 from integrity_checker.logic.calibration import HybridMLScorer
-from integrity_checker.logic.rules import SymbolicRules, _is_fake_url
+from integrity_checker.logic.rules import (
+    SymbolicRules,
+    _is_fake_url,
+    is_explicit_or_named_refutation_context,
+)
 from integrity_checker.logic.vn_legal_verifier import verify_vn_legal_citation
-from integrity_checker.matching.author_matcher import author_match_score
+from integrity_checker.matching.author_matcher import author_match_details, author_match_score
 from integrity_checker.matching.features import FeatureCalculator
 from integrity_checker.matching.semantic import SemanticMatcher
 from integrity_checker.matching.vn_en_academic_bridge import (
@@ -1085,6 +1089,12 @@ class NeuroSymbolicChecker:
                             if ag_c.abstract and len(str(ag_c.abstract).strip()) >= 40:
                                 known_candidate.abstract = ag_c.abstract
                                 break
+                    inherited_full_authors = False
+                    for ag_c in agreeing_other_cands:
+                        if len(ag_c.authors or []) > len(known_candidate.authors or []):
+                            known_candidate.authors = list(ag_c.authors)
+                            inherited_full_authors = True
+                            break
 
                     enhanced_source = SourceResult(
                         citation_raw=source.citation_raw,
@@ -1111,12 +1121,11 @@ class NeuroSymbolicChecker:
                     kp_has_substantive_abs = bool(
                         known_candidate.abstract and len(str(known_candidate.abstract).strip()) >= 40
                     )
-                    kp_explicit_ctx = bool(
-                        getattr(features, "context_source", "") != "implicit_body_discovery"
-                        or (
-                            getattr(features, "stance_label", "") == "contradiction_risk"
-                            and float(getattr(features, "content_alignment_score", 0.0) or 0.0) >= 0.30
-                        )
+                    kp_explicit_ctx = is_explicit_or_named_refutation_context(
+                        features,
+                        citation_authors=citation.authors,
+                        candidate_authors=known_candidate.authors,
+                        mapping_status=mapping_status,
                     )
                     if (
                         self.enable_content_alignment
@@ -1187,6 +1196,24 @@ class NeuroSymbolicChecker:
                             kp_mismatched.append("venue")
                             if "R-VENUE-MISMATCH" not in known_rules:
                                 known_rules.append("R-VENUE-MISMATCH")
+
+                    if citation.authors and known_candidate.authors:
+                        if inherited_full_authors or len(known_candidate.authors) >= 4:
+                            if (
+                                bool(
+                                    author_match_details(
+                                        citation.authors, known_candidate.authors
+                                    ).only_cited
+                                )
+                                and features.author_jaccard < self.rules.author_jaccard_verified
+                            ):
+                                kp_mismatched.append("author")
+                        elif len(known_candidate.authors) >= 2 and len(citation.authors) >= 2:
+                            prefix_cited = citation.authors[: len(known_candidate.authors)]
+                            if bool(
+                                author_match_details(prefix_cited, known_candidate.authors).only_cited
+                            ):
+                                kp_mismatched.append("author")
 
                     if kp_mismatched:
                         err_reason = (
@@ -1273,12 +1300,11 @@ class NeuroSymbolicChecker:
                 kp_intext_has_abs = bool(
                     known_candidate.abstract and len(str(known_candidate.abstract).strip()) >= 40
                 )
-                kp_intext_explicit = bool(
-                    getattr(features, "context_source", "") != "implicit_body_discovery"
-                    or (
-                        getattr(features, "stance_label", "") == "contradiction_risk"
-                        and float(getattr(features, "content_alignment_score", 0.0) or 0.0) >= 0.30
-                    )
+                kp_intext_explicit = is_explicit_or_named_refutation_context(
+                    features,
+                    citation_authors=citation.authors,
+                    candidate_authors=known_candidate.authors,
+                    mapping_status=mapping_status,
                 )
                 if (
                     self.enable_content_alignment

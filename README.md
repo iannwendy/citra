@@ -55,7 +55,7 @@
 
 ## Overview & Brand Philosophy
 
-**CITRA** (*Essay Integrity Checker v3.81.6*) is a full-stack academic citation verification and bibliographic debugging platform developed as a Capstone Graduation Thesis (*Đồ án Tốt nghiệp CNTT*) at **Ton Duc Thang University (TDTU)**.
+**CITRA** (*Essay Integrity Checker v3.81.7*) is a full-stack academic citation verification and bibliographic debugging platform developed as a Capstone Graduation Thesis (*Đồ án Tốt nghiệp CNTT*) at **Ton Duc Thang University (TDTU)**.
 
 Large Language Models (LLMs) frequently hallucinate plausible-sounding references, conflate author lists, or fabricate publication years (`METADATA_ERROR` / `SUSPECTED_HALLUCINATION`). Meanwhile, traditional similarity checkers (e.g., Turnitin) measure text overlap rather than verifying whether cited references actually exist in canonical scholarly registries or whether in-text citations map cleanly to the bibliography.
 
@@ -287,56 +287,56 @@ To rigorously evaluate the **Neuro-Symbolic Logic Checker**, **HybridMLScorer**,
 | Methodological Aspect | Implementation in `train_neuro_symbolic_model.py` (`120,000` ID + `2,400` OOD Samples) | International Reference Standard |
 | :--- | :--- | :--- |
 | **1. Strict Stratified Paper- & Title-Disjoint Split (`0% Overlap`)** | From `129,125` records in `data/local_papers.db` (`98.43%` ACL Anthology; `128,105` valid unique-title papers: `82,877` full-abstract + `45,228` metadata-only), samples **`120,000` distinct real scholarly papers** (`80,000` full-abstract `>80` chars + `40,000` metadata-complete) and partitions **before** generating perturbations:<br>• **Train (`70%`)**: `84,000` papers (`56,000` full-abstract + `28,000` metadata)<br>• **Validation (`15%`)**: `18,000` papers (`12,000` full-abstract + `6,000` metadata)<br>• **Held-Out Test (`15%`)**: `18,000` papers (`12,000` full-abstract + `6,000` metadata)<br>• Programmatic set-intersection audit (`paper_id` & normalized title): `Train ∩ Val = 0`, `Train ∩ Test = 0`, `Val ∩ Test = 0`. | **SciFact** (*Wadden et al., EMNLP 2020*) & **FEVER** (*Thorne et al., NAACL 2018*) |
-| **2. Zero 1-Way Feature Shortcut (`4-Class Context Alignment`)** | Stratifies full-abstract papers (`66.7%`) across **all 4 canonical classes** so authentic multi-sentence `Sentence-BERT` context-vs-abstract alignment (`content_alignment_score > 0`) occurs across every class (`VERIFIED`: `50.0%` [median `0.5840`], `METADATA_ERROR`: `44.9%` [median `0.4629`, incl. aligned contexts & 6-template `R-CONTENT-MISMATCH`], `SUSPECTED_HALLUCINATION`: `8.8%` / `40%` of candidate-bearing `H2/H4` [median `0.2151`], `UNRESOLVED`: `23.2%` / `35%` of `U1` [median `0.3835`]; $P(\text{VERIFIED} \mid \text{score} > 0) = 54.06\%$). | **Poliak et al.** (*NAACL 2018*) & **Gururangan et al.** (*NAACL 2018*) |
+| **2. Zero 1-Way Feature Shortcut (`4-Class Context Alignment`)** | Stratifies full-abstract papers (`66.7%`) across **all 4 canonical classes** so authentic multi-sentence `Sentence-BERT` context-vs-abstract alignment (`content_alignment_score > 0`) occurs across every class (`VERIFIED`: `50.0%` [median `0.5840`], `METADATA_ERROR`: `44.9%` [median `0.4616`, incl. aligned contexts & 12-template verb-agnostic `R-CONTENT-MISMATCH`], `SUSPECTED_HALLUCINATION`: `8.8%` / `40%` of candidate-bearing `H2/H4` [median `0.2151`], `UNRESOLVED`: `23.2%` / `35%` of `U1` [median `0.3835`]; $P(\text{VERIFIED} \mid \text{score} > 0) = 54.06\%$). | **Poliak et al.** (*NAACL 2018*) & **Gururangan et al.** (*NAACL 2018*) |
 | **3. Plausible Same-Domain Hallucinations & 15 Sub-Taxonomies** | Replaces synthetic templates with sanitized cross-paper spliced academic titles (`p1` lead + `p3` methodological tail), real scholar names (`[donor["authors"][0], donor["authors"][-1]]` disjoint from `p2`), real scholarly venues (`ACL`, `EMNLP`, `COLING`, `TACL`, `LREC`, `NAACL`), and bounded publication years (`1950 <= cited_year <= 2026`) strictly within the same split across `V1–V4` (`43,200`), `H1–H4` (`36,000`), `M1–M5` (`26,400`), and `U1–U2` (`14,400`). | **Walters & Wilder** (*Scientific Reports, 2023*) & **ALCE** (*Gao et al., EMNLP 2023*) |
-| **4. Unclamped Feature Extraction & Unified `SymbolicRules`** | Encodes **`420,283` unique texts** (from `600,000` strings) via **`Sentence-BERT (all-MiniLM-L6-v2)`** on GPU (`mps`) with **zero `np.clip` clamping**. `BaselineRunner("proposed")` invokes the exact production `SymbolicRules` engine (`99.01%` Acc / `0.9881` Macro-F1 across both tables). | **Sentence-BERT** (*Reimers & Gurevych, EMNLP 2019*) |
-| **5. Hyperparameter Tuning & Post-Hoc Platt Calibration** | • Grid-searches L2 regularization $C \in \{0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0\}$ for [`HybridMLScorer`](src/integrity_checker/logic/calibration.py) on **Validation (`18,000`)** $\rightarrow$ **$C = 0.5$** (`Val Macro-F1 = 0.9765`).<br>• Fits [`PlattCalibrator`](src/integrity_checker/logic/calibration.py) strictly on **Validation** $\rightarrow$ **$a = 1.844665, b = 1.122114$**. | **Platt Scaling** (*Platt, 1999*) & **Modern Neural Calibration** (*Guo et al., ICML 2017*) |
+| **4. Unclamped Feature Extraction & Unified `SymbolicRules`** | Encodes **`419,053` unique texts** (from `600,000` strings) via **`Sentence-BERT (all-MiniLM-L6-v2)`** on GPU (`mps`) with **zero `np.clip` clamping** and **zero stemmer pre-screening**. `BaselineRunner("proposed")` invokes the exact production `SymbolicRules` engine (`99.02%` Acc / `0.9888` Macro-F1 across both tables). | **Sentence-BERT** (*Reimers & Gurevych, EMNLP 2019*) |
+| **5. Hyperparameter Tuning & Post-Hoc Platt Calibration** | • Grid-searches L2 regularization $C \in \{0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0\}$ for [`HybridMLScorer`](src/integrity_checker/logic/calibration.py) on **Validation (`18,000`)** $\rightarrow$ **$C = 2.0$** (`Val Macro-F1 = 0.9784`).<br>• Fits [`PlattCalibrator`](src/integrity_checker/logic/calibration.py) strictly on **Validation** $\rightarrow$ **$a = 1.807661, b = 1.115955$**. | **Platt Scaling** (*Platt, 1999*) & **Modern Neural Calibration** (*Guo et al., ICML 2017*) |
 | **6. Paired Significance, OOD Stress (`N = 2,400`) & CIS Sensitivity** | Reports **Continuity-Corrected McNemar's $\chi^2$**, **1,000-Resample Paired Bootstrap $p$-values**, **Paired Wilcoxon Brier test**, **6-Category OOD Hard-Guardrail Stress Test**, and **300×20 CIS Sensitivity Analysis**. | **Dror et al.** (*ACL 2018*), **Berg-Kirkpatrick et al.** (*EMNLP 2012*) & **Dietterich** (*1998*) |
 
 #### In-Distribution Ablation Study & Paired Statistical Significance ($N = 18,000$ Held-Out Test Papers)
 
 | Method / Baseline | Description | Accuracy | Macro-P | Macro-R | **Macro-F1** | $\Delta\text{Macro-F1}$ (`Proposed - B`) & Paired Significance |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **`B0` (`doi_only`)** | Exact DOI match only | `26.34%` | `0.2336` | `0.3496` | `0.1963` | **`+0.7919`** (`McNemar χ² = 13,008.38, p < 1e-16; Boot p < 0.001`) |
-| **`B1` (`single_source_crossref`)** | Single-source lookup (`Crossref` only) | `58.06%` | `0.5621` | `0.4789` | `0.4506` | **`+0.5375`** (`McNemar χ² = 7,307.53, p < 1e-16; Boot p < 0.001`) |
-| **`B3` (`embedding_only`)** | Pure neural `Sentence-BERT` cosine threshold on title | `66.42%` | `0.4807` | `0.5179` | `0.4549` | **`+0.5332`** (`McNemar χ² = 5,755.14, p < 1e-16; Boot p < 0.001`) |
-| **`B4` (`no_calibration`)** | Multi-feature linear combination without abstention band | `80.13%` | `0.6211` | `0.6607` | `0.6269` | **`+0.3612`** (`McNemar χ² = 3,276.44, p < 1e-16; Boot p < 0.001`) |
-| **`B2` (`fuzzy_only`)** | Lexical `RapidFuzz` title + `AuthorJaccard` only | `81.89%` | `0.6325` | `0.6808` | `0.6462` | **`+0.3419`** (`McNemar χ² = 2,959.88, p < 1e-16; Boot p < 0.001`) |
-| **`B5` (`ml_hybrid`)** *(In-Dist.)* | `HybridMLScorer` (16D Logistic Regression, $C = 0.5$ — *collapses to `53.21%` on OOD below!*) | `97.59%` | `0.9748` | `0.9758` | `0.9752` | **`+0.0129`** (`McNemar χ² = 149.83, p = 1.89e-34; Boot p < 0.001`) |
-| **`Proposed` (`Neuro-Symbolic`)** | **Production `SymbolicRules` + Neural Specificity Alignment + HTTP Link Check + `PlattCalibrator` + Abstention** | **`99.01%`** | **`0.9881`** | **`0.9882`** | **`0.9881`** | *#1 on Both ID (`17,822 / 18,000`) & OOD (`2,394 / 2,400 = 99.75%`)* |
+| **`B0` (`doi_only`)** | Exact DOI match only | `26.34%` | `0.2336` | `0.3496` | `0.1963` | **`+0.7925`** (`McNemar χ² = 13,033.17, p < 1e-16; Boot p < 0.001`) |
+| **`B1` (`single_source_crossref`)** | Single-source lookup (`Crossref` only) | `58.11%` | `0.5626` | `0.4794` | `0.4513` | **`+0.5375`** (`McNemar χ² = 7,317.27, p < 1e-16; Boot p < 0.001`) |
+| **`B3` (`embedding_only`)** | Pure neural `Sentence-BERT` cosine threshold on title | `66.86%` | `0.4930` | `0.5214` | `0.4585` | **`+0.5302`** (`McNemar χ² = 5,687.73, p < 1e-16; Boot p < 0.001`) |
+| **`B4` (`no_calibration`)** | Multi-feature linear combination without abstention band | `80.13%` | `0.6212` | `0.6607` | `0.6269` | **`+0.3619`** (`McNemar χ² = 3,310.37, p < 1e-16; Boot p < 0.001`) |
+| **`B2` (`fuzzy_only`)** | Lexical `RapidFuzz` title + `AuthorJaccard` only | `81.93%` | `0.6328` | `0.6811` | `0.6466` | **`+0.3422`** (`McNemar χ² = 2,988.50, p < 1e-16; Boot p < 0.001`) |
+| **`B5` (`ml_hybrid`)** *(In-Dist.)* | `HybridMLScorer` (16D Logistic Regression, $C = 2.0$ — *collapses to `49.88%` on OOD below!*) | `97.98%` | `0.9805` | `0.9800` | `0.9802` | **`+0.0085`** (`McNemar χ² = 97.23, p = 6.17e-23; Boot p < 0.001`) |
+| **`Proposed` (`Neuro-Symbolic`)** | **Production `SymbolicRules` + Verb-Agnostic Neural Specificity + HTTP Link Check + `PlattCalibrator` + Abstention** | **`99.02%`** | **`0.9894`** | **`0.9883`** | **`0.9888`** | *#1 on Both ID (`17,823 / 18,000`) & OOD (`2,394 / 2,400 = 99.75%`)* |
 
 #### Per-Class Verification Performance, Confusion Matrix & 95% Bootstrap CI ($N = 18,000$ Test Samples)
 
 | Canonical Verdict Class | Test Support ($N$) | Precision | Recall | **F1-Score** | Confusion Row (`VER` / `META` / `HAL` / `UNR`) & Safety Invariant |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **`VERIFIED`** | `6,480` | **`0.9888`** | **`0.9969`** | **`0.9929`** | `6,460 / 19 / 0 / 1` — **`0` legitimate `VERIFIED` papers accused as hallucinated; `0` fabrications marked `VERIFIED`** |
-| **`SUSPECTED_HALLUCINATION`** | `5,400` | **`0.9981`** | **`0.9967`** | **`0.9974`** | `0 / 0 / 5,382 / 18` — `99.67%` recall & `99.81%` precision across plausible same-domain spliced hallucinations |
-| **`METADATA_ERROR`** | `3,960` | **`0.9884`** | **`0.9712`** | **`0.9797`** | `73 / 3,846 / 10 / 31` — `98.84%` precision & `97.12%` recall across year, co-author, DOI-title, and 6-template `R-CONTENT-MISMATCH` errors |
-| **`UNRESOLVED` *(Abstention)*** | `2,160` | **`0.9771`** | **`0.9880`** | **`0.9825`** | `0 / 26 / 0 / 2,134` — `98.80%` recall & `97.71%` precision across `U1` grey-zone (`R-ABSTENTION-BORDER`) & `U2` registry/429 abstentions |
-| **Macro-Average / Total** *(1,000-Bootstrap 95% CI)* | **`18,000`** | **`0.9881`** | **`0.9882`** | **`0.9881`** `[0.9862, 0.9898]` | **Overall Accuracy: `99.01%`** (`0.9901`, `95% CI: [0.9886, 0.9916]`, `SE: ±0.0007`) |
+| **`VERIFIED`** | `6,480` | **`0.9846`** | **`0.9980`** | **`0.9913`** | `6,467 / 11 / 0 / 2` — **`0` legitimate `VERIFIED` papers accused as hallucinated; `0` fabrications marked `VERIFIED`** |
+| **`SUSPECTED_HALLUCINATION`** | `5,400` | **`0.9993`** | **`0.9969`** | **`0.9981`** | `0 / 0 / 5,383 / 17` — `99.69%` recall & `99.93%` precision across plausible same-domain spliced hallucinations |
+| **`METADATA_ERROR`** | `3,960` | **`0.9915`** | **`0.9684`** | **`0.9798`** | `101 / 3,835 / 4 / 20` — `99.15%` precision & `96.84%` recall across year, co-author, DOI-title, and 12-template `R-CONTENT-MISMATCH` errors |
+| **`UNRESOLVED` *(Abstention)*** | `2,160` | **`0.9821`** | **`0.9898`** | **`0.9859`** | `0 / 22 / 0 / 2,138` — `98.98%` recall & `98.21%` precision across `U1` grey-zone (`R-ABSTENTION-BORDER`) & `U2` registry/429 abstentions |
+| **Macro-Average / Total** *(1,000-Bootstrap 95% CI)* | **`18,000`** | **`0.9894`** | **`0.9883`** | **`0.9888`** `[0.9871, 0.9905]` | **Overall Accuracy: `99.02%`** (`0.9902`, `95% CI: [0.9887, 0.9916]`, `SE: ±0.0007`) |
 
 #### Confidence Calibration Performance (Logit-Space Platt Scaling on $N = 18,000$ Test Samples)
 
-Fitted Platt parameters on the `18,000`-sample Validation split: $a = 1.844665$, $b = 1.122114$ ([`data/models/neuro_symbolic_weights.json`](./data/models/neuro_symbolic_weights.json)).
+Fitted Platt parameters on the `18,000`-sample Validation split: $a = 1.807661$, $b = 1.115955$ ([`data/models/neuro_symbolic_weights.json`](./data/models/neuro_symbolic_weights.json)).
 
 | Configuration | Macro-F1 | **ECE** *(Expected Calibration Error)* | **Brier Score** | Acc @ `50%` Cov | Acc @ `70%` Cov | Acc @ `90%` Cov | Acc @ `95%` Cov | Acc @ `100%` Cov |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Neuro-Symbolic (Uncalibrated Raw Confidence)** | `0.9881` | `0.2444` | `0.0907` | `99.41%` | `99.20%` | `99.10%` | `99.13%` | `99.01%` |
-| **Neuro-Symbolic (Platt-Calibrated Confidence)** | **`0.9881`** | **`0.0394`** *(↓ **6.20×**, $\Delta = -0.2050$, $p < 0.001$, CI `[0.0378, 0.0407]`)* | **`0.0121`** *(↓ **7.50×**, $\Delta = -0.0786$, Wilcoxon $p < 10^{-16}$, CI `[0.0110, 0.0133]`)* | **`99.47%`** | **`99.44%`** | **`99.42%`** | **`99.42%`** | **`99.01%`** |
+| **Neuro-Symbolic (Uncalibrated Raw Confidence)** | `0.9888` | `0.2445` | `0.0915` | `99.27%` | `99.03%` | `99.08%` | `99.11%` | `99.02%` |
+| **Neuro-Symbolic (Platt-Calibrated Confidence)** | **`0.9888`** | **`0.0395`** *(↓ **6.19×**, $\Delta = -0.2050$, $p < 0.001$, CI `[0.0380, 0.0410]`)* | **`0.0125`** *(↓ **7.32×**, $\Delta = -0.0790$, Wilcoxon $p < 10^{-16}$, CI `[0.0113, 0.0137]`)* | **`99.18%`** | **`99.23%`** | **`99.31%`** | **`99.32%`** | **`99.02%`** |
 
 #### Out-of-Distribution (OOD) Hard-Guardrail Stress Suite ($N = 2,400$ Samples from `test_papers`) — Empirical Proof Why Neuro-Symbolic Beats Pure ML `B5`
 
-Even though Pure ML `B5` achieves `97.59%` on the 16D continuous in-distribution feature manifold, real-world academic verification requires first-order symbolic guardrails that continuous similarity vectors cannot represent. Evaluated strictly on `test_papers` (`6 categories × 400 = 2,400` samples, zero Train/Val overlap, zero manual field overrides):
+Even though Pure ML `B5` achieves `97.98%` on the 16D continuous in-distribution feature manifold, real-world academic verification requires first-order symbolic guardrails that continuous similarity vectors cannot represent. Evaluated strictly on `test_papers` (`6 categories × 400 = 2,400` samples, zero Train/Val overlap, zero manual field overrides):
 
 | Real-World Symbolic Guardrail Category ($N = 400$ each) | Gold Label | Guardrail Rule | `B4` (`No Calib.`) | **Pure ML `B5`** | **`Neuro-Symbolic`** | **Gain ($\Delta = \text{NS} - \text{B5}$)** |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: |
 | **1. Retracted Scholarly Papers (`is_retracted=True`, exact DOI/title/authors)** | `metadata_error` | `R-RETRACTED-PAPER` | `0.00%` | **`0.00%`** *(400 `verified`)* | **`100.00%`** | **`+100.00%`** |
-| **2. Chimeric Spliced DOIs (real contemporary DOI pasted onto fabricated paper)** | `suspected_hallucination` | `R-CHIMERIC-DOI-MISMATCH` | `0.00%` | **`94.25%`** *(16 `unresolved`, 7 `meta`)* | **`98.50%`** | **`+4.25%`** |
-| **3. Fake / Placeholder RFC 2606 URLs (`example.com`, `.invalid`, `fake-*`)** | `suspected_hallucination` | `R-FAKE-URL` | `0.00%` | **`0.00%`** *(200 `verified`, 193 `meta`)* | **`100.00%`** | **`+100.00%`** |
+| **2. Chimeric Spliced DOIs (real contemporary DOI pasted onto fabricated paper)** | `suspected_hallucination` | `R-CHIMERIC-DOI-MISMATCH` | `0.00%` | **`64.25%`** *(125 `unresolved`, 18 `meta`)* | **`98.50%`** | **`+34.25%`** |
+| **3. Fake / Placeholder RFC 2606 URLs (`example.com`, `.invalid`, `fake-*`)** | `suspected_hallucination` | `R-FAKE-URL` | `0.00%` | **`0.00%`** *(200 `verified`, 196 `meta`)* | **`100.00%`** | **`+100.00%`** |
 | **4. Regional DOIs without CSL Metadata (`JaLC`, `KISTI`, `CNKI`, `mEDRA`)** | `unresolved` | `R-DOI-RA-NO-CSL` | `0.00%` | `100.00%`* | **`100.00%`** | `0.00%` |
 | **5. Upstream HTTP 429 Rate-Limit Exhaustion (`api_exhausted=True`)** | `unresolved` | `R-RATE-LIMITED-ABSTAIN` | `0.00%` | `100.00%`* | **`100.00%`** | `0.00%` |
-| **6. VN Statutory Authority & Code Mismatches (`parse_vn_legal_reference`, 0 overrides)** | `metadata_error` | `VNLegalVerifier` | `20.00%` | **`25.00%`** *(200 `hal`, 100 `meta`, 100 `ver`)* | **`100.00%`** | **`+75.00%`** |
-| **Overall OOD Stress Suite ($N = 2,400$)** *(McNemar $\chi^2 = 1,103.15, p = 6.83 \times 10^{-242}$)* | **3 Active Labels** | **Symbolic + VNLegal** | `3.33%` | **`53.21%`** *(F1 `0.5717`)* | **`99.75%`** *(F1 `0.9975`)* | **`+46.54%` Acc / `+0.4258` F1** |
+| **6. VN Statutory Authority & Code Mismatches (`parse_vn_legal_reference`, 0 overrides)** | `metadata_error` | `VNLegalVerifier` | `20.00%` | **`35.00%`** *(200 `hal`, 140 `meta`, 60 `ver`)* | **`100.00%`** | **`+65.00%`** |
+| **Overall OOD Stress Suite ($N = 2,400$)** *(McNemar $\chi^2 = 1,189.04, p = 1.47 \times 10^{-260}$)* | **3 Active Labels** | **Symbolic + VNLegal** | `3.33%` | **`49.88%`** *(F1 `0.5256`)* | **`99.75%`** *(F1 `0.9975`)* | **`+49.88%` Acc / `+0.4719` F1** |
 
 *\*Note: `B5` survives Categories 4 & 5 solely because the symbolic indicator `abstention_zone_indicator` (`vec[15]`) explicitly injects `registered_no_csl` and `api_exhausted` flags; without symbolic rules (`B4`), accuracy collapses to `3.33%` across the 2,400-sample suite.*
 
@@ -347,9 +347,9 @@ Even though Pure ML `B5` achieves `97.59%` on the 16D continuous in-distribution
 To evaluate the **complete raw-string pipeline** (`ReferenceListParser` + `parse_vn_legal_reference` $\rightarrow$ `RetrievalOrchestrator` $\rightarrow$ `NeuroSymbolicChecker`, preserving all **5 canonical labels** including `RESOURCE` with zero label-oracle access, verified in [`tests/unit/test_ground_truth_e2e_evaluation.py`](./tests/unit/test_ground_truth_e2e_evaluation.py)), we benchmarked [`scripts/evaluation/run_ground_truth_evaluation.py`](./scripts/evaluation/run_ground_truth_evaluation.py) on two curated raw-bibliography suites:
 
 1. **Adversarial Field-Case Ground Truth ([`data/essays/adversarial_ground_truth.json`](./data/essays/adversarial_ground_truth.json), $N = 15$ across `essay_06..08`)**:
-   - **5-Class End-to-End Accuracy:** **`100.00%` (`15 / 15`)**, Macro-F1 **`1.0000` (`100.00%`)** | **4-Class Scholarly (`N = 14`):** **`100.00%` (`14 / 14`)**, `ECE = 0.0831`, `Brier = 0.0134` (`~2.6s`).
+   - **5-Class End-to-End Accuracy:** **`100.00%` (`15 / 15`)**, Macro-F1 **`1.0000` (`100.00%`)** | **4-Class Scholarly (`N = 14`):** **`100.00%` (`14 / 14`)**, `ECE = 0.0875`, `Brier = 0.0138` (`~2.9s`).
 2. **Multi-Domain End-to-End Raw-Reference Gold Benchmark ([`data/essays/end_to_end_gold_benchmark.json`](./data/essays/end_to_end_gold_benchmark.json), $N = 120$)**:
-   - **5-Class End-to-End (`N = 120`):** **Accuracy = `100.00%` (`120 / 120`)** · Macro-P = **`100.00%`** · Macro-R = **`100.00%`** · **Macro-F1 = `100.00%`** (`ECE = 0.0881`, `Brier = 0.0216`, `~4.9s` cold CLI runtime).
+   - **5-Class End-to-End (`N = 120`):** **Accuracy = `100.00%` (`120 / 120`)** · Macro-P = **`100.00%`** · Macro-R = **`100.00%`** · **Macro-F1 = `100.00%`** (`ECE = 0.0902`, `Brier = 0.0220`, `~6.3s` cold CLI runtime).
    - **4-Class Scholarly (`N = 103`, excluding `17` `resource` items):** **Accuracy = `100.00%` (`103 / 103`)** · Macro-P = **`100.00%`** · Macro-R = **`100.00%`** · **Macro-F1 = `100.00%`**.
    - **Per-Label (`N = 120`):** `verified` (`N=31`): `100.00%` P/R/F1 · `metadata_error` (`N=30`): `100.00%` P/R/F1 · `suspected_hallucination` (`N=28`): `100.00%` P/R/F1 · `unresolved` (`N=14`): `100.00%` P/R/F1 · `resource` (`N=17`): `100.00%` P/R/F1.
    - **Per-Style Accuracy (`7` Styles):** `APA 7th` **`100.00%`** (`24/24`) · `TDTU Vietnamese` **`100.00%`** (`21/21`) · `IEEE` **`100.00%`** (`18/18`) · `Vancouver` **`100.00%`** (`15/15`) · `Chicago` **`100.00%`** (`15/15`) · `Harvard` **`100.00%`** (`14/14`) · `MLA 9th` **`100.00%`** (`13/13`).
@@ -357,7 +357,7 @@ To evaluate the **complete raw-string pipeline** (`ReferenceListParser` + `parse
 
 #### Threats to Validity & Methodological Transparency
 
-- **Internal Validity (Controlled Semi-Synthetic vs. Organic Student Errors):** The `120,000`-sample benchmark applies controlled perturbations to real papers because no manually labeled $10^5$-scale citation error dataset exists publicly. To prevent shortcut learning, we enforce zero `np.clip`, `0/0/0` title/ID overlap, 4-class multi-sentence `Sentence-BERT` context alignment ($P(\text{VERIFIED} \mid \text{score} > 0) = 54.06\%$), 6 diverse natural academic citation templates, and same-domain spliced hallucinations with real scholar names, complemented by the `120`-ref raw-string E2E benchmark and `310` real/adversarial PDFs.
+- **Internal Validity (Controlled Semi-Synthetic vs. Organic Student Errors):** The `120,000`-sample benchmark applies controlled perturbations to real papers because no manually labeled $10^5$-scale citation error dataset exists publicly. To prevent shortcut learning, we enforce zero `np.clip`, zero stemmer pre-screening, `0/0/0` title/ID overlap, 4-class multi-sentence `Sentence-BERT` context alignment ($P(\text{VERIFIED} \mid \text{score} > 0) = 54.06\%$), 12 diverse natural academic citation templates (plus verb-free assertions), and same-domain spliced hallucinations with real scholar names, complemented by the `120`-ref raw-string E2E benchmark and `310` real/adversarial PDFs.
 - **External Validity (`98.43%` CS/NLP Concentration in `local_papers.db`):** The offline SQLite FTS5 store (`129,125` records) is `98.43%` ACL Anthology (`127,102` CS/NLP papers). Cross-disciplinary generalization (Biomedical, Economics, Engineering, Vietnamese Law, Humanities) relies on CITRA's **15+ live federated APIs** (`Crossref`, `OpenAlex`, `Europe PMC`, `NCBI/bioRxiv`, `DOAJ`, `DataCite`, `OpenAIRE/HAL`, `OpenLibrary`, `Global DOI RA`, `VNLegalVerifier`), validated on the 6-domain `120`-ref E2E suite (`100.00%`) and `310`-PDF multi-style corpus.
 - **Construct & Ecological Validity (Paywalled Abstracts & Live API Drift):** Commercial publisher paywalls can omit public abstracts, and third-party APIs experience index drift or `HTTP 429` bursts during thesis deadlines. CITRA mitigates these via 9-source `_enrich_missing_abstract` enrichment, non-penalizing missing-abstract guards, persistent singleflight caching, and `R-RATE-LIMITED-ABSTAIN` (`100.00%` safe abstention under HTTP 429 exhaustion).
 
@@ -449,7 +449,7 @@ essay-integrity-checker/
 ├── docker-compose.yml                  # Orchestrates web (:5173), api (:8000), and grobid (:8070)
 ├── docker-compose.prod.yml             # Production Nginx + TLS + worker deployment stack
 ├── Dockerfile                          # Python 3.11 + FastAPI + Sentence-BERT/ONNX backend image
-├── pyproject.toml                      # Python package metadata (v3.81.6), Ruff/Pytest config & `essay-check` CLI
+├── pyproject.toml                      # Python package metadata (v3.81.7), Ruff/Pytest config & `essay-check` CLI
 ├── CLAUDE.md                           # AI / Developer architectural quick-reference
 ├── README.md                           # Project documentation (this file)
 ├── src/

@@ -96,6 +96,13 @@ def _normalize_greek_tokens(text: str) -> str:
     return out
 
 
+_TITLE_MEDIUM_BRACKET_RE = re.compile(
+    r"\s*\[(?:online|preprint|internet|web|software|computer\s+software|"
+    r"dataset|electronic\s+resource|accessed[^\]]*|trực\s+tuyến)\]",
+    re.IGNORECASE,
+)
+
+
 def _has_contradictory_title_tokens(
     citation_title: str | None,
     citation_raw: str | None,
@@ -106,9 +113,11 @@ def _has_contradictory_title_tokens(
     """Return True if the cited title contains >= 1 non-typo content word absent from `best_title`."""
     if not best_title or not str(best_title).strip():
         return False
-    cited_seg = (citation_title or "").strip()
+    cited_seg = _TITLE_MEDIUM_BRACKET_RE.sub(" ", (citation_title or "")).strip()
     if not cited_seg and citation_raw:
-        raw_no_links = re.sub(r"https?://\S+|10\.\d{4,9}/\S+", " ", citation_raw)
+        raw_no_links = _TITLE_MEDIUM_BRACKET_RE.sub(
+            " ", re.sub(r"https?://\S+|10\.\d{4,9}/\S+", " ", citation_raw)
+        )
         m_yr = re.search(r"\(\s*(?:18|19|20)\d{2}[a-z]?\s*\)\s*[\.,:]?\s*(.+)$", raw_no_links)
         if m_yr:
             rem = m_yr.group(1).strip()
@@ -127,13 +136,20 @@ def _has_contradictory_title_tokens(
         "edition", "revised", "updated", "volume", "part", "chapter", "through",
         "towards", "toward", "across", "between", "among", "about", "their",
     }
+    best_clean = _TITLE_MEDIUM_BRACKET_RE.sub(" ", str(best_title))
     c_norm = _normalize_greek_tokens(_fold_author_diacritics(cited_seg).lower())
-    b_norm = _normalize_greek_tokens(_fold_author_diacritics(best_title).lower())
+    b_norm = _normalize_greek_tokens(_fold_author_diacritics(best_clean).lower())
+    c_dehyph = re.sub(r"(?<=[a-z0-9])-(?=[a-z0-9])", "", c_norm)
+    b_dehyph = re.sub(r"(?<=[a-z0-9])-(?=[a-z0-9])", "", b_norm)
     c_toks = [
-        w for w in re.findall(r"[a-z0-9]{4,}", c_norm)
+        w for w in re.findall(r"[a-z0-9]{4,}", c_dehyph)
         if w not in _title_stop and not re.fullmatch(r"(?:18|19|20)\d{2}[a-z]?", w)
     ]
-    b_toks = [w for w in re.findall(r"[a-z0-9]{3,}", b_norm)]
+    b_toks = list(
+        dict.fromkeys(
+            re.findall(r"[a-z0-9]{3,}", b_norm) + re.findall(r"[a-z0-9]{3,}", b_dehyph)
+        )
+    )
     if not c_toks or not b_toks:
         return False
     b_set = set(b_toks)
@@ -148,8 +164,27 @@ def _has_contradictory_title_tokens(
     return False
 
 
-def _extract_surname_and_initial(author_str: str) -> tuple[str, str]:
-    """Extract (normalized_surname, first_initial) from 'Last, F.' or 'First Last'."""
+def _extract_surname_and_initial(author_str: object) -> tuple[str, str]:
+    """Extract (normalized_surname, first_initial) from Author dataclass, 'Last, F.', 'Last FX', or 'First Last'."""
+    if author_str is not None and hasattr(author_str, "last_name"):
+        last_raw = _fold_author_diacritics(str(getattr(author_str, "last_name", "") or ""))
+        last_toks = re.findall(r"[a-zA-Z\-]+", last_raw.lower())
+        surname = last_toks[-1] if last_toks else ""
+        inits = getattr(author_str, "initials", None) or []
+        init_char = ""
+        if inits:
+            m_init = re.findall(r"[a-zA-Z]", _fold_author_diacritics(str(inits[0])).lower())
+            if m_init:
+                init_char = m_init[0]
+        if not init_char:
+            first_raw = _fold_author_diacritics(str(getattr(author_str, "first_name", "") or ""))
+            m_first = re.findall(r"[a-zA-Z]", first_raw.lower())
+            if m_first:
+                init_char = m_first[0]
+        if surname:
+            return surname, init_char
+        author_str = getattr(author_str, "raw", "") or ""
+
     s = _fold_author_diacritics(re.sub(r"\bet\s+al\.?\b", "", str(author_str or ""), flags=re.I)).strip(" .,;")
     if not s:
         return "", ""
@@ -158,14 +193,53 @@ def _extract_surname_and_initial(author_str: str) -> tuple[str, str]:
         surname_toks = re.findall(r"[a-zA-Z\-]+", last_part.lower())
         init_toks = re.findall(r"[a-zA-Z]", rest_part.lower())
         return (surname_toks[-1] if surname_toks else ""), (init_toks[0] if init_toks else "")
-    toks = re.findall(r"[a-zA-Z\-]+", s.lower())
-    if not toks:
+    raw_toks = re.findall(r"[A-Za-z\-]+", s)
+    if not raw_toks:
         return "", ""
-    if len(toks) == 1:
-        return toks[0], ""
-    if len(toks[-1]) == 1 and len(toks[0]) > 1:
-        return toks[0], toks[-1][0]
-    return toks[-1], toks[0][0]
+    if len(raw_toks) == 1:
+        return raw_toks[0].lower(), ""
+    last_tok = raw_toks[-1]
+    first_tok = raw_toks[0]
+    if len(first_tok) > 1 and (
+        len(last_tok) == 1
+        or (1 <= len(last_tok) <= 3 and last_tok.isupper() and not first_tok.isupper())
+    ):
+        return first_tok.lower(), last_tok[0].lower()
+    return last_tok.lower(), first_tok[0].lower()
+
+
+def is_explicit_or_named_refutation_context(
+    features: MatchFeatures,
+    citation_authors: list[str] | None = None,
+    candidate_authors: list[str] | None = None,
+    mapping_status: CitationMappingStatus | None = None,
+) -> bool:
+    """Return True when context is a cleanly linked explicit in-text citation, or an implicit/mismatched
+    body passage that explicitly names the work's author AND states a direct polarity refutation."""
+    is_in_text_mismatch = bool(
+        mapping_status is not None and getattr(mapping_status, "value", str(mapping_status)) == "in_text_mismatch"
+    )
+    if getattr(features, "context_source", "") != "implicit_body_discovery" and not is_in_text_mismatch:
+        return True
+    best_sent = str(getattr(features, "best_cited_sentence", "") or "")
+    if not best_sent or getattr(features, "stance_label", "") != "contradiction_risk":
+        return False
+    from integrity_checker.matching.semantic import (
+        _DIRECT_REFUTATION_RE,
+        _EXPLICIT_CONTRADICTION_NEGATION_RE,
+    )
+
+    if not (
+        _DIRECT_REFUTATION_RE.search(best_sent)
+        or _EXPLICIT_CONTRADICTION_NEGATION_RE.search(best_sent)
+    ):
+        return False
+    sent_folded = _fold_author_diacritics(best_sent).lower()
+    for a_item in list(citation_authors or []) + list(candidate_authors or []):
+        sur, _ = _extract_surname_and_initial(a_item)
+        if len(sur) >= 3 and re.search(rf"\b{re.escape(sur)}\b", sent_folded):
+            return True
+    return False
 
 
 def _lead_author_compatible(
@@ -973,6 +1047,7 @@ class SymbolicRules:
         style_penalty: float = 0.0,
         citation_doi: str | None = None,
         citation_authors: list[str] | None = None,
+        has_contradiction_risk_veto: bool = False,
     ) -> RuleOutcome | None:
         """Rule: LOCAL_DB only with perfect match → VERIFIED.
 
@@ -1018,7 +1093,7 @@ class SymbolicRules:
                 and not is_arxiv_vs_pub_doi
             )
         )
-        if has_real_doi_conflict:
+        if has_real_doi_conflict or has_contradiction_risk_veto:
             return None
 
         # Perfect match: fuzzy title >= 0.90, title >= 0.95 AND author >= 0.8 AND year match
@@ -1068,6 +1143,7 @@ class SymbolicRules:
         features: MatchFeatures,
         style_penalty: float = 0.0,
         citation_doi: str | None = None,
+        has_contradiction_risk_veto: bool = False,
     ) -> RuleOutcome | None:
         """Rule: LOCAL_DB only with good match → VERIFIED.
 
@@ -1117,6 +1193,7 @@ class SymbolicRules:
         # Good match: fuzzy title >= 0.90, title >= 0.95 AND (author >= 0.5 or exact DOI/arXiv + author >= 0.35) AND year match
         if (
             not has_real_doi_conflict
+            and not has_contradiction_risk_veto
             and features.title_sim_fuzzy >= 0.90
             and title_sim >= 0.95
             and (
@@ -2118,12 +2195,11 @@ class SymbolicRules:
             (best and best.abstract and len(str(best.abstract).strip()) >= 40)
             or _is_mock_test_source
         )
-        is_explicit_in_text_ctx = bool(
-            getattr(features, "context_source", "") != "implicit_body_discovery"
-            or (
-                getattr(features, "stance_label", "") == "contradiction_risk"
-                and features.content_alignment_score >= 0.30
-            )
+        is_explicit_in_text_ctx = is_explicit_or_named_refutation_context(
+            features,
+            citation_authors=citation_authors,
+            candidate_authors=(best.authors if best else None),
+            mapping_status=mapping_status,
         )
         can_enforce_content_mismatch = bool(has_substantive_abstract and is_explicit_in_text_ctx)
         has_contradiction_risk_veto = bool(
@@ -2457,13 +2533,18 @@ class SymbolicRules:
             style_penalty,
             citation_doi=citation_doi,
             citation_authors=citation_authors,
+            has_contradiction_risk_veto=has_contradiction_risk_veto,
         )
         if local_verified:
             return local_verified
 
         # === FIX v1.7: LOCAL_DB Good Match → VERIFIED ===
         local_good = self._rule_local_db_good_match(
-            source, features, style_penalty, citation_doi=citation_doi
+            source,
+            features,
+            style_penalty,
+            citation_doi=citation_doi,
+            has_contradiction_risk_veto=has_contradiction_risk_veto,
         )
         if local_good:
             return local_good
@@ -2780,7 +2861,7 @@ class SymbolicRules:
         ):
             if (
                 author_sim >= self.author_jaccard_verified
-                and year_dist <= self.year_tolerance
+                and (year_dist <= self.year_tolerance or year_dist >= 900)
                 and not has_doi_conflict
                 and not has_contradiction_risk_veto
             ):
@@ -2797,10 +2878,14 @@ class SymbolicRules:
                 mismatched.append("doi")
                 if "R-DOI-CONFLICT" not in triggered_rules:
                     triggered_rules.append("R-DOI-CONFLICT")
-            if year_dist > self.year_tolerance:
+            if year_dist > self.year_tolerance and year_dist < 900:
                 mismatched.append("year")
             if author_sim < self.author_jaccard_verified:
                 mismatched.append("author")
+            if has_contradiction_risk_veto:
+                mismatched.append("content")
+                if "R-CONTENT-MISMATCH" not in triggered_rules:
+                    triggered_rules.append("R-CONTENT-MISMATCH")
             if (
                 completeness.is_incomplete
                 and not has_doi_conflict
@@ -2836,7 +2921,7 @@ class SymbolicRules:
             and _has_live_source(source, verified_sources)
             and features.title_sim_fuzzy >= 0.90
             and author_sim >= 0.80
-            and year_dist <= self.year_tolerance
+            and (year_dist <= self.year_tolerance or year_dist >= 900)
             and not has_doi_conflict
             and not has_severe_content_misalignment_veto
         ):
@@ -2884,6 +2969,7 @@ class SymbolicRules:
             and features.title_sim_fuzzy >= 0.85
             and author_sim >= self.author_jaccard_verified
             and year_dist > self.year_tolerance
+            and year_dist < 900
             and not has_doi_conflict
         ):
             if features.title_sim_fuzzy < 0.90:
@@ -3231,7 +3317,7 @@ class SymbolicRules:
             if 0.3 <= title_sim < self.title_sim_verified:
                 triggered_rules.append("R-KNOWN-AUTHOR-TITLE-MISMATCH")
                 mismatched.append("title")
-                if year_dist > self.year_tolerance:
+                if year_dist > self.year_tolerance and year_dist < 900:
                     mismatched.append("year")
                 return RuleOutcome(
                     label=ValidationLabel.METADATA_ERROR,
@@ -3594,7 +3680,7 @@ class SymbolicRules:
                 mismatched = []
                 if title_sim < self.title_sim_verified:
                     mismatched.append("title")
-                if year_dist > self.year_tolerance:
+                if year_dist > self.year_tolerance and year_dist < 900:
                     mismatched.append("year")
                 triggered_rules.append("R-KNOWN-AUTHOR-WEAK-EVIDENCE")
                 return RuleOutcome(

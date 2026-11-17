@@ -87,6 +87,20 @@ _NEGATION_CUES_RE = re.compile(
     r"không\s+có\s+bằng\s+chứng)\b",
     re.IGNORECASE,
 )
+_EXPLICIT_CONTRADICTION_NEGATION_RE = re.compile(
+    r"\b(?:never|no\s+longer|no\s+evidence|no\s+significant(?:\s+effect)?|fails?\s+to|ineffective|"
+    r"worse\s+than|unreliable|impossible|evaded\s+by|useless|incapable|"
+    r"contrary\s+to|disproves?|refutes?|invalidates?|degrades?|"
+    r"không\s+hiệu\s+quả|thất\s+bại|kém\s+hơn|vô\s+dụng|bác\s+bỏ|trái\s+ngược|"
+    r"không\s+cải\s+thiện|làm\s+giảm|suy\s+giảm\s+hiệu\s+năng|không\s+có\s+ý\s+nghĩa|"
+    r"không\s+có\s+bằng\s+chứng)\b",
+    re.IGNORECASE,
+)
+_CONTRASTIVE_BASELINE_LEAD_RE = re.compile(
+    r"^\s*(?:unlike|whereas|while|although|though|even\s+though|"
+    r"because\s+(?:standard|traditional|prior|existing|conventional))\b",
+    re.IGNORECASE,
+)
 _STRONG_POSITIVE_CLAIM_RE = re.compile(
     r"\b(?:always\s+correct|completely\s+solves|100%\s+accurate|guarantees|perfectly|"
     r"never\s+fails|eliminates\s+all|surprisingly\s+effective|highly\s+effective|"
@@ -186,16 +200,31 @@ _CITATION_CALLOUT_STRIP_RE = re.compile(
     r"|\[\d+(?:\s*[,;–\-]\s*\d+)*\])"
 )
 _MULTI_REF_BRACKET_RE = re.compile(r"\[\s*\d+\s*(?:[,;–\-]\s*\d+\s*)+\]")
+_APA_MULTI_CITATION_RE = re.compile(
+    r"\([^()\n]*(?:18|19|20)\d{2}[a-z]?[^()\n]*;[^()\n]*(?:18|19|20)\d{2}[a-z]?[^()\n]*\)"
+)
 _METHOD_USAGE_SENTENCE_RE = re.compile(
     r"\b(?:we|our|this\s+(?:study|paper|work|thesis)|the\s+(?:implementation|pipeline|system|experiment|experiments))\b"
     r"[^.;]{0,90}\b(?:use|uses|used|using|adopt\w*|apply|applies|applied|employ\w*|implement\w*|"
     r"fine[\s\-]?tun\w*|train\w*|project\w*|visualiz\w*|cluster\w*|preprocess\w*|integrat\w*|leverag\w*)\b",
     re.IGNORECASE,
 )
-_EMPIRICAL_CLAIM_ATTRIBUTION_RE = re.compile(
-    r"(?:\b(?:demonstrat\w*|show(?:ed|n|s)?|establish\w*|reported|achiev\w*|outperform\w*|"
-    r"yield\w*|attain\w*|regarding|concerning|according\s+to)\b|\b\d+(?:\.\d+)?\s*%)",
+_GENERIC_SURVEY_MENTION_RE = re.compile(
+    r"\b(?:in\s+recent\s+years|over\s+the\s+past\s+(?:few\s+)?(?:years|decade|decades)|"
+    r"has\s+revolutionized|have\s+revolutionized|has\s+fundamentally\s+changed|"
+    r"have\s+fundamentally\s+changed|widely\s+(?:used|adopted|studied|recognized)\b|"
+    r"growing\s+(?:body\s+of\s+)?(?:interest|literature|attention)|extensive\s+literature|"
+    r"for\s+a\s+(?:comprehensive\s+|detailed\s+)?(?:survey|review|overview)|"
+    r"see\s+(?:also|e\.g\.|for\s+example)|among\s+others)\b",
     re.IGNORECASE,
+)
+_BIBLIO_CATALOG_BLURB_RE = re.compile(
+    r"(?:\bISBN(?:-1[03])?\b|\b\d+\s+pp\.|\bCD-ROM\b)",
+    re.IGNORECASE,
+)
+_PDF_RUNNING_BANNER_PREFIX_RE = re.compile(
+    r"^\s*(?:essay\s+\d+\s*[—–\-][^\n.]{0,60}?(?=\b(?:The|In|A|An|We|Recent|Prior|For|Building)\b)"
+    r"|[A-Z][A-Z,\s\-]{3,28}\s+\d{1,4}\s+)",
 )
 _NON_ENGLISH_SCRIPT_OR_DIACRITIC_RE = re.compile(
     r"[\u0400-\u04ff\u0590-\u06ff\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af"
@@ -348,16 +377,23 @@ def _has_ungrounded_novel_claim(
         not cited_context
         or not source_abstract
         or raw_sim >= 0.78
+        or len(source_abstract.split()) < 20
+        or _BIBLIO_CATALOG_BLURB_RE.search(source_abstract)
         or is_vietnamese_text(cited_context, min_diacritics=2)
         or is_vietnamese_text(source_abstract, min_diacritics=2)
         or _is_non_english_or_foreign_text(cited_context)
+        or _is_non_english_or_foreign_text(source_abstract)
     ):
         return False
 
-    # Never penalize compound multi-citation sentences (e.g. "[5], whereas ... [9]" or "[13, 14]"),
-    # where half of the sentence legitimately describes a co-cited reference.
+    # Never penalize compound multi-citation sentences (e.g. "[5], whereas ... [9]", "[13, 14]",
+    # or "(Vaswani et al., 2017; Kipf & Welling, 2017)"), where part of the sentence cites another work.
     callout_matches = _CITATION_CALLOUT_STRIP_RE.findall(cited_context)
-    if len(callout_matches) >= 2 or _MULTI_REF_BRACKET_RE.search(cited_context):
+    if (
+        len(callout_matches) >= 2
+        or _MULTI_REF_BRACKET_RE.search(cited_context)
+        or _APA_MULTI_CITATION_RE.search(cited_context)
+    ):
         return False
 
     abs_stems = _extract_distinctive_stems(source_abstract)
@@ -372,26 +408,25 @@ def _has_ungrounded_novel_claim(
     if (
         m_adopt
         and _grounded_stems(_extract_distinctive_stems(m_adopt.group(1)), source_union)
-        and not _NEGATION_CUES_RE.search(cited_context)
+        and not _EXPLICIT_CONTRADICTION_NEGATION_RE.search(cited_context)
         and not _DIRECT_REFUTATION_RE.search(cited_context)
     ):
         return False
     if (
         _METHOD_USAGE_SENTENCE_RE.search(cited_context)
         and not re.match(r"^\s*(?:regarding|concerning|according\s+to)\b", cited_context, re.I)
-        and not _NEGATION_CUES_RE.search(cited_context)
+        and not _EXPLICIT_CONTRADICTION_NEGATION_RE.search(cited_context)
         and not _DIRECT_REFUTATION_RE.search(cited_context)
     ):
         return False
 
-    # Require an explicit empirical finding / quantitative metric / topic-attribution cue so
-    # qualitative background prose citing body sections of a paper is never false-flagged.
-    if not _EMPIRICAL_CLAIM_ATTRIBUTION_RE.search(cited_context):
-        return False
-
-    cleaned_ctx = _CITATION_CALLOUT_STRIP_RE.sub(" ", cited_context)
+    cleaned_ctx = _PDF_RUNNING_BANNER_PREFIX_RE.sub(
+        " ", _CITATION_CALLOUT_STRIP_RE.sub(" ", cited_context)
+    )
     claim_stems = _extract_distinctive_stems(cleaned_ctx)
     claim_non_title = {c for c in claim_stems if not _stem_in_set(c, title_stems)}
+    if _GENERIC_SURVEY_MENTION_RE.search(cleaned_ctx) and len(claim_non_title) <= 6:
+        return False
     grounded_non_title = _grounded_stems(claim_non_title, abs_stems)
 
     if len(claim_non_title) >= 4 and len(grounded_non_title) == 0:
@@ -1030,12 +1065,20 @@ class SemanticMatcher:
         norm_ev = normalize_vn_spelling(best_evidence_sentence) if best_evidence_sentence else ""
 
         # Check for severe polarity inversion when discussing the same technical concept
+        norm_focal_clean = " ".join(norm_focal.split()).lower()
         norm_src_abs = " ".join(source_abstract.split()).lower() if source_abstract else ""
         is_verbatim_from_abstract = bool(
-            norm_src_abs and len(norm_focal) >= 35 and norm_focal[:35] in norm_src_abs
+            norm_src_abs and len(norm_focal_clean) >= 35 and norm_focal_clean[:35] in norm_src_abs
         )
-        if best_evidence_sentence and similarity >= 0.30 and not is_verbatim_from_abstract:
+        is_contrastive_lead = bool(_CONTRASTIVE_BASELINE_LEAD_RE.search(norm_focal))
+        if (
+            best_evidence_sentence
+            and similarity >= 0.30
+            and not is_verbatim_from_abstract
+            and not is_contrastive_lead
+        ):
             ctx_neg = bool(_NEGATION_CUES_RE.search(norm_focal))
+            ctx_explicit_neg = bool(_EXPLICIT_CONTRADICTION_NEGATION_RE.search(norm_focal))
             ev_neg = bool(_NEGATION_CUES_RE.search(norm_ev))
             ctx_abs_pos = bool(_STRONG_POSITIVE_CLAIM_RE.search(norm_focal))
             ev_abs_pos = bool(_STRONG_POSITIVE_CLAIM_RE.search(norm_ev))
@@ -1046,12 +1089,12 @@ class SemanticMatcher:
             )
             if (
                 (ctx_abs_pos and ev_neg and not ctx_neg)
-                or (ctx_neg and ev_abs_pos and not ev_neg)
+                or (ctx_explicit_neg and ev_abs_pos and not ev_neg)
                 or (ctx_direct_refute and ev_pos and not ev_neg)
             ):
                 return "contradiction_risk"
 
-        # Position-independent novel-claim misattribution gate (bounded to similarity < 0.68)
+        # Position- and verb-independent novel-claim misattribution gate (bounded to similarity < 0.68)
         if (
             has_abstract
             and source_abstract
@@ -1075,7 +1118,9 @@ class SemanticMatcher:
             and similarity < 0.22
             and not is_cross_lingual
             and not is_vietnamese_text(focal_sentence, min_diacritics=2)
+            and not is_vietnamese_text(source_abstract or "", min_diacritics=2)
             and not _is_non_english_or_foreign_text(focal_sentence)
+            and not _is_non_english_or_foreign_text(source_abstract)
         ):
             focal_stems = _extract_distinctive_stems(_CITATION_CALLOUT_STRIP_RE.sub(" ", focal_sentence))
             src_stems = _extract_distinctive_stems(source_abstract) | _extract_distinctive_stems(source_title)
@@ -2020,9 +2065,8 @@ class SemanticMatcher:
         - Never activates when `source_abstract` lacks substantive technical content (< 4 stems).
         - Only recalibrates moderate/borderline scores (`0.50 <= raw_sim < 0.78`) when
           `_has_ungrounded_novel_claim` detects >= 4 non-title technical stems with zero
-          morphological root overlap against `source_abstract` (or >= 3 non-title stems with
-          zero total abstract overlap at `raw_sim < 0.72`, or < 15% overlap across >= 6 stems
-          at `raw_sim < 0.68`).
+          morphological root overlap against `source_abstract`, completely independent of
+          reporting verb choice.
         """
         sim = max(0.0, min(1.0, float(raw_sim)))
 

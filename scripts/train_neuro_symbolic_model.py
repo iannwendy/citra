@@ -88,10 +88,7 @@ from integrity_checker.logic.rules import SymbolicRules  # noqa: E402
 from integrity_checker.logic.vn_legal_verifier import verify_vn_legal_citation  # noqa: E402
 from integrity_checker.matching.author_matcher import author_match_score  # noqa: E402
 from integrity_checker.matching.fuzzy import FuzzyMatcher  # noqa: E402
-from integrity_checker.matching.semantic import (  # noqa: E402
-    SemanticMatcher,
-    _extract_distinctive_stems,
-)
+from integrity_checker.matching.semantic import SemanticMatcher  # noqa: E402
 from integrity_checker.matching.venue_normalizer import VenueNormalizer  # noqa: E402
 from integrity_checker.models.citation import Citation, CitationType  # noqa: E402
 from integrity_checker.models.source import SourceCandidate, SourceResult  # noqa: E402
@@ -605,9 +602,12 @@ def _corrupt_title_minor_ocr(title: str, rng: random.Random) -> str:
         main_part = _sanitize_balanced_delimiters(title.split(":")[0].strip())
         if len(main_part) >= 24:
             return main_part
+    if mode == 1:
+        if "-" in title:
+            return _sanitize_balanced_delimiters(title.replace("-", " ", 1))
+        if "," in title or ";" in title:
+            return _sanitize_balanced_delimiters(title.replace(",", "", 1).replace(";", "", 1))
     words = title.split()
-    if mode == 1 and len(words) >= 6:
-        return _sanitize_balanced_delimiters(" ".join(words[:-1]))
     if len(words) >= 4:
         idx = rng.randint(1, len(words) - 2)
         w = words[idx]
@@ -814,41 +814,32 @@ def _clean_claim_clause_for_third_person(raw_claim: str) -> str:
 
 def _make_misattributed_context_sentence(
     p: dict[str, Any],
-    donor_sents: tuple[str, ...],
+    donor_s2: str,
+    donor_s1: str,
     idx: int,
 ) -> str:
-    """Construct a natural academic misattributed citing sentence across 6 diverse syntactic templates."""
+    """Construct a natural academic misattributed citing sentence across 12 diverse syntactic templates
+    without any stemmer pre-screening or lexical overlap inspection against `p`."""
     t_words = [w.strip(":;,") for w in p["title"].split() if w.strip(":;,")][:4]
     while len(t_words) > 2 and t_words[-1].lower() in _SPLICE_TRAILING_FUNC_WORDS:
         t_words.pop()
     topic_anchor = " ".join(t_words)
-    title_stems = _extract_distinctive_stems(p["title"])
-    abs_stems = _extract_distinctive_stems(p["abstract"])
 
-    best_claim = ""
-    best_novel_cnt = -1
-    for cand_sent in donor_sents:
-        cleaned = _clean_claim_clause_for_third_person(cand_sent)
-        c_stems = _extract_distinctive_stems(cleaned) - title_stems
-        novel_cnt = len(c_stems - abs_stems) if not (c_stems & abs_stems) else 0
-        if novel_cnt > best_novel_cnt:
-            best_novel_cnt = novel_cnt
-            best_claim = cleaned
-    if not best_claim:
-        best_claim = _clean_claim_clause_for_third_person(donor_sents[0] if donor_sents else "")
-
+    raw_donor = donor_s2 if len(donor_s2.strip()) >= 45 else donor_s1
+    cleaned_claim = _clean_claim_clause_for_third_person(raw_donor)
     lowered_claim = (
-        best_claim[0].lower() + best_claim[1:]
-        if len(best_claim) > 1 and best_claim[1].islower()
-        else best_claim
+        cleaned_claim[0].lower() + cleaned_claim[1:]
+        if len(cleaned_claim) > 1 and cleaned_claim[1].islower()
+        else cleaned_claim
     )
+    cap_claim = cleaned_claim[0].upper() + cleaned_claim[1:] if cleaned_claim else "Empirical evaluations confirm this finding"
     lead_surname = _extract_lead_surname(p["authors"][0] if p.get("authors") else "Smith")
     has_etal = len(p.get("authors") or []) >= 2
     author_ref = f"{lead_surname} et al." if has_etal else lead_surname
     cite_num = (idx % 38) + 1
     year_val = int(p.get("year") or 2021)
 
-    template_id = idx % 6
+    template_id = idx % 12
     if template_id == 0:
         sent = f"{author_ref} ({year_val}) demonstrated that {lowered_claim} in their study on {topic_anchor}."
     elif template_id == 1:
@@ -859,8 +850,20 @@ def _make_misattributed_context_sentence(
         sent = f"According to {author_ref} ({year_val}), {lowered_claim} when modeling {topic_anchor}."
     elif template_id == 4:
         sent = f"Regarding {topic_anchor}, {lowered_claim} [{cite_num}]."
-    else:
+    elif template_id == 5:
         sent = f"Empirical experiments reported that {lowered_claim} ({author_ref}, {year_val})."
+    elif template_id == 6:
+        sent = f"{author_ref} ({year_val}) found that {lowered_claim} across {topic_anchor} benchmarks."
+    elif template_id == 7:
+        sent = f"In their analysis of {topic_anchor}, {author_ref} ({year_val}) concluded that {lowered_claim}."
+    elif template_id == 8:
+        sent = f"Previous studies on {topic_anchor} observed that {lowered_claim} [{cite_num}]."
+    elif template_id == 9:
+        sent = f"{author_ref} ({year_val}) report that {lowered_claim} for {topic_anchor}."
+    elif template_id == 10:
+        sent = f"Quantitative evaluations of {topic_anchor} revealed that {lowered_claim} ({author_ref}, {year_val})."
+    else:
+        sent = f"{cap_claim} ({author_ref}, {year_val})."
     return sent[:320]
 
 
@@ -979,7 +982,30 @@ _BORDERLINE_TOPIC_FALLBACKS: tuple[str, ...] = (
     "Cross-Domain", "Task-Oriented", "Multi-Stage", "Subword", "Morphosyntactic",
     "Discursive", "Typological", "Compositional", "Autoregressive", "Nonparametric",
     "Factorized", "Calibrated", "Regularized", "Attentional", "Graph-Structured",
-    "Token-Level", "Span-Based", "Document-Level", "Iterative", " Coupled", "Bilingual",
+    "Token-Level", "Span-Based", "Document-Level", "Iterative", "Coupled", "Bilingual",
+)
+
+_BORDERLINE_HEAD_NOUNS: tuple[str, ...] = (
+    "Models", "Frameworks", "Representations", "Architectures", "Algorithms",
+    "Systems", "Protocols", "Formulations", "Pipelines", "Estimators",
+    "Objectives", "Structures",
+)
+
+_BORDERLINE_VALID_TERMINAL_NOUNS: frozenset[str] = frozenset(
+    {
+        "architecture", "architectures", "acquisition", "formulation", "formulations",
+        "idioms", "transduction", "meaning", "embeddings", "embedding", "salience",
+        "categorization", "identification", "synthesis", "examination", "assessment",
+        "topologies", "mining", "decoder", "transcription", "discourse", "corpora",
+        "lexicon", "utterance", "utterances", "query", "resolution", "inference",
+        "optimization", "initialization", "corpus", "benchmark", "benchmarks",
+        "condensation", "lookup", "indexing", "mention", "mentions", "linkage",
+        "linkages", "forecasting", "chains", "syntax", "field", "transfer",
+        "correspondence", "perception", "manuscript", "manuscripts", "paradigm",
+        "approximation", "subspace", "manifold", "archive", "models", "frameworks",
+        "representations", "algorithms", "systems", "protocols", "pipelines",
+        "estimators", "objectives", "structures",
+    }
 )
 
 _BORDERLINE_SUBCLAUSES: tuple[str, ...] = (
@@ -1012,6 +1038,7 @@ def _make_borderline_preprint_title(title: str, idx: int, rng: random.Random) ->
     kept = content[:n_keep]
     out: list[str] = []
     seen_lower: set[str] = set()
+    seen_roots: set[str] = set()
     for k, w in enumerate(kept):
         wl = w.lower()
         if k == 0 and len(w) <= 12:
@@ -1020,16 +1047,27 @@ def _make_borderline_preprint_title(title: str, idx: int, rng: random.Random) ->
             cand_tok = _BORDERLINE_PARAPHRASES[wl]
         else:
             cand_tok = _BORDERLINE_TOPIC_FALLBACKS[(idx * 7 + k * 5) % len(_BORDERLINE_TOPIC_FALLBACKS)].strip()
-        if cand_tok.lower() in seen_lower:
+        cand_root = re.sub(r"[^a-z0-9]", "", cand_tok.lower())[:5]
+        if cand_tok.lower() in seen_lower or (len(cand_root) >= 4 and cand_root in seen_roots):
             for alt_shift in range(1, len(_BORDERLINE_TOPIC_FALLBACKS)):
                 alt_tok = _BORDERLINE_TOPIC_FALLBACKS[
                     (idx * 7 + k * 5 + alt_shift) % len(_BORDERLINE_TOPIC_FALLBACKS)
                 ].strip()
-                if alt_tok.lower() not in seen_lower:
+                alt_root = re.sub(r"[^a-z0-9]", "", alt_tok.lower())[:5]
+                if alt_tok.lower() not in seen_lower and (len(alt_root) < 4 or alt_root not in seen_roots):
                     cand_tok = alt_tok
+                    cand_root = alt_root
                     break
         seen_lower.add(cand_tok.lower())
+        if len(cand_root) >= 4:
+            seen_roots.add(cand_root)
         out.append(cand_tok)
+    if not out or out[-1].lower() not in _BORDERLINE_VALID_TERMINAL_NOUNS:
+        head_noun = _BORDERLINE_HEAD_NOUNS[idx % len(_BORDERLINE_HEAD_NOUNS)]
+        if len(out) >= 4:
+            out[-1] = head_noun
+        else:
+            out.append(head_noun)
     subclause = _BORDERLINE_SUBCLAUSES[idx % len(_BORDERLINE_SUBCLAUSES)]
     sep = " — " if (idx % 3 == 1) else ": "
     return f"{' '.join(out)}{sep}{subclause}"
@@ -1243,15 +1281,10 @@ def build_split_dataset(
                 yd = 0
                 doi_ok = False
                 consensus = rng.choice([1, 2])
-                alt_donor = (
-                    meta_pool[(j + 389) % meta_abs_n]
-                    if meta_abs_n > 2
-                    else other_p
-                )
-                alt_s1, alt_s2 = _extract_sentences(alt_donor["abstract"], alt_donor["title"])
                 ctx_sent = _make_misattributed_context_sentence(
                     p,
-                    (other_s2, other_s1, alt_s2, alt_s1),
+                    other_s2,
+                    other_s1,
                     m4_idx // 2,
                 )
                 abs_sent = s1

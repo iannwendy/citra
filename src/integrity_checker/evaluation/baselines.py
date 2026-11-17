@@ -538,9 +538,9 @@ class BaselineRunner:
 
         if doi_ok and title_best >= 0.90 and aj >= 0.50 and (yd <= 1 or yd >= 900):
             return "verified"
-        if title_best >= 0.90 and aj >= 0.50 and yd <= 1 and consensus >= 2:
+        if title_best >= 0.90 and aj >= 0.50 and (yd <= 1 or yd >= 900) and consensus >= 2:
             return "verified"
-        if tf >= 0.90 and aj >= 0.80 and yd <= 1 and consensus >= 1:
+        if tf >= 0.90 and aj >= 0.80 and (yd <= 1 or yd >= 900) and consensus >= 1:
             return "verified"
         if doi_ok and title_best < 0.90:
             return "metadata_error"

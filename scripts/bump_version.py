@@ -35,6 +35,7 @@ PYPROJECT_TOML = ROOT_DIR / "pyproject.toml"
 PY_VERSION_FILE = ROOT_DIR / "src" / "integrity_checker" / "__version__.py"
 README_MD = ROOT_DIR / "README.md"
 CLAUDE_MD = ROOT_DIR / "CLAUDE.md"
+BENCHMARK_REPORT_MD = ROOT_DIR / "docs" / "reports" / "BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md"
 
 VERSION_FILES = [
     WEB_VERSION_TS,
@@ -44,6 +45,7 @@ VERSION_FILES = [
     PY_VERSION_FILE,
     README_MD,
     CLAUDE_MD,
+    BENCHMARK_REPORT_MD,
 ]
 
 CONVENTIONAL_HEADER_RE = re.compile(
@@ -183,7 +185,21 @@ def update_all_version_files(new_version: str, build_date: str) -> None:
             text,
             count=1,
         )
+        text = re.sub(
+            r"(\(v)\d+\.\d+\.\d+(\s*—\s*)\d{4}-\d{2}-\d{2}(\))",
+            rf"\g<1>{new_version}\g<2>{build_date}\3",
+            text,
+        )
         CLAUDE_MD.write_text(text, encoding="utf-8")
+
+    if BENCHMARK_REPORT_MD.exists():
+        text = BENCHMARK_REPORT_MD.read_text(encoding="utf-8")
+        text = re.sub(
+            r"(Essay Integrity Checker v)\d+\.\d+\.\d+",
+            rf"\g<1>{new_version}",
+            text,
+        )
+        BENCHMARK_REPORT_MD.write_text(text, encoding="utf-8")
 
 
 def _git_output(*args: str) -> str:

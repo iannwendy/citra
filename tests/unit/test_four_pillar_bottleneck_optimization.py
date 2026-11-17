@@ -2,7 +2,7 @@
 
 Covers:
 1. Pillar 1: Rule ordering (`R-DOMAIN-EXCEPTION` above `R-ABSTENTION-BORDER`),
-   strong author-consensus corrupted-title routing (`R-AUTHOR-CONSENSUS-TITLE-CORRUPTION`),
+   strong author-consensus corrupted-title routing (`R-TITLE-MISMATCH`),
    compound partial-author + year discrepancy (`Rule 4a2`), and preserving `U1/U2` grey-zone abstention.
 2. Pillar 2A: `SemanticMatcher.calibrate_monolingual_specificity` (Hybrid Bi-Encoder +
    Distinctive Lexical/Entity Specificity Gate) + `Rule 3b` / `R-CONTENT-MISMATCH` routing,
@@ -1127,5 +1127,330 @@ class TestHostileReviewerAndProductionParityRegressions:
         feat = calc.compute(cit, src, citation_context=cit._occurrence_contexts[0])  # type: ignore[attr-defined]
         assert feat.stance_label == "supported"
         assert feat.content_is_aligned is True
+
+    def test_verb_agnostic_claim_invariance_across_unseen_verbs_and_verbless_assertions(self) -> None:
+        """Unseen reporting verbs ('found', 'concluded', 'observed', 'revealed', 'confirmed',
+        'argued', present-tense 'report') and plain verb-free '(Author, Year).' assertions
+        without '%' or 'achieves' must all trigger R-CONTENT-MISMATCH identically."""
+        checker = NeuroSymbolicChecker(enable_content_alignment=True)
+        src_title = "Attention Is All You Need"
+        src_abs = (
+            "The dominant sequence transduction models are based on complex recurrent or "
+            "convolutional neural networks that include an encoder and a decoder. We propose "
+            "a new simple network architecture, the Transformer, based solely on attention mechanisms."
+        )
+        cit = Citation(
+            raw_text="Vaswani, A., et al. (2017). Attention Is All You Need. NeurIPS.",
+            authors=["Vaswani, A."],
+            year=2017,
+            title=src_title,
+            venue="NeurIPS",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        cand = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title=src_title,
+            authors=["Vaswani, A.", "Shazeer, N.", "Parmar, N."],
+            year="2017",
+            venue="Advances in Neural Information Processing Systems",
+            abstract=src_abs,
+            confidence=0.98,
+        )
+        src = SourceResult(
+            citation_raw=cit.raw_text,
+            candidates=[cand],
+            sources_queried=["openalex", "crossref"],
+            sources_succeeded=["openalex", "crossref"],
+        )
+        claim = "byte-pair subword regularization lowers morphological out-of-vocabulary error rates on agglutinative corpora"
+        unseen_templates = [
+            f"Vaswani et al. (2017) found that {claim}.",
+            f"Vaswani et al. (2017) concluded that {claim}.",
+            f"Vaswani et al. (2017) observed that {claim}.",
+            f"Vaswani et al. (2017) revealed that {claim}.",
+            f"Vaswani et al. (2017) confirmed that {claim}.",
+            f"Vaswani et al. (2017) argued that {claim}.",
+            f"Vaswani et al. (2017) report that {claim}.",
+            "Byte-pair subword regularization lowers morphological out-of-vocabulary error rates on agglutinative corpora (Vaswani et al., 2017).",
+        ]
+        for ctx_sent in unseen_templates:
+            sim_out, _, aligned_out = SemanticMatcher.calibrate_monolingual_specificity(
+                0.58, ctx_sent, src_title, src_abs, is_cross_lingual=False
+            )
+            stance_out = SemanticMatcher.check_claim_stance(
+                ctx_sent, src_abs, sim_out, has_abstract=True, source_abstract=src_abs, source_title=src_title
+            )
+            assert aligned_out is False, f"Failed specificity calibration on: {ctx_sent}"
+            assert stance_out == "contradiction_risk", f"Failed stance detection on: {ctx_sent}"
+            verdict = checker.check(
+                cit,
+                src,
+                citation_context=ctx_sent,
+                mapping_status=CitationMappingStatus.MATCHED,
+            )
+            assert verdict.label == ValidationLabel.METADATA_ERROR, f"Failed verdict on: {ctx_sent}"
+            assert "R-CONTENT-MISMATCH" in verdict.triggered_rules
+
+    def test_known_papers_detects_grafted_coauthors_while_preserving_full_and_etal_lists(self) -> None:
+        """NeuroSymbolicChecker known_papers branch must flag grafted/swapped co-authors ('author')
+        both online and offline while keeping full canonical author lists and 'et al.' VERIFIED."""
+        checker = NeuroSymbolicChecker(enable_content_alignment=False)
+        grafted_cit = Citation(
+            raw_text="Vaswani, A., Sutskever, I., Goodfellow, I., & LeCun, Y. (2017). Attention Is All You Need. Advances in Neural Information Processing Systems.",
+            authors=["Vaswani, A.", "Sutskever, I.", "Goodfellow, I.", "LeCun, Y."],
+            year=2017,
+            title="Attention Is All You Need",
+            venue="Advances in Neural Information Processing Systems",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        # 1. Offline (empty SourceResult -> relies on KNOWN_PAPERS truncated prefix)
+        empty_src = SourceResult(
+            citation_raw=grafted_cit.raw_text,
+            candidates=[],
+            sources_queried=["local_db"],
+            sources_succeeded=[],
+        )
+        v_offline = checker.check(grafted_cit, empty_src, mapping_status=CitationMappingStatus.MATCHED)
+        assert v_offline.label == ValidationLabel.METADATA_ERROR
+        assert "author" in v_offline.mismatched_fields
+
+        # 2. Online with full canonical authors
+        full_authors = [
+            "Ashish Vaswani", "Noam Shazeer", "Niki Parmar", "Jakob Uszkoreit",
+            "Llion Jones", "Aidan N. Gomez", "Lukasz Kaiser", "Illia Polosukhin",
+        ]
+        online_src = SourceResult(
+            citation_raw=grafted_cit.raw_text,
+            candidates=[
+                SourceCandidate(
+                    source_name="openalex",
+                    found=True,
+                    title="Attention Is All You Need",
+                    authors=full_authors,
+                    year="2017",
+                    venue="Advances in Neural Information Processing Systems",
+                    confidence=0.99,
+                )
+            ],
+            sources_queried=["openalex"],
+            sources_succeeded=["openalex"],
+        )
+        v_online = checker.check(grafted_cit, online_src, mapping_status=CitationMappingStatus.MATCHED)
+        assert v_online.label == ValidationLabel.METADATA_ERROR
+        assert "author" in v_online.mismatched_fields
+
+        # 3. Legitimate full 8-author citation offline & online must remain VERIFIED
+        valid_full_cit = Citation(
+            raw_text="Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L., & Polosukhin, I. (2017). Attention Is All You Need. NeurIPS.",
+            authors=full_authors,
+            year=2017,
+            title="Attention Is All You Need",
+            venue="NeurIPS",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert checker.check(valid_full_cit, empty_src, mapping_status=CitationMappingStatus.MATCHED).label == ValidationLabel.VERIFIED
+        assert checker.check(valid_full_cit, online_src, mapping_status=CitationMappingStatus.MATCHED).label == ValidationLabel.VERIFIED
+
+    def test_ordinary_negation_weak_learners_and_capitalized_verbatim_abstract_never_false_veto(self) -> None:
+        """Capitalized verbatim abstract sentences, ordinary 'not required' / 'weak decision trees',
+        APA semicolon multi-citations, and foreign source abstracts must never false-trigger contradiction_risk."""
+        # 1. Capitalized verbatim sentence from abstract containing negation
+        cap_abs = (
+            "Standard recurrent neural models fail to capture long-range dependencies. "
+            "Our attention architecture significantly outperforms existing systems."
+        )
+        cap_focal = "Standard recurrent neural models fail to capture long-range dependencies."
+        assert (
+            SemanticMatcher.check_claim_stance(
+                cap_focal,
+                "Our attention architecture significantly outperforms existing systems.",
+                0.72,
+                has_abstract=True,
+                source_abstract=cap_abs,
+                source_title="Attention Networks",
+            )
+            == "supported"
+        )
+
+        # 2. Ordinary negation ('not required') & 'weak' learners against positive abstract evidence
+        vas_ev = "Experiments on two machine translation tasks show these models to be superior in quality."
+        for benign_focal in [
+            "Vaswani et al. (2017) show that recurrent layers are not required for sequence transduction.",
+            "Gradient boosting combines weak decision trees to achieve high accuracy (Chen & Guestrin, 2016).",
+            "Unlike traditional recurrent networks that fail to parallelize, Vaswani et al. (2017) use self-attention.",
+        ]:
+            assert (
+                SemanticMatcher.check_claim_stance(
+                    benign_focal,
+                    vas_ev,
+                    0.68,
+                    has_abstract=True,
+                    source_abstract=vas_ev,
+                    source_title="Attention Is All You Need",
+                )
+                == "supported"
+            )
+
+        # 3. APA semicolon multi-citation & foreign-language source abstract must be exempted
+        apa_multi = (
+            "Neural sequence encoders and spectral graph Laplacian message-passing operators "
+            "improve benchmark accuracy on Cora (Vaswani et al., 2017; Kipf & Welling, 2017)."
+        )
+        _, _, apa_aligned = SemanticMatcher.calibrate_monolingual_specificity(
+            0.57,
+            apa_multi,
+            "Attention Is All You Need",
+            "We propose the Transformer based solely on attention mechanisms for machine translation.",
+            is_cross_lingual=False,
+        )
+        assert apa_aligned is True
+
+        fr_abs = (
+            "Nous proposons une architecture neuronale pour la traduction automatique des phrases "
+            "longues dans les corpus multilingues."
+        )
+        en_ctx = "This work investigates morphological segmentation of low-resource clinical narratives [4]."
+        _, _, fr_aligned = SemanticMatcher.calibrate_monolingual_specificity(
+            0.55, en_ctx, "Architecture Neuronale", fr_abs, is_cross_lingual=False
+        )
+        assert fr_aligned is True
+        assert (
+            SemanticMatcher.check_claim_stance(
+                en_ctx, fr_abs, 0.18, has_abstract=True, source_abstract=fr_abs, source_title="Architecture Neuronale"
+            )
+            != "contradiction_risk"
+        )
+
+    def test_rule_3_contradiction_mismatched_content_and_uncited_implicit_discovery_guard(self) -> None:
+        """Rule 3 with consensus >= 2 and contradiction_risk must populate mismatched_fields=['content'],
+        while UNCITED_REFERENCE implicit_body_discovery from another paper's sentence stays VERIFIED."""
+        rules = SymbolicRules()
+        cand = SourceCandidate(
+            source_name="crossref",
+            found=True,
+            doi="10.18653/v1/2020.acl-main.10",
+            title="Contextualized Representations for Biomedical Entity Linking",
+            authors=["Lee, J.", "Yoon, W."],
+            year="2020",
+            abstract="We pretrain biomedical language representations on PubMed abstracts to improve entity linking.",
+            confidence=0.98,
+        )
+        src = SourceResult(
+            citation_raw="Lee, J., & Yoon, W. (2020). Contextualized Representations for Biomedical Entity Linking.",
+            candidates=[cand, SourceCandidate(source_name="openalex", found=True, title=cand.title, authors=cand.authors, year="2020", doi=cand.doi, abstract=cand.abstract, confidence=0.97)],
+            sources_queried=["crossref", "openalex"],
+            sources_succeeded=["crossref", "openalex"],
+        )
+        feat_contradict = MatchFeatures(
+            title_sim_fuzzy=1.0,
+            title_sim_semantic=1.0,
+            author_jaccard=1.0,
+            year_distance=0,
+            doi_exact_match=False,
+            source_consensus=2,
+            content_alignment_score=0.38,
+            content_alignment_confidence="medium",
+            content_is_aligned=False,
+            stance_label="contradiction_risk",
+            context_source="in_text_citation",
+            best_cited_sentence="Lee & Yoon (2020) showed that reinforcement learning optimizes robotic quadruped locomotion.",
+        )
+        out_r3 = rules.apply(
+            feat_contradict,
+            src,
+            citation_authors=["Lee, J.", "Yoon, W."],
+            citation_year=2020,
+            citation_title=cand.title,
+            citation_raw=src.citation_raw,
+        )
+        assert out_r3.label == ValidationLabel.METADATA_ERROR
+        assert "content" in out_r3.mismatched_fields
+        assert "R-CONTENT-MISMATCH" in out_r3.triggered_rules
+        assert "fields: ." not in out_r3.reasoning
+
+        # Uncited bibliography entry whose implicit_body_discovery window cites a DIFFERENT author must stay VERIFIED
+        feat_uncited_other = MatchFeatures(
+            title_sim_fuzzy=1.0,
+            title_sim_semantic=1.0,
+            author_jaccard=1.0,
+            year_distance=0,
+            source_consensus=2,
+            content_alignment_score=0.38,
+            content_alignment_confidence="medium",
+            content_is_aligned=False,
+            stance_label="contradiction_risk",
+            context_source="implicit_body_discovery",
+            best_cited_sentence="Kipf & Welling (2017) demonstrated that spectral graph Laplacian operators improve Cora node classification.",
+        )
+        out_uncited = rules.apply(
+            feat_uncited_other,
+            src,
+            mapping_status=CitationMappingStatus.UNCITED_REFERENCE,
+            citation_authors=["Lee, J.", "Yoon, W."],
+            citation_year=2020,
+            citation_title=cand.title,
+            citation_raw=src.citation_raw,
+        )
+        assert out_uncited.label == ValidationLabel.VERIFIED
+        assert "R-CONTENT-MISMATCH" not in out_uncited.triggered_rules
+
+    def test_author_dataclass_vancouver_initials_undated_rule3b_and_dehyphenated_online_titles(self) -> None:
+        """Author dataclass instances, Vancouver 'Wang YX' initials, undated year_distance=999 on exact-author
+        Rule 3/3b, and '[Online]' / 'zeroshot' title tokens must all be handled cleanly."""
+        from integrity_checker.logic.rules import (
+            _has_contradictory_title_tokens,
+            _lead_author_compatible,
+        )
+        from integrity_checker.matching.author_parser import Author
+
+        peters_obj = Author(last_name="peters", initials=["M"], raw="Peters, M.")
+        assert _lead_author_compatible([peters_obj], ["Matthew E. Peters", "Mark Neumann"]) is True  # type: ignore[list-item]
+        assert _lead_author_compatible(["Wang YX"], ["Xiao Wang", "Jie Tang"]) is False
+        assert _lead_author_compatible(["Wang YX"], ["Yuxuan Wang", "Jie Tang"]) is True
+
+        assert (
+            _has_contradictory_title_tokens(
+                "Large Language Models are ZeroShot Reasoners [Online]",
+                None,
+                "Large Language Models are Zero-Shot Reasoners",
+            )
+            is False
+        )
+
+        # Undated candidate (year_distance=999) with exact title & exact author must verify in Rule 3b (not false 'year' error)
+        rules = SymbolicRules()
+        cand_undated_exact = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title="Large Language Models are Zero-Shot Reasoners",
+            authors=["Kojima, T.", "Gu, S. S."],
+            year=None,
+            confidence=0.94,
+        )
+        src_undated_exact = SourceResult(
+            citation_raw="Kojima, T., & Gu, S. S. (2022). Large Language Models are Zero-Shot Reasoners.",
+            candidates=[cand_undated_exact],
+            sources_queried=["openalex"],
+            sources_succeeded=["openalex"],
+        )
+        feat_undated_exact = MatchFeatures(
+            title_sim_fuzzy=1.0,
+            title_sim_semantic=1.0,
+            author_jaccard=1.0,
+            year_distance=999,
+            source_consensus=1,
+        )
+        out_undated_exact = rules.apply(
+            feat_undated_exact,
+            src_undated_exact,
+            citation_authors=["Kojima, T.", "Gu, S. S."],
+            citation_year=2022,
+            citation_title=cand_undated_exact.title,
+            citation_raw=src_undated_exact.citation_raw,
+        )
+        assert out_undated_exact.label == ValidationLabel.VERIFIED
+        assert "year" not in out_undated_exact.mismatched_fields
+
 
 
