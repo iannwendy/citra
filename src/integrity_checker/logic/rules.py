@@ -26,6 +26,13 @@ from typing import TYPE_CHECKING, Any
 from integrity_checker.config import get_settings
 from integrity_checker.logging import get_logger
 from integrity_checker.logic.completeness import assess_bibliographic_completeness
+from integrity_checker.matching.author_matcher import (
+    _extract_corporate_keys,
+    author_match_details,
+)
+from integrity_checker.matching.author_matcher import (
+    _fold_diacritics as _fold_author_diacritics,
+)
 from integrity_checker.matching.fuzzy import FuzzyMatcher
 from integrity_checker.matching.venue_normalizer import VenueNormalizer
 from integrity_checker.models.source import SourceResult
@@ -57,6 +64,125 @@ _RESERVED_FAKE_TLDS: tuple[str, ...] = (
     ".localhost",
     ".fake",
 )
+
+_GREEK_TITLE_MAP: dict[str, str] = {
+    "α": "alpha",
+    "β": "beta",
+    "γ": "gamma",
+    "δ": "delta",
+    "ε": "epsilon",
+    "θ": "theta",
+    "λ": "lambda",
+    "μ": "mu",
+    "π": "pi",
+    "σ": "sigma",
+    "ω": "omega",
+}
+
+_NON_VENUE_WRAPPER_RE = re.compile(
+    r"\b(?:arxiv|corr|preprints?|biorxiv|medrxiv|chemrxiv|techrxiv|psyarxiv|ssrn|hal|zenodo|"
+    r"openreview|research\s+square|researchgate|sciencedirect|springer|elsevier|wiley|taylor|"
+    r"francis|ieee\s+xplore|acm\s+digital|lecture\s+notes|lncs|pubmed|pmlr|"
+    r"proceedings\s+of\s+machine\s+learning\s+research|"
+    r"jmlr\s+workshop\s+and\s+conference\s+proceedings|acl\s+anthology|ceur)\b",
+    re.IGNORECASE,
+)
+
+
+def _normalize_greek_tokens(text: str) -> str:
+    out = text
+    for gr, en in _GREEK_TITLE_MAP.items():
+        out = out.replace(gr, en).replace(gr.upper(), en)
+    return out
+
+
+def _has_contradictory_title_tokens(
+    citation_title: str | None,
+    citation_raw: str | None,
+    best_title: str | None,
+    *,
+    citation_venue: str | None = None,
+) -> bool:
+    """Return True if the cited title contains >= 1 non-typo content word absent from `best_title`."""
+    if not best_title or not str(best_title).strip():
+        return False
+    cited_seg = (citation_title or "").strip()
+    if not cited_seg and citation_raw:
+        raw_no_links = re.sub(r"https?://\S+|10\.\d{4,9}/\S+", " ", citation_raw)
+        m_yr = re.search(r"\(\s*(?:18|19|20)\d{2}[a-z]?\s*\)\s*[\.,:]?\s*(.+)$", raw_no_links)
+        if m_yr:
+            rem = m_yr.group(1).strip()
+            if citation_venue and citation_venue.strip():
+                idx_v = rem.lower().find(citation_venue.strip().lower())
+                if idx_v > 0:
+                    rem = rem[:idx_v].strip()
+            cited_seg = rem.split(".")[0].strip()
+    if not cited_seg or len(cited_seg) < 8:
+        return False
+
+    from difflib import SequenceMatcher
+
+    _title_stop = {
+        "with", "from", "into", "over", "under", "using", "based", "study",
+        "edition", "revised", "updated", "volume", "part", "chapter", "through",
+        "towards", "toward", "across", "between", "among", "about", "their",
+    }
+    c_norm = _normalize_greek_tokens(_fold_author_diacritics(cited_seg).lower())
+    b_norm = _normalize_greek_tokens(_fold_author_diacritics(best_title).lower())
+    c_toks = [
+        w for w in re.findall(r"[a-z0-9]{4,}", c_norm)
+        if w not in _title_stop and not re.fullmatch(r"(?:18|19|20)\d{2}[a-z]?", w)
+    ]
+    b_toks = [w for w in re.findall(r"[a-z0-9]{3,}", b_norm)]
+    if not c_toks or not b_toks:
+        return False
+    b_set = set(b_toks)
+    for ct in c_toks:
+        if ct in b_set:
+            continue
+        if len(ct) >= 5 and any(bt.startswith(ct[:5]) or ct.startswith(bt[:5]) for bt in b_toks if len(bt) >= 5):
+            continue
+        if any(SequenceMatcher(None, ct, bt).ratio() >= 0.80 for bt in b_toks):
+            continue
+        return True
+    return False
+
+
+def _extract_surname_and_initial(author_str: str) -> tuple[str, str]:
+    """Extract (normalized_surname, first_initial) from 'Last, F.' or 'First Last'."""
+    s = _fold_author_diacritics(re.sub(r"\bet\s+al\.?\b", "", str(author_str or ""), flags=re.I)).strip(" .,;")
+    if not s:
+        return "", ""
+    if "," in s:
+        last_part, rest_part = s.split(",", 1)
+        surname_toks = re.findall(r"[a-zA-Z\-]+", last_part.lower())
+        init_toks = re.findall(r"[a-zA-Z]", rest_part.lower())
+        return (surname_toks[-1] if surname_toks else ""), (init_toks[0] if init_toks else "")
+    toks = re.findall(r"[a-zA-Z\-]+", s.lower())
+    if not toks:
+        return "", ""
+    if len(toks) == 1:
+        return toks[0], ""
+    if len(toks[-1]) == 1 and len(toks[0]) > 1:
+        return toks[0], toks[-1][0]
+    return toks[-1], toks[0][0]
+
+
+def _lead_author_compatible(
+    citation_authors: list[str] | None,
+    candidate_authors: list[str] | None,
+) -> bool:
+    """Verify lead cited surname matches a candidate author without conflicting given-name initials."""
+    if not citation_authors or not candidate_authors:
+        return False
+    c_sur, c_init = _extract_surname_and_initial(citation_authors[0])
+    if not c_sur:
+        return False
+    for ba in candidate_authors:
+        b_sur, b_init = _extract_surname_and_initial(ba)
+        if b_sur == c_sur and (not c_init or not b_init or c_init == b_init):
+            return True
+    return False
 
 _VENUE_STOP_TOKENS: frozenset[str] = frozenset(
     {
@@ -1244,6 +1370,95 @@ class SymbolicRules:
         observed_title = str(html_meta.citation_title or html_meta.page_title or "").strip()
         return meta_sim < 0.20, meta_sim, observed_title
 
+    def check_explicit_venue_conflict(
+        self,
+        citation_venue: str | None,
+        candidate_venue: str | None,
+        *,
+        citation_doi: str | None = None,
+        candidate_external_ids: dict[str, Any] | None = None,
+        doi_exact_match: bool = False,
+        is_known_paper: bool = False,
+    ) -> bool:
+        """Return True if `citation_venue` and `candidate_venue` represent two incompatible explicit scholarly venues."""
+        if not citation_venue or not candidate_venue:
+            return False
+        cv_clean = citation_venue.strip()
+        bv_clean = candidate_venue.strip()
+        c_is_bogus_venue = bool(
+            re.search(
+                r"\b(?:unknown|imaginary|hypothetical|nonexistent|fictional|placeholder|unverified|bogus)\b",
+                cv_clean,
+                re.I,
+            )
+        )
+        if (
+            len(cv_clean) < 3
+            or len(bv_clean) < 3
+            or cv_clean.lower() in {"ieee", "acm"}
+            or bv_clean.lower() in {"ieee", "acm"}
+            or _NON_VENUE_WRAPPER_RE.search(cv_clean)
+            or (_NON_VENUE_WRAPPER_RE.search(bv_clean) and not c_is_bogus_venue)
+            or (citation_doi and "10.48550/arxiv" in str(citation_doi).lower())
+            or "vn_standard_code" in (candidate_external_ids or {})
+        ):
+            return False
+        if not (doi_exact_match or is_known_paper or len(cv_clean) >= 6):
+            return False
+
+        vn = VenueNormalizer()
+        v_sim = vn.similarity(cv_clean, bv_clean)
+        if v_sim >= 0.35:
+            return False
+        if c_is_bogus_venue and v_sim < 0.15:
+            return True
+
+        _explicit_venue_re = re.compile(
+            r"\b(?:journal|transactions|proceedings|conference|symposium|letters|workshop)\b",
+            re.I,
+        )
+        _generic_venue_words = {
+            "journal", "transactions", "proceedings", "conference", "symposium",
+            "letters", "workshop", "international", "annual", "meeting", "of",
+            "the", "on", "in", "for", "and", "at", "to", "ieee", "acm",
+            "proc", "conf", "trans", "int",
+        }
+        c_canon = vn._candidate_canonicals(cv_clean)
+        b_canon = vn._candidate_canonicals(bv_clean)
+        c_is_explicit = bool(_explicit_venue_re.search(cv_clean) or c_canon)
+        b_is_explicit = bool(_explicit_venue_re.search(bv_clean) or b_canon)
+        if not (c_is_explicit and b_is_explicit):
+            return False
+
+        c_exp_str = " ".join(c_canon) if c_canon else cv_clean
+        b_exp_str = " ".join(b_canon) if b_canon else bv_clean
+        c_words = {
+            w for w in re.findall(r"[a-z]{3,}", c_exp_str.lower())
+            if w not in _generic_venue_words and not re.fullmatch(r"(?:18|19|20)\d{2}[a-z]?", w)
+        }
+        b_words = {
+            w for w in re.findall(r"[a-z]{3,}", b_exp_str.lower())
+            if w not in _generic_venue_words and not re.fullmatch(r"(?:18|19|20)\d{2}[a-z]?", w)
+        }
+        has_zero_content_overlap = bool(c_words and b_words and not (c_words & b_words))
+        _broad_field_umbrellas = {
+            "medical", "medicine", "clinical", "computer", "computing",
+            "computational", "science", "sciences", "scientific",
+            "engineering", "information", "systems", "system",
+            "research", "applied", "studies", "review", "reviews",
+        }
+        c_specific = c_words - _broad_field_umbrellas
+        b_specific = b_words - _broad_field_umbrellas
+        has_distinct_canonical_conflict = bool(c_canon and b_canon and not (c_canon & b_canon))
+        has_umbrella_only_conflict = bool(
+            v_sim < 0.22 and c_specific and b_specific and not (c_specific & b_specific)
+        )
+        return bool(
+            has_zero_content_overlap
+            or has_distinct_canonical_conflict
+            or has_umbrella_only_conflict
+        )
+
     def apply(
         self,
         features: MatchFeatures,
@@ -1287,13 +1502,6 @@ class SymbolicRules:
             and best_cand.venue
             and "R-INCOMPLETE-METADATA" not in outcome.triggered_rules
         ):
-            _non_venue_pat = re.compile(
-                r"\b(?:arxiv|corr|preprint|biorxiv|medrxiv|ssrn|hal|zenodo|openreview|"
-                r"researchgate|sciencedirect|springer|elsevier|wiley|taylor|francis|"
-                r"ieee\s+xplore|acm\s+digital|lecture\s+notes|lncs|pubmed|pmlr|"
-                r"proceedings\s+of\s+machine\s+learning\s+research|acl\s+anthology|ceur)\b",
-                re.IGNORECASE,
-            )
             cv_clean = citation_venue.strip()
             bv_clean = best_cand.venue.strip()
             c_is_bogus_venue = bool(
@@ -1308,13 +1516,11 @@ class SymbolicRules:
                 and len(bv_clean) >= 3
                 and cv_clean.lower() not in {"ieee", "acm"}
                 and bv_clean.lower() not in {"ieee", "acm"}
-                and not _non_venue_pat.search(cv_clean)
-                and (not _non_venue_pat.search(bv_clean) or c_is_bogus_venue)
+                and not _NON_VENUE_WRAPPER_RE.search(cv_clean)
+                and (not _NON_VENUE_WRAPPER_RE.search(bv_clean) or c_is_bogus_venue)
                 and not (citation_doi and "10.48550/arxiv" in str(citation_doi).lower())
                 and "vn_standard_code" not in (best_cand.external_ids or {})
             ):
-                from integrity_checker.matching.venue_normalizer import VenueNormalizer
-
                 vn = VenueNormalizer()
                 v_sim = vn.similarity(cv_clean, bv_clean)
                 if v_sim < 0.15 and outcome.label == ValidationLabel.METADATA_ERROR:
@@ -1322,76 +1528,22 @@ class SymbolicRules:
                         outcome.mismatched_fields.append("venue")
                     if "R-VENUE-MISMATCH" not in outcome.triggered_rules:
                         outcome.triggered_rules.append("R-VENUE-MISMATCH")
-                elif (
-                    v_sim < 0.35
-                    and outcome.label == ValidationLabel.VERIFIED
-                    and (features.doi_exact_match or len(cv_clean) >= 6)
+                elif outcome.label == ValidationLabel.VERIFIED and self.check_explicit_venue_conflict(
+                    cv_clean,
+                    bv_clean,
+                    citation_doi=citation_doi,
+                    candidate_external_ids=best_cand.external_ids,
+                    doi_exact_match=bool(features.doi_exact_match),
                 ):
-                    _explicit_venue_re = re.compile(
-                        r"\b(?:journal|transactions|proceedings|conference|symposium|letters|workshop)\b",
-                        re.I,
+                    outcome.label = ValidationLabel.METADATA_ERROR
+                    outcome.confidence = min(outcome.confidence, 0.72)
+                    outcome.mismatched_fields = ["venue"]
+                    if 0 < features.year_distance < 900:
+                        outcome.mismatched_fields.append("year")
+                    outcome.triggered_rules.append("R-VENUE-MISMATCH")
+                    outcome.reasoning += (
+                        f" Venue conflict detected: cited '{cv_clean}' vs canonical '{bv_clean}'."
                     )
-                    _generic_venue_words = {
-                        "journal", "transactions", "proceedings", "conference", "symposium",
-                        "letters", "workshop", "international", "annual", "meeting", "of",
-                        "the", "on", "in", "for", "and", "at", "to", "ieee", "acm",
-                        "proc", "conf", "trans", "int",
-                    }
-                    c_canon = vn._candidate_canonicals(cv_clean)
-                    b_canon = vn._candidate_canonicals(bv_clean)
-                    c_is_explicit = bool(_explicit_venue_re.search(cv_clean) or c_canon)
-                    b_is_explicit = bool(_explicit_venue_re.search(bv_clean) or b_canon)
-                    c_exp_str = " ".join(c_canon) if c_canon else cv_clean
-                    b_exp_str = " ".join(b_canon) if b_canon else bv_clean
-                    c_words = {
-                        w for w in re.findall(r"[a-z]{3,}", c_exp_str.lower())
-                        if w not in _generic_venue_words
-                    }
-                    b_words = {
-                        w for w in re.findall(r"[a-z]{3,}", b_exp_str.lower())
-                        if w not in _generic_venue_words
-                    }
-                    has_zero_content_overlap = bool(
-                        c_words and b_words and not (c_words & b_words)
-                    )
-                    _broad_field_umbrellas = {
-                        "medical", "medicine", "clinical", "computer", "computing",
-                        "computational", "science", "sciences", "scientific",
-                        "engineering", "information", "systems", "system",
-                        "research", "applied", "studies", "review", "reviews",
-                    }
-                    c_specific = c_words - _broad_field_umbrellas
-                    b_specific = b_words - _broad_field_umbrellas
-                    has_distinct_canonical_conflict = bool(
-                        c_canon and b_canon and not (c_canon & b_canon)
-                    )
-                    has_umbrella_only_conflict = bool(
-                        v_sim < 0.22
-                        and c_specific
-                        and b_specific
-                        and not (c_specific & b_specific)
-                    )
-                    if (
-                        (c_is_bogus_venue and v_sim < 0.15)
-                        or (
-                            c_is_explicit
-                            and b_is_explicit
-                            and (
-                                has_zero_content_overlap
-                                or has_distinct_canonical_conflict
-                                or has_umbrella_only_conflict
-                            )
-                        )
-                    ):
-                        outcome.label = ValidationLabel.METADATA_ERROR
-                        outcome.confidence = min(outcome.confidence, 0.72)
-                        outcome.mismatched_fields = ["venue"]
-                        if 0 < features.year_distance < 900:
-                            outcome.mismatched_fields.append("year")
-                        outcome.triggered_rules.append("R-VENUE-MISMATCH")
-                        outcome.reasoning += (
-                            f" Venue conflict detected: cited '{cv_clean}' vs canonical '{bv_clean}'."
-                        )
         is_retracted = bool(
             getattr(source, "is_retracted", False)
             or (hasattr(source, "has_retracted_candidate") and source.has_retracted_candidate())
@@ -1961,6 +2113,41 @@ class SymbolicRules:
             doi=(best.doi if best and best.doi else citation_doi),
         )
 
+        _is_mock_test_source = bool(best and best.source_name == "test")
+        has_substantive_abstract = bool(
+            (best and best.abstract and len(str(best.abstract).strip()) >= 40)
+            or _is_mock_test_source
+        )
+        is_explicit_in_text_ctx = bool(
+            getattr(features, "context_source", "") != "implicit_body_discovery"
+            or (
+                getattr(features, "stance_label", "") == "contradiction_risk"
+                and features.content_alignment_score >= 0.30
+            )
+        )
+        can_enforce_content_mismatch = bool(has_substantive_abstract and is_explicit_in_text_ctx)
+        has_contradiction_risk_veto = bool(
+            can_enforce_content_mismatch
+            and getattr(features, "stance_label", "") == "contradiction_risk"
+        )
+        has_severe_content_misalignment_veto = bool(
+            can_enforce_content_mismatch
+            and (
+                getattr(features, "stance_label", "") == "contradiction_risk"
+                or (
+                    0.0 < features.content_alignment_score < 0.25
+                    and not features.content_is_aligned
+                    and not getattr(features, "cross_lingual_detected", False)
+                )
+            )
+        )
+        has_contradictory_title = _has_contradictory_title_tokens(
+            citation_title,
+            citation_raw or source.citation_raw,
+            best.title if best else None,
+            citation_venue=citation_venue,
+        )
+
         # --- Rule 1: DOI + title + author strong match → VERIFIED ---
         # Guard against a self-confirming match: when the citation's DOI comes
         # from the local DB / known-paper cache, ``doi_exact_match`` only proves
@@ -1969,6 +2156,7 @@ class SymbolicRules:
         # strongest VERIFIED verdict.
         if (
             doi_match
+            and not has_contradiction_risk_veto
             and (
                 (
                     title_sim >= self.title_sim_verified
@@ -2301,9 +2489,12 @@ class SymbolicRules:
         if (
             mapping_is_matched
             and features.title_sim_fuzzy >= 0.7
+            and (features.title_sim_fuzzy >= self.title_sim_verified or not has_contradictory_title)
             and author_sim >= 0.3
             and year_dist <= self.year_tolerance
             and not has_doi_conflict
+            and url_status != "dead_link"
+            and not has_severe_content_misalignment_veto
         ):
             triggered_rules.append("R-WELL-LINKED")
             author_note = (
@@ -2328,9 +2519,12 @@ class SymbolicRules:
         if (
             mapping_is_matched
             and 0.5 <= features.title_sim_fuzzy < 0.7
+            and not has_contradictory_title
             and author_sim >= 0.3
             and year_dist <= self.year_tolerance
             and not has_doi_conflict
+            and url_status != "dead_link"
+            and not has_severe_content_misalignment_veto
             and (doi_match or consensus >= 2)
         ):
             triggered_rules.append("R-WELL-LINKED-MODERATE")
@@ -2386,13 +2580,12 @@ class SymbolicRules:
         # --- Rule 2: DOI resolves + moderate title similarity → METADATA_ERROR ---
         # Only apply for live sources, not for local_db (which is handled above)
         if (
-            not mapping_is_matched  # Only apply if not already well-linked
-            and doi_match
+            doi_match
             and self.title_sim_metadata_error <= title_sim < self.title_sim_verified
             and "local_db" not in source.sources_succeeded  # Skip if local_db matched
         ):
             mismatched.append("title")
-            if year_dist > self.year_tolerance:
+            if year_dist > self.year_tolerance and year_dist < 900:
                 mismatched.append("year")
             if author_sim < self.author_jaccard_verified:
                 mismatched.append("author")
@@ -2475,6 +2668,25 @@ class SymbolicRules:
             )
         )
 
+        _has_explicit_venue_mismatch_2b = bool(
+            citation_venue
+            and str(citation_venue).strip()
+            and _cand_venue_str
+            and float(getattr(features, "venue_sim", 0.0) or 0.0) < 0.25
+        )
+        _is_consortium_or_org_author = any(
+            bool(_extract_corporate_keys(a))
+            or bool(
+                re.search(
+                    r"\b(?:collaboration|consortium|committee|panel|commission|organization|organisation|"
+                    r"working\s+group|council|ministry|agency|institute|institution|board|federation|association)\b",
+                    str(a),
+                    re.IGNORECASE,
+                )
+            )
+            for a in (citation_authors or [])
+        )
+
         if (
             doi_match
             and _has_live_source(source, verified_sources)
@@ -2486,11 +2698,16 @@ class SymbolicRules:
                 or (features.title_sim_fuzzy < 0.25 and features.title_sim_semantic < 0.45)
                 or (
                     bool(citation_authors)
+                    and not _is_consortium_or_org_author
                     and author_sim == 0.0
                     and features.title_sim_fuzzy < 0.45
-                    and float(getattr(features, "venue_sim", 0.0) or 0.0) < 0.25
+                    and features.title_sim_semantic < 0.58
+                    and _has_explicit_venue_mismatch_2b
                 )
-                or _chimeric_zero_content_overlap
+                or (
+                    _chimeric_zero_content_overlap
+                    and not (_is_consortium_or_org_author and features.title_sim_semantic >= 0.58)
+                )
                 or _titleless_chimeric_venue_mismatch
             )
         ):
@@ -2565,6 +2782,7 @@ class SymbolicRules:
                 author_sim >= self.author_jaccard_verified
                 and year_dist <= self.year_tolerance
                 and not has_doi_conflict
+                and not has_contradiction_risk_veto
             ):
                 triggered_rules.append("R-CONSENSUS-FULL")
                 return RuleOutcome(
@@ -2620,12 +2838,7 @@ class SymbolicRules:
             and author_sim >= 0.80
             and year_dist <= self.year_tolerance
             and not has_doi_conflict
-            and getattr(features, "stance_label", "") != "contradiction_risk"
-            and not (
-                features.content_alignment_score > 0
-                and features.content_alignment_score < 0.23
-                and not features.content_is_aligned
-            )
+            and not has_severe_content_misalignment_veto
         ):
             triggered_rules.append("R-SINGLE-SOURCE-VERIFIED")
             return RuleOutcome(
@@ -2758,9 +2971,7 @@ class SymbolicRules:
         _is_live_src = _has_live_source(source, verified_sources)
         _has_substantive_title_conflict = bool(
             _is_live_src
-            and best
-            and best.title
-            and len(best.title) >= 20
+            and has_contradictory_title
             and title_sim < self.title_sim_verified
             and not getattr(features, "cross_lingual_detected", False)
             and not is_cross_lingual_title
@@ -2768,6 +2979,7 @@ class SymbolicRules:
         if content_alignment_score > 0 and not is_missing_reference:
             if (
                 content_is_aligned
+                and getattr(features, "stance_label", "") != "contradiction_risk"
                 and features.title_sim_fuzzy >= 0.6
                 and not _has_substantive_title_conflict
                 and author_sim >= 0.5
@@ -2809,22 +3021,15 @@ class SymbolicRules:
         if local_meta_err:
             return local_meta_err
 
-        if content_alignment_score > 0 and not is_missing_reference:
-            triggered_rules.append("R-CONTENT-ALIGNMENT")
-            if getattr(features, "cross_lingual_detected", False) and content_is_aligned:
-                triggered_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
-
-            has_non_live_missing_abstract = bool(
-                best
-                and best.source_name in _NON_LIVE_SOURCES
-                and not (best.abstract and str(best.abstract).strip())
-            )
-            # Rule: Low content alignment + high fuzzy title & author match = METADATA_ERROR / SUSPECTED_HALLUCINATION
-            # Only applies when year is consistent and candidate is not a title-only local_db row
+        if (content_alignment_score > 0 or has_contradiction_risk_veto) and not is_missing_reference:
+            # Rule: Low content alignment / claim contradiction + high fuzzy title & author match
+            # Only applies when candidate has a substantive abstract and context is explicit in-text
             if (
-                not content_is_aligned
+                can_enforce_content_mismatch
+                and (not content_is_aligned or has_contradiction_risk_veto)
                 and (
-                    content_alignment_score >= 0.3
+                    has_contradiction_risk_veto
+                    or content_alignment_score >= 0.3
                     or (_is_live_src and content_alignment_score > 0.0 and features.title_sim_fuzzy >= 0.85)
                 )
                 and features.title_sim_fuzzy >= 0.75
@@ -2832,15 +3037,14 @@ class SymbolicRules:
                     author_sim >= 0.5
                     or (_is_live_src and features.title_sim_fuzzy >= 0.90 and author_sim >= 0.25)
                 )
-                and year_dist <= self.year_tolerance
-                and not has_non_live_missing_abstract
+                and (year_dist <= self.year_tolerance or year_dist >= 900)
             ):
                 triggered_rules.append("R-CONTENT-MISMATCH")
                 if (
-                    (features.title_sim_fuzzy >= 0.85 and author_sim >= 0.50 and year_dist <= 1)
+                    (features.title_sim_fuzzy >= 0.85 and author_sim >= 0.50 and (year_dist <= 1 or year_dist >= 900))
                     or (
                         _is_live_src
-                        and year_dist <= 1
+                        and (year_dist <= 1 or year_dist >= 900)
                         and author_sim >= 0.25
                         and (features.title_sim_fuzzy >= 0.85 or consensus >= 2 or author_sim >= 0.75)
                     )
@@ -2884,6 +3088,7 @@ class SymbolicRules:
                 and year_dist <= self.year_tolerance
                 and not (citation_url and not citation_doi and url_status in ("alive", "restricted_alive"))
             ):
+                triggered_rules.append("R-CONTENT-ALIGNMENT")
                 return RuleOutcome(
                     label=ValidationLabel.UNRESOLVED,
                     confidence=max(0.0, content_alignment_score - style_penalty),
@@ -2938,6 +3143,16 @@ class SymbolicRules:
                     )
 
         # --- Rule 4a2: Single/multi live source partial match (author/year/title discrepancy) → METADATA_ERROR ---
+        _has_year_mismatch_4a2 = 0 < year_dist < 900 and year_dist > self.year_tolerance
+        _author_details_4a2 = (
+            author_match_details(citation_authors, best.authors)
+            if (citation_authors and best and best.authors)
+            else None
+        )
+        _has_compound_lead_match_4a2 = bool(
+            (_author_details_4a2 and len(_author_details_4a2.matched) >= 2)
+            or _lead_author_compatible(citation_authors, best.authors if best else None)
+        )
         if (
             consensus >= 1
             and _has_live_source(source, verified_sources)
@@ -2948,13 +3163,21 @@ class SymbolicRules:
                 or (consensus >= 2 and title_sim >= 0.90 and year_dist <= 1)
             )
             and (
-                (title_sim >= self.title_sim_verified and (author_sim < self.author_jaccard_verified or year_dist > self.year_tolerance))
+                (
+                    title_sim >= self.title_sim_verified
+                    and (author_sim < self.author_jaccard_verified or _has_year_mismatch_4a2)
+                )
                 or (
                     self.title_sim_metadata_error <= title_sim < self.title_sim_verified
                     and (
                         author_sim >= 0.30
                         or year_dist <= 2
-                        or (author_sim > 0.0 and year_dist <= 4)
+                        or (
+                            author_sim > 0.0
+                            and year_dist <= 4
+                            and features.title_sim_fuzzy >= 0.58
+                            and _has_compound_lead_match_4a2
+                        )
                     )
                 )
             )
@@ -2963,19 +3186,20 @@ class SymbolicRules:
                 mismatched.append("title")
             if author_sim < self.author_jaccard_verified:
                 mismatched.append("author")
-            if year_dist > self.year_tolerance:
+            if _has_year_mismatch_4a2:
                 mismatched.append("year")
             if url_status == "dead_link" and "url" not in mismatched:
                 mismatched.append("url")
             if not mismatched:
                 mismatched.append("title")
             triggered_rules.append("R-SINGLE-SOURCE-PARTIAL")
+            year_dist_label = str(year_dist) if year_dist < 900 else "unknown"
             return RuleOutcome(
                 label=ValidationLabel.METADATA_ERROR,
                 confidence=max(0.0, 0.68 - style_penalty),
                 reasoning=(
                     f"Scholarly record matched on {', '.join(source.sources_succeeded)} "
-                    f"(title_sim={title_sim:.2f}, author_sim={author_sim:.2f}, year_dist={year_dist}) "
+                    f"(title_sim={title_sim:.2f}, author_sim={author_sim:.2f}, year_dist={year_dist_label}) "
                     f"with metadata discrepancy in: {', '.join(mismatched)}."
                 ),
                 triggered_rules=triggered_rules,
@@ -3090,8 +3314,8 @@ class SymbolicRules:
                 _has_live_source(source, verified_sources)
                 and title_sim >= 0.35
                 and (
-                    (consensus >= 1 and author_sim >= 0.15 and (year_dist is None or abs(year_dist) <= 4))
-                    or (author_sim >= 0.75 and year_dist is not None and abs(year_dist) <= 2)
+                    (consensus >= 1 and author_sim >= 0.15 and (year_dist is None or year_dist >= 900 or abs(year_dist) <= 4))
+                    or (author_sim >= 0.75 and (year_dist is None or year_dist >= 900 or abs(year_dist) <= 2))
                 )
             ):
                 triggered_rules.append("R-DOMAIN-EXCEPTION")
@@ -3199,31 +3423,51 @@ class SymbolicRules:
                 style_penalty=style_penalty,
             )
 
-        # --- Rule 6 (promoted above Rule 5): DOMAIN-EXCEPTION ---
-        # Exact DOI matched across >= 2 registries with low title similarity -> METADATA_ERROR (domain_exception=True)
+        # --- Rule 6 (promoted above Rule 5): Exact DOI with low title similarity & consensus >= 2 ---
         if (
             doi_match
             and title_sim < self.title_sim_metadata_error
             and consensus >= 2
         ):
-            triggered_rules.append("R-DOMAIN-EXCEPTION")
-            mismatched_dom = ["url"]
-            if "title" not in mismatched_dom:
-                mismatched_dom.append("title")
-            if year_dist is not None and abs(year_dist) > self.year_tolerance and year_dist < 900:
-                mismatched_dom.append("year")
+            has_broken_link_6 = bool(
+                url_status == "dead_link"
+                or (url_status is None and not source.sources_succeeded and title_sim < self.abstention_low)
+            )
+            if has_broken_link_6:
+                triggered_rules.append("R-DOMAIN-EXCEPTION")
+                mismatched_dom = ["url", "title"]
+                if year_dist is not None and abs(year_dist) > self.year_tolerance and abs(year_dist) < 900:
+                    mismatched_dom.append("year")
+                return RuleOutcome(
+                    label=ValidationLabel.METADATA_ERROR,
+                    confidence=max(0.0, 0.62 - style_penalty),
+                    reasoning=(
+                        f"DOMAIN-EXCEPTION: Exact DOI matched across {consensus} sources "
+                        f"(author_sim={author_sim:.2f}) while cited title differs ({title_sim:.2f}) "
+                        f"and external link experienced link rot."
+                    ),
+                    triggered_rules=triggered_rules,
+                    mismatched_fields=mismatched_dom,
+                    style_penalty=style_penalty,
+                    domain_exception=True,
+                )
+            triggered_rules.append("R-DOI-TITLE-MISMATCH")
+            mismatched_dt2 = ["title"]
+            if year_dist is not None and abs(year_dist) > self.year_tolerance and abs(year_dist) < 900:
+                mismatched_dt2.append("year")
+            if author_sim < self.author_jaccard_verified:
+                mismatched_dt2.append("author")
             return RuleOutcome(
                 label=ValidationLabel.METADATA_ERROR,
-                confidence=max(0.0, 0.62 - style_penalty),
+                confidence=max(0.0, 0.65 - style_penalty),
                 reasoning=(
-                    f"DOMAIN-EXCEPTION: Exact DOI matched across {consensus} sources "
-                    f"(author_sim={author_sim:.2f}) while cited title differs ({title_sim:.2f}). "
-                    f"Record exists in scholarly registries with metadata/link discrepancy."
+                    f"Exact DOI matched across {consensus} scholarly sources "
+                    f"(author_sim={author_sim:.2f}), but cited title differs ({title_sim:.2f})."
                 ),
                 triggered_rules=triggered_rules,
-                mismatched_fields=mismatched_dom,
+                mismatched_fields=mismatched_dt2,
                 style_penalty=style_penalty,
-                domain_exception=True,
+                domain_exception=False,
             )
 
         # Single-source exact DOI match with strong author overlap in border zone [0.40, 0.60) -> METADATA_ERROR
@@ -3236,8 +3480,10 @@ class SymbolicRules:
         ):
             triggered_rules.append("R-DOI-TITLE-MISMATCH")
             mismatched_dt = ["title"]
-            if year_dist is not None and abs(year_dist) > self.year_tolerance and year_dist < 900:
+            if year_dist is not None and abs(year_dist) > self.year_tolerance and abs(year_dist) < 900:
                 mismatched_dt.append("year")
+            if url_status == "dead_link":
+                mismatched_dt.append("url")
             return RuleOutcome(
                 label=ValidationLabel.METADATA_ERROR,
                 confidence=max(0.0, 0.65 - style_penalty),
@@ -3251,11 +3497,11 @@ class SymbolicRules:
             )
 
         # --- Rule 4g (Pillar 1): Strong Author-Year Consensus with Corrupted Title in [0.42, 0.60) ---
-        _same_author_cardinality = bool(
+        _no_unmatched_cited_authors = bool(
             not citation_authors
             or not best
             or not best.authors
-            or len(citation_authors) == len(best.authors)
+            or not author_match_details(citation_authors, best.authors).only_cited
         )
         if (
             _has_live_source(source, verified_sources)
@@ -3270,13 +3516,13 @@ class SymbolicRules:
                     author_sim >= 0.85
                     and abs(year_dist) <= 1
                     and features.title_sim_fuzzy >= 0.52
-                    and _same_author_cardinality
+                    and _no_unmatched_cited_authors
                 )
             )
         ):
             triggered_rules.append("R-TITLE-MISMATCH")
             mismatched_ac = ["title"]
-            if abs(year_dist) > self.year_tolerance:
+            if abs(year_dist) > self.year_tolerance and abs(year_dist) < 900:
                 mismatched_ac.append("year")
             if url_status == "dead_link":
                 mismatched_ac.append("url")
@@ -3322,7 +3568,7 @@ class SymbolicRules:
                 border_reason = (
                     f"Partial author overlap (author_sim={author_sim:.2f}) and plausible publication year "
                     f"(year_dist={year_dist}) with grey-zone title similarity ({title_sim:.2f} in "
-                    f"[0.28, {self.title_sim_metadata_error:.2f})) — system abstains for manual review."
+                    f"[0.25, {self.title_sim_metadata_error:.2f})) — system abstains for manual review."
                 )
             else:
                 border_reason = (

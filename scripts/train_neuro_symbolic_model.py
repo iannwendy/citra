@@ -88,7 +88,10 @@ from integrity_checker.logic.rules import SymbolicRules  # noqa: E402
 from integrity_checker.logic.vn_legal_verifier import verify_vn_legal_citation  # noqa: E402
 from integrity_checker.matching.author_matcher import author_match_score  # noqa: E402
 from integrity_checker.matching.fuzzy import FuzzyMatcher  # noqa: E402
-from integrity_checker.matching.semantic import SemanticMatcher  # noqa: E402
+from integrity_checker.matching.semantic import (  # noqa: E402
+    SemanticMatcher,
+    _extract_distinctive_stems,
+)
 from integrity_checker.matching.venue_normalizer import VenueNormalizer  # noqa: E402
 from integrity_checker.models.citation import Citation, CitationType  # noqa: E402
 from integrity_checker.models.source import SourceCandidate, SourceResult  # noqa: E402
@@ -139,6 +142,50 @@ _ACL_VENUE_EXPANSIONS: dict[str, str] = {
     "muc": "Proceedings of the Message Understanding Conference",
     "tipster": "Proceedings of the TIPSTER Text Program",
     "tinlap": "Proceedings of Theoretical Issues in Natural Language Processing",
+    "eamt": "Proceedings of the Annual Conference of the European Association for Machine Translation",
+    "amta": "Proceedings of the Conference of the Association for Machine Translation in the Americas",
+    "ccl": "Proceedings of the China National Conference on Computational Linguistics",
+    "clicit": "Proceedings of the Italian Conference on Computational Linguistics",
+    "tc": "Translating and the Computer Conference Proceedings",
+    "iwpt": "Proceedings of the International Conference on Parsing Technologies",
+    "wassa": "Proceedings of the Workshop on Computational Approaches to Subjectivity, Sentiment and Social Media Analysis",
+    "dravidianlangtech": "Proceedings of the Workshop on Speech and Language Technologies for Dravidian Languages",
+    "arabicnlp": "Proceedings of the Arabic Natural Language Processing Conference",
+    "iwcs": "Proceedings of the International Conference on Computational Semantics",
+    "wnut": "Proceedings of the Workshop on Noisy User-generated Text",
+    "mwe": "Proceedings of the Workshop on Multiword Expressions",
+    "scil": "Proceedings of the Society for Computation in Linguistics",
+    "gwc": "Proceedings of the Global Wordnet Conference",
+    "ijclclp": "International Journal of Computational Linguistics and Chinese Language Processing",
+    "sighan": "Proceedings of the SIGHAN Workshop on Chinese Language Processing",
+    "tal": "Traitement Automatique des Langues",
+    "tag": "Proceedings of the International Workshop on Tree Adjoining Grammars and Related Formalisms",
+    "stil": "Proceedings of the Brazilian Symposium in Information and Human Language Technology",
+    "vardial": "Proceedings of the Workshop on NLP for Similar Languages, Varieties and Dialects",
+    "wanlp": "Proceedings of the Arabic Natural Language Processing Workshop",
+    "propor": "Proceedings of the International Conference on Computational Processing of Portuguese",
+    "clpsych": "Proceedings of the Workshop on Computational Linguistics and Clinical Psychology",
+    "repl4nlp": "Proceedings of the Workshop on Representation Learning for NLP",
+    "earlymt": "Early Machine Translation Historical Collection",
+    "clinicalnlp": "Proceedings of the Clinical Natural Language Processing Workshop",
+    "tmi": "Proceedings of the Conference on Theoretical and Methodological Issues in Machine Translation",
+    "ldk": "Proceedings of the Conference on Language, Data and Knowledge",
+    "argmining": "Proceedings of the Workshop on Argument Mining",
+    "louhi": "Proceedings of the International Workshop on Health Text Mining and Information Analysis",
+    "bucc": "Proceedings of the Workshop on Building and Using Comparable Corpora",
+    "codi": "Proceedings of the Workshop on Computational Approaches to Discourse",
+    "econlp": "Proceedings of the Workshop on Economics and Natural Language Processing",
+    "finnlp": "Proceedings of the Workshop on Financial Technology and Natural Language Processing",
+    "gem": "Proceedings of the Generation, Evaluation, and Metrics Workshop",
+    "latechclfl": "Proceedings of the Joint SIGHUM Workshop on Computational Linguistics for Cultural Heritage, Social Sciences, Humanities and Literature",
+    "nlp4convai": "Proceedings of the Workshop on NLP for Conversational AI",
+    "peoples": "Proceedings of the Workshop on Computational Modeling of People's Opinions, Personality, and Emotion's in Social Media",
+    "privatenlp": "Proceedings of the Workshop on Privacy in Natural Language Processing",
+    "sdp": "Proceedings of the Workshop on Scholarly Document Processing",
+    "smm4h": "Proceedings of the Social Media Mining for Health Applications Workshop",
+    "sustainlp": "Proceedings of the Workshop on Simple and Efficient Natural Language Processing",
+    "textgraphs": "Proceedings of the TextGraphs Workshop on Graph-Based Methods for Natural Language Processing",
+    "wat": "Proceedings of the Workshop on Asian Translation",
 }
 
 MAX_SCHOLARLY_YEAR = 2026
@@ -194,7 +241,11 @@ def _expand_scholarly_venue(raw_venue: str | None) -> str:
     if not v:
         return "Proceedings of the Association for Computational Linguistics"
     mapped = _ACL_VENUE_EXPANSIONS.get(v.lower())
-    return mapped if mapped is not None else v
+    if mapped is not None:
+        return mapped
+    if " " not in v and v == v.lower() and re.fullmatch(r"[a-z][a-z0-9\-]{1,24}", v):
+        return f"Proceedings of the {v.upper()} Workshop on Computational Linguistics"
+    return v
 
 
 def _normalize_title_key(title: str) -> str:
@@ -491,6 +542,16 @@ def _extract_sentences(abstract: str, fallback_title: str = "") -> tuple[str, st
     return s1, s2
 
 
+def _extract_rest_abstract(abstract: str, fallback_title: str = "") -> str:
+    """Extract multi-sentence abstract remainder (excluding sentence 1 when >= 2 sentences exist)."""
+    if not abstract or len(abstract.strip()) < 20:
+        return fallback_title or "Empirical evaluation of computational language representations."
+    parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", abstract) if len(p.strip()) >= 30]
+    if len(parts) >= 2:
+        return " ".join(parts[1:])[:480]
+    return abstract[:480]
+
+
 def _abbreviate_author_name(name: str) -> str:
     """Convert 'First Middle Last' to 'Last, F.' style."""
     tokens = [t for t in re.split(r"[\s,]+", name.strip()) if t]
@@ -555,19 +616,67 @@ def _corrupt_title_minor_ocr(title: str, rng: random.Random) -> str:
     return _sanitize_balanced_delimiters(" ".join(words))
 
 
+_DANGLING_MODIFIER_SUFFIXES: tuple[str, ...] = (
+    "-based",
+    "-driven",
+    "-aware",
+    "-guided",
+    "-oriented",
+    "-specific",
+    "-free",
+    "-agnostic",
+    "-centric",
+    "-informed",
+    "-enhanced",
+    "-assisted",
+    "-augmented",
+    "-inspired",
+)
+
+_DANGLING_HEAD_ADJECTIVES: frozenset[str] = frozenset(
+    {
+        "pretrained", "neural", "deep", "contextual", "multilingual", "bilingual",
+        "cross-lingual", "supervised", "unsupervised", "self-supervised", "semi-supervised",
+        "hierarchical", "adaptive", "dynamic", "joint", "unified", "end-to-end",
+        "effective", "efficient", "robust", "scalable", "novel", "new", "improved",
+        "generative", "discriminative", "statistical", "computational",
+    }
+)
+
+
+def _trim_splice_head(head: list[str], fallback: list[str]) -> list[str]:
+    """Trim trailing function words and dangling hyphenated/adjectival modifiers from a splice head."""
+    cleaned = list(head)
+    while len(cleaned) > 1:
+        last_low = _strip_token_punct(cleaned[-1]).lower()
+        if (
+            last_low in _SPLICE_TRAILING_FUNC_WORDS
+            or any(last_low.endswith(suf) for suf in _DANGLING_MODIFIER_SUFFIXES)
+            or last_low in _DANGLING_HEAD_ADJECTIVES
+        ):
+            cleaned.pop()
+        else:
+            break
+    if not cleaned:
+        return list(fallback)
+    last_final = _strip_token_punct(cleaned[-1]).lower()
+    if last_final in _SPLICE_TRAILING_FUNC_WORDS:
+        return list(fallback)
+    if any(last_final.endswith(suf) for suf in _DANGLING_MODIFIER_SUFFIXES) or last_final in _DANGLING_HEAD_ADJECTIVES:
+        cleaned.append("Models")
+    cleaned[-1] = cleaned[-1].rstrip(":;,-–—")
+    return cleaned
+
+
 def _corrupt_title_moderate(title: str, other_title: str, rng: random.Random) -> str:
-    """Keep 45-65% of original title words and splice a clean phrase from another paper in the same split."""
+    """Keep 45-60% of original title words (dropping >= 2 words when len >= 4) and splice a phrase from another paper."""
     t1 = _clean_title_for_splicing(title)
     t2 = _clean_title_for_splicing(other_title)
     words = [w for w in t1.split() if _strip_token_punct(w)]
     other_words = [w for w in t2.split() if _strip_token_punct(w)]
-    keep_k = max(3, int(len(words) * rng.uniform(0.48, 0.64)))
-    head = list(words[:keep_k])
-    while len(head) > 1 and _strip_token_punct(head[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS:
-        head.pop()
-    if not head or _strip_token_punct(head[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS:
-        head = ["Neural", "Sequence", "Models"]
-    head[-1] = head[-1].rstrip(":;,-–—")
+    raw_k = max(2, int(len(words) * rng.uniform(0.45, 0.60)))
+    keep_k = min(max(2, len(words) - 2), raw_k) if len(words) >= 4 else max(1, len(words) - 1)
+    head = _trim_splice_head(words[:keep_k], ["Neural", "Sequence", "Models"])
 
     tail_k = max(2, min(4, len(other_words) // 3))
     tail = list(other_words[-tail_k:]) if len(other_words) >= tail_k else ["Computational", "Models"]
@@ -579,6 +688,7 @@ def _corrupt_title_moderate(title: str, other_title: str, rng: random.Random) ->
         not tail
         or _strip_token_punct(tail[0]).lower() in _SPLICE_TRAILING_FUNC_WORDS
         or _strip_token_punct(tail[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS
+        or any(_strip_token_punct(tail[-1]).lower().endswith(s) for s in _DANGLING_MODIFIER_SUFFIXES)
     ):
         tail = ["Computational", "Models"]
     return _sanitize_balanced_delimiters(f"{' '.join(head)} for {' '.join(tail)}")
@@ -599,12 +709,7 @@ def _make_spliced_academic_title(
     w1 = [w.strip(":;,") for w in t1.split() if _strip_token_punct(w)]
     w3 = [w.strip(":;,") for w in t3.split() if _strip_token_punct(w)]
     head_len = min(len(w1), rng.choice([3, 4]))
-    head = list(w1[:head_len])
-    while len(head) > 1 and _strip_token_punct(head[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS:
-        head.pop()
-    if not head or _strip_token_punct(head[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS:
-        head = ["Contextual", "Language", "Representations"]
-    head[-1] = head[-1].rstrip(":;,-–—")
+    head = _trim_splice_head(w1[:head_len], ["Contextual", "Language", "Representations"])
 
     tail_len = min(len(w3), rng.choice([3, 4, 5]))
     tail = list(w3[-tail_len:])
@@ -619,11 +724,15 @@ def _make_spliced_academic_title(
             tail.pop(0)
         else:
             break
-    while len(tail) > 1 and _strip_token_punct(tail[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS:
+    while len(tail) > 1 and (
+        _strip_token_punct(tail[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS
+        or any(_strip_token_punct(tail[-1]).lower().endswith(s) for s in _DANGLING_MODIFIER_SUFFIXES)
+    ):
         tail.pop()
     if (
         len(tail) < 2
         or _strip_token_punct(tail[-1]).lower() in _SPLICE_TRAILING_FUNC_WORDS
+        or any(_strip_token_punct(tail[-1]).lower().endswith(s) for s in _DANGLING_MODIFIER_SUFFIXES)
         or (len(tail) == 1 and _strip_token_punct(tail[0]).lower() in _SPLICE_TRAILING_FUNC_WORDS)
     ):
         tail = ["in", "Neural", "Language", "Models"]
@@ -671,18 +780,88 @@ def _pick_non_overlapping_scholar_authors(
     return [fallback_donor["authors"][0]][:count]
 
 
-def _make_misattributed_context_sentence(p: dict[str, Any], other_s2: str) -> str:
-    """Construct a realistic misattributed citing sentence anchoring `p`'s topic to `other_p`'s finding."""
+_FIRST_PERSON_ABSTRACT_LEAD_RE = re.compile(
+    r"^(?:in\s+this\s+(?:paper|work|study|article)\s*,\s*)?"
+    r"(?:we|this\s+(?:paper|work|study|article)|the\s+authors?|our\s+(?:work|study|experiments?))\s+"
+    r"(?:propose|present|introduce|demonstrate|show|describe|develop|investigate|report|prove|establish|conjecture|find)(?:s|d|ed)?\s*"
+    r"(?:that\s+)?",
+    re.IGNORECASE,
+)
+
+
+def _extract_lead_surname(author_name: str) -> str:
+    """Extract clean surname from 'First Last' or 'Last, F.' for natural in-text citations."""
+    raw = str(author_name or "Smith").strip()
+    if "," in raw:
+        sur = raw.split(",", 1)[0].strip()
+    else:
+        parts = [t for t in raw.split() if t]
+        sur = parts[-1] if parts else "Smith"
+    sur_clean = re.sub(r"[^A-Za-zÀ-ÖØ-öø-ÿ'\-]", "", sur)
+    return sur_clean or "Smith"
+
+
+def _clean_claim_clause_for_third_person(raw_claim: str) -> str:
+    """Convert raw abstract sentence into a grammatical third-person empirical claim clause."""
+    s = " ".join(str(raw_claim or "").strip().split()).rstrip(".")
+    s = _FIRST_PERSON_ABSTRACT_LEAD_RE.sub("", s).strip()
+    s = re.sub(r"\b[Oo]ur\b", "their", s)
+    s = re.sub(r"\b[Ww]e\b", "the authors", s)
+    if not s:
+        s = "graph spectral convolution operators improve semi-supervised node accuracy on Cora"
+    return s
+
+
+def _make_misattributed_context_sentence(
+    p: dict[str, Any],
+    donor_sents: tuple[str, ...],
+    idx: int,
+) -> str:
+    """Construct a natural academic misattributed citing sentence across 6 diverse syntactic templates."""
     t_words = [w.strip(":;,") for w in p["title"].split() if w.strip(":;,")][:4]
     while len(t_words) > 2 and t_words[-1].lower() in _SPLICE_TRAILING_FUNC_WORDS:
         t_words.pop()
     topic_anchor = " ".join(t_words)
+    title_stems = _extract_distinctive_stems(p["title"])
+    abs_stems = _extract_distinctive_stems(p["abstract"])
+
+    best_claim = ""
+    best_novel_cnt = -1
+    for cand_sent in donor_sents:
+        cleaned = _clean_claim_clause_for_third_person(cand_sent)
+        c_stems = _extract_distinctive_stems(cleaned) - title_stems
+        novel_cnt = len(c_stems - abs_stems) if not (c_stems & abs_stems) else 0
+        if novel_cnt > best_novel_cnt:
+            best_novel_cnt = novel_cnt
+            best_claim = cleaned
+    if not best_claim:
+        best_claim = _clean_claim_clause_for_third_person(donor_sents[0] if donor_sents else "")
+
     lowered_claim = (
-        other_s2[0].lower() + other_s2[1:]
-        if len(other_s2) > 1 and other_s2[1].islower()
-        else other_s2
+        best_claim[0].lower() + best_claim[1:]
+        if len(best_claim) > 1 and best_claim[1].islower()
+        else best_claim
     )
-    return f"Regarding {topic_anchor}, {lowered_claim}"[:280]
+    lead_surname = _extract_lead_surname(p["authors"][0] if p.get("authors") else "Smith")
+    has_etal = len(p.get("authors") or []) >= 2
+    author_ref = f"{lead_surname} et al." if has_etal else lead_surname
+    cite_num = (idx % 38) + 1
+    year_val = int(p.get("year") or 2021)
+
+    template_id = idx % 6
+    if template_id == 0:
+        sent = f"{author_ref} ({year_val}) demonstrated that {lowered_claim} in their study on {topic_anchor}."
+    elif template_id == 1:
+        sent = f"Prior work on {topic_anchor} [{cite_num}] established that {lowered_claim}."
+    elif template_id == 2:
+        sent = f"Building upon {topic_anchor}, {author_ref} ({year_val}) showed that {lowered_claim}."
+    elif template_id == 3:
+        sent = f"According to {author_ref} ({year_val}), {lowered_claim} when modeling {topic_anchor}."
+    elif template_id == 4:
+        sent = f"Regarding {topic_anchor}, {lowered_claim} [{cite_num}]."
+    else:
+        sent = f"Empirical experiments reported that {lowered_claim} ({author_ref}, {year_val})."
+    return sent[:320]
 
 
 _BORDERLINE_STOPWORDS: frozenset[str] = frozenset(
@@ -777,20 +956,50 @@ _BORDERLINE_PARAPHRASES: dict[str, str] = {
     "estimation": "Approximation",
     "vector": "Subspace",
     "space": "Manifold",
+    "denoising": "Regularized",
+    "contrastive": "Discriminative",
+    "adaptive": "Dynamic",
+    "joint": "Coupled",
+    "probabilistic": "Stochastic",
+    "statistical": "Distributional",
+    "automatic": "Algorithmic",
+    "corpus": "Archive",
+    "lexical": "Terminological",
+    "syntactic": "Grammatical",
+    "discourse": "Rhetorical",
+    "acoustic": "Phonetic",
+    "multimodal": "Cross-Modal",
+    "zero-shot": "Inductive",
+    "few-shot": "Low-Resource",
 }
 
+_BORDERLINE_TOPIC_FALLBACKS: tuple[str, ...] = (
+    "Computational", "Structural", "Distributional", "Parametric", "Probabilistic",
+    "Stochastic", "Modular", "Variational", "Latent", "Symbolic", "Pragmatic",
+    "Cross-Domain", "Task-Oriented", "Multi-Stage", "Subword", "Morphosyntactic",
+    "Discursive", "Typological", "Compositional", "Autoregressive", "Nonparametric",
+    "Factorized", "Calibrated", "Regularized", "Attentional", "Graph-Structured",
+    "Token-Level", "Span-Based", "Document-Level", "Iterative", " Coupled", "Bilingual",
+)
+
 _BORDERLINE_SUBCLAUSES: tuple[str, ...] = (
-    "Preliminary Preprint Notes on Methodological Perspectives and Institutional Protocols",
-    "Exploratory Preprint Draft on Comparative Formulations and Field Observations",
-    "Extended Workshop Draft on Operational Constraints and Analytical Tradeoffs",
-    "Translated Summary of Empirical Criteria and Longitudinal Review",
-    "Interim Research Memorandum on Structural Assumptions and Applied Characterization",
-    "Early Technical Commentary on Boundary Conditions and Qualitative Assessment",
+    "Preliminary Working Paper on Methodological Perspectives and Institutional Protocols",
+    "Exploratory Preprint Study of Comparative Formulations and Field Observations",
+    "Workshop Technical Note on Operational Constraints and Modeling Tradeoffs",
+    "Translated Monograph Excerpt on Evaluation Criteria and Longitudinal Findings",
+    "Technical Report on Structural Assumptions and Applied Characterization",
+    "Working Draft on Boundary Conditions and Qualitative Error Patterns",
+    "Pre-Publication Manuscript on Corpus Design and Annotation Guidelines",
+    "Extended Abstract on Cross-Domain Generalization and Ablation Studies",
+    "Departmental Colloquium Paper on Algorithmic Variants and Convergence Behavior",
+    "Archival Preprint on Baseline Calibration and Diagnostic Probing",
+    "Supplementary Technical Companion on Hyperparameter Sensitivity and Scaling",
+    "Position Paper on Representational Bottlenecks and Inductive Biases",
 )
 
 
 def _make_borderline_preprint_title(title: str, idx: int, rng: random.Random) -> str:
-    """Keep ~48%-56% of content words (lead anchor + renamed/translated paraphrases) + subclause."""
+    """Keep ~48%-56% of content words with deduplicated domain paraphrases and varied subtitle frames."""
     content = [
         re.sub(r"[^A-Za-z0-9\-]", "", w)
         for w in title.split()
@@ -799,19 +1008,31 @@ def _make_borderline_preprint_title(title: str, idx: int, rng: random.Random) ->
     ]
     if not content:
         content = [re.sub(r"[^A-Za-z0-9\-]", "", w) for w in title.split() if w]
-    n_keep = max(2, int(round(len(content) * rng.uniform(0.48, 0.56))))
+    n_keep = max(2, int(round(len(content) * rng.uniform(0.42, 0.50))))
     kept = content[:n_keep]
     out: list[str] = []
+    seen_lower: set[str] = set()
     for k, w in enumerate(kept):
         wl = w.lower()
-        if k == 0 and len(w) <= 10:
-            out.append(w)
+        if k == 0 and len(w) <= 12:
+            cand_tok = w
         elif wl in _BORDERLINE_PARAPHRASES:
-            out.append(_BORDERLINE_PARAPHRASES[wl])
+            cand_tok = _BORDERLINE_PARAPHRASES[wl]
         else:
-            out.append("Analytical" if k % 2 == 0 else "Empirical")
+            cand_tok = _BORDERLINE_TOPIC_FALLBACKS[(idx * 7 + k * 5) % len(_BORDERLINE_TOPIC_FALLBACKS)].strip()
+        if cand_tok.lower() in seen_lower:
+            for alt_shift in range(1, len(_BORDERLINE_TOPIC_FALLBACKS)):
+                alt_tok = _BORDERLINE_TOPIC_FALLBACKS[
+                    (idx * 7 + k * 5 + alt_shift) % len(_BORDERLINE_TOPIC_FALLBACKS)
+                ].strip()
+                if alt_tok.lower() not in seen_lower:
+                    cand_tok = alt_tok
+                    break
+        seen_lower.add(cand_tok.lower())
+        out.append(cand_tok)
     subclause = _BORDERLINE_SUBCLAUSES[idx % len(_BORDERLINE_SUBCLAUSES)]
-    return f"{' '.join(out)}: {subclause}"
+    sep = " — " if (idx % 3 == 1) else ": "
+    return f"{' '.join(out)}{sep}{subclause}"
 
 
 def _encode_texts_fast(texts: list[str], batch_size: int = 256) -> np.ndarray:
@@ -880,6 +1101,7 @@ def build_split_dataset(
     cand_titles_to_encode: list[str] = []
     context_sents_to_encode: list[str] = []
     abs_sents_to_encode: list[str] = []
+    rest_abs_sents_to_encode: list[str] = []
 
     # 1. VERIFIED (36% — 50% with authentic Sentence-BERT context alignment)
     target_ver_ctx = int(round(n_verified * 0.50))
@@ -937,6 +1159,8 @@ def build_split_dataset(
                 "doi_exact_match": has_doi,
                 "source_consensus": rng.choices([1, 2, 3, 4], weights=[0.25, 0.45, 0.20, 0.10])[0],
                 "has_candidate": True,
+                "cand_abstract": p["abstract"],
+                "has_abstract": bool(p.get("has_full_abstract")),
                 "use_context": use_context,
                 "context_aligned_mode": "aligned" if use_context else "none",
                 "url_status": url_status,
@@ -946,7 +1170,8 @@ def build_split_dataset(
         cited_titles_to_encode.append(c_title)
         cand_titles_to_encode.append(p["title"])
         context_sents_to_encode.append(s1)
-        abs_sents_to_encode.append(s1 if (i % 3 == 0) else s2)
+        abs_sents_to_encode.append(s2)
+        rest_abs_sents_to_encode.append(_extract_rest_abstract(p["abstract"], p["title"]))
 
     # 2. METADATA_ERROR (22% — 45% with Sentence-BERT context alignment across M1..M5,
     #    including aligned contexts on year/author/DOI-title errors AND explicit R-CONTENT-MISMATCH)
@@ -1003,19 +1228,32 @@ def build_split_dataset(
             url_status, url_code = "alive", 200
         elif err_mode == 3:
             # M4: Moderate title alteration without DOI, plus explicit R-CONTENT-MISMATCH sub-mode
-            # on real papers (yd=0, doi_ok=False, consensus=1) cited with an unrelated claim from other_p
-            is_content_mismatch_submode = use_context and ((j // 5) % 2 == 0)
+            # on real papers (yd=0, doi_ok=False, full/first-author citations across 6 natural academic templates)
+            m4_idx = j // 5
+            is_content_mismatch_submode = use_context and (m4_idx % 2 == 0)
             if is_content_mismatch_submode:
-                c_title = p["title"]
-                if len(p["authors"]) >= 2 and p["authors"][-1] != p["authors"][0]:
-                    c_authors = [p["authors"][-1]]
-                else:
-                    c_title = _corrupt_title_minor_ocr(p["title"], rng)
+                c_title = p["title"] if (m4_idx % 4 != 3) else _corrupt_title_minor_ocr(p["title"], rng)
+                auth_variant = m4_idx % 4
+                if auth_variant in (0, 1):
                     c_authors = list(p["authors"])
+                elif auth_variant == 2 and len(p["authors"]) >= 2:
+                    c_authors = [f"{p['authors'][0]} et al."]
+                else:
+                    c_authors = [_abbreviate_author_name(p["authors"][0])]
                 yd = 0
                 doi_ok = False
-                consensus = 1
-                ctx_sent = _make_misattributed_context_sentence(p, other_s2)
+                consensus = rng.choice([1, 2])
+                alt_donor = (
+                    meta_pool[(j + 389) % meta_abs_n]
+                    if meta_abs_n > 2
+                    else other_p
+                )
+                alt_s1, alt_s2 = _extract_sentences(alt_donor["abstract"], alt_donor["title"])
+                ctx_sent = _make_misattributed_context_sentence(
+                    p,
+                    (other_s2, other_s1, alt_s2, alt_s1),
+                    m4_idx // 2,
+                )
                 abs_sent = s1
                 ctx_mode = "contradict"
                 url_status, url_code = None, None
@@ -1066,6 +1304,8 @@ def build_split_dataset(
                 "doi_exact_match": doi_ok,
                 "source_consensus": consensus,
                 "has_candidate": True,
+                "cand_abstract": p["abstract"],
+                "has_abstract": bool(p.get("has_full_abstract")),
                 "use_context": use_context,
                 "context_aligned_mode": ctx_mode,
                 "url_status": url_status,
@@ -1076,6 +1316,7 @@ def build_split_dataset(
         cand_titles_to_encode.append(p["title"])
         context_sents_to_encode.append(ctx_sent)
         abs_sents_to_encode.append(abs_sent)
+        rest_abs_sents_to_encode.append(_extract_rest_abstract(p["abstract"], p["title"]))
 
     # 3. SUSPECTED_HALLUCINATION (30% — Plausible same-domain LLM hallucinations:
     #    spliced academic titles + real scholar names + real scholarly venues from same split;
@@ -1175,6 +1416,8 @@ def build_split_dataset(
                 "cited_doi": c_doi,
                 "source_consensus": consensus,
                 "has_candidate": has_cand,
+                "cand_abstract": p2["abstract"] if has_cand else "",
+                "has_abstract": bool(has_cand and p2.get("has_full_abstract")),
                 "use_context": use_context,
                 "context_aligned_mode": "cross_paper" if use_context else "none",
                 "url_status": url_status,
@@ -1185,6 +1428,7 @@ def build_split_dataset(
         cand_titles_to_encode.append(cand_title)
         context_sents_to_encode.append(s1_p1)
         abs_sents_to_encode.append(s2_p2)
+        rest_abs_sents_to_encode.append(_extract_rest_abstract(p2["abstract"], p2["title"]))
 
     # 4. UNRESOLVED / ABSTENTION BAND (12%: U1 = 8% ambiguous partial-evidence with 35% context alignment,
     #    U2 = 4% regional DOI registered_no_csl & HTTP 429 rate-limited abstention)
@@ -1274,6 +1518,8 @@ def build_split_dataset(
                 "cited_doi": c_doi_val,
                 "source_consensus": consensus_val,
                 "has_candidate": has_cand_val,
+                "cand_abstract": p1["abstract"] if has_cand_val else "",
+                "has_abstract": bool(has_cand_val and p1.get("has_full_abstract")),
                 "api_exhausted": api_exhausted_val,
                 "doi_ra_status": doi_ra_status_val,
                 "use_context": use_context,
@@ -1286,12 +1532,14 @@ def build_split_dataset(
         cand_titles_to_encode.append(p1["title"])
         context_sents_to_encode.append(ctx_sent)
         abs_sents_to_encode.append(abs_sent)
+        rest_abs_sents_to_encode.append(_extract_rest_abstract(p1["abstract"], p1["title"]))
 
     all_texts = (
         cited_titles_to_encode
         + cand_titles_to_encode
         + context_sents_to_encode
         + abs_sents_to_encode
+        + rest_abs_sents_to_encode
     )
     all_embs = _encode_texts_fast(all_texts, batch_size=256)
     n_items = len(raw_specs)
@@ -1299,9 +1547,12 @@ def build_split_dataset(
     cand_embs = all_embs[n_items : 2 * n_items]
     ctx_embs = all_embs[2 * n_items : 3 * n_items]
     abs_embs = all_embs[3 * n_items : 4 * n_items]
+    rest_abs_embs = all_embs[4 * n_items : 5 * n_items]
 
     raw_title_sems = np.sum(cited_embs * cand_embs, axis=1)
-    raw_ctx_sems = np.sum(ctx_embs * abs_embs, axis=1)
+    raw_ctx_sent_sems = np.sum(ctx_embs * abs_embs, axis=1)
+    raw_ctx_rest_sems = np.sum(ctx_embs * rest_abs_embs, axis=1)
+    raw_ctx_title_sems = np.sum(ctx_embs * cand_embs, axis=1)
 
     records: list[dict[str, Any]] = []
     for idx_item, spec in enumerate(raw_specs):
@@ -1324,21 +1575,33 @@ def build_split_dataset(
             )
 
         if has_cand and spec["use_context"]:
-            raw_ca = max(0.0, min(1.0, float(raw_ctx_sems[idx_item])))
+            title_ctx_sim = max(0.0, min(1.0, float(raw_ctx_title_sems[idx_item])))
+            sent_sim = max(0.0, min(1.0, float(raw_ctx_sent_sems[idx_item])))
+            rest_sim = max(0.0, min(1.0, float(raw_ctx_rest_sems[idx_item])))
+            max_sent_sim = max(sent_sim, rest_sim)
+            abstract_sim = max(rest_sim, 0.65 * max_sent_sim + 0.35 * rest_sim)
+            weighted_ca = 0.375 * title_ctx_sim + 0.625 * abstract_sim
+            if abstract_sim >= 0.70:
+                raw_ca = max(weighted_ca, abstract_sim * 0.92, max_sent_sim * 0.90)
+            elif max_sent_sim >= 0.65 and abstract_sim > 0.0:
+                raw_ca = max(weighted_ca, max_sent_sim * 0.88)
+            else:
+                raw_ca = weighted_ca
+            full_cand_abs = str(spec.get("cand_abstract") or abs_sents_to_encode[idx_item])
             ca_score, ca_conf, ca_aligned = SemanticMatcher.calibrate_monolingual_specificity(
                 raw_ca,
                 context_sents_to_encode[idx_item],
                 spec["cand_title"],
-                abs_sents_to_encode[idx_item],
+                full_cand_abs,
                 is_cross_lingual=False,
             )
             stance_lbl = SemanticMatcher.check_claim_stance(
                 context_sents_to_encode[idx_item],
-                abs_sents_to_encode[idx_item],
+                rest_abs_sents_to_encode[idx_item],
                 ca_score,
-                has_abstract=True,
+                has_abstract=bool(full_cand_abs),
                 is_cross_lingual=False,
-                source_abstract=abs_sents_to_encode[idx_item],
+                source_abstract=full_cand_abs,
                 source_title=spec["cand_title"],
             )
             if stance_lbl == "contradiction_risk":

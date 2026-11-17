@@ -73,6 +73,13 @@ VENUE_DICT: dict[str, list[str]] = {
     "Nature Medicine": ["Nat. Med.", "Nature Med."],
     "Nature Biotechnology": ["Nat. Biotechnol.", "Nature Biotechnol."],
     "Nature Communications": ["Nat. Commun.", "Nature Commun."],
+    "Nature Genetics": ["Nat. Genet.", "Nature Genet."],
+    "Nature Methods": ["Nat. Methods", "Nature Methods"],
+    "Nature Machine Intelligence": ["Nat. Mach. Intell.", "Nature Mach. Intell."],
+    "Nature Neuroscience": ["Nat. Neurosci.", "Nature Neurosci."],
+    "Nature Physics": ["Nat. Phys.", "Nature Phys."],
+    "Nature Chemistry": ["Nat. Chem.", "Nature Chem."],
+    "Nature Photonics": ["Nat. Photonics", "Nature Photonics"],
     "Annals of Internal Medicine": ["Ann. Intern. Med."],
     "IEEE Transactions on Medical Imaging": [
         "IEEE Trans. Med. Imaging",
@@ -106,9 +113,29 @@ VENUE_DICT: dict[str, list[str]] = {
         "NAACL-HLT",
         "North American Chapter of the Association for Computational Linguistics",
         "North American Chapter of the Association for Computational Linguistics: Human Language Technologies",
+        "Findings of the Association for Computational Linguistics: NAACL",
+        "Findings of the Association for Computational Linguistics: NAACL-HLT",
     ],
     "Conference of the European Chapter of the Association for Computational Linguistics": [
         "EACL",
+        "European Chapter of the Association for Computational Linguistics",
+        "Findings of the Association for Computational Linguistics: EACL",
+    ],
+    "Conference of the Asia-Pacific Chapter of the Association for Computational Linguistics": [
+        "AACL",
+        "AACL-IJCNLP",
+        "IJCNLP-AACL",
+        "Asia-Pacific Chapter of the Association for Computational Linguistics",
+        "Findings of the Association for Computational Linguistics: AACL-IJCNLP",
+        "Findings of the Association for Computational Linguistics: IJCNLP-AACL",
+    ],
+    "Conference on Computational Natural Language Learning": [
+        "CoNLL",
+        "Proceedings of the Conference on Computational Natural Language Learning",
+    ],
+    "International Workshop on Semantic Evaluation": [
+        "SemEval",
+        "Proceedings of the International Workshop on Semantic Evaluation",
     ],
     "International Conference on Computational Linguistics": ["COLING"],
     "AAAI Conference on Artificial Intelligence": [
@@ -157,7 +184,6 @@ _ISO4_WORD_MAP: dict[str, str] = {
     "res": "research",
     "comput": "computational",
     "linguist": "linguistics",
-    "nat": "natural",
     "lang": "language",
     "artif": "artificial",
     "intell": "intelligence",
@@ -287,6 +313,29 @@ class VenueNormalizer:
         self.reverse_dict = _REVERSE_DICT
         self.reverse_multi_dict = _REVERSE_MULTI_DICT
 
+    @staticmethod
+    def _candidate_lookup_keys(cand_str: str) -> list[str]:
+        """Generate normalized lookup variants stripping proceedings prefixes and trailing edition years."""
+        cand_key = _normalize_key(cand_str)
+        if not cand_key:
+            return []
+        cand_no_year = re.sub(r"\s+(?:19|20)\d{2}[a-z]?$", "", cand_key).strip()
+        proc_prefix_re = (
+            r"^(?:in\s+)?(?:proceedings\s+of\s+(?:the\s+)?|proc\s+(?:of\s+(?:the\s+)?)?)"
+            r"(?:\d{4}\s+|\d+(?:st|nd|rd|th)\s+)*(?:annual\s+)?"
+        )
+        cand_no_proc = re.sub(proc_prefix_re, "", cand_key).strip()
+        cand_no_proc_no_year = re.sub(r"\s+(?:19|20)\d{2}[a-z]?$", "", cand_no_proc).strip()
+        raw_variants = [cand_key, cand_no_year, cand_no_proc, cand_no_proc_no_year]
+        out: list[str] = []
+        for v in raw_variants:
+            if v and v not in out:
+                out.append(v)
+            iso_v = _expand_iso4_key(v)
+            if iso_v and iso_v not in out:
+                out.append(iso_v)
+        return out
+
     def _candidate_canonicals(self, venue: str | None) -> set[str]:
         """Return all canonical full names matching a venue string (resolving shared acronyms & proceedings wrappers)."""
         if not venue:
@@ -295,26 +344,45 @@ class VenueNormalizer:
         matches: set[str] = set()
         no_parens = re.sub(r"\s*[\(\[][^\)\]]+[\)\]]\s*", " ", cleaned).strip()
         for cand_str in (cleaned, no_parens):
-            cand_key = _normalize_key(cand_str)
-            cand_no_proc = re.sub(
-                r"^(?:in\s+)?(?:proceedings\s+of\s+(?:the\s+)?|proc\s+(?:of\s+(?:the\s+)?)?)(?:\d{4}\s+|\d+(?:st|nd|rd|th)\s+)*(?:annual\s+)?",
-                "",
-                cand_key,
-            ).strip()
-            for k in (cand_key, cand_no_proc, _expand_iso4_key(cand_key), _expand_iso4_key(cand_no_proc)):
+            for k in self._candidate_lookup_keys(cand_str):
                 if k in self.reverse_multi_dict:
                     matches.update(self.reverse_multi_dict[k])
         for paren_m in re.findall(r"[\(\[]([^)\]]{2,20})[\)\]]", cleaned):
-            p_key = _normalize_key(paren_m)
-            if p_key in self.reverse_multi_dict:
-                matches.update(self.reverse_multi_dict[p_key])
+            for p_key in self._candidate_lookup_keys(paren_m):
+                if p_key in self.reverse_multi_dict:
+                    matches.update(self.reverse_multi_dict[p_key])
         if not matches:
             # Substring match for long conference proceedings titles containing a canonical conference phrase (>= 4 words)
             full_key = _expand_iso4_key(_normalize_key(cleaned))
-            if any(w in full_key.split() for w in ("proceedings", "conference", "meeting", "symposium", "workshop")):
+            full_key_padded = f" {full_key} "
+            _acl_chapter_qualifiers = (
+                "asia pacific",
+                "european",
+                "north american",
+                "transactions",
+                "workshop",
+                "conll",
+                "semeval",
+                "aacl",
+                "ijcnlp",
+                "eacl",
+                "naacl",
+                "tacl",
+                "emnlp",
+                "findings",
+            )
+            if any(
+                w in full_key.split()
+                for w in ("proceedings", "conference", "meeting", "symposium", "workshop", "findings")
+            ):
                 for dict_key, full_set in self.reverse_multi_dict.items():
-                    if len(dict_key.split()) >= 4 and dict_key in full_key:
-                        matches.update(full_set)
+                    if len(dict_key.split()) < 4 or f" {dict_key} " not in full_key_padded:
+                        continue
+                    if dict_key == "association for computational linguistics" and any(
+                        q in full_key for q in _acl_chapter_qualifiers
+                    ):
+                        continue
+                    matches.update(full_set)
         return matches
 
     def normalize(self, venue: str | None) -> str:
@@ -325,22 +393,16 @@ class VenueNormalizer:
         key = _normalize_key(cleaned)
         if key in self.reverse_dict:
             return self.reverse_dict[key]
-        # Try stripping 'Proceedings of (the)' or trailing parenthetical abbreviation e.g. '(NeurIPS)'
+        # Try stripping 'Proceedings of (the)', trailing edition year, or trailing parenthetical abbreviation
         no_parens = re.sub(r"\s*[\(\[][^\)\]]+[\)\]]\s*", " ", cleaned).strip()
         for cand_str in (no_parens, cleaned):
-            cand_key = _normalize_key(cand_str)
-            cand_no_proc = re.sub(
-                r"^(?:in\s+)?(?:proceedings\s+of\s+(?:the\s+)?|proc\s+(?:of\s+(?:the\s+)?)?)(?:\d{4}\s+|\d+(?:st|nd|rd|th)\s+)*(?:annual\s+)?",
-                "",
-                cand_key,
-            ).strip()
-            for k in (cand_key, cand_no_proc, _expand_iso4_key(cand_key), _expand_iso4_key(cand_no_proc)):
+            for k in self._candidate_lookup_keys(cand_str):
                 if k in self.reverse_dict:
                     return self.reverse_dict[k]
         for paren_m in re.findall(r"[\(\[]([^)\]]{2,20})[\)\]]", cleaned):
-            p_key = _normalize_key(paren_m)
-            if p_key in self.reverse_dict:
-                return self.reverse_dict[p_key]
+            for p_key in self._candidate_lookup_keys(paren_m):
+                if p_key in self.reverse_dict:
+                    return self.reverse_dict[p_key]
         cands = self._candidate_canonicals(cleaned)
         if len(cands) == 1:
             return next(iter(cands))

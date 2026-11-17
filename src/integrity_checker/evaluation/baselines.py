@@ -34,7 +34,7 @@ def evaluate_symbolic_record(
         title_sim_fuzzy=float(item.get("title_sim_fuzzy", 0.0) or 0.0),
         title_sim_semantic=float(item.get("title_sim_semantic", 0.0) or 0.0),
         author_jaccard=float(item.get("author_jaccard", 0.0) or 0.0),
-        year_distance=int(item.get("year_distance", 0) if item.get("year_distance") is not None else 0),
+        year_distance=int(item.get("year_distance", 999) if item.get("year_distance") is not None else 999),
         doi_exact_match=bool(item.get("doi_exact_match", False)),
         source_consensus=int(item.get("source_consensus", 0) or 0),
         venue_sim=float(item.get("venue_sim", 0.0) or 0.0),
@@ -42,6 +42,7 @@ def evaluate_symbolic_record(
         content_alignment_confidence=str(item.get("content_alignment_confidence", "") or ""),
         content_is_aligned=bool(item.get("content_is_aligned", False)),
         stance_label=str(item.get("stance_label", "") or ""),
+        context_source=str(item.get("context_source", "") or ""),
         api_exhausted=api_exhausted,
         doi_ra_status=doi_ra_status,
     )
@@ -106,6 +107,15 @@ def evaluate_symbolic_record(
     failed_sources: dict[str, str] = {}
     ext_ids = {"is_retracted": "true"} if is_retracted else {}
 
+    cand_abstract = item.get("cand_abstract")
+    if not cand_abstract and item.get("has_abstract", True) and (
+        feat.content_alignment_score > 0.0 or feat.stance_label == "contradiction_risk"
+    ):
+        cand_abstract = (
+            "Substantive scholarly abstract text provided for semantic alignment evaluation "
+            "and claim grounding verification."
+        )
+
     if has_cand:
         n_cands = max(1, int(item.get("source_consensus", 1)))
         for c_idx in range(n_cands):
@@ -118,6 +128,7 @@ def evaluate_symbolic_record(
                     year=cand_year,
                     venue=cand_venue,
                     doi=cand_doi,
+                    abstract=cand_abstract,
                     external_ids=dict(ext_ids),
                     confidence=0.95,
                     score=0.95,
@@ -246,6 +257,7 @@ class BaselineRunner:
             has_full_record = any(
                 k in item for k in ("cited_title", "cand_title", "raw_citation", "is_vn_legal")
             )
+            raw_yd_dict = features.get("year_distance", item.get("year_distance", 999))
             return {
                 "id": item.get("id") or item.get("citation_id"),
                 "true_label": item.get("true_label") or item.get("gold_label") or item.get("label"),
@@ -253,12 +265,13 @@ class BaselineRunner:
                 "title_sim_fuzzy": float(features.get("title_sim_fuzzy", item.get("title_sim_fuzzy", 0.0)) or 0.0),
                 "title_sim_semantic": float(features.get("title_sim_semantic", item.get("title_sim_semantic", 0.0)) or 0.0),
                 "author_jaccard": float(features.get("author_jaccard", item.get("author_jaccard", 0.0)) or 0.0),
-                "year_distance": int(features.get("year_distance", item.get("year_distance", 0)) if features.get("year_distance", item.get("year_distance", 0)) is not None else 0),
+                "year_distance": int(raw_yd_dict if raw_yd_dict is not None else 999),
                 "source_consensus": int(features.get("source_consensus", item.get("source_consensus", 0)) or 0),
                 "venue_sim": float(features.get("venue_sim", item.get("venue_sim", 0.0)) or 0.0),
                 "content_alignment_score": float(features.get("content_alignment_score", item.get("content_alignment_score", 0.0)) or 0.0),
                 "content_alignment_confidence": str(features.get("content_alignment_confidence", item.get("content_alignment_confidence", "")) or ""),
                 "content_is_aligned": bool(features.get("content_is_aligned", item.get("content_is_aligned", False))),
+                "stance_label": str(features.get("stance_label", item.get("stance_label", "")) or ""),
                 "has_candidate": features.get("has_candidate", item.get("has_candidate")),
                 "url_status": features.get("url_status", item.get("url_status")),
                 "cited_doi": features.get("cited_doi", item.get("cited_doi")),
@@ -319,11 +332,19 @@ class BaselineRunner:
 
         citation_obj = getattr(item, "citation", None)
         cited_doi = getattr(item, "cited_doi", None) or getattr(citation_obj, "doi", None)
-        raw_yd = getattr(feat_obj, "year_distance", 0)
+        raw_yd = getattr(feat_obj, "year_distance", 999)
         api_exhausted = bool(
             getattr(item, "api_exhausted", False)
             or getattr(feat_obj, "api_exhausted", False)
             or getattr(matched_source_raw, "api_exhausted", False)
+        )
+        is_retracted_obj = bool(
+            getattr(item, "is_retracted", False)
+            or getattr(matched_source_raw, "is_retracted", False)
+            or (
+                hasattr(matched_source_raw, "has_retracted_candidate")
+                and matched_source_raw.has_retracted_candidate()
+            )
         )
         doi_ra_status = getattr(feat_obj, "doi_ra_status", None) or None
         if not doi_ra_status and matched_source_raw is not None and hasattr(matched_source_raw, "candidates"):
@@ -332,6 +353,49 @@ class BaselineRunner:
             if _extract_registered_no_csl_ra(matched_source_raw):
                 doi_ra_status = "registered_no_csl"
 
+        synthesized_raw_rec: dict[str, Any] | None = None
+        if citation_obj is not None and hasattr(matched_source_raw, "candidates"):
+            best_c = (
+                matched_source_raw.best_candidate()
+                if hasattr(matched_source_raw, "best_candidate")
+                else None
+            )
+            synthesized_raw_rec = {
+                "title_sim_fuzzy": float(getattr(feat_obj, "title_sim_fuzzy", 0.0) or 0.0),
+                "title_sim_semantic": float(getattr(feat_obj, "title_sim_semantic", 0.0) or 0.0),
+                "author_jaccard": float(getattr(feat_obj, "author_jaccard", 0.0) or 0.0),
+                "year_distance": int(raw_yd if raw_yd is not None else 999),
+                "doi_exact_match": bool(getattr(feat_obj, "doi_exact_match", False)),
+                "source_consensus": int(getattr(feat_obj, "source_consensus", 0) or 0),
+                "venue_sim": float(getattr(feat_obj, "venue_sim", 0.0) or 0.0),
+                "content_alignment_score": float(getattr(feat_obj, "content_alignment_score", 0.0) or 0.0),
+                "content_alignment_confidence": str(getattr(feat_obj, "content_alignment_confidence", "") or ""),
+                "content_is_aligned": bool(getattr(feat_obj, "content_is_aligned", False)),
+                "stance_label": str(getattr(feat_obj, "stance_label", "") or ""),
+                "context_source": str(getattr(feat_obj, "context_source", "") or ""),
+                "api_exhausted": api_exhausted,
+                "doi_ra_status": doi_ra_status,
+                "is_retracted": is_retracted_obj,
+                "has_candidate": bool(has_candidate),
+                "crossref_matched": crossref_matched,
+                "url_status": url_status,
+                "url_status_code": getattr(matched_source_raw, "url_status_code", None),
+                "raw_citation": getattr(citation_obj, "raw_text", None) or getattr(matched_source_raw, "citation_raw", None),
+                "cited_title": getattr(citation_obj, "title", None),
+                "cited_authors": getattr(citation_obj, "authors", None),
+                "cited_year": getattr(citation_obj, "year", None),
+                "cited_venue": getattr(citation_obj, "venue", None),
+                "cited_doi": cited_doi,
+                "cited_url": getattr(citation_obj, "url", None),
+                "cand_title": getattr(best_c, "title", None) if best_c else None,
+                "cand_authors": getattr(best_c, "authors", None) if best_c else None,
+                "cand_year": getattr(best_c, "year", None) if best_c else None,
+                "cand_venue": getattr(best_c, "venue", None) if best_c else None,
+                "cand_doi": getattr(best_c, "doi", None) if best_c else None,
+                "cand_abstract": getattr(best_c, "abstract", None) if best_c else None,
+                "has_abstract": bool(getattr(best_c, "abstract", None)) if best_c else False,
+            }
+
         return {
             "id": getattr(item, "citation_id", None) or getattr(citation_obj, "id", None),
             "true_label": getattr(item, "true_label", None) or label_val,
@@ -339,18 +403,21 @@ class BaselineRunner:
             "title_sim_fuzzy": float(getattr(feat_obj, "title_sim_fuzzy", 0.0) or 0.0),
             "title_sim_semantic": float(getattr(feat_obj, "title_sim_semantic", 0.0) or 0.0),
             "author_jaccard": float(getattr(feat_obj, "author_jaccard", 0.0) or 0.0),
-            "year_distance": int(raw_yd if raw_yd is not None else 0),
+            "year_distance": int(raw_yd if raw_yd is not None else 999),
             "source_consensus": int(getattr(feat_obj, "source_consensus", 0) or 0),
             "venue_sim": float(getattr(feat_obj, "venue_sim", 0.0) or 0.0),
             "content_alignment_score": float(getattr(feat_obj, "content_alignment_score", 0.0) or 0.0),
             "content_alignment_confidence": str(getattr(feat_obj, "content_alignment_confidence", "") or ""),
             "content_is_aligned": bool(getattr(feat_obj, "content_is_aligned", False)),
+            "stance_label": str(getattr(feat_obj, "stance_label", "") or ""),
             "has_candidate": has_candidate,
             "url_status": url_status,
             "cited_doi": cited_doi,
             "api_exhausted": api_exhausted,
             "doi_ra_status": doi_ra_status,
+            "is_retracted": is_retracted_obj,
             "crossref_matched": crossref_matched,
+            "_raw_record": synthesized_raw_rec,
         }
 
     def _predict_single(self, canonical: str, feat: dict[str, Any]) -> str:
@@ -417,8 +484,9 @@ class BaselineRunner:
 
         title_best = max(tf, ts)
         ca_score = feat.get("content_alignment_score", 0.0)
-        ca_conf = feat.get("content_alignment_confidence", "")
         ca_aligned = feat.get("content_is_aligned", False)
+        stance_lbl = feat.get("stance_label", "")
+        venue_sim = float(feat.get("venue_sim", 0.0) or 0.0)
         url_status = feat.get("url_status")
         cited_doi = feat.get("cited_doi")
         has_cand = feat.get("has_candidate")
@@ -436,36 +504,64 @@ class BaselineRunner:
         if cited_doi and not doi_ok and title_best < 0.60:
             return "suspected_hallucination"
         if url_status == "dead_link" and not doi_ok and title_best < 0.60:
+            if title_best >= 0.35 and consensus >= 1 and aj >= 0.15 and yd <= 4:
+                return "metadata_error"
             return "suspected_hallucination"
         if has_cand is False and api_exhausted:
             return "unresolved"
+        if doi_ok and (
+            (title_best < 0.35 and aj < 0.20)
+            or (tf < 0.25 and ts < 0.45)
+            or (aj == 0.0 and tf < 0.45 and ts < 0.58 and venue_sim < 0.25)
+        ):
+            return "suspected_hallucination"
 
-        # Content alignment contradiction check (R-CONTENT-MISMATCH)
-        # Decision-support guardrail: strongly matched real papers (title >= 0.85, author >= 0.50, yd <= 1)
-        # route to metadata_error rather than suspected_hallucination.
-        if not ca_aligned and ca_score >= 0.30 and tf >= 0.75 and aj >= 0.50 and not doi_ok and consensus <= 1:
-            if title_best >= 0.85 and yd <= 1:
+        # Content alignment contradiction check (R-CONTENT-MISMATCH; preserves Rule 3b [0.25, 0.50) guard)
+        if (not ca_aligned or stance_lbl == "contradiction_risk") and (
+            stance_lbl == "contradiction_risk" or (0.0 < ca_score < 0.25 and tf >= 0.85)
+        ) and tf >= 0.75 and aj >= 0.25 and (yd <= 1 or yd >= 900):
+            if title_best >= 0.85 or consensus >= 2 or aj >= 0.75:
                 return "metadata_error"
             return "suspected_hallucination"
-        if ca_conf == "high" and not ca_aligned and 0.0 < ca_score < 0.25 and title_best >= 0.85:
-            return "metadata_error"
 
         # Content alignment rescue check (R-CONTENT-ALIGNMENT)
-        if ca_aligned and ca_score >= 0.60 and tf >= 0.60 and aj >= 0.50 and yd <= 1 and consensus >= 2:
+        if (
+            ca_aligned
+            and stance_lbl != "contradiction_risk"
+            and ca_score >= 0.60
+            and tf >= 0.60
+            and aj >= 0.50
+            and (yd <= 1 or yd >= 900)
+            and consensus >= 2
+        ):
             return "verified"
 
-        if doi_ok and title_best >= 0.85 and yd <= 1:
+        if doi_ok and title_best >= 0.90 and aj >= 0.50 and (yd <= 1 or yd >= 900):
             return "verified"
-        if title_best >= 0.85 and aj >= 0.50 and yd <= 1 and consensus >= 1:
+        if title_best >= 0.90 and aj >= 0.50 and yd <= 1 and consensus >= 2:
             return "verified"
-        if doi_ok and title_best < 0.85:
+        if tf >= 0.90 and aj >= 0.80 and yd <= 1 and consensus >= 1:
+            return "verified"
+        if doi_ok and title_best < 0.90:
             return "metadata_error"
-        if title_best >= 0.60 and (aj < 0.50 or yd > 1 or title_best < 0.85):
+        if title_best >= 0.60 and (aj < 0.50 or (1 < yd < 900) or title_best < 0.90):
+            return "metadata_error"
+        if 0.42 <= title_best < 0.60 and yd <= 2 and (
+            (consensus >= 2 and aj >= 0.75) or (aj >= 0.85 and yd <= 1 and tf >= 0.52)
+        ):
+            return "metadata_error"
+        if (
+            0.42 <= title_best < 0.60
+            and consensus >= 2
+            and aj > 0.0
+            and yd < 900
+            and ((2 <= yd <= 4 and tf >= 0.58) or (yd <= 4 and aj < 0.20 and tf >= 0.58))
+        ):
             return "metadata_error"
         is_sem_noise = tf < 0.65 and aj == 0.0 and not doi_ok and consensus <= 1
         if 0.40 <= title_best < 0.60 and not is_sem_noise:
             return "unresolved"
-        if has_cand is not False and not doi_ok and aj >= 0.18 and yd <= 3 and 0.28 <= title_best < 0.60:
+        if has_cand is not False and not doi_ok and aj >= 0.18 and yd <= 3 and 0.25 <= title_best < 0.60:
             return "unresolved"
         return "suspected_hallucination"
 

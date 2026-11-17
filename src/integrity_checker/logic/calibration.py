@@ -442,7 +442,7 @@ DEFAULT_WEIGHTS_PATH = (
 class HybridMLScorer:
     """Hybrid Neuro-Symbolic Multinomial Logistic Regression + Platt Calibrator.
 
-    Combines 15 neural, lexical, and symbolic-interaction features extracted from
+    Combines 16 neural, lexical, and symbolic-interaction features extracted from
     MatchFeatures to predict class probabilities across the 4 canonical labels:
         - verified
         - metadata_error
@@ -538,8 +538,8 @@ class HybridMLScorer:
             consensus = int(features.get("source_consensus", 0) or 0)
             venue = float(features.get("venue_sim", 0.0) or 0.0)
             ca_score = float(features.get("content_alignment_score", 0.0) or 0.0)
-            ca_conf = str(features.get("content_alignment_confidence", "") or "")
             ca_aligned = bool(features.get("content_is_aligned", False))
+            stance_lbl = str(features.get("stance_label", "") or "")
             api_exhausted = bool(features.get("api_exhausted", False))
             doi_ra_status = str(features.get("doi_ra_status") or "")
             if has_candidate is None:
@@ -562,8 +562,8 @@ class HybridMLScorer:
             consensus = int(getattr(features, "source_consensus", 0) or 0)
             venue = float(getattr(features, "venue_sim", 0.0) or 0.0)
             ca_score = float(getattr(features, "content_alignment_score", 0.0) or 0.0)
-            ca_conf = str(getattr(features, "content_alignment_confidence", "") or "")
             ca_aligned = bool(getattr(features, "content_is_aligned", False))
+            stance_lbl = str(getattr(features, "stance_label", "") or "")
             api_exhausted = bool(getattr(features, "api_exhausted", False))
             doi_ra_status = str(getattr(features, "doi_ra_status", "") or "")
             if has_candidate is None:
@@ -581,9 +581,12 @@ class HybridMLScorer:
         consensus_norm = min(max(consensus, 0), 4) / 4.0
 
         content_signal = 0.0
-        if ca_aligned and ca_score >= 0.45:
+        if ca_aligned and stance_lbl != "contradiction_risk" and ca_score >= 0.45:
             content_signal = ca_score
-        elif ca_conf == "high" and not ca_aligned and ca_score > 0.0 and ca_score < 0.25:
+        elif not ca_aligned and (
+            stance_lbl == "contradiction_risk"
+            or (0.0 < ca_score < 0.46)
+        ):
             content_signal = -0.6
 
         title_x_author = t_max * aj
@@ -591,7 +594,7 @@ class HybridMLScorer:
         title_mismatch_author = t_max * (1.0 - aj) if t_max >= 0.60 else 0.0
         title_mismatch_year = t_max * (1.0 - year_match) if t_max >= 0.60 else 0.0
         doi_mismatch_title = doi_ok * (1.0 - t_max)
-        has_partial_author_grey = 0.28 <= t_max < 0.60 and aj >= 0.18 and abs_yd <= 3
+        has_partial_author_grey = 0.25 <= t_max < 0.60 and aj >= 0.18 and abs_yd <= 3
         has_border_title = 0.40 <= t_max < 0.60 and (aj > 0.0 or tf >= 0.65 or consensus > 1)
         has_registry_abstention = has_cand == 0.0 and (
             api_exhausted or doi_ra_status == "registered_no_csl"

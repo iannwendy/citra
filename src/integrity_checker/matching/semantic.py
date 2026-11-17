@@ -114,68 +114,151 @@ _POSITIVE_EVIDENCE_RE = re.compile(
 
 _ACADEMIC_GENERIC_STOP_WORDS: frozenset[str] = frozenset(
     {
-        "about", "above", "across", "after", "against", "along", "also", "although",
-        "among", "analysis", "analyze", "analyzed", "apply", "applied", "applying",
-        "approach", "approaches", "architecture", "architectures", "article", "author",
-        "authors", "based", "baseline", "baselines", "because", "been", "before",
-        "being", "benchmark", "benchmarks", "between", "both", "build", "building",
-        "compared", "comparison", "concerning", "conduct", "conducted", "conjecture",
-        "consider", "context", "current", "data", "dataset", "datasets", "demonstrate",
-        "demonstrated", "demonstrates", "describe", "described", "design", "designed",
-        "despite", "detail", "detailed", "develop", "developed", "different", "discuss",
-        "discussed", "during", "each", "effect", "effective", "effectively", "empirical",
-        "empirically", "employ", "employed", "enable", "enables", "evaluate", "evaluated",
+        "about", "above", "accuracy", "accurate", "achieve", "achieved", "achieves",
+        "achieving", "across", "after", "against", "al", "algorithm", "algorithms",
+        "along", "also", "although", "among", "analysis", "analyze", "analyzed",
+        "application", "applications", "apply", "applied", "applying", "approach",
+        "approaches", "architecture", "architectures", "article", "author", "authors",
+        "based", "baseline", "baselines", "because", "been", "before", "being",
+        "benchmark", "benchmarks", "between", "both", "build", "building", "capability",
+        "capabilities", "challenge", "challenges", "compared", "comparison",
+        "component", "components", "computational", "compute", "computed", "computing",
+        "concept", "concepts", "concerning", "conduct", "conducted", "conjecture",
+        "consider", "context", "corpora", "corpus", "current", "data", "dataset",
+        "datasets", "deep", "demonstrate", "demonstrated", "demonstrates", "describe",
+        "described", "design", "designed", "despite", "detail", "detailed", "develop",
+        "developed", "different", "discuss", "discussed", "domain", "domains", "during",
+        "each", "effect", "effective", "effectively", "efficiency", "efficient",
+        "empirical", "empirically", "employ", "employed", "enable", "enables", "eq",
+        "establish", "established", "establishes", "et", "evaluate", "evaluated",
         "evaluation", "even", "examine", "example", "existing", "experiment",
         "experimental", "experiments", "explore", "explored", "extend", "extended",
-        "feature", "features", "field", "figure", "find", "finding", "findings", "first",
-        "focus", "following", "form", "formulation", "found", "framework", "frameworks",
-        "from", "further", "furthermore", "general", "given", "have", "having", "high",
-        "higher", "however", "important", "improve", "improved", "improvement",
-        "improvements", "improves", "improving", "include", "including", "increase",
-        "information", "instead", "into", "introduce", "introduced", "introduces",
-        "investigate", "investigated", "issue", "issues", "large", "larger", "level",
-        "literature", "main", "major", "make", "many", "measure", "method", "methods",
-        "model", "modeling", "models", "more", "most", "much", "multiple", "need",
-        "novel", "number", "obtain", "obtained", "often", "only", "order", "other",
-        "others", "outperform", "outperforms", "overall", "over", "paper", "papers",
-        "particular", "particularly", "perform", "performance", "performed", "present",
-        "presented", "presents", "previous", "previously", "prior", "problem", "problems",
-        "process", "produce", "propose", "proposed", "proposes", "provide", "provided",
-        "provides", "quality", "recent", "recently", "regarding", "related", "report",
-        "reported", "research", "respect", "result", "results", "review", "role", "same",
-        "scale", "score", "scores", "second", "section", "several", "show", "showed",
+        "extract", "extracted", "extraction", "feature", "features", "field", "fig",
+        "figure", "find", "finding", "findings", "first", "focus", "following", "form",
+        "formulation", "found", "framework", "frameworks", "from", "function",
+        "functions", "further", "furthermore", "general", "generalization", "given",
+        "have", "having", "high", "higher", "however", "important", "improve",
+        "improved", "improvement", "improvements", "improves", "improving", "include",
+        "including", "increase", "information", "input", "inputs", "instead", "into",
+        "introduce", "introduced", "introduces", "investigate", "investigated", "issue",
+        "issues", "knowledge", "language", "languages", "large", "larger", "layer",
+        "layers", "learn", "learned", "learning", "level", "literature", "main",
+        "major", "make", "many", "measure", "mechanism", "mechanisms", "method",
+        "methods", "metric", "metrics", "model", "modeling", "models", "module",
+        "modules", "more", "most", "much", "multiple", "natural", "need", "network",
+        "networks", "neural", "novel", "number", "objective", "obtain", "obtained",
+        "often", "only", "operator", "operators", "order", "other", "others",
+        "outperform", "outperforms", "output", "outputs", "overall", "over", "paper",
+        "papers", "parameter", "parameters", "particular", "particularly", "perform",
+        "performance", "performed", "pipeline", "pipelines", "pp", "predict",
+        "predicted", "prediction", "predictions", "present", "presented", "presents",
+        "pretrained", "pretraining", "previous", "previously", "prior", "problem",
+        "problems", "process", "processing", "produce", "propose", "proposed",
+        "proposes", "prove", "proved", "proven", "provide", "provided", "provides",
+        "quality", "recent", "recently", "regarding", "related", "report", "reported",
+        "representation", "representations", "research", "respect", "result", "results",
+        "review", "role", "same", "scale", "score", "scores", "second", "section",
+        "sentence", "sentences", "sequence", "sequences", "several", "show", "showed",
         "shown", "shows", "significant", "significantly", "similar", "simple", "since",
-        "single", "small", "some", "specific", "specifically", "standard", "state",
-        "still", "strategy", "strong", "studies", "study", "substantial", "such",
-        "suggest", "superior", "support", "system", "systems", "table", "task", "tasks",
-        "technique", "techniques", "term", "terms", "than", "that", "their", "them",
-        "then", "there", "therefore", "these", "they", "this", "those", "three",
-        "through", "thus", "toward", "towards", "traditional", "train", "trained",
-        "training", "under", "used", "useful", "using", "utilize", "various", "very",
-        "well", "were", "what", "when", "where", "which", "while", "with", "within",
-        "without", "work", "works", "would",
+        "single", "small", "some", "source", "sources", "space", "spaces", "specific",
+        "specifically", "standard", "state", "still", "strategy", "strong",
+        "structural", "structure", "structures", "studies", "study", "substantial",
+        "such", "suggest", "superior", "support", "system", "systems", "tab", "table",
+        "target", "targets", "task", "tasks", "technique", "techniques", "term",
+        "terms", "text", "texts", "than", "that", "their", "them", "then", "there",
+        "therefore", "these", "they", "this", "those", "three", "through", "thus",
+        "token", "tokens", "toward", "towards", "traditional", "train", "trained",
+        "training", "under", "used", "useful", "using", "utilize", "utilizing",
+        "value", "values", "various", "vector", "vectors", "very", "vol", "well",
+        "were", "what", "when", "where", "which", "while", "with", "within",
+        "without", "word", "words", "work", "works", "would",
     }
 )
 
-_TOPIC_FRAMING_CLAUSE_RE = re.compile(
-    r"^\s*(?:regarding|concerning|with\s+respect\s+to|in\s+(?:the\s+)?(?:context|terms)\s+of|"
-    r"on\s+the\s+(?:topic|subject)\s+of|building\s+on|for)\s+([^,]{3,90}),\s*(.+)$",
+_FIRST_PERSON_ADOPTION_CLAUSE_RE = re.compile(
+    r"^\s*(?:building\s+(?:on|upon)|following|inspired\s+by|adapting|adopting|"
+    r"based\s+on|using|leveraging|for)\s+([^,]{3,95}),\s*(?:we|our)\b",
     re.IGNORECASE | re.DOTALL,
+)
+_CITATION_CALLOUT_STRIP_RE = re.compile(
+    r"(?:\b[A-Z][A-Za-z'\-]+(?:\s+(?:and|&)\s+[A-Z][A-Za-z'\-]+|\s+et\s+al\.)?\s*\((?:18|19|20)\d{2}[a-z]?\)"
+    r"|\([A-Z][^()\n]{1,75}(?:18|19|20)\d{2}[a-z]?\)"
+    r"|\[\d+(?:\s*[,;–\-]\s*\d+)*\])"
+)
+_MULTI_REF_BRACKET_RE = re.compile(r"\[\s*\d+\s*(?:[,;–\-]\s*\d+\s*)+\]")
+_METHOD_USAGE_SENTENCE_RE = re.compile(
+    r"\b(?:we|our|this\s+(?:study|paper|work|thesis)|the\s+(?:implementation|pipeline|system|experiment|experiments))\b"
+    r"[^.;]{0,90}\b(?:use|uses|used|using|adopt\w*|apply|applies|applied|employ\w*|implement\w*|"
+    r"fine[\s\-]?tun\w*|train\w*|project\w*|visualiz\w*|cluster\w*|preprocess\w*|integrat\w*|leverag\w*)\b",
+    re.IGNORECASE,
+)
+_EMPIRICAL_CLAIM_ATTRIBUTION_RE = re.compile(
+    r"(?:\b(?:demonstrat\w*|show(?:ed|n|s)?|establish\w*|reported|achiev\w*|outperform\w*|"
+    r"yield\w*|attain\w*|regarding|concerning|according\s+to)\b|\b\d+(?:\.\d+)?\s*%)",
+    re.IGNORECASE,
+)
+_NON_ENGLISH_SCRIPT_OR_DIACRITIC_RE = re.compile(
+    r"[\u0400-\u04ff\u0590-\u06ff\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af"
+    r"äöüßñçøåæœÄÖÜẞÑÇØÅÆŒ]"
+)
+_FOREIGN_FUNCTION_WORDS: frozenset[str] = frozenset(
+    {
+        "wir", "und", "zur", "der", "die", "das", "mit", "für", "auf", "einer", "einem",
+        "nous", "dans", "pour", "avec", "les", "des", "une", "sont", "cette",
+        "para", "con", "los", "las", "una", "del", "como",
+        "kami", "dengan", "untuk", "pada", "yang", "dalam",
+    }
 )
 
 
+def _is_non_english_or_foreign_text(text: str | None) -> bool:
+    """Detect non-English scripts, non-VN European diacritics, or foreign function-word syntax."""
+    if not text:
+        return False
+    if _NON_ENGLISH_SCRIPT_OR_DIACRITIC_RE.search(text):
+        return True
+    words = [w.lower() for w in re.findall(r"[A-Za-z]{2,}", text)]
+    foreign_hits = sum(1 for w in words if w in _FOREIGN_FUNCTION_WORDS)
+    return foreign_hits >= 2
+
+
 def _light_technical_stem(token: str) -> str:
-    """Deterministic light stemmer preserving technical roots (zero external NLP deps)."""
+    """Deterministic morphology-normalizing light stemmer preserving technical roots."""
     w = token.lower()
     if len(w) <= 4:
         return w
+    for morph_suf, repl in (
+        ("ifications", "if"),
+        ("ification", "if"),
+        ("ifiers", "if"),
+        ("ifier", "if"),
+        ("ifying", "if"),
+        ("ified", "if"),
+        ("ify", "if"),
+        ("izations", "iz"),
+        ("ization", "iz"),
+        ("izers", "iz"),
+        ("izer", "iz"),
+        ("izing", "iz"),
+        ("ized", "iz"),
+        ("ize", "iz"),
+        ("convolutions", "convolut"),
+        ("convolutional", "convolut"),
+        ("convolution", "convolut"),
+        ("recurrences", "recurr"),
+        ("recurrence", "recurr"),
+        ("recurrent", "recurr"),
+    ):
+        if w == morph_suf:
+            return repl
+        if w.endswith(morph_suf) and len(w) - len(morph_suf) + len(repl) >= 5:
+            return w[: -len(morph_suf)] + repl
+    for at_suf in ("ations", "ation", "ators", "ator", "ative", "ating", "ated", "ates", "ate"):
+        if w.endswith(at_suf) and len(w) - len(at_suf) >= 4:
+            return w[: -len(at_suf)] + "at"
     if w.endswith("ies") and len(w) > 5:
         return w[:-3] + "y"
     for suffix in (
-        "izations",
-        "ization",
-        "ations",
-        "ation",
         "ments",
         "ment",
         "ingly",
@@ -185,10 +268,19 @@ def _light_technical_stem(token: str) -> str:
         "ness",
         "ally",
         "ical",
+        "ances",
+        "ance",
+        "ences",
+        "ence",
         "ing",
         "ers",
+        "er",
+        "ors",
+        "or",
         "ive",
         "ous",
+        "als",
+        "al",
         "ed",
         "es",
         "s",
@@ -209,7 +301,7 @@ def _extract_distinctive_stems(text: str | None) -> set[str]:
             low = part.lower()
             if low in _ACADEMIC_GENERIC_STOP_WORDS:
                 continue
-            if re.fullmatch(r"(?:18|19|20)\d{2}", low):
+            if re.fullmatch(r"(?:18|19|20)\d{2}[a-z]?", low):
                 continue
             # Keep uppercase/alphanumeric technical acronyms of len >= 3 (e.g., GCN, NMT, BLEU, BERT)
             is_acronym = len(part) >= 3 and (part.isupper() or any(ch.isdigit() for ch in part))
@@ -219,6 +311,92 @@ def _extract_distinctive_stems(text: str | None) -> set[str]:
             if stem not in _ACADEMIC_GENERIC_STOP_WORDS and len(stem) >= 3:
                 stems.add(stem)
     return stems
+
+
+def _stem_in_set(stem: str, target_stems: set[str]) -> bool:
+    """Check exact stem match or 6-character technical root prefix equivalence."""
+    if stem in target_stems:
+        return True
+    if len(stem) >= 6 and stem[:6] != "genera":
+        prefix6 = stem[:6]
+        return any(len(t) >= 6 and t[:6] == prefix6 for t in target_stems)
+    return False
+
+
+def _grounded_stems(claim_stems: set[str], target_stems: set[str]) -> set[str]:
+    """Return subset of `claim_stems` grounded in `target_stems` up to morphological inflection."""
+    if not claim_stems or not target_stems:
+        return set()
+    return {c for c in claim_stems if _stem_in_set(c, target_stems)}
+
+
+def _has_ungrounded_novel_claim(
+    cited_context: str,
+    source_title: str | None,
+    source_abstract: str | None,
+    *,
+    raw_sim: float,
+) -> bool:
+    """Position-independent detector for empirical claims lacking grounding in `source_abstract`.
+
+    Strips bibliographic callouts (`Author et al. (2017)`, `[4]`) and title-echoed topic words,
+    then checks whether a specific empirical predicate (`>= 4` non-title technical stems) has
+    zero grounding in `source_abstract`. Exempts foreign/cross-lingual text and first-person
+    methodological adoption (`Building on X [1], we ...` / `For X, our pipeline ...`).
+    """
+    if (
+        not cited_context
+        or not source_abstract
+        or raw_sim >= 0.78
+        or is_vietnamese_text(cited_context, min_diacritics=2)
+        or is_vietnamese_text(source_abstract, min_diacritics=2)
+        or _is_non_english_or_foreign_text(cited_context)
+    ):
+        return False
+
+    # Never penalize compound multi-citation sentences (e.g. "[5], whereas ... [9]" or "[13, 14]"),
+    # where half of the sentence legitimately describes a co-cited reference.
+    callout_matches = _CITATION_CALLOUT_STRIP_RE.findall(cited_context)
+    if len(callout_matches) >= 2 or _MULTI_REF_BRACKET_RE.search(cited_context):
+        return False
+
+    abs_stems = _extract_distinctive_stems(source_abstract)
+    if len(abs_stems) < 4:
+        return False
+
+    title_stems = _extract_distinctive_stems(source_title)
+    source_union = abs_stems | title_stems
+
+    # Exempt explicit first-person methodological adoption / implementation tool-usage sentences
+    m_adopt = _FIRST_PERSON_ADOPTION_CLAUSE_RE.match(cited_context.strip())
+    if (
+        m_adopt
+        and _grounded_stems(_extract_distinctive_stems(m_adopt.group(1)), source_union)
+        and not _NEGATION_CUES_RE.search(cited_context)
+        and not _DIRECT_REFUTATION_RE.search(cited_context)
+    ):
+        return False
+    if (
+        _METHOD_USAGE_SENTENCE_RE.search(cited_context)
+        and not re.match(r"^\s*(?:regarding|concerning|according\s+to)\b", cited_context, re.I)
+        and not _NEGATION_CUES_RE.search(cited_context)
+        and not _DIRECT_REFUTATION_RE.search(cited_context)
+    ):
+        return False
+
+    # Require an explicit empirical finding / quantitative metric / topic-attribution cue so
+    # qualitative background prose citing body sections of a paper is never false-flagged.
+    if not _EMPIRICAL_CLAIM_ATTRIBUTION_RE.search(cited_context):
+        return False
+
+    cleaned_ctx = _CITATION_CALLOUT_STRIP_RE.sub(" ", cited_context)
+    claim_stems = _extract_distinctive_stems(cleaned_ctx)
+    claim_non_title = {c for c in claim_stems if not _stem_in_set(c, title_stems)}
+    grounded_non_title = _grounded_stems(claim_non_title, abs_stems)
+
+    if len(claim_non_title) >= 4 and len(grounded_non_title) == 0:
+        return True
+    return False
 
 
 @dataclass
@@ -852,7 +1030,11 @@ class SemanticMatcher:
         norm_ev = normalize_vn_spelling(best_evidence_sentence) if best_evidence_sentence else ""
 
         # Check for severe polarity inversion when discussing the same technical concept
-        if best_evidence_sentence and similarity >= 0.30:
+        norm_src_abs = " ".join(source_abstract.split()).lower() if source_abstract else ""
+        is_verbatim_from_abstract = bool(
+            norm_src_abs and len(norm_focal) >= 35 and norm_focal[:35] in norm_src_abs
+        )
+        if best_evidence_sentence and similarity >= 0.30 and not is_verbatim_from_abstract:
             ctx_neg = bool(_NEGATION_CUES_RE.search(norm_focal))
             ev_neg = bool(_NEGATION_CUES_RE.search(norm_ev))
             ctx_abs_pos = bool(_STRONG_POSITIVE_CLAIM_RE.search(norm_focal))
@@ -869,29 +1051,35 @@ class SemanticMatcher:
             ):
                 return "contradiction_risk"
 
-        # Explicit topic-framing predicate misattribution ("Regarding <topic>, <unrelated empirical claim>")
+        # Position-independent novel-claim misattribution gate (bounded to similarity < 0.68)
         if (
             has_abstract
             and source_abstract
+            and similarity < 0.68
             and not is_cross_lingual
-            and not is_vietnamese_text(focal_sentence, min_diacritics=2)
+            and _has_ungrounded_novel_claim(
+                focal_sentence,
+                source_title,
+                source_abstract,
+                raw_sim=similarity,
+            )
         ):
-            m_frame = _TOPIC_FRAMING_CLAUSE_RE.match(focal_sentence.strip())
-            if m_frame:
-                abs_stems = _extract_distinctive_stems(source_abstract)
-                title_stems = _extract_distinctive_stems(source_title)
-                pred_stems = _extract_distinctive_stems(m_frame.group(2))
-                if len(abs_stems) >= 4 and len(pred_stems) >= 3 and len(pred_stems & (abs_stems | title_stems)) == 0:
-                    return "contradiction_risk"
+            return "contradiction_risk"
 
         if similarity >= 0.50:
             return "supported"
         if similarity >= 0.35:
             return "partially_supported"
-        if has_abstract and similarity < 0.22 and not is_cross_lingual:
-            focal_stems = _extract_distinctive_stems(focal_sentence)
+        if (
+            has_abstract
+            and similarity < 0.22
+            and not is_cross_lingual
+            and not is_vietnamese_text(focal_sentence, min_diacritics=2)
+            and not _is_non_english_or_foreign_text(focal_sentence)
+        ):
+            focal_stems = _extract_distinctive_stems(_CITATION_CALLOUT_STRIP_RE.sub(" ", focal_sentence))
             src_stems = _extract_distinctive_stems(source_abstract) | _extract_distinctive_stems(source_title)
-            if not (focal_stems & src_stems):
+            if len(focal_stems) >= 3 and len(src_stems) >= 3 and not _grounded_stems(focal_stems, src_stems):
                 return "contradiction_risk"
         return "neutral"
 
@@ -1820,20 +2008,21 @@ class SemanticMatcher:
     ) -> tuple[float, str, bool]:
         """Neuro-Symbolic Specificity Gate (Option 2A) correcting Bi-Encoder topical false positives.
 
-        Dense Bi-Encoders (`all-MiniLM-L6-v2`) frequently assign cosine 0.50..0.76 to two
+        Dense Bi-Encoders (`all-MiniLM-L6-v2`) frequently assign cosine 0.50..0.77 to two
         unrelated papers from the same subfield (e.g. NLP or CV) when generic field terms or a
-        topic lead-in phrase co-occur, even when the empirical predicate of the citing sentence
-        shares zero distinctive technical terms with the source abstract.
+        cited paper's title phrase co-occur, even when the empirical predicate of the citing
+        sentence shares zero distinctive technical roots with `source_abstract`.
 
         Safety invariants:
-        - Never penalizes cross-lingual pairs (`is_cross_lingual=True` or Vietnamese text).
+        - Never penalizes cross-lingual pairs (`is_cross_lingual=True`), Vietnamese text, or
+          non-English scripts / foreign syntax (`_is_non_english_or_foreign_text`).
+        - Exempts first-person methodological adoption (`Building on X [1], we ...`, `For X, our ...`).
         - Never activates when `source_abstract` lacks substantive technical content (< 4 stems).
-        - Only recalibrates borderline/moderate scores (`0.50 <= raw_sim < 0.78`) when either:
-          (a) A topic-framing lead-in (`Regarding X, <predicate>`) has >= 4 distinctive predicate
-              stems with zero overlap against `title_stems | abstract_stems`, OR
-          (b) `0.50 <= raw_sim < 0.68`, the claim has >= 4 non-title distinctive stems with zero
-              overlap against `abstract_stems`, AND total distinctive overlap with `abstract_stems`
-              is zero (`len(claim_stems & abstract_stems) == 0`).
+        - Only recalibrates moderate/borderline scores (`0.50 <= raw_sim < 0.78`) when
+          `_has_ungrounded_novel_claim` detects >= 4 non-title technical stems with zero
+          morphological root overlap against `source_abstract` (or >= 3 non-title stems with
+          zero total abstract overlap at `raw_sim < 0.72`, or < 15% overlap across >= 6 stems
+          at `raw_sim < 0.68`).
         """
         sim = max(0.0, min(1.0, float(raw_sim)))
 
@@ -1849,47 +2038,20 @@ class SemanticMatcher:
         if (
             is_cross_lingual
             or sim < cls.ALIGNMENT_THRESHOLD_MEDIUM
-            or sim >= 0.85
+            or sim >= 0.78
             or not cited_context
             or not source_abstract
-            or is_vietnamese_text(cited_context, min_diacritics=2)
-            or is_vietnamese_text(source_abstract, min_diacritics=2)
         ):
             return _map_status(sim)
 
-        abs_stems = _extract_distinctive_stems(source_abstract)
-        if len(abs_stems) < 4:
-            return _map_status(sim)
-
-        title_stems = _extract_distinctive_stems(source_title)
-        source_union = abs_stems | title_stems
-
-        # Case A: Explicit topic-framing clause ("Regarding <topic>, <empirical predicate>")
-        # where the substantive predicate after the comma has zero grounding in title or abstract.
-        m_frame = _TOPIC_FRAMING_CLAUSE_RE.match(cited_context.strip())
-        if m_frame:
-            predicate_text = m_frame.group(2)
-            pred_stems = _extract_distinctive_stems(predicate_text)
-            if len(pred_stems) >= 3 and len(pred_stems & source_union) == 0:
-                downgraded = min(0.44, max(0.36, sim * 0.65))
-                return _map_status(round(downgraded, 4))
-            pred_non_title = pred_stems - title_stems
-            if len(pred_non_title) >= 4 and len(pred_non_title & abs_stems) == 0 and len(pred_stems & abs_stems) == 0:
-                downgraded = min(0.45, max(0.36, sim * 0.68))
-                return _map_status(round(downgraded, 4))
-
-        # Case B: General monolingual claim in moderate Bi-Encoder band [0.50, 0.68) with zero
-        # distinctive technical stem overlap against BOTH title and abstract.
-        if sim < 0.68:
-            claim_stems = _extract_distinctive_stems(cited_context)
-            claim_non_title = claim_stems - title_stems
-            if (
-                len(claim_stems) >= 4
-                and len(claim_non_title) >= 3
-                and len(claim_stems & source_union) == 0
-            ):
-                downgraded = min(0.45, max(0.36, sim * 0.70))
-                return _map_status(round(downgraded, 4))
+        if _has_ungrounded_novel_claim(
+            cited_context,
+            source_title,
+            source_abstract,
+            raw_sim=sim,
+        ):
+            downgraded = min(0.44, max(0.36, sim * 0.65))
+            return _map_status(round(downgraded, 4))
 
         return _map_status(sim)
 

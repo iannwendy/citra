@@ -16,13 +16,17 @@ Covers:
 
 from __future__ import annotations
 
+from integrity_checker.evaluation.baselines import BaselineRunner
+from integrity_checker.linking.statuses import CitationMappingStatus
+from integrity_checker.logic.calibration import HybridMLScorer
 from integrity_checker.logic.neuro_symbolic_checker import NeuroSymbolicChecker
 from integrity_checker.logic.rules import SymbolicRules
+from integrity_checker.matching.features import FeatureCalculator
 from integrity_checker.matching.semantic import SemanticMatcher
 from integrity_checker.matching.venue_normalizer import VenueNormalizer
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 from integrity_checker.models.source import SourceCandidate, SourceResult
-from integrity_checker.models.validation import MatchFeatures, ValidationLabel
+from integrity_checker.models.validation import CitationVerdict, MatchFeatures, ValidationLabel
 
 
 class TestPillar1RuleOrderingAndConsensusBorder:
@@ -421,3 +425,707 @@ class TestPillar4BiomedicalVenueNormalization:
         assert verdict.label == ValidationLabel.METADATA_ERROR
         assert "R-VENUE-MISMATCH" in verdict.triggered_rules
         assert "venue" in verdict.mismatched_fields
+
+
+class TestHostileReviewerAndProductionParityRegressions:
+    """Comprehensive regression tests for all Scientific & Production Audit findings."""
+
+    def test_natural_academic_misattributed_templates_caught_across_checker_and_known_papers(self) -> None:
+        """All natural academic misattribution templates (not just 'Regarding...') must be caught
+        even on curated seminal papers (`known_papers`) with full authors and `mapping_status=MATCHED`."""
+        src_title = "Attention Is All You Need"
+        src_abs = (
+            "The dominant sequence transduction models are based on complex recurrent or "
+            "convolutional neural networks that include an encoder and a decoder. We propose "
+            "a new simple network architecture, the Transformer, based solely on attention "
+            "mechanisms, dispensing with recurrence and convolutions entirely. Experiments on "
+            "two machine translation tasks show these models to be superior in quality while "
+            "being more parallelizable and requiring significantly less time to train."
+        )
+        misattributed_templates = [
+            (
+                "Vaswani et al. (2017) demonstrated that spectral graph Laplacian message-passing "
+                "achieves 83.5% semi-supervised node classification accuracy on the Cora citation "
+                "benchmark in their study on Attention Is All You Need."
+            ),
+            (
+                "Prior work on Attention Is All You Need [1] established that spectral graph "
+                "Laplacian message-passing achieves 83.5% semi-supervised node classification "
+                "accuracy on the Cora citation benchmark."
+            ),
+            (
+                "Building upon Attention Is All You Need, Vaswani (2017) showed that spectral "
+                "graph Laplacian message-passing achieves 83.5% semi-supervised node classification "
+                "accuracy on the Cora citation benchmark."
+            ),
+            (
+                "Spectral graph Laplacian message-passing achieves 83.5% semi-supervised node "
+                "classification accuracy on the Cora citation benchmark [1]."
+            ),
+        ]
+        for ctx in misattributed_templates:
+            adj_sim, _, aligned = SemanticMatcher.calibrate_monolingual_specificity(
+                raw_sim=0.61,
+                cited_context=ctx,
+                source_title=src_title,
+                source_abstract=src_abs,
+                is_cross_lingual=False,
+            )
+            stance = SemanticMatcher.check_claim_stance(
+                ctx,
+                src_abs,
+                adj_sim,
+                has_abstract=True,
+                is_cross_lingual=False,
+                source_abstract=src_abs,
+                source_title=src_title,
+            )
+            assert aligned is False, f"Failed specificity gate for template: {ctx}"
+            assert stance == "contradiction_risk", f"Expected contradiction_risk for: {ctx}"
+
+        # Verify full NeuroSymbolicChecker.check parity on seminal known_papers + MATCHED status
+        checker = NeuroSymbolicChecker(enable_content_alignment=True, enable_calibration=False)
+        cit = Citation(
+            raw_text="Vaswani, A., & Shazeer, N. (2017). Attention Is All You Need. Advances in Neural Information Processing Systems.",
+            authors=["Vaswani, A.", "Shazeer, N."],
+            year=2017,
+            title=src_title,
+            venue="Advances in Neural Information Processing Systems",
+            citation_type=CitationType.REFERENCE_LIST,
+            style=CitationStyle.APA,
+        )
+        cand = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title=src_title,
+            authors=["Ashish Vaswani", "Noam Shazeer"],
+            year=2017,
+            venue="Advances in Neural Information Processing Systems",
+            abstract=src_abs,
+            confidence=0.98,
+        )
+        src = SourceResult(
+            citation_raw=cit.raw_text,
+            candidates=[cand],
+            sources_queried=["openalex", "crossref"],
+            sources_succeeded=["openalex", "crossref"],
+        )
+        verdict = checker.check(
+            cit,
+            src,
+            mapping_status=CitationMappingStatus.MATCHED,
+            citation_context=misattributed_templates[1],
+        )
+        assert verdict.label == ValidationLabel.METADATA_ERROR
+        assert "R-CONTENT-MISMATCH" in verdict.triggered_rules
+        assert "R-CONTENT-ALIGNMENT" not in verdict.triggered_rules
+        assert "content" in verdict.mismatched_fields
+
+    def test_known_papers_umbrella_venue_conflict_parity(self) -> None:
+        """NeuroSymbolicChecker.check on a curated seminal paper must catch umbrella-only venue conflicts."""
+        checker = NeuroSymbolicChecker(enable_content_alignment=False, enable_calibration=False)
+        cit = Citation(
+            raw_text="Vaswani, A., et al. (2017). Attention Is All You Need. Journal of Information Robotics.",
+            authors=["Vaswani, A."],
+            year=2017,
+            title="Attention Is All You Need",
+            venue="Journal of Information Robotics",
+            citation_type=CitationType.REFERENCE_LIST,
+            style=CitationStyle.APA,
+        )
+        cand = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title="Attention Is All You Need",
+            authors=["Ashish Vaswani", "Noam Shazeer"],
+            year=2017,
+            venue="Advances in Neural Information Processing Systems",
+            confidence=0.98,
+        )
+        src = SourceResult(
+            citation_raw=cit.raw_text,
+            candidates=[cand],
+            sources_queried=["openalex"],
+            sources_succeeded=["openalex"],
+        )
+        verdict = checker.check(cit, src)
+        assert verdict.label == ValidationLabel.METADATA_ERROR
+        assert "R-VENUE-MISMATCH" in verdict.triggered_rules
+        assert "venue" in verdict.mismatched_fields
+
+    def test_first_author_et_al_preserved_in_rule_4g_while_extra_coauthor_abstains(self) -> None:
+        """First Author et al. (len 1 vs 3, only_cited=[]) must trigger R-TITLE-MISMATCH, whereas
+        fabricated extra coauthor on single-author candidate (only_cited=['collaborator']) stays UNRESOLVED."""
+        rules = SymbolicRules()
+        cand = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title="Hierarchical Attention Networks for Document Classification",
+            authors=["Yang, Z.", "Yang, D.", "Dyer, C."],
+            year="2016",
+            confidence=0.88,
+        )
+        src = SourceResult(
+            citation_raw="Yang, Z., et al. (2016). Hierarchical Attention for Neural Sequence Tagging. NAACL.",
+            candidates=[cand],
+            sources_queried=["crossref", "openalex"],
+            sources_succeeded=["openalex"],
+        )
+        feat = MatchFeatures(
+            title_sim_fuzzy=0.56,
+            title_sim_semantic=0.46,
+            author_jaccard=1.0,
+            year_distance=0,
+            doi_exact_match=False,
+            source_consensus=1,
+        )
+        out_etal = rules.apply(
+            feat,
+            src,
+            mapping_status=CitationMappingStatus.MATCHED,
+            citation_authors=["Yang, Z."],
+            citation_year=2016,
+            citation_title="Hierarchical Attention for Neural Sequence Tagging",
+            citation_raw=src.citation_raw,
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert out_etal.label == ValidationLabel.METADATA_ERROR
+        assert "R-TITLE-MISMATCH" in out_etal.triggered_rules
+
+        # Extra fabricated co-author on a single-author candidate must still abstain (U1 invariant)
+        cand_single = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title="Self-Supervised Contrastive Representation Learning for Speech",
+            authors=["Baevski, A."],
+            year="2020",
+            confidence=0.72,
+        )
+        src_u1 = SourceResult(
+            citation_raw="Baevski, A., & Collaborator, R. (2020). Self-Supervised Contrastive Notes on Audio.",
+            candidates=[cand_single],
+            sources_queried=["openalex"],
+            sources_succeeded=["openalex"],
+        )
+        feat_u1 = MatchFeatures(
+            title_sim_fuzzy=0.55,
+            title_sim_semantic=0.48,
+            author_jaccard=1.0,
+            year_distance=0,
+            doi_exact_match=False,
+            source_consensus=1,
+        )
+        out_u1 = rules.apply(
+            feat_u1,
+            src_u1,
+            citation_authors=["Baevski, A.", "Collaborator, R."],
+            citation_year=2020,
+            citation_raw=src_u1.citation_raw,
+        )
+        assert out_u1.label == ValidationLabel.UNRESOLVED
+
+    def test_missing_abstract_dblp_and_implicit_body_discovery_never_false_flag_content_mismatch(self) -> None:
+        """Live DBLP/Crossref records with abstract=None and UNCITED_REFERENCE implicit_body_discovery
+        must never trigger false R-CONTENT-MISMATCH."""
+        rules = SymbolicRules()
+        cand_dblp = SourceCandidate(
+            source_name="dblp",
+            found=True,
+            title="On the Convergence of Adam and Beyond",
+            authors=["Reddi, S. J.", "Kale, S.", "Kumar, S."],
+            year="2018",
+            abstract=None,
+            confidence=0.95,
+        )
+        src_dblp = SourceResult(
+            citation_raw="Reddi, S. J., Kale, S., & Kumar, S. (2018). On the Convergence of Adam and Beyond. ICLR.",
+            candidates=[cand_dblp],
+            sources_queried=["dblp", "crossref"],
+            sources_succeeded=["dblp"],
+        )
+        feat_no_abs = MatchFeatures(
+            title_sim_fuzzy=1.0,
+            title_sim_semantic=1.0,
+            author_jaccard=1.0,
+            year_distance=0,
+            source_consensus=1,
+            content_alignment_score=0.19,
+            content_alignment_confidence="low",
+            content_is_aligned=False,
+        )
+        out_dblp = rules.apply(
+            feat_no_abs,
+            src_dblp,
+            mapping_status=CitationMappingStatus.MATCHED,
+            citation_authors=["Reddi, S. J.", "Kale, S.", "Kumar, S."],
+            citation_year=2018,
+            citation_raw=src_dblp.citation_raw,
+        )
+        assert out_dblp.label == ValidationLabel.VERIFIED
+        assert "R-CONTENT-MISMATCH" not in out_dblp.triggered_rules
+
+        # Explicit abstract present, but context came from heuristic implicit_body_discovery (UNCITED_REFERENCE)
+        cand_with_abs = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title="On the Convergence of Adam and Beyond",
+            authors=["Reddi, S. J.", "Kale, S.", "Kumar, S."],
+            year="2018",
+            abstract="We study the convergence properties of adaptive gradient methods including Adam and AMSGrad.",
+            confidence=0.95,
+        )
+        src_uncited = SourceResult(
+            citation_raw=src_dblp.citation_raw,
+            candidates=[cand_with_abs],
+            sources_queried=["openalex"],
+            sources_succeeded=["openalex"],
+        )
+        feat_implicit = MatchFeatures(
+            title_sim_fuzzy=1.0,
+            title_sim_semantic=1.0,
+            author_jaccard=1.0,
+            year_distance=0,
+            source_consensus=1,
+            content_alignment_score=0.18,
+            content_alignment_confidence="low",
+            content_is_aligned=False,
+            context_source="implicit_body_discovery",
+        )
+        out_uncited = rules.apply(
+            feat_implicit,
+            src_uncited,
+            mapping_status=CitationMappingStatus.UNCITED_REFERENCE,
+            citation_authors=["Reddi, S. J.", "Kale, S.", "Kumar, S."],
+            citation_year=2018,
+            citation_raw=src_uncited.citation_raw,
+        )
+        assert out_uncited.label == ValidationLabel.VERIFIED
+        assert "R-CONTENT-MISMATCH" not in out_uncited.triggered_rules
+
+    def test_consortium_doi_with_matched_status_routes_to_metadata_error_not_hallucination(self) -> None:
+        """IPCC (2021) consortium DOI with mapping_status=MATCHED, author_sim=0.0, best.venue=None,
+        and high semantic title similarity must never be flagged as R-CHIMERIC-DOI-MISMATCH."""
+        rules = SymbolicRules()
+        cand = SourceCandidate(
+            source_name="crossref",
+            found=True,
+            doi="10.1017/9781009157896",
+            title="Climate Change 2021: The Physical Science Basis. Contribution of Working Group I to the Sixth Assessment Report of the Intergovernmental Panel on Climate Change",
+            authors=["Masson-Delmotte, V.", "Zhai, P.", "Pirani, A."],
+            year="2021",
+            venue=None,
+            confidence=0.99,
+        )
+        raw = "IPCC (2021). Climate Change 2021 — Sixth Assessment Report. https://doi.org/10.1017/9781009157896"
+        src = SourceResult(
+            citation_raw=raw,
+            candidates=[cand],
+            sources_queried=["crossref", "openalex"],
+            sources_succeeded=["crossref"],
+        )
+        feat = MatchFeatures(
+            title_sim_fuzzy=0.42,
+            title_sim_semantic=0.82,
+            author_jaccard=0.0,
+            year_distance=0,
+            doi_exact_match=True,
+            source_consensus=1,
+            venue_sim=0.0,
+        )
+        out = rules.apply(
+            feat,
+            src,
+            mapping_status=CitationMappingStatus.MATCHED,
+            citation_doi="10.1017/9781009157896",
+            citation_authors=["IPCC"],
+            citation_year=2021,
+            citation_title="Climate Change 2021 — Sixth Assessment Report",
+            citation_raw=raw,
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert out.label == ValidationLabel.METADATA_ERROR
+        assert "R-CHIMERIC-DOI-MISMATCH" not in out.triggered_rules
+
+    def test_methodological_adoption_foreign_scripts_math_and_morphology_not_penalized(self) -> None:
+        """First-person methodological adoption ('Building on...', 'For...'), German/CJK/math sentences,
+        and morphological inflections ('translating', 'optimizing') must never trigger false contradiction."""
+        src_title = "Attention Is All You Need"
+        src_abs = (
+            "We propose a new network architecture, the Transformer, based solely on self-attention "
+            "mechanisms for English-to-German machine translation and sequence optimization."
+        )
+        # 1. First-person methodological adoption onto student's own biomedical domain
+        for adopt_ctx in [
+            "Building on the Transformer architecture [1], we classify cardiac arrhythmia from wearable ECG signals.",
+            "For Transformer self-attention encoding, our pipeline projects clinical biomedical records (Vaswani et al., 2017).",
+        ]:
+            sim_out, _, aligned_out = SemanticMatcher.calibrate_monolingual_specificity(
+                0.62, adopt_ctx, src_title, src_abs, is_cross_lingual=False
+            )
+            stance_out = SemanticMatcher.check_claim_stance(
+                adopt_ctx, src_abs, sim_out, has_abstract=True, source_abstract=src_abs, source_title=src_title
+            )
+            assert aligned_out is True
+            assert stance_out != "contradiction_risk"
+
+        # 2. German, CJK, and equation-heavy English contexts
+        de_ctx = "Wir verwenden Aufmerksamkeitsmechanismen zur Verbesserung der maschinellen Übersetzung langer Sätze [1]."
+        _, _, de_aligned = SemanticMatcher.calibrate_monolingual_specificity(
+            0.58, de_ctx, src_title, src_abs, is_cross_lingual=False
+        )
+        assert de_aligned is True
+        for low_sim_ctx in [
+            "本研究采用注意力机制 [1] 进行序列建模。",
+            "Following [7], we set λ = 10⁻⁴ and p = 0.5 in Eq. (4).",
+        ]:
+            st = SemanticMatcher.check_claim_stance(
+                low_sim_ctx, src_abs, 0.18, has_abstract=True, source_abstract=src_abs, source_title=src_title
+            )
+            assert st != "contradiction_risk"
+
+        # 3. Morphological inflection equivalence ('translating', 'optimizing')
+        morph_ctx = "Self-attentive architectures accelerate translating long German clauses while optimizing sequence convergence."
+        _, _, morph_aligned = SemanticMatcher.calibrate_monolingual_specificity(
+            0.59, morph_ctx, src_title, src_abs, is_cross_lingual=False
+        )
+        assert morph_aligned is True
+
+        # 4. Multi-citation sentences & qualitative background mentions in real PDFs must never false-flag
+        for real_pdf_ctx in [
+            "UIT-VSMEC contains emotion-annotated social-media sentences [5], whereas UIT-VSFC concerns student feedback [9].",
+            "The implementation uses a CUDA-capable NVIDIA GPU with PyTorch and Hugging Face Transformers [17], together with scikit-learn [18].",
+            "In recent years, deep learning has revolutionized many fields (Vaswani et al., 2017).",
+        ]:
+            _, _, pdf_aligned = SemanticMatcher.calibrate_monolingual_specificity(
+                0.56, real_pdf_ctx, src_title, src_abs, is_cross_lingual=False
+            )
+            pdf_stance = SemanticMatcher.check_claim_stance(
+                real_pdf_ctx, src_abs, 0.41, has_abstract=True, source_abstract=src_abs, source_title=src_title
+            )
+            assert pdf_aligned is True
+            assert pdf_stance != "contradiction_risk"
+
+    def test_question_mark_subtitle_prefix_and_content_alignment_not_blocked_by_len20(self) -> None:
+        """Short main title before '?' ('Why Should I Trust You?') must get high fuzzy prefix match
+        and must not be blocked from R-CONTENT-ALIGNMENT by candidate title length >= 20."""
+        calc = FeatureCalculator(enable_content_alignment=False)
+        fuzzy_q = calc._compute_single_title_similarity(
+            "Why Should I Trust You?",
+            "Why Should I Trust You? Explaining the Predictions of Any Classifier",
+        )
+        assert fuzzy_q >= 0.90
+
+        rules = SymbolicRules()
+        cand = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title="beta-VAE: Learning Basic Visual Concepts with a Constrained Variational Framework",
+            authors=["Higgins, I.", "Matthey, L."],
+            year="2017",
+            abstract="We introduce beta-VAE, a framework for automated discovery of factorised latent representations.",
+            confidence=0.92,
+        )
+        src = SourceResult(
+            citation_raw="Higgins, I., & Matthey, L. (2017). β-VAE: Learning Basic Visual Concepts.",
+            candidates=[cand],
+            sources_queried=["openalex"],
+            sources_succeeded=["openalex"],
+        )
+        feat = MatchFeatures(
+            title_sim_fuzzy=0.72,
+            title_sim_semantic=0.84,
+            author_jaccard=1.0,
+            year_distance=0,
+            source_consensus=1,
+            content_alignment_score=0.86,
+            content_alignment_confidence="high",
+            content_is_aligned=True,
+        )
+        out = rules.apply(
+            feat,
+            src,
+            citation_authors=["Higgins, I.", "Matthey, L."],
+            citation_year=2017,
+            citation_title="β-VAE: Learning Basic Visual Concepts",
+            citation_raw=src.citation_raw,
+        )
+        assert out.label == ValidationLabel.VERIFIED
+        assert "R-CONTENT-ALIGNMENT" in out.triggered_rules
+
+    def test_rule_6_alive_url_emits_doi_title_mismatch_without_broken_url_flag(self) -> None:
+        """Exact DOI with consensus >= 2 and url_status='alive' (or None on live source) must NOT claim broken URL."""
+        rules = SymbolicRules()
+        cand = SourceCandidate(
+            source_name="crossref",
+            found=True,
+            doi="10.18653/v1/2021.acl-long.120",
+            title="Cross-Lingual Transfer for Low-Resource Dependency Parsing",
+            authors=["Chen, W.", "Liu, Y."],
+            year="2021",
+            confidence=0.95,
+        )
+        src = SourceResult(
+            citation_raw="Chen, W., & Liu, Y. (2021). Cross-Lingual Transfer for Graph Decoding. ACL.",
+            candidates=[cand],
+            sources_queried=["crossref", "openalex"],
+            sources_succeeded=["crossref", "openalex"],
+            url_status="alive",
+            url_status_code=200,
+        )
+        feat = MatchFeatures(
+            title_sim_fuzzy=0.52,
+            title_sim_semantic=0.48,
+            author_jaccard=1.0,
+            year_distance=0,
+            doi_exact_match=True,
+            source_consensus=2,
+        )
+        out = rules.apply(
+            feat,
+            src,
+            citation_doi="10.18653/v1/2021.acl-long.120",
+            citation_authors=["Chen, W.", "Liu, Y."],
+            citation_year=2021,
+            citation_raw=src.citation_raw,
+        )
+        assert out.label == ValidationLabel.METADATA_ERROR
+        assert "R-DOI-TITLE-MISMATCH" in out.triggered_rules
+        assert "url" not in out.mismatched_fields
+        assert out.domain_exception is False
+
+    def test_venue_normalizer_trailing_years_findings_aacl_and_nature_sister_journals(self) -> None:
+        """Trailing conference years, Findings of EMNLP/NAACL/EACL YYYY, AACL-IJCNLP, Nat. Genet.,
+        and JMLR Workshop and Conference Proceedings must never trigger false venue conflicts."""
+        vn = VenueNormalizer()
+        assert vn.similarity(
+            "Proceedings of NeurIPS 2023",
+            "Advances in Neural Information Processing Systems",
+        ) == 1.0
+        assert vn.similarity(
+            "EMNLP",
+            "Findings of the Association for Computational Linguistics: EMNLP 2023",
+        ) == 1.0
+        assert vn.similarity(
+            "Proceedings of AACL-IJCNLP 2022",
+            "Proceedings of the 2nd Conference of the Asia-Pacific Chapter of the Association for Computational Linguistics",
+        ) == 1.0
+        assert vn.normalize("Nat. Genet.") == "Nature Genetics"
+
+        rules = SymbolicRules()
+        assert (
+            rules.check_explicit_venue_conflict(
+                "ICML",
+                "JMLR Workshop and Conference Proceedings",
+                doi_exact_match=True,
+            )
+            is False
+        )
+        assert (
+            rules.check_explicit_venue_conflict(
+                "OSF Preprints",
+                "Psychological Science",
+                doi_exact_match=True,
+            )
+            is False
+        )
+
+    def test_common_surname_initial_mismatch_and_year_999_sentinel_in_rule_4a2(self) -> None:
+        """Common surname collision ('Wang, Y.' vs 'Xiao Wang') with semantic-only title match must not
+        be flagged as METADATA_ERROR, and year_distance=999 must never append 'year' to mismatched_fields."""
+        rules = SymbolicRules()
+        cand_wang = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title="Graph Neural Networks for Molecular Property Prediction",
+            authors=["Xiao Wang", "Jie Tang"],
+            year="2020",
+            confidence=0.75,
+        )
+        src_wang = SourceResult(
+            citation_raw="Wang, Y., & Liu, H. (2024). Deep Graph Representations for Drug Discovery.",
+            candidates=[cand_wang],
+            sources_queried=["openalex", "crossref"],
+            sources_succeeded=["openalex"],
+        )
+        feat_wang = MatchFeatures(
+            title_sim_fuzzy=0.42,
+            title_sim_semantic=0.65,
+            author_jaccard=0.25,
+            year_distance=4,
+            source_consensus=1,
+        )
+        out_wang = rules.apply(
+            feat_wang,
+            src_wang,
+            citation_authors=["Wang, Y.", "Liu, H."],
+            citation_year=2024,
+            citation_raw=src_wang.citation_raw,
+        )
+        assert out_wang.label != ValidationLabel.METADATA_ERROR
+
+        # Undated candidate (year_distance=999) with author mismatch must not flag 'year'
+        cand_undated = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title="Contextualized Word Representations for Named Entity Recognition",
+            authors=["Peters, M.", "Neumann, M."],
+            year=None,
+            confidence=0.88,
+        )
+        src_undated = SourceResult(
+            citation_raw="Peters, M., & Wrong, Z. (2018). Contextualized Word Representations for Named Entity Recognition.",
+            candidates=[cand_undated],
+            sources_queried=["openalex"],
+            sources_succeeded=["openalex"],
+        )
+        feat_undated = MatchFeatures(
+            title_sim_fuzzy=1.0,
+            title_sim_semantic=1.0,
+            author_jaccard=0.33,
+            year_distance=999,
+            source_consensus=1,
+        )
+        out_undated = rules.apply(
+            feat_undated,
+            src_undated,
+            citation_authors=["Peters, M.", "Wrong, Z."],
+            citation_year=2018,
+            citation_raw=src_undated.citation_raw,
+        )
+        assert out_undated.label == ValidationLabel.METADATA_ERROR
+        assert "year" not in out_undated.mismatched_fields
+
+    def test_baseline_runner_citation_verdict_and_calibration_signal_parity(self) -> None:
+        """BaselineRunner('proposed') on CitationVerdict objects and HybridMLScorer feature extraction
+        must stay synchronized with Pillars 1-4."""
+        cit = Citation(
+            raw_text="Yang, Z., Yang, D., & Dyer, C. (2016). Hierarchical Attention for Neural Sequence Tagging. NAACL.",
+            authors=["Yang, Z.", "Yang, D.", "Dyer, C."],
+            year=2016,
+            title="Hierarchical Attention for Neural Sequence Tagging",
+            venue="NAACL",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        cand = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title="Hierarchical Attention Networks for Document Classification",
+            authors=["Yang, Z.", "Yang, D.", "Dyer, C."],
+            year=2016,
+            venue="NAACL",
+            confidence=0.88,
+        )
+        src = SourceResult(
+            citation_raw=cit.raw_text,
+            candidates=[cand],
+            sources_queried=["crossref", "openalex"],
+            sources_succeeded=["crossref", "openalex"],
+        )
+        feat = MatchFeatures(
+            title_sim_fuzzy=0.56,
+            title_sim_semantic=0.46,
+            author_jaccard=1.0,
+            year_distance=0,
+            source_consensus=2,
+        )
+        verdict = CitationVerdict(
+            citation=cit,
+            label=ValidationLabel.METADATA_ERROR,
+            confidence=0.65,
+            matched_source=src,
+            features=feat,
+            reasoning="test",
+            triggered_rules=["R-TITLE-MISMATCH"],
+            mismatched_fields=["title"],
+        )
+        runner = BaselineRunner()
+        res = runner.run("proposed", [verdict])
+        assert res["predictions"] == ["metadata_error"]
+
+        # HybridMLScorer negative content_alignment_signal must activate on unaligned / contradiction_risk claims
+        vec = HybridMLScorer.extract_feature_vector(
+            {
+                "title_sim_fuzzy": 1.0,
+                "title_sim_semantic": 1.0,
+                "author_jaccard": 1.0,
+                "year_distance": 0,
+                "source_consensus": 1,
+                "content_alignment_score": 0.38,
+                "content_alignment_confidence": "medium",
+                "content_is_aligned": False,
+                "stance_label": "contradiction_risk",
+            }
+        )
+        assert vec[8] < 0.0
+
+    def test_multi_occurrence_alignment_state_sync_prevents_contradictory_flags(self) -> None:
+        """When a paper has a strongly supported primary occurrence (0.78) and a non-negated secondary
+        co-citation window, stance_label must remain 'supported'; when explicit refutation occurs,
+        content_is_aligned must sync to False and R-CONTENT-ALIGNMENT must not override it."""
+        from unittest.mock import MagicMock
+
+        mock_sem = MagicMock()
+        mock_sem.similarity.return_value = 1.0
+        mock_sem.check_content_alignment.return_value = MagicMock(
+            similarity=0.78,
+            confidence="high",
+            is_aligned=True,
+            best_cited_sentence="Transformer self-attention accelerates English-to-German translation [1].",
+            best_evidence_sentence="We propose the Transformer, based solely on attention mechanisms.",
+            citation_intent="methodology",
+            stance_label="supported",
+            cross_lingual_detected=False,
+            bridged_concepts=[],
+        )
+        mock_sem.check_multi_context_alignment.return_value = [
+            {
+                "score": 0.78,
+                "confidence": "high",
+                "is_aligned": True,
+                "focal_sentence": "Transformer self-attention accelerates English-to-German translation [1].",
+                "best_evidence_sentence": "We propose the Transformer, based solely on attention mechanisms.",
+                "intent": "methodology",
+                "stance": "supported",
+            },
+            {
+                "score": 0.34,
+                "confidence": "medium",
+                "is_aligned": False,
+                "focal_sentence": "Graph benchmarks such as Cora and CiteSeer evaluate node operators [1, 2].",
+                "best_evidence_sentence": "We propose the Transformer.",
+                "intent": "background",
+                "stance": "contradiction_risk",
+            },
+        ]
+        calc = FeatureCalculator(semantic=mock_sem, enable_content_alignment=True)
+        cit = Citation(
+            raw_text="Vaswani, A., & Shazeer, N. (2017). Attention Is All You Need.",
+            authors=["Vaswani, A.", "Shazeer, N."],
+            year=2017,
+            title="Attention Is All You Need",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        cit._occurrence_contexts = [  # type: ignore[attr-defined]
+            "Transformer self-attention accelerates English-to-German translation [1].",
+            "Graph benchmarks such as Cora and CiteSeer evaluate node operators [1, 2].",
+        ]
+        cand = SourceCandidate(
+            source_name="openalex",
+            found=True,
+            title="Attention Is All You Need",
+            authors=["Vaswani, A.", "Shazeer, N."],
+            year="2017",
+            abstract="We propose the Transformer, based solely on attention mechanisms for machine translation.",
+            confidence=0.98,
+        )
+        src = SourceResult(
+            citation_raw=cit.raw_text,
+            candidates=[cand],
+            sources_queried=["openalex"],
+            sources_succeeded=["openalex"],
+        )
+        feat = calc.compute(cit, src, citation_context=cit._occurrence_contexts[0])  # type: ignore[attr-defined]
+        assert feat.stance_label == "supported"
+        assert feat.content_is_aligned is True
+
+

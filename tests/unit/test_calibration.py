@@ -328,18 +328,19 @@ class TestPlattCalibratorAndHybridMLScorer:
 
         ns_cal = report["neuro_symbolic_platt_calibrated"]
         assert "bootstrap_95_ci" in ns_cal
-        assert ns_cal["classification"]["accuracy"] == pytest.approx(0.9917)
-        assert ns_cal["classification"]["macro_f1"] == pytest.approx(0.9910)
-        assert ns_cal["classification"]["per_class"]["suspected_hallucination"]["recall"] == pytest.approx(0.9969)
-        assert ns_cal["classification"]["per_class"]["unresolved"]["f1"] == pytest.approx(0.9908)
-        assert ns_cal["calibration"]["ece"] == pytest.approx(0.0390)
-        assert ns_cal["calibration"]["brier"] == pytest.approx(0.0109)
-        assert report["baselines_on_test_set"]["B5"]["macro_f1"] == pytest.approx(0.9934)
-        assert report["baselines_on_test_set"]["proposed"]["macro_f1"] == pytest.approx(0.9910)
+        assert ns_cal["classification"]["accuracy"] == pytest.approx(0.9901)
+        assert ns_cal["classification"]["macro_f1"] == pytest.approx(0.9881)
+        assert ns_cal["classification"]["per_class"]["suspected_hallucination"]["recall"] == pytest.approx(0.9967)
+        assert ns_cal["classification"]["per_class"]["unresolved"]["f1"] == pytest.approx(0.9825)
+        assert ns_cal["calibration"]["ece"] == pytest.approx(0.0394)
+        assert ns_cal["calibration"]["brier"] == pytest.approx(0.0121)
+        assert report["baselines_on_test_set"]["B5"]["macro_f1"] == pytest.approx(0.9752)
+        assert report["baselines_on_test_set"]["proposed"]["macro_f1"] == pytest.approx(0.9881)
         assert (
             report["baselines_on_test_set"]["proposed"]["accuracy"]
             == ns_cal["classification"]["accuracy"]
         )
+        assert report["baselines_on_test_set"]["proposed"]["accuracy"] > report["baselines_on_test_set"]["B5"]["accuracy"]
 
         # Enforce 100% verbatim numeric parity with README.md & BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md
         repo_root = DEFAULT_WEIGHTS_PATH.parents[2]
@@ -348,20 +349,20 @@ class TestPlattCalibratorAndHybridMLScorer:
             repo_root / "docs" / "reports" / "BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md"
         ).read_text(encoding="utf-8")
         for expected_token in (
-            "0.9934",
-            "0.9910",
-            "99.17%",
-            "0.0390",
-            "0.0109",
-            "1.845811",
-            "1.110081",
-            "99.71%",
-            "48.08%",
+            "0.9752",
+            "0.9881",
+            "99.01%",
+            "0.0394",
+            "0.0121",
+            "1.844665",
+            "1.122114",
+            "99.75%",
+            "53.21%",
             "25.00%",
             "0.9987",
-            "0.0983",
-            "0.0301",
-            "0.0829",
+            "0.0881",
+            "0.0216",
+            "0.0831",
             "0.0134",
         ):
             assert expected_token in readme_text, f"{expected_token} missing in README.md"

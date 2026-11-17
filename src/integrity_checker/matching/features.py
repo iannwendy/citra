@@ -9,7 +9,11 @@ import re
 
 from integrity_checker.matching.author_matcher import _has_et_al_indicator, author_match_score
 from integrity_checker.matching.fuzzy import FuzzyMatcher
-from integrity_checker.matching.semantic import SemanticMatcher
+from integrity_checker.matching.semantic import (
+    _DIRECT_REFUTATION_RE,
+    _NEGATION_CUES_RE,
+    SemanticMatcher,
+)
 from integrity_checker.models.citation import Citation
 from integrity_checker.models.source import SourceCandidate, SourceResult
 from integrity_checker.models.validation import MatchFeatures
@@ -429,12 +433,26 @@ class FeatureCalculator:
                         for bc in occ_item.get("bridged_concepts") or []:
                             if bc not in bridged_concepts:
                                 bridged_concepts.append(bc)
-                    # Preserve polarity contradiction if any occurrence explicitly refutes the paper
+                    # Preserve polarity contradiction only if primary occurrence was not strongly supported
+                    # or a secondary occurrence contains explicit negation/refutation cues; keep state synced.
+                    def _occ_has_explicit_refutation(occ: dict) -> bool:
+                        focal_txt = str(occ.get("focal_sentence") or "")
+                        return bool(
+                            _NEGATION_CUES_RE.search(focal_txt)
+                            or _DIRECT_REFUTATION_RE.search(focal_txt)
+                        )
+
+                    primary_strongly_supported = bool(
+                        best_occ_score >= 0.65 and best_occ.get("stance") == "supported"
+                    )
                     if any(
-                        o.get("stance") == "contradiction_risk" and float(o.get("score") or 0.0) >= 0.30
+                        o.get("stance") == "contradiction_risk"
+                        and float(o.get("score") or 0.0) >= 0.30
+                        and (not primary_strongly_supported or _occ_has_explicit_refutation(o))
                         for o in occurrence_alignments
                     ):
                         stance_label = "contradiction_risk"
+                        content_is_aligned = False
             if not context_source:
                 context_source = "in_text_citation"
 
@@ -842,10 +860,10 @@ class FeatureCalculator:
         # 2. Safe prefix/colon-split match: either length ratio >= 0.65, or followed/preceded by a subtitle separator
         if len(shorter) >= 12 and longer.startswith(shorter):
             remainder = longer[len(shorter):].lstrip()
-            if len_ratio >= 0.65 or (remainder and remainder[0] in ".:,-—–("):
+            if len_ratio >= 0.65 or (remainder and remainder[0] in ".:,-—–(?!;"):
                 return 0.95
-        if len(shorter) >= 12 and ":" in longer:
-            parts = [p.strip() for p in longer.split(":", 1)]
+        if len(shorter) >= 12 and any(sep in longer for sep in (":", "?", "!")):
+            parts = [p.strip() for p in re.split(r"[:?!]", longer, maxsplit=1)]
             if shorter in parts:
                 return 0.95
 

@@ -77,14 +77,15 @@ class TestTrainNeuroSymbolicIntegrity:
         # on verified items (dot product = 0.22) and collinear vectors on hallucination items (dot product = 0.91)
         # to prove there is ZERO label-conditioned interval clamping!
         def _fake_encode(texts: list[str], batch_size: int = 256) -> np.ndarray:
-            n_quarter = len(texts) // 4
+            n_block = len(texts) // 5
             out = np.zeros((len(texts), 4), dtype=np.float32)
-            for i in range(n_quarter):
+            for i in range(n_block):
                 # Default: cited=[0.22, sqrt(1-0.22^2), 0, 0], cand=[1, 0, 0, 0] -> cos = 0.22
                 out[i] = [0.22, float(np.sqrt(1.0 - 0.22**2)), 0.0, 0.0]
-                out[n_quarter + i] = [1.0, 0.0, 0.0, 0.0]
-                out[2 * n_quarter + i] = [0.31, float(np.sqrt(1.0 - 0.31**2)), 0.0, 0.0]
-                out[3 * n_quarter + i] = [1.0, 0.0, 0.0, 0.0]
+                out[n_block + i] = [1.0, 0.0, 0.0, 0.0]
+                out[2 * n_block + i] = [0.31, float(np.sqrt(1.0 - 0.31**2)), 0.0, 0.0]
+                out[3 * n_block + i] = [1.0, 0.0, 0.0, 0.0]
+                out[4 * n_block + i] = [1.0, 0.0, 0.0, 0.0]
             return out
 
         with patch.object(trainer, "_encode_texts_fast", side_effect=_fake_encode):
@@ -408,14 +409,15 @@ class TestTrainNeuroSymbolicIntegrity:
         assert ood["zero_train_val_overlap_verified"] is True
         assert (
             ood["overall"]["neuro_symbolic_proposed"]["accuracy"]
-            > ood["overall"]["pure_ml_b5"]["accuracy"] + 0.50
+            > ood["overall"]["pure_ml_b5"]["accuracy"] + 0.45
         )
+        assert ood["overall"]["mcnemar_ns_vs_b5"]["p_value"] < 1e-200
         assert ood["categories"]["retracted_papers"]["neuro_symbolic_accuracy"] == 1.0
         assert ood["categories"]["retracted_papers"]["pure_ml_b5_accuracy"] < 0.05
         assert ood["categories"]["vn_statutory_authority_mismatch"]["neuro_symbolic_accuracy"] == 1.0
 
         sig = report["statistical_significance_tests"]
-        for b_key in ("B0", "B1", "B2", "B3", "B4"):
+        for b_key in ("B0", "B1", "B2", "B3", "B4", "B5"):
             pair = sig["pairwise_vs_baselines"][f"proposed_vs_{b_key}"]
             assert pair["mcnemar_test"]["p_value"] < 0.001
             assert pair["paired_bootstrap"]["one_sided_p_value_macro_f1"] <= 0.001

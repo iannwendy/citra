@@ -280,6 +280,8 @@ class NeuroSymbolicChecker:
         if is_contradiction:
             features.stance_label = "contradiction_risk"
             features.content_is_aligned = False
+            if float(getattr(features, "content_alignment_score", 0.0) or 0.0) <= 0.0:
+                features.content_alignment_score = round(max(0.35, min(1.0, probe_sim)), 4)
         elif (
             getattr(features, "content_is_aligned", False)
             or onnx_xl_sim >= 0.50
@@ -1078,6 +1080,11 @@ class NeuroSymbolicChecker:
                                 if ag_c.venue:
                                     known_candidate.venue = ag_c.venue
                                     break
+                    if not known_candidate.abstract or len(str(known_candidate.abstract).strip()) < 40:
+                        for ag_c in agreeing_other_cands:
+                            if ag_c.abstract and len(str(ag_c.abstract).strip()) >= 40:
+                                known_candidate.abstract = ag_c.abstract
+                                break
 
                     enhanced_source = SourceResult(
                         citation_raw=source.citation_raw,
@@ -1100,12 +1107,26 @@ class NeuroSymbolicChecker:
                     features.html_meta_title_sim = hm_title_sim_early
                     features.has_scholarly_candidate = True
                     known_rules = ["R-KNOWN-PAPER"]
+                    kp_mismatched: list[str] = []
+                    kp_has_substantive_abs = bool(
+                        known_candidate.abstract and len(str(known_candidate.abstract).strip()) >= 40
+                    )
+                    kp_explicit_ctx = bool(
+                        getattr(features, "context_source", "") != "implicit_body_discovery"
+                        or (
+                            getattr(features, "stance_label", "") == "contradiction_risk"
+                            and float(getattr(features, "content_alignment_score", 0.0) or 0.0) >= 0.30
+                        )
+                    )
                     if (
                         self.enable_content_alignment
                         and effective_context
+                        and kp_has_substantive_abs
+                        and kp_explicit_ctx
                         and getattr(features, "stance_label", "") == "contradiction_risk"
                     ):
                         known_rules.append("R-CONTENT-MISMATCH")
+                        kp_mismatched.append("content")
                     if (
                         self.enable_content_alignment
                         and effective_context
@@ -1114,7 +1135,6 @@ class NeuroSymbolicChecker:
                     ):
                         known_rules.append("R-CROSS-LINGUAL-ALIGNMENT")
 
-                    kp_mismatched: list[str] = []
                     if citation.doi and str(citation.doi).strip():
                         cit_doi_str = str(citation.doi).strip()
                         kp_doi_str = str(known_doi).strip() if known_doi else ""
@@ -1156,69 +1176,17 @@ class NeuroSymbolicChecker:
                         kp_mismatched.append("year")
 
                     if citation.venue and known_candidate.venue:
-                        cv_kp = citation.venue.strip()
-                        bv_kp = known_candidate.venue.strip()
-                        _kp_non_venue_re = re.compile(
-                            r"\b(?:arxiv|corr|preprint|biorxiv|medrxiv|ssrn|hal|zenodo|openreview|"
-                            r"researchgate|sciencedirect|springer|elsevier|wiley|taylor|francis|"
-                            r"ieee\s+xplore|acm\s+digital|lecture\s+notes|lncs|pubmed|pmlr|"
-                            r"proceedings\s+of\s+machine\s+learning\s+research|acl\s+anthology|ceur)\b",
-                            re.IGNORECASE,
-                        )
-                        _kp_bogus_re = re.compile(
-                            r"\b(?:unknown|imaginary|hypothetical|nonexistent|fictional|placeholder|unverified|bogus)\b",
-                            re.IGNORECASE,
-                        )
-                        _kp_explicit_venue_re = re.compile(
-                            r"\b(?:journal|transactions|proceedings|conference|symposium|letters|workshop)\b",
-                            re.IGNORECASE,
-                        )
-                        c_is_bogus = bool(_kp_bogus_re.search(cv_kp))
-                        if (
-                            len(cv_kp) >= 3
-                            and len(bv_kp) >= 3
-                            and cv_kp.lower() not in {"ieee", "acm"}
-                            and bv_kp.lower() not in {"ieee", "acm"}
-                            and not _kp_non_venue_re.search(cv_kp)
-                            and (not _kp_non_venue_re.search(bv_kp) or c_is_bogus)
-                            and not (citation.doi and "10.48550/arxiv" in str(citation.doi).lower())
+                        if self.rules.check_explicit_venue_conflict(
+                            citation.venue,
+                            known_candidate.venue,
+                            citation_doi=citation.doi,
+                            candidate_external_ids=known_candidate.external_ids,
+                            doi_exact_match=bool(features.doi_exact_match),
+                            is_known_paper=True,
                         ):
-                            from integrity_checker.matching.venue_normalizer import VenueNormalizer
-
-                            vn_kp = VenueNormalizer()
-                            kp_v_sim = vn_kp.similarity(cv_kp, bv_kp)
-                            _kp_generic_words = {
-                                "journal", "transactions", "proceedings", "conference", "symposium",
-                                "letters", "workshop", "international", "annual", "meeting", "of",
-                                "the", "on", "in", "for", "and", "at", "to", "ieee", "acm",
-                                "proc", "conf", "trans", "int",
-                            }
-                            c_canon_kp = vn_kp._candidate_canonicals(cv_kp)
-                            b_canon_kp = vn_kp._candidate_canonicals(bv_kp)
-                            c_is_exp = bool(_kp_explicit_venue_re.search(cv_kp) or c_canon_kp)
-                            b_is_exp = bool(_kp_explicit_venue_re.search(bv_kp) or b_canon_kp)
-                            c_exp_kp = " ".join(c_canon_kp) if c_canon_kp else cv_kp
-                            b_exp_kp = " ".join(b_canon_kp) if b_canon_kp else bv_kp
-                            c_words_kp = {
-                                w for w in re.findall(r"[a-z]{3,}", c_exp_kp.lower())
-                                if w not in _kp_generic_words
-                            }
-                            b_words_kp = {
-                                w for w in re.findall(r"[a-z]{3,}", b_exp_kp.lower())
-                                if w not in _kp_generic_words
-                            }
-                            kp_zero_overlap = bool(
-                                c_words_kp and b_words_kp and not (c_words_kp & b_words_kp)
-                            )
-                            if (c_is_bogus and kp_v_sim < 0.15) or (
-                                kp_v_sim < 0.35
-                                and c_is_exp
-                                and b_is_exp
-                                and kp_zero_overlap
-                            ):
-                                kp_mismatched.append("venue")
-                                if "R-VENUE-MISMATCH" not in known_rules:
-                                    known_rules.append("R-VENUE-MISMATCH")
+                            kp_mismatched.append("venue")
+                            if "R-VENUE-MISMATCH" not in known_rules:
+                                known_rules.append("R-VENUE-MISMATCH")
 
                     if kp_mismatched:
                         err_reason = (
@@ -1276,6 +1244,11 @@ class NeuroSymbolicChecker:
                     )
             elif citation.citation_type != CitationType.REFERENCE_LIST and not citation.doi:
                 # Citation has no title (bare in-text callout) → VERIFIED via known paper
+                if not known_candidate.abstract or len(str(known_candidate.abstract).strip()) < 40:
+                    for oc in other_cands:
+                        if oc.abstract and len(str(oc.abstract).strip()) >= 40:
+                            known_candidate.abstract = oc.abstract
+                            break
                 enhanced_source = SourceResult(
                     citation_raw=source.citation_raw,
                     candidates=[known_candidate] + other_cands,
@@ -1297,12 +1270,47 @@ class NeuroSymbolicChecker:
                 features.html_meta_title_sim = hm_title_sim_early
                 features.has_scholarly_candidate = True
                 known_rules = ["R-KNOWN-PAPER"]
+                kp_intext_has_abs = bool(
+                    known_candidate.abstract and len(str(known_candidate.abstract).strip()) >= 40
+                )
+                kp_intext_explicit = bool(
+                    getattr(features, "context_source", "") != "implicit_body_discovery"
+                    or (
+                        getattr(features, "stance_label", "") == "contradiction_risk"
+                        and float(getattr(features, "content_alignment_score", 0.0) or 0.0) >= 0.30
+                    )
+                )
                 if (
                     self.enable_content_alignment
                     and effective_context
+                    and kp_intext_has_abs
+                    and kp_intext_explicit
                     and getattr(features, "stance_label", "") == "contradiction_risk"
                 ):
                     known_rules.append("R-CONTENT-MISMATCH")
+                    err_intext_reason = (
+                        f"Matched known seminal paper '{paper_info.get('title')}', "
+                        f"but in-text claim conflicts with canonical source content."
+                    )
+                    return self._apply_dead_link_exception(
+                        CitationVerdict(
+                            citation=citation,
+                            label=ValidationLabel.METADATA_ERROR,
+                            confidence=0.78,
+                            matched_source=enhanced_source,
+                            features=features,
+                            reasoning=self._enhance_reasoning_with_neural(
+                                err_intext_reason,
+                                features,
+                                known_rules,
+                                source=enhanced_source,
+                                citation_context=effective_context,
+                            ),
+                            triggered_rules=known_rules,
+                            mismatched_fields=["content"],
+                        ),
+                        enhanced_source,
+                    )
                 if (
                     self.enable_content_alignment
                     and effective_context
@@ -1420,6 +1428,7 @@ class NeuroSymbolicChecker:
             self.enable_content_alignment
             and has_active_ctx
             and getattr(features, "stance_label", "") == "contradiction_risk"
+            and outcome.label not in (ValidationLabel.VERIFIED, ValidationLabel.RESOURCE)
             and "R-CONTENT-MISMATCH" not in final_rules
         ):
             final_rules.append("R-CONTENT-MISMATCH")
