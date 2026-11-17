@@ -88,6 +88,7 @@ from integrity_checker.logic.rules import SymbolicRules  # noqa: E402
 from integrity_checker.logic.vn_legal_verifier import verify_vn_legal_citation  # noqa: E402
 from integrity_checker.matching.author_matcher import author_match_score  # noqa: E402
 from integrity_checker.matching.fuzzy import FuzzyMatcher  # noqa: E402
+from integrity_checker.matching.semantic import SemanticMatcher  # noqa: E402
 from integrity_checker.matching.venue_normalizer import VenueNormalizer  # noqa: E402
 from integrity_checker.models.citation import Citation, CitationType  # noqa: E402
 from integrity_checker.models.source import SourceCandidate, SourceResult  # noqa: E402
@@ -1323,19 +1324,30 @@ def build_split_dataset(
             )
 
         if has_cand and spec["use_context"]:
-            ca_score = max(0.0, min(1.0, float(raw_ctx_sems[idx_item])))
-            if ca_score >= 0.70:
-                ca_conf, ca_aligned = "high", True
-            elif ca_score >= 0.50:
-                ca_conf, ca_aligned = "medium", True
-            elif ca_score >= 0.30:
-                ca_conf, ca_aligned = "medium", False
-            else:
-                ca_conf, ca_aligned = "low", False
+            raw_ca = max(0.0, min(1.0, float(raw_ctx_sems[idx_item])))
+            ca_score, ca_conf, ca_aligned = SemanticMatcher.calibrate_monolingual_specificity(
+                raw_ca,
+                context_sents_to_encode[idx_item],
+                spec["cand_title"],
+                abs_sents_to_encode[idx_item],
+                is_cross_lingual=False,
+            )
+            stance_lbl = SemanticMatcher.check_claim_stance(
+                context_sents_to_encode[idx_item],
+                abs_sents_to_encode[idx_item],
+                ca_score,
+                has_abstract=True,
+                is_cross_lingual=False,
+                source_abstract=abs_sents_to_encode[idx_item],
+                source_title=spec["cand_title"],
+            )
+            if stance_lbl == "contradiction_risk":
+                ca_aligned = False
         else:
             ca_score = 0.0
             ca_conf = ""
             ca_aligned = False
+            stance_lbl = ""
 
         cand_doi = spec.get("cand_doi")
         records.append(
@@ -1363,6 +1375,7 @@ def build_split_dataset(
                 "content_alignment_score": round(float(ca_score), 4),
                 "content_alignment_confidence": ca_conf,
                 "content_is_aligned": ca_aligned,
+                "stance_label": stance_lbl,
                 "has_candidate": has_cand,
                 "api_exhausted": bool(spec.get("api_exhausted", False)),
                 "doi_ra_status": spec.get("doi_ra_status"),

@@ -41,6 +41,7 @@ def evaluate_symbolic_record(
         content_alignment_score=float(item.get("content_alignment_score", 0.0) or 0.0),
         content_alignment_confidence=str(item.get("content_alignment_confidence", "") or ""),
         content_is_aligned=bool(item.get("content_is_aligned", False)),
+        stance_label=str(item.get("stance_label", "") or ""),
         api_exhausted=api_exhausted,
         doi_ra_status=doi_ra_status,
     )

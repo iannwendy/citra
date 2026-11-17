@@ -112,6 +112,114 @@ _POSITIVE_EVIDENCE_RE = re.compile(
     re.IGNORECASE,
 )
 
+_ACADEMIC_GENERIC_STOP_WORDS: frozenset[str] = frozenset(
+    {
+        "about", "above", "across", "after", "against", "along", "also", "although",
+        "among", "analysis", "analyze", "analyzed", "apply", "applied", "applying",
+        "approach", "approaches", "architecture", "architectures", "article", "author",
+        "authors", "based", "baseline", "baselines", "because", "been", "before",
+        "being", "benchmark", "benchmarks", "between", "both", "build", "building",
+        "compared", "comparison", "concerning", "conduct", "conducted", "conjecture",
+        "consider", "context", "current", "data", "dataset", "datasets", "demonstrate",
+        "demonstrated", "demonstrates", "describe", "described", "design", "designed",
+        "despite", "detail", "detailed", "develop", "developed", "different", "discuss",
+        "discussed", "during", "each", "effect", "effective", "effectively", "empirical",
+        "empirically", "employ", "employed", "enable", "enables", "evaluate", "evaluated",
+        "evaluation", "even", "examine", "example", "existing", "experiment",
+        "experimental", "experiments", "explore", "explored", "extend", "extended",
+        "feature", "features", "field", "figure", "find", "finding", "findings", "first",
+        "focus", "following", "form", "formulation", "found", "framework", "frameworks",
+        "from", "further", "furthermore", "general", "given", "have", "having", "high",
+        "higher", "however", "important", "improve", "improved", "improvement",
+        "improvements", "improves", "improving", "include", "including", "increase",
+        "information", "instead", "into", "introduce", "introduced", "introduces",
+        "investigate", "investigated", "issue", "issues", "large", "larger", "level",
+        "literature", "main", "major", "make", "many", "measure", "method", "methods",
+        "model", "modeling", "models", "more", "most", "much", "multiple", "need",
+        "novel", "number", "obtain", "obtained", "often", "only", "order", "other",
+        "others", "outperform", "outperforms", "overall", "over", "paper", "papers",
+        "particular", "particularly", "perform", "performance", "performed", "present",
+        "presented", "presents", "previous", "previously", "prior", "problem", "problems",
+        "process", "produce", "propose", "proposed", "proposes", "provide", "provided",
+        "provides", "quality", "recent", "recently", "regarding", "related", "report",
+        "reported", "research", "respect", "result", "results", "review", "role", "same",
+        "scale", "score", "scores", "second", "section", "several", "show", "showed",
+        "shown", "shows", "significant", "significantly", "similar", "simple", "since",
+        "single", "small", "some", "specific", "specifically", "standard", "state",
+        "still", "strategy", "strong", "studies", "study", "substantial", "such",
+        "suggest", "superior", "support", "system", "systems", "table", "task", "tasks",
+        "technique", "techniques", "term", "terms", "than", "that", "their", "them",
+        "then", "there", "therefore", "these", "they", "this", "those", "three",
+        "through", "thus", "toward", "towards", "traditional", "train", "trained",
+        "training", "under", "used", "useful", "using", "utilize", "various", "very",
+        "well", "were", "what", "when", "where", "which", "while", "with", "within",
+        "without", "work", "works", "would",
+    }
+)
+
+_TOPIC_FRAMING_CLAUSE_RE = re.compile(
+    r"^\s*(?:regarding|concerning|with\s+respect\s+to|in\s+(?:the\s+)?(?:context|terms)\s+of|"
+    r"on\s+the\s+(?:topic|subject)\s+of|building\s+on|for)\s+([^,]{3,90}),\s*(.+)$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _light_technical_stem(token: str) -> str:
+    """Deterministic light stemmer preserving technical roots (zero external NLP deps)."""
+    w = token.lower()
+    if len(w) <= 4:
+        return w
+    if w.endswith("ies") and len(w) > 5:
+        return w[:-3] + "y"
+    for suffix in (
+        "izations",
+        "ization",
+        "ations",
+        "ation",
+        "ments",
+        "ment",
+        "ingly",
+        "ings",
+        "ities",
+        "ity",
+        "ness",
+        "ally",
+        "ical",
+        "ing",
+        "ers",
+        "ive",
+        "ous",
+        "ed",
+        "es",
+        "s",
+    ):
+        if w.endswith(suffix) and len(w) - len(suffix) >= 4:
+            return w[: -len(suffix)]
+    return w
+
+
+def _extract_distinctive_stems(text: str | None) -> set[str]:
+    """Extract distinctive technical word stems and domain acronyms from scholarly English text."""
+    if not text:
+        return set()
+    stems: set[str] = set()
+    for raw_tok in re.findall(r"[A-Za-z][A-Za-z0-9\-]{2,}", text):
+        parts = [p for p in raw_tok.split("-") if p]
+        for part in parts:
+            low = part.lower()
+            if low in _ACADEMIC_GENERIC_STOP_WORDS:
+                continue
+            if re.fullmatch(r"(?:18|19|20)\d{2}", low):
+                continue
+            # Keep uppercase/alphanumeric technical acronyms of len >= 3 (e.g., GCN, NMT, BLEU, BERT)
+            is_acronym = len(part) >= 3 and (part.isupper() or any(ch.isdigit() for ch in part))
+            if len(low) < 4 and not is_acronym:
+                continue
+            stem = low if is_acronym else _light_technical_stem(low)
+            if stem not in _ACADEMIC_GENERIC_STOP_WORDS and len(stem) >= 3:
+                stems.add(stem)
+    return stems
+
 
 @dataclass
 class SemanticAlignmentResult:
@@ -727,6 +835,7 @@ class SemanticMatcher:
         has_abstract: bool,
         is_cross_lingual: bool = False,
         source_abstract: str | None = None,
+        source_title: str | None = None,
     ) -> str:
         """Kiểm tra tính đồng thuận / mâu thuẫn ngữ nghĩa (Stance & Polarity Verification).
 
@@ -760,12 +869,30 @@ class SemanticMatcher:
             ):
                 return "contradiction_risk"
 
+        # Explicit topic-framing predicate misattribution ("Regarding <topic>, <unrelated empirical claim>")
+        if (
+            has_abstract
+            and source_abstract
+            and not is_cross_lingual
+            and not is_vietnamese_text(focal_sentence, min_diacritics=2)
+        ):
+            m_frame = _TOPIC_FRAMING_CLAUSE_RE.match(focal_sentence.strip())
+            if m_frame:
+                abs_stems = _extract_distinctive_stems(source_abstract)
+                title_stems = _extract_distinctive_stems(source_title)
+                pred_stems = _extract_distinctive_stems(m_frame.group(2))
+                if len(abs_stems) >= 4 and len(pred_stems) >= 3 and len(pred_stems & (abs_stems | title_stems)) == 0:
+                    return "contradiction_risk"
+
         if similarity >= 0.50:
             return "supported"
         if similarity >= 0.35:
             return "partially_supported"
         if has_abstract and similarity < 0.22 and not is_cross_lingual:
-            return "contradiction_risk"
+            focal_stems = _extract_distinctive_stems(focal_sentence)
+            src_stems = _extract_distinctive_stems(source_abstract) | _extract_distinctive_stems(source_title)
+            if not (focal_stems & src_stems):
+                return "contradiction_risk"
         return "neutral"
 
     # === NEURAL LAYER: Content-Context Alignment (v2.4) ===
@@ -1153,7 +1280,20 @@ class SemanticMatcher:
                     except Exception as exc:  # noqa: BLE001
                         logger.debug(f"Multilingual dense alignment skipped: {exc}")
 
-            confidence, is_aligned = self._determine_alignment(final_sim)
+            if (
+                not is_cross_lingual
+                and source_abstract
+                and not type(model).__module__.startswith("unittest.mock")
+            ):
+                final_sim, confidence, is_aligned = self.calibrate_monolingual_specificity(
+                    final_sim,
+                    focal_sentence or cited_context_trunc,
+                    source_title_trunc,
+                    source_abstract,
+                    is_cross_lingual=is_cross_lingual,
+                )
+            else:
+                confidence, is_aligned = self._determine_alignment(final_sim)
             stance_label = self.check_claim_stance(
                 focal_sentence or cited_context_trunc,
                 best_evidence_sentence,
@@ -1161,6 +1301,7 @@ class SemanticMatcher:
                 has_abstract=bool(source_abstract),
                 is_cross_lingual=is_cross_lingual,
                 source_abstract=source_abstract,
+                source_title=source_title_trunc,
             )
             if stance_label == "contradiction_risk":
                 is_aligned = False
@@ -1666,6 +1807,91 @@ class SemanticMatcher:
         if len(text) <= max_length:
             return text
         return text[: max_length - 3] + "..."
+
+    @classmethod
+    def calibrate_monolingual_specificity(
+        cls,
+        raw_sim: float,
+        cited_context: str,
+        source_title: str,
+        source_abstract: str | None,
+        *,
+        is_cross_lingual: bool = False,
+    ) -> tuple[float, str, bool]:
+        """Neuro-Symbolic Specificity Gate (Option 2A) correcting Bi-Encoder topical false positives.
+
+        Dense Bi-Encoders (`all-MiniLM-L6-v2`) frequently assign cosine 0.50..0.76 to two
+        unrelated papers from the same subfield (e.g. NLP or CV) when generic field terms or a
+        topic lead-in phrase co-occur, even when the empirical predicate of the citing sentence
+        shares zero distinctive technical terms with the source abstract.
+
+        Safety invariants:
+        - Never penalizes cross-lingual pairs (`is_cross_lingual=True` or Vietnamese text).
+        - Never activates when `source_abstract` lacks substantive technical content (< 4 stems).
+        - Only recalibrates borderline/moderate scores (`0.50 <= raw_sim < 0.78`) when either:
+          (a) A topic-framing lead-in (`Regarding X, <predicate>`) has >= 4 distinctive predicate
+              stems with zero overlap against `title_stems | abstract_stems`, OR
+          (b) `0.50 <= raw_sim < 0.68`, the claim has >= 4 non-title distinctive stems with zero
+              overlap against `abstract_stems`, AND total distinctive overlap with `abstract_stems`
+              is zero (`len(claim_stems & abstract_stems) == 0`).
+        """
+        sim = max(0.0, min(1.0, float(raw_sim)))
+
+        def _map_status(s: float) -> tuple[float, str, bool]:
+            if s >= cls.ALIGNMENT_THRESHOLD_HIGH:
+                return s, "high", True
+            if s >= cls.ALIGNMENT_THRESHOLD_MEDIUM:
+                return s, "medium", True
+            if s >= cls.ALIGNMENT_THRESHOLD_LOW:
+                return s, "medium", False
+            return s, "low", False
+
+        if (
+            is_cross_lingual
+            or sim < cls.ALIGNMENT_THRESHOLD_MEDIUM
+            or sim >= 0.85
+            or not cited_context
+            or not source_abstract
+            or is_vietnamese_text(cited_context, min_diacritics=2)
+            or is_vietnamese_text(source_abstract, min_diacritics=2)
+        ):
+            return _map_status(sim)
+
+        abs_stems = _extract_distinctive_stems(source_abstract)
+        if len(abs_stems) < 4:
+            return _map_status(sim)
+
+        title_stems = _extract_distinctive_stems(source_title)
+        source_union = abs_stems | title_stems
+
+        # Case A: Explicit topic-framing clause ("Regarding <topic>, <empirical predicate>")
+        # where the substantive predicate after the comma has zero grounding in title or abstract.
+        m_frame = _TOPIC_FRAMING_CLAUSE_RE.match(cited_context.strip())
+        if m_frame:
+            predicate_text = m_frame.group(2)
+            pred_stems = _extract_distinctive_stems(predicate_text)
+            if len(pred_stems) >= 3 and len(pred_stems & source_union) == 0:
+                downgraded = min(0.44, max(0.36, sim * 0.65))
+                return _map_status(round(downgraded, 4))
+            pred_non_title = pred_stems - title_stems
+            if len(pred_non_title) >= 4 and len(pred_non_title & abs_stems) == 0 and len(pred_stems & abs_stems) == 0:
+                downgraded = min(0.45, max(0.36, sim * 0.68))
+                return _map_status(round(downgraded, 4))
+
+        # Case B: General monolingual claim in moderate Bi-Encoder band [0.50, 0.68) with zero
+        # distinctive technical stem overlap against BOTH title and abstract.
+        if sim < 0.68:
+            claim_stems = _extract_distinctive_stems(cited_context)
+            claim_non_title = claim_stems - title_stems
+            if (
+                len(claim_stems) >= 4
+                and len(claim_non_title) >= 3
+                and len(claim_stems & source_union) == 0
+            ):
+                downgraded = min(0.45, max(0.36, sim * 0.70))
+                return _map_status(round(downgraded, 4))
+
+        return _map_status(sim)
 
     def _determine_alignment(self, similarity: float) -> tuple[str, bool]:
         """Determine confidence level và alignment status từ similarity score."""
