@@ -212,13 +212,12 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
     await expect(page.locator('.t-avatar-group').first()).toBeVisible();
     await expect(page.locator('.t-text-swap').first()).toBeVisible();
 
-    // Navigate to EssayPage Citation Debugger IDE and check DonutChart (.t-donut), SubtleNumber (.t-subtle-number), SoftTextSwap (.t-text-soft), StreamingText (.t-stream)
+    // Navigate to EssayPage Citation Debugger IDE and check ScoreRing, SubtleNumber (#36), SoftTextSwap (#34), StreamingText (#30)
     await page.goto('/verification/report/1');
     await waitForAuth(page);
-    await expect(page.locator('.t-donut').first()).toBeVisible({ timeout: 10000 });
-    // Verify 100% DonutChart segment renders a complete 360-degree closed ring (two closed Z sub-paths, zero radial gap)
-    const donutSegPath = await page.locator('.t-donut path.t-donut-seg').first().getAttribute('d');
-    expect(donutSegPath).toMatch(/^M.*A.*A.*ZM.*A.*A.*Z$/);
+    const scoreRing = page.getByTestId('cis-score-ring');
+    await expect(scoreRing).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('cis-score-ring-progress')).toBeVisible();
     await expect(page.locator('.t-subtle-number').first()).toBeVisible();
     await expect(page.locator('.t-text-soft').first()).toBeVisible();
     await expect(page.locator('.t-stream').first()).toBeVisible();
@@ -435,16 +434,16 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
     ).toBeGreaterThan(0.8);
     expect(lightMetrics.matrixActive).toBe('#10b981');
 
-    // Switch to Dark mode via the real sidebar theme toggle
-    const themeToggle = page.locator('button[title^="Theme:"]').first();
-    await expect(themeToggle).toBeVisible();
-    for (let i = 0; i < 3; i++) {
-      const isDark = await page.evaluate(() =>
-        document.documentElement.classList.contains('dark'),
-      );
-      if (isDark) break;
-      await themeToggle.click();
-    }
+    // Switch to Dark mode via the ChatGPT-style Account Popover theme control
+    const accountTrigger = page.getByTestId('sidebar-account-trigger');
+    await expect(accountTrigger).toBeVisible();
+    await accountTrigger.click();
+    const darkThemeBtn = page
+      .getByTestId('sidebar-account-popover')
+      .getByRole('button', { name: 'Dark', exact: true });
+    await expect(darkThemeBtn).toBeVisible();
+    await darkThemeBtn.click();
+    await accountTrigger.click();
     await expect
       .poll(() =>
         page.evaluate(() => document.documentElement.classList.contains('dark')),

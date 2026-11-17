@@ -417,7 +417,7 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
     await expect(benchSection.getByText(/0\.0433/i).first()).toBeVisible();
 
     // 2. Test Use Cases / Pipeline 4-tab switcher
-    const stage3Btn = page.getByRole('button', { name: /neuro-symbolic rules|3\. luật neuro-symbolic/i });
+    const stage3Btn = page.getByRole('tab', { name: /neuro-symbolic rules|3\. luật neuro-symbolic/i });
     await stage3Btn.click();
     await expect(page.getByText(/STAGE 03/i)).toBeVisible();
 
@@ -567,11 +567,70 @@ test.describe('Responsive Layout — Authenticated Workspaces (Student, Teacher,
       const sidebar = page.locator('aside');
       await expect(sidebar).toHaveClass(/translate-x-0/);
 
-      // Navigate via drawer link and verify auto-close
-      await sidebar.getByRole('link', { name: /settings|cài đặt/i }).first().click();
+      // Verify CITRA brand link and Close (X) button inside mobile drawer header are vertically centered on the exact same line
+      const drawerHeaderAlignment = await page.evaluate(() => {
+        const aside = document.querySelector('[data-testid="app-sidebar"]');
+        const brand = aside?.querySelector('a[aria-label="Go to dashboard"]');
+        const closeBtn = aside?.querySelector('[data-testid="mobile-sidebar-close-btn"]');
+        if (!brand || !closeBtn) return null;
+        const bRect = brand.getBoundingClientRect();
+        const cRect = closeBtn.getBoundingClientRect();
+        return {
+          brandCenterY: bRect.top + bRect.height / 2,
+          closeCenterY: cRect.top + cRect.height / 2,
+          deltaY: Math.abs(bRect.top + bRect.height / 2 - (cRect.top + cRect.height / 2)),
+        };
+      });
+      expect(drawerHeaderAlignment).not.toBeNull();
+      expect(drawerHeaderAlignment!.deltaY).toBeLessThanOrEqual(1.5);
+
+      // Navigate via drawer Workspace link (History) and verify auto-close
+      await sidebar.getByRole('link', { name: /history|lịch sử/i }).first().click();
+      await expect(page).toHaveURL(/\/history/);
+      await expect(sidebar).toHaveClass(/-translate-x-full/);
+
+      // Re-open drawer -> open ChatGPT-style Account Popover -> click Settings -> verify both popover and drawer close
+      await openNavBtn.click();
+      await expect(sidebar).toHaveClass(/translate-x-0/);
+      await page.getByTestId('sidebar-account-trigger').click();
+      const popover = page.getByTestId('sidebar-account-popover');
+      await expect(popover).toHaveAttribute('data-open', 'true');
+      await popover.getByRole('link', { name: /settings|cài đặt/i }).click();
       await expect(page).toHaveURL(/\/settings/);
+      await expect(popover).toHaveAttribute('data-open', 'false');
       await expect(sidebar).toHaveClass(/-translate-x-full/);
     }
+  });
+
+  test('Auth top bar on compact 320x568 mobile never overlaps CITRA brand mark in Vietnamese or English', async ({
+    page,
+  }) => {
+    clearAuthState(page);
+    await page.addInitScript(() => {
+      localStorage.setItem('i18nextLng', 'vi');
+      localStorage.setItem('language', 'vi');
+    });
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.goto('/login');
+    await page.waitForLoadState('domcontentloaded');
+    await assertNoHorizontalOverflow(page, '/login (VI) @ 320x568');
+
+    const metrics = await page.evaluate(() => {
+      const topControls = Array.from(document.querySelectorAll('a, button'))
+        .map((el) => ({
+          label: (el.getAttribute('aria-label') || el.textContent || '').trim(),
+          rect: el.getBoundingClientRect(),
+        }))
+        .filter((x) => x.rect.width > 0 && x.rect.height > 0 && x.rect.top < 70);
+      const citra = topControls.find((x) => x.label.includes('CITRA'));
+      const home = topControls.find((x) => /trang chủ|home/i.test(x.label));
+      if (!citra || !home) return null;
+      return {
+        gapPx: home.rect.left - citra.rect.right,
+      };
+    });
+    expect(metrics).not.toBeNull();
+    expect(metrics!.gapPx).toBeGreaterThanOrEqual(16);
   });
 
   test('Single-DOM responsive tables render cleanly on Mobile (375x812) and Tablet (768x1024)', async ({
@@ -814,24 +873,26 @@ test.describe('Responsive Layout — Authenticated Workspaces (Student, Teacher,
 
       const metrics = await page.evaluate(() => {
         const listbox = document.querySelector('[role="listbox"]');
-        const contextBox = listbox?.nextElementSibling;
-        if (!listbox || !contextBox) return null;
-        const listRect = listbox.getBoundingClientRect();
-        const ctxRect = contextBox.getBoundingClientRect();
+        const detailStage = document.querySelector('[data-testid="citation-detail-stage"]');
+        if (!listbox || !detailStage) return null;
+        const leftPane = listbox.parentElement?.parentElement ?? listbox.parentElement ?? listbox;
+        const leftRect = leftPane.getBoundingClientRect();
+        const detailRect = detailStage.getBoundingClientRect();
+        const isSideBySide = detailRect.left >= leftRect.right - 2;
+        const gap = isSideBySide
+          ? Math.abs(detailRect.left - leftRect.right)
+          : Math.abs(detailRect.top - leftRect.bottom);
         return {
-          gap: ctxRect.top - listRect.bottom,
-          listboxHeight: listRect.height,
+          gap,
+          isSideBySide,
+          listboxHeight: listbox.getBoundingClientRect().height,
         };
       });
 
       expect(metrics).not.toBeNull();
       expect(
         metrics!.gap,
-        `Expected tight spacing between citation list and manuscript context at ${vp.name}`
-      ).toBeGreaterThanOrEqual(12);
-      expect(
-        metrics!.gap,
-        `Expected no large whitespace gap between citation list and manuscript context at ${vp.name}`
+        `Expected no large whitespace gap between citation list and detail inspector at ${vp.name}`
       ).toBeLessThanOrEqual(24);
     }
   });

@@ -384,4 +384,55 @@ describe('Task 7 — Core Workspace Continuity', () => {
     expect(popover.getAttribute('data-open')).toBe('false');
     expect(popover.getAttribute('aria-hidden')).toBe('true');
   });
+
+  it('AppLayout mobile drawer places Close (X) button inline inside the sidebar brand header row (never floating misaligned) and closes Account Popover when drawer closes', () => {
+    renderWorkspace(
+      <Routes>
+        <Route
+          path="/dashboard"
+          element={
+            <AppLayout>
+              <div data-testid="dash-view">Dashboard</div>
+            </AppLayout>
+          }
+        />
+      </Routes>,
+      ['/dashboard'],
+      'admin',
+    );
+
+    const sidebar = screen.getByTestId('app-sidebar');
+    const closeBtn = screen.getByRole('button', { name: 'Close navigation menu' });
+    const sidebarBrandLink = sidebar.querySelector('a[aria-label="Go to dashboard"]') as HTMLElement;
+
+    expect(sidebarBrandLink).not.toBeNull();
+    // Close button must NOT float with legacy absolute top-4 right-4 outside the header row
+    expect(closeBtn.className).not.toContain('absolute');
+    expect(closeBtn.className).not.toContain('top-4');
+    expect(closeBtn.className).toContain('inline-flex');
+    expect(closeBtn.className).toContain('items-center');
+    expect(closeBtn.className).toContain('justify-center');
+
+    // Close button and CITRA brand link must share the exact same header flex row container
+    const headerRow = sidebarBrandLink.parentElement as HTMLElement;
+    expect(headerRow).not.toBeNull();
+    expect(headerRow.contains(closeBtn)).toBe(true);
+    expect(headerRow.className).toContain('flex');
+    expect(headerRow.className).toContain('items-center');
+    expect(headerRow.className).toContain('justify-between');
+
+    // Open mobile drawer -> open Account Popover -> close mobile drawer via X button -> both close cleanly
+    const openBtn = screen.getByRole('button', { name: 'Open navigation menu' });
+    fireEvent.click(openBtn);
+    expect(sidebar.className).toContain('translate-x-0');
+
+    const accountTrigger = screen.getByTestId('sidebar-account-trigger');
+    fireEvent.click(accountTrigger);
+    const popover = screen.getByTestId('sidebar-account-popover');
+    expect(popover.getAttribute('data-open')).toBe('true');
+
+    fireEvent.click(closeBtn);
+    expect(sidebar.className).toContain('-translate-x-full');
+    expect(popover.getAttribute('data-open')).toBe('false');
+  });
 });

@@ -1171,9 +1171,21 @@ export function NotificationCenterButton({
   } = useToast();
   const [open, setOpen] = useState(false);
   const [justMarkedRead, setJustMarkedRead] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const [desktopAnchor, setDesktopAnchor] = useState<{ top: number; left: number } | null>(null);
 
   const handleOpen = () => {
-    setOpen((prev) => !prev);
+    setOpen((prev) => {
+      const next = !prev;
+      if (next && !compact && triggerRef.current && typeof window !== 'undefined') {
+        const rect = triggerRef.current.getBoundingClientRect();
+        setDesktopAnchor({
+          top: Math.max(12, Math.round(rect.bottom + 8)),
+          left: Math.max(12, Math.min(window.innerWidth - 404, Math.round(rect.left - 4))),
+        });
+      }
+      return next;
+    });
   };
 
   const handleMarkAllRead = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -1211,6 +1223,7 @@ export function NotificationCenterButton({
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={handleOpen}
         data-testid={
@@ -1252,7 +1265,9 @@ export function NotificationCenterButton({
         typeof document !== 'undefined' &&
         createPortal(
           <div
-            className="fixed inset-0 z-[110] flex items-start justify-end p-3 sm:p-5 bg-black/25 dark:bg-black/50 backdrop-blur-[2px] animate-fade-in"
+            className={`fixed inset-0 z-[110] flex items-start ${
+              compact ? 'justify-end p-3 sm:p-5' : 'justify-start p-3 sm:p-4'
+            } bg-black/25 dark:bg-black/50 backdrop-blur-[2px] animate-fade-in`}
             onClick={() => setOpen(false)}
           >
             <div
@@ -1261,7 +1276,19 @@ export function NotificationCenterButton({
               role="dialog"
               aria-modal="false"
               aria-label={lang === 'vi' ? 'Nhật ký thông báo' : 'Notification Center'}
-              className="mt-12 sm:mt-2 w-full max-w-[390px] rounded-2xl border border-[#E7E3D9] dark:border-[#332F26] bg-[#FBFAF6] dark:bg-[#1E1C17] shadow-[0_24px_60px_-12px_rgba(28,26,21,0.32),inset_0_1px_0_rgba(255,255,255,0.85)] dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.8)] overflow-hidden animate-scale-in"
+              style={
+                !compact && desktopAnchor
+                  ? {
+                      position: 'fixed',
+                      top: `${desktopAnchor.top}px`,
+                      left: `${desktopAnchor.left}px`,
+                      marginTop: 0,
+                    }
+                  : undefined
+              }
+              className={`${
+                compact ? 'mt-12 sm:mt-2' : 'mt-12 sm:mt-11'
+              } w-full max-w-[390px] rounded-2xl border border-[#E7E3D9] dark:border-[#332F26] bg-[#FBFAF6] dark:bg-[#1E1C17] shadow-[0_24px_60px_-12px_rgba(28,26,21,0.32),inset_0_1px_0_rgba(255,255,255,0.85)] dark:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.8)] overflow-hidden animate-scale-in`}
             >
               {/* macOS Editorial Header Chrome */}
               <div className="flex items-center justify-between gap-2 px-4 py-3 bg-[#F4F2EC] dark:bg-[#141310] border-b border-[#E7E3D9] dark:border-[#332F26]">

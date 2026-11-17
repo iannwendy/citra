@@ -423,7 +423,7 @@ export function CitationGraphView({
         <div
           className={
             isCleanEmbeddedMode
-              ? 'border-b lg:border-b-0 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col lg:max-h-[730px] min-w-0'
+              ? 'border-b lg:border-b-0 border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col lg:h-full min-w-0'
               : 'space-y-2 lg:max-h-[680px] lg:overflow-y-auto lg:pr-2 w-full min-w-0'
           }
         >
@@ -494,13 +494,14 @@ export function CitationGraphView({
             </div>
           )}
 
-          <div
-            className={
-              isCleanEmbeddedMode
-                ? 'flex-1 p-3 space-y-2 overflow-y-auto max-h-[340px] lg:max-h-none'
-                : 'space-y-2'
-            }
-          >
+          <div className={isCleanEmbeddedMode ? 'relative flex-1 min-h-0' : ''}>
+            <div
+              className={
+                isCleanEmbeddedMode
+                  ? 'p-3 space-y-2 overflow-y-auto max-h-[340px] lg:max-h-none lg:absolute lg:inset-0'
+                  : 'space-y-2'
+              }
+            >
             {filtered.length === 0 ? (
               <div className="py-10 text-center text-xs text-slate-500 dark:text-slate-400 italic">
                 {isVi
@@ -579,6 +580,7 @@ export function CitationGraphView({
                 );
               })
             )}
+            </div>
           </div>
         </div>
 

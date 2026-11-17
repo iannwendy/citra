@@ -112,12 +112,15 @@ test.describe('Toast Integration', () => {
     await page.goto('/settings');
     await waitForAuth(page);
 
-    // Trigger toasts by toggling language options
-    const langBtn = page.locator('button[title="Switch language (VI / EN)"]');
-    await langBtn.click();
+    // Trigger toasts by switching language via ChatGPT-style Account Popover
+    await page.getByTestId('sidebar-account-trigger').click();
+    const popover = page.getByTestId('sidebar-account-popover');
+    await expect(popover).toHaveAttribute('data-open', 'true');
+
+    await popover.getByRole('button', { name: 'vi', exact: true }).click();
     await expect(page.getByTestId('citra-toast-success').first()).toBeVisible();
 
-    await langBtn.click();
+    await popover.getByRole('button', { name: 'en', exact: true }).click();
     await expect(page.getByTestId('toast-stack-toolbar')).toBeVisible();
 
     await page.getByTestId('dismiss-all-toasts-btn').click();
@@ -130,9 +133,12 @@ test.describe('Toast Integration', () => {
     await page.goto('/settings');
     await waitForAuth(page);
 
-    const langBtn = page.locator('button[title="Switch language (VI / EN)"]');
-    await langBtn.click();
+    await page.getByTestId('sidebar-account-trigger').click();
+    const popover = page.getByTestId('sidebar-account-popover');
+    await expect(popover).toHaveAttribute('data-open', 'true');
+    await popover.getByRole('button', { name: 'vi', exact: true }).click();
     await expect(page.getByTestId('citra-toast-success').first()).toBeVisible();
+    await page.getByTestId('sidebar-account-trigger').click();
 
     // Verify notification icon is geometrically centered inside its trigger button
     const trigger = page.getByTestId('notification-center-trigger-desktop');

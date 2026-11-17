@@ -163,8 +163,8 @@ export function SettingsPage(): JSX.Element {
       .getMySubscription()
       .then((res) => {
         if (!active) return;
-        setSubscription(res.subscription);
-        setTransactions(res.transactions);
+        setSubscription(res?.subscription ?? null);
+        setTransactions(Array.isArray(res?.transactions) ? res.transactions : []);
       })
       .catch(() => {
         // Fallback silently if unauthenticated in isolated unit tests

@@ -4541,7 +4541,7 @@ export function EssayPage() {
 
                                 {/* Multi-Source Federation */}
                                 <TabsContent value="sources" className="mt-3">
-                                  <div className="grid sm:grid-cols-2 gap-2.5">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 min-w-0">
                                     {activeItem.sources.map((src) => {
                                       const localizeFieldToken = (f: string) => {
                                         if (lang !== 'vi') return f;
@@ -4574,7 +4574,7 @@ export function EssayPage() {
                                       return (
                                         <div
                                           key={src.name}
-                                          className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${
+                                          className={`p-3 rounded-xl border flex items-center justify-between gap-2 min-w-0 ${
                                             src.status === 'matched'
                                               ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/70'
                                               : src.status === 'partial'

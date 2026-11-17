@@ -137,6 +137,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const isDesktopCollapsed = sidebarCollapsed && !mobileOpen;
 
+  const closeMobileDrawer = useCallback(() => {
+    setMobileOpen(false);
+    setAccountMenuOpen(false);
+  }, []);
+
   // Auto-expand Admin Console when visiting any /admin/* route, and close Account Popover on navigation
   useEffect(() => {
     if (location.pathname.startsWith('/admin')) {
@@ -144,6 +149,31 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
     setAccountMenuOpen(false);
   }, [location.pathname]);
+
+  // Reset mobile drawer state if viewport crosses into lg (>= 1024px) or user presses Escape
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKeyDown = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') {
+        closeMobileDrawer();
+      }
+    };
+    const mql =
+      typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+        ? window.matchMedia('(min-width: 1024px)')
+        : null;
+    const onBreakpointChange = (ev: MediaQueryListEvent) => {
+      if (ev.matches) {
+        setMobileOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    mql?.addEventListener?.('change', onBreakpointChange);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      mql?.removeEventListener?.('change', onBreakpointChange);
+    };
+  }, [mobileOpen, closeMobileDrawer]);
 
   // Close Account Popover on outside click or Escape
   useEffect(() => {
@@ -164,9 +194,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       }
     };
     document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('click', onPointerDown);
     window.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('click', onPointerDown);
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [accountMenuOpen]);
@@ -355,7 +387,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {mobileOpen && (
         <div
           className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40 animate-fade-in"
-          onClick={() => setMobileOpen(false)}
+          onClick={closeMobileDrawer}
         />
       )}
 
@@ -372,15 +404,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           ${mobileOpen ? 'translate-x-0 shadow-2xl duration-[var(--panel-open-dur)]' : '-translate-x-full lg:translate-x-0 duration-[var(--panel-close-dur)]'}
         `}
       >
-        {/* Mobile close button */}
-        <button
-          onClick={() => setMobileOpen(false)}
-          aria-label="Close navigation menu"
-          className="lg:hidden absolute top-4 right-4 p-2 min-h-11 min-w-11 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-        >
-          <X className="h-5 w-5 text-slate-500" />
-        </button>
-
         <div className="flex flex-col h-full">
           {/* Logo, Notification Bell & ChatGPT-Style Sidebar Collapse / Expand Header */}
           {isDesktopCollapsed ? (
@@ -422,10 +445,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <NotificationCenterButton lang={currentLang} />
             </div>
           ) : (
-            <div className="px-3.5 py-3 border-b border-slate-200/80 dark:border-slate-800/80 bg-gradient-to-b from-slate-50/60 to-transparent dark:from-slate-950/40 flex items-center justify-between gap-2 shrink-0">
+            <div className="min-h-14 lg:min-h-0 px-3.5 py-2.5 lg:py-3 border-b border-slate-200/80 dark:border-slate-800/80 bg-gradient-to-b from-slate-50/60 to-transparent dark:from-slate-950/40 flex items-center justify-between gap-2 shrink-0">
               <Link
                 to="/dashboard"
-                onClick={() => setMobileOpen(false)}
+                onClick={closeMobileDrawer}
                 aria-label="Go to dashboard"
                 className="inline-flex items-center gap-[8px] rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
               >
@@ -444,6 +467,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   CITRA
                 </span>
               </Link>
+
+              <button
+                type="button"
+                data-testid="mobile-sidebar-close-btn"
+                onClick={closeMobileDrawer}
+                aria-label="Close navigation menu"
+                className="lg:hidden inline-flex items-center justify-center h-9 w-9 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+              >
+                <X className="h-[18px] w-[18px]" />
+              </button>
 
               <div className="hidden lg:flex items-center gap-1 shrink-0">
                 <NotificationCenterButton lang={currentLang} />
@@ -853,10 +886,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         data-open={accountMenuOpen ? 'true' : 'false'}
         data-rail={isDesktopCollapsed ? 'true' : 'false'}
         aria-hidden={!accountMenuOpen}
-        className={`citra-account-popover-gpu fixed z-[75] rounded-2xl border border-slate-200/90 dark:border-slate-700/90 bg-white dark:bg-slate-900 shadow-[0_18px_42px_-10px_rgba(15,23,42,0.22)] dark:shadow-[0_20px_48px_-10px_rgba(0,0,0,0.7)] p-1.5 text-sm ${
+        className={`citra-account-popover-gpu fixed z-[75] max-h-[calc(100dvh-70px)] overflow-y-auto rounded-2xl border border-slate-200/90 dark:border-slate-700/90 bg-white dark:bg-slate-900 shadow-[0_18px_42px_-10px_rgba(15,23,42,0.22)] dark:shadow-[0_20px_48px_-10px_rgba(0,0,0,0.7)] p-1.5 text-sm ${
           isDesktopCollapsed
             ? 'bottom-3 left-3 lg:left-[80px] w-[244px]'
-            : 'bottom-[58px] left-2 w-[216px]'
+            : 'bottom-[58px] left-2 w-[240px] max-w-[calc(85vw-16px)] lg:w-[216px]'
         }`}
       >
         {/* Identity & Quota Header */}
@@ -1017,7 +1050,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           type="button"
           tabIndex={accountMenuOpen ? undefined : -1}
           onClick={() => {
-            setAccountMenuOpen(false);
+            closeMobileDrawer();
             setHelpOpen(true);
           }}
           className="w-full flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-xl text-[12.5px] font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
@@ -1038,7 +1071,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           tabIndex={accountMenuOpen ? undefined : -1}
           data-testid="account-popover-signout"
           onClick={() => {
-            setAccountMenuOpen(false);
+            closeMobileDrawer();
             void handleLogout();
           }}
           disabled={loggingOut}

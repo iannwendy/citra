@@ -253,9 +253,9 @@ export function EssayHeader({
 
   return (
     <div className="relative rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 px-4 py-3.5 sm:px-5 shadow-xs">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 w-full min-w-0">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 w-full min-w-0">
         {/* Document Identity Cluster */}
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex flex-col items-start gap-2.5 sm:flex-row sm:items-center sm:gap-3 min-w-0 flex-1">
           <Link
             to="/history"
             data-testid="header-back-btn"
@@ -265,74 +265,76 @@ export function EssayHeader({
             <span>{isVi ? 'Quay lại' : 'Back'}</span>
           </Link>
 
-          <FileFormatIcon filename={filename} size="md" />
+          <div className="flex items-start sm:items-center gap-3 min-w-0 w-full sm:flex-1">
+            <span className="shrink-0 mt-0.5 sm:mt-0">
+              <FileFormatIcon filename={filename} size="md" />
+            </span>
 
-          <div className="min-w-0 flex-1">
-            <h1
-              className="font-sans text-base sm:text-lg lg:text-xl font-bold text-slate-900 dark:text-slate-100 truncate tracking-tight"
-              title={filename}
-            >
-              {filename}
-            </h1>
+            <div className="min-w-0 flex-1">
+              <h1
+                className="font-sans text-base sm:text-lg lg:text-xl font-bold text-slate-900 dark:text-slate-100 truncate tracking-tight"
+                title={filename}
+              >
+                {filename}
+              </h1>
 
-            <div className="flex items-center gap-2 text-xs sm:text-[13px] text-slate-600 dark:text-slate-400 mt-0.5 flex-wrap">
-              <span>
-                {numPages}{' '}
-                {!isVi && numPages === 1 ? 'page' : t('history.pages')}
-              </span>
-              <span className="text-slate-300 dark:text-slate-600" aria-hidden="true">
-                •
-              </span>
-              <span data-testid="header-citation-summary">
-                {hasDistinctReferences ? (
-                  isVi ? (
-                    <>
-                      <strong className="font-semibold text-slate-900 dark:text-slate-100">
-                        {numReferences}
-                      </strong>{' '}
-                      tài liệu tham khảo{' '}
-                      <span className="text-slate-500 dark:text-slate-400">
-                        ({numCitations} lượt trích trong bài)
-                      </span>
-                    </>
+              <div className="text-xs sm:text-[13px] text-slate-600 dark:text-slate-400 mt-0.5 leading-relaxed">
+                <span>
+                  {numPages}{' '}
+                  {!isVi && numPages === 1 ? 'page' : t('history.pages')}
+                </span>
+                <span className="mx-1.5 text-slate-300 dark:text-slate-600" aria-hidden="true">
+                  •
+                </span>
+                <span data-testid="header-citation-summary" className="mr-2">
+                  {hasDistinctReferences ? (
+                    isVi ? (
+                      <>
+                        <strong className="font-semibold text-slate-900 dark:text-slate-100">
+                          {numReferences}
+                        </strong>{' '}
+                        tài liệu tham khảo{' '}
+                        <span className="text-slate-500 dark:text-slate-400">
+                          ({numCitations} lượt trích trong bài)
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <strong className="font-semibold text-slate-900 dark:text-slate-100">
+                          {numReferences}
+                        </strong>{' '}
+                        {numReferences === 1 ? 'reference' : 'references'}{' '}
+                        <span className="text-slate-500 dark:text-slate-400">
+                          ({numCitations} in-text{' '}
+                          {numCitations === 1 ? 'mention' : 'mentions'})
+                        </span>
+                      </>
+                    )
                   ) : (
                     <>
-                      <strong className="font-semibold text-slate-900 dark:text-slate-100">
-                        {numReferences}
-                      </strong>{' '}
-                      {numReferences === 1 ? 'reference' : 'references'}{' '}
-                      <span className="text-slate-500 dark:text-slate-400">
-                        ({numCitations} in-text{' '}
-                        {numCitations === 1 ? 'mention' : 'mentions'})
-                      </span>
+                      {numCitations}{' '}
+                      {!isVi && numCitations === 1
+                        ? 'citation'
+                        : t('essay.citationsTab').toLowerCase()}
                     </>
-                  )
-                ) : (
-                  <>
-                    {numCitations}{' '}
-                    {!isVi && numCitations === 1
-                      ? 'citation'
-                      : t('essay.citationsTab').toLowerCase()}
-                  </>
-                )}
-              </span>
+                  )}
+                </span>
 
-              {styleName && styleName.trim().toUpperCase() !== 'UNKNOWN' && (
-                <>
-                  <span className="text-slate-300 dark:text-slate-600" aria-hidden="true">
-                    •
-                  </span>
-                  <Badge variant="secondary" className="text-[11px] font-medium px-2 py-0">
+                {styleName && styleName.trim().toUpperCase() !== 'UNKNOWN' && (
+                  <Badge
+                    variant="secondary"
+                    className="align-middle text-[11px] font-medium px-2 py-0"
+                  >
                     {styleName}
                   </Badge>
-                </>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Clean 2-Control Action Cluster (Primary Fix CTA + Grouped Export Menu) */}
-        <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+        <div className="relative flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap w-full sm:w-auto">
           <Button
             type="button"
             size="sm"
@@ -346,7 +348,7 @@ export function EssayHeader({
             </span>
           </Button>
 
-          <div ref={exportMenuRef} className="relative">
+          <div ref={exportMenuRef} className="sm:relative">
             <Button
               type="button"
               variant="outline"
@@ -370,7 +372,7 @@ export function EssayHeader({
               role="menu"
               data-testid="export-dropdown-menu"
               data-open={exportMenuOpen ? 'true' : 'false'}
-              className={`absolute right-0 top-[calc(100%+6px)] z-50 w-72 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1.5 shadow-xl origin-top-right transition-all duration-150 ${
+              className={`absolute left-0 sm:left-auto sm:right-0 top-[calc(100%+6px)] z-50 w-full max-w-[18rem] sm:w-72 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1.5 shadow-xl origin-top-left sm:origin-top-right transition-all duration-150 ${
                 exportMenuOpen
                   ? 'opacity-100 scale-100 pointer-events-auto visible'
                   : 'opacity-0 scale-95 pointer-events-none invisible'

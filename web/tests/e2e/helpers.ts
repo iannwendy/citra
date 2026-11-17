@@ -293,6 +293,52 @@ export function setupAuthenticatedPage(page: Page): void {
     localStorage.setItem('user', JSON.stringify(user));
   }, { token: 'mock-token-123', user: MOCK_USER });
 
+  // Lowest-priority fallback ONLY for root /api/... endpoints (never Vite's /src/api/client.ts!)
+  // so mock-token-123 never hits a live backend and triggers 401 -> /login
+  page.route(/^https?:\/\/[^/]+\/api\//, (route) => {
+    const req = route.request();
+    const url = req.url();
+    if (req.method() === 'GET') {
+      const isArrayEndpoint =
+        /\/api\/(essays|classes|users|users\/me\/api-keys|billing\/admin\/promos|audit\/logs?|teacher\/(classes|enrolled-classes))(\?|$)/.test(
+          url,
+        );
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: isArrayEndpoint ? '[]' : '{}',
+      });
+      return;
+    }
+    route.continue();
+  });
+
+  // Intercept /api/billing/subscription for SettingsPage
+  page.route(/^https?:\/\/[^/]+\/api\/billing\/subscription(\?.*)?$/, (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        subscription: null,
+        transactions: [],
+      }),
+    });
+  });
+
+  // Intercept /api/essays/stats for Dashboard StatCards
+  page.route(/^https?:\/\/[^/]+\/api\/essays\/stats(\?.*)?$/, (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        total_essays: 4,
+        total_citations: 147,
+        average_cis: 92.8,
+        verified_rate: 91.5,
+      }),
+    });
+  });
+
   // Intercept auth/me — prevents race conditions
   page.route('**/api/auth/me', (route) => {
     route.fulfill({
@@ -321,8 +367,8 @@ export function setupAuthenticatedPage(page: Page): void {
     }
   });
 
-  // Intercept essays list endpoint
-  page.route('**/api/essays', (route) => {
+  // Intercept essays list endpoint (with or without query string)
+  page.route(/\/api\/essays(\?.*)?$/, (route) => {
     const req = route.request();
     if (req.method() === 'GET') {
       route.fulfill({

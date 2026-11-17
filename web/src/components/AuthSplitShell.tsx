@@ -724,7 +724,7 @@ export function AuthSplitShell({
           className={`relative z-10 order-1 w-full ${maxWidthClass} lg:max-w-none mx-auto flex items-center justify-between gap-2`}
         >
           {/* Mobile Brand / Desktop Back to Overview Link */}
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-3 shrink-0">
             <Link
               to="/"
               className="lg:hidden inline-flex items-center gap-[8px] rounded-[6px] shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15] dark:focus-visible:ring-[#FBFAF6]"
@@ -757,15 +757,18 @@ export function AuthSplitShell({
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <Link
               to="/"
+              aria-label={lang === 'vi' ? 'Trang chủ' : 'Home'}
               style={{
                 backgroundColor: 'var(--solva-surface)',
                 borderColor: 'var(--solva-border)',
                 color: 'var(--solva-ink)',
               }}
-              className="lg:hidden inline-flex items-center gap-1 px-2.5 h-8 rounded-[8px] border text-xs font-solva-sans font-medium hover:opacity-85 transition-opacity whitespace-nowrap"
+              className="lg:hidden inline-flex items-center justify-center gap-1 px-2 min-[380px]:px-2.5 h-8 rounded-[8px] border text-xs font-solva-sans font-medium hover:opacity-85 transition-opacity whitespace-nowrap"
             >
               <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
-              <span>{lang === 'vi' ? 'Trang chủ' : 'Home'}</span>
+              <span className="hidden min-[380px]:inline">
+                {lang === 'vi' ? 'Trang chủ' : 'Home'}
+              </span>
             </Link>
 
             <button

@@ -149,7 +149,7 @@ export function LoginPage() {
                 borderColor: 'var(--solva-border)',
                 color: 'var(--solva-ink)',
               }}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] border font-mono text-[10px] uppercase tracking-wider font-semibold whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-[6px] border font-mono text-[10px] uppercase tracking-wider font-semibold whitespace-nowrap shrink-0"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
               <Lock className="h-3 w-3 shrink-0 opacity-80" />
@@ -160,7 +160,7 @@ export function LoginPage() {
 
             <span
               style={{ color: 'var(--solva-muted)' }}
-              className="inline-flex items-center gap-1 font-mono text-[10px]"
+              className="inline-flex items-center gap-1 font-mono text-[10px] whitespace-nowrap shrink-0"
             >
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>SSO · RBAC</span>

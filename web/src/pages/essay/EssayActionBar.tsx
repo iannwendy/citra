@@ -100,13 +100,16 @@ export function EssayActionBar({
   };
 
   const tabBtnClass = (isActive: boolean) =>
-    `t-tab inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold shrink-0 whitespace-nowrap select-none cursor-pointer transition-colors ${
+    `t-tab inline-flex items-center justify-center gap-1 sm:gap-1.5 h-8 px-1.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-semibold min-w-0 sm:shrink-0 whitespace-nowrap select-none cursor-pointer transition-colors ${
       isActive
         ? pillStyle.ready
           ? 'text-slate-900 dark:text-white'
           : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
     }`;
+
+  const lockedTabBtnClass =
+    't-tab inline-flex items-center justify-center gap-1 sm:gap-1.5 h-8 px-1.5 sm:px-3 rounded-lg text-[11px] sm:text-xs font-medium min-w-0 sm:shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer transition-colors';
 
   return (
     <>
@@ -115,7 +118,11 @@ export function EssayActionBar({
         role="tablist"
         data-testid="report-view-tablist"
         aria-label={isVi ? 'Chế độ xem báo cáo' : 'Report Views'}
-        className="t-tabs relative flex flex-wrap sm:inline-flex items-center gap-1 p-1 rounded-xl bg-slate-100/90 dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 max-w-full shrink-0"
+        className={`t-tabs relative ${
+          isUnifiedMode && hideRemediationButton
+            ? 'grid grid-cols-2 w-full sm:w-auto sm:inline-flex'
+            : 'flex flex-wrap sm:inline-flex'
+        } items-center gap-1 p-1 rounded-xl bg-slate-100/90 dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 max-w-full shrink-0`}
       >
         {/* 120fps GPU-Composited Sliding Pill */}
         <span
@@ -147,9 +154,9 @@ export function EssayActionBar({
                 isCitationsTabActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
               }`}
             />
-            <span>{isVi ? 'Danh mục trích dẫn' : 'Citations'}</span>
+            <span className="truncate">{isVi ? 'Danh mục trích dẫn' : 'Citations'}</span>
             {typeof issueCount === 'number' && issueCount > 0 && (
-              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800">
+              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800 shrink-0">
                 {issueCount}
               </span>
             )}
@@ -165,9 +172,9 @@ export function EssayActionBar({
                 isCitationsTabActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
               }`}
             />
-            <span>{isVi ? 'Danh mục trích dẫn' : 'Citations'}</span>
+            <span className="truncate">{isVi ? 'Danh mục trích dẫn' : 'Citations'}</span>
             {typeof issueCount === 'number' && issueCount > 0 && (
-              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800">
+              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800 shrink-0">
                 {issueCount}
               </span>
             )}
@@ -191,7 +198,7 @@ export function EssayActionBar({
                   isDocument ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
                 }`}
               />
-              <span>{isVi ? 'Xem trong bài viết' : 'In Document'}</span>
+              <span className="truncate">{isVi ? 'Xem trong bài viết' : 'In Document'}</span>
             </button>
           ) : (
             <Link
@@ -204,7 +211,7 @@ export function EssayActionBar({
                   isDocument ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
                 }`}
               />
-              <span>{isVi ? 'Xem trong bài viết' : 'In Document'}</span>
+              <span className="truncate">{isVi ? 'Xem trong bài viết' : 'In Document'}</span>
             </Link>
           )
         ) : (
@@ -216,10 +223,10 @@ export function EssayActionBar({
             onClick={() =>
               handleLockedClick(isVi ? 'Xem trích dẫn trong bài viết' : 'In-Document Citation View')
             }
-            className="t-tab inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer transition-colors"
+            className={lockedTabBtnClass}
           >
             <Lock className="h-3 w-3 text-slate-400 shrink-0" />
-            <span>{isVi ? 'Xem trong bài viết' : 'In Document'}</span>
+            <span className="truncate">{isVi ? 'Xem trong bài viết' : 'In Document'}</span>
           </button>
         )}
 
@@ -240,7 +247,7 @@ export function EssayActionBar({
                   isConsistency ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
                 }`}
               />
-              <span>{isVi ? 'Kiểm tra thiếu / thừa' : 'In-Text Check'}</span>
+              <span className="truncate">{isVi ? 'Kiểm tra thiếu / thừa' : 'In-Text Check'}</span>
               {consistencyOk && (
                 <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               )}
@@ -256,7 +263,7 @@ export function EssayActionBar({
                   isConsistency ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
                 }`}
               />
-              <span>{isVi ? 'Kiểm tra thiếu / thừa' : 'In-Text Check'}</span>
+              <span className="truncate">{isVi ? 'Kiểm tra thiếu / thừa' : 'In-Text Check'}</span>
               {consistencyOk && (
                 <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               )}
@@ -275,10 +282,10 @@ export function EssayActionBar({
                   : 'Citation Consistency & Orphan Analysis',
               )
             }
-            className="t-tab inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer transition-colors"
+            className={lockedTabBtnClass}
           >
             <Lock className="h-3 w-3 text-slate-400 shrink-0" />
-            <span>{isVi ? 'Kiểm tra thiếu / thừa' : 'In-Text Check'}</span>
+            <span className="truncate">{isVi ? 'Kiểm tra thiếu / thừa' : 'In-Text Check'}</span>
           </button>
         )}
 
@@ -304,7 +311,7 @@ export function EssayActionBar({
             className={
               has('view_logic_trace')
                 ? tabBtnClass(isGraphTabActive)
-                : 't-tab inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium shrink-0 whitespace-nowrap text-slate-500 hover:text-indigo-600 cursor-pointer transition-colors'
+                : lockedTabBtnClass
             }
           >
             {has('view_logic_trace') ? (
@@ -316,7 +323,7 @@ export function EssayActionBar({
             ) : (
               <Lock className="h-3 w-3 text-slate-400 shrink-0" />
             )}
-            <span>{isVi ? 'Sơ đồ' : 'Network'}</span>
+            <span className="truncate">{isVi ? 'Sơ đồ' : 'Network'}</span>
           </button>
         )}
 

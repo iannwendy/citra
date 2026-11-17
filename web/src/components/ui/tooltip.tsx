@@ -17,7 +17,7 @@ const Tooltip = React.forwardRef<HTMLDivElement, TooltipProps>(
       {content && (
         <span
           role="tooltip"
-          className="t-tt-bubble absolute -top-9 left-1/2 z-50 whitespace-nowrap rounded-lg bg-slate-900 dark:bg-slate-100 px-2.5 py-1 text-xs font-medium text-white dark:text-slate-900 shadow-md"
+          className="t-tt-bubble absolute bottom-[calc(100%+6px)] left-1/2 z-50 w-max max-w-[min(240px,75vw)] whitespace-normal text-center leading-snug rounded-lg bg-slate-900 dark:bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-white dark:text-slate-900 shadow-md"
         >
           {content}
         </span>
