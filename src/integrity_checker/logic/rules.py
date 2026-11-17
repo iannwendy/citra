@@ -210,31 +210,54 @@ def _extract_surname_and_initial(author_str: object) -> tuple[str, str]:
 
 def has_polarity_or_catastrophic_content_conflict(features: MatchFeatures) -> bool:
     """Return True if `features` shows catastrophic semantic misalignment (< 0.25) or an explicit
-    polarity/refutation cue in its cited sentence(s) (or lacks sentence text in synthetic unit tests)."""
+    polarity/refutation conflict in its cited sentence(s) (or lacks sentence text in synthetic unit tests)."""
     if getattr(features, "stance_label", "") != "contradiction_risk":
         return False
     score = float(getattr(features, "content_alignment_score", 0.0) or 0.0)
     if 0.0 < score < 0.25 and not getattr(features, "content_is_aligned", False):
         return True
-    sents = [str(getattr(features, "best_cited_sentence", "") or "").strip()]
-    for occ in getattr(features, "occurrence_alignments", None) or []:
-        if isinstance(occ, dict) and occ.get("focal_sentence"):
-            sents.append(str(occ["focal_sentence"]).strip())
-    sents = [s for s in sents if s]
-    if not sents:
+    default_ev = str(getattr(features, "best_evidence_sentence", "") or "").strip()
+    pairs: list[tuple[str, str]] = []
+    occ_list = getattr(features, "occurrence_alignments", None) or []
+    for occ in occ_list:
+        if (
+            isinstance(occ, dict)
+            and occ.get("focal_sentence")
+            and occ.get("stance", "contradiction_risk") == "contradiction_risk"
+        ):
+            pairs.append(
+                (
+                    str(occ["focal_sentence"]).strip(),
+                    str(occ.get("best_evidence_sentence") or default_ev).strip(),
+                )
+            )
+    best_sent = str(getattr(features, "best_cited_sentence", "") or "").strip()
+    if not pairs and best_sent:
+        pairs.append((best_sent, default_ev))
+    if not pairs:
         return True
     from integrity_checker.matching.semantic import (
+        _CONTRASTIVE_BASELINE_LEAD_RE,
         _DIRECT_REFUTATION_RE,
         _EXPLICIT_CONTRADICTION_NEGATION_RE,
+        _NEGATION_CUES_RE,
         _STRONG_POSITIVE_CLAIM_RE,
     )
 
-    return any(
-        _DIRECT_REFUTATION_RE.search(s)
-        or _EXPLICIT_CONTRADICTION_NEGATION_RE.search(s)
-        or _STRONG_POSITIVE_CLAIM_RE.search(s)
-        for s in sents
-    )
+    for s, ev_sent in pairs:
+        ev_has_neg = bool(ev_sent and _NEGATION_CUES_RE.search(ev_sent))
+        if not _CONTRASTIVE_BASELINE_LEAD_RE.search(s) and (
+            bool(_DIRECT_REFUTATION_RE.search(s))
+            or bool(_EXPLICIT_CONTRADICTION_NEGATION_RE.search(s))
+        ):
+            return True
+        if (
+            ev_has_neg
+            and bool(_STRONG_POSITIVE_CLAIM_RE.search(s))
+            and not bool(_NEGATION_CUES_RE.search(s))
+        ):
+            return True
+    return False
 
 
 def is_explicit_or_named_refutation_context(

@@ -1631,6 +1631,146 @@ class TestHostileReviewerAndProductionParityRegressions:
         assert vas_feat.stance_label == "contradiction_risk"
         assert vas_feat.content_is_aligned is False
 
+    def test_local_db_known_papers_seed_stubs_and_affirmative_exact_doi_polarity(self) -> None:
+        """Stale `source='known_papers'` rows in `local_papers.db` must NOT overwrite corrected
+        `_KNOWN_PAPERS` co-authors or set `inherited_full_authors=True` on 12-to-14-author papers;
+        and affirmative `_STRONG_POSITIVE_CLAIM_RE` phrases must NOT trip exact-DOI polarity conflict."""
+        from integrity_checker.database.local_db import LocalDatabase
+        from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
+
+        checker = NeuroSymbolicChecker(enable_content_alignment=True)
+        orch = RetrievalOrchestrator(local_db=LocalDatabase(), use_local_db=True)
+
+        # 1. Cer et al. (2018) Universal Sentence Encoder via real LocalDatabase arXiv lookup
+        cer_real = Citation(
+            raw_text="Cer, D., Yang, Y., Kong, S., & Hua, N. (2018). Universal Sentence Encoder. arXiv:1803.11175",
+            authors=["Cer, D.", "Yang, Y.", "Kong, S.", "Hua, N."],
+            year=2018,
+            title="Universal Sentence Encoder",
+            doi="10.48550/arXiv.1803.11175",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        cer_src = orch._lookup_local_db(cer_real)
+        assert cer_src is not None and cer_src.candidates
+        assert cer_src.candidates[0].authors == ["Cer", "Yang", "Kong", "Hua"]
+        assert checker.check(cer_real, cer_src, mapping_status=CitationMappingStatus.MATCHED).label == ValidationLabel.VERIFIED
+
+        cer_fake = Citation(
+            raw_text="Cer, D., Yang, Y., Luong, M.-T., & Manning, C. D. (2018). Universal Sentence Encoder. arXiv:1803.11175",
+            authors=["Cer, D.", "Yang, Y.", "Luong, M.-T.", "Manning, C. D."],
+            year=2018,
+            title="Universal Sentence Encoder",
+            doi="10.48550/arXiv.1803.11175",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        cer_fake_v = checker.check(cer_fake, cer_src, mapping_status=CitationMappingStatus.MATCHED)
+        assert cer_fake_v.label == ValidationLabel.METADATA_ERROR
+        assert "author" in cer_fake_v.mismatched_fields
+
+        # 2. Full 14-author LLaMA (Touvron et al., 2023) & 12-author CLIP (Radford et al., 2021) via real LocalDatabase
+        llama_cit = Citation(
+            raw_text="Touvron, H., Lavril, T., Izacard, G., Martinet, X., Lachaux, M.-A., Lacroix, T., Roziere, B., Goyal, N., Hambro, E., Azhar, F., Rodriguez, A., Joulin, A., Grave, E., & Lample, G. (2023). LLaMA: Open and Efficient Foundation Language Models. arXiv:2302.13971",
+            authors=[
+                "Touvron, H.", "Lavril, T.", "Izacard, G.", "Martinet, X.", "Lachaux, M.-A.",
+                "Lacroix, T.", "Roziere, B.", "Goyal, N.", "Hambro, E.", "Azhar, F.",
+                "Rodriguez, A.", "Joulin, A.", "Grave, E.", "Lample, G.",
+            ],
+            year=2023,
+            title="LLaMA: Open and Efficient Foundation Language Models",
+            doi="10.48550/arXiv.2302.13971",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        llama_src = orch._lookup_local_db(llama_cit)
+        assert llama_src is not None and llama_src.candidates
+        assert checker.check(llama_cit, llama_src, mapping_status=CitationMappingStatus.MATCHED).label == ValidationLabel.VERIFIED
+
+        clip_cit = Citation(
+            raw_text="Radford, A., Kim, J. W., Hallacy, C., Ramesh, A., Goh, G., Agarwal, S., Sastry, G., Askell, A., Mishkin, P., Clark, J., Krueger, G., & Sutskever, I. (2021). Learning Transferable Visual Models From Natural Language Supervision. arXiv:2103.00020",
+            authors=[
+                "Radford, A.", "Kim, J. W.", "Hallacy, C.", "Ramesh, A.", "Goh, G.", "Agarwal, S.",
+                "Sastry, G.", "Askell, A.", "Mishkin, P.", "Clark, J.", "Krueger, G.", "Sutskever, I.",
+            ],
+            year=2021,
+            title="Learning Transferable Visual Models From Natural Language Supervision",
+            doi="10.48550/arXiv.2103.00020",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        clip_src = orch._lookup_local_db(clip_cit)
+        assert clip_src is not None and clip_src.candidates
+        assert checker.check(clip_cit, clip_src, mapping_status=CitationMappingStatus.MATCHED).label == ValidationLabel.VERIFIED
+
+        # 3. Exact-DOI affirmative '_STRONG_POSITIVE_CLAIM_RE' body claim & contrastive baseline lead stay VERIFIED
+        he_cit = Citation(
+            raw_text="He, K., Zhang, X., Ren, S., & Sun, J. (2016). Deep Residual Learning for Image Recognition. CVPR. doi:10.1109/CVPR.2016.90",
+            authors=["He, K.", "Zhang, X.", "Ren, S.", "Sun, J."],
+            year=2016,
+            title="Deep Residual Learning for Image Recognition",
+            doi="10.1109/CVPR.2016.90",
+            venue="CVPR",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        he_src = SourceResult(
+            citation_raw=he_cit.raw_text,
+            candidates=[
+                SourceCandidate(
+                    source_name="crossref",
+                    found=True,
+                    doi="10.1109/CVPR.2016.90",
+                    title="Deep Residual Learning for Image Recognition",
+                    authors=["Kaiming He", "Xiangyu Zhang", "Shaoqing Ren", "Jian Sun"],
+                    year="2016",
+                    venue="CVPR",
+                    abstract="Deeper neural networks are more difficult to train. We present a residual learning framework to ease the training of networks that are substantially deeper than those used previously.",
+                    confidence=0.99,
+                )
+            ],
+            sources_queried=["crossref", "openalex"],
+            sources_succeeded=["crossref", "openalex"],
+        )
+        he_pos_v = checker.check(
+            he_cit,
+            he_src,
+            citation_context="Identity shortcut mappings in 152-layer skip-connected architectures significantly outperform shallow baselines on PASCAL VOC segmentation (He et al., 2016).",
+            mapping_status=CitationMappingStatus.MATCHED,
+        )
+        assert he_pos_v.label == ValidationLabel.VERIFIED
+
+        peters_cit = Citation(
+            raw_text="Peters, M. E., Neumann, M., Iyyer, M., Gardner, M., & Clark, C. (2018). Deep Contextualized Word Representations. NAACL. doi:10.18653/v1/N18-1202",
+            authors=["Peters, M. E.", "Neumann, M.", "Iyyer, M.", "Gardner, M.", "Clark, C."],
+            year=2018,
+            title="Deep Contextualized Word Representations",
+            doi="10.18653/v1/N18-1202",
+            venue="NAACL",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        peters_src = SourceResult(
+            citation_raw=peters_cit.raw_text,
+            candidates=[
+                SourceCandidate(
+                    source_name="crossref",
+                    found=True,
+                    doi="10.18653/v1/N18-1202",
+                    title="Deep Contextualized Word Representations",
+                    authors=["Matthew E. Peters", "Mark Neumann", "Mohit Iyyer", "Matt Gardner", "Christopher Clark"],
+                    year="2018",
+                    venue="NAACL",
+                    abstract="We introduce a new type of deep contextualized word representation that models both complex characteristics of word use and how these uses vary across linguistic contexts.",
+                    confidence=0.99,
+                )
+            ],
+            sources_queried=["crossref"],
+            sources_succeeded=["crossref"],
+        )
+        peters_v = checker.check(
+            peters_cit,
+            peters_src,
+            citation_context="Traditional bag-of-words models fail to work on polysemous clinical acronyms (Peters et al., 2018).",
+            mapping_status=CitationMappingStatus.MATCHED,
+        )
+        assert peters_v.label == ValidationLabel.VERIFIED
+
+
 
 
 

@@ -666,7 +666,7 @@ _KNOWN_PAPERS: dict[tuple[str, str], dict] = {
     ("subramanian", "2018"): {
         "title": "Learning General Purpose Distributed Sentence Representations via Large Scale Multi-task Learning",
         "doi": "10.48550/arXiv.1803.02500",
-        "authors": ["Subramanian", "Tran", "Irving", "Friedland"],
+        "authors": ["Subramanian", "Trischler", "Bengio", "Pal"],
     },
     ("snell", "2017"): {
         "title": "Prototypical Networks for Few-shot Learning",
@@ -686,7 +686,7 @@ _KNOWN_PAPERS: dict[tuple[str, str], dict] = {
     ("mou", "2016"): {
         "title": "How Transferable are Neural Networks in NLP Applications?",
         "doi": "10.48550/arXiv.1603.06111",
-        "authors": ["Mou", "Li", "Zhou", "Jin"],
+        "authors": ["Mou", "Meng", "Yan", "Li", "Xu", "Zhang", "Jin"],
     },
     ("bowman", "2015"): {
         "title": "A large annotated corpus for learning natural language inference",
@@ -3902,12 +3902,54 @@ class RetrievalOrchestrator:
             return str(paper_info["abstract"])
         return paper_abstract
 
+    def _resolve_known_authors(self, citation: Citation, paper: object) -> list[str]:
+        """Replace stale legacy `source='known_papers'` SQLite seed co-authors with canonical `_KNOWN_PAPERS` authors."""
+        raw_authors = list(getattr(paper, "authors", None) or [])
+        if not raw_authors:
+            return raw_authors
+        paper_title = str(getattr(paper, "title", "") or "")
+        paper_year = getattr(paper, "year", None)
+        paper_doi = getattr(paper, "doi", None)
+        matched_kp: dict | None = None
+        is_known, paper_info = self.is_known_paper(citation)
+        if is_known and paper_info and paper_info.get("title"):
+            if title_similarity(paper_title, str(paper_info["title"])) >= 0.85:
+                matched_kp = paper_info
+        if matched_kp is None:
+            first_key = author_key(raw_authors[0])
+            yr_str = str(paper_year)[:4] if paper_year else ""
+            candidate_years = [yr_str]
+            if yr_str.isdigit():
+                candidate_years.extend([str(int(yr_str) - 1), str(int(yr_str) + 1)])
+            for cy in candidate_years:
+                if not first_key or not cy:
+                    continue
+                kp_cand = _KNOWN_PAPERS.get((first_key, cy))
+                if kp_cand and kp_cand.get("title"):
+                    if title_similarity(paper_title, str(kp_cand["title"])) >= 0.85 or (
+                        paper_doi
+                        and kp_cand.get("doi")
+                        and normalize_doi(str(paper_doi)) == normalize_doi(str(kp_cand["doi"]))
+                        and title_similarity(paper_title, str(kp_cand["title"])) >= 0.75
+                    ):
+                        matched_kp = kp_cand
+                        break
+        if matched_kp and matched_kp.get("authors"):
+            from integrity_checker.matching.author_matcher import author_match_details
+
+            kp_authors = list(matched_kp["authors"])
+            if len(raw_authors) <= len(kp_authors) and author_match_details(kp_authors, raw_authors).only_cited:
+                return kp_authors
+        return raw_authors
+
     def _lookup_local_db(self, citation: Citation) -> SourceResult | None:
         """Lookup paper in local database.
 
         Returns:
             SourceResult if found, None otherwise.
         """
+        if self._local_db is None:
+            return None
         # Try DOI first
         if citation.doi:
             # Normalize DOI
@@ -3928,7 +3970,7 @@ class RetrievalOrchestrator:
                         paper = None
             if paper:
                 resolved_authors = (
-                    paper.authors
+                    self._resolve_known_authors(citation, paper)
                     if paper.authors
                     else [
                         paper.venue.strip()
@@ -3976,7 +4018,7 @@ class RetrievalOrchestrator:
                     found=True,
                     doi=paper.doi,
                     title=paper.title,
-                    authors=paper.authors,
+                    authors=self._resolve_known_authors(citation, paper),
                     year=str(paper.year) if paper.year else None,
                     venue=paper.venue,
                     url=paper.external_ids.get("url") if paper.external_ids else None,
@@ -4049,14 +4091,15 @@ class RetrievalOrchestrator:
                         if cit_year_int is not None:
                             if not r_paper.year or abs(int(r_paper.year) - cit_year_int) > 1:
                                 continue
+                        r_resolved_authors = self._resolve_known_authors(citation, r_paper)
                         if citation.authors:
-                            if not r_paper.authors or author_match_score(citation.authors, r_paper.authors) < 0.50:
+                            if not r_resolved_authors or author_match_score(citation.authors, r_resolved_authors) < 0.50:
                                 continue
                             if is_book_review_mismatch(
                                 citation.title,
                                 citation.authors,
                                 r_paper.title,
-                                r_paper.authors,
+                                r_resolved_authors,
                                 citation_venue=citation.venue,
                                 citation_raw=citation.raw_text,
                                 candidate_venue=r_paper.venue,
@@ -4076,7 +4119,7 @@ class RetrievalOrchestrator:
                         found=True,
                         doi=paper.doi,
                         title=paper.title,
-                        authors=paper.authors,
+                        authors=self._resolve_known_authors(citation, paper),
                         year=str(paper.year) if paper.year else None,
                         venue=paper.venue,
                         url=paper.external_ids.get("url") if paper.external_ids else None,

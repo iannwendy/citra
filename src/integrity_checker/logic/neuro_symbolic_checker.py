@@ -1092,7 +1092,17 @@ class NeuroSymbolicChecker:
                                 break
                     inherited_full_authors = False
                     for ag_c in agreeing_other_cands:
-                        if ag_c.authors and len(ag_c.authors) >= len(known_candidate.authors or []):
+                        if not ag_c.authors:
+                            continue
+                        is_strictly_fuller = len(ag_c.authors) > len(known_candidate.authors or [])
+                        is_live_complete = (
+                            ag_c.source_name not in ("local_db", "known_papers", "serpapi")
+                            and len(ag_c.authors) >= len(known_candidate.authors or [])
+                        )
+                        if (is_strictly_fuller or is_live_complete) and not (
+                            known_candidate.authors
+                            and author_match_details(known_candidate.authors, ag_c.authors).only_cited
+                        ):
                             known_candidate.authors = list(ag_c.authors)
                             inherited_full_authors = True
                             break
