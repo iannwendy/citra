@@ -88,8 +88,9 @@ _NEGATION_CUES_RE = re.compile(
     re.IGNORECASE,
 )
 _EXPLICIT_CONTRADICTION_NEGATION_RE = re.compile(
-    r"\b(?:never|no\s+longer|no\s+evidence|no\s+significant(?:\s+effect)?|fails?\s+to|ineffective|"
-    r"worse\s+than|unreliable|impossible|evaded\s+by|useless|incapable|"
+    r"\b(?:never|no\s+longer|no\s+evidence|no\s+significant(?:\s+effect)?|"
+    r"fails?\s+to\s+(?:improve|outperform|beat|exceed|generalize|work|converge|achieve|surpass|solve|help|yield|reduce|scale|perform)|"
+    r"ineffective|worse\s+than|unreliable|impossible|evaded\s+by|useless|incapable|"
     r"contrary\s+to|disproves?|refutes?|invalidates?|degrades?|"
     r"không\s+hiệu\s+quả|thất\s+bại|kém\s+hơn|vô\s+dụng|bác\s+bỏ|trái\s+ngược|"
     r"không\s+cải\s+thiện|làm\s+giảm|suy\s+giảm\s+hiệu\s+năng|không\s+có\s+ý\s+nghĩa|"
@@ -97,8 +98,13 @@ _EXPLICIT_CONTRADICTION_NEGATION_RE = re.compile(
     re.IGNORECASE,
 )
 _CONTRASTIVE_BASELINE_LEAD_RE = re.compile(
-    r"^\s*(?:unlike|whereas|while|although|though|even\s+though|"
-    r"because\s+(?:standard|traditional|prior|existing|conventional))\b",
+    r"^\s*(?:(?:unlike|whereas|while|although|though|even\s+though|"
+    r"because\s+(?:standard|traditional|prior|existing|conventional))\b"
+    r"|(?:the\s+)?(?:traditional|standard|conventional|prior|previous|existing|classical|"
+    r"vanilla|naive|static|shallow|unidirectional|bag-of-words)\s+"
+    r"(?:[\w\-]+\s+){0,2}(?:models?|methods?|approaches|architectures?|systems?|networks?|"
+    r"representations?|embeddings?|classifiers?|baselines?|pipelines?|algorithms?)\b"
+    r"|(?:the\s+)?(?:recurrent|convolutional)\s+(?:neural\s+)?(?:networks?|models?)\b)",
     re.IGNORECASE,
 )
 _STRONG_POSITIVE_CLAIM_RE = re.compile(
@@ -111,9 +117,11 @@ _STRONG_POSITIVE_CLAIM_RE = re.compile(
     re.IGNORECASE,
 )
 _DIRECT_REFUTATION_RE = re.compile(
-    r"\b(?:completely\s+ineffective|fails?\s+to\s+\w+|useless|does\s+not\s+work|"
+    r"\b(?:completely\s+ineffective|"
+    r"fails?\s+to\s+(?:improve|outperform|beat|exceed|generalize|work|converge|achieve|surpass|solve|help|yield|reduce|scale|perform)|"
+    r"useless|does\s+not\s+work|"
     r"cannot\s+improve|worse\s+than\s+random|incapable\s+of|no\s+significant\s+effect|"
-    r"degrades?\s+performance|fails?\s+to\s+improve|"
+    r"degrades?\s+performance|"
     r"hoàn\s+toàn\s+thất\s+bại|không\s+có\s+tác\s+dụng|hoàn\s+toàn\s+vô\s+dụng|không\s+mang\s+lại\s+hiệu\s+quả|"
     r"không\s+thể\s+cải\s+thiện|làm\s+giảm\s+độ\s+chính\s+xác|kém\s+hơn\s+ngẫu\s+nhiên)\b",
     re.IGNORECASE,
@@ -136,7 +144,8 @@ _ACADEMIC_GENERIC_STOP_WORDS: frozenset[str] = frozenset(
         "based", "baseline", "baselines", "because", "been", "before", "being",
         "benchmark", "benchmarks", "between", "both", "build", "building", "capability",
         "capabilities", "challenge", "challenges", "compared", "comparison",
-        "component", "components", "computational", "compute", "computed", "computing",
+        "component", "components", "computational", "compute", "computed", "computes",
+        "computing",
         "concept", "concepts", "concerning", "conduct", "conducted", "conjecture",
         "consider", "context", "corpora", "corpus", "current", "data", "dataset",
         "datasets", "deep", "demonstrate", "demonstrated", "demonstrates", "describe",
@@ -166,7 +175,8 @@ _ACADEMIC_GENERIC_STOP_WORDS: frozenset[str] = frozenset(
         "papers", "parameter", "parameters", "particular", "particularly", "perform",
         "performance", "performed", "pipeline", "pipelines", "pp", "predict",
         "predicted", "prediction", "predictions", "present", "presented", "presents",
-        "pretrained", "pretraining", "previous", "previously", "prior", "problem",
+        "pretrain", "pretrained", "pretraining", "pretrains", "previous", "previously",
+        "prior", "problem",
         "problems", "process", "processing", "produce", "propose", "proposed",
         "proposes", "prove", "proved", "proven", "provide", "provided", "provides",
         "quality", "recent", "recently", "regarding", "related", "report", "reported",
@@ -326,7 +336,8 @@ def _extract_distinctive_stems(text: str | None) -> set[str]:
     stems: set[str] = set()
     for raw_tok in re.findall(r"[A-Za-z][A-Za-z0-9\-]{2,}", text):
         parts = [p for p in raw_tok.split("-") if p]
-        for part in parts:
+        candidates = [raw_tok.replace("-", ""), *parts] if "-" in raw_tok else parts
+        for part in candidates:
             low = part.lower()
             if low in _ACADEMIC_GENERIC_STOP_WORDS:
                 continue
@@ -1066,7 +1077,11 @@ class SemanticMatcher:
 
         # Check for severe polarity inversion when discussing the same technical concept
         norm_focal_clean = " ".join(norm_focal.split()).lower()
-        norm_src_abs = " ".join(source_abstract.split()).lower() if source_abstract else ""
+        norm_src_abs = (
+            " ".join(normalize_vn_spelling(source_abstract).split()).lower()
+            if source_abstract
+            else ""
+        )
         is_verbatim_from_abstract = bool(
             norm_src_abs and len(norm_focal_clean) >= 35 and norm_focal_clean[:35] in norm_src_abs
         )

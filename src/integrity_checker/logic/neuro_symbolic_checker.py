@@ -20,6 +20,7 @@ from integrity_checker.logic.calibration import HybridMLScorer
 from integrity_checker.logic.rules import (
     SymbolicRules,
     _is_fake_url,
+    has_polarity_or_catastrophic_content_conflict,
     is_explicit_or_named_refutation_context,
 )
 from integrity_checker.logic.vn_legal_verifier import verify_vn_legal_citation
@@ -1091,7 +1092,7 @@ class NeuroSymbolicChecker:
                                 break
                     inherited_full_authors = False
                     for ag_c in agreeing_other_cands:
-                        if len(ag_c.authors or []) > len(known_candidate.authors or []):
+                        if ag_c.authors and len(ag_c.authors) >= len(known_candidate.authors or []):
                             known_candidate.authors = list(ag_c.authors)
                             inherited_full_authors = True
                             break
@@ -1127,12 +1128,27 @@ class NeuroSymbolicChecker:
                         candidate_authors=known_candidate.authors,
                         mapping_status=mapping_status,
                     )
+                    kp_verified_exact_doi = bool(
+                        citation.doi
+                        and str(citation.doi).strip()
+                        and (
+                            (known_doi and FeatureCalculator._doi_matches(str(citation.doi).strip(), str(known_doi).strip()))
+                            or any(
+                                c.doi and FeatureCalculator._doi_matches(str(citation.doi).strip(), str(c.doi))
+                                for c in agreeing_other_cands
+                            )
+                        )
+                    )
                     if (
                         self.enable_content_alignment
                         and effective_context
                         and kp_has_substantive_abs
                         and kp_explicit_ctx
                         and getattr(features, "stance_label", "") == "contradiction_risk"
+                        and (
+                            not kp_verified_exact_doi
+                            or has_polarity_or_catastrophic_content_conflict(features)
+                        )
                     ):
                         known_rules.append("R-CONTENT-MISMATCH")
                         kp_mismatched.append("content")
@@ -1198,7 +1214,7 @@ class NeuroSymbolicChecker:
                                 known_rules.append("R-VENUE-MISMATCH")
 
                     if citation.authors and known_candidate.authors:
-                        if inherited_full_authors or len(known_candidate.authors) >= 4:
+                        if inherited_full_authors:
                             if (
                                 bool(
                                     author_match_details(

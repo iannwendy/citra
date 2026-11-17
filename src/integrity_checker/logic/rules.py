@@ -208,6 +208,35 @@ def _extract_surname_and_initial(author_str: object) -> tuple[str, str]:
     return last_tok.lower(), first_tok[0].lower()
 
 
+def has_polarity_or_catastrophic_content_conflict(features: MatchFeatures) -> bool:
+    """Return True if `features` shows catastrophic semantic misalignment (< 0.25) or an explicit
+    polarity/refutation cue in its cited sentence(s) (or lacks sentence text in synthetic unit tests)."""
+    if getattr(features, "stance_label", "") != "contradiction_risk":
+        return False
+    score = float(getattr(features, "content_alignment_score", 0.0) or 0.0)
+    if 0.0 < score < 0.25 and not getattr(features, "content_is_aligned", False):
+        return True
+    sents = [str(getattr(features, "best_cited_sentence", "") or "").strip()]
+    for occ in getattr(features, "occurrence_alignments", None) or []:
+        if isinstance(occ, dict) and occ.get("focal_sentence"):
+            sents.append(str(occ["focal_sentence"]).strip())
+    sents = [s for s in sents if s]
+    if not sents:
+        return True
+    from integrity_checker.matching.semantic import (
+        _DIRECT_REFUTATION_RE,
+        _EXPLICIT_CONTRADICTION_NEGATION_RE,
+        _STRONG_POSITIVE_CLAIM_RE,
+    )
+
+    return any(
+        _DIRECT_REFUTATION_RE.search(s)
+        or _EXPLICIT_CONTRADICTION_NEGATION_RE.search(s)
+        or _STRONG_POSITIVE_CLAIM_RE.search(s)
+        for s in sents
+    )
+
+
 def is_explicit_or_named_refutation_context(
     features: MatchFeatures,
     citation_authors: list[str] | None = None,
@@ -1093,7 +1122,10 @@ class SymbolicRules:
                 and not is_arxiv_vs_pub_doi
             )
         )
-        if has_real_doi_conflict or has_contradiction_risk_veto:
+        if has_real_doi_conflict or (
+            has_contradiction_risk_veto
+            and (not features.doi_exact_match or has_polarity_or_catastrophic_content_conflict(features))
+        ):
             return None
 
         # Perfect match: fuzzy title >= 0.90, title >= 0.95 AND author >= 0.8 AND year match
@@ -1201,7 +1233,7 @@ class SymbolicRules:
                 or ((features.doi_exact_match or is_arxiv_vs_pub_doi) and author_sim >= 0.35)
                 or (features.title_sim_fuzzy >= 0.98 and author_sim >= 0.35)
             )
-            and year_dist <= self.year_tolerance
+            and (year_dist <= self.year_tolerance or year_dist >= 900)
         ):
             confidence = max(0.0, 0.75 - style_penalty)
 
@@ -2206,6 +2238,10 @@ class SymbolicRules:
             can_enforce_content_mismatch
             and getattr(features, "stance_label", "") == "contradiction_risk"
         )
+        has_exact_doi_content_veto = bool(
+            has_contradiction_risk_veto
+            and has_polarity_or_catastrophic_content_conflict(features)
+        )
         has_severe_content_misalignment_veto = bool(
             can_enforce_content_mismatch
             and (
@@ -2232,7 +2268,7 @@ class SymbolicRules:
         # strongest VERIFIED verdict.
         if (
             doi_match
-            and not has_contradiction_risk_veto
+            and not has_exact_doi_content_veto
             and (
                 (
                     title_sim >= self.title_sim_verified

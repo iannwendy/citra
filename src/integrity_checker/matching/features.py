@@ -446,8 +446,22 @@ class FeatureCalculator:
                         if not citation.year:
                             return False
                         focal_txt = str(occ.get("focal_sentence") or "")
-                        yrs = [int(y) for y in re.findall(r"\b((?:19|20)\d{2})[a-z]?\b", focal_txt)]
-                        return bool(yrs) and all(abs(y - int(citation.year)) >= 3 for y in yrs)
+                        num_idx = getattr(citation, "numeric_index", None)
+                        if num_idx is None:
+                            m_num = re.match(r"^\s*\[(\d+)\]", str(getattr(citation, "raw_text", "") or ""))
+                            if m_num:
+                                num_idx = int(m_num.group(1))
+                        if num_idx is not None and re.search(rf"\[\s*{int(num_idx)}\s*\]", focal_txt):
+                            return False
+                        callout_yrs = [
+                            int(m.group(1) or m.group(2))
+                            for m in re.finditer(
+                                r"(?:\b[A-Z][A-Za-z'\-]+(?:\s+(?:and|&)\s+[A-Z][A-Za-z'\-]+|\s+et\s+al\.)?\s*\(((?:19|20)\d{2})[a-z]?\)"
+                                r"|\([A-Z][^()\n]{1,65}?,\s*((?:19|20)\d{2})[a-z]?\))",
+                                focal_txt,
+                            )
+                        ]
+                        return bool(callout_yrs) and all(abs(y - int(citation.year)) >= 3 for y in callout_yrs)
 
                     primary_strongly_supported = bool(
                         (best_occ_score >= 0.50 or best_occ.get("is_aligned"))

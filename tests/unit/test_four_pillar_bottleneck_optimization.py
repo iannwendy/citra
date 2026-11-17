@@ -1452,5 +1452,185 @@ class TestHostileReviewerAndProductionParityRegressions:
         assert out_undated_exact.label == ValidationLabel.VERIFIED
         assert "year" not in out_undated_exact.mismatched_fields
 
+    def test_known_papers_offline_full_20_author_wolf_and_corrected_9_seminal_entries_verify(self) -> None:
+        """Offline known_papers checks must verify full 20-author Wolf et al. (2020) and all 9 corrected
+        seminal co-author lists without false METADATA_ERROR (['author'])."""
+        checker = NeuroSymbolicChecker(enable_content_alignment=False)
+        empty_src = SourceResult(
+            citation_raw="",
+            candidates=[],
+            sources_queried=["local_db"],
+            sources_succeeded=[],
+        )
+        wolf_cit = Citation(
+            raw_text="Wolf, T., Debut, L., Sanh, V., Chaumond, J., Delangue, C., Moi, A., Cistac, P., Rault, T., Louf, R., Funtowicz, M., Davison, J., Shleifer, S., von Platen, P., Ma, C., Jernite, Y., Plu, J., Xu, C., Le Scao, T., Gugger, S., & Rush, A. M. (2020). Transformers: State-of-the-Art Natural Language Processing. EMNLP.",
+            authors=[
+                "Wolf, T.", "Debut, L.", "Sanh, V.", "Chaumond, J.", "Delangue, C.",
+                "Moi, A.", "Cistac, P.", "Rault, T.", "Louf, R.", "Funtowicz, M.",
+                "Davison, J.", "Shleifer, S.", "von Platen, P.", "Ma, C.", "Jernite, Y.",
+                "Plu, J.", "Xu, C.", "Le Scao, T.", "Gugger, S.", "Rush, A. M.",
+            ],
+            year=2020,
+            title="Transformers: State-of-the-Art Natural Language Processing",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        assert checker.check(wolf_cit, empty_src, mapping_status=CitationMappingStatus.MATCHED).label == ValidationLabel.VERIFIED
+
+        for title_s, year_i, authors_l in [
+            ("High-Resolution Image Synthesis with Latent Diffusion Models", 2022, ["Rombach, R.", "Blattmann, A.", "Lorenz, D.", "Esser, P.", "Ommer, B."]),
+            ("Modeling Relational Data with Graph Convolutional Networks", 2018, ["Schlichtkrull, M.", "Kipf, T. N.", "Bloem, P.", "van den Berg, R.", "Titov, I.", "Welling, M."]),
+            ("Universal Sentence Encoder", 2018, ["Cer, D.", "Yang, Y.", "Kong, S.", "Hua, N."]),
+            ("One Billion Word Benchmark for Measuring Progress in Language Modeling", 2013, ["Chelba, C.", "Mikolov, T.", "Schuster, M.", "Ge, Q.", "Brants, T."]),
+            ("Google's Neural Machine Translation System: Bridging the Gap between Human and Machine Translation", 2016, ["Wu, Y.", "Schuster, M.", "Chen, Z.", "Le, Q. V.", "Norouzi, M."]),
+            ("Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation", 2014, ["Cho, K.", "van Merrienboer, B.", "Gulcehre, C.", "Bahdanau, D."]),
+        ]:
+            cit_s = Citation(
+                raw_text=f"{', '.join(authors_l)} ({year_i}). {title_s}.",
+                authors=authors_l,
+                year=year_i,
+                title=title_s,
+                citation_type=CitationType.REFERENCE_LIST,
+            )
+            res_s = checker.check(cit_s, empty_src, mapping_status=CitationMappingStatus.MATCHED)
+            assert res_s.label == ValidationLabel.VERIFIED, f"Unexpected {res_s.label} ({res_s.mismatched_fields}) on {title_s}"
+
+    def test_problem_motivation_fail_to_hyphen_compounds_exact_doi_body_and_wmt_year(self) -> None:
+        """Problem-motivation 'fail to' clauses, hyphenated 'pre-train' vs 'pretrains' compounds,
+        exact-DOI body-section citations, and 'WMT 2014' dataset years must work without false positives/negatives."""
+        vas_ev = "Experiments on two machine translation tasks show these models to be superior in quality."
+        for motiv_sent in [
+            "Traditional bag-of-words representations fail to capture contextual polysemy (Peters et al., 2018).",
+            "Recurrent neural networks fail to parallelize across long token sequences (Vaswani et al., 2017).",
+        ]:
+            assert (
+                SemanticMatcher.check_claim_stance(
+                    motiv_sent,
+                    vas_ev,
+                    0.68,
+                    has_abstract=True,
+                    source_abstract=vas_ev,
+                    source_title="Attention Is All You Need",
+                )
+                == "supported"
+            )
+
+        # Hyphen compound symmetry: 'pretrains' / 'subword' vs 'pre-training' / 'sub-word'
+        bert_abs = (
+            "We introduce a new language representation model called BERT, designed to pre-train "
+            "deep bidirectional representations from unlabeled text over sub-word vocabularies."
+        )
+        bert_ctx = "BERT pretrains masked token objectives using subword vocabulary embeddings (Devlin et al., 2019)."
+        _, _, bert_aligned = SemanticMatcher.calibrate_monolingual_specificity(
+            0.61, bert_ctx, "BERT: Pre-training of Deep Bidirectional Transformers", bert_abs, is_cross_lingual=False
+        )
+        assert bert_aligned is True
+
+        # Exact-DOI ResNet (2016) citing Section 3 body mechanism without polarity refutation stays VERIFIED
+        checker = NeuroSymbolicChecker(enable_content_alignment=True)
+        he_cit = Citation(
+            raw_text="He, K., Zhang, X., Ren, S., & Sun, J. (2016). Deep Residual Learning for Image Recognition. CVPR. doi:10.1109/CVPR.2016.90",
+            authors=["He, K.", "Zhang, X.", "Ren, S.", "Sun, J."],
+            year=2016,
+            title="Deep Residual Learning for Image Recognition",
+            doi="10.1109/CVPR.2016.90",
+            venue="CVPR",
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        he_src = SourceResult(
+            citation_raw=he_cit.raw_text,
+            candidates=[
+                SourceCandidate(
+                    source_name="crossref",
+                    found=True,
+                    doi="10.1109/CVPR.2016.90",
+                    title="Deep Residual Learning for Image Recognition",
+                    authors=["Kaiming He", "Xiangyu Zhang", "Shaoqing Ren", "Jian Sun"],
+                    year="2016",
+                    venue="CVPR",
+                    abstract="Deeper neural networks are more difficult to train. We present a residual learning framework to ease the training of networks that are substantially deeper than those used previously.",
+                    confidence=0.99,
+                )
+            ],
+            sources_queried=["crossref", "openalex"],
+            sources_succeeded=["crossref", "openalex"],
+        )
+        he_v = checker.check(
+            he_cit,
+            he_src,
+            citation_context="Skip connections mitigate vanishing gradients during backpropagation through identity shortcut mappings (He et al., 2016).",
+            mapping_status=CitationMappingStatus.MATCHED,
+        )
+        assert he_v.label == ValidationLabel.VERIFIED
+
+        # Benchmark year 'WMT 2014' in numeric [1] refutation must NOT be suppressed as a conflicting callout year
+        from unittest.mock import MagicMock
+
+        mock_sem = MagicMock()
+        mock_sem.similarity.return_value = 1.0
+        mock_sem.check_content_alignment.return_value = MagicMock(
+            similarity=0.72,
+            confidence="high",
+            is_aligned=True,
+            best_cited_sentence="We evaluate Transformer self-attention on machine translation [1].",
+            best_evidence_sentence="We propose the Transformer.",
+            citation_intent="methodology",
+            stance_label="supported",
+            cross_lingual_detected=False,
+            bridged_concepts=[],
+        )
+        mock_sem.check_multi_context_alignment.return_value = [
+            {
+                "score": 0.72,
+                "confidence": "high",
+                "is_aligned": True,
+                "focal_sentence": "We evaluate Transformer self-attention on machine translation [1].",
+                "best_evidence_sentence": "We propose the Transformer.",
+                "intent": "methodology",
+                "stance": "supported",
+            },
+            {
+                "score": 0.54,
+                "confidence": "medium",
+                "is_aligned": False,
+                "focal_sentence": "However, on the WMT 2014 benchmark, [1] completely fails to improve translation quality and degrades performance.",
+                "best_evidence_sentence": "We propose the Transformer.",
+                "intent": "result_comparison",
+                "stance": "contradiction_risk",
+            },
+        ]
+        calc = FeatureCalculator(semantic=mock_sem, enable_content_alignment=True)
+        vas_cit = Citation(
+            raw_text="[1] Vaswani, A., et al. (2017). Attention Is All You Need.",
+            authors=["Vaswani, A."],
+            year=2017,
+            title="Attention Is All You Need",
+            numeric_index=1,
+            citation_type=CitationType.REFERENCE_LIST,
+        )
+        vas_cit._occurrence_contexts = [  # type: ignore[attr-defined]
+            "We evaluate Transformer self-attention on machine translation [1].",
+            "However, on the WMT 2014 benchmark, [1] completely fails to improve translation quality and degrades performance.",
+        ]
+        vas_src = SourceResult(
+            citation_raw=vas_cit.raw_text,
+            candidates=[
+                SourceCandidate(
+                    source_name="openalex",
+                    found=True,
+                    title="Attention Is All You Need",
+                    authors=["Vaswani, A."],
+                    year="2017",
+                    abstract="We propose the Transformer based solely on attention mechanisms for machine translation.",
+                    confidence=0.98,
+                )
+            ],
+            sources_queried=["openalex"],
+            sources_succeeded=["openalex"],
+        )
+        vas_feat = calc.compute(vas_cit, vas_src, citation_context=vas_cit._occurrence_contexts[0])  # type: ignore[attr-defined]
+        assert vas_feat.stance_label == "contradiction_risk"
+        assert vas_feat.content_is_aligned is False
+
+
 
 

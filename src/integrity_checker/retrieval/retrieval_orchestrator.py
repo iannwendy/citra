@@ -542,7 +542,7 @@ _KNOWN_PAPERS: dict[tuple[str, str], dict] = {
     ("chelba", "2013"): {
         "title": "One Billion Word Benchmark for Measuring Progress in Language Modeling",
         "doi": "10.48550/arXiv.1312.3005",
-        "authors": ["Chelba", "Miklos", "Bacchiani", "Brants"],
+        "authors": ["Chelba", "Mikolov", "Schuster", "Ge", "Brants", "Koehn", "Robinson"],
     },
     ("seo", "2017"): {
         "title": "Bidirectional Attention Flow for Machine Comprehension (BiDAF)",
@@ -562,7 +562,7 @@ _KNOWN_PAPERS: dict[tuple[str, str], dict] = {
     ("yu", "2018"): {
         "title": "QANet: Combining Local Convolution with Global Self-Attention for Reading Comprehension",
         "doi": "10.48550/arXiv.1804.09541",
-        "authors": ["Yu", "Dohan", "Lu", "Nachum"],
+        "authors": ["Yu", "Dohan", "Luong", "Zhao", "Chen", "Norouzi", "Le"],
     },
     ("joshi", "2017"): {
         "title": "TriviaQA: A Large Scale Distantly Supervised Challenge Dataset for Reading Comprehension",
@@ -592,7 +592,7 @@ _KNOWN_PAPERS: dict[tuple[str, str], dict] = {
     ("wu", "2016"): {
         "title": "Google's Neural Machine Translation System: Bridging the Gap between Human and Machine Translation",
         "doi": "10.48550/arXiv.1609.08144",
-        "authors": ["Wu", "Schuster", "Chen", "Norving"],
+        "authors": ["Wu", "Schuster", "Chen", "Le", "Norouzi"],
     },
     # ===== Additional known papers for evaluation (2026-09-25) =====
     ("velickovic", "2018"): {
@@ -616,7 +616,7 @@ _KNOWN_PAPERS: dict[tuple[str, str], dict] = {
     ("cho", "2014"): {
         "title": "Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation",
         "doi": "10.48550/arXiv.1406.1078",
-        "authors": ["Cho", "Van Merrienboer", "Gulcehre", "Bougares"],
+        "authors": ["Cho", "van Merrienboer", "Gulcehre", "Bahdanau", "Bougares", "Schwenk", "Bengio"],
     },
     ("luong", "2015"): {
         "title": "Effective Approaches to Attention-based Neural Machine Translation",
@@ -661,7 +661,7 @@ _KNOWN_PAPERS: dict[tuple[str, str], dict] = {
     ("cer", "2018"): {
         "title": "Universal Sentence Encoder",
         "doi": "10.48550/arXiv.1803.11175",
-        "authors": ["Cer", "Yang", "Luong", "Manning"],
+        "authors": ["Cer", "Yang", "Kong", "Hua"],
     },
     ("subramanian", "2018"): {
         "title": "Learning General Purpose Distributed Sentence Representations via Large Scale Multi-task Learning",
@@ -721,7 +721,7 @@ _KNOWN_PAPERS: dict[tuple[str, str], dict] = {
     ("rombach", "2022"): {
         "title": "High-Resolution Image Synthesis with Latent Diffusion Models",
         "doi": "10.48550/arXiv.2112.10752",
-        "authors": ["Rombach", "Blattmann", "Lorenz", "Eskew"],
+        "authors": ["Rombach", "Blattmann", "Lorenz", "Esser", "Ommer"],
     },
     ("elman", "1990"): {
         "title": "Finding Structure in Time",
@@ -787,7 +787,7 @@ _KNOWN_PAPERS: dict[tuple[str, str], dict] = {
     ("bar-haim", "2006"): {
         "title": "The Second Recognizing Textual Entailment Challenge",
         "doi": None,
-        "authors": ["Bar-Haim", "Dagan", "Greental", "Gottfried"],
+        "authors": ["Bar-Haim", "Dagan", "Dolan", "Ferro"],
     },
     ("santurkar", "2018"): {
         "title": "How Does Batch Normalization Help Optimization?",
@@ -797,7 +797,7 @@ _KNOWN_PAPERS: dict[tuple[str, str], dict] = {
     ("kumar", "2016"): {
         "title": "Ask Me Anything: Dynamic Memory Networks for Natural Language Processing",
         "doi": "10.48550/arXiv.1506.07285",
-        "authors": ["Kumar", "Irsoy", "Ondruska", "Gulcehre"],
+        "authors": ["Kumar", "Irsoy", "Ondruska", "Iyyer", "Bradbury"],
     },
     ("liwick", "2009"): {
         "title": "The First International Contest on Parse Analysis",
@@ -822,7 +822,7 @@ _KNOWN_PAPERS: dict[tuple[str, str], dict] = {
     ("schlichtkrull", "2018"): {
         "title": "Modeling Relational Data with Graph Convolutional Networks",
         "doi": "10.48550/arXiv.1703.06103",
-        "authors": ["Schlichtkrull", "Knoblock", "Mladenov", "Heckman"],
+        "authors": ["Schlichtkrull", "Kipf", "Bloem", "van den Berg", "Titov", "Welling"],
     },
     # Additional famous papers for evaluation (v1.4)
     ("radford", "2021"): {

@@ -719,6 +719,24 @@ class TestConfigsPackagingCiAndDocsParity:
         assert __version__ in claude
         assert __version__ in bench_report_md
         assert "_extract_distinctive_stems" not in train_script_src
+        import json
+
+        bench_json = json.loads(
+            (REPO_ROOT / "data" / "models" / "neuro_symbolic_benchmark_report.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        prop_acc_pct = f"{bench_json['baselines_on_test_set']['proposed']['accuracy'] * 100:.2f}"
+        prop_ece_str = f"{bench_json['neuro_symbolic_platt_calibrated']['calibration']['ece']:.4f}"
+        b5_id_acc_pct = f"{bench_json['baselines_on_test_set']['B5']['accuracy'] * 100:.2f}%"
+        b5_ood_acc_pct = f"{bench_json['ood_guardrail_stress_test']['overall']['pure_ml_b5']['accuracy'] * 100:.2f}%"
+        assert f"{prop_acc_pct}%25_Neuro--Symbolic" in readme
+        assert f"{prop_ece_str}_ECE" in readme
+        assert b5_id_acc_pct in readme
+        assert b5_ood_acc_pct in readme
+        for stale_tok in ("99.01%", "99.01%25", "0.9881", "0.0394"):
+            assert stale_tok not in readme
+            assert stale_tok not in bench_report_md
         assert "/api/auth/token" not in readme
         assert "/api/verify" not in readme
         assert "src/integrity_checker/ingestion" not in readme

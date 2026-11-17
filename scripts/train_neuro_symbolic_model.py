@@ -1266,7 +1266,7 @@ def build_split_dataset(
             url_status, url_code = "alive", 200
         elif err_mode == 3:
             # M4: Moderate title alteration without DOI, plus explicit R-CONTENT-MISMATCH sub-mode
-            # on real papers (yd=0, doi_ok=False, full/first-author citations across 6 natural academic templates)
+            # on real papers (yd=0, doi_ok=False, full/first-author citations across 12 natural academic templates)
             m4_idx = j // 5
             is_content_mismatch_submode = use_context and (m4_idx % 2 == 0)
             if is_content_mismatch_submode:
