@@ -248,4 +248,39 @@ describe('Task 3: Real transitions-ui-generation Engine & UIGenerationReveal', (
     expect(heroRoot).not.toBeNull();
     expect(heroRoot.style.opacity).not.toBe('0.001');
   });
+
+  it('synchronizes measured child border-radius onto .t-gen overlay so rounded cards never flash or clip square corners', () => {
+    vi.useFakeTimers();
+    const rafQueue: FrameRequestCallback[] = [];
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      rafQueue.push(cb);
+      return rafQueue.length;
+    });
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+
+    const { container, unmount } = render(
+      <UIGenerationReveal durationMs={1000}>
+        <div
+          data-testid="rounded-hero-card"
+          style={{ backgroundColor: 'rgb(255, 255, 255)', borderRadius: '10px' }}
+        >
+          Rounded Hero Card
+        </div>
+      </UIGenerationReveal>,
+    );
+
+    const targetWrap = container.querySelector('.t-gen-target') as HTMLElement;
+    const roundedCard = container.querySelector('[data-testid="rounded-hero-card"]') as HTMLElement;
+    const genOverlay = container.querySelector('.t-gen') as HTMLElement;
+    mockRect(targetWrap, { left: 20, top: 20, width: 632, height: 380 });
+    mockRect(roundedCard, { left: 20, top: 20, width: 632, height: 380 });
+
+    act(() => {
+      const batch = rafQueue.splice(0, rafQueue.length);
+      batch.forEach((cb) => cb(1000));
+    });
+
+    expect(genOverlay.style.borderRadius).toBe('10px');
+    unmount();
+  });
 });

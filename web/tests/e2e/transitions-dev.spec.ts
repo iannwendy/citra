@@ -32,6 +32,19 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
     const genWrap = page.locator('.t-gen-wrap').first();
     const genOverlay = page.locator('.t-gen').first();
     await expect(genWrap).toBeVisible();
+    const heroCornerGeometry = await page.evaluate(() => {
+      const wrap = document.querySelector('.t-gen-wrap');
+      const overlay = document.querySelector('.t-gen');
+      const card = wrap?.querySelector('.solva-glass-ring');
+      return {
+        wrapOverflow: wrap ? getComputedStyle(wrap).overflow : null,
+        overlayRadius: overlay ? getComputedStyle(overlay).borderTopLeftRadius : null,
+        cardRadius: card ? getComputedStyle(card).borderTopLeftRadius : null,
+      };
+    });
+    expect(heroCornerGeometry.wrapOverflow).toBe('visible');
+    expect(heroCornerGeometry.overlayRadius).toBe('10px');
+    expect(heroCornerGeometry.cardRadius).toBe('10px');
     await expect
       .poll(async () => genOverlay.locator('.t-gen-wire').count(), {
         timeout: 1500,

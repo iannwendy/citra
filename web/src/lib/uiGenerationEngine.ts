@@ -197,6 +197,10 @@ function parseColorAlpha(colorStr: string): number {
   return parts.length > 3 ? Number(parts[3]) : 1;
 }
 
+function parseCornerRadius(cs: CSSStyleDeclaration): number {
+  return parseFloat(cs.borderTopLeftRadius) || parseFloat(cs.borderRadius) || 0;
+}
+
 export function measureTarget(
   el: HTMLElement,
   opts: { maxParts?: number; keys?: number } = {},
@@ -236,7 +240,7 @@ export function measureTarget(
     return false;
   };
 
-  let radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+  let radius = parseCornerRadius(getComputedStyle(el));
 
   const walk = (node: Element) => {
     for (const c of Array.from(node.children)) {
@@ -255,7 +259,7 @@ export function measureTarget(
       }
 
       if (Math.abs(r.width - R.width) < 2 && Math.abs(r.height - R.height) < 2) {
-        radius = Math.max(radius, parseFloat(cs.borderTopLeftRadius) || 0);
+        radius = Math.max(radius, parseCornerRadius(cs));
       }
 
       if (c instanceof SVGSVGElement) {
@@ -330,7 +334,7 @@ export function measureTarget(
           kind: 'box',
           ...rel(r),
           r: Math.min(
-            parseFloat(cs.borderTopLeftRadius) || 0,
+            parseCornerRadius(cs),
             r.width / 2,
             r.height / 2,
           ),
@@ -491,6 +495,13 @@ export function runUIGeneration(
 
     svgRoot.replaceChildren();
     svgRoot.setAttribute('viewBox', `0 0 ${f2(w)} ${f2(h)}`);
+    const genOverlayEl = svgRoot.parentElement as HTMLElement | null;
+    if (genOverlayEl && M.r > 0) {
+      const existingRadius = parseCornerRadius(getComputedStyle(genOverlayEl));
+      if (existingRadius <= 0) {
+        genOverlayEl.style.borderRadius = `${Number(M.r.toFixed(2))}px`;
+      }
+    }
     if (canvasEl) {
       canvasEl.style.opacity = '1';
       canvasEl.style.clipPath = 'inset(0px 0px 0px 0px)';
@@ -774,11 +785,12 @@ export function runUIGeneration(
       { class: 't-gen-label t-gen-label--tag', opacity: 0 },
       svgRoot,
     );
+    const handleInset = Math.max(3, Math.round(M.r * 0.35 + 2.5));
     const cardHandles = [
-      [3, 3, 0.17],
-      [w - 3, 3, 0.17],
-      [w - 3, h - 3, 0.37],
-      [3, h - 3, 0.37],
+      [handleInset, handleInset, 0.17],
+      [w - handleInset, handleInset, 0.17],
+      [w - handleInset, h - handleInset, 0.37],
+      [handleInset, h - handleInset, 0.37],
     ].map(([hx, hy, at]) => ({
       el: createSvg(
         'rect',

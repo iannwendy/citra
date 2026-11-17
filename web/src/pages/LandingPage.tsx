@@ -1084,6 +1084,7 @@ function SolvaHeroSection({
             >
               <div className="lg:absolute lg:top-[52px] lg:left-[52px] lg:right-[-24px]">
                 <UIGenerationReveal
+                  className="rounded-[10px]"
                   steps={
                     lang === 'vi'
                       ? [
