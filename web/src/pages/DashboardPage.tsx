@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -20,9 +20,21 @@ import {
   GitBranch,
   AlertCircle,
   Lock,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
+import { EssaySortSelect } from '@/components/EssaySortSelect';
+import {
+  DEFAULT_ESSAY_SORT,
+  sortEssays,
+  toggleEssayColumnSort,
+  getEssayColumnAriaSort,
+  type EssaySortOption,
+  type EssaySortColumn,
+} from '@/lib/essaySort';
 import { SCHOLARLY_APIS_LABEL } from '@/lib/productFacts';
 import {
   FileFormatIcon,
@@ -76,6 +88,7 @@ export function DashboardPage() {
   } = useDashboardStats();
   const deleteMutation = useDeleteEssay();
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<EssaySortOption>(DEFAULT_ESSAY_SORT);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
@@ -101,10 +114,42 @@ export function DashboardPage() {
     }
   };
 
-  // Filter essays by search query
-  const filteredEssays = essays.filter((essay) =>
-    essay.filename.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter essays by search query and apply active sort order
+  const filteredEssays = useMemo(() => {
+    const filtered = essays.filter((essay) =>
+      essay.filename.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    return sortEssays(filtered, sortBy);
+  }, [essays, searchQuery, sortBy]);
+
+  const renderSortHeaderButton = (column: EssaySortColumn, label: string) => {
+    const ariaSort = getEssayColumnAriaSort(sortBy, column);
+    const isActive = ariaSort !== 'none';
+    return (
+      <button
+        type="button"
+        data-testid={`dashboard-sort-col-${column}`}
+        onClick={() => setSortBy((prev) => toggleEssayColumnSort(prev, column))}
+        className={`group/sort inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 rounded ${
+          isActive
+            ? 'text-indigo-600 dark:text-indigo-400 font-bold'
+            : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+        }`}
+      >
+        <span>{label}</span>
+        {ariaSort === 'ascending' ? (
+          <ArrowUp className="h-3 w-3 shrink-0" aria-hidden="true" />
+        ) : ariaSort === 'descending' ? (
+          <ArrowDown className="h-3 w-3 shrink-0" aria-hidden="true" />
+        ) : (
+          <ArrowUpDown
+            className="hidden lg:inline-block h-3 w-3 opacity-45 group-hover/sort:opacity-90 shrink-0 transition-opacity"
+            aria-hidden="true"
+          />
+        )}
+      </button>
+    );
+  };
 
   // Stat cards data
   const statCards = [
@@ -286,8 +331,8 @@ export function DashboardPage() {
       {/* IDE Window Container for Document Registry & Search */}
       <Card className="p-0 overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
         {/* Top Window Chrome Bar */}
-        <div className="px-4 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+        <div className="px-4 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-wrap shrink-0">
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-red-400/80 inline-block" />
               <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80 inline-block" />
@@ -305,29 +350,32 @@ export function DashboardPage() {
             </Badge>
           </div>
 
-          {/* Search Input inside Chrome Bar */}
-          <div className="relative w-full sm:w-80">
-            <Search
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none"
-              aria-hidden="true"
-            />
-            <Input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('dashboard.searchPlaceholder')}
-              aria-label="Search documents"
-              className="t-clear-input h-9 pl-9 pr-8 text-xs rounded-xl bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                aria-label="Clear search"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-              >
-                <XCircle className="h-4 w-4" />
-              </button>
-            )}
+          {/* Sort & Search Controls inside Chrome Bar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full xl:w-auto min-w-0">
+            <EssaySortSelect value={sortBy} onChange={setSortBy} />
+            <div className="relative w-full sm:flex-1 xl:flex-none xl:w-64 2xl:w-72 min-w-0">
+              <Search
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none"
+                aria-hidden="true"
+              />
+              <Input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t('dashboard.searchPlaceholder')}
+                aria-label="Search documents"
+                className="t-clear-input h-9 pl-9 pr-8 text-xs rounded-xl bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Clear search"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                >
+                  <XCircle className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -383,17 +431,29 @@ export function DashboardPage() {
           <Table className="t-skel-reveal block md:table">
             <TableHeader className="hidden md:table-header-group">
               <TableRow className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200/80 dark:border-slate-800">
-                <TableHead className="w-full font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-3.5 xl:px-5">
-                  {t('dashboard.tableDocument')}
+                <TableHead
+                  aria-sort={getEssayColumnAriaSort(sortBy, 'name')}
+                  className="w-full font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-3.5 xl:px-5"
+                >
+                  {renderSortHeaderButton('name', t('dashboard.tableDocument'))}
                 </TableHead>
-                <TableHead className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-2.5 xl:px-4">
-                  {t('dashboard.tablePages')}
+                <TableHead
+                  aria-sort={getEssayColumnAriaSort(sortBy, 'pages')}
+                  className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-2 xl:px-4"
+                >
+                  {renderSortHeaderButton('pages', t('dashboard.tablePages'))}
                 </TableHead>
-                <TableHead className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-2.5 xl:px-4">
-                  CIS
+                <TableHead
+                  aria-sort={getEssayColumnAriaSort(sortBy, 'cis')}
+                  className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-2 xl:px-4"
+                >
+                  {renderSortHeaderButton('cis', 'CIS')}
                 </TableHead>
-                <TableHead className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-2.5 xl:px-4">
-                  {t('dashboard.tableUploaded')}
+                <TableHead
+                  aria-sort={getEssayColumnAriaSort(sortBy, 'date')}
+                  className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-2 xl:px-4"
+                >
+                  {renderSortHeaderButton('date', t('dashboard.tableUploaded'))}
                 </TableHead>
                 <TableHead className="whitespace-nowrap font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400 py-3 px-3.5 xl:px-5 text-right">
                   {t('dashboard.tableActions')}
@@ -511,7 +571,7 @@ export function DashboardPage() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="py-0 md:py-4 px-0 md:px-2.5 xl:px-4 whitespace-nowrap flex items-center justify-between md:table-cell">
+                  <TableCell className="py-0 md:py-4 px-0 md:px-2 xl:px-4 whitespace-nowrap flex items-center justify-between md:table-cell">
                     <span className="md:hidden text-[11px] font-mono uppercase text-slate-400">
                       {t('dashboard.tablePages')}
                     </span>
@@ -519,7 +579,7 @@ export function DashboardPage() {
                       {essay.num_pages}
                     </span>
                   </TableCell>
-                  <TableCell className="py-0 md:py-4 px-0 md:px-2.5 xl:px-4 whitespace-nowrap flex items-center justify-between md:table-cell">
+                  <TableCell className="py-0 md:py-4 px-0 md:px-2 xl:px-4 whitespace-nowrap flex items-center justify-between md:table-cell">
                     <span className="md:hidden text-[11px] font-mono uppercase text-slate-400">
                       CIS
                     </span>
@@ -530,7 +590,7 @@ export function DashboardPage() {
                       {cisDisplay}
                     </span>
                   </TableCell>
-                  <TableCell className="py-0 md:py-4 px-0 md:px-2.5 xl:px-4 whitespace-nowrap flex items-center justify-between md:table-cell">
+                  <TableCell className="py-0 md:py-4 px-0 md:px-2 xl:px-4 whitespace-nowrap flex items-center justify-between md:table-cell">
                     <span className="md:hidden text-[11px] font-mono uppercase text-slate-400">
                       {t('dashboard.tableUploaded')}
                     </span>

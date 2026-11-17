@@ -204,7 +204,16 @@
     "deleteConfirmTitle": "Xóa tài liệu này?",
     "deleteConfirmMessage": "Tài liệu và kết quả phân tích sẽ bị xóa vĩnh viễn. Không thể hoàn tác hành động này.",
     "documentDeleted": "Đã xóa tài liệu",
-    "deleteFailed": "Xóa tài liệu thất bại"
+    "deleteFailed": "Xóa tài liệu thất bại",
+    "sortAriaLabel": "Sắp xếp tài liệu",
+    "sortDateDesc": "Ngày tải: Mới nhất",
+    "sortDateAsc": "Ngày tải: Cũ nhất",
+    "sortNameAsc": "Tên tệp: A → Z",
+    "sortNameDesc": "Tên tệp: Z → A",
+    "sortCisDesc": "Điểm CIS: Cao → Thấp",
+    "sortCisAsc": "Điểm CIS: Thấp → Cao",
+    "sortPagesDesc": "Số trang: Nhiều → Ít",
+    "sortPagesAsc": "Số trang: Ít → Nhiều"
   },
   "upload": {
     "title": "Kiểm tra mới",

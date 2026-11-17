@@ -873,10 +873,12 @@ describe('DashboardPage, HistoryPage job lifecycle badges & AccountManagementPag
     expect(screen.getByTestId('history-essay-cis-804').textContent).toBe('CIS: 92/100');
 
     const historyLinks = screen.getAllByTestId('essay-item');
-    expect(historyLinks[0]?.getAttribute('href')).toBe('/verification/processing/801');
-    expect(historyLinks[1]?.getAttribute('href')).toBe('/verification/processing/802');
-    expect(historyLinks[2]?.getAttribute('href')).toBe('/verification/processing/803');
-    expect(historyLinks[3]?.getAttribute('href')).toBe('/verification/report/804');
+    expect(historyLinks.map((el) => el.getAttribute('href'))).toEqual([
+      '/verification/report/804',
+      '/verification/processing/803',
+      '/verification/processing/802',
+      '/verification/processing/801',
+    ]);
   });
 
   it('AccountManagementPage renders Plan / Quota column with tier badge + used/limit, Unlimited for admin, and graceful — when quota is undefined', async () => {

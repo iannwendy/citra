@@ -204,7 +204,16 @@
     "deleteConfirmTitle": "Delete this document?",
     "deleteConfirmMessage": "This will permanently remove the document and its analysis. This action cannot be undone.",
     "documentDeleted": "Document deleted",
-    "deleteFailed": "Delete failed"
+    "deleteFailed": "Delete failed",
+    "sortAriaLabel": "Sort documents",
+    "sortDateDesc": "Date: Newest first",
+    "sortDateAsc": "Date: Oldest first",
+    "sortNameAsc": "Name: A → Z",
+    "sortNameDesc": "Name: Z → A",
+    "sortCisDesc": "CIS: High → Low",
+    "sortCisAsc": "CIS: Low → High",
+    "sortPagesDesc": "Pages: Most → Fewest",
+    "sortPagesAsc": "Pages: Fewest → Most"
   },
   "upload": {
     "title": "New Verification",

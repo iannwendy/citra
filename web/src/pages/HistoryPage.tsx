@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -17,6 +17,12 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/contexts/ToastContext';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
+import { EssaySortSelect } from '@/components/EssaySortSelect';
+import {
+  DEFAULT_ESSAY_SORT,
+  sortEssays,
+  type EssaySortOption,
+} from '@/lib/essaySort';
 import {
   FileFormatIcon,
   getDocumentFormat,
@@ -47,6 +53,7 @@ export function HistoryPage() {
   } = useEssays();
   const deleteMutation = useDeleteEssay();
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<EssaySortOption>(DEFAULT_ESSAY_SORT);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
@@ -72,9 +79,12 @@ export function HistoryPage() {
     }
   };
 
-  const filteredItems = items.filter((item) =>
-    item.filename.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredItems = useMemo(() => {
+    const filtered = items.filter((item) =>
+      item.filename.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    return sortEssays(filtered, sortBy);
+  }, [items, searchQuery, sortBy]);
 
   const dateLocale = lang === 'vi' ? 'vi-VN' : 'en-US';
 
@@ -153,8 +163,8 @@ export function HistoryPage() {
       {/* IDE Window Container for Archive List */}
       <Card className="p-0 overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
         {/* Top Window Chrome */}
-        <div className="px-4 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+        <div className="px-4 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-wrap shrink-0">
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-red-400/80 inline-block" />
               <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80 inline-block" />
@@ -172,29 +182,32 @@ export function HistoryPage() {
             </Badge>
           </div>
 
-          {/* Search Input inside Chrome Bar */}
-          <div className="relative w-full sm:w-80">
-            <Search
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none"
-              aria-hidden="true"
-            />
-            <Input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t('dashboard.searchPlaceholder')}
-              aria-label="Search documents"
-              className="t-clear-input h-9 pl-9 pr-8 text-xs rounded-xl bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                aria-label="Clear search"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-              >
-                <XCircle className="h-4 w-4" />
-              </button>
-            )}
+          {/* Sort & Search Controls inside Chrome Bar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full xl:w-auto min-w-0">
+            <EssaySortSelect value={sortBy} onChange={setSortBy} />
+            <div className="relative w-full sm:flex-1 xl:flex-none xl:w-64 2xl:w-72 min-w-0">
+              <Search
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none"
+                aria-hidden="true"
+              />
+              <Input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t('dashboard.searchPlaceholder')}
+                aria-label="Search documents"
+                className="t-clear-input h-9 pl-9 pr-8 text-xs rounded-xl bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Clear search"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                >
+                  <XCircle className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
