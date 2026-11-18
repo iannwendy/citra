@@ -116,7 +116,7 @@ const COMPARISON_MATRIX: ComparisonRow[] = [
   {
     category_en: 'Scholarly Databases & Legal Registry',
     category_vi: 'CSDL Học thuật & Hệ thống Pháp luật Việt Nam',
-    basic: 'Local 127K + Crossref + OpenAlex + VN Legal',
+    basic: 'Local 128K+ + Crossref + OpenAlex + VN Legal',
     pro: '15+ Scholarly & Technical APIs (+DataCite, DOAJ, HAL, NCBI/bioRxiv, HF, RFC, Wayback, Retraction Watch)',
     ultra: 'All 15+ APIs + SerpAPI Google Scholar Fallback',
   },
@@ -695,7 +695,7 @@ export function PricingPage() {
                               'Dung lượng tối đa 5 MB / tệp tải lên',
                               'Giới hạn tối đa 15 trang & 30 trích dẫn / bài',
                               'Layer 1: Đối chiếu trích dẫn trong bài & Danh mục',
-                              'Tra cứu Local 127K papers, Crossref & OpenAlex',
+                              'Tra cứu Local 128K+ papers, Crossref & OpenAlex',
                               'Hệ phân loại 2 tầng 13 trạng thái & Điểm CIS',
                             ]
                           : [
@@ -703,7 +703,7 @@ export function PricingPage() {
                               'Maximum 5 MB file size per upload',
                               'Up to 15 pages & 30 citations per document',
                               'Layer 1 In-text <-> Bibliography Linking',
-                              'Local 127K DB, Crossref & OpenAlex lookup',
+                              'Local 128K+ DB, Crossref & OpenAlex lookup',
                               '13-state Two-Layer Taxonomy & CIS Score',
                             ]
                         ).map((feat) => (
@@ -1475,19 +1475,19 @@ export function PricingPage() {
                       }
                     />
                     <SolvaAnimatedMetric
-                      targetValue={98.6}
+                      targetValue={99.02}
                       suffix="%"
-                      decimals={1}
+                      decimals={2}
                       label={
                         lang === 'vi'
-                          ? 'Độ chính xác Neuro-Symbolic (F1 0.976)'
-                          : 'Neuro-Symbolic accuracy (0.976 F1)'
+                          ? 'Độ chính xác Neuro-Symbolic (Macro-F1 0.9888)'
+                          : 'Neuro-Symbolic accuracy (0.9888 F1)'
                       }
                     />
                     <SolvaAnimatedMetric
-                      targetValue={100}
+                      targetValue={99.93}
                       suffix="%"
-                      decimals={0}
+                      decimals={2}
                       label={
                         lang === 'vi'
                           ? 'Precision phát hiện ảo giác (0 oan sai)'
@@ -1716,7 +1716,7 @@ function PricingSolvaHeader({
           },
           {
             title: 'Kiểm định 120K bài báo',
-            desc: '98.6% Acc · 100% F1 ảo giác · 0.043 ECE',
+            desc: '99,02% Acc · 99,75% OOD · 0,0395 ECE',
             href: '/#benchmark-120k',
             icon: Sparkles,
           },
@@ -1748,7 +1748,7 @@ function PricingSolvaHeader({
           },
           {
             title: '120K-Paper Benchmark',
-            desc: '98.6% Acc · 100% Hallucination F1 · 0.043 ECE',
+            desc: '99.02% Acc · 99.75% OOD · 0.0395 ECE',
             href: '/#benchmark-120k',
             icon: Sparkles,
           },
