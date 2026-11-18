@@ -1631,15 +1631,50 @@ class TestHostileReviewerAndProductionParityRegressions:
         assert vas_feat.stance_label == "contradiction_risk"
         assert vas_feat.content_is_aligned is False
 
-    def test_local_db_known_papers_seed_stubs_and_affirmative_exact_doi_polarity(self) -> None:
+    def test_local_db_known_papers_seed_stubs_and_affirmative_exact_doi_polarity(
+        self, tmp_path
+    ) -> None:
         """Stale `source='known_papers'` rows in `local_papers.db` must NOT overwrite corrected
         `_KNOWN_PAPERS` co-authors or set `inherited_full_authors=True` on 12-to-14-author papers;
         and affirmative `_STRONG_POSITIVE_CLAIM_RE` phrases must NOT trip exact-DOI polarity conflict."""
         from integrity_checker.database.local_db import LocalDatabase
+        from integrity_checker.database.models import Paper
         from integrity_checker.retrieval.retrieval_orchestrator import RetrievalOrchestrator
 
+        stale_db = LocalDatabase(db_path=tmp_path / "stale_known_papers.db")
+        stale_db.add_paper(
+            Paper(
+                doi="10.48550/arxiv.1803.11175",
+                title="Universal Sentence Encoder",
+                authors=["Cer", "Yang", "Luong", "Manning"],
+                year=2018,
+                venue="NeurIPS",
+                source="known_papers",
+            )
+        )
+        stale_db.add_paper(
+            Paper(
+                doi="10.48550/arxiv.2302.13971",
+                title="LLaMA: Open and Efficient Foundation Language Models",
+                authors=["Touvron", "Lavril", "Izacard", "Martinet"],
+                year=2023,
+                venue="ICLR",
+                source="known_papers",
+            )
+        )
+        stale_db.add_paper(
+            Paper(
+                doi="10.48550/arxiv.2103.00020",
+                title="Learning Transferable Visual Models From Natural Language Supervision",
+                authors=["Radford", "Kim", "Hallacy", "Ramesh"],
+                year=2021,
+                venue="NeurIPS",
+                source="known_papers",
+            )
+        )
+
         checker = NeuroSymbolicChecker(enable_content_alignment=True)
-        orch = RetrievalOrchestrator(local_db=LocalDatabase(), use_local_db=True)
+        orch = RetrievalOrchestrator(local_db=stale_db, use_local_db=True)
 
         # 1. Cer et al. (2018) Universal Sentence Encoder via real LocalDatabase arXiv lookup
         cer_real = Citation(
