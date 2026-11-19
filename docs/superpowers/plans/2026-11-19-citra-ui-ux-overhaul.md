@@ -137,22 +137,22 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
 **Interfaces:**
 - Consumes: `scroll-padding-top: 88px` from Task 0.1; Global Constraint 5 statutory disclosures.
 
-- [ ] **Step 1: Update & extend `web/src/pages/PrivacyCompliance.test.tsx`**
+- [x] **Step 1: Update & extend `web/src/pages/PrivacyCompliance.test.tsx`**
   Update `[DLCN-01]` to assert that `PrivacyPolicyPage` renders an official `"CHÍNH SÁCH BẢO VỆ DỮ LIỆU CÁ NHÂN · PHIÊN BẢN 1.0"` / `"OFFICIAL PERSONAL DATA PROTECTION NOTICE · v1.0"` badge with **zero** `LEGAL DRAFT`, `BẢN NHÁP PHÁP LÝ`, `[CHECK:`, or `[KIỂM TRA:` substrings; assert primary Data Inventory rows present human-friendly field descriptions while preserving a collapsible `"Chi tiết trường kỹ thuật / Technical Schema"` disclosure (retaining `card_last4` visibility under `Dữ liệu Nhạy cảm (1)` and all `91/2025/QH15` / `356/2025/NĐ-CP` statutory strings); assert header nav items fit on a single row without 2-line wrapping.
-- [ ] **Step 2: Run `PrivacyCompliance.test.tsx` to confirm failure**
+- [x] **Step 2: Run `PrivacyCompliance.test.tsx` to confirm failure**
   Run: `cd web && npx vitest run src/pages/PrivacyCompliance.test.tsx`
   Expected: FAIL (`LEGAL DRAFT` and `[KIỂM TRA:` currently present).
-- [ ] **Step 3: Refactor `web/src/pages/PrivacyPolicyPage.tsx`**
+- [x] **Step 3: Refactor `web/src/pages/PrivacyPolicyPage.tsx`**
   1. Replace the `LEGAL DRAFT` warning banner and all `[CHECK: ...]` / `[KIỂM TRA: ...]` placeholders with finalized, accurate CITRA academic deployment statements.
   2. Rewrite primary Data Matrix descriptions in clear, reassuring non-tech prose (`Ảnh đại diện tải lên`, `Tệp bản thảo PDF/Word`, `4 số cuối thẻ thanh toán`), placing internal schema identifiers (`avatar_path`, `privacy_consented_at`, `vnp_bank_code`, `card_last4`) in clean monospace pills/expandable schema details.
   3. Simplify the top `PrivacyPolicyPage` navbar to match the global single-line header (moving the 5 policy section jump links into a sleek sticky sub-navigation bar below the hero so `1440px` never wraps onto 2 lines).
   4. Remove lingering mid-scroll `blur(...)` state on Section 05 so text renders razor-sharp immediately upon reveal.
-- [ ] **Step 4: Run full frontend verification gate**
+- [x] **Step 4: Run full frontend verification gate**
   Run: `cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
   Expected: PASS.
-- [ ] **Step 5: Run Triad Review & Critic Loop + Browser Check (`/privacy` at `1440×900` & `390×844`, Light & Dark, EN & VI)**
+- [x] **Step 5: Run Triad Review & Critic Loop + Browser Check (`/privacy` at `1440×900` & `390×844`, Light & Dark, EN & VI)**
   Verify zero draft banners, crisp typography without scroll blur, single-line header, and 100% Vietnamese PDPL legal clarity; loop until `APPROVED`.
-- [ ] **Step 6: Tick checkboxes & commit**
+- [x] **Step 6: Tick checkboxes & commit**
   ```bash
   git add web/src/pages/PrivacyPolicyPage.tsx web/src/pages/PrivacyCompliance.test.tsx
   git commit -m "fix(privacy): finalize production PDPL policy copy, remove draft placeholders, and fix header wrapping"
