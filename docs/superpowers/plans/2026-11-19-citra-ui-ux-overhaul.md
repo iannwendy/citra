@@ -473,21 +473,21 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
 **Interfaces:**
 - Consumes: Global Constraint 4 (`300ms` open / `190ms` close FAQ accordion timing invariant).
 
-- [ ] **Step 1: Write failing tests in `web/src/pages/LandingInteractiveMotion.test.tsx`**
+- [x] **Step 1: Write failing tests in `web/src/pages/LandingInteractiveMotion.test.tsx`**
   Assert:
   1. Clicking the header dropdown (`Platform` / `Dành cho ai`) opens the menu, and pressing `Escape` or clicking outside (`document.body`) dismisses it cleanly.
   2. `SolvaScrollReveal` immediately shows content without blank white gaps when anchor-jumped or when `prefers-reduced-motion: reduce` is active.
-- [ ] **Step 2: Run `LandingInteractiveMotion.test.tsx` to confirm failure**
+- [x] **Step 2: Run `LandingInteractiveMotion.test.tsx` to confirm failure**
   Run: `cd web && npx vitest run src/pages/LandingInteractiveMotion.test.tsx`
   Expected: FAIL.
-- [ ] **Step 3: Implement outside-click + `Escape` dismissal, asymmetric open/close polish, and instant anchor-scroll reveal**
+- [x] **Step 3: Implement outside-click + `Escape` dismissal, asymmetric open/close polish, and instant anchor-scroll reveal**
   Refine hover/press/drawer transitions across `LandingPage`, `PricingPage`, and `GuestInstantChecker` using `cubic-bezier(0.16, 1, 0.3, 1)` enter (`180–240ms`) and fast exit (`130–160ms`), keeping FAQ `300ms`/`190ms` intact.
-- [ ] **Step 4: Run full frontend verification gate**
+- [x] **Step 4: Run full frontend verification gate**
   Run: `cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
   Expected: PASS.
-- [ ] **Step 5: Run Triad Review & Critic Loop + Browser Motion Check**
+- [x] **Step 5: Run Triad Review & Critic Loop + Browser Motion Check**
   Verify silky 60/120fps interactions, snappy dropdown dismissal, and zero blank scroll gaps; loop until `APPROVED`.
-- [ ] **Step 6: Tick checkboxes & commit**
+- [x] **Step 6: Tick checkboxes & commit**
   ```bash
   git add web/src/styles/transitions-dev.css web/src/pages/LandingPage.tsx web/src/pages/PricingPage.tsx web/src/components/landing/SolvaPrimitives.tsx web/src/pages/LandingInteractiveMotion.test.tsx
   git commit -m "polish(motion): add dropdown outside-click/Escape dismissal, anchor-reveal safety, and asymmetric motion curves"
