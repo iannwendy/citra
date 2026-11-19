@@ -275,7 +275,7 @@ export function AuthSplitShell({
               }
               className="ml-0.5 xl:ml-1 px-1.5 xl:px-2 py-0.5 rounded-[5px] border font-mono text-[9.5px] xl:text-[10px] font-medium whitespace-nowrap"
             >
-              <span className="hidden xl:inline">Engine: </span>SourceLogic v{APP_VERSION}
+              <span className="sr-only xl:not-sr-only">Engine: </span>SourceLogic v{APP_VERSION}
             </span>
           </Link>
 

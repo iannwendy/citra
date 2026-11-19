@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  IS_DEMO_EVALUATOR_MODE,
   SCHOLARLY_APIS_LABEL,
   SYMBOLIC_RULES_RANGE,
+  isDemoEvaluatorMode,
 } from '@/lib/productFacts';
 import {
   Check,
@@ -336,8 +336,7 @@ export function PricingPage() {
 
   const proPrice = billingCycle === 'annual' ? 16 : 20;
   const ultraPrice = billingCycle === 'annual' ? 160 : 200;
-  const demoEvaluatorMode =
-    IS_DEMO_EVALUATOR_MODE || import.meta.env.VITE_DEMO_MODE === 'true';
+  const demoEvaluatorMode = isDemoEvaluatorMode();
   const { containerRef: billingToggleRef, pillStyle: billingPill } =
     useSlidingPill<HTMLDivElement>(billingCycle);
   const PricingMainTag = user ? 'div' : 'main';
@@ -1543,7 +1542,12 @@ export function PricingPage() {
               ].map((item, idx) => {
                 const Icon = item.icon;
                 return (
-                  <SolvaScrollReveal key={item.title_en} delayMs={idx * 80} yOffset={24}>
+                  <SolvaScrollReveal
+                    key={item.title_en}
+                    delayMs={idx * 80}
+                    yOffset={24}
+                    className="h-full"
+                  >
                     <div
                       style={{
                         backgroundColor: 'var(--solva-surface)',
@@ -2104,7 +2108,7 @@ function PricingSolvaFAQSection({
           : 'Can I cancel auto-renewal or switch plans at any time?',
       a:
         lang === 'vi'
-          ? 'Có. Bạn có thể hủy gia hạn tự động hoặc kích hoạt lại chỉ với 1 cú nhấp chuột trong mục Cài đặt (Settings -> Quản lý Gói cước). Khi hủy gia hạn, bạn vẫn giữ nguyên toàn bộ quyền lợi Pro/Ultra cho đến hết chu kỳ đã thanh toán.'
+          ? 'Có. Bạn có thể hủy gia hạn tự động hoặc kích hoạt lại chỉ với 1 cú nhấp chuột trong mục Cài đặt (Cài đặt → Quản lý Gói cước). Khi hủy gia hạn, bạn vẫn giữ nguyên toàn bộ quyền lợi Pro/Ultra cho đến hết chu kỳ đã thanh toán.'
           : 'Yes. You can cancel or reactivate auto-renewal with one click from your Settings page. If you cancel, your Pro or Ultra features remain active through the end of your current billing period.',
     },
     {

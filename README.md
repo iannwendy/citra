@@ -55,7 +55,7 @@
 
 ## Overview & Brand Philosophy
 
-**CITRA** (*Essay Integrity Checker v3.84.2*) is a full-stack academic citation verification and bibliographic debugging platform developed as a Capstone Graduation Thesis (*Đồ án Tốt nghiệp CNTT*) at **Ton Duc Thang University (TDTU)**.
+**CITRA** (*Essay Integrity Checker v3.84.3*) is a full-stack academic citation verification and bibliographic debugging platform developed as a Capstone Graduation Thesis (*Đồ án Tốt nghiệp CNTT*) at **Ton Duc Thang University (TDTU)**.
 
 Large Language Models (LLMs) frequently hallucinate plausible-sounding references, conflate author lists, or fabricate publication years (`METADATA_ERROR` / `SUSPECTED_HALLUCINATION`). Meanwhile, traditional similarity checkers (e.g., Turnitin) measure text overlap rather than verifying whether cited references actually exist in canonical scholarly registries or whether in-text citations map cleanly to the bibliography.
 
@@ -449,7 +449,7 @@ essay-integrity-checker/
 ├── docker-compose.yml                  # Orchestrates web (:5173), api (:8000), and grobid (:8070)
 ├── docker-compose.prod.yml             # Production Nginx + TLS + worker deployment stack
 ├── Dockerfile                          # Python 3.11 + FastAPI + Sentence-BERT/ONNX backend image
-├── pyproject.toml                      # Python package metadata (v3.84.2), Ruff/Pytest config & `essay-check` CLI
+├── pyproject.toml                      # Python package metadata (v3.84.3), Ruff/Pytest config & `essay-check` CLI
 ├── CLAUDE.md                           # AI / Developer architectural quick-reference
 ├── README.md                           # Project documentation (this file)
 ├── src/

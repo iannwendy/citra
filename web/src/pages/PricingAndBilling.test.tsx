@@ -1666,6 +1666,7 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
 
   it('PricingPage hides evaluator test-card copy (4242, 4444, Stripe Demo) when VITE_DEMO_MODE is unset and renders encrypted Stripe & VNPay copy in EN and VI', async () => {
     try {
+      vi.stubEnv('VITE_DEMO_MODE', '');
       await i18n.changeLanguage('en');
       const { container: enContainer, unmount: unmountEn } = renderWithAuth(<PricingPage />, {
         user: null,
@@ -1693,12 +1694,15 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       expect(viText.toLowerCase()).not.toContain('thẻ kiểm thử');
       expect(viText.toLowerCase()).not.toContain('thẻ thử nghiệm');
       expect(viText.toLowerCase()).not.toContain('stripe demo');
+      expect(viText).not.toContain('Settings ->');
+      expect(viText).toContain('(Cài đặt → Quản lý Gói cước)');
       expect(viText).toMatch(/PCI-DSS/i);
       expect(viText).toMatch(/TLS 1\.3/i);
       expect(viText).toMatch(/Stripe/i);
       expect(viText).toMatch(/VNPay/i);
       unmountVi();
     } finally {
+      vi.unstubAllEnvs();
       await i18n.changeLanguage('en');
     }
   });
@@ -1784,6 +1788,9 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       );
       expect(authContainer.textContent ?? '').toContain(`Engine: SourceLogic v${APP_VERSION}`);
       expect(authContainer.textContent ?? '').toContain(`SourceLogic v${APP_VERSION}`);
+      const srPrefix = authContainer.querySelector('span.sr-only');
+      expect(srPrefix?.textContent).toBe('Engine: ');
+      expect(srPrefix?.className).toContain('xl:not-sr-only');
       const leftPanel = authContainer.firstElementChild?.firstElementChild as HTMLElement | null;
       expect(leftPanel).not.toBeNull();
       expect(leftPanel?.querySelectorAll('button').length).toBe(0);
