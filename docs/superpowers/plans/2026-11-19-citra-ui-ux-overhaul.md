@@ -402,19 +402,19 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
 **Interfaces:**
 - Consumes: `getPlainVerdictLabel` and `getPlainMappingLabel` from Task 0.1.
 
-- [ ] **Step 1: Write failing tests in `web/src/components/ComponentsI18n.test.tsx`**
+- [x] **Step 1: Write failing tests in `web/src/components/ComponentsI18n.test.tsx`**
   Assert `VerdictBadge` and `MappingStatusBadge` render clear localized labels and accessible `title` / tooltip action hints in both `en` and `vi` (with zero raw uppercase underscore strings like `SUSPECTED_HALLUCINATION` or `IN_TEXT_MISMATCH`), while keeping all existing `I18nAndHygiene.test.tsx` & `ReportRedesignUX.test.tsx` expectations intact; assert `UpgradeModal` renders friendly, benefit-focused Vietnamese & English copy.
-- [ ] **Step 2: Run `ComponentsI18n.test.tsx` & `I18nAndHygiene.test.tsx` to confirm failure**
+- [x] **Step 2: Run `ComponentsI18n.test.tsx` & `I18nAndHygiene.test.tsx` to confirm failure**
   Run: `cd web && npx vitest run src/components/ComponentsI18n.test.tsx src/pages/I18nAndHygiene.test.tsx`
   Expected: FAIL.
-- [ ] **Step 3: Enhance `VerdictBadge.tsx`, `MappingStatusBadge.tsx`, `UpgradeModal.tsx`, `en.json`, and `vi.json`**
+- [x] **Step 3: Enhance `VerdictBadge.tsx`, `MappingStatusBadge.tsx`, `UpgradeModal.tsx`, `en.json`, and `vi.json`**
   Wire human-friendly descriptions and `whitespace-nowrap` badge styling so badges never wrap mid-label on narrow table/card layouts.
-- [ ] **Step 4: Run full frontend verification gate**
+- [x] **Step 4: Run full frontend verification gate**
   Run: `cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
   Expected: PASS.
-- [ ] **Step 5: Run Triad Review & Critic Loop**
+- [x] **Step 5: Run Triad Review & Critic Loop**
   Verify badge clarity, contrast, and zero regressions across report/workspace tests; loop until `APPROVED`.
-- [ ] **Step 6: Tick checkboxes & commit**
+- [x] **Step 6: Tick checkboxes & commit**
   ```bash
   git add web/src/components/VerdictBadge.tsx web/src/components/MappingStatusBadge.tsx web/src/components/UpgradeModal.tsx web/src/i18n/locales/en.json web/src/i18n/locales/vi.json web/src/components/ComponentsI18n.test.tsx
   git commit -m "feat(workspace-ux): add plain-language tooltips and bilingual clarity to verdict, mapping, and upgrade components"
