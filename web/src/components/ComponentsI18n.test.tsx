@@ -392,6 +392,8 @@ describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & Up
     expect(viModal.innerHTML).not.toContain('class="truncate"');
     expect(viModal.textContent).toContain('400.000 ₫');
     expect(viModal.textContent).toContain('4.000.000 ₫');
+    expect(viModal.textContent).toContain('$1.920/năm');
+    expect(viModal.textContent).not.toContain('$1,920');
 
     fireEvent.click(screen.getByTestId('modal-cycle-monthly'));
     expect(viModal.textContent).toContain('500.000 ₫');

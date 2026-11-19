@@ -2479,4 +2479,82 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       await i18n.changeLanguage('en');
     }
   });
+
+  it('Task 3.3 Round 1 — PricingPage harmonizes non-tech copy across Platform dropdown, Section 3 quote/metrics, FAQ, and Footer, sets lang + data-lang, and removes dead Tailwind v4 tokens', async () => {
+    const forbiddenPricingPageJargon = [
+      /GROBID/i,
+      /TEI-XML/i,
+      /Sentence-BERT/i,
+      /MiniLM/i,
+      /ONNX/i,
+      /INT8/i,
+      /SerpAPI/i,
+      /Orthogonal Mapping/i,
+      /Citation Debugger/i,
+      /0[.,]0395 ECE/i,
+      /99[.,]75% OOD/i,
+      /mã DOI ảo giác/i,
+      /Class ZIP/i,
+      /L1 × L2/i,
+      /Neuro-Symbolic/i,
+    ];
+
+    try {
+      for (const locale of ['en', 'vi'] as const) {
+        await i18n.changeLanguage(locale);
+        const { container, unmount } = renderWithAuth(<PricingPage />, {
+          user: null,
+          initialEntries: ['/pricing'],
+        });
+
+        const root = screen.getByTestId('pricing-page');
+        expect(root.getAttribute('lang')).toBe(locale);
+        expect(root.getAttribute('data-lang')).toBe(locale);
+        expect(root.innerHTML).not.toContain('shadow-2xs');
+        expect(root.innerHTML).not.toContain('duration-250');
+
+        // Open Platform / Nền tảng dropdown so its items are included in DOM text audit
+        const nav = container.querySelector('nav[aria-label="Pricing Navigation"]') as HTMLElement;
+        const dropdownBtn = within(nav).getByRole('button', {
+          name: locale === 'vi' ? /Nền tảng/i : /Platform/i,
+        });
+        fireEvent.click(dropdownBtn);
+
+        // Expand all FAQ items in #pricing-faq
+        const faqButtons = Array.from(
+          container.querySelectorAll('#pricing-faq button[aria-expanded]'),
+        ) as HTMLButtonElement[];
+        expect(faqButtons.length).toBe(6);
+        for (const btn of faqButtons) {
+          if (btn.getAttribute('aria-expanded') === 'false') {
+            fireEvent.click(btn);
+          }
+        }
+
+        const fullPageText = container.textContent ?? '';
+        for (const pattern of forbiddenPricingPageJargon) {
+          expect(fullPageText).not.toMatch(pattern);
+        }
+
+        if (locale === 'vi') {
+          expect(nav.textContent).toContain('Thực nghiệm 120K');
+          expect(fullPageText).toContain('mã DOI không tồn tại');
+          expect(fullPageText).toContain('Thư viện & kho dữ liệu học thuật uy tín');
+          expect(fullPageText).toContain('Độ chính xác kiểm chứng trích dẫn');
+          expect(fullPageText).toContain('Độ chuẩn xác phát hiện nguồn ảo (0 kết luận oan)');
+          expect(fullPageText).toContain('99,02%');
+          expect(fullPageText).toContain('99,93%');
+        } else {
+          expect(nav.textContent).toContain('120K Benchmark');
+          expect(fullPageText).toContain('Trusted academic libraries & indexes');
+          expect(fullPageText).toContain('Overall citation verification accuracy');
+          expect(fullPageText).toContain('Unverified-source precision (zero false accusations)');
+        }
+
+        unmount();
+      }
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
 });

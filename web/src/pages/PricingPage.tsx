@@ -397,6 +397,8 @@ export function PricingPage() {
 
   return (
     <div
+      lang={lang}
+      data-lang={lang}
       className={`solva-editorial-root ${
         user ? 'rounded-[20px] pb-12' : 'min-h-screen overflow-x-clip'
       } selection:bg-[#1C1A15] selection:text-[#FBFAF6]`}
@@ -938,7 +940,7 @@ export function PricingPage() {
                               backgroundColor: 'var(--solva-btn-bg)',
                               color: 'var(--solva-btn-fg)',
                             }}
-                            className="w-[40px] h-[40px] rounded-[10px] flex items-center justify-center shrink-0 shadow-2xs"
+                            className="w-[40px] h-[40px] rounded-[10px] flex items-center justify-center shrink-0 shadow-sm"
                           >
                             <Zap className="w-[18px] h-[18px]" />
                           </div>
@@ -2032,16 +2034,16 @@ export function PricingPage() {
                 <div className="lg:col-span-7 p-4 sm:p-[28px] lg:pl-[36px] flex flex-col justify-between gap-[28px]">
                   <div className="space-y-[20px]">
                     <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-                      <blockquote className="font-solva-serif font-light text-[22px] sm:text-[28px] leading-[1.25] tracking-[-0.05em] max-w-[520px]">
+                      <blockquote className="font-solva-serif font-light text-[22px] sm:text-[28px] leading-[1.25] max-w-[520px]">
                         <span style={{ color: 'var(--solva-ink)' }}>
                           {lang === 'vi'
-                            ? '“Nâng cấp lên gói Pro & Ultra giúp hội đồng rà soát 120 khóa luận tốt nghiệp chỉ trong một buổi sáng, phát hiện chính xác mọi mã DOI ảo giác '
-                            : '“Upgrading to CITRA Pro & Ultra let our review committee audit 120 graduation theses in a single morning, catching every hallucinated DOI '}
+                            ? '“Nâng cấp lên gói Pro & Ultra giúp hội đồng rà soát 120 khóa luận tốt nghiệp chỉ trong một buổi sáng, phát hiện chính xác mọi mã DOI không tồn tại '
+                            : '“Upgrading to CITRA Pro & Ultra let our review committee audit 120 graduation theses in a single morning, catching every non-existent DOI '}
                         </span>
                         <span style={{ color: 'var(--solva-muted)' }}>
                           {lang === 'vi'
-                            ? `kèm bằng chứng truy vết quy tắc ${SYMBOLIC_RULES_RANGE} minh bạch.”`
-                            : `with verifiable ${SYMBOLIC_RULES_RANGE} symbolic rule traces.”`}
+                            ? `kèm đối chiếu nguồn gốc từng trường thông tin (${SYMBOLIC_RULES_RANGE}) minh bạch.”`
+                            : `with clear, field-by-field source checks (${SYMBOLIC_RULES_RANGE}).”`}
                         </span>
                       </blockquote>
 
@@ -2085,28 +2087,30 @@ export function PricingPage() {
                       decimals={0}
                       label={
                         lang === 'vi'
-                          ? 'CSDL học thuật & kỹ thuật liên hợp'
-                          : 'Federated scholarly & technical APIs'
+                          ? 'Thư viện & kho dữ liệu học thuật uy tín'
+                          : 'Trusted academic libraries & indexes'
                       }
                     />
                     <SolvaAnimatedMetric
                       targetValue={99.02}
                       suffix="%"
                       decimals={2}
+                      decimalSeparator={lang === 'vi' ? ',' : '.'}
                       label={
                         lang === 'vi'
-                          ? 'Độ chính xác Neuro-Symbolic (Macro-F1 0.9888)'
-                          : 'Neuro-Symbolic accuracy (0.9888 F1)'
+                          ? 'Độ chính xác kiểm chứng trích dẫn'
+                          : 'Overall citation verification accuracy'
                       }
                     />
                     <SolvaAnimatedMetric
                       targetValue={99.93}
                       suffix="%"
                       decimals={2}
+                      decimalSeparator={lang === 'vi' ? ',' : '.'}
                       label={
                         lang === 'vi'
-                          ? 'Precision phát hiện ảo giác (0 oan sai)'
-                          : 'Hallucination precision (0 false flags)'
+                          ? 'Độ chuẩn xác phát hiện nguồn ảo (0 kết luận oan)'
+                          : 'Unverified-source precision (zero false accusations)'
                       }
                     />
                   </div>
@@ -2234,8 +2238,8 @@ export function PricingPage() {
                           className="font-solva-sans text-[16px] font-normal leading-[23.2px] max-w-[420px]"
                         >
                           {lang === 'vi'
-                            ? 'Bắt đầu miễn phí ngay hôm nay với 3 lượt kiểm tra (.PDF, .DOCX, .BIB, .RIS) mỗi tháng, hoặc mở khóa toàn bộ sức mạnh Neuro-Symbolic với gói Pro.'
-                            : 'Start free today with 3 checks (.PDF, .DOCX, .BIB, .RIS) per month, or unlock the full Neuro-Symbolic pipeline with CITRA Pro.'}
+                            ? 'Bắt đầu miễn phí ngay hôm nay với 3 lượt kiểm tra (.PDF, .DOCX, .BIB, .RIS) mỗi tháng, hoặc nâng cấp lên gói Pro để tra cứu toàn diện hơn 15 thư viện học thuật và xuất báo cáo đầy đủ.'
+                            : 'Start free today with 3 checks (.PDF, .DOCX, .BIB, .RIS) per month, or upgrade to CITRA Pro for full 15+ academic library verification and complete exports.'}
                         </p>
                       </div>
 
@@ -2355,64 +2359,64 @@ function PricingSolvaHeader({
     lang === 'vi'
       ? [
           {
-            title: 'Kiến trúc 2 tầng',
-            desc: 'Tách biệt Mapping & Kiểm chứng nguồn',
+            title: 'Kiểm tra trích dẫn 2 bước',
+            desc: 'Đối chiếu trong bài & xác minh nguồn thật',
             href: '/#architecture',
             icon: Layers,
           },
           {
-            title: 'Trình gỡ lỗi trích dẫn',
-            desc: `Soi chiếu metadata & luật ${SYMBOLIC_RULES_RANGE}`,
-            href: '/#interactive-demo',
-            icon: FileSearch,
-          },
-          {
-            title: 'Quy trình 4 giai đoạn',
-            desc: 'Từ GROBID TEI tới Sentence-BERT + MiniLM ONNX',
+            title: 'Cách hoạt động',
+            desc: '4 bước rõ ràng từ tải bài đến xuất báo cáo',
             href: '/#how-it-works',
             icon: GitBranch,
           },
           {
-            title: 'Kiểm định 120K bài báo',
-            desc: '99,02% Acc · 99,75% OOD · 0,0395 ECE',
+            title: 'Kiểm tra thử trực quan',
+            desc: 'So sánh chi tiết bài viết với bản ghi thư viện',
+            href: '/#interactive-demo',
+            icon: FileSearch,
+          },
+          {
+            title: 'Độ tin cậy thực tế',
+            desc: 'Chính xác 99,02% trên 120.000 bài báo',
             href: '/#benchmark-120k',
             icon: Sparkles,
           },
           {
-            title: 'Phân quyền 3 vai trò',
-            desc: 'Sinh viên, Giảng viên & Quản trị',
+            title: 'Dành cho từng vai trò',
+            desc: 'Sinh viên, Giảng viên & Khoa / Trường',
             href: '/#workspaces',
             icon: Users,
           },
         ]
       : [
           {
-            title: '2-Layer Architecture',
-            desc: 'Orthogonal Mapping & Verification',
+            title: 'Two-Step Citation Check',
+            desc: 'In-text links & real source verification',
             href: '/#architecture',
             icon: Layers,
           },
           {
-            title: 'Citation Debugger',
-            desc: `Live metadata diff & rules ${SYMBOLIC_RULES_RANGE}`,
-            href: '/#interactive-demo',
-            icon: FileSearch,
-          },
-          {
-            title: 'Verification Pipeline',
-            desc: 'GROBID TEI to Sentence-BERT + MiniLM ONNX INT8',
+            title: 'How It Works',
+            desc: '4 clear steps from upload to clean report',
             href: '/#how-it-works',
             icon: GitBranch,
           },
           {
-            title: '120K-Paper Benchmark',
-            desc: '99.02% Acc · 99.75% OOD · 0.0395 ECE',
+            title: 'Live Citation Check',
+            desc: 'Compare cited details with library records',
+            href: '/#interactive-demo',
+            icon: FileSearch,
+          },
+          {
+            title: 'Proven Accuracy',
+            desc: '99.02% accuracy across 120,000 papers',
             href: '/#benchmark-120k',
             icon: Sparkles,
           },
           {
-            title: 'Role Workspaces',
-            desc: 'Student, Teacher & Admin views',
+            title: 'Built for Every Role',
+            desc: 'Students, Lecturers & Faculties',
             href: '/#workspaces',
             icon: Users,
           },
@@ -2440,7 +2444,7 @@ function PricingSolvaHeader({
             to="/"
             className="inline-flex items-center gap-[8px] rounded-[6px] whitespace-nowrap shrink-0 focus:outline-none"
           >
-            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
               <SourceLogicLogo size={18} />
             </span>
             <span
@@ -2724,8 +2728,8 @@ function PricingSolvaFAQSection({
           : 'Is the Basic ($0) tier really free forever?',
       a:
         lang === 'vi'
-          ? 'Hoàn toàn miễn phí trọn đời và không yêu cầu thẻ tín dụng. Mỗi tháng tài khoản Basic được cấp mới 3 lượt kiểm tra bản thảo (.PDF, .DOCX, .BIB, .RIS — tối đa 15 trang và 30 trích dẫn mỗi bài) cùng đầy đủ phân loại 2 tầng 13 trạng thái (L1 × L2).'
-          : 'Yes — Basic is free forever with no credit card required. Your quota automatically resets every month with 3 manuscript checks (.PDF, .DOCX, .BIB, .RIS — up to 15 pages and 30 citations per document).',
+          ? 'Hoàn toàn miễn phí trọn đời và không yêu cầu thẻ tín dụng. Mỗi tháng tài khoản Basic được cấp mới 3 lượt kiểm tra bản thảo (.PDF, .DOCX, .BIB, .RIS — tối đa 15 trang và 30 trích dẫn mỗi bài) cùng đầy đủ kết quả đối chiếu trích dẫn trong bài và xác minh nguồn thật.'
+          : 'Yes — Basic is free forever with no credit card required. Your quota automatically resets every month with 3 manuscript checks (.PDF, .DOCX, .BIB, .RIS — up to 15 pages and 30 citations per document) with complete in-text link and real-source verification.',
     },
     {
       id: 'pfaq-1',
@@ -2735,8 +2739,8 @@ function PricingSolvaFAQSection({
           : 'What unlocks immediately when I upgrade to Pro ($16/mo)?',
       a:
         lang === 'vi'
-          ? 'Gói Pro nâng hạn mức lên 50 tài liệu/tháng (tối đa 100 trang, 200 trích dẫn/bài), mở khóa toàn bộ 15+ API học thuật & kỹ thuật (PubMed, arXiv, DBLP, DOAJ, DataCite, Retraction Watch, Wayback Machine), đối chiếu câu bằng chứng Sentence-BERT & Multilingual MiniLM ONNX INT8, 1-Click Auto-Fix Studio, Document Inspector và xuất báo cáo ra PDF/DOCX/CSV.'
-          : 'Pro unlocks 50 manuscripts/month (up to 100 pages & 200 citations each), all 15+ federated scholarly APIs, Sentence-BERT + Multilingual MiniLM ONNX INT8 semantic alignment, 1-Click Auto-Fix Studio, interactive PDF bounding-box Document Inspector, and full PDF/DOCX/CSV exports.',
+          ? 'Gói Pro nâng hạn mức lên 50 tài liệu/tháng (tối đa 100 trang, 200 trích dẫn/bài), mở khóa toàn bộ hơn 15 thư viện học thuật quốc tế (PubMed, arXiv, DBLP, DOAJ, DataCite, Retraction Watch, Wayback Machine), đối chiếu nội dung tóm tắt bài gốc, gợi ý sửa định dạng trích dẫn 1 chạm, trình đọc đối chiếu trực tiếp trên trang PDF và xuất báo cáo ra PDF/DOCX/CSV.'
+          : 'Pro unlocks 50 manuscripts/month (up to 100 pages & 200 citations each), all 15+ trusted academic libraries, source-abstract content matching, one-click citation formatting fixes, side-by-side PDF page inspection, and full PDF/DOCX/CSV report exports.',
     },
     {
       id: 'pfaq-2',
@@ -2788,8 +2792,8 @@ function PricingSolvaFAQSection({
           : 'When should a research lab or department choose Ultra?',
       a:
         lang === 'vi'
-          ? 'Gói Ultra hỗ trợ tài liệu dài tới 500 trang (luận án Tiến sĩ, sách chuyên khảo), tải lên hàng loạt 50 file PDF cùng lúc, kích hoạt SerpAPI Google Scholar dự phòng cho tài liệu hiếm, quản lý không giới hạn lớp học và xuất toàn bộ báo cáo khóa luận ra file ZIP.'
-          : 'Ultra is designed for departments and thesis review boards: supporting 500-page doctoral dissertations, 50-file concurrent batch uploads, SerpAPI Google Scholar fallback, unlimited classroom cohorts, and 1-click Class ZIP exports.',
+          ? 'Gói Ultra hỗ trợ tài liệu dài tới 500 trang (luận án Tiến sĩ, sách chuyên khảo), tải lên hàng loạt 50 tệp PDF cùng lúc, tra cứu mở rộng qua Google Scholar cho tài liệu hiếm, quản lý không giới hạn lớp học và tải trọn bộ báo cáo cả lớp dạng tệp nén ZIP.'
+          : 'Ultra is designed for departments and thesis review committees: supporting 500-page doctoral dissertations, 50-file concurrent batch uploads, extended Google Scholar lookup for rare publications, unlimited classroom cohorts, and full-cohort archive exports (.ZIP).',
     },
   ];
 
@@ -2824,14 +2828,14 @@ function PricingSolvaFAQSection({
                   className="relative w-[20px] h-[25px] flex items-center justify-center shrink-0"
                 >
                   <Plus
-                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
                       isOpen
                         ? 'rotate-90 opacity-0 scale-75'
                         : 'rotate-0 opacity-100 scale-100'
                     }`}
                   />
                   <Minus
-                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
                       isOpen
                         ? 'rotate-0 opacity-100 scale-100'
                         : '-rotate-90 opacity-0 scale-75'
@@ -2917,38 +2921,38 @@ function PricingSolvaFAQSection({
 function PricingSolvaFooter({ lang }: { lang: Lang }) {
   const columns = [
     {
-      header: lang === 'vi' ? 'Sản phẩm' : 'Product',
+      header: lang === 'vi' ? 'Nền tảng' : 'Product',
       links: [
-        { label: lang === 'vi' ? 'Benchmark 120K bài báo' : '120K-Paper Benchmark', to: '/#benchmark-120k' },
-        { label: lang === 'vi' ? 'Trình gỡ lỗi trích dẫn' : 'Citation Debugger', to: '/#interactive-demo' },
-        { label: lang === 'vi' ? 'Kiến trúc 2 tầng' : '2-Layer Architecture', to: '/#architecture' },
-        { label: lang === 'vi' ? 'Quy trình 4 giai đoạn' : 'Verification Pipeline', to: '/#how-it-works' },
+        { label: lang === 'vi' ? 'Cách hoạt động' : 'How It Works', to: '/#how-it-works' },
+        { label: lang === 'vi' ? 'Kiểm tra thử trích dẫn' : 'Live Citation Check', to: '/#interactive-demo' },
+        { label: lang === 'vi' ? 'Kiểm tra 2 bước rõ ràng' : 'Two-Step Citation Check', to: '/#architecture' },
+        { label: lang === 'vi' ? 'Độ tin cậy (120.000 bài)' : 'Proven Accuracy (120K)', to: '/#benchmark-120k' },
         { label: lang === 'vi' ? 'Bảng so sánh gói cước' : 'Comparison Matrix', href: '#compare-matrix' },
       ],
     },
     {
-      header: lang === 'vi' ? 'Không gian làm việc' : 'Workspaces',
+      header: lang === 'vi' ? 'Không gian học thuật' : 'Workspaces',
       links: [
-        { label: lang === 'vi' ? 'Dành cho Sinh viên' : 'Student Workspace', to: '/#workspaces-student' },
-        { label: lang === 'vi' ? 'Dành cho Giảng viên' : 'Teacher Classroom', to: '/#workspaces-teacher' },
-        { label: lang === 'vi' ? 'Quản trị hệ thống' : 'Admin Control', to: '/#workspaces-admin' },
+        { label: lang === 'vi' ? 'Dành cho Sinh viên & Tác giả' : 'Student Workspace', to: '/#workspaces-student' },
+        { label: lang === 'vi' ? 'Dành cho Giảng viên & Hội đồng' : 'Teacher Classroom', to: '/#workspaces-teacher' },
+        { label: lang === 'vi' ? 'Trung tâm Quản trị' : 'Admin Control', to: '/#workspaces-admin' },
         { label: lang === 'vi' ? 'Trang chủ CITRA' : 'CITRA Home', to: '/' },
       ],
     },
     {
-      header: lang === 'vi' ? 'Công nghệ' : 'Technology',
+      header: lang === 'vi' ? 'Công nghệ' : 'Capabilities',
       links: [
-        { label: 'GROBID TEI-XML', to: '/#how-it-works' },
-        { label: '15+ Scholarly APIs', to: '/#architecture' },
-        { label: 'Neuro-Symbolic Rules', to: '/#interactive-demo' },
-        { label: 'Sentence-BERT + MiniLM ONNX INT8', to: '/#how-it-works' },
+        { label: lang === 'vi' ? 'Đọc chuẩn APA, IEEE, Harvard' : 'APA, IEEE & Harvard Reader', to: '/#how-it-works' },
+        { label: lang === 'vi' ? 'Tra cứu 15+ thư viện học thuật' : '15+ Academic Libraries', to: '/#architecture' },
+        { label: lang === 'vi' ? 'Đối chiếu chi tiết từng trường' : 'Side-by-Side Detail Checks', to: '/#interactive-demo' },
+        { label: lang === 'vi' ? 'Đối chiếu nội dung Việt ↔ Anh' : 'Bilingual Abstract Matching', to: '/#how-it-works' },
       ],
     },
     {
       header: lang === 'vi' ? 'Tài khoản' : 'Account',
       links: [
         { label: lang === 'vi' ? 'Đăng nhập' : 'Sign in', to: '/login' },
-        { label: lang === 'vi' ? 'Tạo tài khoản' : 'Create account', to: '/register' },
+        { label: lang === 'vi' ? 'Đăng ký tài khoản' : 'Create account', to: '/register' },
         { label: lang === 'vi' ? 'Câu hỏi thường gặp' : 'Billing FAQ', href: '#pricing-faq' },
         {
           label:
@@ -2974,7 +2978,7 @@ function PricingSolvaFooter({ lang }: { lang: Lang }) {
         <div className="flex flex-col lg:flex-row items-start justify-between gap-[28px] sm:gap-[36px] lg:gap-[32px]">
           <div className="w-full lg:w-[389px] flex flex-col items-start gap-[16px]">
             <Link to="/" className="inline-flex items-center gap-[10px]">
-              <span className="w-[32px] h-[32px] rounded-[8px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+              <span className="w-[32px] h-[32px] rounded-[8px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
                 <SourceLogicLogo size={20} />
               </span>
               <span
@@ -2987,11 +2991,11 @@ function PricingSolvaFooter({ lang }: { lang: Lang }) {
 
             <p
               style={{ color: 'var(--solva-muted)' }}
-              className="font-solva-sans text-[16px] font-normal leading-[23.2px] max-w-[290px]"
+              className="font-solva-sans text-[16px] font-normal leading-[23.2px] max-w-[310px]"
             >
               {lang === 'vi'
-                ? 'Không gian kiểm chứng nguồn trích dẫn học thuật đa nguồn dựa trên kiến trúc Neuro-Symbolic 2 tầng.'
-                : 'Academic source verification workspace powered by a two-layer Neuro-Symbolic and 15+ API engine.'}
+                ? 'Không gian kiểm chứng trích dẫn học thuật giúp sinh viên, nhà nghiên cứu và giảng viên tự tin với mọi danh mục tài liệu tham khảo.'
+                : 'Academic citation verification workspace helping students, researchers, and faculty submit every paper with verified references.'}
             </p>
           </div>
 

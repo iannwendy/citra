@@ -228,17 +228,28 @@ describe('LoginPage', () => {
     expect(leftPanelEn.textContent).toContain('Semantic Scholar');
     expect(leftPanelEn.textContent).toContain('symbolic_verifier.py');
     expect(leftPanelEn.textContent).toContain('R01_DOI_MATCH');
+    expect(leftPanelEn.textContent).toContain('Content match: 96%');
+    expect(leftPanelEn.textContent).not.toContain('NLI:');
+    expect(leftPanelEn.textContent).not.toContain('expr:');
+    expect(enContainer.querySelector('.solva-editorial-root')?.getAttribute('data-lang')).toBe('en');
+    expect(enContainer.querySelector('.solva-editorial-root')?.getAttribute('lang')).toBe('en');
     unmountEn();
 
     await i18n.changeLanguage('vi');
     const { container: viContainer, unmount: unmountVi } = renderLoginPage();
     const leftPanelVi = viContainer.firstElementChild?.firstElementChild as HTMLElement;
+    expect(viContainer.querySelector('.solva-editorial-root')?.getAttribute('data-lang')).toBe('vi');
+    expect(viContainer.querySelector('.solva-editorial-root')?.getAttribute('lang')).toBe('vi');
     expect(leftPanelVi.querySelectorAll('button').length).toBe(0);
     expect(leftPanelVi.querySelectorAll('.truncate').length).toBe(0);
     expect(leftPanelVi.innerHTML).not.toMatch(/\bline-clamp-\d+\b/);
     expect(leftPanelVi.textContent).toContain('Semantic Scholar');
     expect(leftPanelVi.textContent).toContain('Xác minh mọi trích dẫn. Truy vết mọi nguồn tài liệu.');
     expect(leftPanelVi.textContent).toContain(`SourceLogic v${APP_VERSION}`);
+    expect(leftPanelVi.textContent).toContain('Độ khớp nội dung: 96%');
+    expect(leftPanelVi.textContent).toContain('Đối chiếu:');
+    expect(leftPanelVi.textContent).not.toContain('NLI:');
+    expect(leftPanelVi.textContent).not.toContain('expr:');
 
     // Accuracy badge prevents mid-phrase line breaks
     const accSpanVi = Array.from(leftPanelVi.querySelectorAll('span')).find((el) =>

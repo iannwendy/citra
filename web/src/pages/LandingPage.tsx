@@ -2692,7 +2692,7 @@ function SolvaStickySection({
                   <div className="flex flex-col gap-[12px]">
                     <h3
                       style={{ color: 'var(--solva-ink)' }}
-                      className="font-solva-serif font-light text-[30px] sm:text-[36px] xl:text-[40px] leading-[1.15] tracking-[-0.05em] max-w-[400px]"
+                      className="font-solva-serif font-light text-[30px] sm:text-[36px] xl:text-[40px] leading-[1.15] max-w-[400px]"
                     >
                       {block.title}
                     </h3>
@@ -3908,7 +3908,7 @@ function SolvaUseCasesSection({
                     <div className="space-y-[28px]">
                       <h4
                         style={{ color: 'var(--solva-ink)' }}
-                        className="font-solva-serif font-light text-[26px] sm:text-[30px] leading-[1.25] tracking-[-0.05em]"
+                        className="font-solva-serif font-light text-[26px] sm:text-[30px] leading-[1.25]"
                       >
                         {current.headline}
                       </h4>
@@ -4661,7 +4661,7 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
               {/* Top Two-Tone Quote + Attribution */}
               <div className="space-y-[24px]">
                 <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-                  <blockquote className="font-solva-serif font-light text-[24px] sm:text-[30px] leading-[1.25] tracking-[-0.05em] max-w-[520px]">
+                  <blockquote className="font-solva-serif font-light text-[24px] sm:text-[30px] leading-[1.25] max-w-[520px]">
                     <span style={{ color: 'var(--solva-ink)' }}>
                       {lang === 'vi'
                         ? '“Đầu tuần vừa qua, chúng tôi đưa 120 quyển khóa luận tốt nghiệp vào rà soát trên CITRA. Chỉ trong một buổi sáng, hệ thống đã chỉ rõ từng mã DOI không tồn tại và năm xuất bản sai — '
@@ -5472,14 +5472,14 @@ function SolvaFAQSection({ lang }: { lang: Lang }) {
                   className="relative w-[20px] h-[25px] flex items-center justify-center shrink-0"
                 >
                   <Plus
-                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
                       isOpen
                         ? 'rotate-90 opacity-0 scale-75'
                         : 'rotate-0 opacity-100 scale-100'
                     }`}
                   />
                   <Minus
-                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
                       isOpen
                         ? 'rotate-0 opacity-100 scale-100'
                         : '-rotate-90 opacity-0 scale-75'

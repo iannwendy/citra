@@ -53,6 +53,12 @@ describe('Vietnamese Personal Data Protection Compliance UI (DLCN-01, DLCN-02, D
 
     const root = screen.getByTestId('privacy-policy-page');
     expect(root.className).toContain('solva-editorial-root');
+    expect(root.getAttribute('lang')).toBe('vi');
+    expect(root.getAttribute('data-lang')).toBe('vi');
+    expect(root.innerHTML).not.toContain('shadow-2xs');
+    const headerNavVi = root.querySelector('header nav[aria-label="Primary Navigation"]');
+    expect(headerNavVi?.textContent).toContain('Quy trình hoạt động');
+    expect(headerNavVi?.textContent).toContain('Độ tin cậy');
     expect(screen.getByTestId('solva-sticky-card-0')).toBeDefined();
     expect(document.querySelector('.animate-solva-marquee')).not.toBeNull();
     expect(document.querySelector('footer')).not.toBeNull();

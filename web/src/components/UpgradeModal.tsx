@@ -435,7 +435,7 @@ export function UpgradeModal({
                   <p className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 mt-0.5">
                     {billingCycle === 'annual'
                       ? lang === 'vi'
-                        ? 'Thanh toán $1,920/năm (Tiết kiệm $480/năm)'
+                        ? 'Thanh toán $1.920/năm (Tiết kiệm $480/năm)'
                         : 'Billed $1,920/year (Save $480/year)'
                       : lang === 'vi'
                         ? 'Thanh toán $200 định kỳ hàng tháng'
@@ -511,7 +511,7 @@ export function UpgradeModal({
                     ? 'Đang sử dụng gói CITRA Ultra'
                     : 'Current Plan · CITRA Ultra'
                   : lang === 'vi'
-                    ? `Nâng cấp Ultra · $${billingCycle === 'annual' ? '1,920/năm' : '200/tháng'}`
+                    ? `Nâng cấp Ultra · $${billingCycle === 'annual' ? '1.920/năm' : '200/tháng'}`
                     : `Upgrade to Ultra · $${billingCycle === 'annual' ? '1,920/yr' : '200/mo'}`}
               </Button>
             </div>

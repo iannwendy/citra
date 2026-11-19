@@ -556,15 +556,15 @@ function PrivacySolvaHeader({
     lang === 'vi'
       ? [
           { label: 'Trang chủ', to: '/' },
-          { label: 'Kiến trúc', to: '/#architecture' },
-          { label: 'Thực nghiệm 120K', to: '/#benchmark-120k' },
+          { label: 'Quy trình hoạt động', to: '/#how-it-works' },
+          { label: 'Độ tin cậy', to: '/#benchmark-120k' },
           { label: 'Bảng giá', to: '/pricing' },
           { label: 'Bảo vệ dữ liệu', to: '/privacy', active: true },
         ]
       : [
           { label: 'Home', to: '/' },
-          { label: 'Architecture', to: '/#architecture' },
-          { label: '120K Benchmark', to: '/#benchmark-120k' },
+          { label: 'How It Works', to: '/#how-it-works' },
+          { label: 'Accuracy', to: '/#benchmark-120k' },
           { label: 'Pricing', to: '/pricing' },
           { label: 'Privacy', to: '/privacy', active: true },
         ];
@@ -590,7 +590,7 @@ function PrivacySolvaHeader({
             to="/"
             className="inline-flex items-center gap-[8px] rounded-[6px] whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15]/40 dark:focus-visible:ring-[#FBFAF6]/40"
           >
-            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
               <CitraLogo size={18} />
             </span>
             <span
@@ -1378,7 +1378,7 @@ function PrivacySolvaFooter({ lang }: { lang: Lang }) {
         <div className="flex flex-col lg:flex-row items-start justify-between gap-[28px] sm:gap-[36px] lg:gap-[32px]">
           <div className="w-full lg:w-[389px] flex flex-col items-start gap-[16px]">
             <Link to="/" className="inline-flex items-center gap-[10px]">
-              <span className="w-[32px] h-[32px] rounded-[8px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+              <span className="w-[32px] h-[32px] rounded-[8px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
                 <CitraLogo size={20} />
               </span>
               <span
@@ -1493,6 +1493,7 @@ export function PrivacyPolicyPage(): JSX.Element {
   return (
     <div
       data-testid="privacy-policy-page"
+      lang={lang}
       data-lang={lang}
       className="solva-editorial-root min-h-screen overflow-x-clip selection:bg-[#1C1A15] selection:text-[#FBFAF6]"
     >
@@ -1522,7 +1523,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                   backgroundColor: 'var(--solva-surface)',
                   borderColor: 'var(--solva-border)',
                 }}
-                className="rounded-[16px] border p-4 sm:p-5 flex flex-col sm:flex-row items-start gap-3.5 shadow-2xs"
+                className="rounded-[16px] border p-4 sm:p-5 flex flex-col sm:flex-row items-start gap-3.5 shadow-sm"
               >
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-emerald-500/[0.12] text-emerald-800 dark:text-emerald-300 border border-emerald-500/25 font-mono text-[11px] font-semibold shrink-0 mt-0.5">
                   <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
@@ -2670,7 +2671,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                             borderColor: 'var(--solva-border)',
                             color: 'var(--solva-ink)',
                           }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] border font-mono text-[11px] font-medium shadow-2xs"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] border font-mono text-[11px] font-medium shadow-sm"
                         >
                           <ScholarlySourceLogo name={apiName} size={13} />
                           <span>{apiName}</span>

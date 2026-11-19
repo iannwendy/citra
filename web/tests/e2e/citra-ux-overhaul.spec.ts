@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { clearAuthState } from './helpers';
 
 test.use({
-  baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5174',
+  baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173',
 });
 
 const OVERHAUL_VIEWPORTS = [
@@ -211,9 +211,13 @@ test.describe('CITRA UI/UX & Non-Tech Experience Overhaul — Master E2E Verific
       await expect(page.locator('form a[href="/privacy"]')).toBeVisible();
       await expect(page.locator('form a[href="/terms"]')).toBeVisible();
 
-      // Verify LoginPage #password Eye button is the FIRST <button><svg> in DOM order
+      // Verify LoginPage #password Eye button is the FIRST <button><svg> in DOM order + data-lang/lang + humanized AuthSplitShell
       await page.goto('/login');
       await page.evaluate(() => document.fonts.ready);
+
+      const loginEditorialRoot = page.locator('.solva-editorial-root').first();
+      await expect(loginEditorialRoot).toHaveAttribute('data-lang', locale);
+      await expect(loginEditorialRoot).toHaveAttribute('lang', locale);
 
       const loginAudit = await page.evaluate(() => {
         const firstSvgInButton = document.querySelector('button svg');
@@ -233,6 +237,8 @@ test.describe('CITRA UI/UX & Non-Tech Experience Overhaul — Master E2E Verific
         loginAudit.isInsidePasswordField,
         `Expected first <button><svg> on /login (${locale}) to be #password Eye toggle`,
       ).toBe(true);
+      expect(loginAudit.bodyText).not.toContain('NLI:');
+      expect(loginAudit.bodyText).not.toContain('expr:');
 
       if (locale === 'vi') {
         expect(loginAudit.bodyText).not.toContain('SSO · RBAC');
@@ -266,16 +272,21 @@ test.describe('CITRA UI/UX & Non-Tech Experience Overhaul — Master E2E Verific
         await page.goto(route);
         await waitForRouteReady(page, route);
 
-        // Expand every FAQ button one-by-one on / and /pricing so both multi-open and single-open FAQ answers are audited
+        // Expand every FAQ button one-by-one on / (#faq) and /pricing (#pricing-faq)
         if (route === '/' || route === '/pricing') {
-          const faqButtons = page.locator('#faq button[aria-expanded]');
+          const faqContainer = page.locator(route === '/pricing' ? '#pricing-faq' : '#faq');
+          const faqButtons = faqContainer.locator('button[aria-expanded]');
           const faqCount = await faqButtons.count();
+          expect(
+            faqCount,
+            `Expected > 0 FAQ accordion buttons on ${route} (${locale})`,
+          ).toBeGreaterThan(0);
           for (let i = 0; i < faqCount; i++) {
             const btn = faqButtons.nth(i);
             if ((await btn.getAttribute('aria-expanded')) === 'false') {
               await btn.click();
             }
-            const faqText = await page.locator('#faq').innerText();
+            const faqText = await faqContainer.innerText();
             for (const forbidden of FORBIDDEN_TRUST_STRINGS) {
               expect(
                 faqText,
@@ -283,6 +294,19 @@ test.describe('CITRA UI/UX & Non-Tech Experience Overhaul — Master E2E Verific
               ).not.toContain(forbidden);
             }
           }
+        }
+
+        if (route === '/pricing') {
+          const pricingRoot = page.getByTestId('pricing-page');
+          await expect(pricingRoot).toHaveAttribute('data-lang', locale);
+          await expect(pricingRoot).toHaveAttribute('lang', locale);
+
+          // Open desktop Platform / Nền tảng dropdown so its items are audited for non-tech parity too
+          const pricingDropdownBtn = page
+            .locator('nav[aria-label="Pricing Navigation"]')
+            .getByRole('button', { name: /Platform|Nền tảng/i });
+          await pricingDropdownBtn.click();
+          await expect(page.locator('.t-dropdown.is-open').first()).toBeVisible();
         }
 
         const fullText = await page.evaluate(
@@ -296,12 +320,32 @@ test.describe('CITRA UI/UX & Non-Tech Experience Overhaul — Master E2E Verific
           ).not.toContain(forbidden);
         }
 
+        if (route === '/pricing') {
+          for (const pricingJargon of [
+            'GROBID TEI',
+            'ONNX INT8',
+            'SerpAPI',
+            'mã DOI ảo giác',
+            'Orthogonal Mapping',
+            'Citation Debugger',
+          ]) {
+            expect(
+              fullText,
+              `/pricing (${locale}) must not expose raw technical jargon "${pricingJargon}"`,
+            ).not.toContain(pricingJargon);
+          }
+          await page.keyboard.press('Escape');
+        }
+
         if (route === '/' || route === '/pricing') {
           expect(fullText).toContain('© 2026 CITRA');
         }
 
         if (route === '/privacy') {
-          await expect(page.getByTestId('privacy-policy-page')).toBeVisible();
+          const privacyRoot = page.getByTestId('privacy-policy-page');
+          await expect(privacyRoot).toBeVisible();
+          await expect(privacyRoot).toHaveAttribute('data-lang', locale);
+          await expect(privacyRoot).toHaveAttribute('lang', locale);
           expect(fullText).toContain('91/2025/QH15');
           expect(fullText).toMatch(/356\/2025\/N[ĐD]-CP/);
           if (locale === 'vi') {
@@ -363,11 +407,12 @@ test.describe('CITRA UI/UX & Non-Tech Experience Overhaul — Master E2E Verific
     );
     await expect(page.locator('#workspace-panel-teacher')).toBeVisible();
 
-    // Verify /missing-route-404 -> "Back to Home" recovery
+    // Verify /missing-route-404 ->/#try-instant quick card & "Back to Home" recovery
     await page.goto('/missing-route-404');
     const notFoundPage = page.getByTestId('not-found-page');
     await expect(notFoundPage).toBeVisible();
     await expect(notFoundPage).toContainText('/missing-route-404');
+    await expect(notFoundPage.locator('a[href="/#try-instant"]')).toBeVisible();
 
     const backHomeCta = page.getByTestId('not-found-home-cta');
     await expect(backHomeCta).toContainText(/Back to Home|Về trang chủ/i);
@@ -376,11 +421,14 @@ test.describe('CITRA UI/UX & Non-Tech Experience Overhaul — Master E2E Verific
     await expect(page.getByTestId('guest-instant-checker')).toBeVisible();
   });
 
-  test('4. Live Unauthenticated GuestInstantChecker (#try-instant): 3 Presets, Custom Input, Split-View Diff, cited_doi Highlight, Trace Toggle & /register CTA at 1440x900 & 375x812', async ({
+  test('4. Live Unauthenticated GuestInstantChecker (#try-instant): 3 Presets, Custom Input, Split-View Diff, cited_doi Highlight, Trace Toggle & /register CTA at 1440x900 & 375x812 (<= 6 public-verify calls)', async ({
     browser,
   }) => {
     test.setTimeout(120_000);
 
+    let totalPublicVerifyCalls = 0;
+
+    // Budgeted to 4 calls (EN 1440x900: all 3 presets + 1 custom) + 2 calls (VI 375x812: ai_invented + 1 custom) = 6 <= 6/min Nginx IP limit
     const scenarios = [
       {
         viewport: { width: 1440, height: 900 },
@@ -388,6 +436,21 @@ test.describe('CITRA UI/UX & Non-Tech Experience Overhaul — Master E2E Verific
         realIp: `203.0.113.${40 + Math.floor(Math.random() * 80)}`,
         submittedHeader: 'Submitted in Your Draft',
         officialHeader: 'Official Library Record',
+        presets: [
+          {
+            testId: 'guest-preset-economics',
+            expectedDoi: '10.2307/1914185',
+          },
+          {
+            testId: 'guest-preset-biomedical',
+            expectedDoi: '10.1056/NEJMoa2034577',
+          },
+          {
+            testId: 'guest-preset-ai_invented',
+            expectedDoi: '10.1093/qje/qjae994',
+            expectHallucinationDoiClass: true,
+          },
+        ],
       },
       {
         viewport: { width: 375, height: 812 },
@@ -395,6 +458,13 @@ test.describe('CITRA UI/UX & Non-Tech Experience Overhaul — Master E2E Verific
         realIp: `198.51.100.${40 + Math.floor(Math.random() * 80)}`,
         submittedHeader: 'Trích dẫn bạn đưa vào',
         officialHeader: 'Hồ sơ gốc trên thư viện học thuật',
+        presets: [
+          {
+            testId: 'guest-preset-ai_invented',
+            expectedDoi: '10.1093/qje/qjae994',
+            expectHallucinationDoiClass: true,
+          },
+        ],
       },
     ];
 
@@ -407,6 +477,15 @@ test.describe('CITRA UI/UX & Non-Tech Experience Overhaul — Master E2E Verific
       });
       const page = await context.newPage();
       clearAuthState(page);
+
+      page.on('request', (req) => {
+        if (
+          req.url().includes('/api/essays/sandbox/public-verify') &&
+          req.method() === 'POST'
+        ) {
+          totalPublicVerifyCalls += 1;
+        }
+      });
 
       await page.addInitScript((lang: string) => {
         localStorage.setItem('language', lang);
@@ -421,28 +500,8 @@ test.describe('CITRA UI/UX & Non-Tech Experience Overhaul — Master E2E Verific
       await checker.scrollIntoViewIfNeeded();
       await expect(checker).toBeVisible();
 
-      // 1. Click all 3 one-click presets without authentication
-      const presets: Array<{
-        testId: string;
-        expectedDoi: string;
-        expectHallucinationDoiClass?: boolean;
-      }> = [
-        {
-          testId: 'guest-preset-economics',
-          expectedDoi: '10.2307/1914185',
-        },
-        {
-          testId: 'guest-preset-biomedical',
-          expectedDoi: '10.1056/NEJMoa2034577',
-        },
-        {
-          testId: 'guest-preset-ai_invented',
-          expectedDoi: '10.1093/qje/qjae994',
-          expectHallucinationDoiClass: true,
-        },
-      ];
-
-      for (const preset of presets) {
+      // 1. Exercise budgeted one-click presets without authentication
+      for (const preset of sc.presets) {
         const verifyRespPromise = page.waitForResponse(
           (resp) =>
             resp.url().includes('/api/essays/sandbox/public-verify') &&
@@ -517,6 +576,11 @@ test.describe('CITRA UI/UX & Non-Tech Experience Overhaul — Master E2E Verific
 
       await context.close();
     }
+
+    expect(
+      totalPublicVerifyCalls,
+      'Total POST /api/essays/sandbox/public-verify calls must stay <= 6 for single-IP Nginx rate-limit safety',
+    ).toBeLessThanOrEqual(6);
   });
 
   test('5. Mobile Pricing UX (375x812 & 390x844) & High-Contrast .solva-pro-card-surface in Light and Dark Modes', async ({

@@ -53,15 +53,16 @@ interface LiveTraceSample {
   ruleCode: string;
   ruleSummaryEn: string;
   ruleSummaryVi: string;
-  condition: string;
+  checkSummaryEn: string;
+  checkSummaryVi: string;
   l1Status: string;
   verdict: 'VERIFIED' | 'METADATA_ERROR' | 'SUSPECTED_HALLUCINATION';
   verdictLabelEn: string;
   verdictLabelVi: string;
   confidence: number;
   cisScore: number;
-  nliLabelEn: string;
-  nliLabelVi: string;
+  matchBadgeEn: string;
+  matchBadgeVi: string;
   tone: 'emerald' | 'amber' | 'red';
   sources: Array<{ name: string; ms: number; match: string }>;
 }
@@ -77,15 +78,16 @@ const LIVE_TRACE_SAMPLES: LiveTraceSample[] = [
     ruleCode: 'R01_DOI_MATCH',
     ruleSummaryEn: 'Canonical DOI & Cross-Index Consensus',
     ruleSummaryVi: 'Đồng thuận mã DOI & 4 thư viện quốc tế',
-    condition: 'cited.doi == canonical.doi ∧ title_sim >= 0.99',
+    checkSummaryEn: 'Check: Exact match on canonical DOI and original paper title (2017).',
+    checkSummaryVi: 'Đối chiếu: Khớp chính xác mã DOI và tiêu đề bài báo gốc (2017).',
     l1Status: 'MATCHED',
     verdict: 'VERIFIED',
     verdictLabelEn: 'Verified Source',
     verdictLabelVi: 'Nguồn trích dẫn hợp lệ',
     confidence: 99,
     cisScore: 94.8,
-    nliLabelEn: 'SUPPORTS (0.96)',
-    nliLabelVi: 'TƯƠNG ĐỒNG (0,96)',
+    matchBadgeEn: 'Content match: 96%',
+    matchBadgeVi: 'Độ khớp nội dung: 96%',
     tone: 'emerald',
     sources: [
       { name: 'Crossref', ms: 38, match: '100%' },
@@ -103,15 +105,18 @@ const LIVE_TRACE_SAMPLES: LiveTraceSample[] = [
     ruleCode: 'R05_YEAR_DRIFT',
     ruleSummaryEn: 'Preprint-to-Proceedings Year & Venue Drift',
     ruleSummaryVi: 'Sai lệch năm bản nháp & hội nghị công bố',
-    condition: '|cited.year - canonical.year| == 1 ∧ venue_drift',
+    checkSummaryEn:
+      'Check: Cited year (2021) and venue differ from the official NAACL-HLT (2019) record.',
+    checkSummaryVi:
+      'Đối chiếu: Năm trích dẫn (2021) và tên hội nghị lệch với bản ghi gốc NAACL-HLT (2019).',
     l1Status: 'MATCHED',
     verdict: 'METADATA_ERROR',
     verdictLabelEn: 'Citation Details Mismatch',
     verdictLabelVi: 'Sai lệch thông tin trích dẫn',
     confidence: 84,
     cisScore: 88.5,
-    nliLabelEn: 'SUPPORTS (0.93)',
-    nliLabelVi: 'TƯƠNG ĐỒNG (0,93)',
+    matchBadgeEn: 'Content match: 93%',
+    matchBadgeVi: 'Độ khớp nội dung: 93%',
     tone: 'amber',
     sources: [
       { name: 'Crossref', ms: 44, match: '94%' },
@@ -129,15 +134,17 @@ const LIVE_TRACE_SAMPLES: LiveTraceSample[] = [
     ruleCode: 'R12_GHOST_DOI',
     ruleSummaryEn: 'Non-Existent DOI Handle across 15+ Registries',
     ruleSummaryVi: 'Mã DOI không tồn tại trên 15+ thư viện',
-    condition: 'doi_ra_status == NOT_EXIST ∧ max_title_sim < 0.18',
+    checkSummaryEn:
+      'Check: DOI handle does not exist on Crossref and no matching title was found.',
+    checkSummaryVi: 'Đối chiếu: Mã DOI không tồn tại trên Crossref và tiêu đề không khớp.',
     l1Status: 'MATCHED',
     verdict: 'SUSPECTED_HALLUCINATION',
     verdictLabelEn: 'Source Not Found',
     verdictLabelVi: 'Không tìm thấy nguồn gốc',
     confidence: 11,
     cisScore: 84.5,
-    nliLabelEn: 'UNVERIFIED (0.00)',
-    nliLabelVi: 'CHƯA XÁC MINH (0,00)',
+    matchBadgeEn: 'Source match: 0%',
+    matchBadgeVi: 'Độ khớp nguồn: 0%',
     tone: 'red',
     sources: [
       { name: 'Crossref', ms: 51, match: '404' },
@@ -232,7 +239,11 @@ export function AuthSplitShell({
   const secondaryHeroWords = t('auth.heroTitle2').trim().split(/\s+/);
 
   return (
-    <div className="solva-editorial-root min-h-screen flex flex-col lg:flex-row selection:bg-[#1C1A15]/15 selection:text-[#1C1A15] dark:selection:bg-[#FBFAF6]/20 dark:selection:text-[#FBFAF6]">
+    <div
+      lang={lang}
+      data-lang={lang}
+      className="solva-editorial-root min-h-screen flex flex-col lg:flex-row selection:bg-[#1C1A15]/15 selection:text-[#1C1A15] dark:selection:bg-[#FBFAF6]/20 dark:selection:text-[#FBFAF6]"
+    >
       {/* ============================================================
           Left Panel — Solva Editorial & Painterly Live Debugger Showcase
           (Contains ZERO <button> elements so #password toggle is first SVG button in DOM)
@@ -580,13 +591,13 @@ export function AuthSplitShell({
                   </span>
                 </div>
 
-                {/* Symbolic Rule Condition Box */}
+                {/* Plain-Language Verification Summary Box */}
                 <div
                   style={{
                     backgroundColor: 'var(--solva-surface)',
                     borderColor: 'var(--solva-border)',
                   }}
-                  className="rounded-[8px] px-2.5 py-1.5 border font-mono text-[10px] space-y-0.5"
+                  className="rounded-[8px] px-2.5 py-1.5 border font-solva-sans text-[11px] leading-snug space-y-0.5"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span style={{ color: 'var(--solva-muted)' }}>
@@ -596,18 +607,20 @@ export function AuthSplitShell({
                     </span>
                     <span
                       style={{ color: 'var(--solva-ink)' }}
-                      className="font-semibold whitespace-nowrap"
+                      className="font-mono text-[10px] font-semibold whitespace-nowrap"
                     >
                       {lang === 'vi'
-                        ? `Ngữ nghĩa: ${activeTrace.nliLabelVi}`
-                        : `NLI: ${activeTrace.nliLabelEn}`}
+                        ? activeTrace.matchBadgeVi
+                        : activeTrace.matchBadgeEn}
                     </span>
                   </div>
                   <div
                     style={{ color: 'var(--solva-ink)' }}
-                    className="opacity-85 break-words"
+                    className="opacity-90 break-words"
                   >
-                    expr: {activeTrace.condition}
+                    {lang === 'vi'
+                      ? activeTrace.checkSummaryVi
+                      : activeTrace.checkSummaryEn}
                   </div>
                 </div>
 

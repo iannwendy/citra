@@ -676,7 +676,9 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
       name: /Pricing Navigation/i,
     });
     fireEvent.click(within(pricingNavDropdown).getByRole('button', { name: /^Platform$/i }));
-    fireEvent.click(within(pricingNavDropdown).getByRole('link', { name: /2-Layer Architecture/i }));
+    fireEvent.click(
+      within(pricingNavDropdown).getByRole('link', { name: /Two-Step Citation Check/i }),
+    );
 
     const pricingToArchSection = spaView.container.querySelector('#architecture') as HTMLElement;
     expect(pricingToArchSection).not.toBeNull();
