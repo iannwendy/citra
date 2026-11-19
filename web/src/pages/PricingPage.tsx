@@ -2511,9 +2511,9 @@ function PricingSolvaHeader({
                   {dropdownItems.map((item) => {
                     const Icon = item.icon;
                     return (
-                      <a
+                      <Link
                         key={item.href}
-                        href={item.href}
+                        to={item.href}
                         onClick={() => setDropdownOpen(false)}
                         className="flex items-start gap-3 p-[10px_12px] rounded-[8px] hover:bg-[#F4F2EC] dark:hover:bg-[#1E1C17] transition-colors"
                       >
@@ -2535,7 +2535,7 @@ function PricingSolvaHeader({
                             {item.desc}
                           </div>
                         </div>
-                      </a>
+                      </Link>
                     );
                   })}
                 </div>
@@ -2559,14 +2559,14 @@ function PricingSolvaHeader({
             {lang === 'vi' ? 'Giải đáp' : 'Billing FAQ'}
           </a>
 
-          <a
-            href="/#benchmark-120k"
+          <Link
+            to="/#benchmark-120k"
             style={{ color: 'var(--solva-muted)' }}
             className="inline-flex items-center gap-1.5 h-[40px] px-2.5 xl:px-3 rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             <span>{lang === 'vi' ? 'Thực nghiệm 120K' : '120K Benchmark'}</span>
-          </a>
+          </Link>
         </nav>
 
         {/* Right: Lang, Theme, Sign In, Primary Double-Slide CTA */}
@@ -2919,10 +2919,10 @@ function PricingSolvaFooter({ lang }: { lang: Lang }) {
     {
       header: lang === 'vi' ? 'Sản phẩm' : 'Product',
       links: [
-        { label: lang === 'vi' ? 'Benchmark 120K bài báo' : '120K-Paper Benchmark', href: '/#benchmark-120k' },
-        { label: lang === 'vi' ? 'Trình gỡ lỗi trích dẫn' : 'Citation Debugger', href: '/#interactive-demo' },
-        { label: lang === 'vi' ? 'Kiến trúc 2 tầng' : '2-Layer Architecture', href: '/#architecture' },
-        { label: lang === 'vi' ? 'Quy trình 4 giai đoạn' : 'Verification Pipeline', href: '/#how-it-works' },
+        { label: lang === 'vi' ? 'Benchmark 120K bài báo' : '120K-Paper Benchmark', to: '/#benchmark-120k' },
+        { label: lang === 'vi' ? 'Trình gỡ lỗi trích dẫn' : 'Citation Debugger', to: '/#interactive-demo' },
+        { label: lang === 'vi' ? 'Kiến trúc 2 tầng' : '2-Layer Architecture', to: '/#architecture' },
+        { label: lang === 'vi' ? 'Quy trình 4 giai đoạn' : 'Verification Pipeline', to: '/#how-it-works' },
         { label: lang === 'vi' ? 'Bảng so sánh gói cước' : 'Comparison Matrix', href: '#compare-matrix' },
       ],
     },
@@ -2938,10 +2938,10 @@ function PricingSolvaFooter({ lang }: { lang: Lang }) {
     {
       header: lang === 'vi' ? 'Công nghệ' : 'Technology',
       links: [
-        { label: 'GROBID TEI-XML', href: '/#how-it-works' },
-        { label: '15+ Scholarly APIs', href: '/#architecture' },
-        { label: 'Neuro-Symbolic Rules', href: '/#interactive-demo' },
-        { label: 'Sentence-BERT + MiniLM ONNX INT8', href: '/#how-it-works' },
+        { label: 'GROBID TEI-XML', to: '/#how-it-works' },
+        { label: '15+ Scholarly APIs', to: '/#architecture' },
+        { label: 'Neuro-Symbolic Rules', to: '/#interactive-demo' },
+        { label: 'Sentence-BERT + MiniLM ONNX INT8', to: '/#how-it-works' },
       ],
     },
     {

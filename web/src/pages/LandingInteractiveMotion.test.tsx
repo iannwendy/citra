@@ -8,7 +8,7 @@ import { ToastProvider } from '@/contexts/ToastContext';
 import { AuthContext } from '@/contexts/AuthContext';
 import { CitraMotionProvider } from '@/components/ui/motion-primitives';
 import {
-  notifyAnchorHashJump,
+  clearAnchorHashJump,
   SolvaScrollReveal,
   SolvaTwoToneHeading,
   SolvaAnimatedMetric,
@@ -67,7 +67,7 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
     delete (globalThis as { __CITRA_ENABLE_TEST_MOTION__?: boolean })
       .__CITRA_ENABLE_TEST_MOTION__;
     window.history.replaceState(null, '', '/');
-    notifyAnchorHashJump('');
+    clearAnchorHashJump();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -527,7 +527,23 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
     expect(metricWrapper.style.transition).toBe('none');
 
     unmount();
-    window.history.replaceState(null, '', '/');
+    // Native browser hashchange clearing location.hash to '' syncs activeAnchorHash = '' automatically
+    act(() => {
+      window.history.replaceState(null, '', '/');
+      window.dispatchEvent(new Event('hashchange'));
+    });
+    const standaloneAfterHashClear = render(
+      <section id="benchmark-120k">
+        <SolvaScrollReveal>
+          <div>Fresh Reveal After Native Hash Clear</div>
+        </SolvaScrollReveal>
+      </section>,
+    );
+    const standaloneWrapper = standaloneAfterHashClear.container.querySelector(
+      '#benchmark-120k > div',
+    ) as HTMLElement;
+    expect(Number.parseFloat(standaloneWrapper.style.opacity)).toBeLessThan(0.05);
+    standaloneAfterHashClear.unmount();
 
     // Verify clicking SolvaFooter role link (#workspaces-teacher) dispatches hashchange despite replaceState and snaps #workspaces open on frame 0
     Element.prototype.scrollIntoView = vi.fn();
@@ -547,30 +563,52 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
 
     landingView.unmount();
     window.history.replaceState(null, '', '/');
-    act(() => {
-      notifyAnchorHashJump('');
-    });
 
-    // Verify SPA React Router <Link to="/#benchmark-120k"> (pushState without native hashchange) also snaps target open on frame 0
+    // Verify SPA React Router <Link to="/#benchmark-120k"> snaps target open on frame 0,
+    // AND navigating away to /pricing -> returning to / (location.hash === '') automatically
+    // clears activeAnchorHash without any manual reset, AND PricingSolvaHeader /#... links
+    // preserve full SPA routing continuity!
+    const spaQueryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
     const spaView = render(
       <CitraMotionProvider>
-        <ThemeProvider defaultTheme="light">
-          <MemoryRouter initialEntries={['/privacy']}>
-            <Routes>
-              <Route
-                path="/privacy"
-                element={
-                  <Link to="/#benchmark-120k" data-testid="spa-bench-link">
-                    120K Benchmark
-                  </Link>
-                }
-              />
-              <Route path="/" element={<LandingPage />} />
-            </Routes>
-          </MemoryRouter>
-        </ThemeProvider>
+        <QueryClientProvider client={spaQueryClient}>
+          <ThemeProvider defaultTheme="light">
+            <ToastProvider>
+              <AuthContext.Provider
+                value={{
+                  user: null,
+                  token: null,
+                  isLoading: false,
+                  isAdmin: false,
+                  login: vi.fn(),
+                  logout: vi.fn(),
+                  refreshUser: vi.fn().mockResolvedValue(undefined),
+                }}
+              >
+                <MemoryRouter initialEntries={['/privacy']}>
+                  <Routes>
+                    <Route
+                      path="/privacy"
+                      element={
+                        <Link to="/#benchmark-120k" data-testid="spa-bench-link">
+                          120K Benchmark
+                        </Link>
+                      }
+                    />
+                    <Route path="/pricing" element={<PricingPage />} />
+                    <Route path="/" element={<LandingPage />} />
+                  </Routes>
+                </MemoryRouter>
+              </AuthContext.Provider>
+            </ToastProvider>
+          </ThemeProvider>
+        </QueryClientProvider>
       </CitraMotionProvider>,
     );
+
+    // 1. /privacy -> <Link to="/#benchmark-120k"> reveals #benchmark-120k on frame 0
     fireEvent.click(spaView.getByTestId('spa-bench-link'));
     const spaBenchSection = spaView.container.querySelector('#benchmark-120k') as HTMLElement;
     const spaBenchHeadingWord = spaBenchSection.querySelector('h2 span span') as HTMLElement;
@@ -578,10 +616,76 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
     expect(spaBenchHeadingWord.style.transitionProperty).toBe('none');
     expect(spaBenchHeadingWord.style.transitionDelay).toBe('0ms');
 
-    spaView.unmount();
-    act(() => {
-      notifyAnchorHashJump('');
+    // 2. Navigate from /#benchmark-120k -> /pricing -> / (location.hash === '') WITHOUT manual reset
+    const landingNav = within(spaView.container).getByRole('navigation', {
+      name: /Primary Navigation/i,
     });
+    fireEvent.click(within(landingNav).getByRole('link', { name: /^Pricing$/i }));
+    const pricingNav = within(spaView.container).getByRole('navigation', {
+      name: /Pricing Navigation/i,
+    });
+    fireEvent.click(within(pricingNav).getByRole('link', { name: /^Home$/i }));
+
+    const freshBenchSection = spaView.container.querySelector('#benchmark-120k') as HTMLElement;
+    const freshBenchHeadingWord = freshBenchSection.querySelector('h2 span span') as HTMLElement;
+    // Off-screen below-the-fold heading MUST mount cloaked for scroll-reveal entrance (zero activeAnchorHash leak!)
+    expect(Number.parseFloat(freshBenchHeadingWord.style.opacity)).toBeLessThan(0.05);
+
+    // 3. Navigate back to /pricing and verify PricingSolvaHeader's /#benchmark-120k + Platform dropdown /#architecture links transition via SPA Router and snap open on frame 0
+    const freshLandingNav = within(spaView.container).getByRole('navigation', {
+      name: /Primary Navigation/i,
+    });
+    fireEvent.click(within(freshLandingNav).getByRole('link', { name: /^Pricing$/i }));
+    const pricingNavAgain = within(spaView.container).getByRole('navigation', {
+      name: /Pricing Navigation/i,
+    });
+    fireEvent.click(within(pricingNavAgain).getByRole('link', { name: /120K Benchmark/i }));
+
+    const pricingToBenchSection = spaView.container.querySelector('#benchmark-120k') as HTMLElement;
+    expect(pricingToBenchSection).not.toBeNull();
+    const pricingToBenchHeadingWord = pricingToBenchSection.querySelector(
+      'h2 span span',
+    ) as HTMLElement;
+    expect(pricingToBenchHeadingWord.style.opacity).toBe('1');
+    expect(pricingToBenchHeadingWord.style.transitionProperty).toBe('none');
+    expect(pricingToBenchHeadingWord.style.transitionDelay).toBe('0ms');
+
+    // 4. Same-component transition (/ #benchmark-120k -> <Link to="/">) + PricingSolvaHeader Platform dropdown (/pricing -> /#architecture)
+    const brandHomeLink = spaView.container.querySelector('header a[href="/"]') as HTMLElement;
+    fireEvent.click(brandHomeLink);
+
+    // Prove activeAnchorHash was cleared directly by LandingPage's effect (standalone SolvaScrollReveal mounts cloaked)
+    const standalonePostSpaClear = render(
+      <section id="benchmark-120k">
+        <SolvaScrollReveal>
+          <div>Standalone Check After Same-Component Home Link</div>
+        </SolvaScrollReveal>
+      </section>,
+    );
+    const standalonePostSpaWrapper = standalonePostSpaClear.container.querySelector(
+      '#benchmark-120k > div',
+    ) as HTMLElement;
+    expect(Number.parseFloat(standalonePostSpaWrapper.style.opacity)).toBeLessThan(0.05);
+    standalonePostSpaClear.unmount();
+
+    const thirdLandingNav = within(spaView.container).getByRole('navigation', {
+      name: /Primary Navigation/i,
+    });
+    fireEvent.click(within(thirdLandingNav).getByRole('link', { name: /^Pricing$/i }));
+    const pricingNavDropdown = within(spaView.container).getByRole('navigation', {
+      name: /Pricing Navigation/i,
+    });
+    fireEvent.click(within(pricingNavDropdown).getByRole('button', { name: /^Platform$/i }));
+    fireEvent.click(within(pricingNavDropdown).getByRole('link', { name: /2-Layer Architecture/i }));
+
+    const pricingToArchSection = spaView.container.querySelector('#architecture') as HTMLElement;
+    expect(pricingToArchSection).not.toBeNull();
+    const pricingToArchWord = pricingToArchSection.querySelector('h2 span span') as HTMLElement;
+    expect(pricingToArchWord.style.opacity).toBe('1');
+    expect(pricingToArchWord.style.transitionProperty).toBe('none');
+    expect(pricingToArchWord.style.transitionDelay).toBe('0ms');
+
+    spaView.unmount();
 
     // Verify prefers-reduced-motion: reduce mounts immediately visible with no opacity/transform cloaking
     Object.defineProperty(window, 'matchMedia', {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useContext, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AuthContext } from '@/contexts/AuthContext';
@@ -56,6 +56,7 @@ import { SolvaFilmSection } from '@/components/landing/CitraFilm';
 import { ThemeToggle } from '@/contexts/ThemeContext';
 import {
   type Lang,
+  clearAnchorHashJump,
   notifyAnchorHashJump,
   SolvaScrollReveal,
   SolvaEyebrow,
@@ -526,6 +527,14 @@ export function LandingPage() {
       ) ?? 'student',
   );
 
+  useLayoutEffect(() => {
+    if (!location.hash && (typeof window === 'undefined' || !window.location.hash)) {
+      clearAnchorHashJump();
+    }
+  }, [location.key, location.hash]);
+
+  useEffect(() => () => clearAnchorHashJump(), []);
+
   useEffect(() => {
     const matchedRole = parseWorkspaceRoleFromUrl(location.search, location.hash);
     if (matchedRole) {
@@ -539,8 +548,10 @@ export function LandingPage() {
       if (targetEl && typeof targetEl.scrollIntoView === 'function') {
         targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
+    } else if (typeof window === 'undefined' || !window.location.hash) {
+      clearAnchorHashJump();
     }
-  }, [location.search, location.hash]);
+  }, [location.key, location.search, location.hash]);
 
   useEffect(() => {
     const onHashChange = () => {

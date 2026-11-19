@@ -1282,11 +1282,11 @@ function PrivacySolvaFooter({ lang }: { lang: Lang }) {
         },
         {
           label: lang === 'vi' ? 'Thực nghiệm 120K bài báo' : '120K-Paper Benchmark',
-          href: '/#benchmark-120k',
+          to: '/#benchmark-120k',
         },
         {
           label: lang === 'vi' ? 'Quy trình kiểm chứng trích dẫn' : 'How Verification Works',
-          href: '/#architecture',
+          to: '/#architecture',
         },
         {
           label: lang === 'vi' ? 'Bảng giá dịch vụ' : 'Pricing Plans',

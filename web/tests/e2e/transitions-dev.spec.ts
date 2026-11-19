@@ -286,8 +286,8 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
       ).toBeLessThanOrEqual(430);
     }
 
-    // Verify mobile hamburger menu on LandingPage & TermsOfServicePage uses IconSwap (.t-icon-swap) and dismisses via Escape with focus restoration
-    for (const drawerRoute of ['/', '/terms']) {
+    // Verify mobile hamburger menu on LandingPage, PrivacyPolicyPage & TermsOfServicePage uses IconSwap (.t-icon-swap) and dismisses via Escape with focus restoration
+    for (const drawerRoute of ['/', '/privacy', '/terms']) {
       await page.goto(drawerRoute);
       const mobileMenuBtn = page.getByRole('button', { name: 'Toggle navigation menu' });
       await expect(mobileMenuBtn).toBeVisible();

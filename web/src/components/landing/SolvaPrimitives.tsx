@@ -101,22 +101,43 @@ function handleGlobalResize() {
 }
 
 let activeAnchorHash = '';
+let isDispatchingSyntheticHash = false;
+let hashListenerAttached = false;
+
+function ensureHashListener() {
+  if (!hashListenerAttached && typeof window !== 'undefined') {
+    hashListenerAttached = true;
+    window.addEventListener('hashchange', handleGlobalHashChange);
+  }
+}
+
+export function clearAnchorHashJump() {
+  activeAnchorHash = '';
+}
 
 export function notifyAnchorHashJump(hashOverride?: string) {
   if (typeof window === 'undefined') return;
+  ensureHashListener();
   if (typeof hashOverride === 'string') {
     activeAnchorHash = hashOverride;
   } else {
     activeAnchorHash = window.location.hash;
   }
-  window.dispatchEvent(new Event('hashchange'));
+  isDispatchingSyntheticHash = true;
+  try {
+    window.dispatchEvent(new Event('hashchange'));
+  } finally {
+    isDispatchingSyntheticHash = false;
+  }
 }
 
 function handleGlobalHashChange() {
-  if (typeof window !== 'undefined' && window.location.hash) {
+  if (!isDispatchingSyntheticHash && typeof window !== 'undefined') {
     activeAnchorHash = window.location.hash;
   }
-  requestScrollFrame(true);
+  if (scrollEntries.size > 0) {
+    requestScrollFrame(true);
+  }
 }
 
 function resolveAnchorTargetElement(): Element | null {
@@ -230,6 +251,8 @@ function subscribeToScroll(
     observer.observe(el);
   }
 
+  ensureHashListener();
+
   if (!listenersAttached && typeof window !== 'undefined') {
     listenersAttached = true;
     activeScrollTop = null;
@@ -241,7 +264,6 @@ function subscribeToScroll(
       capture: true,
     });
     window.addEventListener('resize', handleGlobalResize, { passive: true });
-    window.addEventListener('hashchange', handleGlobalHashChange);
   }
 
   requestScrollFrame(false);
@@ -257,7 +279,6 @@ function subscribeToScroll(
       activeScrollTop = null;
       window.removeEventListener('scroll', handleGlobalScroll, true);
       window.removeEventListener('resize', handleGlobalResize);
-      window.removeEventListener('hashchange', handleGlobalHashChange);
     }
   };
 }
