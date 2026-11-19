@@ -9,10 +9,11 @@ import {
   ClipboardCheck,
   ChevronRight,
   AlertCircle,
-  Terminal,
-  ShieldCheck,
   LogOut,
   Trash2,
+  Copy,
+  Check,
+  KeyRound,
 } from 'lucide-react';
 import { api, type Class, type TeacherDashboard } from '@/api/client';
 import { useToast } from '@/contexts/ToastContext';
@@ -21,24 +22,30 @@ import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { StudioWindowHeader } from '@/components/ui/studio-visuals';
+import {
+  CardHoverTilt,
+  NumberPopIn,
+  TextMorph,
+} from '@/components/ui/transitions';
 
 /**
- * MyClassesPage — teacher dashboard (Scholarly Precision shadcn/ui v2.0).
+ * MyClassesPage — Visual Classroom Hub for faculty.
  *
- * Shows aggregate stats + class list. Click into a class to manage students
- * and essays (ClassDetailPage).
+ * Combines above-the-fold cohort metrics, an interactive 2-column class card grid
+ * with 1-click join-code copying, and direct triage entry into Pending Reviews.
  */
 export function MyClassesPage() {
   const { t, i18n } = useTranslation();
-  const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang: 'en' | 'vi' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const navigate = useNavigate();
   const toast = useToast();
   const [dashboard, setDashboard] = useState<TeacherDashboard | null>(null);
   const [enrolledClasses, setEnrolledClasses] = useState<Class[]>([]);
   const [pendingLeaveClass, setPendingLeaveClass] = useState<Class | null>(null);
   const [pendingDeleteClass, setPendingDeleteClass] = useState<Class | null>(null);
+  const [copiedClassId, setCopiedClassId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -61,6 +68,26 @@ export function MyClassesPage() {
       setError(e instanceof Error ? e.message : 'Failed to load dashboard');
     }
   }, []);
+
+  const handleCopyCode = async (e: React.MouseEvent, c: Class) => {
+    e.stopPropagation();
+    if (!c.join_code) return;
+    try {
+      await navigator.clipboard?.writeText(c.join_code);
+    } catch {
+      // Ignore clipboard failures in headless environments
+    }
+    setCopiedClassId(c.id);
+    toast.success(
+      lang === 'vi'
+        ? `Đã sao chép mã lớp ${c.join_code}`
+        : `Copied join code ${c.join_code}`,
+      c.name,
+    );
+    setTimeout(() => {
+      setCopiedClassId((prev) => (prev === c.id ? null : prev));
+    }, 1800);
+  };
 
   const handleConfirmLeave = async () => {
     if (!pendingLeaveClass) return;
@@ -97,56 +124,54 @@ export function MyClassesPage() {
   };
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
+  const maxStudentsInCohort = Math.max(
+    1,
+    ...(dashboard?.classes ?? []).map((c) => c.student_count || 0),
+  );
+
   return (
-    <div className="space-y-6 pb-10">
-      {/* Executive Header Card */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2.5 flex-wrap mb-2.5">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-semibold text-indigo-700 dark:text-indigo-300">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                {lang === 'vi' ? 'BẢNG ĐIỀU KHIỂN GIẢNG VIÊN' : 'FACULTY WORKSPACE IDE'}
-              </span>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/70 dark:border-emerald-800/70 text-[11px] font-mono text-emerald-700 dark:text-emerald-300">
+    <div className="space-y-5 pb-10">
+      {/* Clean Classroom Header */}
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shrink-0">
+            <GraduationCap className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+                {t('teacher.myClasses')}
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/70 dark:border-emerald-800/70 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 {dashboard
                   ? lang === 'vi'
                     ? `${dashboard.total_classes} LỚP ĐANG HOẠT ĐỘNG`
-                    : `${dashboard.total_classes} ACTIVE COHORTS`
+                    : `${dashboard.total_classes} ACTIVE CLASSES`
                   : lang === 'vi'
                     ? 'ĐANG ĐỒNG BỘ...'
                     : 'SYNCING...'}
               </span>
             </div>
-
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shrink-0">
-                <GraduationCap className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-              </div>
-              <div>
-                <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-                  {t('teacher.myClasses')}
-                </h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                  {t('teacher.myClassesSubtitle')}
-                </p>
-              </div>
-            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+              {lang === 'vi'
+                ? 'Quản lý danh sách sinh viên, mã tham gia và tiến độ nộp bài theo từng lớp.'
+                : 'Manage student rosters, join codes, and citation health across your classes.'}
+            </p>
           </div>
-
-          <Button
-            onClick={() => setCreateOpen(true)}
-            aria-label={t('teacher.createClass')}
-            className="gap-2 rounded-xl shadow-xs shrink-0"
-          >
-            <Plus className="h-4 w-4" />
-            {t('teacher.createClass')}
-          </Button>
         </div>
+
+        <Button
+          onClick={() => setCreateOpen(true)}
+          aria-label={t('teacher.createClass')}
+          className="gap-2 rounded-xl shadow-xs shrink-0"
+        >
+          <Plus className="h-4 w-4" />
+          {t('teacher.createClass')}
+        </Button>
       </div>
 
       {error && (
@@ -156,57 +181,48 @@ export function MyClassesPage() {
         </Alert>
       )}
 
-      {/* Architectural Metric Cards */}
+      {/* Visual Metric Cards (Zero numbered corner tags) */}
       {dashboard && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
           <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2.5 mb-2.5">
               <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/60 dark:border-indigo-800/60">
                 <GraduationCap className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400">
-                01
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                {t('teacher.classes')}
               </span>
             </div>
             <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100">
-              {dashboard.total_classes}
-            </p>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">
-              {t('teacher.classes')}
+              <NumberPopIn value={dashboard.total_classes} />
             </p>
           </Card>
 
           <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2.5 mb-2.5">
               <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200/60 dark:border-emerald-800/60">
                 <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400">
-                02
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                {t('teacher.students')}
               </span>
             </div>
             <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
-              {dashboard.total_students}
-            </p>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">
-              {t('teacher.students')}
+              <NumberPopIn value={dashboard.total_students} />
             </p>
           </Card>
 
           <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2.5 mb-2.5">
               <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/80 border border-amber-200/60 dark:border-amber-800/60">
                 <FileCheck className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400">
-                03
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                {t('teacher.submissions')}
               </span>
             </div>
             <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400">
-              {dashboard.total_essays}
-            </p>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">
-              {t('teacher.submissions')}
+              <NumberPopIn value={dashboard.total_essays} />
             </p>
           </Card>
 
@@ -216,146 +232,186 @@ export function MyClassesPage() {
               data-testid="needs-review-kpi-link"
               className="block rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500 group"
             >
-              <Card className="p-4 sm:p-5 h-full rounded-2xl bg-white dark:bg-slate-900 border border-rose-200/90 dark:border-rose-800/80 hover:border-rose-400 dark:hover:border-rose-600 shadow-2xs transition-colors">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/80 border border-rose-200/60 dark:border-rose-800/60">
-                    <ClipboardCheck className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+              <Card className="p-4 sm:p-5 h-full rounded-2xl bg-rose-50/40 dark:bg-rose-950/20 border border-rose-200/90 dark:border-rose-800/80 hover:border-rose-400 dark:hover:border-rose-600 shadow-2xs transition-colors">
+                <div className="flex items-center justify-between gap-2 mb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-xl bg-rose-100/80 dark:bg-rose-950/80 border border-rose-200/60 dark:border-rose-800/60">
+                      <ClipboardCheck className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                    </div>
+                    <span className="text-xs font-semibold text-rose-700 dark:text-rose-300">
+                      {t('teacher.needsReview')}
+                    </span>
                   </div>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400">
-                    04
-                    <ChevronRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-                  </span>
+                  <ChevronRight className="h-4 w-4 text-rose-500 transition-transform group-hover:translate-x-0.5 shrink-0" />
                 </div>
                 <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-rose-600 dark:text-rose-400">
-                  {dashboard.pending_reviews}
-                </p>
-                <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
-                  {t('teacher.needsReview')}
+                  <NumberPopIn value={dashboard.pending_reviews} />
                 </p>
               </Card>
             </Link>
           ) : (
             <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-              <div className="flex items-center justify-between mb-2">
-                <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/80 border border-rose-200/60 dark:border-rose-800/60">
-                  <ClipboardCheck className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+              <div className="flex items-center gap-2.5 mb-2.5">
+                <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700">
+                  <ClipboardCheck className="h-4 w-4 text-slate-500 dark:text-slate-400" />
                 </div>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400">
-                  04
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {t('teacher.needsReview')}
                 </span>
               </div>
-              <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-rose-600 dark:text-rose-400">
-                {dashboard.pending_reviews}
-              </p>
-              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">
-                {t('teacher.needsReview')}
+              <p className="text-2xl sm:text-3xl font-bold font-mono tabular-nums text-slate-700 dark:text-slate-200">
+                <NumberPopIn value={dashboard.pending_reviews} />
               </p>
             </Card>
           )}
         </div>
       )}
 
-      {/* IDE Container for Cohort Registry */}
+      {/* Visual Class Cards Studio */}
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-            </div>
-            <Separator orientation="vertical" className="h-4" />
-            <Terminal className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
-            <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-200">
-              teacher_classes.registry
-            </span>
-          </div>
-          <span className="text-[11px] font-mono text-slate-400">
-            {lang === 'vi'
-              ? `${dashboard?.classes?.length ?? 0} lớp học`
-              : `${dashboard?.classes?.length ?? 0} cohorts`}
-          </span>
-        </div>
+        <StudioWindowHeader
+          title={lang === 'vi' ? 'DANH SÁCH LỚP HỌC' : 'MY CLASSES'}
+          badge={
+            <Badge
+              variant="secondary"
+              className="font-mono text-[11px] bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60"
+            >
+              {lang === 'vi'
+                ? `${dashboard?.classes?.length ?? 0} lớp học`
+                : `${dashboard?.classes?.length ?? 0} classes`}
+            </Badge>
+          }
+        />
 
-        <div className="p-4 sm:p-5 space-y-3">
+        <div className="p-4 sm:p-5">
           {(dashboard?.classes?.length ?? 0) === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-8 sm:p-12 text-center">
+            <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center">
               <p className="text-slate-700 dark:text-slate-300 font-medium">
                 {t('teacher.noClassesYet')}
               </p>
               <p className="text-sm text-slate-500 mt-1">{t('teacher.noClassesHint')}</p>
             </div>
           ) : (
-            (dashboard?.classes ?? []).map((c: Class, idx: number) => (
-              <button
-                key={c.id}
-                onClick={() => navigate(`/teacher/classes/${c.id}`)}
-                className="card w-full text-left rounded-xl bg-slate-50/60 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-800 p-4 hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all flex items-center justify-between gap-4 group focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
-              >
-                <div className="flex items-start gap-3.5 flex-1 min-w-0">
-                  <span className="text-xs font-mono font-semibold px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 text-slate-500 dark:text-slate-400 shrink-0 mt-0.5">
-                    #{String(idx + 1).padStart(2, '0')}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-display font-semibold text-base text-slate-900 dark:text-white break-words group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                      {c.name}
-                    </h3>
-                    {c.description && (
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-2 break-words">
-                        {c.description}
-                      </p>
-                    )}
-                    <div className="flex flex-wrap gap-2.5 mt-2.5">
-                      <Badge
-                        variant="secondary"
-                        className="font-mono font-normal text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700"
-                      >
-                        <Users className="inline h-3 w-3 mr-1 text-emerald-500" />
-                        {c.student_count} {lang === 'vi' ? 'SV' : t('teacher.students').toLowerCase()}
-                      </Badge>
-                      <Badge
-                        variant="secondary"
-                        className="font-mono font-normal text-xs bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700"
-                      >
-                        <FileCheck className="inline h-3 w-3 mr-1 text-indigo-500" />
-                        {c.essay_count} {lang === 'vi' ? 'bài' : t('teacher.submissions').toLowerCase()}
-                      </Badge>
-                      {c.join_code && (
-                        <Badge
-                          variant="outline"
-                          className="font-mono font-semibold text-xs bg-indigo-50/90 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
-                        >
-                          CODE: {c.join_code}
-                        </Badge>
-                      )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(dashboard?.classes ?? []).map((c: Class) => {
+                const submissionRatio =
+                  c.student_count > 0
+                    ? Math.min(100, Math.round((c.essay_count / c.student_count) * 100))
+                    : c.essay_count > 0
+                      ? 100
+                      : 0;
+                const studentBarPct = Math.min(
+                  100,
+                  Math.round(((c.student_count || 0) / maxStudentsInCohort) * 100),
+                );
+                const isCopied = copiedClassId === c.id;
+
+                return (
+                  <CardHoverTilt key={c.id} maxTilt={3.2} className="h-full">
+                    <div
+                      onClick={() => navigate(`/teacher/classes/${c.id}`)}
+                      className="h-full w-full text-left rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-800 p-4 sm:p-5 hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors flex flex-col justify-between gap-4 group cursor-pointer shadow-2xs"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-display font-bold text-base sm:text-lg text-slate-900 dark:text-white break-words">
+                            <Link
+                              to={`/teacher/classes/${c.id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded"
+                            >
+                              {c.name}
+                            </Link>
+                          </h3>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              data-testid={`delete-class-card-btn-${c.id}`}
+                              title={lang === 'vi' ? 'Xóa lớp học' : 'Delete class'}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPendingDeleteClass(c);
+                              }}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                            <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-indigo-500 transition-transform group-hover:translate-x-0.5" />
+                          </div>
+                        </div>
+
+                        {c.description && (
+                          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 line-clamp-2 break-words">
+                            {c.description}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-3 pt-1">
+                        {/* Visual Activity Bar */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-medium">
+                              <Users className="h-3.5 w-3.5 text-emerald-500" />
+                              {c.student_count}{' '}
+                              {lang === 'vi' ? 'sinh viên' : 'students'}
+                            </span>
+                            <span className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-medium">
+                              <FileCheck className="h-3.5 w-3.5 text-indigo-500" />
+                              {c.essay_count}{' '}
+                              {lang === 'vi' ? 'bài nộp' : 'submissions'}
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-slate-200/80 dark:bg-slate-700/80 overflow-hidden">
+                            <div
+                              style={{
+                                width: `${Math.max(
+                                  submissionRatio,
+                                  c.student_count > 0 ? Math.min(25, studentBarPct) : 0,
+                                )}%`,
+                                transition: 'width 420ms cubic-bezier(0.22, 1, 0.36, 1)',
+                              }}
+                              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Interactive Join Code Ticket Pill */}
+                        {c.join_code && (
+                          <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-700/70">
+                            <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                              {lang === 'vi' ? 'Mã tham gia lớp' : 'Class Join Code'}
+                            </span>
+                            <button
+                              type="button"
+                              data-testid={`copy-class-code-${c.id}`}
+                              onClick={(e) => void handleCopyCode(e, c)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50/90 hover:bg-indigo-100 dark:bg-indigo-950/80 dark:hover:bg-indigo-900/70 border border-indigo-200/80 dark:border-indigo-800 text-xs font-mono font-semibold text-indigo-700 dark:text-indigo-300 transition-colors cursor-pointer"
+                            >
+                              {isCopied ? (
+                                <Check className="h-3 w-3 text-emerald-500" />
+                              ) : (
+                                <KeyRound className="h-3 w-3" />
+                              )}
+                              <TextMorph
+                                text={
+                                  isCopied
+                                    ? lang === 'vi'
+                                      ? 'Đã chép!'
+                                      : 'Copied!'
+                                    : c.join_code
+                                }
+                              />
+                              {!isCopied && <Copy className="h-3 w-3 opacity-60" />}
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    data-testid={`delete-class-card-btn-${c.id}`}
-                    title={lang === 'vi' ? 'Xóa lớp học' : 'Delete class'}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPendingDeleteClass(c);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setPendingDeleteClass(c);
-                      }
-                    }}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </span>
-                  <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-indigo-500 shrink-0 transition-transform group-hover:translate-x-0.5" />
-                </div>
-              </button>
-            ))
+                  </CardHoverTilt>
+                );
+              })}
+            </div>
           )}
         </div>
       </div>
@@ -365,17 +421,14 @@ export function MyClassesPage() {
           data-testid="enrolled-classes-section"
           className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
         >
-          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-            <div className="flex items-center gap-2.5">
-              <Terminal className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-200">
-                {lang === 'vi' ? 'Lớp học đã tham gia' : 'Enrolled Cohorts'}
-              </span>
-            </div>
-            <span className="text-[11px] font-mono text-slate-400">
-              {enrolledClasses.length}
-            </span>
-          </div>
+          <StudioWindowHeader
+            title={lang === 'vi' ? 'LỚP HỌC ĐÃ THAM GIA' : 'ENROLLED CLASSES'}
+            badge={
+              <Badge variant="secondary" className="font-mono text-[11px]">
+                {enrolledClasses.length}
+              </Badge>
+            }
+          />
           <div className="p-4 sm:p-5 space-y-3">
             {enrolledClasses.map((c) => (
               <div
@@ -386,7 +439,7 @@ export function MyClassesPage() {
                   <h3 className="font-display font-semibold text-sm sm:text-base text-slate-900 dark:text-white">
                     {c.name}
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                     {lang === 'vi' ? 'Giảng viên:' : 'Instructor:'} {c.teacher_username}
                   </p>
                 </div>
@@ -396,7 +449,7 @@ export function MyClassesPage() {
                   size="sm"
                   data-testid={`leave-class-btn-${c.id}`}
                   onClick={() => setPendingLeaveClass(c)}
-                  className="gap-1.5 rounded-xl text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-800 dark:hover:bg-rose-950/50 text-xs font-mono"
+                  className="gap-1.5 rounded-xl text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-800 dark:hover:bg-rose-950/50 text-xs"
                 >
                   <LogOut className="h-3.5 w-3.5" />
                   {lang === 'vi' ? 'Rời lớp' : 'Leave Class'}
@@ -419,7 +472,7 @@ export function MyClassesPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
-              {lang === 'vi' ? 'Xác nhận rời lớp học' : 'Leave Cohort?'}
+              {lang === 'vi' ? 'Xác nhận rời lớp học' : 'Leave Class?'}
             </h3>
             <p className="text-sm text-slate-600 dark:text-slate-300">
               {lang === 'vi'

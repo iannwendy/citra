@@ -872,8 +872,21 @@ export function AccordionExpand({
   className?: string;
   innerClassName?: string;
 }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useIsomorphicLayoutEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    if (!open) {
+      el.setAttribute('inert', '');
+    } else {
+      el.removeAttribute('inert');
+    }
+  }, [open]);
+
   return (
     <div
+      ref={panelRef}
       className={cn('t-acc-panel', className)}
       data-open={open ? 'true' : 'false'}
       aria-hidden={!open}

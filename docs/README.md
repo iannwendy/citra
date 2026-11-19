@@ -58,6 +58,7 @@ docs/
 - [**`2026-11-14-hybrid-motion-system-design.md`**](./plans/2026-11-14-hybrid-motion-system-design.md) & [**`2026-11-14-hybrid-motion-system.md`**](./plans/2026-11-14-hybrid-motion-system.md) — Đặc tả & kế hoạch triển khai hệ thống chuyển động lai (`transitions.dev` CSS Tokens + `motion` `LazyMotion`).
 - [**`2026-11-15-citra-promo-90s-120fps-design.md`**](./plans/2026-11-15-citra-promo-90s-120fps-design.md) & [**`2026-11-15-citra-promo-90s-120fps.md`**](./plans/2026-11-15-citra-promo-90s-120fps.md) — Đặc tả & kế hoạch sản xuất phim giới thiệu sản phẩm CITRA 90s · 120fps (`marketing/citra-promo`).
 - [**`2026-11-17-four-pillar-zero-regression-optimization.md`**](./plans/2026-11-17-four-pillar-zero-regression-optimization.md) — Đặc tả & kế hoạch tối ưu hóa 4 trụ cột Neuro-Symbolic Zero-Regression (`Pillar 1–4` + `Option 2A` Novel-Claim Grounding Gate).
+- [**`2026-11-19-teaching-admin-visual-studio-design.md`**](./plans/2026-11-19-teaching-admin-visual-studio-design.md) & [**`2026-11-19-teaching-admin-visual-studio.md`**](./plans/2026-11-19-teaching-admin-visual-studio.md) — Đặc tả & kế hoạch thiết kế lại toàn bộ 6 trang Giảng viên & Quản trị viên theo ngôn ngữ *Visual Action Studio* (duyệt trích dẫn 1 chạm, sơ đồ luồng 3 chặng, biểu đồ SVG & chuyển động 120Hz).
 
 ---
 

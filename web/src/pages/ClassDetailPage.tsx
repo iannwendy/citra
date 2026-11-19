@@ -9,17 +9,13 @@ import {
   FileText,
   Trash2,
   AlertCircle,
-  Terminal,
-  ShieldCheck,
   ExternalLink,
   Loader2,
   Copy,
   Check,
   RefreshCw,
   KeyRound,
-  BarChart3,
   AlertTriangle,
-  Sparkles,
   Pencil,
   Archive,
 } from 'lucide-react';
@@ -31,6 +27,7 @@ import {
   type ClassAnalytics,
 } from '@/api/client';
 import { getRuleDisplayName } from '@/lib/verdictExplanation';
+import { getHumanVerdictMeta } from '@/lib/teacherGuidance';
 import { useToast } from '@/contexts/ToastContext';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { AddStudentDialog } from '@/components/AddStudentDialog';
@@ -38,23 +35,32 @@ import { UpgradeModal } from '@/components/UpgradeModal';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  StudioWindowHeader,
+  ProportionalBarRow,
+} from '@/components/ui/studio-visuals';
+import {
+  DonutChart,
+  NumberPopIn,
+  ScoreRing,
+} from '@/components/ui/transitions';
 
 /**
- * ClassDetailPage — manage a single class (Scholarly Precision shadcn/ui v2.0).
+ * ClassDetailPage — Visual Cohort Studio for a single class.
  *
- * 3 sections: header (name, description, CSV export), students (add/remove),
- * essays (click-through to report). Owner-only — 403 redirects to dashboard.
+ * Combines ScoreRing gauges, DonutChart verdict distribution, 4-band grade histogram,
+ * plain-language issue ranking bars, and student/submission rosters.
  */
 export function ClassDetailPage() {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
-  const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const lang: 'en' | 'vi' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const toast = useToast();
   const cid = Number(classId);
 
@@ -109,7 +115,7 @@ export function ClassDetailPage() {
   }, [cid, t]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   const handleRemove = async () => {
@@ -119,9 +125,9 @@ export function ClassDetailPage() {
     try {
       await api.removeStudentFromClass(cid, studentId);
       toast.success(
-        t('teacher.studentRemovedSuccess', { username: pendingRemove.username })
+        t('teacher.studentRemovedSuccess', { username: pendingRemove.username }),
       );
-      load();
+      void load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t('teacher.studentRemoveFailed'));
     }
@@ -136,7 +142,7 @@ export function ClassDetailPage() {
       toast.success(
         lang === 'vi'
           ? `Đã sao chép mã tham gia lớp: ${cls.join_code}`
-          : `Copied class join code: ${cls.join_code}`
+          : `Copied class join code: ${cls.join_code}`,
       );
     } catch {
       toast.error(lang === 'vi' ? 'Không thể sao chép mã' : 'Failed to copy code');
@@ -151,7 +157,7 @@ export function ClassDetailPage() {
       toast.success(
         lang === 'vi'
           ? `Đã tạo mã tham gia mới: ${updated.join_code}`
-          : `Generated new join code: ${updated.join_code}`
+          : `Generated new join code: ${updated.join_code}`,
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to regenerate code');
@@ -249,9 +255,7 @@ export function ClassDetailPage() {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-6 w-6 text-indigo-600 dark:text-indigo-400 animate-spin" />
-        <span className="ml-3 text-slate-500 font-mono text-sm">
-          {t('common.loading')}
-        </span>
+        <span className="ml-3 text-slate-500 text-sm">{t('common.loading')}</span>
       </div>
     );
   }
@@ -274,9 +278,16 @@ export function ClassDetailPage() {
   }
   if (!cls) return null;
 
+  const avgCisSafe =
+    analytics && Number.isFinite(analytics.avg_cis) ? analytics.avg_cis : 0;
+  const recencySafe =
+    analytics && Number.isFinite(analytics.recency_5yr_ratio)
+      ? analytics.recency_5yr_ratio
+      : 0;
+
   return (
-    <div className="space-y-6 pb-10">
-      {/* Executive Header Card */}
+    <div className="space-y-5 pb-10">
+      {/* Clean Class Header */}
       <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
@@ -286,38 +297,44 @@ export function ClassDetailPage() {
                 size="sm"
                 onClick={() => navigate('/teacher/classes')}
                 aria-label="Back to classes"
-                className="h-7 px-2.5 rounded-lg text-xs font-mono gap-1.5"
+                className="h-7 px-2.5 rounded-lg text-xs gap-1.5"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
                 {t('common.back')}
               </Button>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-semibold text-indigo-700 dark:text-indigo-300">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                COHORT #{cls.id}
-              </span>
               {cls.join_code && (
                 <div
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/80 dark:border-emerald-800/80 text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-300"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200/80 dark:border-emerald-800/80 text-xs font-mono font-semibold text-emerald-700 dark:text-emerald-300"
                   data-testid="class-join-code-badge"
                 >
-                  <KeyRound className="h-3 w-3" />
-                  <span>JOIN CODE: {cls.join_code}</span>
+                  <KeyRound className="h-3.5 w-3.5" />
+                  <span>
+                    {lang === 'vi' ? 'MÃ LỚP:' : 'JOIN CODE:'} {cls.join_code}
+                  </span>
                   <button
                     type="button"
-                    onClick={handleCopyJoinCode}
+                    onClick={() => void handleCopyJoinCode()}
                     title={lang === 'vi' ? 'Sao chép mã lớp' : 'Copy join code'}
                     className="p-0.5 rounded hover:bg-emerald-200/60 dark:hover:bg-emerald-900/60 transition-colors cursor-pointer"
                   >
-                    {copiedCode ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    {copiedCode ? (
+                      <Check className="h-3 w-3" />
+                    ) : (
+                      <Copy className="h-3 w-3" />
+                    )}
                   </button>
                   <button
                     type="button"
-                    onClick={handleRegenerateCode}
+                    onClick={() => void handleRegenerateCode()}
                     disabled={regeneratingCode}
-                    title={lang === 'vi' ? 'Đổi mã tham gia lớp mới' : 'Regenerate join code'}
+                    title={
+                      lang === 'vi' ? 'Đổi mã tham gia lớp mới' : 'Regenerate join code'
+                    }
                     className="p-0.5 rounded hover:bg-emerald-200/60 dark:hover:bg-emerald-900/60 transition-colors cursor-pointer disabled:opacity-50"
                   >
-                    <RefreshCw className={`h-3 w-3 ${regeneratingCode ? 'animate-spin' : ''}`} />
+                    <RefreshCw
+                      className={`h-3 w-3 ${regeneratingCode ? 'animate-spin' : ''}`}
+                    />
                   </button>
                 </div>
               )}
@@ -339,17 +356,17 @@ export function ClassDetailPage() {
               variant="outline"
               data-testid="edit-class-btn"
               onClick={handleOpenEdit}
-              className="gap-1.5 rounded-xl font-mono text-xs h-9"
+              className="gap-1.5 rounded-xl text-xs h-9"
             >
               <Pencil className="h-3.5 w-3.5" />
-              {lang === 'vi' ? 'Đổi tên' : 'Edit Class'}
+              {lang === 'vi' ? 'Sửa thông tin' : 'Edit Class'}
             </Button>
 
             <Button
               type="button"
               variant="outline"
-              onClick={handleExport}
-              className="gap-2 rounded-xl font-mono text-xs h-9"
+              onClick={() => void handleExport()}
+              className="gap-1.5 rounded-xl text-xs h-9"
             >
               <Download className="h-3.5 w-3.5" />
               {t('teacher.exportCsv')}
@@ -361,14 +378,14 @@ export function ClassDetailPage() {
               data-testid="export-class-zip-btn"
               disabled={exportingZip}
               onClick={() => void handleExportZip()}
-              className="gap-1.5 rounded-xl font-mono text-xs h-9 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/50"
+              className="gap-1.5 rounded-xl text-xs h-9 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/50"
             >
               {exportingZip ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <Archive className="h-3.5 w-3.5" />
               )}
-              {lang === 'vi' ? 'Xuất ZIP Lớp' : 'Export ZIP'}
+              {lang === 'vi' ? 'Tải gói ZIP' : 'Export ZIP'}
             </Button>
 
             <Button
@@ -376,7 +393,7 @@ export function ClassDetailPage() {
               variant="outline"
               data-testid="delete-class-btn"
               onClick={() => setConfirmDeleteOpen(true)}
-              className="gap-1.5 rounded-xl font-mono text-xs h-9 border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50"
+              className="gap-1.5 rounded-xl text-xs h-9 border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50"
             >
               <Trash2 className="h-3.5 w-3.5" />
               {lang === 'vi' ? 'Xóa lớp' : 'Delete'}
@@ -385,115 +402,102 @@ export function ClassDetailPage() {
         </div>
       </div>
 
-      {/* Architectural Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {t('teacher.enrolledStudents')}
-            </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400">
-              01
-            </span>
-          </div>
-          <p className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100">
-            {students.length}
+      {/* Visual Metric & Ring Gauge Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            {t('teacher.enrolledStudents')}
+          </span>
+          <p className="mt-2 text-2xl sm:text-3xl font-bold font-mono tabular-nums text-slate-900 dark:text-slate-100">
+            <NumberPopIn value={students.length} />
           </p>
         </Card>
 
-        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {t('teacher.cohortSubmissions')}
-            </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400">
-              02
-            </span>
-          </div>
-          <p className="text-2xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
-            {essays.length}
+        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            {t('teacher.cohortSubmissions')}
+          </span>
+          <p className="mt-2 text-2xl sm:text-3xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+            <NumberPopIn value={essays.length} />
           </p>
         </Card>
 
-        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {lang === 'vi' ? 'Điểm CIS Trung bình Lớp' : 'Cohort Average CIS'}
+        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex items-center justify-between gap-3">
+          <div>
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
+              {lang === 'vi' ? 'Điểm tin cậy TB' : 'Average CIS'}
             </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-violet-50 dark:bg-violet-950/80 text-violet-600 dark:text-violet-400">
-              03
-            </span>
+            <p className="mt-1.5 text-2xl sm:text-3xl font-bold font-mono tabular-nums text-violet-600 dark:text-violet-400">
+              {analytics ? `${avgCisSafe.toFixed(1)}` : '—'}
+            </p>
           </div>
-          <p className="text-2xl font-bold font-mono tabular-nums text-violet-600 dark:text-violet-400">
-            {analytics ? `${analytics.avg_cis.toFixed(1)}` : '—'}
-          </p>
+          <ScoreRing
+            data-testid="cohort-cis-ring"
+            value={avgCisSafe}
+            size={46}
+            thickness={4.5}
+            color="#8b5cf6"
+          />
         </Card>
 
-        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {lang === 'vi' ? 'Tỷ lệ Tài liệu Mới (≤ 5 năm)' : '5-Year Citation Recency'}
+        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex items-center justify-between gap-3">
+          <div>
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
+              {lang === 'vi' ? 'Tài liệu mới (≤ 5 năm)' : '5-Year Recency'}
             </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400">
-              04
-            </span>
+            <p className="mt-1.5 text-2xl sm:text-3xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400">
+              {analytics ? `${recencySafe.toFixed(1)}%` : '—'}
+            </p>
           </div>
-          <p className="text-2xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400">
-            {analytics ? `${analytics.recency_5yr_ratio.toFixed(1)}%` : '—'}
-          </p>
+          <ScoreRing
+            data-testid="cohort-recency-ring"
+            value={recencySafe}
+            size={46}
+            thickness={4.5}
+            color="#f59e0b"
+          />
         </Card>
       </div>
 
-      {/* Cohort Integrity Analytics & Shared Hallucination Detector */}
+      {/* Visual Cohort Citation Health Studio */}
       {analytics && (
         <section
           className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden"
           data-testid="cohort-analytics-panel"
         >
-          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
+          <StudioWindowHeader
+            title={
+              lang === 'vi'
+                ? 'TỔNG QUAN CHẤT LƯỢNG TRÍCH DẪN'
+                : 'CLASS CITATION HEALTH'
+            }
+            rightSlot={
+              <div className="flex flex-wrap items-center gap-2">
+                {(analytics.queued_essays ?? 0) > 0 && (
+                  <span
+                    data-testid="cohort-queued-essays-pill"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/80 border border-amber-200/80 dark:border-amber-800/80 text-xs font-medium text-amber-700 dark:text-amber-300"
+                  >
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {lang === 'vi'
+                      ? `${analytics.queued_essays} bài đang xử lý`
+                      : `${analytics.queued_essays} queued`}
+                  </span>
+                )}
+                {(analytics.failed_essays ?? 0) > 0 && (
+                  <span
+                    data-testid="cohort-failed-essays-pill"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/80 border border-rose-200/80 dark:border-rose-800/80 text-xs font-medium text-rose-700 dark:text-rose-300"
+                  >
+                    <AlertCircle className="h-3 w-3" />
+                    {lang === 'vi'
+                      ? `${analytics.failed_essays} bài lỗi xử lý`
+                      : `${analytics.failed_essays} failed`}
+                  </span>
+                )}
               </div>
-              <Separator orientation="vertical" className="h-4" />
-              <BarChart3 className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-              <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-white">
-                {lang === 'vi'
-                  ? 'Phân tích Độ tin cậy Lớp học & Cảnh báo Ảo giác AI Trùng lặp'
-                  : 'Cohort Integrity Analytics & Shared AI Hallucination Detector'}
-              </h2>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {(analytics.queued_essays ?? 0) > 0 && (
-                <span
-                  data-testid="cohort-queued-essays-pill"
-                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/80 border border-amber-200/80 dark:border-amber-800/80 text-[10px] font-mono font-semibold text-amber-700 dark:text-amber-300"
-                >
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  {lang === 'vi'
-                    ? `${analytics.queued_essays} bài đang xử lý`
-                    : `${analytics.queued_essays} queued`}
-                </span>
-              )}
-              {(analytics.failed_essays ?? 0) > 0 && (
-                <span
-                  data-testid="cohort-failed-essays-pill"
-                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/80 border border-rose-200/80 dark:border-rose-800/80 text-[10px] font-mono font-semibold text-rose-700 dark:text-rose-300"
-                >
-                  <AlertCircle className="h-3 w-3" />
-                  {lang === 'vi'
-                    ? `${analytics.failed_essays} bài lỗi xử lý`
-                    : `${analytics.failed_essays} failed`}
-                </span>
-              )}
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[10px] font-mono font-semibold text-indigo-700 dark:text-indigo-300">
-                <Sparkles className="h-3 w-3" />
-                CROSS-STUDENT ANOMALY ENGINE
-              </span>
-            </div>
-          </div>
+            }
+          />
 
           {(() => {
             const vb = analytics.verdict_breakdown ?? {};
@@ -502,6 +506,7 @@ export function ClassDetailPage() {
                 key: 'verified',
                 count: vb.verified ?? 0,
                 label: lang === 'vi' ? 'Hợp lệ' : 'Verified',
+                colorHex: '#10b981',
                 barClass: 'bg-emerald-500',
                 pillClass:
                   'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-200/80 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300',
@@ -509,7 +514,8 @@ export function ClassDetailPage() {
               {
                 key: 'metadata_error',
                 count: vb.metadata_error ?? 0,
-                label: lang === 'vi' ? 'Sai lệch Metadata' : 'Metadata Error',
+                label: lang === 'vi' ? 'Sai lệch thông tin' : 'Metadata Discrepancy',
+                colorHex: '#f59e0b',
                 barClass: 'bg-amber-500',
                 pillClass:
                   'bg-amber-50 dark:bg-amber-950/70 border-amber-200/80 dark:border-amber-800/80 text-amber-700 dark:text-amber-300',
@@ -521,6 +527,7 @@ export function ClassDetailPage() {
                   lang === 'vi'
                     ? 'Thiếu quy cách trích dẫn'
                     : 'Incomplete Reference',
+                colorHex: '#fb923c',
                 barClass: 'bg-orange-400',
                 pillClass:
                   'bg-orange-50 dark:bg-orange-950/70 border-orange-200/80 dark:border-orange-800/80 text-orange-700 dark:text-orange-300',
@@ -528,7 +535,8 @@ export function ClassDetailPage() {
               {
                 key: 'suspected_hallucination',
                 count: vb.suspected_hallucination ?? 0,
-                label: lang === 'vi' ? 'Nghi vấn ngụy tạo' : 'Suspected Hallucination',
+                label: lang === 'vi' ? 'Nghi vấn ngụy tạo' : 'Suspected Fabrication',
+                colorHex: '#f43f5e',
                 barClass: 'bg-rose-500',
                 pillClass:
                   'bg-rose-50 dark:bg-rose-950/70 border-rose-200/80 dark:border-rose-800/80 text-rose-700 dark:text-rose-300',
@@ -536,7 +544,8 @@ export function ClassDetailPage() {
               {
                 key: 'unresolved',
                 count: vb.unresolved ?? 0,
-                label: lang === 'vi' ? 'Chờ rà soát' : 'Unresolved',
+                label: lang === 'vi' ? 'Chờ kiểm tra' : 'Unresolved',
+                colorHex: '#94a3b8',
                 barClass: 'bg-slate-400',
                 pillClass:
                   'bg-slate-100 dark:bg-slate-800/90 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300',
@@ -548,14 +557,20 @@ export function ClassDetailPage() {
                   lang === 'vi'
                     ? 'Tài nguyên Web / Pháp luật'
                     : 'Web / Legal Resource',
+                colorHex: '#0ea5e9',
                 barClass: 'bg-sky-500',
                 pillClass:
                   'bg-sky-50 dark:bg-sky-950/70 border-sky-200/80 dark:border-sky-800/80 text-sky-700 dark:text-sky-300',
               },
             ];
-            const totalVerdicts = breakdownItems.reduce((sum, item) => sum + item.count, 0);
+            const totalVerdicts = breakdownItems.reduce(
+              (sum, item) => sum + item.count,
+              0,
+            );
             const showBreakdown =
-              totalVerdicts > 0 || (analytics.total_essays ?? 0) > 0 || essays.length > 0;
+              totalVerdicts > 0 ||
+              (analytics.total_essays ?? 0) > 0 ||
+              essays.length > 0;
             if (!showBreakdown) return null;
 
             return (
@@ -563,44 +578,67 @@ export function ClassDetailPage() {
                 data-testid="cohort-verdict-breakdown"
                 className="px-4 sm:px-5 pt-4 sm:pt-5"
               >
-                <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-[11px] font-mono font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      {lang === 'vi'
-                        ? 'Phân bổ Phán quyết Trích dẫn Toàn Lớp'
-                        : 'Cohort Verdict Breakdown'}
-                    </p>
-                    <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                      {totalVerdicts}{' '}
-                      {lang === 'vi' ? 'trích dẫn đã phân loại' : 'verdicts classified'}
-                    </span>
-                  </div>
-                  {totalVerdicts > 0 && (
-                    <div className="h-2 w-full rounded-full bg-slate-200/70 dark:bg-slate-800 overflow-hidden flex">
-                      {breakdownItems
-                        .filter((item) => item.count > 0)
-                        .map((item) => (
-                          <div
-                            key={item.key}
-                            style={{ width: `${(item.count / totalVerdicts) * 100}%` }}
-                            title={`${item.label}: ${item.count}`}
-                            className={`${item.barClass} h-full transition-all`}
-                          />
-                        ))}
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    {breakdownItems.map((item) => (
-                      <span
-                        key={item.key}
-                        data-testid={`verdict-breakdown-pill-${item.key}`}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-mono ${item.pillClass}`}
-                      >
-                        <span className={`w-2 h-2 rounded-full ${item.barClass}`} />
-                        <span className="font-medium">{item.label}:</span>
-                        <span className="font-bold tabular-nums">{item.count}</span>
+                <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center gap-4">
+                  <DonutChart
+                    size={76}
+                    thickness={10}
+                    segments={
+                      totalVerdicts > 0
+                        ? breakdownItems.map((b) => ({
+                            value: b.count,
+                            color: b.colorHex,
+                          }))
+                        : [{ value: 1, color: '#cbd5e1' }]
+                    }
+                    centerContent={
+                      <span className="text-sm font-bold font-mono tabular-nums text-slate-800 dark:text-slate-100">
+                        {totalVerdicts}
                       </span>
-                    ))}
+                    }
+                  />
+                  <div className="flex-1 min-w-0 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        {lang === 'vi'
+                          ? 'Phân bổ kết quả trích dẫn toàn lớp'
+                          : 'Class Citation Breakdown'}
+                      </p>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        {totalVerdicts}{' '}
+                        {lang === 'vi' ? 'trích dẫn' : 'citations'}
+                      </span>
+                    </div>
+                    {totalVerdicts > 0 && (
+                      <div className="h-2.5 w-full rounded-full bg-slate-200/70 dark:bg-slate-800 overflow-hidden flex">
+                        {breakdownItems
+                          .filter((item) => item.count > 0)
+                          .map((item) => (
+                            <div
+                              key={item.key}
+                              style={{
+                                width: `${(item.count / totalVerdicts) * 100}%`,
+                              }}
+                              title={`${item.label}: ${item.count}`}
+                              className={`${item.barClass} h-full transition-all`}
+                            />
+                          ))}
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-1.5">
+                      {breakdownItems.map((item) => (
+                        <span
+                          key={item.key}
+                          data-testid={`verdict-breakdown-pill-${item.key}`}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs ${item.pillClass}`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${item.barClass}`} />
+                          <span>{item.label}:</span>
+                          <span className="font-bold font-mono tabular-nums">
+                            {item.count}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -608,157 +646,195 @@ export function ClassDetailPage() {
           })()}
 
           <div className="p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-12 gap-5">
-            {/* Left: CIS Distribution & Top Symbolic Rules */}
+            {/* Left: Visual Grade Histogram & Natural-Language Issue Bars */}
             <div className="lg:col-span-5 space-y-4">
-              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800">
-                <p className="text-[11px] font-mono font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
-                  {lang === 'vi' ? 'Phân phối Điểm CIS trong Lớp' : 'Cohort CIS Score Distribution'}
-                </p>
-                <div className="grid grid-cols-4 gap-2 text-center">
-                  <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                    <p className="text-lg font-mono font-bold text-emerald-700 dark:text-emerald-300">
-                      {analytics.cis_distribution?.excellent ?? 0}
-                    </p>
-                    <p className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">
-                      ≥ 85 (A)
-                    </p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
-                    <p className="text-lg font-mono font-bold text-indigo-700 dark:text-indigo-300">
-                      {analytics.cis_distribution?.good ?? 0}
-                    </p>
-                    <p className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400">
-                      70–84 (B)
-                    </p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                    <p className="text-lg font-mono font-bold text-amber-700 dark:text-amber-300">
-                      {analytics.cis_distribution?.fair ?? 0}
-                    </p>
-                    <p className="text-[10px] font-mono text-amber-600 dark:text-amber-400">
-                      50–69 (C)
-                    </p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20">
-                    <p className="text-lg font-mono font-bold text-rose-700 dark:text-rose-300">
-                      {analytics.cis_distribution?.poor ?? 0}
-                    </p>
-                    <p className="text-[10px] font-mono text-rose-600 dark:text-rose-400">
-                      &lt; 50 (D)
-                    </p>
-                  </div>
-                </div>
-              </div>
+              {(() => {
+                const dist = analytics.cis_distribution ?? {};
+                const bands = [
+                  {
+                    key: 'A',
+                    range: '≥ 85',
+                    count: dist.excellent ?? 0,
+                    barClass: 'bg-emerald-500',
+                    textClass: 'text-emerald-700 dark:text-emerald-300',
+                  },
+                  {
+                    key: 'B',
+                    range: '70–84',
+                    count: dist.good ?? 0,
+                    barClass: 'bg-indigo-500',
+                    textClass: 'text-indigo-700 dark:text-indigo-300',
+                  },
+                  {
+                    key: 'C',
+                    range: '50–69',
+                    count: dist.fair ?? 0,
+                    barClass: 'bg-amber-500',
+                    textClass: 'text-amber-700 dark:text-amber-300',
+                  },
+                  {
+                    key: 'D',
+                    range: '< 50',
+                    count: dist.poor ?? 0,
+                    barClass: 'bg-rose-500',
+                    textClass: 'text-rose-700 dark:text-rose-300',
+                  },
+                ];
+                const maxBand = Math.max(1, ...bands.map((b) => b.count));
 
-              <div className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800">
-                <p className="text-[11px] font-mono font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2.5">
+                return (
+                  <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800">
+                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-3">
+                      {lang === 'vi'
+                        ? 'Phân bố mức điểm tin cậy (A – D)'
+                        : 'Score Band Distribution (A – D)'}
+                    </p>
+                    <div className="grid grid-cols-4 gap-2.5 items-end pt-2">
+                      {bands.map((b) => {
+                        const heightPct =
+                          b.count > 0 ? Math.max(18, (b.count / maxBand) * 100) : 6;
+                        return (
+                          <div
+                            key={b.key}
+                            className="flex flex-col items-center gap-1.5"
+                          >
+                            <span
+                              className={`text-sm font-bold font-mono tabular-nums ${b.textClass}`}
+                            >
+                              {b.count}
+                            </span>
+                            <div className="w-full h-16 rounded-xl bg-slate-200/60 dark:bg-slate-800/80 flex items-end p-1">
+                              <div
+                                style={{
+                                  height: `${heightPct}%`,
+                                  transition:
+                                    'height 420ms cubic-bezier(0.22, 1, 0.36, 1)',
+                                }}
+                                className={`w-full rounded-lg ${b.barClass}`}
+                              />
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                                {b.key}
+                              </p>
+                              <p className="text-[10px] font-mono text-slate-400">
+                                {b.range}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800">
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-2.5">
                   {lang === 'vi'
-                    ? 'Luật Symbolic Kích hoạt Nhiều nhất'
-                    : 'Most Triggered Symbolic Rules'}
+                    ? 'Lỗi trích dẫn thường gặp nhất trong lớp'
+                    : 'Most Common Citation Issues'}
                 </p>
                 {(analytics.top_triggered_rules ?? []).length === 0 ? (
-                  <p className="text-xs font-mono text-slate-400">
-                    {lang === 'vi' ? 'Chưa có luật vi phạm nào được ghi nhận.' : 'No rule violations triggered yet.'}
+                  <p className="text-xs text-slate-400">
+                    {lang === 'vi'
+                      ? 'Chưa ghi nhận lỗi trích dẫn phổ biến nào.'
+                      : 'No recurring citation issues detected yet.'}
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {(analytics.top_triggered_rules ?? []).map((r) => (
-                      <div
-                        key={r.rule_id}
-                        className="flex flex-col gap-0.5 px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700"
-                      >
-                        <div className="flex items-center justify-between gap-2 text-xs font-mono">
-                          <span className="font-bold text-indigo-600 dark:text-indigo-400">
-                            {r.rule_id}
-                          </span>
-                          <span className="text-slate-500 dark:text-slate-400 font-semibold">
-                            ×{r.count}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-snug">
-                          {getRuleDisplayName(r.rule_id, lang)}
-                        </p>
-                      </div>
-                    ))}
+                    {(() => {
+                      const rules = analytics.top_triggered_rules ?? [];
+                      const maxRuleCount = Math.max(1, ...rules.map((r) => r.count));
+                      return rules.map((r) => (
+                        <ProportionalBarRow
+                          key={r.rule_id}
+                          label={getRuleDisplayName(r.rule_id, lang)}
+                          count={`×${r.count}`}
+                          value={r.count}
+                          max={maxRuleCount}
+                          barClass="bg-amber-500"
+                        />
+                      ));
+                    })()}
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Right: Shared Hallucination & Flagged Citation Radar */}
-            <div className="lg:col-span-7 p-4 rounded-xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
+            {/* Right: Shared Flagged Citations Across Students */}
+            <div className="lg:col-span-7 p-4 rounded-2xl bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between gap-2 mb-3">
-                  <p className="text-[11px] font-mono font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                     <AlertTriangle className="h-3.5 w-3.5 text-rose-500" />
                     {lang === 'vi'
-                      ? 'Radar Phát hiện Trích dẫn Ảo giác / Lỗi Metadata trong Lớp'
-                      : 'Shared Hallucination & Flagged Citation Radar'}
+                      ? 'Nguồn lỗi xuất hiện ở các bài nộp'
+                      : 'Flagged Citations Across Submissions'}
                   </p>
-                  <span className="text-[10px] font-mono text-slate-400">
+                  <span className="text-xs text-slate-400">
                     {(analytics.shared_hallucinations ?? []).length}{' '}
-                    {lang === 'vi' ? 'cảnh báo' : 'flagged items'}
+                    {lang === 'vi' ? 'mục' : 'items'}
                   </span>
                 </div>
 
                 {(analytics.shared_hallucinations ?? []).length === 0 ? (
-                  <div className="py-8 text-center text-xs font-mono text-slate-400">
+                  <div className="py-10 text-center text-xs text-slate-400">
                     {lang === 'vi'
-                      ? 'Không phát hiện trích dẫn ảo giác hoặc lỗi metadata nào trong lớp học.'
-                      : 'No suspected hallucinations or metadata anomalies detected across this cohort.'}
+                      ? 'Chưa phát hiện trích dẫn nghi vấn trùng lặp nào giữa các bài nộp.'
+                      : 'No shared or repeated citation warnings detected across this class.'}
                   </div>
                 ) : (
-                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                    {(analytics.shared_hallucinations ?? []).map((item, idx) => (
-                      <div
-                        key={idx}
-                        className={`p-3 rounded-xl border text-xs ${
-                          item.is_shared
-                            ? 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800/80'
-                            : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
-                          <span
-                            className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold uppercase ${
-                              item.label === 'suspected_hallucination'
-                                ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
-                                : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-                            }`}
-                          >
-                            {item.label}
-                          </span>
-                          <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
-                            {item.is_shared
-                              ? lang === 'vi'
-                                ? `TRÙNG LẶP Ở ${item.essay_ids.length} BÀI NỘP (${item.students.join(', ')})`
-                                : `SHARED ACROSS ${item.essay_ids.length} SUBMISSIONS (${item.students.join(', ')})`
-                              : `${item.students.join(', ')}`}
-                          </span>
-                        </div>
-                        <p className="font-mono text-[11px] text-slate-800 dark:text-slate-200 line-clamp-2">
-                          {item.citation_raw}
-                        </p>
-                        {item.essay_ids && item.essay_ids.length > 0 && (
-                          <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-1.5 border-t border-slate-200/60 dark:border-slate-800/80">
-                            <span className="text-[10px] font-mono text-slate-400">
-                              {lang === 'vi' ? 'Báo cáo:' : 'Reports:'}
+                  <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+                    {(analytics.shared_hallucinations ?? []).map((item, idx) => {
+                      const meta = getHumanVerdictMeta(item.label, lang);
+                      return (
+                        <div
+                          key={idx}
+                          className={`p-3.5 rounded-xl border text-xs ${
+                            item.is_shared
+                              ? 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800/80'
+                              : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                            <span
+                              className={`px-2 py-0.5 rounded-md border text-[11px] font-semibold ${meta.badgeClass}`}
+                            >
+                              {meta.label}
                             </span>
-                            {item.essay_ids.map((eid) => (
-                              <Link
-                                key={eid}
-                                to={`/verification/report/${eid}`}
-                                data-testid={`shared-hallucination-essay-link-${eid}`}
-                                className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900/70 border border-indigo-200/80 dark:border-indigo-800/80 font-mono text-[10px] font-semibold text-indigo-700 dark:text-indigo-300 transition-colors"
-                              >
-                                #{eid}
-                                <ExternalLink className="h-2.5 w-2.5" />
-                              </Link>
-                            ))}
+                            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                              {item.is_shared
+                                ? lang === 'vi'
+                                  ? `Trùng ở ${item.essay_ids.length} bài (${item.students.join(', ')})`
+                                  : `Shared in ${item.essay_ids.length} papers (${item.students.join(', ')})`
+                                : item.students.join(', ')}
+                            </span>
                           </div>
-                        )}
-                      </div>
-                    ))}
+                          <p className="font-serif text-xs text-slate-800 dark:text-slate-200 line-clamp-2">
+                            &ldquo;{item.citation_raw}&rdquo;
+                          </p>
+                          {item.essay_ids && item.essay_ids.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-800/80">
+                              <span className="text-[11px] text-slate-400">
+                                {lang === 'vi' ? 'Mở báo cáo:' : 'Reports:'}
+                              </span>
+                              {item.essay_ids.map((eid) => (
+                                <Link
+                                  key={eid}
+                                  to={`/verification/report/${eid}`}
+                                  data-testid={`shared-hallucination-essay-link-${eid}`}
+                                  className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900/70 border border-indigo-200/80 dark:border-indigo-800/80 font-mono text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 transition-colors"
+                                >
+                                  #{eid}
+                                  <ExternalLink className="h-2.5 w-2.5" />
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -767,46 +843,43 @@ export function ClassDetailPage() {
         </section>
       )}
 
-      {/* Students Roster IDE Container */}
+      {/* Students Roster */}
       <section className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-            </div>
-            <Separator orientation="vertical" className="h-4 shrink-0" />
-            <Users className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-white">
-              {t('teacher.students')} ({students.length})
-            </h2>
-          </div>
-          <Button
-            size="sm"
-            onClick={() => setAddOpen(true)}
-            className="gap-1.5 rounded-xl h-8 text-xs shrink-0"
-          >
-            <UserPlus className="h-3.5 w-3.5" />
-            {t('teacher.addStudent')}
-          </Button>
-        </div>
+        <StudioWindowHeader
+          title={lang === 'vi' ? 'DANH SÁCH SINH VIÊN' : 'STUDENTS'}
+          badge={
+            <Badge variant="secondary" className="font-mono text-[11px]">
+              {students.length}
+            </Badge>
+          }
+          rightSlot={
+            <Button
+              size="sm"
+              onClick={() => setAddOpen(true)}
+              className="gap-1.5 rounded-xl h-8 text-xs"
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              {t('teacher.addStudent')}
+            </Button>
+          }
+        />
 
         <div className="divide-y divide-slate-100 dark:divide-slate-800">
           {students.length === 0 ? (
-            <p className="p-8 text-center text-sm text-slate-500 font-mono">
-              {t('teacher.noStudentsYet')}
-            </p>
+            <div className="p-10 text-center space-y-1">
+              <Users className="h-6 w-6 text-slate-300 dark:text-slate-600 mx-auto mb-1" />
+              <p className="text-sm text-slate-500">{t('teacher.noStudentsYet')}</p>
+            </div>
           ) : (
-            students.map((s, idx) => (
+            students.map((s) => (
               <div
                 key={s.id}
                 className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="text-xs font-mono text-slate-400 dark:text-slate-500">
-                    #{String(idx + 1).padStart(2, '0')}
-                  </span>
+                  <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center text-xs font-bold text-indigo-700 dark:text-indigo-300 shrink-0 uppercase">
+                    {(s.full_name || s.username).slice(0, 1)}
+                  </div>
                   <div className="min-w-0">
                     <p className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate">
                       {s.username}
@@ -831,41 +904,37 @@ export function ClassDetailPage() {
         </div>
       </section>
 
-      {/* Submissions IDE Container */}
+      {/* Class Submissions */}
       <section className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400/80" />
-            </div>
-            <Separator orientation="vertical" className="h-4 shrink-0" />
-            <FileText className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <h2 className="text-sm font-display font-semibold text-slate-900 dark:text-white">
-              {t('teacher.submissions')} ({essays.length})
-            </h2>
-          </div>
-          <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1 shrink-0">
-            <Terminal className="h-3 w-3" />
-            cohort_submissions.log
-          </span>
-        </div>
+        <StudioWindowHeader
+          title={lang === 'vi' ? 'BÀI NỘP CỦA LỚP' : 'CLASS SUBMISSIONS'}
+          badge={
+            <Badge variant="secondary" className="font-mono text-[11px]">
+              {essays.length}
+            </Badge>
+          }
+        />
 
         <div className="divide-y divide-slate-100 dark:divide-slate-800">
           {essays.length === 0 ? (
-            <p className="p-8 text-center text-sm text-slate-500 font-mono">
-              {t('teacher.noSubmissionsYet')}
-            </p>
+            <div className="p-10 text-center space-y-1">
+              <FileText className="h-6 w-6 text-slate-300 dark:text-slate-600 mx-auto mb-1" />
+              <p className="text-sm text-slate-500">{t('teacher.noSubmissionsYet')}</p>
+            </div>
           ) : (
-            essays.map((e, idx) => {
+            essays.map((e) => {
               const status = (e.job_status ?? 'completed').toLowerCase();
-              const isQueuedOrProcessing = status === 'queued' || status === 'processing';
+              const isQueuedOrProcessing =
+                status === 'queued' || status === 'processing';
               const isFailed = status === 'failed';
               const targetHref =
                 isQueuedOrProcessing || isFailed
                   ? `/verification/processing/${e.id}`
                   : `/verification/report/${e.id}`;
+              const cisVal =
+                e.cis_score != null && Number.isFinite(Number(e.cis_score))
+                  ? Number(e.cis_score)
+                  : null;
 
               return (
                 <Link
@@ -876,27 +945,24 @@ export function ClassDetailPage() {
                   className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 focus:outline-none focus:bg-slate-50 dark:focus:bg-slate-800/50 transition-colors group"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-xs font-mono text-slate-400 dark:text-slate-500">
-                      #{String(idx + 1).padStart(2, '0')}
-                    </span>
                     <FileFormatIcon filename={e.filename} size="sm" />
                     <div className="min-w-0">
                       <p className="font-medium text-sm text-slate-900 dark:text-slate-100 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                         {e.filename}
                       </p>
-                      <p className="text-xs font-mono text-slate-500 mt-0.5">
-                        {e.username ?? '—'} • {e.num_pages} {t('teacher.pages')} •{' '}
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {e.username ?? '—'} • {e.num_pages} {t('teacher.pages')}
                         {e.uploaded_at
-                          ? new Date(e.uploaded_at).toLocaleDateString()
+                          ? ` • ${new Date(e.uploaded_at).toLocaleDateString()}`
                           : ''}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                     {isQueuedOrProcessing ? (
                       <>
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/80 border border-amber-200/80 dark:border-amber-800/80 text-[11px] font-mono font-semibold text-amber-700 dark:text-amber-300">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/80 border border-amber-200/80 dark:border-amber-800/80 text-xs font-medium text-amber-700 dark:text-amber-300">
                           <Loader2 className="h-3 w-3 animate-spin" />
                           {status === 'queued'
                             ? lang === 'vi'
@@ -906,7 +972,7 @@ export function ClassDetailPage() {
                               ? 'Đang xử lý'
                               : 'Processing'}
                         </span>
-                        <span className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 font-medium">
+                        <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
                           {lang === 'vi' ? 'Xem tiến độ' : 'View Progress'}
                         </span>
                       </>
@@ -914,28 +980,44 @@ export function ClassDetailPage() {
                       <>
                         <span
                           title={e.job_error ?? undefined}
-                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/80 border border-rose-200/80 dark:border-rose-800/80 text-[11px] font-mono font-semibold text-rose-700 dark:text-rose-300"
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/80 border border-rose-200/80 dark:border-rose-800/80 text-xs font-medium text-rose-700 dark:text-rose-300"
                         >
                           <AlertCircle className="h-3 w-3" />
                           {lang === 'vi' ? 'Thất bại' : 'Failed'}
                         </span>
                         {e.quota_charged === false && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200/80 dark:border-emerald-800/80 text-[10px] font-mono font-semibold text-emerald-700 dark:text-emerald-300">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200/80 dark:border-emerald-800/80 text-xs font-medium text-emerald-700 dark:text-emerald-300">
                             {lang === 'vi' ? 'Đã hoàn lượt' : 'Credit Refunded'}
                           </span>
                         )}
-                        <span className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 font-medium">
+                        <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
                           {lang === 'vi' ? 'Thử lại' : 'Retry'}
                         </span>
                       </>
                     ) : (
                       <>
-                        {e.cis_score != null && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-bold text-indigo-700 dark:text-indigo-300 tabular-nums">
-                            CIS {Number(e.cis_score).toFixed(1)}%
-                          </span>
+                        {cisVal !== null && (
+                          <div className="inline-flex items-center gap-2">
+                            <ScoreRing
+                              value={cisVal}
+                              size={28}
+                              thickness={3.2}
+                              color={
+                                cisVal >= 85
+                                  ? '#10b981'
+                                  : cisVal >= 70
+                                    ? '#6366f1'
+                                    : cisVal >= 50
+                                      ? '#f59e0b'
+                                      : '#f43f5e'
+                              }
+                            />
+                            <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 tabular-nums">
+                              CIS {cisVal.toFixed(1)}%
+                            </span>
+                          </div>
                         )}
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200/80 dark:border-emerald-800/80 text-[10px] font-mono font-semibold text-emerald-700 dark:text-emerald-300">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200/80 dark:border-emerald-800/80 text-xs font-medium text-emerald-700 dark:text-emerald-300">
                           <Check className="h-3 w-3" />
                           {lang === 'vi' ? 'Hoàn tất' : 'Completed'}
                         </span>
@@ -997,7 +1079,8 @@ export function ClassDetailPage() {
             <form onSubmit={(e) => void handleSaveEdit(e)} className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="edit-class-name">
-                  {t('teacher.classNameLabel')} <span className="text-rose-500">*</span>
+                  {t('teacher.classNameLabel')}{' '}
+                  <span className="text-rose-500">*</span>
                 </Label>
                 <Input
                   id="edit-class-name"
@@ -1009,7 +1092,9 @@ export function ClassDetailPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="edit-class-desc">{t('teacher.classDescriptionLabel')}</Label>
+                <Label htmlFor="edit-class-desc">
+                  {t('teacher.classDescriptionLabel')}
+                </Label>
                 <Textarea
                   id="edit-class-desc"
                   data-testid="edit-class-desc-input"

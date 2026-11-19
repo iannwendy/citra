@@ -1,6 +1,6 @@
 {
   "name": "essay-integrity-checker",
-  "version": "3.82.4",
+  "version": "3.83.0",
   "description": "",
   "main": "index.js",
   "scripts": {
