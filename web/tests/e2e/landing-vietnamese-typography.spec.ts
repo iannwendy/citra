@@ -284,7 +284,7 @@ test.describe('Landing Page — Full Vietnamese Typography & Sentient Glyph Veri
       'Trình thẩm định',
       'Quy trình',
       'Thực nghiệm 120K',
-      'Gói dịch vụ',
+      'Vai trò',
       'Bảng giá',
       'Đăng nhập',
       'Trải nghiệm miễn phí',
@@ -307,6 +307,7 @@ test.describe('Landing Page — Full Vietnamese Typography & Sentient Glyph Veri
       '#how-it-works',
       '#benchmark-120k',
       '#taxonomy',
+      '#pricing-plans',
       '#workspaces',
       '#faq',
     ];

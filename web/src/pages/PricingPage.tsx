@@ -2898,9 +2898,9 @@ function PricingSolvaFooter({ lang }: { lang: Lang }) {
     {
       header: lang === 'vi' ? 'Không gian làm việc' : 'Workspaces',
       links: [
-        { label: lang === 'vi' ? 'Dành cho Sinh viên' : 'Student Workspace', href: '/#workspaces' },
-        { label: lang === 'vi' ? 'Dành cho Giảng viên' : 'Teacher Classroom', href: '/#workspaces' },
-        { label: lang === 'vi' ? 'Quản trị hệ thống' : 'Admin Control', href: '/#workspaces' },
+        { label: lang === 'vi' ? 'Dành cho Sinh viên' : 'Student Workspace', to: '/#workspaces-student' },
+        { label: lang === 'vi' ? 'Dành cho Giảng viên' : 'Teacher Classroom', to: '/#workspaces-teacher' },
+        { label: lang === 'vi' ? 'Quản trị hệ thống' : 'Admin Control', to: '/#workspaces-admin' },
         { label: lang === 'vi' ? 'Trang chủ CITRA' : 'CITRA Home', to: '/' },
       ],
     },
@@ -2925,6 +2925,10 @@ function PricingSolvaFooter({ lang }: { lang: Lang }) {
               ? 'Chính sách bảo vệ dữ liệu'
               : 'Personal Data Policy',
           to: '/privacy',
+        },
+        {
+          label: lang === 'vi' ? 'Điều khoản dịch vụ' : 'Terms of Service',
+          to: '/terms',
         },
       ],
     },

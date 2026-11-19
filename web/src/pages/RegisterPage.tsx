@@ -557,6 +557,15 @@ export function RegisterPage() {
                       >
                         {t('privacyCompliance.policyLinkLabel')}
                       </Link>
+                      {lang === 'vi' ? ' và ' : ' and '}
+                      <Link
+                        to="/terms"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-[#1C1A15] dark:text-[#FBFAF6] underline underline-offset-3 decoration-[#1C1A15]/40 dark:decoration-[#FBFAF6]/40 hover:opacity-80 transition-opacity"
+                      >
+                        {lang === 'vi' ? 'Điều khoản dịch vụ' : 'Terms of Service'}
+                      </Link>
                       {t('privacyCompliance.consentCheckboxSuffix')}
                     </span>
                   </label>

@@ -4,6 +4,7 @@ import {
   matchPath,
   Navigate,
   Outlet,
+  type RouteObject,
   useLocation,
   useParams,
   useRouteError,
@@ -83,6 +84,8 @@ const StripeDemoCheckoutPage = lazyWithRetry(() => import('./pages/StripeDemoChe
 const BillingSuccessPage = lazyWithRetry(() => import('./pages/BillingSuccessPage').then((m) => ({ default: m.BillingSuccessPage })));
 const SharedReportPage = lazyWithRetry(() => import('./pages/SharedReportPage').then((m) => ({ default: m.SharedReportPage })));
 const PrivacyPolicyPage = lazyWithRetry(() => import('./pages/PrivacyPolicyPage').then((m) => ({ default: m.PrivacyPolicyPage })));
+const TermsOfServicePage = lazyWithRetry(() => import('./pages/TermsOfServicePage').then((m) => ({ default: m.TermsOfServicePage })));
+const NotFoundPage = lazyWithRetry(() => import('./pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 
 // Route-level ErrorBoundary that overrides React Router's raw "Unexpected Application Error!"
 // screen and automatically recovers from stale dynamic import chunk errors after deployments.
@@ -194,6 +197,7 @@ const PAGE_TITLE_ROUTES: Array<{ pattern: string; title: string }> = [
   { pattern: '/settings', title: 'Settings' },
   { pattern: '/pricing', title: 'Pricing & Plans' },
   { pattern: '/privacy', title: 'Privacy Policy' },
+  { pattern: '/terms', title: 'Terms of Service' },
   { pattern: '/billing/checkout', title: 'Stripe Checkout' },
   { pattern: '/billing/success', title: 'Payment Confirmed' },
   { pattern: '/teacher/classes', title: 'My Classes' },
@@ -208,7 +212,7 @@ export function getDocumentTitle(pathname: string): string {
       return `CITRA - ${route.title}`;
     }
   }
-  return 'CITRA';
+  return 'CITRA - Page Not Found';
 }
 
 function syncRobotsMeta(pathname: string): void {
@@ -244,7 +248,7 @@ function RootLayout() {
   return <Outlet />;
 }
 
-export const router = createBrowserRouter([
+export const appRoutes: RouteObject[] = [
   {
     element: <RootLayout />,
     errorElement: <RouteErrorBoundary />,
@@ -293,6 +297,10 @@ export const router = createBrowserRouter([
       {
         path: '/privacy',
         element: withSuspense(PrivacyPolicyPage),
+      },
+      {
+        path: '/terms',
+        element: withSuspense(TermsOfServicePage),
       },
       {
         path: '/verify/share/:token',
@@ -449,14 +457,16 @@ export const router = createBrowserRouter([
         ],
       },
 
-      // Catch-all redirect
+      // Catch-all 404 page
       {
         path: '*',
-        element: <Navigate to="/" replace />,
+        element: withSuspense(NotFoundPage),
       },
     ],
   },
-], {
+];
+
+export const router = createBrowserRouter(appRoutes, {
   future: {
     v7_relativeSplatPath: true,
     v7_fetcherPersist: true,

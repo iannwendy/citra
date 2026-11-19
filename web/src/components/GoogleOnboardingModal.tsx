@@ -44,8 +44,12 @@ export function GoogleOnboardingModal() {
       setOpen(false);
       return;
     }
-    // Don't cover the Profile or Privacy Policy page
-    if (location.pathname === '/profile' || location.pathname === '/privacy') {
+    // Don't cover the Profile, Privacy Policy, or Terms of Service page
+    if (
+      location.pathname === '/profile' ||
+      location.pathname === '/privacy' ||
+      location.pathname === '/terms'
+    ) {
       setOpen(false);
       return;
     }

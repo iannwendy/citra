@@ -751,6 +751,18 @@ function PrivacySolvaHeader({
               <span>{lang === 'vi' ? 'Bảng giá dịch vụ' : 'Pricing Plans'}</span>
               <ChevronRight className="w-4 h-4 opacity-60" />
             </Link>
+            <Link
+              to="/terms"
+              onClick={() => setMobileMenuOpen(false)}
+              style={{
+                backgroundColor: 'var(--solva-surface)',
+                color: 'var(--solva-ink)',
+              }}
+              className="flex items-center justify-between px-3.5 py-2.5 rounded-[10px] font-solva-sans text-[14px] font-medium"
+            >
+              <span>{lang === 'vi' ? 'Điều khoản dịch vụ' : 'Terms of Service'}</span>
+              <ChevronRight className="w-4 h-4 opacity-60" />
+            </Link>
           </div>
 
           <div className="pt-2 flex items-center gap-2">
@@ -1258,6 +1270,18 @@ function PrivacySolvaFooter({ lang }: { lang: Lang }) {
           label: lang === 'vi' ? 'Bảng giá dịch vụ' : 'Pricing Plans',
           to: '/pricing',
         },
+        {
+          label: lang === 'vi' ? 'Sinh viên & Tác giả' : 'Student Workspace',
+          to: '/#workspaces-student',
+        },
+        {
+          label: lang === 'vi' ? 'Giảng viên & Hội đồng' : 'Teacher Classroom',
+          to: '/#workspaces-teacher',
+        },
+        {
+          label: lang === 'vi' ? 'Quản trị Khoa & Trường' : 'Admin Control',
+          to: '/#workspaces-admin',
+        },
       ],
     },
     {
@@ -1314,6 +1338,10 @@ function PrivacySolvaFooter({ lang }: { lang: Lang }) {
               ? 'Chính sách bảo vệ dữ liệu'
               : 'Personal Data Policy',
           to: '/privacy',
+        },
+        {
+          label: lang === 'vi' ? 'Điều khoản dịch vụ' : 'Terms of Service',
+          to: '/terms',
         },
       ],
     },

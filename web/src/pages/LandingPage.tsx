@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AuthContext } from '@/contexts/AuthContext';
 import {
@@ -399,8 +399,23 @@ function SourceLogicLogo({ size = 24 }: { size?: number }) {
   );
 }
 
+export type WorkspaceRole = 'student' | 'teacher' | 'admin';
+
+function parseWorkspaceRoleFromUrl(search: string, hash: string): WorkspaceRole | null {
+  const roleParam = new URLSearchParams(search).get('role');
+  if (roleParam === 'student' || roleParam === 'teacher' || roleParam === 'admin') {
+    return roleParam;
+  }
+  const normalizedHash = hash.toLowerCase();
+  if (normalizedHash === '#workspaces-student') return 'student';
+  if (normalizedHash === '#workspaces-teacher') return 'teacher';
+  if (normalizedHash === '#workspaces-admin') return 'admin';
+  return null;
+}
+
 export function LandingPage() {
   const { i18n } = useTranslation();
+  const location = useLocation();
   const lang: Lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const auth = useContext(AuthContext);
   const isAuthenticated = auth
@@ -409,6 +424,55 @@ export function LandingPage() {
           (auth.isLoading && typeof window !== 'undefined' && localStorage.getItem('token')),
       )
     : typeof window !== 'undefined' && Boolean(localStorage.getItem('token'));
+
+  const [activeWorkspaceRole, setActiveWorkspaceRole] = useState<WorkspaceRole>(
+    () =>
+      parseWorkspaceRoleFromUrl(
+        location.search || (typeof window !== 'undefined' ? window.location.search : ''),
+        location.hash || (typeof window !== 'undefined' ? window.location.hash : ''),
+      ) ?? 'student',
+  );
+
+  useEffect(() => {
+    const matchedRole = parseWorkspaceRoleFromUrl(location.search, location.hash);
+    if (matchedRole) {
+      setActiveWorkspaceRole(matchedRole);
+    }
+    if (location.hash) {
+      const rawId = location.hash.slice(1);
+      const targetId = rawId.startsWith('workspaces-') ? 'workspaces' : rawId;
+      const targetEl = document.getElementById(targetId);
+      if (targetEl && typeof targetEl.scrollIntoView === 'function') {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  }, [location.search, location.hash]);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const matchedRole = parseWorkspaceRoleFromUrl(
+        window.location.search,
+        window.location.hash,
+      );
+      if (matchedRole) {
+        setActiveWorkspaceRole(matchedRole);
+      }
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const selectAndFocusWorkspaceRole = (role: WorkspaceRole) => {
+    setActiveWorkspaceRole(role);
+    const sectionEl = document.getElementById('workspaces');
+    if (sectionEl && typeof sectionEl.scrollIntoView === 'function') {
+      sectionEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    window.requestAnimationFrame(() => {
+      const tabEl = document.getElementById(`workspace-tab-${role}`);
+      tabEl?.focus({ preventScroll: true });
+    });
+  };
 
   const toggleLanguage = () => {
     const next = lang === 'en' ? 'vi' : 'en';
@@ -437,11 +501,16 @@ export function LandingPage() {
         <SolvaClientResultsSection lang={lang} />
         <SolvaSecuritySection lang={lang} />
         <SolvaTaxonomyPricingSection lang={lang} isAuthenticated={isAuthenticated} />
-        <SolvaRoleTestimonialsSection lang={lang} />
+        <SolvaRoleTestimonialsSection
+          lang={lang}
+          activeRole={activeWorkspaceRole}
+          onSelectRole={setActiveWorkspaceRole}
+          isAuthenticated={isAuthenticated}
+        />
         <SolvaFAQSection lang={lang} />
         <SolvaBottomCTASection lang={lang} isAuthenticated={isAuthenticated} />
       </main>
-      <SolvaFooter lang={lang} />
+      <SolvaFooter lang={lang} onSelectWorkspaceRole={selectAndFocusWorkspaceRole} />
     </div>
   );
 }
@@ -583,7 +652,7 @@ function SolvaHeader({
       }}
       className="fixed top-0 left-0 right-0 z-50"
     >
-      <div className="max-w-[1280px] mx-auto px-5 sm:px-6 lg:px-8 xl:px-[40px] h-[64px] lg:h-[76px] flex items-center justify-between gap-2 xl:gap-4">
+      <div className="max-w-[1280px] mx-auto px-5 sm:px-6 lg:px-8 xl:px-[40px] h-[64px] lg:h-[76px] flex items-center justify-between flex-nowrap gap-2 xl:gap-4">
         {/* Left: Brand Logo */}
         <div className="flex items-center shrink-0">
           <Link
@@ -606,7 +675,7 @@ function SolvaHeader({
         {/* Center: Solva Navigation Links + Dropdown */}
         <nav
           aria-label="Primary Navigation"
-          className="hidden lg:flex items-center justify-center flex-1 min-w-0 gap-0.5 xl:gap-1"
+          className="hidden lg:flex items-center justify-center flex-1 min-w-0 flex-nowrap gap-0.5 xl:gap-1"
         >
           {/* Dropdown Trigger (`Platform v` / `Kiến trúc v`) */}
           <div
@@ -675,7 +744,7 @@ function SolvaHeader({
           <a
             href="#interactive-demo"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Trình thẩm định' : 'Inspector'}
           </a>
@@ -683,7 +752,7 @@ function SolvaHeader({
           <a
             href="#how-it-works"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Quy trình' : 'Pipeline'}
           </a>
@@ -691,25 +760,25 @@ function SolvaHeader({
           <a
             href="#benchmark-120k"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center gap-1.5 h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
+            className="inline-flex items-center gap-1.5 h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             <span>{lang === 'vi' ? 'Thực nghiệm 120K' : '120K Benchmark'}</span>
           </a>
 
           <a
-            href="#taxonomy"
+            href="#workspaces"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
-            {lang === 'vi' ? 'Gói dịch vụ' : 'Taxonomy'}
+            {lang === 'vi' ? 'Vai trò' : 'Workspaces'}
           </a>
 
           <Link
             to="/pricing"
             data-testid="landing-pricing-link"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Bảng giá' : 'Pricing'}
           </Link>
@@ -807,8 +876,8 @@ function SolvaHeader({
                 href: '#benchmark-120k',
               },
               {
-                label: lang === 'vi' ? 'Gói dịch vụ & Quyền lợi' : 'Verdict Taxonomy',
-                href: '#taxonomy',
+                label: lang === 'vi' ? 'Tóm tắt gói dịch vụ' : 'Pricing Overview',
+                href: '#pricing-plans',
               },
               {
                 label: lang === 'vi' ? 'Không gian 3 vai trò' : 'Role Workspaces',
@@ -3794,10 +3863,13 @@ function SolvaTaxonomyPricingSection({
 
   return (
     <section
-      id="taxonomy"
+      id="pricing-plans"
       className="scroll-mt-[84px] lg:scroll-mt-[108px] py-[36px] sm:py-[48px] lg:py-[96px] px-5 sm:px-6 lg:px-[40px]"
     >
-      <div className="max-w-[1200px] mx-auto flex flex-col items-center gap-[28px] sm:gap-[36px] lg:gap-[64px]">
+      <div
+        id="taxonomy"
+        className="scroll-mt-[88px] max-w-[1200px] mx-auto flex flex-col items-center gap-[28px] sm:gap-[36px] lg:gap-[64px]"
+      >
         {/* Centered Headline */}
         <div className="flex flex-col items-center text-center gap-[16px] max-w-[580px]">
           <SolvaEyebrow centered>
@@ -4239,9 +4311,394 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
 
 /* ============================================================
    SECTION 9: ROLE WORKSPACES & ACADEMIC TESTIMONIALS (`#workspaces`)
-   Solva's 3-Column Staggered Grid (Middle Column Offset by `48px`)
+   Interactive 3-Role Showcase + Solva's 3-Column Staggered Grid
    ============================================================ */
-function SolvaRoleTestimonialsSection({ lang }: { lang: Lang }) {
+function SolvaRoleWorkspacesShowcase({
+  lang,
+  activeRole,
+  onSelectRole,
+  isAuthenticated,
+}: {
+  lang: Lang;
+  activeRole: WorkspaceRole;
+  onSelectRole: (role: WorkspaceRole) => void;
+  isAuthenticated: boolean;
+}) {
+  const isVi = lang === 'vi';
+  const roleOrder: WorkspaceRole[] = ['student', 'teacher', 'admin'];
+
+  const roleConfigs: Record<
+    WorkspaceRole,
+    {
+      tabLabel: string;
+      eyebrow: string;
+      headline: string;
+      summary: string;
+      steps: string[];
+      ctaLabel: string;
+      ctaTo: string;
+      previewTitle: string;
+      previewSubtitle: string;
+      previewMetricLabel: string;
+      previewMetricValue: string;
+      previewRows: Array<{ label: string; badge: string; tone: 'ok' | 'warn' | 'info' }>;
+      icon: typeof GraduationCap;
+    }
+  > = {
+    student: {
+      tabLabel: isVi ? 'Sinh viên & Tác giả' : 'Students & Authors',
+      eyebrow: isVi ? 'DÀNH CHO SINH VIÊN & TÁC GIẢ' : 'FOR STUDENTS & AUTHORS',
+      headline: isVi
+        ? 'Hoàn thiện khóa luận và bài báo với sự tự tin trọn vẹn trước giờ nộp.'
+        : 'Submit your thesis or manuscript with complete bibliographic confidence.',
+      summary: isVi
+        ? 'Rà soát danh mục tham khảo ngay khi đang viết, không sợ sót nguồn hay nhầm năm xuất bản.'
+        : 'Verify every reference while you write — before a reviewer or advisor ever sees a formatting slip.',
+      steps: isVi
+        ? [
+            'Tải tệp PDF, Word (.docx), BibTeX hoặc dán trực tiếp đoạn tài liệu tham khảo để kiểm tra nhanh.',
+            'Phát hiện tức thì trích dẫn thiếu mục tài liệu cuối bài, lệch năm công bố hoặc tài liệu không có thật.',
+            'Chuẩn hóa trích dẫn chuẩn APA, IEEE, Harvard và theo dõi Điểm Toàn vẹn Trích dẫn (Citation Integrity Score) tăng qua từng bản sửa.',
+          ]
+        : [
+            'Upload a PDF, Word (.docx), or bibliography file — or paste references for an instant check while writing.',
+            'Spot missing bibliography entries, wrong publication years, and non-existent AI-suggested papers in seconds.',
+            'Apply clean APA, IEEE, or Harvard fixes and watch your Citation Integrity Score climb across revisions.',
+          ],
+      ctaLabel: isAuthenticated
+        ? isVi
+          ? 'Kiểm tra bản thảo ngay'
+          : 'Check a Manuscript Now'
+        : isVi
+          ? 'Bắt đầu miễn phí cho Tác giả'
+          : 'Start Free Author Check',
+      ctaTo: isAuthenticated ? '/upload' : '/register',
+      previewTitle: isVi ? 'Bản xem trước Khóa luận Tốt nghiệp' : 'Thesis Readiness Snapshot',
+      previewSubtitle: isVi
+        ? 'Bản nộp cuối · 30 tài liệu tham khảo'
+        : 'Final Submission · 30 References Checked',
+      previewMetricLabel: isVi
+        ? 'Điểm Toàn vẹn Trích dẫn'
+        : 'Citation Integrity Score',
+      previewMetricValue: '72% → 98%',
+      previewRows: isVi
+        ? [
+            { label: '28 nguồn học thuật khớp chuẩn quốc tế', badge: 'ĐÃ XÁC THỰC', tone: 'ok' },
+            { label: '2 lỗi ghi nhầm năm bản nháp đã chỉnh sửa', badge: 'ĐÃ CHUẨN HÓA', tone: 'info' },
+            { label: '0 tài liệu tham khảo ngụy tạo tồn đọng', badge: 'SẴN SÀNG NỘP', tone: 'ok' },
+          ]
+        : [
+            { label: '28 scholarly sources matched & confirmed', badge: 'VERIFIED', tone: 'ok' },
+            { label: '2 preprint-to-journal year typos corrected', badge: 'FIXED', tone: 'info' },
+            { label: '0 unresolved phantom references remaining', badge: 'READY', tone: 'ok' },
+          ],
+      icon: GraduationCap,
+    },
+    teacher: {
+      tabLabel: isVi ? 'Giảng viên & Hội đồng' : 'Lecturers & Advisors',
+      eyebrow: isVi ? 'DÀNH CHO GIẢNG VIÊN & HỘI ĐỒNG' : 'FOR LECTURERS & ADVISORS',
+      headline: isVi
+        ? 'Thẩm định trích dẫn cho cả lớp học và hội đồng chỉ trong vài phút.'
+        : 'Review an entire cohort’s bibliography in minutes, not weekends.',
+      summary: isVi
+        ? 'Tập trung thời gian quý báu vào hướng dẫn chuyên môn thay vì tra cứu thủ công từng tiêu đề bài báo.'
+        : 'Spend your advising hours mentoring research depth instead of manually searching reference lists.',
+      steps: isVi
+        ? [
+            'Mở lớp học bằng mã tham gia đơn giản hoặc tải lên cùng lúc tới 50 bài nộp của sinh viên.',
+            'Xem danh sách ưu tiên làm nổi bật các trích dẫn nghi vấn bịa đặt hoặc lệch nội dung so với tóm tắt bài báo gốc.',
+            'Xác nhận hợp lệ một chạm (Override) cho giáo trình, sách chuyên khảo in trong nước kèm ghi chú góp ý xây dựng.',
+          ]
+        : [
+            'Open a class cohort with a simple join code, or upload up to 50 student submissions in a single batch.',
+            'Scan a clear review queue highlighting fabricated citations and claims that diverge from the cited paper’s abstract.',
+            'Approve domestic print monographs or regional textbooks in one click and attach constructive advisor feedback.',
+          ],
+      ctaLabel: isVi ? 'Xem gói cho Giảng viên & Lớp học' : 'Explore Lecturer Plans',
+      ctaTo: '/pricing',
+      previewTitle: isVi ? 'Bảng Tổng hợp Lớp Khóa luận' : 'Cohort Review Dashboard',
+      previewSubtitle: isVi
+        ? 'Hội đồng KLTN · 38 bài nộp của sinh viên'
+        : 'Honors Thesis Cohort · 38 Student Submissions',
+      previewMetricLabel: isVi ? 'Thời gian rà soát tiết kiệm' : 'Manual Lookup Time Saved',
+      previewMetricValue: '~85%',
+      previewRows: isVi
+        ? [
+            { label: '31 quyển đạt chuẩn danh mục tài liệu tham khảo', badge: 'HỢP LỆ', tone: 'ok' },
+            { label: '5 bài cần bổ sung số tập / trang tạp chí', badge: 'GỢI Ý SỬA', tone: 'info' },
+            { label: '2 sách in trong nước chờ giảng viên duyệt', badge: 'DUYỆT 1 CHẠM', tone: 'warn' },
+          ]
+        : [
+            { label: '31 submissions with clean reference lists', badge: 'CLEAN', tone: 'ok' },
+            { label: '5 papers needing minor volume or year fixes', badge: 'GUIDANCE', tone: 'info' },
+            { label: '2 print monographs queued for 1-click approval', badge: 'ADVISOR REVIEW', tone: 'warn' },
+          ],
+      icon: Users,
+    },
+    admin: {
+      tabLabel: isVi ? 'Quản trị Khoa & Trường' : 'Department Admin',
+      eyebrow: isVi ? 'DÀNH CHO KHOA, VIỆN & NHÀ TRƯỜNG' : 'FOR FACULTIES & DEPARTMENTS',
+      headline: isVi
+        ? 'Đồng bộ chuẩn mực trích dẫn và bảo mật học thuật trên toàn đơn vị.'
+        : 'Consistent citation standards and transparent governance across faculties.',
+      summary: isVi
+        ? 'Đảm bảo tính giải trình minh bạch cho hội đồng học thuật và bảo vệ tuyệt đối tài sản trí tuệ của nhà trường.'
+        : 'Equip thesis committees and research labs with clear quotas, accountable review trails, and strict data protection.',
+      steps: isVi
+        ? [
+            'Phân quyền rõ ràng cho Sinh viên, Giảng viên, Quản trị viên và điều phối hạn mức kiểm tra cho từng bộ môn.',
+            'Lưu giữ lịch sử duyệt thủ công minh bạch, không thể chỉnh sửa lùi ngày phục vụ công tác kiểm định chất lượng.',
+            'Bảo vệ tuyệt đối luận văn chưa công bố — không chia sẻ toàn văn ra bất kỳ kho dữ liệu đối chiếu bên ngoài nào.',
+          ]
+        : [
+            'Manage Student, Lecturer, and Administrator accounts and allocate monthly verification quotas across cohorts.',
+            'Maintain a clear, tamper-evident review history of manual citation approvals for academic board accountability.',
+            'Keep unpublished theses strictly private — zero external full-text sharing and full compliance with Law 91/2025/QH15.',
+          ],
+      ctaLabel: isVi ? 'Xem gói cho Khoa & Bộ môn' : 'Compare Institutional Tier',
+      ctaTo: '/pricing',
+      previewTitle: isVi ? 'Tổng quan Quản trị Học thuật Khoa' : 'Faculty Governance Overview',
+      previewSubtitle: isVi
+        ? 'Phân quyền theo vai trò · Bảo mật cấp đơn vị'
+        : 'Role-Isolated Access · Institutional Safeguards',
+      previewMetricLabel: isVi ? 'Chia sẻ toàn văn ra bên ngoài' : 'External Full-Text Sharing',
+      previewMetricValue: '0%',
+      previewRows: isVi
+        ? [
+            { label: 'Phân tách độc lập Sinh viên · Giảng viên · Quản trị', badge: 'ĐÃ KÍCH HOẠT', tone: 'ok' },
+            { label: 'Nhật ký xác nhận của hội đồng minh bạch', badge: 'MINH BẠCH', tone: 'info' },
+            { label: 'Tuân thủ Luật Bảo vệ dữ liệu 91/2025/QH15', badge: 'CHUẨN PHÁP LÝ', tone: 'ok' },
+          ]
+        : [
+            { label: 'Isolated Student, Lecturer & Admin permissions', badge: 'ACTIVE', tone: 'ok' },
+            { label: 'Tamper-evident advisor override history', badge: 'AUDITED', tone: 'info' },
+            { label: 'Aligned with Data Protection Law 91/2025/QH15', badge: 'COMPLIANT', tone: 'ok' },
+          ],
+      icon: Shield,
+    },
+  };
+
+  const current = roleConfigs[activeRole];
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
+    let nextIdx: number | null = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      nextIdx = (idx + 1) % roleOrder.length;
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      nextIdx = (idx - 1 + roleOrder.length) % roleOrder.length;
+    } else if (e.key === 'Home') {
+      nextIdx = 0;
+    } else if (e.key === 'End') {
+      nextIdx = roleOrder.length - 1;
+    }
+    if (nextIdx !== null) {
+      e.preventDefault();
+      const nextRole = roleOrder[nextIdx];
+      onSelectRole(nextRole);
+      document.getElementById(`workspace-tab-${nextRole}`)?.focus();
+    }
+  };
+
+  return (
+    <div data-testid="role-workspaces-showcase" className="w-full flex flex-col gap-[20px]">
+      {/* Accessible 3-Role Segmented Switcher (Mobile-safe stacked pills at 375px, 3-col bar on sm+) */}
+      <div
+        role="tablist"
+        aria-label={isVi ? 'Không gian làm việc theo vai trò học thuật' : 'Academic workspaces by role'}
+        style={{
+          backgroundColor: 'var(--solva-surface)',
+          borderColor: 'var(--solva-border)',
+        }}
+        className="w-full max-w-[780px] grid grid-cols-1 sm:grid-cols-3 gap-1.5 p-1.5 rounded-[14px] border"
+      >
+        {roleOrder.map((roleKey, idx) => {
+          const cfg = roleConfigs[roleKey];
+          const Icon = cfg.icon;
+          const isSelected = activeRole === roleKey;
+          return (
+            <button
+              key={roleKey}
+              id={`workspace-tab-${roleKey}`}
+              data-testid={`workspace-tab-${roleKey}`}
+              type="button"
+              role="tab"
+              aria-selected={isSelected}
+              aria-controls={`workspace-panel-${roleKey}`}
+              tabIndex={isSelected ? 0 : -1}
+              onClick={() => onSelectRole(roleKey)}
+              onKeyDown={(e) => handleTabKeyDown(e, idx)}
+              className={`min-h-[44px] px-3.5 py-2.5 rounded-[10px] inline-flex items-center justify-center gap-2 font-solva-sans text-[14px] font-medium transition-all cursor-pointer ${
+                isSelected
+                  ? 'bg-white dark:bg-[#26231D] text-[#1C1A15] dark:text-[#FBFAF6] shadow-xs border border-[#E7E3D9] dark:border-[#3A352B]'
+                  : 'text-[var(--solva-muted)] hover:text-[var(--solva-ink)] border border-transparent'
+              }`}
+            >
+              <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+              <span>{cfg.tabLabel}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Active Role Panel */}
+      <div
+        id={`workspace-panel-${activeRole}`}
+        role="tabpanel"
+        aria-labelledby={`workspace-tab-${activeRole}`}
+        style={{
+          backgroundColor: 'var(--solva-surface)',
+          borderColor: 'var(--solva-border)',
+        }}
+        className="w-full rounded-[16px] border p-5 sm:p-8 lg:p-10 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center"
+      >
+        {/* Left: Jargon-Free Workflow */}
+        <div className="lg:col-span-7 flex flex-col items-start gap-5">
+          <span
+            style={{
+              backgroundColor: 'var(--solva-bg)',
+              color: 'var(--solva-muted)',
+              borderColor: 'var(--solva-border)',
+            }}
+            className="px-3 py-1 rounded-full border font-mono text-[11px] font-medium tracking-wide"
+          >
+            {current.eyebrow}
+          </span>
+
+          <div className="space-y-2.5">
+            <h3
+              style={{ color: 'var(--solva-ink)' }}
+              className={`font-solva-serif font-light text-[26px] sm:text-[32px] ${
+                isVi ? 'leading-[1.18] tracking-[-0.025em]' : 'leading-[1.1] tracking-[-0.04em]'
+              }`}
+            >
+              {current.headline}
+            </h3>
+            <p
+              style={{ color: 'var(--solva-muted)' }}
+              className="font-solva-sans text-[15.5px] sm:text-[16px] leading-[24px]"
+            >
+              {current.summary}
+            </p>
+          </div>
+
+          <ol className="space-y-3 w-full">
+            {current.steps.map((step, sIdx) => (
+              <li key={step} className="flex items-start gap-3">
+                <span
+                  style={{
+                    backgroundColor: 'var(--solva-bg)',
+                    color: 'var(--solva-ink)',
+                    borderColor: 'var(--solva-border)',
+                  }}
+                  className="mt-0.5 w-6 h-6 rounded-full border font-mono text-[11px] font-semibold flex items-center justify-center shrink-0"
+                >
+                  {sIdx + 1}
+                </span>
+                <span
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="font-solva-sans text-[15px] leading-[22.5px]"
+                >
+                  {step}
+                </span>
+              </li>
+            ))}
+          </ol>
+
+          <div className="pt-1">
+            <SolvaButton to={current.ctaTo} variant="primary">
+              <span>{current.ctaLabel}</span>
+              <ArrowRight className="w-4 h-4 shrink-0" />
+            </SolvaButton>
+          </div>
+        </div>
+
+        {/* Right: Clean Visual Summary Card */}
+        <div className="lg:col-span-5 w-full">
+          <div
+            style={{
+              backgroundColor: 'var(--solva-bg)',
+              borderColor: 'var(--solva-border)',
+            }}
+            className="rounded-[14px] border p-5 sm:p-6 flex flex-col gap-5 shadow-2xs"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[#E7E3D9] dark:border-[#332F26]">
+              <div className="space-y-0.5">
+                <div
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="font-solva-sans text-[15.5px] font-semibold leading-snug"
+                >
+                  {current.previewTitle}
+                </div>
+                <div
+                  style={{ color: 'var(--solva-muted)' }}
+                  className="font-solva-sans text-[13px] leading-snug"
+                >
+                  {current.previewSubtitle}
+                </div>
+              </div>
+              <div className="sm:text-right">
+                <div className="font-mono text-[18px] font-semibold text-emerald-700 dark:text-emerald-400">
+                  {current.previewMetricValue}
+                </div>
+                <div
+                  style={{ color: 'var(--solva-muted)' }}
+                  className="font-mono text-[10.5px] uppercase tracking-wider"
+                >
+                  {current.previewMetricLabel}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              {current.previewRows.map((row) => {
+                const badgeClass =
+                  row.tone === 'ok'
+                    ? 'bg-emerald-500/12 text-emerald-800 dark:text-emerald-300 border-emerald-500/25'
+                    : row.tone === 'warn'
+                      ? 'bg-amber-500/12 text-amber-800 dark:text-amber-300 border-amber-500/25'
+                      : 'bg-sky-500/12 text-sky-800 dark:text-sky-300 border-sky-500/25';
+                return (
+                  <div
+                    key={row.label}
+                    style={{
+                      backgroundColor: 'var(--solva-surface)',
+                      borderColor: 'var(--solva-border)',
+                    }}
+                    className="rounded-[10px] border px-3.5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                  >
+                    <span
+                      style={{ color: 'var(--solva-ink)' }}
+                      className="font-solva-sans text-[13.5px] leading-[19.5px]"
+                    >
+                      {row.label}
+                    </span>
+                    <span
+                      className={`self-start sm:self-auto px-2 py-0.5 rounded-[6px] border font-mono text-[10.5px] font-semibold whitespace-nowrap shrink-0 ${badgeClass}`}
+                    >
+                      {row.badge}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SolvaRoleTestimonialsSection({
+  lang,
+  activeRole,
+  onSelectRole,
+  isAuthenticated,
+}: {
+  lang: Lang;
+  activeRole: WorkspaceRole;
+  onSelectRole: (role: WorkspaceRole) => void;
+  isAuthenticated: boolean;
+}) {
   const columns = [
     // Column 1 (padding-top: 0px)
     [
@@ -4367,7 +4824,10 @@ function SolvaRoleTestimonialsSection({ lang }: { lang: Lang }) {
       id="workspaces"
       className="scroll-mt-[84px] lg:scroll-mt-[108px] py-[32px] sm:py-[48px] lg:py-[96px] px-5 sm:px-6 lg:px-[40px]"
     >
-      <div className="max-w-[1200px] mx-auto flex flex-col gap-[28px] sm:gap-[36px] lg:gap-[64px]">
+      <div id="workspaces-student" className="scroll-mt-[88px]" aria-hidden="true" />
+      <div id="workspaces-teacher" className="scroll-mt-[88px]" aria-hidden="true" />
+      <div id="workspaces-admin" className="scroll-mt-[88px]" aria-hidden="true" />
+      <div className="max-w-[1200px] mx-auto flex flex-col gap-[28px] sm:gap-[36px] lg:gap-[56px]">
         {/* Headline */}
         <div className="flex flex-col items-start gap-[12px] max-w-[540px]">
           <SolvaEyebrow>
@@ -4386,6 +4846,14 @@ function SolvaRoleTestimonialsSection({ lang }: { lang: Lang }) {
             }
           />
         </div>
+
+        {/* Interactive 3-Role Academic Workspace Showcase */}
+        <SolvaRoleWorkspacesShowcase
+          lang={lang}
+          activeRole={activeRole}
+          onSelectRole={onSelectRole}
+          isAuthenticated={isAuthenticated}
+        />
 
         {/* 3-Column Staggered Masonry Grid (`gap: 12px`, Middle Column `lg:pt-[48px]`) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-[12px] items-start">
@@ -4737,8 +5205,22 @@ function SolvaBottomCTASection({
 /* ============================================================
    SECTION 12: FOOTER (Full-Bleed `#F4F2EC`, 4 Menu Columns)
    ============================================================ */
-function SolvaFooter({ lang }: { lang: Lang }) {
-  const columns = [
+function SolvaFooter({
+  lang,
+  onSelectWorkspaceRole,
+}: {
+  lang: Lang;
+  onSelectWorkspaceRole: (role: WorkspaceRole) => void;
+}) {
+  const columns: Array<{
+    header: string;
+    links: Array<{
+      label: string;
+      href?: string;
+      to?: string;
+      role?: WorkspaceRole;
+    }>;
+  }> = [
     {
       header: lang === 'vi' ? 'Nền tảng' : 'Product',
       links: [
@@ -4746,15 +5228,27 @@ function SolvaFooter({ lang }: { lang: Lang }) {
         { label: lang === 'vi' ? 'Kiểm nghiệm trích dẫn' : 'Citation Debugger', href: '#interactive-demo' },
         { label: lang === 'vi' ? 'Kiến trúc 2 tầng (L1 × L2)' : '2-Layer Architecture', href: '#architecture' },
         { label: lang === 'vi' ? 'Quy trình 4 giai đoạn' : 'Verification Pipeline', href: '#how-it-works' },
-        { label: lang === 'vi' ? 'Gói dịch vụ & Quyền lợi' : 'Pricing & Benefits', href: '#taxonomy' },
+        { label: lang === 'vi' ? 'Gói dịch vụ & Quyền lợi' : 'Pricing & Benefits', href: '#pricing-plans' },
       ],
     },
     {
       header: lang === 'vi' ? 'Không gian học thuật' : 'Workspaces',
       links: [
-        { label: lang === 'vi' ? 'Dành cho Sinh viên & Tác giả' : 'Student Workspace', href: '#workspaces' },
-        { label: lang === 'vi' ? 'Dành cho Giảng viên & Hội đồng' : 'Teacher Classroom', href: '#workspaces' },
-        { label: lang === 'vi' ? 'Trung tâm Quản trị' : 'Admin Control', href: '#workspaces' },
+        {
+          label: lang === 'vi' ? 'Dành cho Sinh viên & Tác giả' : 'Student Workspace',
+          href: '#workspaces-student',
+          role: 'student',
+        },
+        {
+          label: lang === 'vi' ? 'Dành cho Giảng viên & Hội đồng' : 'Teacher Classroom',
+          href: '#workspaces-teacher',
+          role: 'teacher',
+        },
+        {
+          label: lang === 'vi' ? 'Trung tâm Quản trị' : 'Admin Control',
+          href: '#workspaces-admin',
+          role: 'admin',
+        },
         { label: lang === 'vi' ? 'Bảng giá chi tiết' : 'Pricing Plans', to: '/pricing' },
       ],
     },
@@ -4779,6 +5273,10 @@ function SolvaFooter({ lang }: { lang: Lang }) {
               ? 'Chính sách bảo vệ dữ liệu'
               : 'Personal Data Policy',
           to: '/privacy',
+        },
+        {
+          label: lang === 'vi' ? 'Điều khoản dịch vụ' : 'Terms of Service',
+          to: '/terms',
         },
       ],
     },
@@ -4840,6 +5338,11 @@ function SolvaFooter({ lang }: { lang: Lang }) {
                       ) : (
                         <a
                           href={lnk.href}
+                          onClick={
+                            lnk.role
+                              ? () => onSelectWorkspaceRole(lnk.role!)
+                              : undefined
+                          }
                           style={{ color: 'var(--solva-muted)' }}
                           className="font-solva-sans text-[16px] font-normal leading-[23.2px] hover:opacity-75 transition-opacity"
                         >
