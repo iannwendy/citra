@@ -440,20 +440,20 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
   - Frontend API method: `api.verifyPublicGuestCitations(payload: { references_text: string; lang?: 'vi' | 'en' }): Promise<SandboxInstantVerifyResponse>` in `web/src/api/client.ts` (note: ensure `deadCode.test.ts` stays green because `GuestInstantChecker.tsx` actively calls `api.verifyPublicGuestCitations`!).
   - Component: `<GuestInstantChecker lang={lang} />` mounted at `#try-instant` right below the Hero fold on `LandingPage.tsx`, featuring 3 one-click academic presets (*Luận văn Kinh tế / Economics Thesis*, *Bài báo Y khoa / Biomedical Paper*, *Nguồn AI tự bịa / AI-Invented Citation*), live textarea input (up to 3 references), Split-View Manuscript Diff results with plain-language verdicts + collapsible technical trace, graceful instant client fallback on network/429, and a 1-click `"Kiểm tra toàn bộ file PDF/Word miễn phí →"` CTA to `/register`.
 
-- [ ] **Step 1: Write failing backend test `tests/test_public_guest_sandbox.py` and frontend test `web/src/components/landing/GuestInstantChecker.test.tsx`**
+- [x] **Step 1: Write failing backend test `tests/test_public_guest_sandbox.py` and frontend test `web/src/components/landing/GuestInstantChecker.test.tsx`**
   - Backend test: Assert unauthenticated `POST /api/essays/sandbox/public-verify` rejects empty input (`400`), caps/rejects `> 3` references or `> 1500` chars with clear message, verifies valid/hallucinated references without auth token, and enforces `429` rate limit on the 7th rapid call from the same IP.
   - Frontend test: Assert `GuestInstantChecker` renders 3 preset pills in EN & VI, populates and verifies citations on click, handles empty input & `429` rate-limit gracefully with friendly guidance, toggles `"Technical Trace"`, and links full-document upload CTA to `/register`.
-- [ ] **Step 2: Run backend pytest and frontend Vitest to confirm failure**
+- [x] **Step 2: Run backend pytest and frontend Vitest to confirm failure**
   Run: `.venv/bin/python -m pytest tests/test_public_guest_sandbox.py -v && cd web && npx vitest run src/components/landing/GuestInstantChecker.test.tsx`
   Expected: FAIL (`404` on `/api/essays/sandbox/public-verify` and missing `GuestInstantChecker`).
-- [ ] **Step 3: Implement backend `public-verify` route, `api.verifyPublicGuestCitations`, `GuestInstantChecker.tsx`, and mount on `LandingPage.tsx`**
+- [x] **Step 3: Implement backend `public-verify` route, `api.verifyPublicGuestCitations`, `GuestInstantChecker.tsx`, and mount on `LandingPage.tsx`**
   Wire Hero `"Try CITRA Free"` / `"Kiểm tra thử ngay"` primary experience so visitors can test CITRA live in 3 seconds with zero login wall!
-- [ ] **Step 4: Run full backend + frontend verification gates**
+- [x] **Step 4: Run full backend + frontend verification gates**
   Run: `.venv/bin/python -m ruff check src/ tests/ && .venv/bin/python -m pytest tests/test_public_guest_sandbox.py -q && cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
   Expected: PASS.
-- [ ] **Step 5: Run Triad Review & Critic Loop + Live Browser Interactive Test**
+- [x] **Step 5: Run Triad Review & Critic Loop + Live Browser Interactive Test**
   Test clicking all 3 presets and pasting custom citations in the live browser on Desktop & Mobile, Light & Dark, EN & VI; loop until `APPROVED`.
-- [ ] **Step 6: Tick checkboxes & commit**
+- [x] **Step 6: Tick checkboxes & commit**
   ```bash
   git add src/integrity_checker/api/routes/essays.py tests/test_public_guest_sandbox.py web/src/api/client.ts web/src/components/landing/GuestInstantChecker.tsx web/src/components/landing/GuestInstantChecker.test.tsx web/src/pages/LandingPage.tsx
   git commit -m "feat(plg): add rate-limited public guest citation checker and interactive homepage try-it studio"
