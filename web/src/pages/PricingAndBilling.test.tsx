@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@/contexts/ThemeContext';
@@ -2209,6 +2209,271 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
           ).not.toBeNull();
         }
         unmountPricing();
+      }
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.4 — LandingPage mobile drawer renders accessible Pricing / Bảng giá link (data-testid="mobile-menu-pricing-link") with >=44px tap target and closes menu on click', async () => {
+    try {
+      await i18n.changeLanguage('en');
+      const { unmount: unmountEn } = renderWithAuth(
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/pricing" element={<div data-testid="mobile-pricing-dest">Pricing Route</div>} />
+        </Routes>,
+        { user: null, initialEntries: ['/'] },
+      );
+
+      expect(screen.queryByTestId('mobile-menu-pricing-link')).toBeNull();
+      const menuBtn = screen.getByRole('button', { name: /toggle navigation menu/i });
+      fireEvent.click(menuBtn);
+      expect(menuBtn.getAttribute('aria-expanded')).toBe('true');
+
+      const pricingLinkEn = screen.getByTestId('mobile-menu-pricing-link');
+      expect(pricingLinkEn.getAttribute('href')).toBe('/pricing');
+      expect(pricingLinkEn.textContent?.trim()).toBe('Pricing');
+      expect(pricingLinkEn.className).toContain('min-h-[44px]');
+
+      fireEvent.click(pricingLinkEn);
+      expect(screen.getByTestId('mobile-pricing-dest')).toBeDefined();
+      unmountEn();
+
+      // Verify Vietnamese label and drawer close state
+      await i18n.changeLanguage('vi');
+      const { unmount: unmountVi } = renderWithAuth(<LandingPage />, {
+        user: null,
+        initialEntries: ['/'],
+      });
+      const menuBtnVi = screen.getByRole('button', { name: /toggle navigation menu/i });
+      fireEvent.click(menuBtnVi);
+      const pricingLinkVi = screen.getByTestId('mobile-menu-pricing-link');
+      expect(pricingLinkVi.getAttribute('href')).toBe('/pricing');
+      expect(pricingLinkVi.textContent?.trim()).toBe('Bảng giá');
+      expect(pricingLinkVi.className).toContain('min-h-[44px]');
+
+      fireEvent.click(pricingLinkVi);
+      expect(menuBtnVi.getAttribute('aria-expanded')).toBe('false');
+      unmountVi();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.4 — PricingSolvaHeader desktop nav enforces single-line discipline (flex-nowrap, whitespace-nowrap shrink-0) in EN and VI while preserving Platform dropdown', async () => {
+    try {
+      for (const locale of ['en', 'vi'] as const) {
+        await i18n.changeLanguage(locale);
+        const { container, unmount } = renderWithAuth(<PricingPage />, {
+          user: null,
+          initialEntries: ['/pricing'],
+        });
+
+        // Root uses overflow-x-clip instead of overflow-x-hidden so position:sticky works cleanly
+        const root = screen.getByTestId('pricing-page');
+        expect(root.className).toContain('overflow-x-clip');
+        expect(root.className).not.toContain('overflow-x-hidden');
+
+        const header = container.querySelector('header') as HTMLElement;
+        expect(header).not.toBeNull();
+        const headerBar = header.firstElementChild as HTMLElement;
+        expect(headerBar.className).toContain('flex-nowrap');
+
+        const nav = container.querySelector('nav[aria-label="Pricing Navigation"]') as HTMLElement;
+        expect(nav).not.toBeNull();
+        expect(nav.className).toContain('flex-nowrap');
+        expect(nav.className).toContain('min-w-0');
+
+        // Every direct interactive link/button in center nav must enforce whitespace-nowrap + shrink-0
+        const navControls = [
+          ...Array.from(nav.querySelectorAll(':scope > a')),
+          ...Array.from(nav.querySelectorAll(':scope > div > button')),
+        ];
+        expect(navControls.length).toBeGreaterThanOrEqual(4);
+        for (const ctrl of navControls) {
+          expect(ctrl.className).toContain('whitespace-nowrap');
+          expect(ctrl.className).toContain('shrink-0');
+        }
+
+        if (locale === 'vi') {
+          expect(nav.textContent).not.toContain('Câu hỏi thường gặp');
+          expect(nav.textContent).not.toContain('Benchmark 120K');
+          expect(nav.textContent).toContain('Thực nghiệm 120K');
+        }
+
+        unmount();
+      }
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.4 — PricingPage #compare-matrix renders mobile-compare-tier-tabs switching cleanly between Basic, Pro, and Ultra feature cards + CTA while preserving semantic 4-column desktop table', async () => {
+    const createSessionSpy = vi.spyOn(api, 'createCheckoutSession').mockResolvedValue({
+      session_id: 'cs_test_mobile_matrix',
+      checkout_url: '/billing/checkout?session_id=cs_test_mobile_matrix',
+      mode: 'stripe_demo',
+      plan_tier: 'pro',
+      plan_name: 'Pro',
+      billing_cycle: 'annual',
+      amount_usd: 192,
+      transaction_id: 9,
+    });
+
+    await i18n.changeLanguage('en');
+
+    // 1. Public view (!user) -> md:hidden mobile switcher + hidden md:block desktop table
+    const { container: pubContainer, unmount: unmountPublic } = renderWithAuth(<PricingPage />, {
+      user: null,
+      initialEntries: ['/pricing'],
+    });
+
+    const compareSection = pubContainer.querySelector('#compare-matrix') as HTMLElement;
+    expect(compareSection).not.toBeNull();
+
+    const tierTabs = within(compareSection).getByTestId('mobile-compare-tier-tabs');
+    expect(tierTabs.getAttribute('role')).toBe('tablist');
+    expect(tierTabs.className).toContain('md:hidden');
+
+    const tabs = within(tierTabs).getAllByRole('tab');
+    expect(tabs).toHaveLength(3);
+    for (const tab of tabs) {
+      expect(tab.className).toContain('min-h-[44px]');
+    }
+
+    const [basicTab, proTab, ultraTab] = tabs;
+    expect(basicTab.textContent).toMatch(/Basic/i);
+    expect(proTab.textContent).toMatch(/Pro/i);
+    expect(ultraTab.textContent).toMatch(/Ultra/i);
+
+    // Switch to Basic -> Basic quotas + Not included badges + Basic CTA
+    fireEvent.click(basicTab);
+    expect(basicTab.getAttribute('aria-selected')).toBe('true');
+    expect(proTab.getAttribute('aria-selected')).toBe('false');
+    expect(ultraTab.getAttribute('aria-selected')).toBe('false');
+    const panelBasic = within(compareSection).getByTestId('mobile-compare-tier-panel');
+    expect(panelBasic.textContent).toContain('3 manuscripts / mo');
+    expect(panelBasic.textContent).toContain('5 MB');
+    expect(panelBasic.textContent).toContain('15 pages');
+    expect(panelBasic.textContent).toContain('Not included');
+
+    // Switch to Pro -> Pro quotas + Included badges + Pro CTA
+    fireEvent.click(proTab);
+    expect(proTab.getAttribute('aria-selected')).toBe('true');
+    expect(panelBasic.textContent).toContain('50 manuscripts / mo');
+    expect(panelBasic.textContent).toContain('25 MB');
+    expect(panelBasic.textContent).toContain('100 pages');
+    expect(panelBasic.textContent).toContain('Included');
+
+    // Switch to Ultra -> Ultra quotas + Ultra CTA
+    fireEvent.click(ultraTab);
+    expect(ultraTab.getAttribute('aria-selected')).toBe('true');
+    expect(panelBasic.textContent).toContain('Up to 1,000 / mo');
+    expect(panelBasic.textContent).toContain('100 MB');
+    expect(panelBasic.textContent).toContain('500 pages');
+    expect(panelBasic.textContent).toContain('Lifetime Retention');
+
+    // Desktop 4-column semantic table preserved inside hidden md:block + overflow-x-auto
+    const desktopTable = compareSection.querySelector('table') as HTMLTableElement;
+    expect(desktopTable).not.toBeNull();
+    expect(desktopTable.querySelectorAll('thead th')).toHaveLength(4);
+    expect(desktopTable.querySelectorAll('tbody tr')).toHaveLength(13);
+    const desktopTableWrap = desktopTable.closest('[data-testid="desktop-compare-table-wrap"]') as HTMLElement;
+    expect(desktopTableWrap).not.toBeNull();
+    expect(desktopTableWrap.className).toContain('hidden');
+    expect(desktopTableWrap.className).toContain('md:block');
+    unmountPublic();
+
+    // 2. Authenticated view (Boolean(user) inside AppLayout) -> lg:hidden mobile switcher + hidden lg:block desktop table + bottom CTA checkout
+    const { container: authContainer, unmount: unmountAuth } = renderWithAuth(
+      <Routes>
+        <Route
+          path="/pricing"
+          element={
+            <AppLayout>
+              <PricingPage />
+            </AppLayout>
+          }
+        />
+        <Route path="/billing/checkout" element={<div data-testid="matrix-checkout-dest">Checkout</div>} />
+      </Routes>,
+      { user: createMockUser({ plan_tier: 'basic' }), initialEntries: ['/pricing'] },
+    );
+
+    const authCompare = authContainer.querySelector('#compare-matrix') as HTMLElement;
+    const authTabs = within(authCompare).getByTestId('mobile-compare-tier-tabs');
+    expect(authTabs.className).toContain('lg:hidden');
+
+    const authDesktopWrap = within(authCompare).getByTestId('desktop-compare-table-wrap');
+    expect(authDesktopWrap.className).toContain('hidden');
+    expect(authDesktopWrap.className).toContain('lg:block');
+
+    fireEvent.click(within(authTabs).getAllByRole('tab')[1]); // Select Pro tab
+    fireEvent.click(within(authCompare).getByTestId('mobile-compare-tier-cta'));
+
+    await waitFor(() => {
+      expect(createSessionSpy).toHaveBeenCalledWith({
+        plan_tier: 'pro',
+        billing_cycle: 'annual',
+      });
+    });
+    unmountAuth();
+  });
+
+  it('Task 1.4 — eliminates engineering/vendor jargon and Vietlish in COMPARISON_MATRIX and PricingPage hero subtitle across EN and VI', async () => {
+    const forbiddenJargon = [
+      /Local 128K\+/i,
+      /HF,\s*RFC/i,
+      /Hugging Face/i,
+      /IETF RFC/i,
+      /OpenAIRE\/HAL/i,
+      /Sentence-BERT/i,
+      /Evidence DAG/i,
+      /Bounding-Box/i,
+      /SerpAPI/i,
+    ];
+    const forbiddenMatrixVietlish = [
+      /Batch Check/i,
+      /Batch Upload/i,
+      /Document Inspector/i,
+      /Override/i,
+      /Auto-Fix Studio/i,
+      /Class ZIP/i,
+      /Web View/i,
+      /docs \/ mo/i,
+      /15 pages/i,
+      /Unlimited Lifetime/i,
+    ];
+
+    try {
+      for (const locale of ['en', 'vi'] as const) {
+        await i18n.changeLanguage(locale);
+        const { container, unmount } = renderWithAuth(<PricingPage />, {
+          user: null,
+          initialEntries: ['/pricing'],
+        });
+
+        const heroHeading = container.querySelector('h1');
+        const heroBlock = heroHeading?.closest('div.max-w-\\[760px\\]') ?? heroHeading?.parentElement?.parentElement;
+        const heroSubtitleText = heroBlock?.querySelector('p')?.textContent ?? '';
+        expect(heroSubtitleText.length).toBeGreaterThan(40);
+
+        const compareSection = container.querySelector('#compare-matrix') as HTMLElement;
+        const compareText = compareSection.textContent ?? '';
+
+        for (const pattern of forbiddenJargon) {
+          expect(heroSubtitleText).not.toMatch(pattern);
+          expect(compareText).not.toMatch(pattern);
+        }
+
+        if (locale === 'vi') {
+          for (const pattern of forbiddenMatrixVietlish) {
+            expect(compareText).not.toMatch(pattern);
+          }
+        }
+
+        unmount();
       }
     } finally {
       await i18n.changeLanguage('en');

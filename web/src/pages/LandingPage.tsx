@@ -827,12 +827,29 @@ function SolvaHeader({
                   backgroundColor: 'var(--solva-surface)',
                   color: 'var(--solva-ink)',
                 }}
-                className="flex items-center justify-between px-3.5 py-2.5 rounded-[10px] font-solva-sans text-[14px] font-medium"
+                className="flex items-center justify-between min-h-[44px] px-3.5 py-2.5 rounded-[10px] font-solva-sans text-[14px] font-medium"
               >
                 <span>{item.label}</span>
-                <ChevronRight className="w-4 h-4 opacity-60" />
+                <ChevronRight className="w-4 h-4 opacity-60 shrink-0" aria-hidden="true" />
               </a>
             ))}
+            <Link
+              to="/pricing"
+              data-testid="mobile-menu-pricing-link"
+              onClick={() => setMobileMenuOpen(false)}
+              style={{
+                backgroundColor: 'var(--solva-surface)',
+                borderColor: 'var(--solva-ink)',
+                color: 'var(--solva-ink)',
+              }}
+              className="flex items-center justify-between min-h-[44px] px-3.5 py-2.5 rounded-[10px] border font-solva-sans text-[14px] font-semibold"
+            >
+              <span className="inline-flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                <span>{lang === 'vi' ? 'Bảng giá' : 'Pricing'}</span>
+              </span>
+              <ChevronRight className="w-4 h-4 opacity-80 shrink-0" aria-hidden="true" />
+            </Link>
           </div>
 
           <div className="pt-2 flex items-center gap-2">

@@ -70,105 +70,133 @@ import {
    3 Tiers: Basic ($0) · Pro ($20/mo | $16/mo annual) · Ultra ($200/mo | $160/mo annual)
    ============================================================ */
 
+type LocalizedQuotaValue = boolean | { en: string; vi: string };
+
 interface ComparisonRow {
   category_en: string;
   category_vi: string;
-  basic: string | boolean;
-  pro: string | boolean;
-  ultra: string | boolean;
+  basic: LocalizedQuotaValue;
+  pro: LocalizedQuotaValue;
+  ultra: LocalizedQuotaValue;
+}
+
+function resolveComparisonValue(value: LocalizedQuotaValue, lang: Lang): boolean | string {
+  if (typeof value === 'boolean') return value;
+  return lang === 'vi' ? value.vi : value.en;
 }
 
 const COMPARISON_MATRIX: ComparisonRow[] = [
   {
-    category_en: 'Monthly Checks (.pdf / .docx / .bib / .ris)',
-    category_vi: 'Số lượt tải & kiểm tra (.pdf / .docx / .bib / .ris) / tháng',
-    basic: '3 docs / mo',
-    pro: '50 docs / mo',
-    ultra: 'Unlimited (1,000/mo)',
+    category_en: 'Monthly Manuscript Checks (.PDF, .DOCX, .BIB, .RIS)',
+    category_vi: 'Số lượt kiểm tra bản thảo (.PDF, .DOCX, .BIB, .RIS) / tháng',
+    basic: { en: '3 manuscripts / mo', vi: '3 bản thảo / tháng' },
+    pro: { en: '50 manuscripts / mo', vi: '50 bản thảo / tháng' },
+    ultra: { en: 'Up to 1,000 / mo', vi: 'Tối đa 1.000 / tháng' },
   },
   {
-    category_en: 'Maximum File Size (.pdf / .docx / .bib / .ris)',
-    category_vi: 'Dung lượng file tối đa (.pdf / .docx / .bib / .ris)',
-    basic: '5 MB',
-    pro: '25 MB',
-    ultra: '100 MB',
+    category_en: 'Maximum File Size per Upload',
+    category_vi: 'Dung lượng tệp tải lên tối đa',
+    basic: { en: '5 MB', vi: '5 MB' },
+    pro: { en: '25 MB', vi: '25 MB' },
+    ultra: { en: '100 MB', vi: '100 MB' },
   },
   {
     category_en: 'Maximum Pages per Manuscript',
-    category_vi: 'Giới hạn số trang mỗi tài liệu',
-    basic: '15 pages',
-    pro: '100 pages',
-    ultra: '500 pages',
+    category_vi: 'Số trang tối đa mỗi bản thảo',
+    basic: { en: '15 pages', vi: '15 trang' },
+    pro: { en: '100 pages', vi: '100 trang' },
+    ultra: { en: '500 pages', vi: '500 trang' },
   },
   {
-    category_en: 'Citations Verified per Document',
-    category_vi: 'Số trích dẫn kiểm chứng tối đa / bài',
-    basic: 'Up to 30',
-    pro: 'Up to 200',
-    ultra: 'Unlimited',
+    category_en: 'Citations Verified per Manuscript',
+    category_vi: 'Số trích dẫn kiểm chứng mỗi tài liệu',
+    basic: { en: 'Up to 30', vi: 'Tối đa 30 trích dẫn' },
+    pro: { en: 'Up to 200', vi: 'Tối đa 200 trích dẫn' },
+    ultra: { en: 'Unlimited', vi: 'Không giới hạn' },
   },
   {
-    category_en: 'Concurrent Batch Upload (.pdf / .docx)',
-    category_vi: 'Tải lên hàng loạt (Batch Check)',
+    category_en: 'Simultaneous Multi-File Upload (.PDF / .DOCX)',
+    category_vi: 'Tải lên và kiểm tra đồng thời nhiều tệp (.PDF / .DOCX)',
     basic: false,
-    pro: 'Up to 10 files',
-    ultra: 'Up to 50 files',
+    pro: { en: 'Up to 10 files', vi: 'Tối đa 10 tệp / lần' },
+    ultra: { en: 'Up to 50 files', vi: 'Tối đa 50 tệp / lần' },
   },
   {
-    category_en: 'Scholarly Databases & Legal Registry',
-    category_vi: 'CSDL Học thuật & Hệ thống Pháp luật Việt Nam',
-    basic: 'Local 128K+ + Crossref + OpenAlex + VN Legal',
-    pro: '15+ Scholarly & Technical APIs (+DataCite, DOAJ, HAL, NCBI/bioRxiv, HF, RFC, Wayback, Retraction Watch)',
-    ultra: 'All 15+ APIs + SerpAPI Google Scholar Fallback',
+    category_en: 'Scholarly Indexes & Legal Registry',
+    category_vi: 'Cơ sở dữ liệu học thuật & Văn bản Pháp luật VN',
+    basic: {
+      en: 'Crossref, OpenAlex & Vietnam Legal Registry',
+      vi: 'Crossref, OpenAlex & Văn bản Pháp luật VN',
+    },
+    pro: {
+      en: '15+ Scholarly Indexes (PubMed, arXiv, DOAJ, DBLP, DataCite, Wayback, Retraction Watch)',
+      vi: '15+ CSDL học thuật quốc tế (PubMed, arXiv, DOAJ, DBLP, DataCite, Wayback, Retraction Watch)',
+    },
+    ultra: {
+      en: 'All 15+ Indexes + Extended Google Scholar Discovery',
+      vi: 'Toàn bộ 15+ CSDL + Tra cứu mở rộng Google Scholar',
+    },
   },
   {
-    category_en: '1-Click Bibliography Auto-Fix Studio (BibTeX / RIS)',
-    category_vi: '1-Click Auto-Fix Studio (Chuẩn hóa APA, IEEE, TDTU, BibTeX, RIS)',
-    basic: false,
-    pro: true,
-    ultra: true,
-  },
-  {
-    category_en: 'Deep Neural Sentence-BERT Evidence & Stance',
-    category_vi: 'Đối chiếu câu bằng chứng Sentence-BERT & Stance',
-    basic: false,
-    pro: true,
-    ultra: true,
-  },
-  {
-    category_en: 'Interactive PDF Page Preview (Bounding-Box)',
-    category_vi: 'Document Inspector (Xem trang PDF & Highlight tọa độ)',
+    category_en: 'Automated Bibliography Formatting (APA, IEEE, BibTeX, RIS)',
+    category_vi: 'Tự động chuẩn hóa danh mục tham khảo (APA, IEEE, TDTU, BibTeX, RIS)',
     basic: false,
     pro: true,
     ultra: true,
   },
   {
-    category_en: 'Interactive Citation Network & Evidence DAG Graph',
-    category_vi: 'Đồ thị Mạng lưới Trích dẫn & Cây suy diễn Bằng chứng',
+    category_en: 'Deep Semantic Evidence & Claim Alignment',
+    category_vi: 'Đối chiếu ngữ nghĩa sâu giữa câu trích dẫn và tài liệu gốc',
+    basic: false,
+    pro: true,
+    ultra: true,
+  },
+  {
+    category_en: 'Interactive PDF Source-to-Page Highlight Reader',
+    category_vi: 'Trình đọc đối chiếu trang PDF & đánh dấu vị trí trích dẫn',
+    basic: false,
+    pro: true,
+    ultra: true,
+  },
+  {
+    category_en: 'Interactive Citation Network & Step-by-Step Reasoning',
+    category_vi: 'Đồ thị mạng lưới trích dẫn & giải thích suy luận từng bước',
     basic: false,
     pro: true,
     ultra: true,
   },
   {
     category_en: 'Academic Report Export Formats',
-    category_vi: 'Định dạng xuất báo cáo học thuật',
-    basic: 'Web View (JSON)',
-    pro: 'PDF, DOCX (Word), CSV, JSON, BibTeX, RIS',
-    ultra: 'PDF, DOCX, CSV, JSON, BibTeX, RIS + Class ZIP',
+    category_vi: 'Định dạng xuất báo cáo thẩm định',
+    basic: { en: 'Interactive Web Report (JSON)', vi: 'Báo cáo trực tuyến (JSON)' },
+    pro: {
+      en: 'Word (DOCX), PDF, CSV, JSON, BibTeX, RIS',
+      vi: 'Word (DOCX), PDF, CSV, JSON, BibTeX, RIS',
+    },
+    ultra: {
+      en: 'Word, PDF, CSV, JSON, BibTeX, RIS + Full-Cohort Archive (.ZIP)',
+      vi: 'Word, PDF, CSV, JSON, BibTeX, RIS + Trọn bộ cả lớp (.ZIP)',
+    },
   },
   {
-    category_en: 'Classroom Join Code (CITRA-XXXX) & Cohort Analytics',
-    category_vi: 'Mã lớp học (CITRA-XXXX), Thống kê khóa luận & Ghi đè (Override)',
-    basic: 'Self-Join Classes',
-    pro: 'Up to 3 Classes + Cohort Analytics',
-    ultra: 'Unlimited Classes & Audit Log',
+    category_en: 'Classroom Cohorts (CITRA-XXXX) & Instructor Review',
+    category_vi: 'Quản lý lớp học (CITRA-XXXX), thống kê khóa luận & giảng viên duyệt kết luận',
+    basic: { en: 'Join Classes via Code', vi: 'Tham gia lớp học bằng mã' },
+    pro: {
+      en: 'Up to 3 Cohorts + Analytics & Verdict Review',
+      vi: 'Tối đa 3 lớp học + Thống kê & Duyệt kết luận',
+    },
+    ultra: {
+      en: 'Unlimited Cohorts & Full Audit Log',
+      vi: 'Không giới hạn lớp học & Nhật ký kiểm toán',
+    },
   },
   {
-    category_en: 'Verification History Retention',
+    category_en: 'Verification Report History Retention',
     category_vi: 'Thời gian lưu trữ lịch sử báo cáo',
-    basic: '7 days',
-    pro: '1 year',
-    ultra: 'Unlimited Lifetime',
+    basic: { en: '7 days', vi: '7 ngày' },
+    pro: { en: '1 year', vi: '1 năm' },
+    ultra: { en: 'Lifetime Retention', vi: 'Lưu trữ vĩnh viễn' },
   },
 ];
 
@@ -337,8 +365,11 @@ export function PricingPage() {
   const proPrice = billingCycle === 'annual' ? 16 : 20;
   const ultraPrice = billingCycle === 'annual' ? 160 : 200;
   const demoEvaluatorMode = isDemoEvaluatorMode();
+  const [mobileCompareTier, setMobileCompareTier] = useState<PlanTier>('pro');
   const { containerRef: billingToggleRef, pillStyle: billingPill } =
     useSlidingPill<HTMLDivElement>(billingCycle);
+  const { containerRef: compareTabsRef, pillStyle: comparePill } =
+    useSlidingPill<HTMLDivElement>(mobileCompareTier);
   const PricingMainTag = user ? 'div' : 'main';
   const isCurrentUltra = Boolean(
     user &&
@@ -361,11 +392,13 @@ export function PricingPage() {
     : 'lg:gap-y-0 lg:row-span-4 lg:grid lg:grid-rows-subgrid';
   const subgridRowPb18Class = user ? 'xl:pb-[18px]' : 'lg:pb-[18px]';
   const subgridRowPb20Class = user ? 'xl:pb-[20px]' : 'lg:pb-[20px]';
+  const mobileCompareWrapClass = user ? 'lg:hidden' : 'md:hidden';
+  const desktopCompareWrapClass = user ? 'hidden lg:block' : 'hidden md:block';
 
   return (
     <div
       className={`solva-editorial-root ${
-        user ? 'rounded-[20px] pb-12' : 'min-h-screen overflow-x-hidden'
+        user ? 'rounded-[20px] pb-12' : 'min-h-screen overflow-x-clip'
       } selection:bg-[#1C1A15] selection:text-[#FBFAF6]`}
       data-testid="pricing-page"
     >
@@ -419,8 +452,8 @@ export function PricingPage() {
                   className="font-solva-sans text-[15px] sm:text-[16px] font-normal leading-[23.8px] max-w-[680px] pt-1"
                 >
                   {lang === 'vi'
-                    ? 'Bắt đầu miễn phí với gói Basic cho bài tiểu luận ngắn, hoặc nâng cấp lên Pro & Ultra để mở khóa toàn bộ 15+ cơ sở dữ liệu học thuật & kỹ thuật (DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, Hugging Face, IETF RFC, Wayback Machine, Retraction Watch), Sentence-BERT Deep Neural và xuất báo cáo chuẩn hội đồng.'
-                    : 'Start free with Basic for course essays, or upgrade to Pro & Ultra for full 15+ scholarly & technical API retrieval (DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, Hugging Face, IETF RFC, Wayback Machine, Retraction Watch), Sentence-BERT Deep Neural verification, and academic PDF/DOCX exports.'}
+                    ? 'Bắt đầu miễn phí với gói Basic cho tiểu luận môn học, hoặc nâng cấp lên Pro & Ultra để tra cứu hơn 15 cơ sở dữ liệu học thuật quốc tế (Crossref, OpenAlex, PubMed, arXiv, DOAJ, DataCite, Wayback Machine, Retraction Watch), đối chiếu ngữ nghĩa sâu giữa câu trích dẫn với tài liệu gốc và xuất báo cáo Word/PDF chuẩn hội đồng.'
+                    : 'Start free with Basic for course essays, or upgrade to Pro & Ultra to cross-check citations across 15+ international scholarly indexes (Crossref, OpenAlex, PubMed, arXiv, DOAJ, DataCite, Wayback Machine, Retraction Watch), verify semantic alignment against source papers, and export Word/PDF reports ready for committee review.'}
                 </p>
               </SolvaScrollReveal>
 
@@ -1441,136 +1474,530 @@ export function PricingPage() {
             user ? 'px-3 sm:px-6' : 'px-5 sm:px-6 lg:px-[40px]'
           }`}
         >
-          <div className="max-w-[1200px] mx-auto flex flex-col gap-[28px] sm:gap-[36px] lg:gap-[48px]">
+          <div className="max-w-[1200px] mx-auto flex flex-col gap-[24px] sm:gap-[36px] lg:gap-[48px]">
             <div className="flex flex-col items-start gap-[12px] max-w-[620px]">
               <SolvaEyebrow>
-                {lang === 'vi'
-                  ? 'Thông số kỹ thuật & Hạn mức'
-                  : 'Technical specifications'}
+                {lang === 'vi' ? 'So sánh tính năng & Hạn mức' : 'Plan comparison'}
               </SolvaEyebrow>
               <SolvaTwoToneHeading
                 primary={
                   lang === 'vi'
-                    ? 'Bảng so sánh chi tiết tính năng,'
-                    : 'Detailed feature & quota matrix,'
+                    ? 'Bảng so sánh chi tiết quyền lợi,'
+                    : 'Detailed feature & quota comparison,'
                 }
                 secondary={
                   lang === 'vi'
-                    ? 'minh bạch giữa 3 gói cước.'
-                    : 'transparent across every tier.'
+                    ? 'minh bạch giữa 3 gói dịch vụ.'
+                    : 'transparent across every plan.'
                 }
               />
             </div>
 
-            <SolvaScrollReveal delayMs={70} yOffset={32}>
+            {/* Mobile / Narrow Segmented Comparison Switcher + 100%-Width Tier Feature Cards */}
+            <div className={`${mobileCompareWrapClass} flex flex-col gap-3 w-full max-w-full`}>
               <div
+                style={{ backgroundColor: 'var(--solva-bg)' }}
+                className={`sticky ${
+                  user
+                    ? '-top-[18px] sm:-top-[24px] z-20 pt-2.5 pb-2'
+                    : 'top-[64px] z-30 pt-2 pb-2'
+                } -mx-1 px-1`}
+              >
+                <div
+                  ref={compareTabsRef}
+                  data-testid="mobile-compare-tier-tabs"
+                  role="tablist"
+                  aria-label={
+                    lang === 'vi' ? 'Chọn gói dịch vụ để so sánh' : 'Select plan tier to compare'
+                  }
+                  style={{
+                    backgroundColor: 'var(--solva-surface)',
+                    borderColor: 'var(--solva-border)',
+                  }}
+                  className={`${mobileCompareWrapClass} relative grid grid-cols-3 items-center gap-1 p-1 rounded-[12px] border shadow-sm w-full max-w-full`}
+                >
+                  {comparePill.ready && (
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        backgroundColor: 'var(--solva-btn-bg)',
+                        width: `${comparePill.width}px`,
+                        height: `${comparePill.height}px`,
+                        transform: `translate3d(${comparePill.left}px, ${comparePill.top}px, 0)`,
+                        transition: comparePill.animate ? undefined : 'none',
+                      }}
+                      className="t-tabs-pill rounded-[8px]"
+                    />
+                  )}
+                  {(
+                    [
+                      {
+                        tier: 'basic' as const,
+                        id: 'mobile-compare-tab-basic',
+                        label: 'Basic ($0)',
+                      },
+                      {
+                        tier: 'pro' as const,
+                        id: 'mobile-compare-tab-pro',
+                        label: 'Pro',
+                        starred: true,
+                      },
+                      {
+                        tier: 'ultra' as const,
+                        id: 'mobile-compare-tab-ultra',
+                        label: 'Ultra',
+                      },
+                    ] as const
+                  ).map((tab) => {
+                    const isActive = mobileCompareTier === tab.tier;
+                    return (
+                      <button
+                        key={tab.tier}
+                        id={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        aria-controls="mobile-compare-tier-panel"
+                        data-pill-active={isActive ? 'true' : 'false'}
+                        data-testid={tab.id}
+                        onClick={() => setMobileCompareTier(tab.tier)}
+                        style={
+                          isActive
+                            ? {
+                                backgroundColor: comparePill.ready
+                                  ? 'transparent'
+                                  : 'var(--solva-btn-bg)',
+                                color: 'var(--solva-btn-fg)',
+                              }
+                            : {
+                                backgroundColor: 'transparent',
+                                color: 'var(--solva-muted)',
+                              }
+                        }
+                        className={`t-tab relative z-10 min-h-[44px] px-2 rounded-[8px] font-solva-sans text-[13px] ${
+                          isActive ? 'font-semibold' : 'font-medium'
+                        } inline-flex items-center justify-center gap-1 whitespace-nowrap cursor-pointer`}
+                      >
+                        <span>{tab.label}</span>
+                        {'starred' in tab && tab.starred && (
+                          <Sparkles className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Selected Tier Panel + Full-Width Comparison Rows + Bottom CTA */}
+              <div
+                id="mobile-compare-tier-panel"
+                data-testid="mobile-compare-tier-panel"
+                role="tabpanel"
+                aria-labelledby={`mobile-compare-tab-${mobileCompareTier}`}
                 style={{
                   backgroundColor: 'var(--solva-surface)',
-                  borderColor: 'var(--solva-border)',
+                  borderColor:
+                    mobileCompareTier === 'pro' ? 'var(--solva-ink)' : 'var(--solva-border)',
                 }}
-                className="rounded-[16px] border p-4 sm:p-[28px] lg:p-[32px] overflow-hidden"
+                className="rounded-[16px] border p-3.5 sm:p-5 flex flex-col gap-3.5 w-full max-w-full"
               >
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse font-solva-sans text-[13px] sm:text-[14px]">
-                    <thead>
-                      <tr
-                        style={{
-                          borderColor: 'var(--solva-border)',
-                          color: 'var(--solva-muted)',
-                        }}
-                        className="border-b font-mono uppercase text-[11px]"
-                      >
-                        <th className="py-4 pr-4 font-semibold min-w-[220px]">
-                          {lang === 'vi' ? 'Danh mục tính năng' : 'Feature / Quota'}
-                        </th>
-                        <th className="py-4 px-4 text-center font-semibold min-w-[140px]">
-                          Basic ($0)
-                        </th>
-                        <th
-                          style={{
-                            backgroundColor: 'var(--solva-bg)',
-                            color: 'var(--solva-ink)',
-                          }}
-                          className="py-4 px-4 text-center font-bold rounded-t-[10px] min-w-[180px]"
-                        >
-                          Pro (${proPrice}/mo)
-                        </th>
-                        <th
-                          style={{ color: 'var(--solva-ink)' }}
-                          className="py-4 pl-4 text-center font-bold min-w-[160px]"
-                        >
-                          Ultra (${ultraPrice}/mo)
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody
-                      style={{ borderColor: 'var(--solva-border)' }}
-                      className="divide-y"
+                {/* Selected Tier Header Summary */}
+                <div className="flex flex-wrap items-center justify-between gap-2.5 px-1">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      style={
+                        mobileCompareTier === 'pro'
+                          ? {
+                              backgroundColor: 'var(--solva-btn-bg)',
+                              color: 'var(--solva-btn-fg)',
+                            }
+                          : {
+                              backgroundColor: 'var(--solva-bg)',
+                              borderColor: 'var(--solva-border)',
+                              color: 'var(--solva-ink)',
+                            }
+                      }
+                      className={`w-[36px] h-[36px] rounded-[9px] ${
+                        mobileCompareTier === 'pro' ? '' : 'border'
+                      } flex items-center justify-center shrink-0`}
                     >
-                      {COMPARISON_MATRIX.map((row) => (
-                        <tr
-                          key={row.category_en}
-                          style={{ borderColor: 'var(--solva-border)' }}
-                          className="hover:bg-[#FBFAF6]/60 dark:hover:bg-[#141310]/40 transition-colors"
+                      {mobileCompareTier === 'basic' ? (
+                        <FileText className="w-4 h-4" />
+                      ) : mobileCompareTier === 'pro' ? (
+                        <Zap className="w-4 h-4" />
+                      ) : (
+                        <Building2 className="w-4 h-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3
+                          style={{ color: 'var(--solva-ink)' }}
+                          className="font-solva-sans text-[17px] font-semibold leading-tight"
                         >
-                          <td
-                            style={{ color: 'var(--solva-ink)' }}
-                            className="py-3.5 pr-4 font-medium"
+                          {mobileCompareTier === 'basic'
+                            ? 'Basic'
+                            : mobileCompareTier === 'pro'
+                              ? 'Pro'
+                              : 'Ultra'}
+                        </h3>
+                        {mobileCompareTier === 'pro' && (
+                          <span
+                            style={{
+                              backgroundColor: 'var(--solva-btn-bg)',
+                              color: 'var(--solva-btn-fg)',
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[5px] font-mono text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap shrink-0"
                           >
-                            {lang === 'vi' ? row.category_vi : row.category_en}
-                          </td>
-                          <td
-                            style={{ color: 'var(--solva-muted)' }}
-                            className="py-3.5 px-4 text-center font-mono text-[12px]"
+                            <Sparkles className="w-2.5 h-2.5 shrink-0" aria-hidden="true" />
+                            <span>{lang === 'vi' ? 'Phổ biến nhất' : 'Most Popular'}</span>
+                          </span>
+                        )}
+                      </div>
+                      <p
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="font-solva-sans text-[12.5px] leading-snug mt-0.5"
+                      >
+                        {mobileCompareTier === 'basic'
+                          ? lang === 'vi'
+                            ? 'Gói khởi đầu miễn phí cho sinh viên'
+                            : 'Free starter for course essays'
+                          : mobileCompareTier === 'pro'
+                            ? lang === 'vi'
+                              ? 'Khóa luận, luận văn & giảng viên'
+                              : 'Theses, researchers & lecturers'
+                            : lang === 'vi'
+                              ? 'Phòng thí nghiệm, bộ môn & hội đồng'
+                              : 'Labs, faculties & review boards'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      backgroundColor: 'var(--solva-bg)',
+                      borderColor: 'var(--solva-border)',
+                      color: 'var(--solva-ink)',
+                    }}
+                    className="inline-flex items-baseline gap-1 px-2.5 py-1 rounded-[8px] border font-mono text-[13px] font-semibold whitespace-nowrap shrink-0"
+                  >
+                    <span>
+                      $
+                      {mobileCompareTier === 'basic'
+                        ? 0
+                        : mobileCompareTier === 'pro'
+                          ? proPrice
+                          : ultraPrice}
+                    </span>
+                    <span
+                      style={{ color: 'var(--solva-muted)' }}
+                      className="font-solva-sans text-[11.5px] font-normal"
+                    >
+                      /{lang === 'vi' ? 'tháng' : 'mo'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 100%-Width Comparison Feature Rows */}
+                <div
+                  style={{
+                    backgroundColor: 'var(--solva-bg)',
+                    borderColor: 'var(--solva-border)',
+                  }}
+                  className="rounded-[12px] border divide-y w-full max-w-full"
+                >
+                  {COMPARISON_MATRIX.map((row) => {
+                    const resolved = resolveComparisonValue(row[mobileCompareTier], lang);
+                    const categoryLabel = lang === 'vi' ? row.category_vi : row.category_en;
+                    const isLongString = typeof resolved === 'string' && resolved.length > 22;
+
+                    return (
+                      <div
+                        key={row.category_en}
+                        style={{ borderColor: 'var(--solva-border)' }}
+                        className={`px-3.5 py-3 w-full max-w-full ${
+                          isLongString
+                            ? 'flex flex-col items-start gap-1.5'
+                            : 'flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5'
+                        }`}
+                      >
+                        <span
+                          style={{ color: 'var(--solva-ink)' }}
+                          className="font-solva-sans text-[13.5px] font-medium leading-[19.5px] min-w-0 break-words"
+                        >
+                          {categoryLabel}
+                        </span>
+
+                        {typeof resolved === 'boolean' ? (
+                          resolved ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[7px] bg-emerald-600/[0.12] dark:bg-emerald-400/15 text-emerald-800 dark:text-emerald-300 border border-emerald-700/20 dark:border-emerald-400/25 font-mono text-[11.5px] font-semibold whitespace-nowrap shrink-0">
+                              <Check className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                              <span>{lang === 'vi' ? 'Có hỗ trợ' : 'Included'}</span>
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                backgroundColor: 'var(--solva-surface)',
+                                borderColor: 'var(--solva-border)',
+                                color: 'var(--solva-muted)',
+                              }}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[7px] border font-mono text-[11.5px] font-medium whitespace-nowrap shrink-0"
+                            >
+                              <Minus className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                              <span>{lang === 'vi' ? 'Chưa bao gồm' : 'Not included'}</span>
+                            </span>
+                          )
+                        ) : isLongString ? (
+                          <span
+                            style={{
+                              backgroundColor: 'var(--solva-surface)',
+                              borderColor: 'var(--solva-border)',
+                              color: 'var(--solva-ink)',
+                            }}
+                            className="inline-block max-w-full px-2.5 py-1.5 rounded-[8px] border font-solva-sans text-[12.5px] font-medium leading-[18px] break-words"
                           >
-                            {typeof row.basic === 'boolean' ? (
-                              row.basic ? (
-                                <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mx-auto" />
-                              ) : (
-                                <X className="h-4 w-4 opacity-40 mx-auto" />
-                              )
-                            ) : (
-                              row.basic
-                            )}
-                          </td>
-                          <td
+                            {resolved}
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              backgroundColor: 'var(--solva-surface)',
+                              borderColor: 'var(--solva-border)',
+                              color: 'var(--solva-ink)',
+                            }}
+                            className="inline-flex items-center px-2.5 py-1 rounded-[7px] border font-mono text-[12px] font-semibold whitespace-nowrap shrink-0"
+                          >
+                            {resolved}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Bottom Action CTA for Selected Tier */}
+                <div className="pt-0.5">
+                  {mobileCompareTier === 'basic' ? (
+                    <SolvaPlanActionButton
+                      variant="outline"
+                      disabled={adminLocked || Boolean(user && planTier === 'basic')}
+                      onClick={() => handleSelectPlan('basic')}
+                      testId="mobile-compare-tier-cta"
+                    >
+                      {adminLocked
+                        ? lang === 'vi'
+                          ? 'Mở sẵn cho Quản trị'
+                          : 'Included with Admin'
+                        : user && planTier === 'basic'
+                          ? lang === 'vi'
+                            ? 'Đang sử dụng gói Basic'
+                            : 'Current Active Plan'
+                          : lang === 'vi'
+                            ? 'Bắt đầu miễn phí'
+                            : 'Get Started Free'}
+                    </SolvaPlanActionButton>
+                  ) : mobileCompareTier === 'pro' ? (
+                    <SolvaPlanActionButton
+                      variant="primary"
+                      disabled={
+                        adminLocked ||
+                        loadingTier !== null ||
+                        isCurrentPro ||
+                        Boolean(user && planTier === 'ultra')
+                      }
+                      onClick={() => handleSelectPlan('pro')}
+                      testId="mobile-compare-tier-cta"
+                    >
+                      {loadingTier === 'pro' ? (
+                        <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                      ) : (
+                        <CreditCard className="h-4 w-4 shrink-0" />
+                      )}
+                      <span>
+                        {adminLocked
+                          ? lang === 'vi'
+                            ? 'Mở sẵn cho Quản trị'
+                            : 'Included with Admin'
+                          : user && planTier === 'ultra'
+                            ? lang === 'vi'
+                              ? 'Đã bao gồm gói Ultra'
+                              : 'Included in Ultra'
+                            : isCurrentPro
+                              ? lang === 'vi'
+                                ? 'Đang sử dụng gói Pro'
+                                : 'Current Pro Plan'
+                              : lang === 'vi'
+                                ? 'Nâng cấp lên Pro'
+                                : 'Upgrade to Pro'}
+                      </span>
+                    </SolvaPlanActionButton>
+                  ) : (
+                    <SolvaPlanActionButton
+                      variant="outline"
+                      disabled={adminLocked || loadingTier !== null || isCurrentUltra}
+                      onClick={() => handleSelectPlan('ultra')}
+                      testId="mobile-compare-tier-cta"
+                    >
+                      {loadingTier === 'ultra' ? (
+                        <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                      ) : (
+                        <CreditCard className="h-4 w-4 shrink-0" />
+                      )}
+                      <span>
+                        {adminLocked
+                          ? lang === 'vi'
+                            ? 'Gói Quản trị · Ultra'
+                            : 'Current · Ultra (Admin)'
+                          : isCurrentUltra
+                            ? lang === 'vi'
+                              ? 'Đang sử dụng gói Ultra'
+                              : 'Current Ultra Plan'
+                            : lang === 'vi'
+                              ? 'Nâng cấp lên Ultra'
+                              : 'Upgrade to Ultra'}
+                      </span>
+                    </SolvaPlanActionButton>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop 4-Column Semantic Comparison Table */}
+            <div data-testid="desktop-compare-table-wrap" className={desktopCompareWrapClass}>
+              <SolvaScrollReveal delayMs={40} yOffset={20} blurPx={0}>
+                <div
+                  style={{
+                    backgroundColor: 'var(--solva-surface)',
+                    borderColor: 'var(--solva-border)',
+                  }}
+                  className="rounded-[16px] border p-4 sm:p-5 xl:p-[32px] overflow-hidden"
+                >
+                  <div className="overflow-x-auto">
+                    <table className="w-full table-fixed text-left border-collapse font-solva-sans text-[13px] xl:text-[14px]">
+                      <thead>
+                        <tr
+                          style={{
+                            borderColor: 'var(--solva-border)',
+                            color: 'var(--solva-muted)',
+                          }}
+                          className="border-b font-mono uppercase text-[11px]"
+                        >
+                          <th className="w-[34%] py-3.5 pr-3 xl:pr-4 font-semibold">
+                            {lang === 'vi' ? 'Danh mục tính năng' : 'Feature / Quota'}
+                          </th>
+                          <th className="w-[18%] py-3.5 px-2.5 xl:px-4 text-center font-semibold">
+                            Basic ($0)
+                          </th>
+                          <th
                             style={{
                               backgroundColor: 'var(--solva-bg)',
                               color: 'var(--solva-ink)',
                             }}
-                            className="py-3.5 px-4 text-center font-semibold font-mono text-[12px]"
+                            className="w-[24%] py-3.5 px-2.5 xl:px-4 text-center font-bold rounded-t-[10px]"
                           >
-                            {typeof row.pro === 'boolean' ? (
-                              row.pro ? (
-                                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mx-auto" />
-                              ) : (
-                                <X className="h-4 w-4 opacity-40 mx-auto" />
-                              )
-                            ) : (
-                              row.pro
-                            )}
-                          </td>
-                          <td
+                            Pro (${proPrice}/{lang === 'vi' ? 'tháng' : 'mo'})
+                          </th>
+                          <th
                             style={{ color: 'var(--solva-ink)' }}
-                            className="py-3.5 pl-4 text-center font-semibold font-mono text-[12px]"
+                            className="w-[24%] py-3.5 pl-2.5 xl:pl-4 text-center font-bold"
                           >
-                            {typeof row.ultra === 'boolean' ? (
-                              row.ultra ? (
-                                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mx-auto" />
-                              ) : (
-                                <X className="h-4 w-4 opacity-40 mx-auto" />
-                              )
-                            ) : (
-                              row.ultra
-                            )}
-                          </td>
+                            Ultra (${ultraPrice}/{lang === 'vi' ? 'tháng' : 'mo'})
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody
+                        style={{ borderColor: 'var(--solva-border)' }}
+                        className="divide-y"
+                      >
+                        {COMPARISON_MATRIX.map((row) => {
+                          const basicVal = resolveComparisonValue(row.basic, lang);
+                          const proVal = resolveComparisonValue(row.pro, lang);
+                          const ultraVal = resolveComparisonValue(row.ultra, lang);
+
+                          return (
+                            <tr
+                              key={row.category_en}
+                              style={{ borderColor: 'var(--solva-border)' }}
+                              className="hover:bg-[#FBFAF6]/60 dark:hover:bg-[#141310]/40 transition-colors"
+                            >
+                              <td
+                                style={{ color: 'var(--solva-ink)' }}
+                                className="py-3.5 pr-3 xl:pr-4 font-medium break-words"
+                              >
+                                {lang === 'vi' ? row.category_vi : row.category_en}
+                              </td>
+                              <td
+                                style={{ color: 'var(--solva-muted)' }}
+                                className="py-3.5 px-2.5 xl:px-4 text-center font-mono text-[12px] break-words"
+                              >
+                                {typeof basicVal === 'boolean' ? (
+                                  basicVal ? (
+                                    <Check
+                                      aria-label={lang === 'vi' ? 'Có hỗ trợ' : 'Included'}
+                                      className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mx-auto"
+                                    />
+                                  ) : (
+                                    <Minus
+                                      aria-label={lang === 'vi' ? 'Chưa bao gồm' : 'Not included'}
+                                      className="h-4 w-4 opacity-55 mx-auto"
+                                    />
+                                  )
+                                ) : (
+                                  basicVal
+                                )}
+                              </td>
+                              <td
+                                style={{
+                                  backgroundColor: 'var(--solva-bg)',
+                                  color: 'var(--solva-ink)',
+                                }}
+                                className="py-3.5 px-2.5 xl:px-4 text-center font-semibold font-mono text-[12px] break-words"
+                              >
+                                {typeof proVal === 'boolean' ? (
+                                  proVal ? (
+                                    <CheckCircle2
+                                      aria-label={lang === 'vi' ? 'Có hỗ trợ' : 'Included'}
+                                      className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mx-auto"
+                                    />
+                                  ) : (
+                                    <Minus
+                                      aria-label={lang === 'vi' ? 'Chưa bao gồm' : 'Not included'}
+                                      className="h-4 w-4 opacity-55 mx-auto"
+                                    />
+                                  )
+                                ) : (
+                                  proVal
+                                )}
+                              </td>
+                              <td
+                                style={{ color: 'var(--solva-ink)' }}
+                                className="py-3.5 pl-2.5 xl:pl-4 text-center font-semibold font-mono text-[12px] break-words"
+                              >
+                                {typeof ultraVal === 'boolean' ? (
+                                  ultraVal ? (
+                                    <CheckCircle2
+                                      aria-label={lang === 'vi' ? 'Có hỗ trợ' : 'Included'}
+                                      className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mx-auto"
+                                    />
+                                  ) : (
+                                    <Minus
+                                      aria-label={lang === 'vi' ? 'Chưa bao gồm' : 'Not included'}
+                                      className="h-4 w-4 opacity-55 mx-auto"
+                                    />
+                                  )
+                                ) : (
+                                  ultraVal
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            </SolvaScrollReveal>
+              </SolvaScrollReveal>
+            </div>
           </div>
         </section>
 
@@ -1982,12 +2409,12 @@ function PricingSolvaHeader({
       }}
       className="fixed top-0 left-0 right-0 z-50"
     >
-      <div className="max-w-[1280px] mx-auto px-5 sm:px-6 lg:px-[40px] h-[64px] lg:h-[76px] flex items-center justify-between gap-4">
-        {/* Left: Brand Logo + Back to Home */}
-        <div className="flex items-center gap-3 shrink-0">
+      <div className="max-w-[1280px] mx-auto px-5 sm:px-6 lg:px-8 xl:px-[40px] h-[64px] lg:h-[76px] flex items-center justify-between flex-nowrap gap-2 xl:gap-4">
+        {/* Left: Brand Logo (+ Tablet Home Pill on sm..lg) */}
+        <div className="flex items-center gap-2.5 shrink-0">
           <Link
             to="/"
-            className="inline-flex items-center gap-[8px] rounded-[6px] focus:outline-none"
+            className="inline-flex items-center gap-[8px] rounded-[6px] whitespace-nowrap shrink-0 focus:outline-none"
           >
             <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
               <SourceLogicLogo size={18} />
@@ -2006,25 +2433,33 @@ function PricingSolvaHeader({
               backgroundColor: 'var(--solva-surface)',
               color: 'var(--solva-muted)',
             }}
-            className="hidden sm:inline-flex items-center gap-1.5 h-[32px] px-2.5 rounded-[8px] font-solva-sans text-[13px] font-normal hover:opacity-80 transition-opacity"
+            className="hidden sm:inline-flex lg:hidden items-center gap-1.5 h-[32px] px-2.5 rounded-[8px] font-solva-sans text-[13px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>{lang === 'vi' ? 'Trang chủ' : 'Back to Home'}</span>
+            <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+            <span>{lang === 'vi' ? 'Trang chủ' : 'Home'}</span>
           </Link>
         </div>
 
-        {/* Center: Solva Navigation Links */}
+        {/* Center: Single-Row Solva Navigation Links (Never Wraps at 1024px or 1440px) */}
         <nav
           aria-label="Pricing Navigation"
-          className="hidden lg:flex items-center justify-center flex-1 gap-1"
+          className="hidden lg:flex items-center justify-center flex-1 min-w-0 flex-nowrap gap-0.5 xl:gap-1.5"
         >
-          <div className="relative" onMouseLeave={() => setDropdownOpen(false)}>
+          <Link
+            to="/"
+            style={{ color: 'var(--solva-muted)' }}
+            className="inline-flex items-center h-[40px] px-2.5 xl:px-3 rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
+          >
+            {lang === 'vi' ? 'Trang chủ' : 'Home'}
+          </Link>
+
+          <div className="relative shrink-0" onMouseLeave={() => setDropdownOpen(false)}>
             <button
               type="button"
               onClick={() => setDropdownOpen((prev) => !prev)}
               aria-expanded={dropdownOpen}
               style={{ color: 'var(--solva-muted)' }}
-              className="inline-flex items-center gap-[6px] h-[44px] px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal hover:opacity-80 transition-opacity cursor-pointer"
+              className="inline-flex items-center gap-[5px] h-[40px] px-2.5 xl:px-3 rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity cursor-pointer"
             >
               <span>{lang === 'vi' ? 'Nền tảng' : 'Platform'}</span>
               <SymmetricChevron open={dropdownOpen} size={14} />
@@ -2032,7 +2467,7 @@ function PricingSolvaHeader({
 
             {dropdownPresence.mounted && (
               <div
-                className={`absolute left-0 top-[44px] pt-1 z-50 t-dropdown ${
+                className={`absolute left-0 top-[40px] pt-1 z-50 t-dropdown ${
                   dropdownPresence.phase === 'open' ? 'is-open' : 'is-closing'
                 }`}
               >
@@ -2081,31 +2516,31 @@ function PricingSolvaHeader({
           <a
             href="#compare-matrix"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[40px] px-2.5 xl:px-3 rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
-            {lang === 'vi' ? 'Bảng so sánh' : 'Comparison Matrix'}
+            {lang === 'vi' ? 'So sánh gói' : 'Compare Plans'}
           </a>
 
           <a
             href="#pricing-faq"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[40px] px-2.5 xl:px-3 rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
-            {lang === 'vi' ? 'Câu hỏi thường gặp' : 'Billing FAQ'}
+            {lang === 'vi' ? 'Giải đáp' : 'Billing FAQ'}
           </a>
 
           <a
             href="/#benchmark-120k"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center gap-1.5 h-[44px] px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal hover:opacity-80 transition-opacity"
+            className="inline-flex items-center gap-1.5 h-[40px] px-2.5 xl:px-3 rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>{lang === 'vi' ? 'Benchmark 120K' : '120K Benchmark'}</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span>{lang === 'vi' ? 'Thực nghiệm 120K' : '120K Benchmark'}</span>
           </a>
         </nav>
 
         {/* Right: Lang, Theme, Sign In, Primary Double-Slide CTA */}
-        <div className="flex items-center justify-end gap-1.5 sm:gap-2 shrink-0">
+        <div className="flex items-center justify-end flex-nowrap gap-1.5 sm:gap-2 shrink-0">
           <button
             type="button"
             onClick={onToggleLanguage}
@@ -2113,10 +2548,10 @@ function PricingSolvaHeader({
               backgroundColor: 'var(--solva-surface)',
               color: 'var(--solva-ink)',
             }}
-            className="inline-flex items-center gap-1 h-[36px] px-2.5 rounded-[8px] font-mono text-[12px] font-medium hover:opacity-85 transition-opacity cursor-pointer"
+            className="inline-flex items-center gap-1 h-[36px] px-2.5 rounded-[8px] font-mono text-[12px] font-medium whitespace-nowrap shrink-0 hover:opacity-85 transition-opacity cursor-pointer"
             title={lang === 'vi' ? 'Switch to English' : 'Chuyển sang Tiếng Việt'}
           >
-            <Globe className="w-3.5 h-3.5" />
+            <Globe className="w-3.5 h-3.5 shrink-0" />
             <span>{lang === 'vi' ? 'VI' : 'EN'}</span>
           </button>
 
@@ -2125,13 +2560,13 @@ function PricingSolvaHeader({
           <Link
             to="/login"
             style={{ color: 'var(--solva-muted)' }}
-            className="hidden sm:inline-flex items-center h-[44px] px-[12px] rounded-[8px] font-solva-sans text-[15px] font-normal hover:opacity-80 transition-opacity"
+            className="hidden sm:inline-flex items-center h-[40px] px-2.5 xl:px-3 rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Đăng nhập' : 'Sign in'}
           </Link>
 
-          <SolvaButton to="/register" variant="primary" className="hidden sm:inline-flex">
-            {lang === 'vi' ? 'Dùng thử miễn phí' : 'Start Free'}
+          <SolvaButton to="/register" variant="primary" className="hidden sm:inline-flex shrink-0">
+            {lang === 'vi' ? 'Đăng ký' : 'Start Free'}
           </SolvaButton>
 
           <button
@@ -2143,7 +2578,7 @@ function PricingSolvaHeader({
               backgroundColor: 'var(--solva-surface)',
               color: 'var(--solva-ink)',
             }}
-            className="lg:hidden inline-flex items-center justify-center w-[40px] h-[40px] rounded-[8px] cursor-pointer"
+            className="lg:hidden inline-flex items-center justify-center w-[40px] h-[40px] rounded-[8px] shrink-0 cursor-pointer"
           >
             <IconSwap
               active={mobileMenuOpen}
@@ -2174,10 +2609,10 @@ function PricingSolvaHeader({
                 backgroundColor: 'var(--solva-surface)',
                 color: 'var(--solva-ink)',
               }}
-              className="flex items-center justify-between px-3.5 py-2.5 rounded-[10px] font-solva-sans text-[14px] font-medium"
+              className="flex items-center justify-between min-h-[44px] px-3.5 py-2.5 rounded-[10px] font-solva-sans text-[14px] font-medium"
             >
               <span>{lang === 'vi' ? 'Quay về Trang chủ' : 'Back to Home'}</span>
-              <ChevronRight className="w-4 h-4 opacity-60" />
+              <ChevronRight className="w-4 h-4 opacity-60 shrink-0" />
             </Link>
             <a
               href="#compare-matrix"
@@ -2186,10 +2621,10 @@ function PricingSolvaHeader({
                 backgroundColor: 'var(--solva-surface)',
                 color: 'var(--solva-ink)',
               }}
-              className="flex items-center justify-between px-3.5 py-2.5 rounded-[10px] font-solva-sans text-[14px] font-medium"
+              className="flex items-center justify-between min-h-[44px] px-3.5 py-2.5 rounded-[10px] font-solva-sans text-[14px] font-medium"
             >
-              <span>{lang === 'vi' ? 'Bảng so sánh tính năng' : 'Comparison Matrix'}</span>
-              <ChevronRight className="w-4 h-4 opacity-60" />
+              <span>{lang === 'vi' ? 'Bảng so sánh tính năng' : 'Compare Plans'}</span>
+              <ChevronRight className="w-4 h-4 opacity-60 shrink-0" />
             </a>
             <a
               href="#pricing-faq"
@@ -2198,10 +2633,10 @@ function PricingSolvaHeader({
                 backgroundColor: 'var(--solva-surface)',
                 color: 'var(--solva-ink)',
               }}
-              className="flex items-center justify-between px-3.5 py-2.5 rounded-[10px] font-solva-sans text-[14px] font-medium"
+              className="flex items-center justify-between min-h-[44px] px-3.5 py-2.5 rounded-[10px] font-solva-sans text-[14px] font-medium"
             >
-              <span>{lang === 'vi' ? 'Câu hỏi thanh toán' : 'Billing FAQ'}</span>
-              <ChevronRight className="w-4 h-4 opacity-60" />
+              <span>{lang === 'vi' ? 'Giải đáp thanh toán' : 'Billing FAQ'}</span>
+              <ChevronRight className="w-4 h-4 opacity-60 shrink-0" />
             </a>
           </div>
 
