@@ -170,26 +170,26 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
 **Interfaces:**
 - Consumes: `.solva-pro-card-surface` and `.solva-floral-banner-mask` from Task 0.1; Global Constraint 4 test-IDs.
 
-- [ ] **Step 1: Write failing tests in `web/src/pages/PricingAndBilling.test.tsx`**
+- [x] **Step 1: Write failing tests in `web/src/pages/PricingAndBilling.test.tsx`**
   Assert:
   1. Both `LandingPage` Pro card and `PricingPage` `plan-card-pro` separate the floral painting header/frame from a high-contrast `.solva-pro-card-surface` content body so body/checklist items never sit directly on un-scrimmed floral imagery.
   2. `Save $480/yr` / `Tiết kiệm $480/năm` badge on Ultra uses `whitespace-nowrap` so it never splits onto 2 lines.
   3. `LandingPage` Pro CTA no longer falsely promises `"Start Pro trial"` when no trial exists, aligning with `/pricing`.
   4. When language is `vi`, `data-testid="pro-vnd-equivalent"` renders a clear VND reference while `landing-price-pro` and `pro-price-display` keep exact `'$16'` / `'$20'` `textContent`.
-- [ ] **Step 2: Run `PricingAndBilling.test.tsx` & `LandingInteractiveMotion.test.tsx` to confirm failure**
+- [x] **Step 2: Run `PricingAndBilling.test.tsx` & `LandingInteractiveMotion.test.tsx` to confirm failure**
   Run: `cd web && npx vitest run src/pages/PricingAndBilling.test.tsx src/pages/LandingInteractiveMotion.test.tsx`
   Expected: FAIL.
-- [ ] **Step 3: Implement Framed Gallery Header + High-Contrast Surface on `Pro` Card & Subgrid Alignment**
+- [x] **Step 3: Implement Framed Gallery Header + High-Contrast Surface on `Pro` Card & Subgrid Alignment**
   Update `SolvaTaxonomyPricingSection` in `LandingPage.tsx` and the 3-card grid in `PricingPage.tsx` so:
   - `Pro` showcases `/solva/pricing-floral.webp` in a rich `104px` top gallery banner (hosting the `MOST POPULAR` frosted pill + `Save $48/yr` `whitespace-nowrap` badge), transitioning into `.solva-pro-card-surface` (`#FFFFFF`/`#FAF9F5` in Light mode, `#181713` in Dark mode) for >= 12:1 AAA contrast on price, description, and checklist items.
   - All 3 cards (`Basic`, `Pro`, `Ultra`) align top edges, price baselines, dividers, and bottom CTA buttons cleanly on `lg:grid-cols-3`.
   - Basic tier checklist replaces harsh triple *"No PDF..."* lines with constructive framing (*"Báo cáo trực tuyến đầy đủ · Mở khóa xuất Word/PDF ở gói Pro"*).
-- [ ] **Step 4: Run full frontend verification gate**
+- [x] **Step 4: Run full frontend verification gate**
   Run: `cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
   Expected: PASS.
-- [ ] **Step 5: Run Triad Review & Critic Loop + Browser Visual Inspection (Light & Dark modes on `/` and `/pricing`)**
+- [x] **Step 5: Run Triad Review & Critic Loop + Browser Visual Inspection (Light & Dark modes on `/` and `/pricing`)**
   Inspect `Pro` card legibility in both Light and Dark themes and verify horizontal alignment across all 3 cards; loop until `APPROVED`.
-- [ ] **Step 6: Tick checkboxes & commit**
+- [x] **Step 6: Tick checkboxes & commit**
   ```bash
   git add web/src/pages/LandingPage.tsx web/src/pages/PricingPage.tsx web/src/pages/PricingAndBilling.test.tsx
   git commit -m "fix(pricing): rescue Pro card Light/Dark WCAG contrast, align tier cards, and add VI currency context"
