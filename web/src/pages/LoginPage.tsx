@@ -83,10 +83,23 @@ export function LoginPage() {
     setError('');
     setNeedsActivation(false);
     setResentSuccess('');
+
+    if (!username.trim()) {
+      triggerShake();
+      setError(t('auth.loginMissingIdentifier'));
+      return;
+    }
+
+    if (!password) {
+      triggerShake();
+      setError(t('auth.loginMissingPassword'));
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await login(username, password);
+      await login(username.trim(), password);
       navigate('/dashboard');
     } catch (err) {
       triggerShake();
@@ -154,7 +167,7 @@ export function LoginPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
               <Lock className="h-3 w-3 shrink-0 opacity-80" />
               <span>
-                {lang === 'vi' ? 'Xác thực Hệ thống' : 'Workspace Sign In'}
+                {lang === 'vi' ? 'Đăng nhập Không gian' : 'Workspace Sign In'}
               </span>
             </div>
 
@@ -163,7 +176,7 @@ export function LoginPage() {
               className="inline-flex items-center gap-1 font-mono text-[10px] whitespace-nowrap shrink-0"
             >
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>SSO · RBAC</span>
+              <span>{t('auth.loginSecurityChip')}</span>
             </span>
           </div>
 
@@ -176,9 +189,13 @@ export function LoginPage() {
               transition:
                 'opacity 520ms cubic-bezier(0.22, 1, 0.36, 1), transform 520ms cubic-bezier(0.22, 1, 0.36, 1)',
             }}
-            className="font-solva-serif font-light text-[30px] sm:text-[34px] leading-[1.08] tracking-[-0.04em] pt-0.5"
+            className={`font-solva-serif font-light text-[30px] sm:text-[34px] pt-0.5 ${
+              lang === 'vi'
+                ? 'leading-[1.15] tracking-[-0.03em]'
+                : 'leading-[1.08] tracking-[-0.04em]'
+            }`}
           >
-            {t('auth.welcomeBack')}
+            {t('auth.welcomeBack').normalize('NFC')}
           </CardTitle>
 
           <CardDescription
@@ -218,8 +235,8 @@ export function LoginPage() {
           )}
 
           {/* Login Form (Contains ZERO <button><svg> before #password Eye toggle) */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Username / Email Input */}
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
+            {/* Email or Username Input */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <Label
@@ -227,7 +244,7 @@ export function LoginPage() {
                   style={{ color: 'var(--solva-ink)' }}
                   className="font-mono text-[11px] font-semibold uppercase tracking-wider"
                 >
-                  {t('auth.username')}
+                  {t('auth.emailOrUsername')}
                 </Label>
                 {username.trim().length > 0 && (
                   <span
@@ -236,7 +253,7 @@ export function LoginPage() {
                       borderColor: 'var(--solva-border)',
                       color: 'var(--solva-muted)',
                     }}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold border"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold border whitespace-nowrap"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                     {isEmailFormat ? 'EMAIL' : 'USERNAME'}
@@ -266,7 +283,10 @@ export function LoginPage() {
                   value={username}
                   onFocus={() => setFocusedField('username')}
                   onBlur={() => setFocusedField(null)}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    if (error) setError('');
+                  }}
                   required
                   autoComplete="username"
                   style={{
@@ -281,7 +301,7 @@ export function LoginPage() {
                     color: 'var(--solva-ink)',
                   }}
                   className={`t-input ${error ? 'is-error' : ''} ${isShaking ? 'is-shaking' : ''} h-11 pl-10 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20`}
-                  placeholder={t('auth.usernamePlaceholder')}
+                  placeholder={t('auth.emailOrUsernamePlaceholder')}
                 />
               </div>
             </div>
@@ -298,7 +318,7 @@ export function LoginPage() {
                 </Label>
                 <div className="flex items-center gap-2">
                   {capsLockOn && (
-                    <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 font-mono text-[9px] font-semibold">
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 font-mono text-[9px] font-semibold whitespace-nowrap">
                       CAPS LOCK
                     </span>
                   )}
@@ -335,7 +355,10 @@ export function LoginPage() {
                   }}
                   onKeyDown={handlePasswordKeyEvent}
                   onKeyUp={handlePasswordKeyEvent}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError('');
+                  }}
                   required
                   autoComplete="current-password"
                   style={{
@@ -472,7 +495,7 @@ export function LoginPage() {
                   borderColor: 'var(--solva-border)',
                   color: 'var(--solva-ink)',
                 }}
-                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-[11px] font-mono font-semibold rounded-[7px] border hover:opacity-85 transition-opacity cursor-pointer shrink-0 shadow-2xs"
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-[11px] font-mono font-semibold rounded-[7px] border hover:opacity-85 transition-opacity cursor-pointer shrink-0 shadow-sm"
               >
                 {copiedDemo ? (
                   <>

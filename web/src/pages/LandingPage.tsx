@@ -901,7 +901,7 @@ function SolvaHeader({
           </Link>
 
           <SolvaButton
-            to={isAuthenticated ? '/dashboard' : '/login'}
+            to={isAuthenticated ? '/dashboard' : '/register'}
             variant="primary"
             className="hidden sm:inline-flex"
           >
@@ -1166,7 +1166,7 @@ function SolvaHeroSection({
             <SolvaScrollReveal delayMs={260} yOffset={24} blurPx={3}>
               <div className="flex flex-wrap items-center gap-3">
                 <SolvaButton
-                  to={isAuthenticated ? '/upload' : '/login'}
+                  to={isAuthenticated ? '/upload' : '/register'}
                   variant="primary"
                 >
                   {isAuthenticated
@@ -2654,7 +2654,7 @@ function SolvaStickySection({
                   </div>
 
                   <SolvaButton
-                    to={isAuthenticated ? '/upload' : '/login'}
+                    to={isAuthenticated ? '/upload' : '/register'}
                     variant="primary"
                   >
                     {block.cta}
@@ -3885,7 +3885,7 @@ function SolvaUseCasesSection({
                     </div>
 
                     <SolvaButton
-                      to={isAuthenticated ? '/upload' : '/login'}
+                      to={isAuthenticated ? '/upload' : '/register'}
                       variant="primary"
                       fullWidth
                     >
@@ -5547,7 +5547,7 @@ function SolvaBottomCTASection({
 
               <div className="flex flex-wrap items-center gap-3">
                 <SolvaButton
-                  to={isAuthenticated ? '/upload' : '/login'}
+                  to={isAuthenticated ? '/upload' : '/register'}
                   variant="primary"
                 >
                   {isAuthenticated

@@ -15,7 +15,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -24,6 +23,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+
+const SIMPLE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export function ForgotPasswordPage() {
   const { t, i18n } = useTranslation();
@@ -46,10 +47,16 @@ export function ForgotPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    const normalized = email.trim().toLowerCase();
+    if (!normalized || !SIMPLE_EMAIL_RE.test(normalized)) {
+      setError(t('auth.forgotInvalidEmail'));
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const normalized = email.trim().toLowerCase();
       await api.forgotPassword(normalized, lang);
       setSentToEmail(normalized);
       setCooldown(30);
@@ -95,32 +102,47 @@ export function ForgotPasswordPage() {
           className="h-[3px] w-full opacity-85"
         />
 
-        <CardHeader className="space-y-2 pb-4 pt-5 sm:pt-6 px-4 sm:px-7">
+        <CardHeader className="space-y-2 pb-4 pt-5 sm:pt-6 px-5 sm:px-7">
           <div className="flex items-center justify-between gap-2">
-            <Badge
-              variant="outline"
-              className="font-mono text-[10px] uppercase tracking-wider px-2.5 py-0.5 bg-indigo-50/80 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border-indigo-200/70 dark:border-indigo-800/70"
+            <div
+              style={{
+                backgroundColor: 'var(--solva-surface)',
+                borderColor: 'var(--solva-border)',
+                color: 'var(--solva-ink)',
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] border font-mono text-[10px] uppercase tracking-wider font-semibold whitespace-nowrap"
             >
-              <KeyRound className="h-3 w-3 mr-1 shrink-0" />
-              {t('auth.forgotBadge')}
-            </Badge>
+              <KeyRound className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>{t('auth.forgotBadge')}</span>
+            </div>
           </div>
 
-          <CardTitle className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white pt-1">
-            {sentToEmail
+          <CardTitle
+            style={{ color: 'var(--solva-ink)' }}
+            className={`font-solva-serif font-light text-[28px] sm:text-[32px] pt-0.5 ${
+              lang === 'vi'
+                ? 'leading-[1.15] tracking-[-0.03em]'
+                : 'leading-[1.08] tracking-[-0.04em]'
+            }`}
+          >
+            {(sentToEmail
               ? t('auth.resetEmailSentTitle')
-              : t('auth.forgotTitle')}
+              : t('auth.forgotTitle')
+            ).normalize('NFC')}
           </CardTitle>
-          <CardDescription className="text-sm text-slate-600 dark:text-slate-400">
+          <CardDescription
+            style={{ color: 'var(--solva-muted)' }}
+            className="font-solva-sans text-[14px] sm:text-[15px] leading-relaxed"
+          >
             {sentToEmail
               ? t('auth.resetEmailSentSubtitle')
               : t('auth.forgotSubtitle')}
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="px-4 sm:px-7 pb-5 sm:pb-6">
+        <CardContent className="px-5 sm:px-7 pb-5 sm:pb-6">
           {error && (
-            <Alert variant="destructive" className="mb-4">
+            <Alert variant="destructive" className="mb-4 rounded-[12px]">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="text-xs sm:text-sm font-medium">
                 {error}
@@ -130,15 +152,24 @@ export function ForgotPasswordPage() {
 
           {sentToEmail ? (
             <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/70 flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-emerald-600 text-white shrink-0">
+              <div
+                style={{
+                  backgroundColor: 'var(--solva-surface)',
+                  borderColor: 'var(--solva-border)',
+                }}
+                className="p-4 rounded-[12px] border flex items-center gap-3"
+              >
+                <div className="p-2 rounded-[8px] bg-emerald-600 text-white shrink-0">
                   <CheckCircle2 className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[11px] font-mono uppercase tracking-wider text-emerald-700 dark:text-emerald-300 font-semibold">
                     {lang === 'vi' ? 'Email nhận liên kết' : 'Target Inbox'}
                   </p>
-                  <p className="text-sm font-mono font-bold text-slate-900 dark:text-white truncate">
+                  <p
+                    style={{ color: 'var(--solva-ink)' }}
+                    className="text-sm font-mono font-bold break-all"
+                  >
                     {sentToEmail}
                   </p>
                 </div>
@@ -150,7 +181,7 @@ export function ForgotPasswordPage() {
                   variant="outline"
                   disabled={cooldown > 0 || loading}
                   onClick={handleResend}
-                  className="flex-1 h-10 rounded-xl text-xs font-semibold cursor-pointer"
+                  className="flex-1 h-10 rounded-[11px] text-xs font-semibold cursor-pointer"
                 >
                   <RefreshCw
                     className={`h-3.5 w-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`}
@@ -162,66 +193,87 @@ export function ForgotPasswordPage() {
                   </span>
                 </Button>
 
-                <Button
-                  asChild
-                  className="flex-1 h-10 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white"
+                <Link
+                  to="/login"
+                  style={{
+                    backgroundColor: 'var(--solva-btn-bg)',
+                    color: 'var(--solva-btn-fg)',
+                  }}
+                  className="flex-1 h-10 px-4 rounded-[11px] font-solva-sans text-xs font-semibold inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition-opacity"
                 >
-                  <Link to="/login">
-                    <span>{t('auth.backToSignIn')}</span>
-                    <ArrowRight className="h-3.5 w-3.5 ml-1" />
-                  </Link>
-                </Button>
+                  <span>{t('auth.backToSignIn')}</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
               </div>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
+            <form onSubmit={handleSubmit} noValidate className="space-y-4">
+              <div className="space-y-1.5">
                 <Label
                   htmlFor="email"
-                  className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300"
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="font-mono text-[11px] font-semibold uppercase tracking-wider"
                 >
                   {t('auth.forgotEmailLabel')}
                 </Label>
                 <div className="relative">
-                  <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
+                  <div
+                    style={{ color: 'var(--solva-muted)' }}
+                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2"
+                  >
                     <Mail className="h-4 w-4" />
                   </div>
                   <Input
                     id="email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (error) setError('');
+                    }}
                     required
                     autoComplete="email"
-                    className="h-11 pl-10 bg-slate-50/60 dark:bg-slate-950/60 focus-visible:bg-white dark:focus-visible:bg-slate-900"
+                    style={{
+                      backgroundColor: 'var(--solva-surface)',
+                      borderColor: 'var(--solva-border)',
+                      color: 'var(--solva-ink)',
+                    }}
+                    className="h-11 pl-10 rounded-[11px] font-solva-sans text-[14px]"
                     placeholder={t('auth.forgotEmailPlaceholder')}
                   />
                 </div>
               </div>
 
-              <Button
+              <button
                 type="submit"
                 disabled={loading}
-                size="lg"
-                className="w-full h-11 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 cursor-pointer"
+                style={{
+                  backgroundColor: 'var(--solva-btn-bg)',
+                  color: 'var(--solva-btn-fg)',
+                }}
+                className="group relative w-full h-[46px] px-5 rounded-[11px] font-solva-sans text-[14px] font-medium flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.985] disabled:opacity-55 disabled:pointer-events-none cursor-pointer select-none"
               >
                 {loading ? (
                   <>
-                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                    <div className="h-4 w-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
                     <span>{t('auth.sendingResetLink')}</span>
                   </>
                 ) : (
                   <>
                     <span>{t('auth.sendResetLinkBtn')}</span>
-                    <ArrowRight className="h-4 w-4" />
+                    <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
                   </>
                 )}
-              </Button>
+              </button>
 
-              <div className="pt-3 border-t border-slate-200/70 dark:border-slate-800/70 text-center">
+              <div
+                style={{ borderColor: 'var(--solva-border)' }}
+                className="pt-3 border-t text-center"
+              >
                 <Link
                   to="/login"
-                  className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="inline-flex items-center gap-1.5 font-solva-sans text-xs sm:text-sm font-semibold underline underline-offset-4 decoration-[#1C1A15]/35 dark:decoration-[#FBFAF6]/35 hover:decoration-current transition-colors"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
                   <span>{t('auth.backToSignIn')}</span>
