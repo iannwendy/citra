@@ -364,24 +364,24 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
   - `deriveUsernameFromEmailOrName(input: string): string` helper in `RegisterPage.tsx` (auto-suggests valid `3–50` char username from email/name until manually edited by user, keeping the `#username` input synced and editable).
   - Custom inline validation messages (`noValidate` on `<form>`) on `LoginPage`, `RegisterPage`, and `ForgotPasswordPage`.
 
-- [ ] **Step 1: Write failing tests in `web/src/pages/LoginPage.test.tsx` and `web/src/pages/AuthPages.test.tsx`**
+- [x] **Step 1: Write failing tests in `web/src/pages/LoginPage.test.tsx` and `web/src/pages/AuthPages.test.tsx`**
   Assert:
   1. `LoginPage` labels the identifier input `"Email or Username"` (EN) / `"Email hoặc Tên đăng nhập"` (VI) (still matching `/username|tên đăng nhập/i`), shows inline error messages when submitted empty (without relying solely on native browser tooltips), and replaces raw `SSO · RBAC` with localized trust copy in `vi`.
   2. `RegisterPage` auto-populates a sanitized valid `#username` when the user types an email (e.g. `minh.nguyen+kltn@tdtu.edu.vn` -> `minh.nguyen_kltn`) unless the user explicitly edits `#username`; manual edits to `#username` still work identically for existing tests.
   3. `RegisterPage` placeholders fit cleanly without clipping, and compact vertical spacing + concise 2-line consent copy (`91/2025/QH15` + `/privacy` + `/terms`) keeps the entire card comfortably inside a `900px` desktop viewport.
   4. `AuthSplitShell` left panel renders localized verdict labels in `vi`, removes `truncate` / `line-clamp` ellipsis cuts on feature cards and source chips (`Semantic Scholar`), prevents `99,02% CHÍNH XÁC` from breaking mid-phrase, and preserves zero `<button>` elements in the left panel.
   5. Unauthenticated `"Try CITRA Free"` CTAs on `LandingPage` route to `#try-instant` / `/register` rather than dumping new visitors onto `/login` (`"Sign in"` still routes to `/login`).
-- [ ] **Step 2: Run `LoginPage.test.tsx`, `AuthPages.test.tsx`, and `PrivacyCompliance.test.tsx` to confirm failure**
+- [x] **Step 2: Run `LoginPage.test.tsx`, `AuthPages.test.tsx`, and `PrivacyCompliance.test.tsx` to confirm failure**
   Run: `cd web && npx vitest run src/pages/LoginPage.test.tsx src/pages/AuthPages.test.tsx src/pages/PrivacyCompliance.test.tsx`
   Expected: FAIL.
-- [ ] **Step 3: Implement Auth UX overhaul across `AuthSplitShell.tsx`, `LoginPage.tsx`, `RegisterPage.tsx`, `ForgotPasswordPage.tsx`, `en.json`, `vi.json`, and `LandingPage.tsx` CTAs**
+- [x] **Step 3: Implement Auth UX overhaul across `AuthSplitShell.tsx`, `LoginPage.tsx`, `RegisterPage.tsx`, `ForgotPasswordPage.tsx`, `en.json`, `vi.json`, and `LandingPage.tsx` CTAs**
   Carefully verify DOM button order (`document.querySelectorAll('button svg')[0]` on `LoginPage` MUST remain the `#password` Eye icon!).
-- [ ] **Step 4: Run full frontend verification gate**
+- [x] **Step 4: Run full frontend verification gate**
   Run: `cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
   Expected: PASS.
-- [ ] **Step 5: Run Triad Review & Critic Loop + Browser Check (`/login`, `/register`, `/forgot-password` at `1440×900` & `390×844`, EN & VI, Light & Dark)**
+- [x] **Step 5: Run Triad Review & Critic Loop + Browser Check (`/login`, `/register`, `/forgot-password` at `1440×900` & `390×844`, EN & VI, Light & Dark)**
   Verify that on `1440×900`, the `RegisterPage` `"Create Account →"` button is 100% visible above the bottom viewport edge without scrolling, placeholders never clip, and zero `...` truncations appear on the left showcase; loop until `APPROVED`.
-- [ ] **Step 6: Tick checkboxes & commit**
+- [x] **Step 6: Tick checkboxes & commit**
   ```bash
   git add web/src/components/AuthSplitShell.tsx web/src/pages/LoginPage.tsx web/src/pages/RegisterPage.tsx web/src/pages/ForgotPasswordPage.tsx web/src/i18n/locales/en.json web/src/i18n/locales/vi.json web/src/pages/LoginPage.test.tsx web/src/pages/AuthPages.test.tsx web/src/pages/LandingPage.tsx
   git commit -m "feat(auth-ux): enable email-first sign-in, auto-suggest username, fit register form in 900px viewport, and fix left-panel truncation"
