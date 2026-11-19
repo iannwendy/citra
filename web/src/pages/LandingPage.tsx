@@ -15,6 +15,7 @@ import {
   Database,
   Shield,
   ArrowRight,
+  ArrowDown,
   CheckCircle2,
   GitBranch,
   Scale,
@@ -1180,9 +1181,12 @@ function SolvaHeroSection({
                       : 'Try CITRA Free'}
                 </SolvaButton>
                 <SolvaButton href="#try-instant" variant="outline">
-                  {lang === 'vi'
-                    ? 'Thử dán 3 trích dẫn ngay ↓'
-                    : 'Try 3 Citations Now ↓'}
+                  <span>
+                    {lang === 'vi'
+                      ? 'Thử dán 3 trích dẫn ngay'
+                      : 'Try 3 Citations Now'}
+                  </span>
+                  <ArrowDown className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                 </SolvaButton>
               </div>
             </SolvaScrollReveal>

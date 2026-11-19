@@ -9,7 +9,10 @@ import { getPlainVerdictLabel } from '@/lib/verdictExplanation';
 import { makeUser } from '@/test-utils';
 import i18n from '@/i18n';
 import { LandingPage } from '@/pages/LandingPage';
-import { GuestInstantChecker } from './GuestInstantChecker';
+import {
+  GuestInstantChecker,
+  estimateGuestReferenceCount,
+} from './GuestInstantChecker';
 
 function renderGuestChecker(lang: 'en' | 'vi' = 'en', isAuthenticated = false) {
   const mockUser = isAuthenticated ? makeUser('user') : null;
@@ -352,9 +355,101 @@ describe('Task 3.1 — GuestInstantChecker (EN & VI)', () => {
       expect(heroJumpLink?.textContent).toContain(
         lang === 'vi' ? 'Thử dán 3 trích dẫn ngay' : 'Try 3 Citations Now',
       );
+      expect(heroJumpLink?.textContent).not.toContain('↓');
+      expect(heroJumpLink?.querySelector('svg')).not.toBeNull();
 
       unmount();
     }
     await i18n.changeLanguage('en');
+  });
+
+  it('6. accurately counts entry boundaries for inline APA, mixed APA + bare URLs, wrapped multi-line PDF refs with bare years, and 4-line wrapped (n.d.) refs', () => {
+    // (a) 4 inline APA references pasted on 1 single line -> 4 (> 3 rejected!)
+    const caseA =
+      'Acemoglu, D., Johnson, S., & Robinson, J. A. (2001). Colonial origins. AER, 91(5), 1369-1401. ' +
+      'Kahneman, D., & Tversky, A. (1979). Prospect theory. Econometrica, 47(2), 263-291. ' +
+      'Vaswani, A., Shazeer, N., & Parmar, N. (2017). Attention is all you need. NeurIPS, 30. ' +
+      'Devlin, J., Chang, M. W., Lee, K., & Toutanova, K. (2019). BERT. NAACL-HLT.';
+    expect(estimateGuestReferenceCount(caseA)).toBe(4);
+
+    // (b) 1 APA reference + 3 bare https://arxiv.org/abs/... URL lines -> 4 (> 3 rejected!)
+    const caseB = [
+      'Acemoglu, D., Johnson, S., & Robinson, J. A. (2001). Colonial origins. American Economic Review, 91(5), 1369-1401.',
+      'https://arxiv.org/abs/1706.03762',
+      'https://arxiv.org/abs/1810.04805',
+      'https://arxiv.org/abs/2005.14165',
+    ].join('\n');
+    expect(estimateGuestReferenceCount(caseB)).toBe(4);
+
+    // (c) 2 legitimate multi-line PDF-wrapped references with bare years in titles -> 2 (<= 3 allowed!)
+    const caseC = [
+      'Acemoglu, D., Johnson, S., & Robinson, J. A. (2001).',
+      'The colonial origins of comparative development: Evidence from 2019 and 2020 surveys.',
+      'American Economic Review, 91(5), 1369-1401.',
+      'https://doi.org/10.1257/aer.91.5.1369',
+      'Kahneman, D., & Tversky, A. (1979).',
+      'Prospect theory: Study of 2019–2020 markets under risk.',
+      'Econometrica, 47(2), 263-291.',
+      'https://doi.org/10.2307/1914185',
+    ].join('\n');
+    expect(estimateGuestReferenceCount(caseC)).toBe(2);
+
+    // (d) 1 legitimate 4-line wrapped (n.d.) reference across 4 lines without blank lines -> 1 (<= 3 allowed!)
+    const caseD = [
+      'World Health Organization.',
+      '(n.d.). Global guidelines on digital health interventions.',
+      'World Health Organization Press.',
+      'https://www.who.int/publications/i/item/9789241550505',
+    ].join('\n');
+    expect(estimateGuestReferenceCount(caseD)).toBe(1);
+  });
+
+  it('7. renders cited_doi with red/amber highlight, explains R01_EXACT_DOI / R05_YEAR_DRIFT / R12_GHOST_DOI without generic fallback, hides stale results under new unverified 429/error inputs, and displays dynamic Retry-After seconds', async () => {
+    const verifySpy = vi.spyOn(api, 'verifyPublicGuestCitations');
+
+    // Initial render in VI & EN: trace panel has zero generic fallback rule descriptions
+    const { container, unmount } = renderGuestChecker('vi', false);
+    const section = container.querySelector('#try-instant') as HTMLElement;
+    const resultsWrapper = section.querySelector('[aria-live="polite"]') as HTMLElement;
+    expect(resultsWrapper).not.toBeNull();
+
+    fireEvent.click(within(section).getByTestId('guest-checker-trace-toggle'));
+    const tracePanel = within(section).getByTestId('guest-checker-trace-panel');
+    expect(tracePanel.textContent).not.toContain('Đã áp dụng quy tắc kiểm tra bổ sung');
+    expect(tracePanel.textContent).not.toContain('An additional verification check was applied');
+
+    // AI-Invented Citation offline fallback spotlights fake DOI 10.1093/qje/qjae994 in red in left column
+    verifySpy.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    fireEvent.click(within(section).getByRole('button', { name: /Nguồn AI tự bịa/i }));
+
+    await waitFor(() => {
+      const doiChip = within(section).getByTestId('guest-checker-cited-doi-0');
+      expect(doiChip.textContent).toContain('10.1093/qje/qjae994');
+      expect(doiChip.className).toContain('text-red-700');
+    });
+    expect(tracePanel.textContent).toContain('R12_GHOST_DOI');
+    expect(tracePanel.textContent).not.toContain('Đã áp dụng quy tắc kiểm tra bổ sung');
+
+    // Paste a brand-new citation and hit 429 with retryAfterSeconds=42 -> hides stale preset card & shows ~42s
+    const rateErr = Object.assign(
+      new Error('API 429: Guest preview limit reached.'),
+      { status: 429, retryAfterSeconds: 42 },
+    );
+    verifySpy.mockRejectedValueOnce(rateErr);
+    const textarea = within(section).getByRole('textbox') as HTMLTextAreaElement;
+    fireEvent.change(textarea, {
+      target: {
+        value:
+          'Vaswani, A., Shazeer, N., & Parmar, N. (2017). Attention is all you need. NeurIPS, 30.',
+      },
+    });
+    fireEvent.click(within(section).getByTestId('guest-checker-submit'));
+
+    const rateBanner = await within(section).findByTestId('guest-checker-rate-limit-banner');
+    expect(rateBanner.textContent).toContain('42');
+    // Stale preset result card must NOT be rendered beneath the new unverified input's 429 banner
+    expect(section.querySelector('[data-testid="guest-checker-result-0"]')).toBeNull();
+
+    unmount();
   });
 });

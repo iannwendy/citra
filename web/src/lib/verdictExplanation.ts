@@ -147,6 +147,17 @@ const RULE_LABELS: Record<string, string> = {
   'R-YEAR-MISMATCH': 'Publication year in the citation differs from the canonical registry record',
   'R-DOI-METADATA-MISMATCH': 'Cited DOI differs from the canonical DOI of the matched publication',
   'R-DOI-CONFLICT': 'Conflicting DOI identifiers returned across scholarly registries',
+  R00_PRECONDITION_HALT: 'Stopped early due to missing required bibliographic identifiers',
+  R01_EXACT_DOI: 'Exact DOI resolved and matched to the canonical publication record',
+  R01_DOI_EXACT: 'Exact DOI resolved and matched to the canonical publication record',
+  R01_DOI_MATCH: 'DOI identifier matches the registered scholarly record',
+  R04_AUTHOR_OVERLAP: 'Cited author list aligns with the official publication authors',
+  R05_YEAR_DRIFT: 'Cited publication year differs from the official publication date',
+  R07_VENUE_MISMATCH: 'Cited journal or conference differs from the official publication venue',
+  R09_SEMANTIC_ALIGN: 'In-text claim aligns semantically with the source abstract',
+  R12_GHOST_DOI: 'Cited DOI does not exist in global DOI registration agencies',
+  R14_ZERO_TITLE_HIT: 'Zero scholarly publications match the cited article title',
+  R16_SYNTHETIC_PATTERN: 'Citation exhibits synthetic or AI-fabricated bibliographic patterns',
 };
 
 const RULE_LABELS_VI: Record<string, string> = {
@@ -225,6 +236,17 @@ const RULE_LABELS_VI: Record<string, string> = {
   'R-YEAR-MISMATCH': 'Năm xuất bản trong trích dẫn sai lệch so với bản ghi học thuật chính thức',
   'R-DOI-METADATA-MISMATCH': 'Mã DOI trích dẫn sai lệch so với mã DOI chính thức của ấn phẩm',
   'R-DOI-CONFLICT': 'Các cơ sở dữ liệu học thuật trả về mã DOI mâu thuẫn nhau',
+  R00_PRECONDITION_HALT: 'Tạm dừng đối chiếu do thiếu thông tin định danh thư mục tối thiểu',
+  R01_EXACT_DOI: 'Mã DOI phân giải chính xác và khớp hoàn toàn với bản ghi gốc',
+  R01_DOI_EXACT: 'Mã DOI phân giải chính xác và khớp hoàn toàn với bản ghi gốc',
+  R01_DOI_MATCH: 'Mã DOI khớp với hồ sơ ấn phẩm đã đăng ký trên thư viện học thuật',
+  R04_AUTHOR_OVERLAP: 'Danh sách tác giả trích dẫn khớp với tác giả trên bản ghi gốc',
+  R05_YEAR_DRIFT: 'Năm xuất bản ghi trong bài bị lệch so với năm phát hành chính thức',
+  R07_VENUE_MISMATCH: 'Tên tạp chí hoặc kỷ yếu trích dẫn không khớp với nơi công bố gốc',
+  R09_SEMANTIC_ALIGN: 'Nội dung câu trích dẫn tương đồng ngữ nghĩa với tóm tắt bài báo gốc',
+  R12_GHOST_DOI: 'Mã DOI không tồn tại trên hệ thống đăng ký DOI học thuật toàn cầu',
+  R14_ZERO_TITLE_HIT: 'Không có công trình học thuật nào khớp với tiêu đề được trích dẫn',
+  R16_SYNTHETIC_PATTERN: 'Phát hiện dấu hiệu ghép nối thông tin giả tạo thường gặp ở văn bản AI',
 };
 
 export function getSourceDisplayName(

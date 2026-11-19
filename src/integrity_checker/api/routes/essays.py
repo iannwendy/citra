@@ -3487,6 +3487,107 @@ async def _execute_instant_citations_verification(
     }
 
 
+_GUEST_BIB_HEADER_RE = re.compile(
+    r"^(?:references?|reference\s+list|bibliography|works?\s+cited|tài\s+liệu\s+tham\s+khảo)\s*:?$",
+    re.IGNORECASE,
+)
+_GUEST_NUMBERED_MARKER_RE = re.compile(
+    r"(?:\[\s*\d+[a-z]?\s*\]|(?:^|\s)\d{1,2}[\.\)]\s+[A-ZÀ-ÝĂÂĐÊÔƠƯh])"
+)
+_GUEST_PAREN_YEAR_OR_ND_RE = re.compile(
+    r"\(\s*(?:18|19|20)\d{2}[a-z]?(?:\s*,\s*[^)]*)?\s*\)|\(\s*n\.?\s*d\.?\s*\)",
+    re.IGNORECASE,
+)
+_GUEST_LEADING_PAREN_YEAR_OR_ND_RE = re.compile(
+    r"^\(\s*(?:(?:18|19|20)\d{2}[a-z]?(?:\s*,\s*[^)]*)?|n\.?\s*d\.?)\s*\)",
+    re.IGNORECASE,
+)
+_GUEST_STANDALONE_URL_DOI_LINE_RE = re.compile(
+    r"^(?:https?://|www\.|doi\s*:\s*|10\.\d{4,9}/)\S+$",
+    re.IGNORECASE,
+)
+_GUEST_HAS_URL_OR_DOI_RE = re.compile(
+    r"(?:https?://\S+|www\.\S+|\bdoi\s*:\s*\S+|\b10\.\d{4,9}/\S+)",
+    re.IGNORECASE,
+)
+_GUEST_COMPLETE_SINGLE_LINE_CITATION_RE = re.compile(
+    r"\(\s*(?:(?:18|19|20)\d{2}[a-z]?(?:\s*,\s*[^)]*)?|n\.?\s*d\.?)\s*\)\.\s+\S.{10,}\.\s+\S.{3,}",
+    re.IGNORECASE,
+)
+
+
+def _estimate_guest_reference_boundaries(raw_lines: list[str]) -> int:
+    """Count distinct bibliography entry boundaries without wrapped-PDF false positives."""
+    non_empty_lines = [ln for ln in raw_lines if ln]
+    if not non_empty_lines:
+        return 0
+
+    clean_body = "\n".join(non_empty_lines)
+    body_with_blanks = "\n".join(raw_lines).strip()
+
+    # 1. Blank-line-separated paragraphs
+    paragraphs = [
+        blk.strip()
+        for blk in re.split(r"\n\s*\n+", body_with_blanks)
+        if len(blk.strip()) > 12
+    ]
+
+    # 2. Numbered entry markers — both line-start and inline (avoiding DOI decimals like 10.1093)
+    numbered_markers = len(_GUEST_NUMBERED_MARKER_RE.findall(clean_body))
+
+    # 3. Parenthetical APA/Harvard year or (n.d.) markers
+    paren_year_markers = len(_GUEST_PAREN_YEAR_OR_ND_RE.findall(clean_body))
+
+    # 4. Standalone URL/DOI lines + preceding non-URL bibliography entries
+    url_and_entry_count = 0
+    open_entry_needs_url = False
+    open_entry_complete = False
+    for ln in non_empty_lines:
+        is_standalone_url = bool(_GUEST_STANDALONE_URL_DOI_LINE_RE.match(ln))
+        line_has_url = bool(_GUEST_HAS_URL_OR_DOI_RE.search(ln))
+        is_complete_single_line = bool(_GUEST_COMPLETE_SINGLE_LINE_CITATION_RE.search(ln))
+        line_starts_entry = bool(
+            _GUEST_PAREN_YEAR_OR_ND_RE.search(ln)
+            or _GUEST_NUMBERED_MARKER_RE.match(ln)
+            or re.search(r"\b(?:18|19|20)\d{2}[a-z]?\s*[;:.]", ln)
+        )
+        if is_standalone_url:
+            if open_entry_needs_url and not open_entry_complete:
+                open_entry_needs_url = False
+                open_entry_complete = True
+            else:
+                url_and_entry_count += 1
+                open_entry_needs_url = False
+                open_entry_complete = True
+        elif line_starts_entry:
+            if (
+                url_and_entry_count == 1
+                and not open_entry_complete
+                and _GUEST_LEADING_PAREN_YEAR_OR_ND_RE.match(ln)
+            ):
+                open_entry_needs_url = not line_has_url and not is_complete_single_line
+                open_entry_complete = line_has_url or is_complete_single_line
+            else:
+                url_and_entry_count += 1
+                open_entry_needs_url = not line_has_url and not is_complete_single_line
+                open_entry_complete = line_has_url or is_complete_single_line
+        elif line_has_url:
+            if open_entry_needs_url and not open_entry_complete:
+                open_entry_needs_url = False
+                open_entry_complete = True
+            else:
+                url_and_entry_count += 1
+                open_entry_needs_url = False
+                open_entry_complete = True
+        else:
+            if url_and_entry_count == 0 or open_entry_complete:
+                url_and_entry_count += 1
+                open_entry_needs_url = True
+                open_entry_complete = False
+
+    return max(1, len(paragraphs), numbered_markers, paren_year_markers, url_and_entry_count)
+
+
 @router.post("/sandbox/public-verify")
 async def verify_public_guest_citations(
     request: Request,
@@ -3507,7 +3608,7 @@ async def verify_public_guest_citations(
     if style not in {"apa", "ieee"}:
         style = "apa"
 
-    # Short-circuit already-throttled client IPs before running any regex/reference parsing
+    # Short-circuit already-throttled client IPs before running any checks
     _enforce_public_sandbox_rate_limit(request, is_en=is_en, consume=False)
 
     raw_references_text = str(payload.get("references_text") or "").strip()
@@ -3538,11 +3639,7 @@ async def verify_public_guest_citations(
         )
 
     raw_lines = [ln.strip() for ln in raw_references_text.splitlines()]
-    if raw_lines and re.match(
-        r"^(?:references|bibliography|works\s+cited|tài\s+liệu\s+tham\s+khảo)\s*:?$",
-        raw_lines[0],
-        flags=re.IGNORECASE,
-    ):
+    if raw_lines and _GUEST_BIB_HEADER_RE.match(raw_lines[0]):
         raw_lines = raw_lines[1:]
     clean_body = "\n".join(raw_lines).strip()
     if not clean_body:
@@ -3555,47 +3652,47 @@ async def verify_public_guest_citations(
             ),
         )
 
+    # Consume 1 IP rate-limit token immediately after cheap empty & >1,500-char pre-checks,
+    # BEFORE regex-intensive reference section parsing to prevent unauthenticated CPU abuse.
+    _enforce_public_sandbox_rate_limit(request, is_en=is_en, consume=True)
+
+    # Collapse a wrapped Author line + leading "(n.d.)" / "(Year)" line before _split_entries
+    # so ReferenceListParser keeps a single 4-line wrapped (n.d.) reference intact.
+    normalized_lines: list[str] = []
+    for ln in raw_lines:
+        if (
+            normalized_lines
+            and normalized_lines[-1]
+            and ln
+            and _GUEST_LEADING_PAREN_YEAR_OR_ND_RE.match(ln)
+            and not _GUEST_PAREN_YEAR_OR_ND_RE.search(normalized_lines[-1])
+            and not _GUEST_HAS_URL_OR_DOI_RE.search(normalized_lines[-1])
+        ):
+            normalized_lines[-1] = f"{normalized_lines[-1]} {ln}"
+        else:
+            normalized_lines.append(ln)
+    normalized_body = "\n".join(normalized_lines).strip()
+
     fake_doc = Document(
         file_path="public_guest_sandbox.pdf",
         num_pages=1,
         pages=[
             Page(
                 page_num=1,
-                text=f"References\n{clean_body}\n",
+                text=f"References\n{normalized_body}\n",
                 has_text_layer=True,
             )
         ],
         parser_used="sandbox",
     )
+    split_entries = pipeline.ref_parser._split_entries(f"References\n{normalized_body}\n")
     parsed_citations = pipeline.ref_parser.parse_reference_section(fake_doc)
 
-    non_empty_lines = [ln for ln in raw_lines if ln]
-    paragraphs = [
-        blk.strip()
-        for blk in re.split(r"\n\s*\n+", clean_body)
-        if len(blk.strip()) > 12
-    ]
-    numbered_starters = sum(
-        1
-        for ln in non_empty_lines
-        if re.match(r"^(?:\[\s*\d+[a-z]?\s*\]|\d+[a-z]?[\.\)])\s+\S", ln)
-    )
-    year_bearing_lines = sum(
-        1
-        for ln in non_empty_lines
-        if len(ln) > 15
-        and re.search(
-            r"\b(?:19|20)\d{2}[a-z]?\b",
-            re.sub(r"(?:https?://\S+|10\.\d{4,9}/\S+)", "", ln),
-        )
-    )
-    fallback_line_count = len(non_empty_lines) if not parsed_citations else 0
+    boundary_estimate = _estimate_guest_reference_boundaries(raw_lines)
     estimated_reference_count = max(
+        boundary_estimate,
+        len(split_entries),
         len(parsed_citations),
-        len(paragraphs),
-        numbered_starters,
-        year_bearing_lines,
-        fallback_line_count,
     )
 
     if estimated_reference_count > PUBLIC_SANDBOX_MAX_REFERENCES:
@@ -3613,8 +3710,11 @@ async def verify_public_guest_citations(
         )
 
     if not parsed_citations:
-        candidate_lines = [ln for ln in non_empty_lines if len(ln) >= 8]
-        if not candidate_lines:
+        candidate_entries = [e.strip() for e in split_entries if len(e.strip()) >= 8]
+        if not candidate_entries:
+            joined_single = " ".join(ln for ln in normalized_lines if ln).strip()
+            candidate_entries = [joined_single] if len(joined_single) >= 8 else []
+        if not candidate_entries:
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -3623,10 +3723,10 @@ async def verify_public_guest_citations(
                     else "Vui lòng nhập đầy đủ thông tin trích dẫn (tác giả, năm và tiêu đề) để kiểm tra."
                 ),
             )
-        for line in candidate_lines[:PUBLIC_SANDBOX_MAX_REFERENCES]:
+        for entry_text in candidate_entries[:PUBLIC_SANDBOX_MAX_REFERENCES]:
             parsed_citations.append(
                 Citation(
-                    raw_text=line,
+                    raw_text=entry_text,
                     citation_type=CitationType.REFERENCE_LIST,
                     style=CitationStyle.IEEE if style == "ieee" else CitationStyle.APA,
                     page_num=1,
@@ -3647,9 +3747,6 @@ async def verify_public_guest_citations(
         }
         for _ in parsed_citations
     ]
-
-    # Consume 1 IP rate-limit token and run verification with paid SerpAPI strictly disabled
-    _enforce_public_sandbox_rate_limit(request, is_en=is_en, consume=True)
 
     return await _execute_instant_citations_verification(
         pipeline=pipeline,

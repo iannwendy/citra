@@ -246,45 +246,108 @@ function formatConfidencePercent(confidence0to1: number, lang: Lang): string {
   return lang === 'vi' ? `${formatted.replace('.', ',')}%` : `${formatted}%`;
 }
 
-function estimateGuestReferenceCount(rawText: string): number {
+const GUEST_BIB_HEADER_RE =
+  /^(?:references?|reference\s+list|bibliography|works?\s+cited|tài\s+liệu\s+tham\s+khảo)\s*:?$/i;
+const GUEST_NUMBERED_MARKER_G_RE =
+  /(?:\[\s*\d+[a-z]?\s*\]|(?:^|\s)\d{1,2}[.)]\s+[A-ZÀ-ÝĂÂĐÊÔƠƯh])/g;
+const GUEST_NUMBERED_LINE_START_RE =
+  /^(?:\[\s*\d+[a-z]?\s*\]|\d{1,2}[.)]\s+[A-ZÀ-ÝĂÂĐÊÔƠƯh])/;
+const GUEST_PAREN_YEAR_OR_ND_G_RE =
+  /\(\s*(?:18|19|20)\d{2}[a-z]?(?:\s*,\s*[^)]*)?\s*\)|\(\s*n\.?\s*d\.?\s*\)/gi;
+const GUEST_PAREN_YEAR_OR_ND_RE =
+  /\(\s*(?:18|19|20)\d{2}[a-z]?(?:\s*,\s*[^)]*)?\s*\)|\(\s*n\.?\s*d\.?\s*\)/i;
+const GUEST_LEADING_PAREN_YEAR_OR_ND_RE =
+  /^\(\s*(?:(?:18|19|20)\d{2}[a-z]?(?:\s*,\s*[^)]*)?|n\.?\s*d\.?)\s*\)/i;
+const GUEST_STANDALONE_URL_DOI_LINE_RE =
+  /^(?:https?:\/\/|www\.|doi\s*:\s*|10\.\d{4,9}\/)\S+$/i;
+const GUEST_HAS_URL_OR_DOI_RE =
+  /(?:https?:\/\/\S+|www\.\S+|\bdoi\s*:\s*\S+|\b10\.\d{4,9}\/\S+)/i;
+const GUEST_COMPLETE_SINGLE_LINE_CITATION_RE =
+  /\(\s*(?:(?:18|19|20)\d{2}[a-z]?(?:\s*,\s*[^)]*)?|n\.?\s*d\.?)\s*\)\.\s+\S.{10,}\.\s+\S.{3,}/i;
+
+export function estimateGuestReferenceCount(rawText: string): number {
   const trimmed = rawText.trim();
   if (!trimmed) return 0;
 
-  const lines = trimmed
-    .split(/\r?\n/)
-    .map((ln) => ln.trim())
-    .filter(
-      (ln, idx) =>
-        Boolean(ln) &&
-        !(
-          idx === 0 &&
-          /^(?:references|bibliography|works\s+cited|tài\s+liệu\s+tham\s+khảo)\s*:?$/i.test(
-            ln,
-          )
-        ),
-    );
-  if (lines.length === 0) return 0;
+  let rawLines = trimmed.split(/\r?\n/).map((ln) => ln.trim());
+  if (rawLines.length > 0 && GUEST_BIB_HEADER_RE.test(rawLines[0])) {
+    rawLines = rawLines.slice(1);
+  }
+  const nonEmptyLines = rawLines.filter(Boolean);
+  if (nonEmptyLines.length === 0) return 0;
 
-  const body = lines.join('\n');
-  const paragraphs = body
+  const cleanBody = nonEmptyLines.join('\n');
+  const bodyWithBlanks = rawLines.join('\n').trim();
+
+  // 1. Blank-line-separated paragraphs
+  const paragraphs = bodyWithBlanks
     .split(/\n\s*\n+/)
     .map((b) => b.trim())
     .filter((b) => b.length > 12);
-  const numberedStarters = lines.filter((ln) =>
-    /^(?:\[\s*\d+[a-z]?\s*\]|\d+[a-z]?[.)])\s+\S/i.test(ln),
-  ).length;
-  const yearBearingLines = lines.filter((ln) => {
-    if (ln.length <= 15) return false;
-    const withoutUrls = ln.replace(/(?:https?:\/\/\S+|10\.\d{4,9}\/\S+)/gi, '');
-    return /\b(?:19|20)\d{2}[a-z]?\b/.test(withoutUrls);
-  }).length;
+
+  // 2. Numbered entry markers — both line-start and inline (avoiding DOI decimals like 10.1093)
+  const numberedMarkers = (cleanBody.match(GUEST_NUMBERED_MARKER_G_RE) ?? []).length;
+
+  // 3. Parenthetical APA/Harvard year or (n.d.) markers
+  const parenYearMarkers = (cleanBody.match(GUEST_PAREN_YEAR_OR_ND_G_RE) ?? []).length;
+
+  // 4. Standalone URL/DOI lines + preceding non-URL bibliography entries
+  let urlAndEntryCount = 0;
+  let openEntryNeedsUrl = false;
+  let openEntryComplete = false;
+  for (const ln of nonEmptyLines) {
+    const isStandaloneUrl = GUEST_STANDALONE_URL_DOI_LINE_RE.test(ln);
+    const lineHasUrl = GUEST_HAS_URL_OR_DOI_RE.test(ln);
+    const isCompleteSingleLine = GUEST_COMPLETE_SINGLE_LINE_CITATION_RE.test(ln);
+    const lineStartsEntry =
+      GUEST_PAREN_YEAR_OR_ND_RE.test(ln) ||
+      GUEST_NUMBERED_LINE_START_RE.test(ln) ||
+      /\b(?:18|19|20)\d{2}[a-z]?\s*[;:.]/.test(ln);
+
+    if (isStandaloneUrl) {
+      if (openEntryNeedsUrl && !openEntryComplete) {
+        openEntryNeedsUrl = false;
+        openEntryComplete = true;
+      } else {
+        urlAndEntryCount += 1;
+        openEntryNeedsUrl = false;
+        openEntryComplete = true;
+      }
+    } else if (lineStartsEntry) {
+      if (
+        urlAndEntryCount === 1 &&
+        !openEntryComplete &&
+        GUEST_LEADING_PAREN_YEAR_OR_ND_RE.test(ln)
+      ) {
+        openEntryNeedsUrl = !lineHasUrl && !isCompleteSingleLine;
+        openEntryComplete = lineHasUrl || isCompleteSingleLine;
+      } else {
+        urlAndEntryCount += 1;
+        openEntryNeedsUrl = !lineHasUrl && !isCompleteSingleLine;
+        openEntryComplete = lineHasUrl || isCompleteSingleLine;
+      }
+    } else if (lineHasUrl) {
+      if (openEntryNeedsUrl && !openEntryComplete) {
+        openEntryNeedsUrl = false;
+        openEntryComplete = true;
+      } else {
+        urlAndEntryCount += 1;
+        openEntryNeedsUrl = false;
+        openEntryComplete = true;
+      }
+    } else if (urlAndEntryCount === 0 || openEntryComplete) {
+      urlAndEntryCount += 1;
+      openEntryNeedsUrl = true;
+      openEntryComplete = false;
+    }
+  }
 
   return Math.max(
     1,
     paragraphs.length,
-    numberedStarters,
-    yearBearingLines,
-    paragraphs.length <= 1 && yearBearingLines === 0 ? lines.length : 1,
+    numberedMarkers,
+    parenYearMarkers,
+    urlAndEntryCount,
   );
 }
 
@@ -318,9 +381,11 @@ function buildOfflinePreviewResponse(rawText: string): SandboxInstantVerifyRespo
     (line, idx): SandboxInstantVerdictItem => {
       const hasFakeMarker = /qjae994|99812-x|invented|fabricated|fake/i.test(line);
       const label = hasFakeMarker ? 'suspected_hallucination' : 'unresolved';
+      const extractedDoi = line.match(/\b10\.\d{4,9}\/[^\s,;)"]+/)?.[0] ?? null;
       return {
         index: idx + 1,
         citation_raw: line,
+        cited_doi: extractedDoi,
         label,
         confidence: hasFakeMarker ? 0.91 : 0.65,
         mapping_status: 'matched',
@@ -386,12 +451,16 @@ export function GuestInstantChecker({
   const defaultPreset = GUEST_PRESETS[0];
   const [activePresetId, setActivePresetId] = useState<PresetId | null>(defaultPreset.id);
   const [referencesText, setReferencesText] = useState<string>(defaultPreset.referencesText);
+  const [verifiedInputSnapshot, setVerifiedInputSnapshot] = useState<string>(
+    defaultPreset.referencesText.trim(),
+  );
   const [result, setResult] = useState<SandboxInstantVerifyResponse>(
     defaultPreset.fallbackResponse,
   );
   const [isLoading, setIsLoading] = useState(false);
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [isRateLimited, setIsRateLimited] = useState(false);
+  const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(null);
   const [isOfflinePreview, setIsOfflinePreview] = useState(false);
   const [showTechnicalTrace, setShowTechnicalTrace] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -400,6 +469,9 @@ export function GuestInstantChecker({
   const refCount = estimateGuestReferenceCount(referencesText);
   const isOverLimit =
     charCount > MAX_GUEST_CHARS || refCount > MAX_GUEST_REFERENCES;
+  const shouldHideStaleResults =
+    (Boolean(inlineError) || isRateLimited) &&
+    referencesText.trim() !== verifiedInputSnapshot;
 
   const validateInput = (raw: string): string | null => {
     const trimmed = raw.trim();
@@ -427,27 +499,41 @@ export function GuestInstantChecker({
     if (validationMsg) {
       setInlineError(validationMsg);
       setIsRateLimited(false);
+      setRetryAfterSeconds(null);
       return;
     }
 
+    const trimmedToVerify = textToVerify.trim();
     setInlineError(null);
     setIsRateLimited(false);
+    setRetryAfterSeconds(null);
     setIsOfflinePreview(false);
     setIsLoading(true);
 
     try {
       const liveResp = await api.verifyPublicGuestCitations({
-        references_text: textToVerify.trim(),
+        references_text: trimmedToVerify,
         lang,
         style: 'apa',
       });
       setResult(liveResp);
+      setVerifiedInputSnapshot(trimmedToVerify);
     } catch (err) {
-      const errObj = err as Error & { status?: number };
+      const errObj = err as Error & { status?: number; retryAfterSeconds?: number };
       const msg = String(errObj?.message || '');
       const status = errObj?.status;
 
       if (status === 429 || /\bAPI\s+429\b/i.test(msg)) {
+        const parsedSec =
+          typeof errObj?.retryAfterSeconds === 'number' && errObj.retryAfterSeconds > 0
+            ? errObj.retryAfterSeconds
+            : (() => {
+                const m = msg.match(/\b(\d{1,3})\s*(?:s|sec|seconds?|giây)\b/i);
+                return m ? Number.parseInt(m[1], 10) : null;
+              })();
+        setRetryAfterSeconds(
+          parsedSec && Number.isFinite(parsedSec) && parsedSec > 0 ? parsedSec : null,
+        );
         setIsRateLimited(true);
       } else if (status === 400 || /\bAPI\s+400\b/i.test(msg)) {
         const cleanDetail = msg.replace(/^API\s+\d+:\s*/i, '').trim();
@@ -460,6 +546,7 @@ export function GuestInstantChecker({
       } else {
         setIsOfflinePreview(true);
         setResult(buildOfflinePreviewResponse(textToVerify));
+        setVerifiedInputSnapshot(trimmedToVerify);
       }
     } finally {
       setIsLoading(false);
@@ -469,6 +556,8 @@ export function GuestInstantChecker({
   const handleSelectPreset = (preset: GuestPreset) => {
     setActivePresetId(preset.id);
     setReferencesText(preset.referencesText);
+    setResult(preset.fallbackResponse);
+    setVerifiedInputSnapshot(preset.referencesText.trim());
     void executeVerification(preset.referencesText);
   };
 
@@ -682,6 +771,7 @@ export function GuestInstantChecker({
                       setActivePresetId(null);
                       setInlineError(null);
                       setIsRateLimited(false);
+                      setRetryAfterSeconds(null);
                     }}
                     style={{
                       backgroundColor: 'var(--solva-card-elevated)',
@@ -721,12 +811,12 @@ export function GuestInstantChecker({
               {(charCount > MAX_GUEST_CHARS || refCount > MAX_GUEST_REFERENCES) && (
                 <Link
                   to={fullDraftPath}
-                  className="min-h-[44px] px-3.5 py-2 rounded-[9px] bg-amber-800 text-white dark:bg-amber-300 dark:text-[#1C1A15] font-solva-sans text-xs font-semibold inline-flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap hover:opacity-90 transition-opacity"
+                  className="min-h-[44px] px-3.5 py-2 rounded-[9px] bg-amber-800 text-white dark:bg-amber-300 dark:text-[#1C1A15] font-solva-sans text-xs font-semibold inline-flex items-center justify-center text-center gap-1.5 shrink-0 w-full sm:w-auto sm:whitespace-nowrap hover:opacity-90 transition-opacity"
                 >
                   <span>
                     {lang === 'vi' ? 'Tải toàn bộ bài viết' : 'Upload Full Draft'}
                   </span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  <ArrowRight className="w-3.5 h-3.5 shrink-0" />
                 </Link>
               )}
             </div>
@@ -757,8 +847,8 @@ export function GuestInstantChecker({
                   className="font-solva-sans text-xs sm:text-sm leading-relaxed"
                 >
                   {lang === 'vi'
-                    ? 'Đợi khoảng một phút để thử tiếp trên trang chủ, hoặc mở tài khoản miễn phí để tải lên trọn bộ khóa luận PDF/Word không bị gián đoạn.'
-                    : 'Wait a moment to run another quick check here, or create a free account to upload your full PDF or Word manuscript without waiting.'}
+                    ? `Đợi ${retryAfterSeconds ? `~${retryAfterSeconds}s` : 'khoảng một phút'} để thử tiếp trên trang chủ, hoặc mở tài khoản miễn phí để tải lên trọn bộ khóa luận PDF/Word không bị gián đoạn.`
+                    : `Wait ${retryAfterSeconds ? `~${retryAfterSeconds}s` : 'a moment'} to run another quick check here, or create a free account to upload your full PDF or Word manuscript without waiting.`}
                 </p>
               </div>
               <Link
@@ -767,7 +857,7 @@ export function GuestInstantChecker({
                   backgroundColor: 'var(--solva-btn-bg)',
                   color: 'var(--solva-btn-fg)',
                 }}
-                className="min-h-[44px] px-4 py-2.5 rounded-[10px] font-solva-sans text-xs sm:text-sm font-medium inline-flex items-center justify-center gap-2 shrink-0 whitespace-nowrap hover:opacity-90 transition-opacity"
+                className="min-h-[44px] px-4 py-2.5 rounded-[10px] font-solva-sans text-xs sm:text-sm font-medium inline-flex items-center justify-center text-center gap-2 shrink-0 w-full sm:w-auto sm:whitespace-nowrap hover:opacity-90 transition-opacity"
               >
                 <span>
                   {isAuthenticated
@@ -778,13 +868,13 @@ export function GuestInstantChecker({
                       ? 'Tạo tài khoản miễn phí'
                       : 'Create Free Account'}
                 </span>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-4 h-4 shrink-0" />
               </Link>
             </div>
           )}
 
           {/* Calm Offline Preview Notice */}
-          {isOfflinePreview && (
+          {isOfflinePreview && !shouldHideStaleResults && (
             <div
               data-testid="guest-checker-offline-notice"
               style={{
@@ -803,362 +893,386 @@ export function GuestInstantChecker({
             </div>
           )}
 
-          {/* Split-View Manuscript Diff Results */}
-          <div className="space-y-4">
-            {result.results.map((item, idx) => {
-              const plainVerdict = getPlainVerdictLabel(item.label, lang);
-              const badgeVariant = getVerdictBadgeVariantClass(item.label);
-              const matchedSource =
-                item.matched_source ?? item.matched_sources?.[0] ?? null;
-              const remediatedApa = resolveItemRemediatedApa(item, idx, result);
-              const mismatchedSet = new Set(
-                (item.mismatched_fields ?? []).map((f) => f.toLowerCase()),
-              );
+          {/* Split-View Manuscript Diff Results & Progressive Disclosure Trace */}
+          <div
+            aria-live="polite"
+            aria-busy={isLoading}
+            className="space-y-4"
+          >
+            {!shouldHideStaleResults && (
+              <>
+                <div className="space-y-4">
+                  {result.results.map((item, idx) => {
+                    const plainVerdict = getPlainVerdictLabel(item.label, lang);
+                    const badgeVariant = getVerdictBadgeVariantClass(item.label);
+                    const matchedSource =
+                      item.matched_source ?? item.matched_sources?.[0] ?? null;
+                    const remediatedApa = resolveItemRemediatedApa(item, idx, result);
+                    const mismatchedSet = new Set(
+                      (item.mismatched_fields ?? []).map((f) => f.toLowerCase()),
+                    );
 
-              return (
-                <div
-                  key={`${item.index}-${idx}`}
-                  data-testid={`guest-checker-result-${idx}`}
-                  style={{
-                    backgroundColor: 'var(--solva-card-elevated)',
-                    borderColor: 'var(--solva-border)',
-                  }}
-                  className="rounded-[14px] border p-4 sm:p-5 space-y-4"
-                >
-                  {/* Card Top Header: Marker + Plain Verdict Badge + Confidence */}
-                  <div
-                    style={{ borderColor: 'var(--solva-border)' }}
-                    className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b"
-                  >
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <span
-                        style={{
-                          backgroundColor: 'var(--solva-surface)',
-                          color: 'var(--solva-ink)',
-                        }}
-                        className="font-mono text-xs font-bold px-2.5 py-1 rounded-[6px]"
-                      >
-                        [{item.index}]
-                      </span>
-                      <span
-                        className={`verdict-badge ${badgeVariant} text-xs px-3 py-1 font-semibold inline-flex items-center gap-1.5`}
-                      >
-                        {item.label === 'verified' ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                        ) : item.label === 'suspected_hallucination' ? (
-                          <XCircle className="w-3.5 h-3.5 shrink-0" />
-                        ) : (
-                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                        )}
-                        <span>{plainVerdict.label}</span>
-                      </span>
-                    </div>
-
-                    <div
-                      style={{ color: 'var(--solva-muted)' }}
-                      className="font-mono text-xs flex items-center gap-2"
-                    >
-                      <span>
-                        {lang === 'vi' ? 'Độ tin cậy:' : 'Confidence:'}{' '}
-                        <strong style={{ color: 'var(--solva-ink)' }}>
-                          {formatConfidencePercent(item.confidence, lang)}
-                        </strong>
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Split-View Manuscript Diff: Submitted Citation vs. Matched Library Record */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
-                    {/* Left Column: Submitted Citation */}
-                    <div
-                      style={{
-                        backgroundColor: 'var(--solva-surface)',
-                        borderColor: 'var(--solva-border)',
-                      }}
-                      className="rounded-[10px] border p-3.5 sm:p-4 space-y-2.5"
-                    >
+                    return (
                       <div
-                        style={{ color: 'var(--solva-muted)' }}
-                        className="font-mono text-[11px] uppercase tracking-wider font-semibold"
+                        key={`${item.index}-${idx}`}
+                        data-testid={`guest-checker-result-${idx}`}
+                        style={{
+                          backgroundColor: 'var(--solva-card-elevated)',
+                          borderColor: 'var(--solva-border)',
+                        }}
+                        className="rounded-[14px] border p-4 sm:p-5 space-y-4"
                       >
-                        {lang === 'vi'
-                          ? 'Trích dẫn bạn đưa vào'
-                          : 'Submitted in Your Draft'}
-                      </div>
-                      <p
-                        style={{ color: 'var(--solva-ink)' }}
-                        className={`font-solva-serif text-sm sm:text-[15px] ${serifTuneClass} break-words`}
-                      >
-                        {item.citation_raw.normalize('NFC')}
-                      </p>
-                      {(item.cited_year || item.cited_venue || item.cited_doi) && (
-                        <div className="flex flex-wrap gap-1.5 pt-1 text-[11px] font-mono">
-                          {item.cited_year && (
-                            <span
-                              className={`px-2 py-0.5 rounded border ${
-                                mismatchedSet.has('year')
-                                  ? 'border-amber-600/40 bg-amber-500/[0.12] text-amber-800 dark:text-amber-300 font-semibold'
-                                  : 'border-[#E7E3D9] dark:border-[#332F26] text-[#56524A] dark:text-[#A8A296]'
-                              }`}
-                            >
-                              {lang === 'vi' ? 'Năm ghi:' : 'Cited year:'} {item.cited_year}
-                            </span>
-                          )}
-                          {item.cited_venue && (
-                            <span
-                              className={`px-2 py-0.5 rounded border break-words ${
-                                mismatchedSet.has('venue')
-                                  ? 'border-amber-600/40 bg-amber-500/[0.12] text-amber-800 dark:text-amber-300 font-semibold'
-                                  : 'border-[#E7E3D9] dark:border-[#332F26] text-[#56524A] dark:text-[#A8A296]'
-                              }`}
-                            >
-                              {item.cited_venue}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right Column: Official Matched Library Record */}
-                    <div
-                      style={{
-                        backgroundColor: 'var(--solva-surface)',
-                        borderColor: 'var(--solva-border)',
-                      }}
-                      className="rounded-[10px] border p-3.5 sm:p-4 space-y-2.5"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span
-                          style={{ color: 'var(--solva-muted)' }}
-                          className="font-mono text-[11px] uppercase tracking-wider font-semibold"
+                        {/* Card Top Header: Marker + Plain Verdict Badge + Confidence */}
+                        <div
+                          style={{ borderColor: 'var(--solva-border)' }}
+                          className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b"
                         >
-                          {lang === 'vi'
-                            ? 'Hồ sơ gốc trên thư viện học thuật'
-                            : 'Official Library Record'}
-                        </span>
-                        {matchedSource?.source && (
-                          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-semibold">
-                            {getSourceDisplayName(matchedSource.source, lang)}
-                          </span>
-                        )}
-                      </div>
-
-                      {matchedSource ? (
-                        <div className="space-y-2">
-                          <div
-                            style={{ color: 'var(--solva-ink)' }}
-                            className={`font-solva-serif text-sm sm:text-[15px] font-normal ${serifTuneClass} break-words`}
-                          >
-                            {(matchedSource.title || item.citation_raw).normalize('NFC')}
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <span
+                              style={{
+                                backgroundColor: 'var(--solva-surface)',
+                                color: 'var(--solva-ink)',
+                              }}
+                              className="font-mono text-xs font-bold px-2.5 py-1 rounded-[6px]"
+                            >
+                              [{item.index}]
+                            </span>
+                            <span
+                              className={`verdict-badge ${badgeVariant} text-xs px-3 py-1 font-semibold inline-flex items-center gap-1.5`}
+                            >
+                              {item.label === 'verified' ? (
+                                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                              ) : item.label === 'suspected_hallucination' ? (
+                                <XCircle className="w-3.5 h-3.5 shrink-0" />
+                              ) : (
+                                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                              )}
+                              <span>{plainVerdict.label}</span>
+                            </span>
                           </div>
+
                           <div
                             style={{ color: 'var(--solva-muted)' }}
-                            className="text-xs leading-relaxed break-words"
+                            className="font-mono text-xs flex items-center gap-2"
                           >
-                            {(matchedSource.authors ?? []).join(', ')}
+                            <span>
+                              {lang === 'vi' ? 'Độ tin cậy:' : 'Confidence:'}{' '}
+                              <strong style={{ color: 'var(--solva-ink)' }}>
+                                {formatConfidencePercent(item.confidence, lang)}
+                              </strong>
+                            </span>
                           </div>
-                          <div className="flex flex-wrap gap-1.5 text-[11px] font-mono">
-                            {matchedSource.year && (
-                              <span className="px-2 py-0.5 rounded bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-semibold">
-                                {lang === 'vi' ? 'Năm xuất bản:' : 'Published:'}{' '}
-                                {matchedSource.year}
-                              </span>
+                        </div>
+
+                        {/* Split-View Manuscript Diff: Submitted Citation vs. Matched Library Record */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+                          {/* Left Column: Submitted Citation */}
+                          <div
+                            style={{
+                              backgroundColor: 'var(--solva-surface)',
+                              borderColor: 'var(--solva-border)',
+                            }}
+                            className="rounded-[10px] border p-3.5 sm:p-4 space-y-2.5"
+                          >
+                            <div
+                              style={{ color: 'var(--solva-muted)' }}
+                              className="font-mono text-[11px] uppercase tracking-wider font-semibold"
+                            >
+                              {lang === 'vi'
+                                ? 'Trích dẫn bạn đưa vào'
+                                : 'Submitted in Your Draft'}
+                            </div>
+                            <p
+                              style={{ color: 'var(--solva-ink)' }}
+                              className={`font-solva-serif text-sm sm:text-[15px] ${serifTuneClass} break-words`}
+                            >
+                              {item.citation_raw.normalize('NFC')}
+                            </p>
+                            {(item.cited_year || item.cited_venue || item.cited_doi) && (
+                              <div className="flex flex-wrap gap-1.5 pt-1 text-[11px] font-mono">
+                                {item.cited_year && (
+                                  <span
+                                    className={`px-2 py-0.5 rounded border ${
+                                      mismatchedSet.has('year')
+                                        ? 'border-amber-600/40 bg-amber-500/[0.12] text-amber-800 dark:text-amber-300 font-semibold'
+                                        : 'border-[#E7E3D9] dark:border-[#332F26] text-[#56524A] dark:text-[#A8A296]'
+                                    }`}
+                                  >
+                                    {lang === 'vi' ? 'Năm ghi:' : 'Cited year:'} {item.cited_year}
+                                  </span>
+                                )}
+                                {item.cited_venue && (
+                                  <span
+                                    className={`px-2 py-0.5 rounded border break-words ${
+                                      mismatchedSet.has('venue')
+                                        ? 'border-amber-600/40 bg-amber-500/[0.12] text-amber-800 dark:text-amber-300 font-semibold'
+                                        : 'border-[#E7E3D9] dark:border-[#332F26] text-[#56524A] dark:text-[#A8A296]'
+                                    }`}
+                                  >
+                                    {item.cited_venue}
+                                  </span>
+                                )}
+                                {item.cited_doi && (
+                                  <span
+                                    data-testid={`guest-checker-cited-doi-${idx}`}
+                                    className={`px-2 py-0.5 rounded border break-all ${
+                                      item.label === 'suspected_hallucination'
+                                        ? 'text-red-700 dark:text-red-300 border-red-500/30 bg-red-500/[0.08] font-semibold'
+                                        : mismatchedSet.has('doi')
+                                          ? 'border-amber-600/40 bg-amber-500/[0.12] text-amber-800 dark:text-amber-300 font-semibold'
+                                          : 'border-[#E7E3D9] dark:border-[#332F26] text-[#56524A] dark:text-[#A8A296]'
+                                    }`}
+                                  >
+                                    DOI: {item.cited_doi}
+                                  </span>
+                                )}
+                              </div>
                             )}
-                            {matchedSource.venue && (
-                              <span className="px-2 py-0.5 rounded bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-semibold break-words">
-                                {matchedSource.venue}
-                              </span>
-                            )}
-                            {matchedSource.doi && (
+                          </div>
+
+                          {/* Right Column: Official Matched Library Record */}
+                          <div
+                            style={{
+                              backgroundColor: 'var(--solva-surface)',
+                              borderColor: 'var(--solva-border)',
+                            }}
+                            className="rounded-[10px] border p-3.5 sm:p-4 space-y-2.5"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
                               <span
                                 style={{ color: 'var(--solva-muted)' }}
-                                className="px-2 py-0.5 rounded border border-[#E7E3D9] dark:border-[#332F26] break-all"
+                                className="font-mono text-[11px] uppercase tracking-wider font-semibold"
                               >
-                                DOI: {matchedSource.doi}
+                                {lang === 'vi'
+                                  ? 'Hồ sơ gốc trên thư viện học thuật'
+                                  : 'Official Library Record'}
                               </span>
+                              {matchedSource?.source && (
+                                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-semibold">
+                                  {getSourceDisplayName(matchedSource.source, lang)}
+                                </span>
+                              )}
+                            </div>
+
+                            {matchedSource ? (
+                              <div className="space-y-2">
+                                <div
+                                  style={{ color: 'var(--solva-ink)' }}
+                                  className={`font-solva-serif text-sm sm:text-[15px] font-normal ${serifTuneClass} break-words`}
+                                >
+                                  {(matchedSource.title || item.citation_raw).normalize('NFC')}
+                                </div>
+                                <div
+                                  style={{ color: 'var(--solva-muted)' }}
+                                  className="text-xs leading-relaxed break-words"
+                                >
+                                  {(matchedSource.authors ?? []).join(', ')}
+                                </div>
+                                <div className="flex flex-wrap gap-1.5 text-[11px] font-mono">
+                                  {matchedSource.year && (
+                                    <span className="px-2 py-0.5 rounded bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-semibold">
+                                      {lang === 'vi' ? 'Năm xuất bản:' : 'Published:'}{' '}
+                                      {matchedSource.year}
+                                    </span>
+                                  )}
+                                  {matchedSource.venue && (
+                                    <span className="px-2 py-0.5 rounded bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-semibold break-words">
+                                      {matchedSource.venue}
+                                    </span>
+                                  )}
+                                  {matchedSource.doi && (
+                                    <span
+                                      style={{ color: 'var(--solva-muted)' }}
+                                      className="px-2 py-0.5 rounded border border-[#E7E3D9] dark:border-[#332F26] break-all"
+                                    >
+                                      DOI: {matchedSource.doi}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="py-2 space-y-1.5">
+                                <p className="text-xs sm:text-sm font-medium text-red-700 dark:text-red-300">
+                                  {lang === 'vi'
+                                    ? 'Không tìm thấy bài báo hoặc mã DOI này trên hơn 15 thư viện học thuật.'
+                                    : 'No matching paper or valid DOI found across 15+ academic libraries.'}
+                                </p>
+                                <p
+                                  style={{ color: 'var(--solva-muted)' }}
+                                  className="text-xs leading-relaxed"
+                                >
+                                  {lang === 'vi'
+                                    ? 'Các công cụ tạo văn bản AI thường ghép tên tạp chí uy tín với mã DOI hoặc tiêu đề chưa từng xuất bản.'
+                                    : 'AI writing tools frequently pair real journal names with non-existent DOIs or invented article titles.'}
+                                </p>
+                              </div>
                             )}
                           </div>
                         </div>
-                      ) : (
-                        <div className="py-2 space-y-1.5">
-                          <p className="text-xs sm:text-sm font-medium text-red-700 dark:text-red-300">
-                            {lang === 'vi'
-                              ? 'Không tìm thấy bài báo hoặc mã DOI này trên hơn 15 thư viện học thuật.'
-                              : 'No matching paper or valid DOI found across 15+ academic libraries.'}
-                          </p>
-                          <p
-                            style={{ color: 'var(--solva-muted)' }}
-                            className="text-xs leading-relaxed"
-                          >
-                            {lang === 'vi'
-                              ? 'Các công cụ tạo văn bản AI thường ghép tên tạp chí uy tín với mã DOI hoặc tiêu đề chưa từng xuất bản.'
-                              : 'AI writing tools frequently pair real journal names with non-existent DOIs or invented article titles.'}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Plain-Language Action Hint */}
-                  <div
-                    style={{
-                      backgroundColor: 'var(--solva-surface)',
-                      borderColor: 'var(--solva-border)',
-                    }}
-                    className="rounded-[10px] border p-3.5 flex items-start gap-2.5 text-xs sm:text-sm leading-relaxed"
-                  >
-                    <Scale
-                      style={{ color: 'var(--solva-ink)' }}
-                      className="w-4 h-4 shrink-0 mt-0.5"
-                    />
-                    <div style={{ color: 'var(--solva-ink)' }}>
-                      <strong className="mr-1.5">
-                        {lang === 'vi' ? 'Hướng xử lý gợi ý:' : 'Recommended action:'}
-                      </strong>
-                      <span style={{ color: 'var(--solva-muted)' }}>
-                        {plainVerdict.actionHint}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Copyable Corrected APA 7th Reference */}
-                  {remediatedApa && (
-                    <div
-                      style={{
-                        backgroundColor: 'var(--solva-bg)',
-                        borderColor: 'var(--solva-border)',
-                      }}
-                      className="rounded-[10px] border p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                    >
-                      <div className="space-y-1 min-w-0">
-                        <div className="text-[11px] font-mono font-semibold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">
-                          {lang === 'vi'
-                            ? ' Chuẩn hóa trích dẫn APA 7th sẵn sàng sao chép'
-                            : 'Ready-to-Copy Corrected APA 7th Reference'}
-                        </div>
-                        <p
-                          style={{ color: 'var(--solva-ink)' }}
-                          className="text-xs sm:text-[13px] leading-relaxed break-words"
+                        {/* Plain-Language Action Hint */}
+                        <div
+                          style={{
+                            backgroundColor: 'var(--solva-surface)',
+                            borderColor: 'var(--solva-border)',
+                          }}
+                          className="rounded-[10px] border p-3.5 flex items-start gap-2.5 text-xs sm:text-sm leading-relaxed"
                         >
-                          {remediatedApa}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        data-testid={`guest-checker-copy-remediated-${idx}`}
-                        onClick={() => handleCopyRemediated(remediatedApa, idx)}
-                        style={{
-                          backgroundColor: 'var(--solva-surface)',
-                          borderColor: 'var(--solva-border)',
-                          color: 'var(--solva-ink)',
-                        }}
-                        className="min-h-[44px] px-3.5 py-2 rounded-[9px] border font-solva-sans text-xs font-medium inline-flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap hover:opacity-85 transition-opacity cursor-pointer"
-                      >
-                        {copiedIndex === idx ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
-                            <span>{lang === 'vi' ? 'Đã chép' : 'Copied'}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3.5 h-3.5" />
-                            <span>
-                              {lang === 'vi' ? 'Sao chép chuẩn APA' : 'Copy APA 7th'}
+                          <Scale
+                            style={{ color: 'var(--solva-ink)' }}
+                            className="w-4 h-4 shrink-0 mt-0.5"
+                          />
+                          <div style={{ color: 'var(--solva-ink)' }}>
+                            <strong className="mr-1.5">
+                              {lang === 'vi' ? 'Hướng xử lý gợi ý:' : 'Recommended action:'}
+                            </strong>
+                            <span style={{ color: 'var(--solva-muted)' }}>
+                              {plainVerdict.actionHint}
                             </span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                          </div>
+                        </div>
 
-          {/* Progressive Disclosure: Optional Technical Rule Trace (R01–R30) */}
-          <div className="pt-1 space-y-3">
-            <button
-              type="button"
-              data-testid="guest-checker-trace-toggle"
-              aria-expanded={showTechnicalTrace}
-              aria-controls="guest-checker-trace-panel"
-              onClick={() => setShowTechnicalTrace((prev) => !prev)}
-              style={{
-                backgroundColor: 'var(--solva-card-elevated)',
-                borderColor: showTechnicalTrace
-                  ? 'var(--solva-ink)'
-                  : 'var(--solva-border)',
-                color: 'var(--solva-ink)',
-              }}
-              className="w-full min-h-[44px] px-4 py-2.5 rounded-[10px] border font-solva-sans text-xs font-medium flex items-center justify-between gap-2 hover:opacity-90 transition-colors cursor-pointer"
-            >
-              <span>
-                {showTechnicalTrace
-                  ? lang === 'vi'
-                    ? 'Ẩn mã quy tắc kỹ thuật'
-                    : 'Hide Technical Rule Trace'
-                  : lang === 'vi'
-                    ? `Tùy chọn: Xem mã quy tắc kỹ thuật (${SYMBOLIC_RULES_RANGE})`
-                    : `Optional: View Technical Rule Trace (${SYMBOLIC_RULES_RANGE})`}
-              </span>
-              <SymmetricChevron open={showTechnicalTrace} size={14} />
-            </button>
-
-            <div
-              id="guest-checker-trace-panel"
-              data-testid="guest-checker-trace-panel"
-              hidden={!showTechnicalTrace}
-            >
-              {showTechnicalTrace && (
-                <div
-                  style={{
-                    backgroundColor: 'var(--solva-card-elevated)',
-                    borderColor: 'var(--solva-border)',
-                  }}
-                  className="rounded-[12px] border p-4 space-y-3 font-mono text-xs"
-                >
-                  {result.results.map((item, idx) => (
-                    <div
-                      key={`trace-${item.index}-${idx}`}
-                      style={{
-                        backgroundColor: 'var(--solva-surface)',
-                        borderColor: 'var(--solva-border)',
-                      }}
-                      className="rounded-[9px] border p-3 space-y-2"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span style={{ color: 'var(--solva-ink)' }} className="font-bold">
-                          [{item.index}] {String(item.label).toUpperCase()}
-                        </span>
-                        <span style={{ color: 'var(--solva-muted)' }}>
-                          {lang === 'vi' ? 'Độ tin cậy:' : 'Confidence:'}{' '}
-                          {formatConfidencePercent(item.confidence, lang)}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {(item.triggered_rules && item.triggered_rules.length > 0
-                          ? item.triggered_rules
-                          : ['R01_EXACT_DOI']
-                        ).map((ruleCode) => (
-                          <span
-                            key={ruleCode}
+                        {/* Copyable Corrected APA 7th Reference */}
+                        {remediatedApa && (
+                          <div
                             style={{
                               backgroundColor: 'var(--solva-bg)',
                               borderColor: 'var(--solva-border)',
-                              color: 'var(--solva-ink)',
                             }}
-                            className="px-2 py-1 rounded border text-[11px] break-words"
+                            className="rounded-[10px] border p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                           >
-                            <strong>{ruleCode}</strong> ·{' '}
-                            {getRuleDisplayName(ruleCode, lang)}
-                          </span>
+                            <div className="space-y-1 min-w-0">
+                              <div className="text-[11px] font-mono font-semibold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">
+                                {lang === 'vi'
+                                  ? 'Chuẩn hóa trích dẫn APA 7th sẵn sàng sao chép'
+                                  : 'Ready-to-Copy Corrected APA 7th Reference'}
+                              </div>
+                              <p
+                                style={{ color: 'var(--solva-ink)' }}
+                                className="text-xs sm:text-[13px] leading-relaxed break-words"
+                              >
+                                {remediatedApa}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              data-testid={`guest-checker-copy-remediated-${idx}`}
+                              onClick={() => handleCopyRemediated(remediatedApa, idx)}
+                              style={{
+                                backgroundColor: 'var(--solva-surface)',
+                                borderColor: 'var(--solva-border)',
+                                color: 'var(--solva-ink)',
+                              }}
+                              className="min-h-[44px] px-3.5 py-2 rounded-[9px] border font-solva-sans text-xs font-medium inline-flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap hover:opacity-85 transition-opacity cursor-pointer"
+                            >
+                              {copiedIndex === idx ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
+                                  <span>{lang === 'vi' ? 'Đã chép' : 'Copied'}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3.5 h-3.5" />
+                                  <span>
+                                    {lang === 'vi' ? 'Sao chép chuẩn APA' : 'Copy APA 7th'}
+                                  </span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Progressive Disclosure: Optional Technical Rule Trace (R01–R30) */}
+                <div className="pt-1 space-y-3">
+                  <button
+                    type="button"
+                    data-testid="guest-checker-trace-toggle"
+                    aria-expanded={showTechnicalTrace}
+                    aria-controls="guest-checker-trace-panel"
+                    onClick={() => setShowTechnicalTrace((prev) => !prev)}
+                    style={{
+                      backgroundColor: 'var(--solva-card-elevated)',
+                      borderColor: showTechnicalTrace
+                        ? 'var(--solva-ink)'
+                        : 'var(--solva-border)',
+                      color: 'var(--solva-ink)',
+                    }}
+                    className="w-full min-h-[44px] px-4 py-2.5 rounded-[10px] border font-solva-sans text-xs font-medium flex items-center justify-between gap-2 hover:opacity-90 transition-colors cursor-pointer"
+                  >
+                    <span>
+                      {showTechnicalTrace
+                        ? lang === 'vi'
+                          ? 'Ẩn mã quy tắc kỹ thuật'
+                          : 'Hide Technical Rule Trace'
+                        : lang === 'vi'
+                          ? `Tùy chọn: Xem mã quy tắc kỹ thuật (${SYMBOLIC_RULES_RANGE})`
+                          : `Optional: View Technical Rule Trace (${SYMBOLIC_RULES_RANGE})`}
+                    </span>
+                    <SymmetricChevron open={showTechnicalTrace} size={14} />
+                  </button>
+
+                  <div
+                    id="guest-checker-trace-panel"
+                    data-testid="guest-checker-trace-panel"
+                    hidden={!showTechnicalTrace}
+                  >
+                    {showTechnicalTrace && (
+                      <div
+                        style={{
+                          backgroundColor: 'var(--solva-card-elevated)',
+                          borderColor: 'var(--solva-border)',
+                        }}
+                        className="rounded-[12px] border p-4 space-y-3 font-mono text-xs"
+                      >
+                        {result.results.map((item, idx) => (
+                          <div
+                            key={`trace-${item.index}-${idx}`}
+                            style={{
+                              backgroundColor: 'var(--solva-surface)',
+                              borderColor: 'var(--solva-border)',
+                            }}
+                            className="rounded-[9px] border p-3 space-y-2"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span style={{ color: 'var(--solva-ink)' }} className="font-bold">
+                                [{item.index}] {String(item.label).toUpperCase()}
+                              </span>
+                              <span style={{ color: 'var(--solva-muted)' }}>
+                                {lang === 'vi' ? 'Độ tin cậy:' : 'Confidence:'}{' '}
+                                {formatConfidencePercent(item.confidence, lang)}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {(item.triggered_rules && item.triggered_rules.length > 0
+                                ? item.triggered_rules
+                                : ['R01_EXACT_DOI']
+                              ).map((ruleCode) => (
+                                <span
+                                  key={ruleCode}
+                                  style={{
+                                    backgroundColor: 'var(--solva-bg)',
+                                    borderColor: 'var(--solva-border)',
+                                    color: 'var(--solva-ink)',
+                                  }}
+                                  className="px-2 py-1 rounded border text-[11px] break-words"
+                                >
+                                  <strong>{ruleCode}</strong> ·{' '}
+                                  {getRuleDisplayName(ruleCode, lang)}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
                         ))}
                       </div>
-                    </div>
-                  ))}
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
 
           {/* Bottom Full-Document Conversion Bar */}
@@ -1194,7 +1308,7 @@ export function GuestInstantChecker({
                 backgroundColor: 'var(--solva-btn-bg)',
                 color: 'var(--solva-btn-fg)',
               }}
-              className="min-h-[44px] px-5 py-2.5 rounded-[10px] font-solva-sans text-xs sm:text-sm font-medium inline-flex items-center justify-center gap-2 shrink-0 whitespace-nowrap hover:opacity-90 transition-opacity"
+              className="min-h-[44px] px-5 py-2.5 rounded-[10px] font-solva-sans text-xs sm:text-sm font-medium inline-flex items-center justify-center text-center gap-2 shrink-0 w-full sm:w-auto sm:whitespace-nowrap hover:opacity-90 transition-opacity"
             >
               <span>
                 {isAuthenticated

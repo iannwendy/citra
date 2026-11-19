@@ -289,10 +289,136 @@ def test_public_verify_enforces_sliding_window_ip_rate_limit_6_per_60s(
     retry_after = throttled_resp.headers.get("Retry-After")
     assert retry_after is not None and int(retry_after) >= 1
 
-    # Different client IP has its own independent bucket and succeeds
+    # different client IP has its own independent bucket and succeeds
     other_ip_resp = public_guest_env.client.post(
         "/api/essays/sandbox/public-verify",
         headers={"X-Real-IP": "198.51.100.77"},
         json=payload,
     )
     assert other_ip_resp.status_code == 200, other_ip_resp.text
+
+
+def test_public_verify_consumes_rate_limit_before_ref_parser_while_keeping_empty_and_over_1500_cheap(
+    public_guest_env,
+) -> None:
+    """5. CPU abuse protection: empty & >1500 char pre-checks do NOT consume tokens,
+    but valid-length payloads consume rate-limit tokens BEFORE parse_reference_section runs
+    so flooding 4-reference regex payloads triggers 429 on the 7th attempt.
+    """
+    ip_headers = {"X-Real-IP": "198.51.100.88"}
+
+    # Empty & >1500 char pre-checks remain cheap 400s without consuming rate-limit tokens
+    for _ in range(4):
+        r_empty = public_guest_env.client.post(
+            "/api/essays/sandbox/public-verify",
+            headers=ip_headers,
+            json={"references_text": "   ", "lang": "en"},
+        )
+        assert r_empty.status_code == 400
+        r_long = public_guest_env.client.post(
+            "/api/essays/sandbox/public-verify",
+            headers=ip_headers,
+            json={"references_text": "X" * 1505, "lang": "en"},
+        )
+        assert r_long.status_code == 400
+
+    four_inline_apa = (
+        "Acemoglu, D., Johnson, S., & Robinson, J. A. (2001). Colonial origins. AER, 91(5), 1369-1401. "
+        "Kahneman, D., & Tversky, A. (1979). Prospect theory. Econometrica, 47(2), 263-291. "
+        "Vaswani, A., Shazeer, N., & Parmar, N. (2017). Attention is all you need. NeurIPS, 30. "
+        "Devlin, J., Chang, M. W., Lee, K., & Toutanova, K. (2019). BERT. NAACL-HLT."
+    )
+
+    # First 6 calls with 4-ref payloads consume rate-limit tokens and return 400 (> 3 refs)
+    for attempt in range(1, 7):
+        resp_400 = public_guest_env.client.post(
+            "/api/essays/sandbox/public-verify",
+            headers=ip_headers,
+            json={"references_text": four_inline_apa, "lang": "en"},
+        )
+        assert resp_400.status_code == 400, f"Attempt #{attempt}: {resp_400.text}"
+
+    # 7th rapid 4-ref payload MUST be blocked with 429 BEFORE regex reference parsing runs
+    resp_429 = public_guest_env.client.post(
+        "/api/essays/sandbox/public-verify",
+        headers=ip_headers,
+        json={"references_text": four_inline_apa, "lang": "en"},
+    )
+    assert resp_429.status_code == 429, resp_429.text
+    assert int(resp_429.headers.get("Retry-After", "0")) >= 1
+
+
+def test_public_verify_entry_boundary_counting_handles_inline_mixed_urls_and_wrapped_pdfs(
+    public_guest_env,
+) -> None:
+    """6. Entry-boundary counting accurately rejects (a) 4 inline APA on 1 line and
+    (b) 1 APA + 3 bare URLs, while allowing (c) 2 multi-line PDF-wrapped refs with bare years in titles
+    and (d) 1 legitimate 4-line wrapped (n.d.) reference.
+    """
+    # (a) 4 inline APA references pasted on 1 single line -> rejected (400)
+    case_a_inline_four = (
+        "Acemoglu, D., Johnson, S., & Robinson, J. A. (2001). Colonial origins. AER, 91(5), 1369-1401. "
+        "Kahneman, D., & Tversky, A. (1979). Prospect theory. Econometrica, 47(2), 263-291. "
+        "Vaswani, A., Shazeer, N., & Parmar, N. (2017). Attention is all you need. NeurIPS, 30. "
+        "Devlin, J., Chang, M. W., Lee, K., & Toutanova, K. (2019). BERT. NAACL-HLT."
+    )
+    resp_a = public_guest_env.client.post(
+        "/api/essays/sandbox/public-verify",
+        headers={"X-Real-IP": "198.51.100.101"},
+        json={"references_text": case_a_inline_four, "lang": "en"},
+    )
+    assert resp_a.status_code == 400, resp_a.text
+
+    # (b) 1 APA reference + 3 bare https://arxiv.org/abs/... URL lines -> rejected (400)
+    case_b_mixed_urls = "\n".join(
+        [
+            "Acemoglu, D., Johnson, S., & Robinson, J. A. (2001). Colonial origins. American Economic Review, 91(5), 1369-1401.",
+            "https://arxiv.org/abs/1706.03762",
+            "https://arxiv.org/abs/1810.04805",
+            "https://arxiv.org/abs/2005.14165",
+        ]
+    )
+    resp_b = public_guest_env.client.post(
+        "/api/essays/sandbox/public-verify",
+        headers={"X-Real-IP": "198.51.100.102"},
+        json={"references_text": case_b_mixed_urls, "lang": "en"},
+    )
+    assert resp_b.status_code == 400, resp_b.text
+
+    # (c) 2 legitimate multi-line PDF-wrapped references (8 lines total, bare years in titles, trailing DOI line) -> 200 OK
+    case_c_wrapped_two = "\n".join(
+        [
+            "Acemoglu, D., Johnson, S., & Robinson, J. A. (2001).",
+            "The colonial origins of comparative development: Evidence from 2019 and 2020 surveys.",
+            "American Economic Review, 91(5), 1369-1401.",
+            "https://doi.org/10.1257/aer.91.5.1369",
+            "Kahneman, D., & Tversky, A. (1979).",
+            "Prospect theory: Study of 2019–2020 markets under risk.",
+            "Econometrica, 47(2), 263-291.",
+            "https://doi.org/10.2307/1914185",
+        ]
+    )
+    resp_c = public_guest_env.client.post(
+        "/api/essays/sandbox/public-verify",
+        headers={"X-Real-IP": "198.51.100.103"},
+        json={"references_text": case_c_wrapped_two, "lang": "en"},
+    )
+    assert resp_c.status_code == 200, resp_c.text
+    assert resp_c.json()["total"] == 2
+
+    # (d) 1 legitimate 4-line wrapped (n.d.) reference across 4 lines without blank lines -> 200 OK
+    case_d_wrapped_nd = "\n".join(
+        [
+            "World Health Organization.",
+            "(n.d.). Global guidelines on digital health interventions.",
+            "World Health Organization Press.",
+            "https://www.who.int/publications/i/item/9789241550505",
+        ]
+    )
+    resp_d = public_guest_env.client.post(
+        "/api/essays/sandbox/public-verify",
+        headers={"X-Real-IP": "198.51.100.104"},
+        json={"references_text": case_d_wrapped_nd, "lang": "en"},
+    )
+    assert resp_d.status_code == 200, resp_d.text
+    assert 1 <= resp_d.json()["total"] <= 2
