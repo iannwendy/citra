@@ -284,23 +284,23 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
 **Interfaces:**
 - Consumes: `.citra-nowrap-tail` from Task 0.1.
 
-- [ ] **Step 1: Write failing tests in `web/src/components/landing/SolvaMotionCalm.test.tsx`**
+- [x] **Step 1: Write failing tests in `web/src/components/landing/SolvaMotionCalm.test.tsx`**
   Assert:
   1. `HeroVerificationMockup` renders full non-truncated source labels and human-friendly status chips without clipped `"Semant.."` or right-edge overflow, and the generation header pill fits comfortably without clipping `"S-BER"`.
   2. `hero-benchmark-120k-strip` renders 4 concise, non-truncated proof labels (zero `"..."` ellipsis).
   3. Hero top announcement pill wraps its last word + `→` arrow inside `whitespace-nowrap` so `→` never orphans on Mobile.
   4. Architecture Card 3 wraps `ALIGNED (94%)` (and its VI equivalent) in `whitespace-nowrap` so `)` never drops onto a new line alone.
-- [ ] **Step 2: Run `SolvaMotionCalm.test.tsx` to confirm failure**
+- [x] **Step 2: Run `SolvaMotionCalm.test.tsx` to confirm failure**
   Run: `cd web && npx vitest run src/components/landing/SolvaMotionCalm.test.tsx`
   Expected: FAIL.
-- [ ] **Step 3: Fix layout geometry & nowrap bindings in `SolvaMockupWidgets.tsx`, `SolvaPrimitives.tsx`, and `LandingPage.tsx`**
+- [x] **Step 3: Fix layout geometry & nowrap bindings in `SolvaMockupWidgets.tsx`, `SolvaPrimitives.tsx`, and `LandingPage.tsx`**
   Adjust internal padding, flex-shrink, responsive font sizing, and `whitespace-nowrap` spans across `HeroVerificationMockup`, `FeatureCardWidget`, `StickyCardWidget`, and `LandingPage` Hero benchmark strip so zero text clips at `1440×900` or `390×844`.
-- [ ] **Step 4: Run full frontend verification gate**
+- [x] **Step 4: Run full frontend verification gate**
   Run: `cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
   Expected: PASS.
-- [ ] **Step 5: Run Triad Review & Critic Loop + Browser Pixel Check (`1440×900` & `390×844`, EN & VI)**
+- [x] **Step 5: Run Triad Review & Critic Loop + Browser Pixel Check (`1440×900` & `390×844`, EN & VI)**
   Inspect Hero right frame, Hero left proof box, Hero eyebrow arrow, and Architecture cards at both viewports in EN & VI; loop until `APPROVED`.
-- [ ] **Step 6: Tick checkboxes & commit**
+- [x] **Step 6: Tick checkboxes & commit**
   ```bash
   git add web/src/components/landing/SolvaMockupWidgets.tsx web/src/components/landing/SolvaPrimitives.tsx web/src/pages/LandingPage.tsx web/src/components/landing/SolvaMotionCalm.test.tsx
   git commit -m "fix(landing-ui): eliminate hero mockup clipping, benchmark truncation, and orphan arrow/parenthesis wraps"
