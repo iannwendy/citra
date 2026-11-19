@@ -717,10 +717,14 @@ export function SolvaPainterlyFrame({
 export function SolvaStickyStackCard({
   index,
   total,
+  baseTopDesktop = 92,
+  baseTopMobile = 76,
   children,
 }: {
   index: number;
   total: number;
+  baseTopDesktop?: number;
+  baseTopMobile?: number;
   children: ReactNode;
 }) {
   const stickyWrapperRef = useRef<HTMLDivElement>(null);
@@ -746,7 +750,7 @@ export function SolvaStickyStackCard({
         }
 
         const isDesktop = viewportW >= 1024;
-        const baseTop = isDesktop ? 92 : 76;
+        const baseTop = isDesktop ? baseTopDesktop : baseTopMobile;
         const stepOffset = isDesktop ? 28 : 18;
         const myStickyTop = baseTop + index * stepOffset;
         const myMarginBottom = (total - 1 - index) * stepOffset;
@@ -870,10 +874,14 @@ export function SolvaStickyStackCard({
       },
       true
     );
-  }, [index, total]);
+  }, [index, total, baseTopDesktop, baseTopMobile]);
 
-  const initialTop = 92 + index * 28;
-  const initialMarginBottom = (total - 1 - index) * 28;
+  const isInitialDesktop =
+    typeof window === 'undefined' ? true : (window.innerWidth || 1440) >= 1024;
+  const initialStepOffset = isInitialDesktop ? 28 : 18;
+  const initialTop =
+    (isInitialDesktop ? baseTopDesktop : baseTopMobile) + index * initialStepOffset;
+  const initialMarginBottom = (total - 1 - index) * initialStepOffset;
 
   return (
     <div

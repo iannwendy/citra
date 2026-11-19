@@ -228,6 +228,79 @@ describe('Vietnamese Personal Data Protection Compliance UI (DLCN-01, DLCN-02, D
     }
   });
 
+  it('[DLCN-01] PrivacyPolicyPage honors Fix Round 1 UX/visual/non-tech polish: localized schema button, zero ellipsis truncation, sticky stack clearance, localized VI badges, OpenAIRE ticker, and unpublished-thesis confidentiality', async () => {
+    render(
+      <ThemeProvider defaultTheme="light">
+        <MemoryRouter initialEntries={['/privacy']}>
+          <Routes>
+            <Route path="/privacy" element={<PrivacyPolicyPage />} />
+          </Routes>
+        </MemoryRouter>
+      </ThemeProvider>,
+    );
+
+    // 1. Mobile-safe Data Matrix filter with aria-pressed + localized visible schema label
+    const allFilterBtn = screen.getByRole('button', { name: /Tất cả \(5\)/i });
+    const sensitiveFilterBtn = screen.getByRole('button', { name: /Dữ liệu Nhạy cảm \(1\)/i });
+    expect(allFilterBtn.getAttribute('aria-pressed')).toBe('true');
+    expect(sensitiveFilterBtn.getAttribute('aria-pressed')).toBe('false');
+
+    const schemaToggle = screen.getByRole('button', {
+      name: /Chi tiết trường kỹ thuật \/ Technical Schema/i,
+    });
+    expect(schemaToggle.textContent?.trim()).toBe('Chi tiết trường kỹ thuật');
+
+    // 2. Zero .truncate classes inside Hero Governance Widget or Hero SLA Proof Strip
+    const heroSection = document.getElementById('privacy-hero');
+    expect(heroSection).not.toBeNull();
+    expect(heroSection!.querySelectorAll('.truncate').length).toBe(0);
+
+    // 3. Sticky Stack Card 0 clears sticky sub-nav (baseTopDesktop=132) & #sensitive-data is on static <section>
+    const stickyCard0 = screen.getByTestId('solva-sticky-card-0');
+    expect(stickyCard0.style.top).toBe('132px');
+    const sensitiveAnchor = document.getElementById('sensitive-data');
+    expect(sensitiveAnchor).not.toBeNull();
+    expect(sensitiveAnchor!.tagName).toBe('SECTION');
+    expect(sensitiveAnchor!.className).toContain('scroll-mt-[132px]');
+    expect(stickyCard0.contains(sensitiveAnchor)).toBe(false);
+
+    const subnav = screen.getByTestId('privacy-section-subnav');
+    const subnavLink = subnav.querySelector('a[href="#controller"]') as HTMLAnchorElement;
+    expect(subnavLink.style.color).toBe('');
+    expect(subnavLink.className).toContain('text-[var(--solva-muted)]');
+
+    // 4. Ticker replaces self-hosted GROBID TEI with OpenAIRE; VI eliminates residual English/SQL/tech jargon
+    expect(screen.queryByText(/GROBID TEI/i)).toBeNull();
+    expect(screen.getAllByText(/^OpenAIRE$/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/tệp mồ côi/i)).toBeNull();
+    expect(screen.queryByText(/0 Orphaned Files/i)).toBeNull();
+    expect(screen.queryByText(/Neuro-Symbolic hai tầng trực giao/i)).toBeNull();
+    expect(screen.queryByText(/L1 × L2/i)).toBeNull();
+    expect(screen.queryByText(/^ISOLATED$/)).toBeNull();
+    expect(screen.queryByText(/^NEVER STORED$/)).toBeNull();
+    expect(screen.queryByText(/^0 TRACKERS$/)).toBeNull();
+    expect(screen.queryByText(/^CASCADE PURGE$/)).toBeNull();
+    expect(screen.getByText('CÁCH LY BẢO MẬT')).toBeDefined();
+    expect(screen.getByText('KHÔNG LƯU TRỮ')).toBeDefined();
+    expect(screen.getByText('4 số cuối (card_last4)')).toBeDefined();
+    expect(document.getElementById('data-collected')!.textContent).toContain(
+      'ảnh đại diện tải lên',
+    );
+
+    // 5. Unpublished-thesis confidentiality reassurance in VI (no full-text transmit, no shared Turnitin/similarity pool)
+    expect(screen.getAllByText(/Turnitin/i).length).toBeGreaterThanOrEqual(2);
+
+    // Switch to English and verify localized schema label, zero PAN/SMTP jargon, and Turnitin reassurance
+    fireEvent.click(screen.getByRole('button', { name: /VI \/ EN/i }));
+    await waitFor(() => {
+      expect(schemaToggle.textContent?.trim()).toBe('Technical Schema');
+      expect(screen.getByText('Last 4 digits (card_last4)')).toBeDefined();
+      expect(screen.queryByText(/\bPAN\b/)).toBeNull();
+      expect(screen.queryByText(/\bSMTP\b/)).toBeNull();
+      expect(screen.getAllByText(/Turnitin/i).length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
   it('[DLCN-01] PricingPage footer includes a link to /privacy', () => {
     renderWithProviders(<PricingPage />, { user: null, initialRoute: '/pricing' });
     const privacyLinks = document.querySelectorAll('a[href="/privacy"]');

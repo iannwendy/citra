@@ -297,7 +297,7 @@ function buildDataMappingRows(demoEvaluatorMode: boolean): DataMappingRow[] {
       categoryEn: 'Account Identity & Profile',
       classification: 'basic',
       fieldsVi:
-        'Tên đăng nhập, địa chỉ email, họ và tên, trường đại học hoặc đơn vị công tác, vai trò học thuật (sinh viên, giảng viên, quản trị viên), Ảnh đại diện tải lên và thời điểm xác nhận đồng ý chính sách.',
+        'Tên đăng nhập, địa chỉ email, họ và tên, trường đại học hoặc đơn vị công tác, vai trò học thuật (sinh viên, giảng viên, quản trị viên), ảnh đại diện tải lên và thời điểm xác nhận đồng ý chính sách.',
       fieldsEn:
         'Username, email address, full name, academic institution, workspace role (student, instructor, administrator), uploaded profile photo, and policy consent timestamp.',
       schemaFields: [
@@ -438,7 +438,7 @@ const TICKER_SCHOLARLY_SOURCES = [
   'ORCID',
   'Wikidata',
   'DataCite',
-  'GROBID TEI',
+  'OpenAIRE',
 ];
 
 function getPolicySectionLinks(lang: Lang) {
@@ -573,7 +573,7 @@ function PrivacySolvaHeader({
         <div className="flex items-center shrink-0">
           <Link
             to="/"
-            className="inline-flex items-center gap-[8px] rounded-[6px] whitespace-nowrap focus:outline-none"
+            className="inline-flex items-center gap-[8px] rounded-[6px] whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15]/40 dark:focus-visible:ring-[#FBFAF6]/40"
           >
             <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
               <CitraLogo size={18} />
@@ -809,15 +809,14 @@ function PrivacySectionSubnav({ lang }: { lang: Lang }) {
       className="sticky top-[64px] lg:top-[76px] z-40 border-b backdrop-blur-md"
     >
       <div className="max-w-[1280px] mx-auto px-5 sm:px-6 lg:px-8 xl:px-[40px] h-[42px] flex items-center justify-between gap-3 overflow-x-auto scrollbar-none">
-        <div className="flex items-center flex-nowrap gap-1 sm:gap-1.5 min-w-max">
+        <div className="flex items-center flex-nowrap gap-1 sm:gap-1.5 min-w-max pr-5 sm:pr-0">
           {sectionLinks.map((item) => {
             const Icon = item.icon;
             return (
               <a
                 key={item.href}
                 href={item.href}
-                style={{ color: 'var(--solva-muted)' }}
-                className="inline-flex items-center gap-1.5 h-[30px] px-2.5 rounded-[7px] font-solva-sans text-[13px] font-medium whitespace-nowrap shrink-0 hover:bg-[#F4F2EC] dark:hover:bg-[#1E1C17] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] transition-colors"
+                className="inline-flex items-center gap-1.5 h-[30px] px-2.5 rounded-[7px] font-solva-sans text-[13px] font-medium whitespace-nowrap shrink-0 text-[var(--solva-muted)] hover:bg-[#F4F2EC] dark:hover:bg-[#1E1C17] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] transition-colors"
               >
                 <Icon className="w-3.5 h-3.5 opacity-75 shrink-0" />
                 <span>{item.shortLabel}</span>
@@ -862,13 +861,13 @@ function HeroPrivacyGovernanceWidget({
             code: '01 · CONSENT',
             badge: 'ĐIỀU 9 LUẬT 91/2025/QH15',
             title: 'Bằng chứng đồng ý tường minh',
-            metric: 'v1.0 · UTC Timestamp',
+            metric: 'v1.0 · Ghi nhận thời điểm (UTC)',
             detail:
               'Ô tích chọn mặc định để trống khi đăng ký tài khoản và liên kết Google. Hệ thống ghi nhận chính xác thời điểm và phiên bản chính sách đã đồng ý.',
             rows: [
-              { k: 'Trạng thái đồng ý', v: 'Xác nhận tường minh (Opt-In)', ok: true },
-              { k: 'Bảo vệ mật khẩu & khóa API', v: 'Mã hóa một chiều (bcrypt / SHA-256)', ok: true },
-              { k: 'Cookie theo dõi quảng cáo', v: '0 trình theo dõi (Zero Ad Tech)', ok: true },
+              { k: 'Trạng thái đồng ý', v: 'Xác nhận tường minh', ok: true },
+              { k: 'Mật khẩu & khóa API', v: 'Mã hóa một chiều', ok: true },
+              { k: 'Cookie quảng cáo', v: '0 trình theo dõi', ok: true },
             ],
           },
           {
@@ -877,18 +876,18 @@ function HeroPrivacyGovernanceWidget({
             title: 'Tối thiểu hóa truy vấn học thuật',
             metric: 'Chỉ gửi chuỗi thư mục',
             detail:
-              `Khi đối chiếu ${SCHOLARLY_APIS_LABEL} cơ sở dữ liệu quốc tế, hệ thống chỉ gửi tiêu đề, tên tác giả được trích dẫn, năm công bố và mã DOI — tuyệt đối không gửi mật khẩu hay thẻ thanh toán.`,
+              `CITRA tuyệt đối không gửi toàn văn hay các chương luận văn chưa công bố ra bên ngoài, và không lập chỉ mục vào kho đối sánh tương đồng dùng chung (không ảnh hưởng kết quả Turnitin của trường); chỉ gửi chuỗi thư mục ngắn tới ${SCHOLARLY_APIS_LABEL} cơ sở dữ liệu quốc tế.`,
             rows: [
-              { k: 'Dữ liệu truy vấn gửi đi', v: 'Tiêu đề, tác giả, năm, DOI', ok: true },
-              { k: 'Thông tin xác thực', v: 'Cách ly hoàn toàn', ok: true },
-              { k: 'Số thẻ & mã CVV/OTP', v: 'Do Stripe / VNPay xử lý trực tiếp', ok: true },
+              { k: 'Dữ liệu gửi đi', v: 'Tiêu đề, tác giả, năm, DOI', ok: true },
+              { k: 'Toàn văn luận văn', v: 'Không gửi · Không lưu kho chung', ok: true },
+              { k: 'Số thẻ & CVV/OTP', v: 'Stripe / VNPay xử lý riêng', ok: true },
             ],
           },
           {
             code: '03 · PURGE',
             badge: 'ĐIỀU 14 · XÓA TỨC THÌ',
-            title: 'Xóa sạch không để lại tệp mồ côi',
-            metric: '0 Orphaned Files',
+            title: 'Xóa triệt để, không lưu tệp tồn dư',
+            metric: '0 tệp tồn dư',
             detail:
               'Chức năng tự xóa tài khoản tại Cài đặt (/settings) thu hồi toàn bộ phiên đăng nhập, xóa ảnh đại diện, bản ghi trích dẫn và gỡ bỏ vĩnh viễn tệp bản thảo gốc.',
             rows: [
@@ -908,8 +907,8 @@ function HeroPrivacyGovernanceWidget({
               'Unchecked-by-default opt-in during registration and Google Sign-In onboarding. CITRA records the exact UTC timestamp and consented policy version.',
             rows: [
               { k: 'Consent status', v: 'Explicit Opt-In', ok: true },
-              { k: 'Credential protection', v: 'One-way hash (bcrypt / SHA-256)', ok: true },
-              { k: 'Ad tracking pixels', v: '0 trackers (Zero Ad Tech)', ok: true },
+              { k: 'Credential protection', v: 'One-way hashed', ok: true },
+              { k: 'Ad tracking pixels', v: '0 ad trackers', ok: true },
             ],
           },
           {
@@ -918,18 +917,18 @@ function HeroPrivacyGovernanceWidget({
             title: 'Bibliographic Query Minimization',
             metric: 'Metadata Strings Only',
             detail:
-              `Across ${SCHOLARLY_APIS_LABEL} international scholarly indexes, CITRA sends only cited titles, cited author surnames, publication years, and DOIs — never passwords or payment credentials.`,
+              `CITRA never transmits unpublished manuscript full text or chapters to external APIs and never indexes manuscripts into any shared cross-user or inter-university similarity pool (zero impact on Turnitin or institutional checks) — querying only short cited bibliographic fields across ${SCHOLARLY_APIS_LABEL} scholarly indexes.`,
             rows: [
-              { k: 'Outbound query payload', v: 'Cited title, author, year, DOI', ok: true },
-              { k: 'Account credentials', v: 'Strictly isolated', ok: true },
-              { k: 'Card PAN & CVV/OTP', v: 'Handled directly by Stripe / VNPay', ok: true },
+              { k: 'Outbound query', v: 'Cited title, author, year, DOI', ok: true },
+              { k: 'Manuscript full text', v: 'Never sent · No shared pool', ok: true },
+              { k: 'Card numbers & CVV/OTP', v: 'Handled by Stripe / VNPay', ok: true },
             ],
           },
           {
             code: '03 · PURGE',
             badge: 'ARTICLE 14 · INSTANT PURGE',
-            title: 'Zero-Orphan Account & File Deletion',
-            metric: '0 Orphaned Files',
+            title: 'Complete Account & File Deletion',
+            metric: '0 Residual Files',
             detail:
               'Self-service deletion in Settings (/settings) revokes active sessions, deletes profile photos and citation records, and permanently removes all uploaded manuscript files.',
             rows: [
@@ -1032,14 +1031,14 @@ function HeroPrivacyGovernanceWidget({
           {current.rows.map((r) => (
             <div
               key={r.k}
-              className="px-3 py-2 flex items-center justify-between gap-3 text-[11px] sm:text-[12px] font-mono"
+              className="px-3 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-3 text-[11px] sm:text-[12px] font-mono"
             >
-              <span style={{ color: 'var(--solva-muted)' }} className="truncate">
+              <span style={{ color: 'var(--solva-muted)' }}>
                 {r.k}
               </span>
               <span
                 style={{ color: 'var(--solva-ink)' }}
-                className="inline-flex items-center gap-1.5 font-medium shrink-0"
+                className="inline-flex items-center gap-1.5 font-medium"
               >
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <span>{r.v}</span>
@@ -1082,12 +1081,12 @@ function PrivacyRightsAccordion({ lang }: { lang: Lang }) {
       id: 'pfaq-1',
       q:
         lang === 'vi'
-          ? 'CITRA có bán bản thảo khóa luận hoặc dùng bài viết của tôi để huấn luyện AI bên ngoài không?'
-          : 'Does CITRA sell my manuscripts or send full theses to train external LLMs?',
+          ? 'CITRA có bán bản thảo khóa luận, dùng bài viết huấn luyện AI hay lưu vào kho đạo văn chung không?'
+          : 'Does CITRA sell my manuscripts, train external AI models, or index my thesis in a shared similarity pool?',
       a:
         lang === 'vi'
-          ? 'Tuyệt đối không. Tệp bản thảo chỉ lưu riêng biệt phục vụ chính bạn (hoặc lớp học bạn chủ động nộp bài). Khi kiểm chứng nguồn tham khảo, CITRA chỉ gửi chuỗi siêu dữ liệu thư mục ngắn (tiêu đề, tác giả được trích dẫn, năm công bố, DOI) tới các cơ sở dữ liệu khoa học công khai như Crossref, OpenAlex, PubMed, arXiv.'
-          : 'Never. Manuscripts remain isolated to your workspace (or the classroom you explicitly submit to). External API queries transmit only short bibliographic strings (cited title, cited author, publication year, DOI) to public scholarly registries such as Crossref, OpenAlex, PubMed, and arXiv.',
+          ? 'Tuyệt đối không. CITRA không bao giờ gửi toàn văn hay các chương bản thảo chưa công bố ra bên ngoài, không dùng bài viết để huấn luyện AI và không đưa bản thảo vào bất kỳ kho đối sánh tương đồng liên trường hay liên người dùng nào (hoàn toàn không ảnh hưởng đến lần kiểm tra Turnitin hoặc hệ thống của trường sau đó). Khi kiểm chứng nguồn tham khảo, CITRA chỉ gửi chuỗi siêu dữ liệu thư mục ngắn (tiêu đề, tác giả được trích dẫn, năm công bố, DOI) tới các cơ sở dữ liệu khoa học công khai như Crossref, OpenAlex, PubMed, arXiv.'
+          : 'Never. CITRA never transmits unpublished manuscript full text or chapters to external APIs, never uses submissions to train external AI models, and never indexes your manuscripts into any shared cross-user or inter-university similarity pool (zero impact on subsequent Turnitin or institutional checks). External lookups transmit only short cited bibliographic strings (cited title, cited author, publication year, DOI) to public scholarly registries such as Crossref, OpenAlex, PubMed, and arXiv.',
     },
     {
       id: 'pfaq-2',
@@ -1191,7 +1190,9 @@ function PrivacyRightsAccordion({ lang }: { lang: Lang }) {
               <div
                 style={{
                   gridTemplateRows: isOpen ? '1fr' : '0fr',
-                  transition: 'grid-template-rows 380ms cubic-bezier(0.22, 1, 0.36, 1)',
+                  transition: isOpen
+                    ? 'grid-template-rows 320ms cubic-bezier(0.22, 1, 0.36, 1)'
+                    : 'grid-template-rows 200ms cubic-bezier(0.32, 0, 0.67, 0)',
                 }}
                 className="grid"
                 aria-hidden={!isOpen}
@@ -1203,8 +1204,9 @@ function PrivacyRightsAccordion({ lang }: { lang: Lang }) {
                       transform: isOpen
                         ? 'translate3d(0, 0, 0)'
                         : 'translate3d(0, -8px, 0)',
-                      transition:
-                        'opacity 320ms cubic-bezier(0.22, 1, 0.36, 1), transform 360ms cubic-bezier(0.22, 1, 0.36, 1)',
+                      transition: isOpen
+                        ? 'opacity 320ms cubic-bezier(0.22, 1, 0.36, 1), transform 320ms cubic-bezier(0.22, 1, 0.36, 1)'
+                        : 'opacity 200ms cubic-bezier(0.32, 0, 0.67, 0), transform 200ms cubic-bezier(0.32, 0, 0.67, 0)',
                     }}
                     className="pb-[24px] pr-[12px]"
                   >
@@ -1249,7 +1251,7 @@ function PrivacySolvaFooter({ lang }: { lang: Lang }) {
           href: '/#benchmark-120k',
         },
         {
-          label: lang === 'vi' ? 'Kiến trúc 2 tầng (L1 × L2)' : '2-Layer Architecture',
+          label: lang === 'vi' ? 'Quy trình kiểm chứng trích dẫn' : 'How Verification Works',
           href: '/#architecture',
         },
         {
@@ -1342,8 +1344,8 @@ function PrivacySolvaFooter({ lang }: { lang: Lang }) {
               className="font-solva-sans text-[16px] font-normal leading-[23.2px] max-w-[310px]"
             >
               {lang === 'vi'
-                ? 'Nền tảng kiểm chứng trích dẫn học thuật đa nguồn, vận hành trên kiến trúc Neuro-Symbolic hai tầng trực giao.'
-                : `Academic citation verification workspace powered by a two-layer Neuro-Symbolic and ${SCHOLARLY_APIS_LABEL} API engine.`}
+                ? 'Không gian kiểm chứng trích dẫn và danh mục tài liệu tham khảo học thuật, đối chiếu trực tiếp qua hơn 15 cơ sở dữ liệu khoa học quốc tế.'
+                : `Academic citation and bibliography verification workspace cross-referencing ${SCHOLARLY_APIS_LABEL} international scholarly databases.`}
             </p>
           </div>
 
@@ -1472,7 +1474,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                 }}
                 className="rounded-[16px] border p-4 sm:p-5 flex flex-col sm:flex-row items-start gap-3.5 shadow-2xs"
               >
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-emerald-500/12 text-emerald-800 dark:text-emerald-300 border border-emerald-500/25 font-mono text-[11px] font-semibold shrink-0 mt-0.5">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-emerald-500/[0.12] text-emerald-800 dark:text-emerald-300 border border-emerald-500/25 font-mono text-[11px] font-semibold shrink-0 mt-0.5">
                   <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
                   <span>
                     {isVi
@@ -1582,7 +1584,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                         className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-0.5 shrink-0"
                       />
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t border-[#E7E3D9] dark:border-[#332F26]">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-2.5 pt-2 border-t border-[#E7E3D9] dark:border-[#332F26]">
                       <div>
                         <div
                           style={{ color: 'var(--solva-ink)' }}
@@ -1592,7 +1594,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                         </div>
                         <div
                           style={{ color: 'var(--solva-muted)' }}
-                          className="font-mono text-[10px] mt-1 truncate"
+                          className="font-solva-sans text-[11px] leading-snug mt-1"
                         >
                           {isVi ? 'Tiếp nhận (làm việc)' : 'Business-day ack'}
                         </div>
@@ -1603,7 +1605,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                         </div>
                         <div
                           style={{ color: 'var(--solva-muted)' }}
-                          className="font-mono text-[10px] mt-1 truncate"
+                          className="font-solva-sans text-[11px] leading-snug mt-1"
                         >
                           {isVi ? 'Xem, sửa & cung cấp' : 'Access & rectify'}
                         </div>
@@ -1617,7 +1619,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                         </div>
                         <div
                           style={{ color: 'var(--solva-muted)' }}
-                          className="font-mono text-[10px] mt-1 truncate"
+                          className="font-solva-sans text-[11px] leading-snug mt-1"
                         >
                           {isVi ? 'Yêu cầu xóa dữ liệu' : 'Deletion requests'}
                         </div>
@@ -1628,7 +1630,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                         </div>
                         <div
                           style={{ color: 'var(--solva-muted)' }}
-                          className="font-mono text-[10px] mt-1 truncate"
+                          className="font-solva-sans text-[11px] leading-snug mt-1"
                         >
                           {isVi ? 'Tự xóa tại /settings' : 'Self-purge /settings'}
                         </div>
@@ -1915,13 +1917,13 @@ export function PrivacyPolicyPage(): JSX.Element {
 
               {/* Filter Track + Collapsible Technical Schema Toggle */}
               <SolvaScrollReveal delayMs={60} yOffset={14} blurPx={0}>
-                <div className="flex flex-wrap xl:flex-nowrap items-center gap-2.5">
+                <div className="flex flex-wrap xl:flex-nowrap items-center gap-2.5 max-w-full">
                   <div
                     style={{
                       backgroundColor: 'var(--solva-surface)',
                       borderColor: 'var(--solva-border)',
                     }}
-                    className="inline-flex items-center p-[5px] rounded-[12px] border gap-1"
+                    className="inline-flex flex-wrap sm:flex-nowrap max-w-full items-center p-[5px] rounded-[12px] border gap-1"
                     role="group"
                     aria-label="Filter personal data categories"
                   >
@@ -1947,6 +1949,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                       <button
                         key={tab.key}
                         type="button"
+                        aria-pressed={dataFilter === tab.key}
                         onClick={() => setDataFilter(tab.key)}
                         style={
                           dataFilter === tab.key
@@ -1959,7 +1962,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                                 color: 'var(--solva-muted)',
                               }
                         }
-                        className="px-3.5 py-2 rounded-[8px] font-solva-sans text-[13px] font-medium whitespace-nowrap transition-all duration-200 cursor-pointer"
+                        className="px-2.5 sm:px-3.5 py-2 rounded-[8px] font-solva-sans text-[13px] font-medium whitespace-nowrap transition-all duration-200 cursor-pointer"
                       >
                         {isVi ? tab.vi : tab.en}
                       </button>
@@ -1969,6 +1972,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                   <button
                     type="button"
                     data-testid="privacy-schema-toggle"
+                    aria-label="Chi tiết trường kỹ thuật / Technical Schema"
                     aria-expanded={showTechnicalSchema}
                     onClick={() => setShowTechnicalSchema((prev) => !prev)}
                     style={
@@ -1984,10 +1988,10 @@ export function PrivacyPolicyPage(): JSX.Element {
                             borderColor: 'var(--solva-border)',
                           }
                     }
-                    className="inline-flex items-center gap-1.5 h-[44px] px-3.5 rounded-[12px] border font-mono text-[12px] font-medium whitespace-nowrap transition-colors duration-200 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 min-h-[44px] max-w-full px-3.5 py-2 rounded-[12px] border font-mono text-[12px] font-medium whitespace-normal sm:whitespace-nowrap text-left transition-colors duration-200 cursor-pointer"
                   >
                     <Code2 className="w-3.5 h-3.5 shrink-0" />
-                    <span>Chi tiết trường kỹ thuật / Technical Schema</span>
+                    <span>{isVi ? 'Chi tiết trường kỹ thuật' : 'Technical Schema'}</span>
                   </button>
                 </div>
               </SolvaScrollReveal>
@@ -2119,7 +2123,10 @@ export function PrivacyPolicyPage(): JSX.Element {
         {/* ============================================================
             SECTION 3: 3-CARD STICKY STACK — SENSITIVE DATA, COOKIES & RETENTION
             ============================================================ */}
-        <section className="py-[36px] sm:py-[56px] lg:py-[88px] px-5 sm:px-6 lg:px-[40px]">
+        <section
+          id="sensitive-data"
+          className="scroll-mt-[132px] py-[36px] sm:py-[56px] lg:py-[88px] px-5 sm:px-6 lg:px-[40px]"
+        >
           <div className="max-w-[1200px] mx-auto flex flex-col gap-[32px] sm:gap-[48px]">
             <div className="flex flex-col items-start gap-[12px] max-w-[680px]">
               <PrivacyEyebrow>
@@ -2142,12 +2149,9 @@ export function PrivacyPolicyPage(): JSX.Element {
             </div>
 
             <div className="flex flex-col gap-[24px]">
-              {/* Sticky Card 0: Sensitive Billing Data (`#sensitive-data`) */}
-              <SolvaStickyStackCard index={0} total={3}>
-                <div
-                  id="sensitive-data"
-                  className="scroll-mt-[136px] grid grid-cols-1 lg:grid-cols-12 items-center gap-6"
-                >
+              {/* Sticky Card 0: Sensitive Billing Data */}
+              <SolvaStickyStackCard index={0} total={3} baseTopDesktop={132} baseTopMobile={118}>
+                <div className="grid grid-cols-1 lg:grid-cols-12 items-center gap-6">
                   <div className="lg:col-span-7 p-4 sm:p-7 space-y-4">
                     <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-[6px] bg-red-500/10 text-red-700 dark:text-red-300 border border-red-500/20 font-mono text-[11px] font-semibold">
                       <Lock className="w-3.5 h-3.5" />
@@ -2179,7 +2183,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                         <span style={{ color: 'var(--solva-ink)' }}>
                           {isVi
                             ? 'Cổng thanh toán Stripe & VNPay chính thức: số thẻ đầy đủ, mã bảo mật CVV/CVC và OTP ngân hàng được xử lý trực tiếp trên hạ tầng chuẩn PCI-DSS của Stripe và VNPay. CITRA chỉ lưu mã giao dịch tham chiếu, thương hiệu thẻ, 4 số cuối thẻ thanh toán, tên ngân hàng thanh toán, quốc gia/mã bưu chính và thời hạn gói dịch vụ.'
-                            : 'Official Stripe & VNPay gateways: full card PAN, CVV/CVC codes, and bank OTPs are handled directly on Stripe and VNPay PCI-DSS infrastructure. CITRA retains only transaction IDs, card brand, last 4 card digits, issuing bank code, billing country/postal code, and plan tier.'}
+                            : 'Official Stripe & VNPay gateways: full card numbers, CVV/CVC codes, and bank OTPs are handled directly on Stripe and VNPay PCI-DSS infrastructure. CITRA retains only transaction IDs, card brand, last 4 card digits, issuing bank code, billing country/postal code, and plan tier.'}
                         </span>
                       </li>
                       <li className="flex items-start gap-2.5">
@@ -2211,26 +2215,26 @@ export function PrivacyPolicyPage(): JSX.Element {
                         }}
                         className="solva-glass-ring w-full rounded-[12px] border p-4 space-y-2.5 font-mono text-[12px]"
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <span style={{ color: 'var(--solva-ink)' }} className="font-semibold">
                             PCI-DSS · HMAC-SHA512
                           </span>
                           <span className="verdict-badge verdict-badge-verified px-2 py-0.5 text-[10px]">
-                            ISOLATED
+                            {isVi ? 'CÁCH LY BẢO MẬT' : 'ISOLATED'}
                           </span>
                         </div>
                         <div
                           style={{ color: 'var(--solva-muted)' }}
                           className="pt-2 border-t border-[#E7E3D9] dark:border-[#332F26] space-y-1.5"
                         >
-                          <div className="flex justify-between">
-                            <span>{isVi ? 'Số thẻ đầy đủ / CVV' : 'Full card PAN / CVV'}</span>
+                          <div className="flex justify-between gap-2">
+                            <span>{isVi ? 'Số thẻ đầy đủ / CVV' : 'Full card numbers / CVV'}</span>
                             <span className="text-emerald-600 dark:text-emerald-400">
-                              NEVER STORED
+                              {isVi ? 'KHÔNG LƯU TRỮ' : 'NEVER STORED'}
                             </span>
                           </div>
-                          <div className="flex justify-between">
-                            <span>card_last4</span>
+                          <div className="flex justify-between gap-2">
+                            <span>{isVi ? '4 số cuối (card_last4)' : 'Last 4 digits (card_last4)'}</span>
                             <span style={{ color: 'var(--solva-ink)' }}>
                               {demoEvaluatorMode
                                 ? '•••• 4242'
@@ -2239,7 +2243,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                                   : 'Last 4 digits only'}
                             </span>
                           </div>
-                          <div className="flex justify-between">
+                          <div className="flex justify-between gap-2">
                             <span>{isVi ? 'Cổng thanh toán' : 'Gateways'}</span>
                             <span style={{ color: 'var(--solva-ink)' }}>Stripe · VNPay</span>
                           </div>
@@ -2251,10 +2255,10 @@ export function PrivacyPolicyPage(): JSX.Element {
               </SolvaStickyStackCard>
 
               {/* Sticky Card 1: Cookies & Browser Storage (`#cookies`) */}
-              <SolvaStickyStackCard index={1} total={3}>
+              <SolvaStickyStackCard index={1} total={3} baseTopDesktop={132} baseTopMobile={118}>
                 <div
                   id="cookies"
-                  className="scroll-mt-[148px] grid grid-cols-1 lg:grid-cols-12 items-center gap-6"
+                  className="scroll-mt-[172px] grid grid-cols-1 lg:grid-cols-12 items-center gap-6"
                 >
                   <div className="lg:col-span-7 p-4 sm:p-7 space-y-4">
                     <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-[6px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 font-mono text-[11px] font-semibold">
@@ -2297,23 +2301,25 @@ export function PrivacyPolicyPage(): JSX.Element {
                         }}
                         className="solva-glass-ring w-full rounded-[12px] border p-4 space-y-2.5 font-mono text-[12px]"
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <span style={{ color: 'var(--solva-ink)' }} className="font-semibold">
-                            BROWSER STORAGE AUDIT
+                            {isVi ? 'KIỂM ĐỊNH TRÌNH DUYỆT' : 'BROWSER STORAGE AUDIT'}
                           </span>
                           <span className="verdict-badge verdict-badge-verified px-2 py-0.5 text-[10px]">
-                            0 TRACKERS
+                            {isVi ? '0 THEO DÕI' : '0 TRACKERS'}
                           </span>
                         </div>
                         <div
                           style={{ color: 'var(--solva-muted)' }}
                           className="pt-2 border-t border-[#E7E3D9] dark:border-[#332F26] space-y-1.5"
                         >
-                          <div className="flex justify-between">
+                          <div className="flex justify-between gap-2">
                             <span>Google Analytics / Meta</span>
-                            <span className="text-emerald-600 dark:text-emerald-400">NONE</span>
+                            <span className="text-emerald-600 dark:text-emerald-400">
+                              {isVi ? 'KHÔNG DÙNG' : 'NONE'}
+                            </span>
                           </div>
-                          <div className="flex justify-between">
+                          <div className="flex justify-between gap-2">
                             <span>{isVi ? 'Khóa thiết yếu' : 'Essential state'}</span>
                             <span style={{ color: 'var(--solva-ink)' }}>
                               {isVi ? 'Phiên · Giao diện · Ngôn ngữ' : 'Session · Theme · Language'}
@@ -2326,19 +2332,19 @@ export function PrivacyPolicyPage(): JSX.Element {
                 </div>
               </SolvaStickyStackCard>
 
-              {/* Sticky Card 2: Retention & Zero-Orphan Purge (`#retention`) */}
-              <SolvaStickyStackCard index={2} total={3}>
+              {/* Sticky Card 2: Retention & Complete File Deletion (`#retention`) */}
+              <SolvaStickyStackCard index={2} total={3} baseTopDesktop={132} baseTopMobile={118}>
                 <div
                   id="retention"
-                  className="scroll-mt-[160px] grid grid-cols-1 lg:grid-cols-12 items-center gap-6"
+                  className="scroll-mt-[200px] grid grid-cols-1 lg:grid-cols-12 items-center gap-6"
                 >
                   <div className="lg:col-span-7 p-4 sm:p-7 space-y-4">
                     <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-[6px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 font-mono text-[11px] font-semibold">
                       <Clock className="w-3.5 h-3.5" />
                       <span>
                         {isVi
-                          ? '3.3 · LƯU TRỮ & CƠ CHẾ XÓA SẠCH KHÔNG TỆP MỒ CÔI'
-                          : '3.3 · RETENTION & ZERO-ORPHAN FILE DELETION'}
+                          ? '3.3 · LƯU TRỮ & CƠ CHẾ XÓA TRIỆT ĐỂ KHÔNG TỆP TỒN DƯ'
+                          : '3.3 · RETENTION & COMPLETE FILE DELETION'}
                       </span>
                     </div>
                     <h3
@@ -2391,29 +2397,35 @@ export function PrivacyPolicyPage(): JSX.Element {
                         }}
                         className="solva-glass-ring w-full rounded-[12px] border p-4 space-y-2.5 font-mono text-[12px]"
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <span style={{ color: 'var(--solva-ink)' }} className="font-semibold">
                             {isVi ? 'XÓA TỨC THÌ (/settings)' : 'SELF-SERVICE PURGE (/settings)'}
                           </span>
                           <span className="verdict-badge verdict-badge-verified px-2 py-0.5 text-[10px]">
-                            CASCADE PURGE
+                            {isVi ? 'XÓA TRIỆT ĐỂ' : 'COMPLETE PURGE'}
                           </span>
                         </div>
                         <div
                           style={{ color: 'var(--solva-muted)' }}
                           className="pt-2 border-t border-[#E7E3D9] dark:border-[#332F26] space-y-1.5"
                         >
-                          <div className="flex justify-between">
+                          <div className="flex justify-between gap-2">
                             <span>{isVi ? 'Báo cáo & phán quyết' : 'Reports & verdicts'}</span>
-                            <span className="text-emerald-600 dark:text-emerald-400">PURGED</span>
+                            <span className="text-emerald-600 dark:text-emerald-400">
+                              {isVi ? 'ĐÃ XÓA SẠCH' : 'DELETED'}
+                            </span>
                           </div>
-                          <div className="flex justify-between">
+                          <div className="flex justify-between gap-2">
                             <span>{isVi ? 'Tệp bản thảo (.pdf/.docx)' : 'Manuscripts (.pdf/.docx)'}</span>
-                            <span className="text-emerald-600 dark:text-emerald-400">ERASED</span>
+                            <span className="text-emerald-600 dark:text-emerald-400">
+                              {isVi ? 'ĐÃ GỠ BỎ' : 'REMOVED'}
+                            </span>
                           </div>
-                          <div className="flex justify-between">
+                          <div className="flex justify-between gap-2">
                             <span>{isVi ? 'Ảnh đại diện & phiên' : 'Profile photo & sessions'}</span>
-                            <span className="text-emerald-600 dark:text-emerald-400">REMOVED</span>
+                            <span className="text-emerald-600 dark:text-emerald-400">
+                              {isVi ? 'ĐÃ THU HỒI' : 'REVOKED'}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -2484,7 +2496,7 @@ export function PrivacyPolicyPage(): JSX.Element {
                     >
                       {isVi
                         ? 'Đối tác hạ tầng định danh & cổng thanh toán'
-                        : 'Identity, SMTP & Payment Infrastructure'}
+                        : 'Identity, Account Email & Payment Infrastructure'}
                     </h3>
 
                     <div className="space-y-3 pt-1">
@@ -2499,15 +2511,17 @@ export function PrivacyPolicyPage(): JSX.Element {
                           style={{ color: 'var(--solva-ink)' }}
                           className="font-solva-sans text-[15px] font-medium"
                         >
-                          Google LLC (Google OAuth 2.0 &amp; Gmail SMTP — US / Global)
+                          {isVi
+                            ? 'Google LLC (Google OAuth 2.0 & Email hệ thống — Hoa Kỳ / Quốc tế)'
+                            : 'Google LLC (Google OAuth 2.0 & Transactional Email — US / Global)'}
                         </div>
                         <p
                           style={{ color: 'var(--solva-muted)' }}
                           className="font-solva-sans text-[14px] leading-[21px]"
                         >
                           {isVi
-                            ? 'Xác thực đăng nhập bằng Google (oauth2.googleapis.com) và gửi email kích hoạt tài khoản, đặt lại mật khẩu qua giao thức SMTP TLS.'
-                            : 'Federated Google Sign-In verification (oauth2.googleapis.com) and transactional activation / password-reset emails via SMTP TLS.'}
+                            ? 'Xác thực đăng nhập bằng Google (oauth2.googleapis.com) và gửi email kích hoạt tài khoản, đặt lại mật khẩu qua kết nối mã hóa TLS.'
+                            : 'Federated Google Sign-In verification (oauth2.googleapis.com) and encrypted transactional emails for account activation and password resets over TLS.'}
                         </p>
                       </div>
 
@@ -2593,8 +2607,8 @@ export function PrivacyPolicyPage(): JSX.Element {
                       className="font-solva-sans text-[15px] leading-[23px]"
                     >
                       {isVi
-                        ? 'Khi phân tích bản thảo, CITRA KHÔNG gửi mật khẩu hay dữ liệu thanh toán cho các API này; hệ thống chỉ gửi chuỗi thông tin thư mục trích xuất từ bài viết (tiêu đề bài báo được trích dẫn, tên tác giả được trích dẫn, năm xuất bản, DOI/arXiv/PMID/ISBN hoặc URL nguồn) tới:'
-                        : 'When verifying a manuscript, CITRA NEVER transmits passwords or billing records to external registries; it queries only extracted bibliographic strings (cited titles, cited author names, years, DOI/arXiv/PMID/ISBN, or cited URLs) across:'}
+                        ? 'Khi phân tích bản thảo, CITRA tuyệt đối KHÔNG gửi toàn văn hay các chương luận văn chưa công bố ra bên ngoài, KHÔNG đưa bài viết vào bất kỳ kho đối sánh tương đồng dùng chung hay liên trường nào (không ảnh hưởng kết quả kiểm tra Turnitin của trường) và KHÔNG gửi mật khẩu hay dữ liệu thanh toán; hệ thống chỉ truy vấn các trường thư mục ngắn (tiêu đề tài liệu được trích dẫn, tên tác giả được trích dẫn, năm xuất bản, mã DOI/arXiv/PMID/ISBN hoặc URL nguồn) tới:'
+                        : 'When verifying a manuscript, CITRA NEVER transmits unpublished manuscript full text or chapters to external APIs, NEVER indexes submissions into any shared cross-user or inter-university similarity pool (zero impact on subsequent Turnitin or institutional checks), and NEVER shares passwords or billing records — querying only short cited bibliographic fields (cited titles, cited author names, publication years, DOI/arXiv/PMID/ISBN, or cited URLs) across:'}
                     </p>
 
                     <div className="flex flex-wrap gap-2 pt-1">

@@ -4,6 +4,7 @@ import {
   SolvaScrollReveal,
   SolvaTwoToneHeading,
   SolvaAnimatedMetric,
+  SolvaStickyStackCard,
 } from './SolvaPrimitives';
 import {
   StickyCardWidget,
@@ -253,5 +254,42 @@ describe('Task 5: Editorial Calm, Scroll Latch & Honest Scholarly Telemetry', ()
       vi.advanceTimersByTime(16);
     });
     expect(container.textContent).toContain('120 Graduation Theses (4,380 refs)');
+  });
+
+  it('supports configurable baseTopDesktop and baseTopMobile on SolvaStickyStackCard while preserving 92/76 defaults', () => {
+    const { getByTestId, unmount } = render(
+      <div>
+        <SolvaStickyStackCard index={0} total={3}>
+          <div>Default card 0</div>
+        </SolvaStickyStackCard>
+      </div>,
+    );
+    expect(getByTestId('solva-sticky-card-0').style.top).toBe('92px');
+    unmount();
+
+    const { getByTestId: getCustomByTestId } = render(
+      <div>
+        <SolvaStickyStackCard index={0} total={3} baseTopDesktop={132} baseTopMobile={118}>
+          <div>Subnav-cleared card 0</div>
+        </SolvaStickyStackCard>
+        <SolvaStickyStackCard index={1} total={3} baseTopDesktop={132} baseTopMobile={118}>
+          <div>Subnav-cleared card 1</div>
+        </SolvaStickyStackCard>
+      </div>,
+    );
+    expect(getCustomByTestId('solva-sticky-card-0').style.top).toBe('132px');
+    expect(getCustomByTestId('solva-sticky-card-1').style.top).toBe('160px');
+
+    Object.defineProperty(window, 'innerWidth', {
+      value: 390,
+      configurable: true,
+      writable: true,
+    });
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+      vi.advanceTimersByTime(50);
+    });
+    expect(getCustomByTestId('solva-sticky-card-0').style.top).toBe('118px');
+    expect(getCustomByTestId('solva-sticky-card-1').style.top).toBe('136px');
   });
 });
