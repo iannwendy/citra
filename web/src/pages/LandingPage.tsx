@@ -56,6 +56,7 @@ import { SolvaFilmSection } from '@/components/landing/CitraFilm';
 import { ThemeToggle } from '@/contexts/ThemeContext';
 import {
   type Lang,
+  notifyAnchorHashJump,
   SolvaScrollReveal,
   SolvaEyebrow,
   SolvaTwoToneHeading,
@@ -531,6 +532,7 @@ export function LandingPage() {
       setActiveWorkspaceRole(matchedRole);
     }
     if (location.hash) {
+      notifyAnchorHashJump(location.hash);
       const rawId = location.hash.slice(1);
       const targetId = rawId.startsWith('workspaces-') ? 'workspaces' : rawId;
       const targetEl = document.getElementById(targetId);
@@ -5777,6 +5779,9 @@ function SolvaFooter({
                                   e.preventDefault();
                                   if (lnk.href) {
                                     window.history.replaceState(null, '', lnk.href);
+                                    notifyAnchorHashJump(
+                                      lnk.href.startsWith('#') ? lnk.href : window.location.hash,
+                                    );
                                   }
                                   onSelectWorkspaceRole(lnk.role!);
                                 }

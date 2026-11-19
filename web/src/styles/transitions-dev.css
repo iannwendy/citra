@@ -514,7 +514,7 @@
   }
   to {
     opacity: 0;
-    transform: translate3d(0, -3px, 0) scale(var(--dropdown-closing-scale));
+    transform: translate3d(0, calc(var(--distance-micro) * -0.75), 0) scale(var(--dropdown-closing-scale));
   }
 }
 

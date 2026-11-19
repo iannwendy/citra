@@ -270,6 +270,7 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
       '/register',
       '/forgot-password',
       '/privacy',
+      '/terms',
     ]) {
       await page.goto(publicRoute);
       await page.waitForTimeout(250);
@@ -285,17 +286,19 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
       ).toBeLessThanOrEqual(430);
     }
 
-    // Verify mobile hamburger menu on LandingPage uses IconSwap (.t-icon-swap) and dismisses via Escape
-    await page.goto('/');
-    const mobileMenuBtn = page.getByRole('button', { name: 'Toggle navigation menu' });
-    await expect(mobileMenuBtn).toBeVisible();
-    await expect(mobileMenuBtn.locator('.t-icon-swap')).toHaveAttribute('data-state', 'a');
-    await mobileMenuBtn.click();
-    await expect(mobileMenuBtn.locator('.t-icon-swap')).toHaveAttribute('data-state', 'b');
-    await expect(page.locator('.t-mobile-drawer.is-open')).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(mobileMenuBtn).toHaveAttribute('aria-expanded', 'false');
-    await expect(mobileMenuBtn).toBeFocused();
+    // Verify mobile hamburger menu on LandingPage & TermsOfServicePage uses IconSwap (.t-icon-swap) and dismisses via Escape with focus restoration
+    for (const drawerRoute of ['/', '/terms']) {
+      await page.goto(drawerRoute);
+      const mobileMenuBtn = page.getByRole('button', { name: 'Toggle navigation menu' });
+      await expect(mobileMenuBtn).toBeVisible();
+      await expect(mobileMenuBtn.locator('.t-icon-swap')).toHaveAttribute('data-state', 'a');
+      await mobileMenuBtn.click();
+      await expect(mobileMenuBtn.locator('.t-icon-swap')).toHaveAttribute('data-state', 'b');
+      await expect(page.locator('.t-mobile-drawer.is-open')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(mobileMenuBtn).toHaveAttribute('aria-expanded', 'false');
+      await expect(mobileMenuBtn).toBeFocused();
+    }
 
     // B) Authenticated routes on iPhone 14 Pro Max (430x932)
     setupAuthenticatedPage(page);

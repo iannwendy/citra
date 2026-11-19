@@ -1,15 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, Link } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import i18n from '@/i18n';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { AuthContext } from '@/contexts/AuthContext';
 import { CitraMotionProvider } from '@/components/ui/motion-primitives';
-import { SolvaScrollReveal } from '@/components/landing/SolvaPrimitives';
+import {
+  notifyAnchorHashJump,
+  SolvaScrollReveal,
+  SolvaTwoToneHeading,
+  SolvaAnimatedMetric,
+} from '@/components/landing/SolvaPrimitives';
 import { LandingPage } from '@/pages/LandingPage';
 import { PricingPage } from '@/pages/PricingPage';
+import { PrivacyPolicyPage } from '@/pages/PrivacyPolicyPage';
+import { TermsOfServicePage } from '@/pages/TermsOfServicePage';
 
 type IOListener = (entries: IntersectionObserverEntry[]) => void;
 
@@ -18,6 +25,7 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
 
   beforeEach(async () => {
     vi.useFakeTimers();
+    window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
     await i18n.changeLanguage('en');
     (globalThis as { __CITRA_ENABLE_TEST_MOTION__?: boolean }).__CITRA_ENABLE_TEST_MOTION__ =
       true;
@@ -58,6 +66,8 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
   afterEach(() => {
     delete (globalThis as { __CITRA_ENABLE_TEST_MOTION__?: boolean })
       .__CITRA_ENABLE_TEST_MOTION__;
+    window.history.replaceState(null, '', '/');
+    notifyAnchorHashJump('');
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -358,9 +368,97 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(pricingMobileToggle.getAttribute('aria-expanded')).toBe('false');
     expect(document.activeElement).toBe(pricingMobileToggle);
+
+    pricingView.unmount();
+
+    // 6. PrivacyPolicyPage & TermsOfServicePage mobile navigation drawers: IconSwap, .t-mobile-drawer exit presence, Escape dismiss & focus restoration
+    const privacyView = render(
+      <CitraMotionProvider>
+        <ThemeProvider defaultTheme="light">
+          <AuthContext.Provider
+            value={{
+              user: null,
+              token: null,
+              isLoading: false,
+              isAdmin: false,
+              login: vi.fn(),
+              logout: vi.fn(),
+              refreshUser: vi.fn().mockResolvedValue(undefined),
+            }}
+          >
+            <MemoryRouter initialEntries={['/privacy']}>
+              <PrivacyPolicyPage />
+            </MemoryRouter>
+          </AuthContext.Provider>
+        </ThemeProvider>
+      </CitraMotionProvider>,
+    );
+
+    const privacyMobileToggle = screen.getByRole('button', {
+      name: /Toggle navigation menu/i,
+    });
+    expect(
+      privacyMobileToggle.querySelector('.t-icon-swap')?.getAttribute('data-state'),
+    ).toBe('a');
+    fireEvent.click(privacyMobileToggle);
+    expect(privacyMobileToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(
+      privacyMobileToggle.querySelector('.t-icon-swap')?.getAttribute('data-state'),
+    ).toBe('b');
+    expect(privacyView.container.querySelector('.t-mobile-drawer.is-open')).not.toBeNull();
+    document.body.focus();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(privacyMobileToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(privacyMobileToggle);
+
+    privacyView.unmount();
+
+    const termsView = render(
+      <CitraMotionProvider>
+        <ThemeProvider defaultTheme="light">
+          <AuthContext.Provider
+            value={{
+              user: null,
+              token: null,
+              isLoading: false,
+              isAdmin: false,
+              login: vi.fn(),
+              logout: vi.fn(),
+              refreshUser: vi.fn().mockResolvedValue(undefined),
+            }}
+          >
+            <MemoryRouter initialEntries={['/terms']}>
+              <TermsOfServicePage />
+            </MemoryRouter>
+          </AuthContext.Provider>
+        </ThemeProvider>
+      </CitraMotionProvider>,
+    );
+
+    const termsMobileToggle = screen.getByRole('button', {
+      name: /Toggle navigation menu/i,
+    });
+    expect(
+      termsMobileToggle.querySelector('.t-icon-swap')?.getAttribute('data-state'),
+    ).toBe('a');
+    fireEvent.click(termsMobileToggle);
+    expect(termsMobileToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(
+      termsMobileToggle.querySelector('.t-icon-swap')?.getAttribute('data-state'),
+    ).toBe('b');
+    expect(termsView.container.querySelector('.t-mobile-drawer.is-open')).not.toBeNull();
+    document.body.focus();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(termsMobileToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(termsMobileToggle);
+    expect(termsView.container.querySelector('.t-mobile-drawer.is-closing')).not.toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(160);
+    });
+    expect(termsView.container.querySelector('.t-mobile-drawer')).toBeNull();
   });
 
-  it('SolvaScrollReveal immediately reveals content on #hash anchor jump without blank opacity:0 gaps and mounts visible under prefers-reduced-motion: reduce', () => {
+  it('SolvaScrollReveal, SolvaTwoToneHeading, and SolvaAnimatedMetric snap on frame 0 (transitionProperty: none, 0ms delay) on #hash & replaceState anchor jumps and prefers-reduced-motion: reduce', () => {
     window.history.replaceState(null, '', '/');
 
     // Mock element off-screen below fold (rect.top = 2400 > vh = 900) so scroll reveal starts hidden
@@ -380,18 +478,30 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
 
     const { container, unmount } = render(
       <section id="benchmark-120k">
-        <SolvaScrollReveal>
+        <SolvaScrollReveal delayMs={240}>
           <div data-testid="anchor-reveal-payload">120,000 Papers Verified</div>
         </SolvaScrollReveal>
+        <SolvaTwoToneHeading
+          primary="Empirical scale"
+          secondary="across scholarly APIs"
+          delayMs={180}
+        />
+        <SolvaAnimatedMetric targetValue={120000} suffix="+" label="Papers" />
       </section>,
     );
 
     const revealWrapper = container.querySelector('#benchmark-120k > div') as HTMLElement;
+    const headingWord = container.querySelector('#benchmark-120k h2 span span') as HTMLElement;
+    const metricWrapper = container.querySelectorAll('#benchmark-120k > div')[1] as HTMLElement;
     expect(revealWrapper).not.toBeNull();
-    // Before anchor jump while off-screen below the fold, wrapper starts cloaked
+    expect(headingWord).not.toBeNull();
+    expect(metricWrapper).not.toBeNull();
+    // Before anchor jump while off-screen below the fold, primitives start cloaked
     expect(Number.parseFloat(revealWrapper.style.opacity)).toBeLessThan(0.05);
+    expect(Number.parseFloat(headingWord.style.opacity)).toBeLessThan(0.05);
+    expect(Number.parseFloat(metricWrapper.style.opacity)).toBeLessThan(0.05);
 
-    // Simulate anchor jump to #benchmark-120k -> SolvaScrollReveal inside target section reveals immediately (zero blank white gap!)
+    // Simulate anchor jump to #benchmark-120k -> frame-0 instant reveal (transitionProperty: 'none', 0ms delay, zero 700ms fade lag!)
     act(() => {
       window.history.replaceState(null, '', '#benchmark-120k');
       window.dispatchEvent(new Event('hashchange'));
@@ -399,9 +509,79 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
 
     expect(revealWrapper.style.opacity).toBe('1');
     expect(revealWrapper.style.filter).toBe('none');
+    expect(revealWrapper.style.transform).toBe('none');
+    expect(revealWrapper.style.transitionProperty).toBe('none');
+    expect(revealWrapper.style.transitionDuration).toBe('0ms');
+    expect(revealWrapper.style.transitionDelay).toBe('0ms');
+
+    expect(headingWord.style.opacity).toBe('1');
+    expect(headingWord.style.filter).toBe('none');
+    expect(headingWord.style.transform).toBe('none');
+    expect(headingWord.style.transitionProperty).toBe('none');
+    expect(headingWord.style.transitionDuration).toBe('0ms');
+    expect(headingWord.style.transitionDelay).toBe('0ms');
+
+    expect(metricWrapper.style.opacity).toBe('1');
+    expect(metricWrapper.style.filter).toBe('none');
+    expect(metricWrapper.style.transform).toBe('none');
+    expect(metricWrapper.style.transition).toBe('none');
 
     unmount();
     window.history.replaceState(null, '', '/');
+
+    // Verify clicking SolvaFooter role link (#workspaces-teacher) dispatches hashchange despite replaceState and snaps #workspaces open on frame 0
+    Element.prototype.scrollIntoView = vi.fn();
+    const landingView = renderLanding();
+    const workspacesSection = landingView.container.querySelector('#workspaces') as HTMLElement;
+    const workspacesHeadingWord = workspacesSection.querySelector('h2 span span') as HTMLElement;
+    expect(Number.parseFloat(workspacesHeadingWord.style.opacity)).toBeLessThan(0.05);
+
+    const footer = landingView.container.querySelector('footer') as HTMLElement;
+    const teacherRoleLink = within(footer).getByRole('link', { name: /Teacher Classroom/i });
+    fireEvent.click(teacherRoleLink);
+
+    expect(window.location.hash).toBe('#workspaces-teacher');
+    expect(workspacesHeadingWord.style.opacity).toBe('1');
+    expect(workspacesHeadingWord.style.transitionProperty).toBe('none');
+    expect(workspacesHeadingWord.style.transitionDelay).toBe('0ms');
+
+    landingView.unmount();
+    window.history.replaceState(null, '', '/');
+    act(() => {
+      notifyAnchorHashJump('');
+    });
+
+    // Verify SPA React Router <Link to="/#benchmark-120k"> (pushState without native hashchange) also snaps target open on frame 0
+    const spaView = render(
+      <CitraMotionProvider>
+        <ThemeProvider defaultTheme="light">
+          <MemoryRouter initialEntries={['/privacy']}>
+            <Routes>
+              <Route
+                path="/privacy"
+                element={
+                  <Link to="/#benchmark-120k" data-testid="spa-bench-link">
+                    120K Benchmark
+                  </Link>
+                }
+              />
+              <Route path="/" element={<LandingPage />} />
+            </Routes>
+          </MemoryRouter>
+        </ThemeProvider>
+      </CitraMotionProvider>,
+    );
+    fireEvent.click(spaView.getByTestId('spa-bench-link'));
+    const spaBenchSection = spaView.container.querySelector('#benchmark-120k') as HTMLElement;
+    const spaBenchHeadingWord = spaBenchSection.querySelector('h2 span span') as HTMLElement;
+    expect(spaBenchHeadingWord.style.opacity).toBe('1');
+    expect(spaBenchHeadingWord.style.transitionProperty).toBe('none');
+    expect(spaBenchHeadingWord.style.transitionDelay).toBe('0ms');
+
+    spaView.unmount();
+    act(() => {
+      notifyAnchorHashJump('');
+    });
 
     // Verify prefers-reduced-motion: reduce mounts immediately visible with no opacity/transform cloaking
     Object.defineProperty(window, 'matchMedia', {
@@ -472,7 +652,10 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
       cancelable: true,
       button: 0,
     });
-    const plainNotCancelled = teacherLink.dispatchEvent(plainClickEvent);
+    let plainNotCancelled = true;
+    act(() => {
+      plainNotCancelled = teacherLink.dispatchEvent(plainClickEvent);
+    });
     expect(plainNotCancelled).toBe(false);
   });
 });

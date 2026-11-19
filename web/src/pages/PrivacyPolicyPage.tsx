@@ -552,19 +552,19 @@ function PrivacySolvaHeader({
   }, [mobileMenuOpen]);
 
   const sectionLinks = getPolicySectionLinks(lang);
-  const globalLinks =
+  const globalLinks: Array<{ label: string; to?: string; href?: string; active?: boolean }> =
     lang === 'vi'
       ? [
           { label: 'Trang chủ', to: '/' },
-          { label: 'Kiến trúc', href: '/#architecture' },
-          { label: 'Thực nghiệm 120K', href: '/#benchmark-120k' },
+          { label: 'Kiến trúc', to: '/#architecture' },
+          { label: 'Thực nghiệm 120K', to: '/#benchmark-120k' },
           { label: 'Bảng giá', to: '/pricing' },
           { label: 'Bảo vệ dữ liệu', to: '/privacy', active: true },
         ]
       : [
           { label: 'Home', to: '/' },
-          { label: 'Architecture', href: '/#architecture' },
-          { label: '120K Benchmark', href: '/#benchmark-120k' },
+          { label: 'Architecture', to: '/#architecture' },
+          { label: '120K Benchmark', to: '/#benchmark-120k' },
           { label: 'Pricing', to: '/pricing' },
           { label: 'Privacy', to: '/privacy', active: true },
         ];

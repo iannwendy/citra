@@ -100,13 +100,28 @@ function handleGlobalResize() {
   requestScrollFrame(true);
 }
 
+let activeAnchorHash = '';
+
+export function notifyAnchorHashJump(hashOverride?: string) {
+  if (typeof window === 'undefined') return;
+  if (typeof hashOverride === 'string') {
+    activeAnchorHash = hashOverride;
+  } else {
+    activeAnchorHash = window.location.hash;
+  }
+  window.dispatchEvent(new Event('hashchange'));
+}
+
 function handleGlobalHashChange() {
+  if (typeof window !== 'undefined' && window.location.hash) {
+    activeAnchorHash = window.location.hash;
+  }
   requestScrollFrame(true);
 }
 
 function resolveAnchorTargetElement(): Element | null {
   if (typeof window === 'undefined' || typeof document === 'undefined') return null;
-  const rawHash = window.location.hash;
+  const rawHash = window.location.hash || activeAnchorHash;
   if (!rawHash || rawHash.length <= 1) return null;
   let rawId = rawHash.slice(1);
   try {
@@ -288,6 +303,7 @@ export function SolvaScrollReveal({
     reduced ? 'visible' : 'below'
   );
   const [settled, setSettled] = useState<boolean>(reduced);
+  const [instant, setInstant] = useState<boolean>(reduced);
 
   useEffect(() => {
     if (reduced) {
@@ -295,6 +311,7 @@ export function SolvaScrollReveal({
       phaseRef.current = 'visible';
       setPhase('visible');
       setSettled(true);
+      setInstant(true);
       return;
     }
     const el = ref.current;
@@ -307,6 +324,7 @@ export function SolvaScrollReveal({
       if (isRevealedByAnchorJump(el)) {
         latchedRef.current = true;
         phaseRef.current = 'visible';
+        setInstant(true);
         setPhase('visible');
         setSettled(true);
         unsub?.();
@@ -330,6 +348,7 @@ export function SolvaScrollReveal({
         latchedRef.current = true;
         phaseRef.current = 'visible';
         schedule(() => {
+          setInstant(true);
           setPhase('visible');
           setSettled(true);
           unsub?.();
@@ -371,9 +390,10 @@ export function SolvaScrollReveal({
   }, [triggerRatio, reversible, reduced]);
 
   const isVisible = phase === 'visible';
+  const skipMotion = reduced || instant;
 
   useEffect(() => {
-    if (reduced) return;
+    if (skipMotion) return;
     if (!isVisible) {
       setSettled(false);
       return;
@@ -382,26 +402,29 @@ export function SolvaScrollReveal({
       setSettled(true);
     }, delayMs + 720);
     return () => window.clearTimeout(timer);
-  }, [isVisible, delayMs, reduced]);
+  }, [isVisible, delayMs, skipMotion]);
 
   const translateY = phase === 'below' ? yOffset : phase === 'above' ? -16 : 0;
   const currentScale = isVisible ? 1 : scaleFrom;
   const currentOpacity = isVisible ? 1 : 0.001;
   const currentBlur = isVisible ? 0 : blurPx;
-  const activeDelay = isVisible ? delayMs : 0;
+  const activeDelay = skipMotion ? 0 : isVisible ? delayMs : 0;
 
   return (
     <div
       ref={ref}
       style={{
         opacity: currentOpacity,
-        transform: settled ? 'none' : `translate3d(0, ${translateY}px, 0) scale(${currentScale})`,
+        transform:
+          settled || skipMotion
+            ? 'none'
+            : `translate3d(0, ${translateY}px, 0) scale(${currentScale})`,
         filter: currentBlur > 0 ? `blur(${currentBlur}px)` : 'none',
-        transitionProperty: reduced ? 'none' : 'opacity, transform, filter',
-        transitionDuration: isVisible ? '700ms' : '420ms',
+        transitionProperty: skipMotion ? 'none' : 'opacity, transform, filter',
+        transitionDuration: skipMotion ? '0ms' : isVisible ? '700ms' : '420ms',
         transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
         transitionDelay: `${activeDelay}ms`,
-        willChange: settled ? 'auto' : 'transform, opacity, filter',
+        willChange: settled || skipMotion ? 'auto' : 'transform, opacity, filter',
       }}
       className={className}
     >
@@ -479,6 +502,7 @@ export function SolvaTwoToneHeading({
     reduced ? 'visible' : 'below'
   );
   const [wordsSettled, setWordsSettled] = useState<boolean>(reduced);
+  const [instant, setInstant] = useState<boolean>(reduced);
 
   useEffect(() => {
     if (reduced) {
@@ -486,6 +510,7 @@ export function SolvaTwoToneHeading({
       phaseRef.current = 'visible';
       setPhase('visible');
       setWordsSettled(true);
+      setInstant(true);
       return;
     }
     const el = ref.current;
@@ -498,6 +523,7 @@ export function SolvaTwoToneHeading({
       if (isRevealedByAnchorJump(el)) {
         latchedRef.current = true;
         phaseRef.current = 'visible';
+        setInstant(true);
         setPhase('visible');
         setWordsSettled(true);
         unsub?.();
@@ -521,6 +547,7 @@ export function SolvaTwoToneHeading({
         latchedRef.current = true;
         phaseRef.current = 'visible';
         schedule(() => {
+          setInstant(true);
           setPhase('visible');
           setWordsSettled(true);
           unsub?.();
@@ -585,10 +612,11 @@ export function SolvaTwoToneHeading({
   const primaryWords = normalizedPrimary.trim().split(/\s+/);
   const secondaryWords = normalizedSecondary ? normalizedSecondary.trim().split(/\s+/) : [];
   const isVisible = phase === 'visible';
+  const skipMotion = reduced || instant;
   const wordY = phase === 'below' ? 28 : phase === 'above' ? -14 : 0;
 
   useEffect(() => {
-    if (reduced) return;
+    if (skipMotion) return;
     if (!isVisible) {
       setWordsSettled(false);
       return;
@@ -599,25 +627,25 @@ export function SolvaTwoToneHeading({
       setWordsSettled(true);
     }, maxDelay);
     return () => window.clearTimeout(timer);
-  }, [isVisible, delayMs, primaryWords.length, secondaryWords.length, reduced]);
+  }, [isVisible, delayMs, primaryWords.length, secondaryWords.length, skipMotion]);
 
   const renderAnimatedWords = (words: string[], startIndex: number) =>
     words.map((word, idx) => {
       const globalIdx = startIndex + idx;
-      const delay = isVisible ? delayMs + Math.min(globalIdx * 34, 420) : 0;
+      const delay = skipMotion ? 0 : isVisible ? delayMs + Math.min(globalIdx * 34, 420) : 0;
       return (
         <Fragment key={`${word}-${idx}`}>
           <span
             className="inline-block"
             style={{
               opacity: isVisible ? 1 : 0.001,
-              transform: wordsSettled ? 'none' : `translate3d(0, ${wordY}px, 0)`,
+              transform: wordsSettled || skipMotion ? 'none' : `translate3d(0, ${wordY}px, 0)`,
               filter: isVisible ? 'none' : 'blur(4px)',
-              transitionProperty: reduced ? 'none' : 'opacity, transform, filter',
-              transitionDuration: isVisible ? '640ms' : '360ms',
+              transitionProperty: skipMotion ? 'none' : 'opacity, transform, filter',
+              transitionDuration: skipMotion ? '0ms' : isVisible ? '640ms' : '360ms',
               transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
               transitionDelay: `${delay}ms`,
-              willChange: wordsSettled ? 'auto' : 'transform, opacity, filter',
+              willChange: wordsSettled || skipMotion ? 'auto' : 'transform, opacity, filter',
             }}
           >
             {word}
@@ -1079,6 +1107,7 @@ export function SolvaAnimatedMetric({
   const ref = useRef<HTMLDivElement>(null);
   const numRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState<boolean>(reduced);
+  const [instant, setInstant] = useState<boolean>(reduced);
   const hasAnimated = useRef<boolean>(reduced);
   const animRafRef = useRef<number | null>(null);
 
@@ -1126,6 +1155,7 @@ export function SolvaAnimatedMetric({
 
     if (reduced) {
       hasAnimated.current = true;
+      setInstant(true);
       setIsVisible(true);
       if (numRef.current) {
         numRef.current.textContent = formatMetric(targetValue);
@@ -1147,6 +1177,11 @@ export function SolvaAnimatedMetric({
       if (hasAnimated.current) return true;
       if (isRevealedByAnchorJump(el)) {
         hasAnimated.current = true;
+        if (animRafRef.current !== null) {
+          cancelAnimationFrame(animRafRef.current);
+          animRafRef.current = null;
+        }
+        setInstant(true);
         setIsVisible(true);
         if (numRef.current) {
           numRef.current.textContent = formatMetric(targetValue);
@@ -1171,6 +1206,11 @@ export function SolvaAnimatedMetric({
       if (isRevealedByAnchorJump(el)) {
         hasAnimated.current = true;
         schedule(() => {
+          if (animRafRef.current !== null) {
+            cancelAnimationFrame(animRafRef.current);
+            animRafRef.current = null;
+          }
+          setInstant(true);
           setIsVisible(true);
           if (numRef.current) {
             numRef.current.textContent = formatMetric(targetValue);
@@ -1199,6 +1239,8 @@ export function SolvaAnimatedMetric({
     };
   }, [targetValue, formatMetric, reduced]);
 
+  const skipMotion = reduced || instant;
+
   return (
     <div
       ref={ref}
@@ -1206,7 +1248,7 @@ export function SolvaAnimatedMetric({
         opacity: isVisible ? 1 : 0.001,
         transform: isVisible ? 'none' : 'translate3d(0, 20px, 0)',
         filter: isVisible ? 'none' : 'blur(3px)',
-        transition: reduced
+        transition: skipMotion
           ? 'none'
           : 'opacity 560ms cubic-bezier(0.22, 1, 0.36, 1), transform 580ms cubic-bezier(0.22, 1, 0.36, 1), filter 480ms cubic-bezier(0.22, 1, 0.36, 1)',
       }}

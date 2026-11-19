@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { AuthContext } from '@/contexts/AuthContext';
 import { ThemeToggle } from '@/contexts/ThemeContext';
+import { IconSwap, useExitPresence } from '@/components/ui/transitions';
 import { SCHOLARLY_APIS_LABEL } from '@/lib/productFacts';
 import {
   type Lang,
@@ -268,12 +269,15 @@ function TermsSolvaHeader({
   sections: TermsSectionItem[];
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileToggleRef = useRef<HTMLButtonElement>(null);
+  const mobileDrawerPresence = useExitPresence(mobileMenuOpen, 150);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
     const closeOnKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setMobileMenuOpen(false);
+        mobileToggleRef.current?.focus({ preventScroll: true });
       }
     };
     window.addEventListener('keydown', closeOnKeyDown);
@@ -414,6 +418,7 @@ function TermsSolvaHeader({
           </SolvaButton>
 
           <button
+            ref={mobileToggleRef}
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-label="Toggle navigation menu"
@@ -424,20 +429,26 @@ function TermsSolvaHeader({
             }}
             className="lg:hidden inline-flex items-center justify-center w-[40px] h-[40px] rounded-[8px] cursor-pointer shrink-0"
           >
-            {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            <IconSwap
+              active={mobileMenuOpen}
+              iconA={<Menu className="w-4 h-4" />}
+              iconB={<X className="w-4 h-4" />}
+            />
           </button>
         </div>
       </div>
 
       {/* Mobile Drawer */}
-      {mobileMenuOpen && (
+      {mobileDrawerPresence.mounted && (
         <nav
           aria-label="Mobile Terms Navigation"
           style={{
             backgroundColor: 'var(--solva-bg)',
             borderColor: 'var(--solva-border)',
           }}
-          className="lg:hidden border-t border-b px-5 py-4 space-y-2 shadow-lg"
+          className={`lg:hidden border-t border-b px-5 py-4 space-y-2 shadow-lg t-mobile-drawer ${
+            mobileDrawerPresence.phase === 'open' ? 'is-open' : 'is-closing'
+          }`}
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {sections.map((sec) => (
