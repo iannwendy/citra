@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { CheckCircle, AlertTriangle, AlertCircle, XCircle, HelpCircle, Link2, Scale } from 'lucide-react';
-import { isLegalStatuteVerdict } from '@/lib/verdictExplanation';
+import { getPlainVerdictLabel, isLegalStatuteVerdict } from '@/lib/verdictExplanation';
 
 /* ============================================================
    SourceLogic — Verdict Badge Component
@@ -36,145 +36,120 @@ const _HALLUCINATED_COLOR = 'hsl(0 72% 51%)';    // #ef4444 - Red
 const _UNVERIFIABLE_COLOR = 'hsl(215 16% 47%)';    // #94a3b8 - Slate
 
 // Verdict configuration based on UX/UI Concept Section 11: Verification Status Taxonomy
+// Uses WCAG AA (>= 4.5:1) contrast pairs in Light & Dark modes
 const verdictConfig: Record<string, {
   icon: React.ReactNode;
   label: string;
-  description: string;
   bgClass: string;
   borderClass: string;
   iconColor: string;
 }> = {
-  // Main verdict types (from UX/UI concept)
   VERIFIED: {
-    icon: <CheckCircle className="h-3.5 w-3.5" />,
+    icon: <CheckCircle className="h-3.5 w-3.5 shrink-0" />,
     label: 'Verified',
-    description: 'Publication exists and metadata is consistent',
     bgClass: 'bg-emerald-50 dark:bg-emerald-950',
     borderClass: 'border-emerald-200 dark:border-emerald-800',
-    iconColor: 'text-emerald-600 dark:text-emerald-400',
+    iconColor: 'text-emerald-700 dark:text-emerald-300',
   },
   LIKELY_VERIFIED: {
-    icon: <CheckCircle className="h-3.5 w-3.5" />,
+    icon: <CheckCircle className="h-3.5 w-3.5 shrink-0" />,
     label: 'Likely Verified',
-    description: 'Strong candidate but missing some identifiers',
     bgClass: 'bg-green-50 dark:bg-green-950',
     borderClass: 'border-green-200 dark:border-green-800',
-    iconColor: 'text-green-600 dark:text-green-400',
+    iconColor: 'text-green-700 dark:text-green-300',
   },
   METADATA_ERROR: {
-    icon: <AlertTriangle className="h-3.5 w-3.5" />,
+    icon: <AlertTriangle className="h-3.5 w-3.5 shrink-0" />,
     label: 'Metadata Error',
-    description: 'Source exists but citation has incorrect metadata',
     bgClass: 'bg-amber-50 dark:bg-amber-950',
     borderClass: 'border-amber-200 dark:border-amber-800',
-    iconColor: 'text-amber-600 dark:text-amber-400',
+    iconColor: 'text-amber-800 dark:text-amber-300',
   },
   SOURCE_MISMATCH: {
-    icon: <AlertCircle className="h-3.5 w-3.5" />,
+    icon: <AlertCircle className="h-3.5 w-3.5 shrink-0" />,
     label: 'Source Mismatch',
-    description: 'Citation appears to reference a different publication',
     bgClass: 'bg-orange-50 dark:bg-orange-950',
     borderClass: 'border-orange-200 dark:border-orange-800',
-    iconColor: 'text-orange-600 dark:text-orange-400',
+    iconColor: 'text-orange-700 dark:text-orange-300',
   },
   HALLUCINATED: {
-    icon: <XCircle className="h-3.5 w-3.5" />,
+    icon: <XCircle className="h-3.5 w-3.5 shrink-0" />,
     label: 'Likely Hallucinated',
-    description: 'No matching publication found across databases',
     bgClass: 'bg-red-50 dark:bg-red-950',
     borderClass: 'border-red-200 dark:border-red-800',
-    iconColor: 'text-red-600 dark:text-red-400',
+    iconColor: 'text-red-700 dark:text-red-300',
   },
   SUSPECTED_HALLUCINATION: {
-    icon: <XCircle className="h-3.5 w-3.5" />,
+    icon: <XCircle className="h-3.5 w-3.5 shrink-0" />,
     label: 'Suspected',
-    description: 'Potentially hallucinated source detected',
     bgClass: 'bg-red-50 dark:bg-red-950',
     borderClass: 'border-red-200 dark:border-red-800',
-    iconColor: 'text-red-600 dark:text-red-400',
+    iconColor: 'text-red-700 dark:text-red-300',
   },
   UNVERIFIABLE: {
-    icon: <HelpCircle className="h-3.5 w-3.5" />,
+    icon: <HelpCircle className="h-3.5 w-3.5 shrink-0" />,
     label: 'Unverifiable',
-    description: 'Insufficient data to conclude',
     bgClass: 'bg-slate-100 dark:bg-slate-800',
     borderClass: 'border-slate-200 dark:border-slate-700',
-    iconColor: 'text-slate-600 dark:text-slate-400',
+    iconColor: 'text-slate-700 dark:text-slate-300',
   },
   UNRESOLVED: {
-    icon: <HelpCircle className="h-3.5 w-3.5" />,
+    icon: <HelpCircle className="h-3.5 w-3.5 shrink-0" />,
     label: 'Unresolved',
-    description: 'Pending verification',
     bgClass: 'bg-slate-100 dark:bg-slate-800',
     borderClass: 'border-slate-200 dark:border-slate-700',
-    iconColor: 'text-slate-600 dark:text-slate-400',
+    iconColor: 'text-slate-700 dark:text-slate-300',
   },
   RESOURCE: {
-    icon: <Link2 className="h-3.5 w-3.5" />,
+    icon: <Link2 className="h-3.5 w-3.5 shrink-0" />,
     label: 'URL Resource',
-    description: 'URL or reference link, excluded from academic citation scoring',
     bgClass: 'bg-violet-50 dark:bg-violet-950',
     borderClass: 'border-violet-200 dark:border-violet-800',
-    iconColor: 'text-violet-600 dark:text-violet-400',
+    iconColor: 'text-violet-700 dark:text-violet-300',
   },
-  // Legacy lowercase mappings (from API)
-  verified: {
-    icon: <CheckCircle className="h-3.5 w-3.5" />,
-    label: 'Verified',
-    description: 'Source verified',
-    bgClass: 'bg-emerald-50 dark:bg-emerald-950',
-    borderClass: 'border-emerald-200 dark:border-emerald-800',
-    iconColor: 'text-emerald-600 dark:text-emerald-400',
-  },
-  metadata_error: {
-    icon: <AlertTriangle className="h-3.5 w-3.5" />,
-    label: 'Metadata Error',
-    description: 'Metadata mismatch',
-    bgClass: 'bg-amber-50 dark:bg-amber-950',
-    borderClass: 'border-amber-200 dark:border-amber-800',
-    iconColor: 'text-amber-600 dark:text-amber-400',
-  },
-  source_mismatch: {
-    icon: <AlertCircle className="h-3.5 w-3.5" />,
-    label: 'Source Mismatch',
-    description: 'Source mismatch',
-    bgClass: 'bg-orange-50 dark:bg-orange-950',
-    borderClass: 'border-orange-200 dark:border-orange-800',
-    iconColor: 'text-orange-600 dark:text-orange-400',
-  },
-  suspected_hallucination: {
-    icon: <XCircle className="h-3.5 w-3.5" />,
-    label: 'Suspected',
-    description: 'Suspected hallucination',
-    bgClass: 'bg-red-50 dark:bg-red-950',
-    borderClass: 'border-red-200 dark:border-red-800',
-    iconColor: 'text-red-600 dark:text-red-400',
-  },
-  hallucinated: {
-    icon: <XCircle className="h-3.5 w-3.5" />,
+  LIKELY_HALLUCINATED: {
+    icon: <XCircle className="h-3.5 w-3.5 shrink-0" />,
     label: 'Likely Hallucinated',
-    description: 'Likely hallucinated',
     bgClass: 'bg-red-50 dark:bg-red-950',
     borderClass: 'border-red-200 dark:border-red-800',
-    iconColor: 'text-red-600 dark:text-red-400',
+    iconColor: 'text-red-700 dark:text-red-300',
   },
-  unresolved: {
-    icon: <HelpCircle className="h-3.5 w-3.5" />,
-    label: 'Unresolved',
-    description: 'Unresolved',
-    bgClass: 'bg-slate-100 dark:bg-slate-800',
-    borderClass: 'border-slate-200 dark:border-slate-700',
-    iconColor: 'text-slate-600 dark:text-slate-400',
+  SUSPECTED: {
+    icon: <XCircle className="h-3.5 w-3.5 shrink-0" />,
+    label: 'Suspected',
+    bgClass: 'bg-red-50 dark:bg-red-950',
+    borderClass: 'border-red-200 dark:border-red-800',
+    iconColor: 'text-red-700 dark:text-red-300',
   },
-  resource: {
-    icon: <Link2 className="h-3.5 w-3.5" />,
+  URL_RESOURCE: {
+    icon: <Link2 className="h-3.5 w-3.5 shrink-0" />,
     label: 'URL Resource',
-    description: 'URL or reference link, excluded from academic citation scoring',
     bgClass: 'bg-violet-50 dark:bg-violet-950',
     borderClass: 'border-violet-200 dark:border-violet-800',
-    iconColor: 'text-violet-600 dark:text-violet-400',
+    iconColor: 'text-violet-700 dark:text-violet-300',
+  },
+  WEB_RESOURCE: {
+    icon: <Link2 className="h-3.5 w-3.5 shrink-0" />,
+    label: 'URL Resource',
+    bgClass: 'bg-violet-50 dark:bg-violet-950',
+    borderClass: 'border-violet-200 dark:border-violet-800',
+    iconColor: 'text-violet-700 dark:text-violet-300',
   },
 };
+
+function normalizeVerdictKey(raw: string): string {
+  return String(raw ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_');
+}
+
+function resolveVerdictConfig(verdict: string) {
+  const key = normalizeVerdictKey(verdict);
+  return Object.prototype.hasOwnProperty.call(verdictConfig, key)
+    ? verdictConfig[key]
+    : verdictConfig.UNVERIFIABLE;
+}
 
 const sizeClasses = {
   sm: 'text-[10px] px-2 py-0.5 gap-1',
@@ -184,22 +159,69 @@ const sizeClasses = {
 
 const verdictLabelKey: Record<string, string> = {
   VERIFIED: 'verdict.verified',
-  verified: 'verdict.verified',
   LIKELY_VERIFIED: 'verdict.likelyVerified',
   METADATA_ERROR: 'verdict.metadataError',
-  metadata_error: 'verdict.metadataError',
   SOURCE_MISMATCH: 'verdict.sourceMismatch',
-  source_mismatch: 'verdict.sourceMismatch',
   HALLUCINATED: 'verdict.likelyHallucinated',
-  hallucinated: 'verdict.likelyHallucinated',
+  LIKELY_HALLUCINATED: 'verdict.likelyHallucinated',
   SUSPECTED_HALLUCINATION: 'essay.suspected',
-  suspected_hallucination: 'essay.suspected',
+  SUSPECTED: 'essay.suspected',
   UNVERIFIABLE: 'essay.unverifiable',
   UNRESOLVED: 'verdict.unresolved',
-  unresolved: 'verdict.unresolved',
   RESOURCE: 'essay.urlResource',
-  resource: 'essay.urlResource',
+  URL_RESOURCE: 'essay.urlResource',
+  WEB_RESOURCE: 'essay.urlResource',
 };
+
+function resolveVerdictPresentation(
+  verdict: string,
+  triggeredRules: string[] | undefined,
+  lang: 'en' | 'vi',
+  t: ReturnType<typeof useTranslation>['t'],
+) {
+  const isVi = lang === 'vi';
+  const normalizedKey = normalizeVerdictKey(verdict);
+  const isIncompleteMeta =
+    normalizedKey === 'METADATA_ERROR' &&
+    Boolean(triggeredRules?.includes('R-INCOMPLETE-METADATA'));
+  const isLegalResource =
+    (normalizedKey === 'RESOURCE' ||
+      normalizedKey === 'URL_RESOURCE' ||
+      normalizedKey === 'WEB_RESOURCE') &&
+    isLegalStatuteVerdict({ label: verdict, triggered_rules: triggeredRules });
+  const config = resolveVerdictConfig(verdict);
+  const plainVerdict = getPlainVerdictLabel(verdict, lang);
+  const labelKey = Object.prototype.hasOwnProperty.call(verdictLabelKey, normalizedKey)
+    ? verdictLabelKey[normalizedKey]
+    : undefined;
+  const labelText = isLegalResource
+    ? t('verdict.legalStatute', isVi ? 'Văn bản Pháp luật' : 'Legal Statute')
+    : isIncompleteMeta
+      ? t(
+          'verdict.incompleteReference',
+          isVi ? 'Thiếu quy cách trích dẫn' : 'Incomplete Reference',
+        )
+      : labelKey
+        ? t(labelKey)
+        : plainVerdict.label;
+  const descriptionText = isLegalResource
+    ? t(
+        'verdict.legalStatuteDesc',
+        isVi
+          ? 'Văn bản Pháp luật — Văn bản quy phạm pháp luật đã nhận diện; không cần chỉnh sửa và không bị tính điểm trừ trích dẫn.'
+          : 'Legal Statute — Recognized legal statute or government regulation; no action needed (excluded from academic citation penalty).',
+      )
+    : isIncompleteMeta
+      ? t(
+          'verdict.incompleteReferenceDesc',
+          isVi
+            ? 'Thiếu quy cách trích dẫn — Mục tham khảo thiếu tác giả, năm xuất bản hoặc nơi công bố (không phải nguồn bịa đặt); hãy bổ sung đầy đủ các thông tin còn thiếu.'
+            : 'Incomplete Reference — Citation lacks required fields (author, publication year, or venue) rather than being fabricated; add the missing details to complete this entry.',
+        )
+      : `${plainVerdict.label} — ${plainVerdict.actionHint}`;
+
+  return { config, isLegalResource, labelText, descriptionText };
+}
 
 export function VerdictBadge({
   verdict,
@@ -209,44 +231,18 @@ export function VerdictBadge({
   className = ''
 }: VerdictBadgeProps) {
   const { t, i18n } = useTranslation();
-  const isVi = i18n.language?.startsWith('vi');
-  const isIncompleteMeta =
-    (verdict === 'METADATA_ERROR' || verdict === 'metadata_error') &&
-    Boolean(triggeredRules?.includes('R-INCOMPLETE-METADATA'));
-  const isLegalResource =
-    (verdict === 'RESOURCE' || verdict === 'resource') &&
-    isLegalStatuteVerdict({ label: verdict, triggered_rules: triggeredRules });
-  const config = verdictConfig[verdict] || verdictConfig.UNVERIFIABLE;
-  const labelKey = verdictLabelKey[verdict];
-  const labelText = isLegalResource
-    ? isVi
-      ? 'Văn bản Pháp luật'
-      : 'Legal Statute'
-    : isIncompleteMeta
-      ? t(
-          'verdict.incompleteReference',
-          isVi ? 'Thiếu quy cách trích dẫn' : 'Incomplete Reference',
-        )
-      : labelKey
-        ? t(labelKey)
-        : config.label;
-  const descriptionText = isLegalResource
-    ? isVi
-      ? 'Văn bản quy phạm pháp luật đã nhận diện, không tính điểm phạt CIS.'
-      : 'Recognized legal statute or government regulation, excluded from academic citation penalty.'
-    : isIncompleteMeta
-      ? t(
-          'verdict.incompleteReferenceDesc',
-          isVi
-            ? 'Mục tham khảo thiếu các trường bắt buộc (tác giả, năm xuất bản hoặc nơi công bố) chứ không phải nguồn do AI bịa đặt.'
-            : 'Citation lacks required bibliographic fields (author, publication year, or academic venue) rather than being fabricated.',
-        )
-      : config.description;
+  const lang: 'en' | 'vi' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const { config, isLegalResource, labelText, descriptionText } = resolveVerdictPresentation(
+    verdict,
+    triggeredRules,
+    lang,
+    t,
+  );
 
   return (
     <span
       className={`
-        inline-flex items-center rounded-full font-semibold
+        inline-flex items-center rounded-full font-semibold whitespace-nowrap shrink-0
         ${config.bgClass} ${config.borderClass} border
         ${sizeClasses[size]}
         ${className}
@@ -255,7 +251,7 @@ export function VerdictBadge({
     >
       {showIcon && (
         <span className={config.iconColor}>
-          {isLegalResource ? <Scale className="h-3.5 w-3.5" /> : config.icon}
+          {isLegalResource ? <Scale className="h-3.5 w-3.5 shrink-0" /> : config.icon}
         </span>
       )}
       <span className={config.iconColor}>{labelText}</span>
@@ -266,25 +262,34 @@ export function VerdictBadge({
 // Compact version for inline use (icon only)
 export function VerdictBadgeCompact({
   verdict,
+  triggeredRules,
   className = ''
 }: {
   verdict: VerdictType | string;
+  triggeredRules?: string[];
   className?: string;
 }) {
-  const config = verdictConfig[verdict] || verdictConfig.UNVERIFIABLE;
+  const { t, i18n } = useTranslation();
+  const lang: 'en' | 'vi' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const { config, isLegalResource, descriptionText } = resolveVerdictPresentation(
+    verdict,
+    triggeredRules,
+    lang,
+    t,
+  );
 
   return (
     <span
       className={`
-        inline-flex items-center justify-center rounded-full
+        inline-flex items-center justify-center rounded-full shrink-0
         ${config.bgClass} ${config.borderClass} border
         w-6 h-6
         ${className}
       `}
-      title={config.description}
+      title={descriptionText}
     >
       <span className={config.iconColor}>
-        {config.icon}
+        {isLegalResource ? <Scale className="h-3.5 w-3.5 shrink-0" /> : config.icon}
       </span>
     </span>
   );
@@ -293,14 +298,23 @@ export function VerdictBadgeCompact({
 // Icon-only version
 export function VerdictIcon({
   verdict,
+  triggeredRules,
   size = 'md',
   className = ''
 }: {
   verdict: VerdictType | string;
+  triggeredRules?: string[];
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }) {
-  const config = verdictConfig[verdict] || verdictConfig.UNVERIFIABLE;
+  const { t, i18n } = useTranslation();
+  const lang: 'en' | 'vi' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const { config, isLegalResource, descriptionText } = resolveVerdictPresentation(
+    verdict,
+    triggeredRules,
+    lang,
+    t,
+  );
 
   const iconSizes = {
     sm: 'h-3 w-3',
@@ -310,11 +324,11 @@ export function VerdictIcon({
 
   return (
     <span
-      className={`inline-flex ${className}`}
-      title={`${config.label}: ${config.description}`}
+      className={`inline-flex shrink-0 ${className}`}
+      title={descriptionText}
     >
       <span className={`${config.iconColor} ${iconSizes[size]}`}>
-        {config.icon}
+        {isLegalResource ? <Scale className={`${iconSizes[size]} shrink-0`} /> : config.icon}
       </span>
     </span>
   );
@@ -322,7 +336,10 @@ export function VerdictIcon({
 
 // Get verdict color for inline highlights (underline-based status)
 export function getVerdictColor(verdict: string): string {
-  const config = verdictConfig[verdict];
+  const normalizedKey = normalizeVerdictKey(verdict);
+  const config = Object.prototype.hasOwnProperty.call(verdictConfig, normalizedKey)
+    ? verdictConfig[normalizedKey]
+    : undefined;
   if (!config) return 'border-slate-300';
 
   const colorMap: Record<string, string> = {
@@ -331,15 +348,20 @@ export function getVerdictColor(verdict: string): string {
     'bg-amber-50': 'border-amber-400',
     'bg-orange-50': 'border-orange-400',
     'bg-red-50': 'border-red-400',
+    'bg-violet-50': 'border-violet-400',
     'bg-slate-100': 'border-slate-400',
   };
 
-  return colorMap[config.bgClass] || 'border-slate-300';
+  const lightBgClass = config.bgClass.split(' ')[0];
+  return colorMap[lightBgClass] || 'border-slate-300';
 }
 
 // Get underline color for document inspector (UX/UI Concept Section 13)
 export function getVerdictUnderlineClass(verdict: string): string {
-  const config = verdictConfig[verdict];
+  const normalizedKey = normalizeVerdictKey(verdict);
+  const config = Object.prototype.hasOwnProperty.call(verdictConfig, normalizedKey)
+    ? verdictConfig[normalizedKey]
+    : undefined;
   if (!config) return 'decoration-slate-400';
 
   const underlineMap: Record<string, string> = {
@@ -348,8 +370,10 @@ export function getVerdictUnderlineClass(verdict: string): string {
     'bg-amber-50': 'decoration-amber-500',
     'bg-orange-50': 'decoration-orange-500',
     'bg-red-50': 'decoration-red-500',
+    'bg-violet-50': 'decoration-violet-500',
     'bg-slate-100': 'decoration-slate-400',
   };
 
-  return underlineMap[config.bgClass] || 'decoration-slate-400';
+  const lightBgClass = config.bgClass.split(' ')[0];
+  return underlineMap[lightBgClass] || 'decoration-slate-400';
 }

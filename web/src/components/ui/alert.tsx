@@ -5,7 +5,7 @@ import { cn } from '../../lib/utils';
 const alertVariants = cva(
   [
     'relative w-full rounded-2xl border p-4 overflow-hidden',
-    'transform-gpu transition-[transform,opacity,box-shadow] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)]',
+    'transform-gpu transition-[transform,opacity,box-shadow] duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)]',
     'shadow-[0_4px_16px_-4px_rgba(28,26,21,0.06),inset_0_1px_0_rgba(255,255,255,0.65)] dark:shadow-[0_6px_20px_-4px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.05)]',
     '[&>svg~*]:pl-7 [&>svg+div]:translate-y-[-2px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4',
   ].join(' '),

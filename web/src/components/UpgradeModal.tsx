@@ -42,7 +42,7 @@ export function UpgradeModal({
   reasonDescription,
   featureName,
 }: UpgradeModalProps) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { isPro, isUltra } = useRole();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
@@ -70,9 +70,12 @@ export function UpgradeModal({
       setError(
         err instanceof Error
           ? err.message
-          : lang === 'vi'
-            ? 'Không thể khởi tạo phiên thanh toán Stripe.'
-            : 'Could not initialize Stripe checkout session.',
+          : t(
+              'upgradeModal.checkoutInitError',
+              lang === 'vi'
+                ? 'Không thể khởi tạo phiên thanh toán. Vui lòng thử lại sau giây lát.'
+                : 'Could not start the checkout session. Please try again in a moment.',
+            ),
       );
     } finally {
       setLoadingTier(null);
@@ -93,44 +96,59 @@ export function UpgradeModal({
         <div className="shrink-0 bg-gradient-to-r from-indigo-950 via-indigo-900 to-slate-900 px-5 sm:px-6 py-4 sm:py-5 text-white relative overflow-hidden">
           <div className="flex items-start justify-between gap-4 relative z-10">
             <div className="space-y-1.5 min-w-0">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-[11px] font-mono font-semibold">
-                <Lock className="h-3 w-3 shrink-0" />
-                <span className="truncate">
+              <div className="inline-flex items-start gap-1.5 max-w-full px-2.5 py-1 rounded-lg bg-amber-400/20 border border-amber-300/30 text-amber-200 text-[11px] font-mono font-semibold leading-snug">
+                <Lock className="h-3 w-3 shrink-0 mt-0.5" />
+                <span className="min-w-0 break-words">
                   {featureName
                     ? lang === 'vi'
                       ? `TÍNH NĂNG PREMIUM · ${featureName.toUpperCase()}`
                       : `PREMIUM FEATURE · ${featureName.toUpperCase()}`
-                    : lang === 'vi'
-                      ? 'NÂNG CẤP TÀI KHOẢN CITRA PREMIUM'
-                      : 'UPGRADE TO CITRA PREMIUM'}
+                    : t(
+                        'upgradeModal.badgeDefault',
+                        lang === 'vi'
+                          ? 'NÂNG CẤP TÀI KHOẢN CITRA PREMIUM'
+                          : 'UPGRADE TO CITRA PREMIUM',
+                      )}
                 </span>
               </div>
               <DialogHeader className="text-left">
                 <DialogTitle className="font-display text-xl sm:text-2xl font-bold text-white">
                   {reasonTitle ||
                     (highlightUltra
-                      ? lang === 'vi'
-                        ? 'Nâng cấp lên CITRA Ultra cho Phòng Lab & Bộ môn'
-                        : 'Upgrade to CITRA Ultra for Labs & Departments'
-                      : lang === 'vi'
-                        ? 'Mở khóa toàn bộ sức mạnh kiểm chứng học thuật'
-                        : 'Unlock Full Academic Verification Power')}
+                      ? t(
+                          'upgradeModal.titleUltra',
+                          lang === 'vi'
+                            ? 'Nâng cấp lên CITRA Ultra cho Phòng Lab & Bộ môn'
+                            : 'Upgrade to CITRA Ultra for Labs & Departments',
+                        )
+                      : t(
+                          'upgradeModal.titlePro',
+                          lang === 'vi'
+                            ? 'Mở khóa trọn bộ công cụ kiểm chứng trích dẫn học thuật'
+                            : 'Verify Every Citation with Complete Confidence',
+                        ))}
                 </DialogTitle>
                 <DialogDescription className="text-indigo-100/90 text-sm">
                   {reasonDescription ||
                     (highlightUltra
-                      ? lang === 'vi'
-                        ? 'Bạn đang sử dụng gói CITRA Pro. Nâng cấp lên Ultra để mở khóa 1.000 bài/tháng (tối đa 100MB, 500 trang), SerpAPI Google Scholar Fallback, Không giới hạn Lớp học & Xuất Class ZIP.'
-                        : 'You are currently on CITRA Pro. Upgrade to Ultra for 1,000 checks/month (up to 100MB, 500 pages), SerpAPI Google Scholar Fallback, Unlimited Classrooms & Full Class ZIP Export.'
-                      : lang === 'vi'
-                        ? 'Gói Basic miễn phí giới hạn 3 tài liệu/tháng (tối đa 5MB, 15 trang) và không hỗ trợ xuất PDF/DOCX hay phân tích sâu.'
-                        : 'The free Basic plan is limited to 3 documents/month (max 5MB, 15 pages) without PDF/DOCX exports or deep inspection.')}
+                      ? t(
+                          'upgradeModal.descUltra',
+                          lang === 'vi'
+                            ? 'Bạn đang sử dụng gói CITRA Pro. Nâng cấp lên Ultra để kiểm tra tới 1.000 bản thảo/tháng (tối đa 100MB, 500 trang), tra cứu mở rộng trên Google Scholar, không giới hạn lớp học và tải trọn bộ báo cáo cả lớp (.ZIP).'
+                            : 'You are currently on CITRA Pro. Upgrade to Ultra for up to 1,000 manuscript checks/month (up to 100MB, 500 pages), extended Google Scholar discovery, unlimited classrooms, and full-cohort ZIP export.',
+                        )
+                      : t(
+                          'upgradeModal.descPro',
+                          lang === 'vi'
+                            ? 'Gói Basic miễn phí hỗ trợ 3 tài liệu/tháng (tối đa 5MB, 15 trang). Nâng cấp để kiểm tra trọn vẹn khóa luận, đối chiếu trang PDF trực quan và xuất báo cáo chuẩn học thuật Word/PDF.'
+                            : 'The free Basic plan includes 3 documents/month (up to 5MB, 15 pages). Upgrade to verify full-length theses, inspect citations directly on PDF pages, and export polished Word & PDF reports.',
+                        ))}
                 </DialogDescription>
               </DialogHeader>
             </div>
             <DialogClose className="rounded-lg p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 shrink-0 cursor-pointer">
               <X className="h-4 w-4" />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{t('common.close', lang === 'vi' ? 'Đóng' : 'Close')}</span>
             </DialogClose>
           </div>
         </div>
@@ -144,40 +162,48 @@ export function UpgradeModal({
             <div className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
               <span>
-                {lang === 'vi'
-                  ? 'Chọn chu kỳ thanh toán theo năm để tiết kiệm ngay 20% (Tặng >2 tháng miễn phí)'
-                  : 'Choose annual billing to save 20% instantly (Over 2 months free)'}
+                {t(
+                  'upgradeModal.annualSavingsHint',
+                  lang === 'vi'
+                    ? 'Chọn chu kỳ thanh toán theo năm để tiết kiệm ngay 20% (tặng hơn 2 tháng sử dụng)'
+                    : 'Choose annual billing to save 20% instantly (over 2 months free)',
+                )}
               </span>
             </div>
             <div
               className="inline-flex items-center p-1 rounded-xl bg-slate-200/80 dark:bg-slate-900 border border-slate-300/60 dark:border-slate-700 shrink-0"
               role="group"
-              aria-label="Billing cycle toggle"
+              aria-label={t(
+                'upgradeModal.billingCycleAriaLabel',
+                lang === 'vi' ? 'Chọn chu kỳ thanh toán' : 'Billing cycle toggle',
+              )}
             >
               <button
                 type="button"
                 data-testid="modal-cycle-monthly"
+                aria-pressed={billingCycle === 'monthly'}
                 onClick={() => setBillingCycle('monthly')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   billingCycle === 'monthly'
-                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                {lang === 'vi' ? 'Theo tháng' : 'Monthly'}
+                {t('upgradeModal.monthly', lang === 'vi' ? 'Theo tháng' : 'Monthly')}
               </button>
               <button
                 type="button"
                 data-testid="modal-cycle-annual"
+                aria-pressed={billingCycle === 'annual'}
                 onClick={() => setBillingCycle('annual')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                   billingCycle === 'annual'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <span>{lang === 'vi' ? 'Theo năm' : 'Annual'}</span>
-                <span className="px-1.5 py-0.2 rounded-full bg-emerald-500 text-white text-[10px] font-mono font-bold">
+                <span>{t('upgradeModal.annual', lang === 'vi' ? 'Theo năm' : 'Annual')}</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-mono font-bold">
                   -20%
                 </span>
               </button>
@@ -196,47 +222,50 @@ export function UpgradeModal({
             <div
               className={`rounded-2xl p-5 flex flex-col justify-between relative ${
                 highlightUltra
-                  ? 'border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 shadow-xs'
+                  ? 'border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 shadow-sm'
                   : 'border-2 border-indigo-600 dark:border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 shadow-md'
               }`}
             >
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-indigo-600 text-white">
-                      <Zap className="h-4 w-4" />
-                    </div>
-                    <div>
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-lg bg-indigo-600 text-white shrink-0">
+                        <Zap className="h-4 w-4" />
+                      </div>
                       <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
                         CITRA Pro
                       </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {lang === 'vi'
-                          ? 'Luận văn, Nghiên cứu sinh & Giảng viên'
-                          : 'Thesis writers, Researchers & Lecturers'}
-                      </p>
                     </div>
-                  </div>
-                  <Badge
-                    variant={highlightUltra ? 'secondary' : 'default'}
-                    className={
-                      highlightUltra
-                        ? 'text-[10px] font-mono'
-                        : 'bg-indigo-600 text-white text-[10px] font-mono'
-                    }
-                  >
-                    {isPro
-                      ? lang === 'vi'
-                        ? 'GÓI HIỆN TẠI'
-                        : 'CURRENT PLAN'
-                      : isUltra
+                    <Badge
+                      variant={highlightUltra ? 'secondary' : 'default'}
+                      className={
+                        highlightUltra
+                          ? 'text-[10px] font-mono whitespace-nowrap shrink-0'
+                          : 'bg-indigo-600 text-white text-[10px] font-mono whitespace-nowrap shrink-0'
+                      }
+                    >
+                      {isPro
                         ? lang === 'vi'
-                          ? 'ĐÃ BAO GỒM'
-                          : 'INCLUDED'
-                        : lang === 'vi'
-                          ? 'PHỔ BIẾN NHẤT'
-                          : 'MOST POPULAR'}
-                  </Badge>
+                          ? 'GÓI HIỆN TẠI'
+                          : 'CURRENT PLAN'
+                        : isUltra
+                          ? lang === 'vi'
+                            ? 'ĐÃ BAO GỒM'
+                            : 'INCLUDED'
+                          : lang === 'vi'
+                            ? 'PHỔ BIẾN NHẤT'
+                            : 'MOST POPULAR'}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    {t(
+                      'upgradeModal.proAudience',
+                      lang === 'vi'
+                        ? 'Khóa luận, Nghiên cứu sinh & Giảng viên'
+                        : 'Thesis writers, Researchers & Lecturers',
+                    )}
+                  </p>
                 </div>
 
                 <div className="pt-1">
@@ -244,16 +273,16 @@ export function UpgradeModal({
                     <span className="font-display text-3xl font-bold text-slate-900 dark:text-white">
                       ${proMonthlyDisplay}
                     </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                    <span className="text-xs text-slate-600 dark:text-slate-400">
                       / {lang === 'vi' ? 'tháng' : 'month'}
                     </span>
                     {billingCycle === 'annual' && (
-                      <span className="text-xs line-through text-slate-400 ml-1">
+                      <span className="text-xs line-through text-slate-500 dark:text-slate-400 ml-1">
                         $20
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+                  <p className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 mt-0.5">
                     {billingCycle === 'annual'
                       ? lang === 'vi'
                         ? 'Thanh toán $192/năm (Tiết kiệm $48/năm)'
@@ -262,23 +291,42 @@ export function UpgradeModal({
                         ? 'Thanh toán $20 định kỳ hàng tháng'
                         : 'Billed $20 monthly'}
                   </p>
+                  {lang === 'vi' && (
+                    <p
+                      data-testid="modal-pro-vnd-equivalent"
+                      className="text-[11px] font-mono font-medium text-slate-700 dark:text-slate-300 mt-0.5"
+                    >
+                      {billingCycle === 'annual' ? (
+                        <>
+                          <span className="whitespace-nowrap">≈ 400.000 ₫/tháng</span> ·{' '}
+                          <span className="whitespace-nowrap">4.800.000 ₫/năm</span>{' '}
+                          <span className="whitespace-nowrap">qua VNPay</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="whitespace-nowrap">≈ 500.000 ₫/tháng</span>{' '}
+                          <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
+                        </>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 <ul className="space-y-2 text-xs text-slate-700 dark:text-slate-300 pt-2 border-t border-slate-200/80 dark:border-slate-800">
                   {(lang === 'vi'
                     ? [
-                        '50 tài liệu (.PDF, .DOCX, .BIB, .RIS) / tháng (Tối đa 25MB, 100 trang)',
-                        'Kiểm chứng tới 200 trích dẫn / bài + Batch 10 files',
-                        'Mở khóa Document Inspector, Logic Trace & Đồ thị',
-                        'Xuất báo cáo chuẩn học thuật PDF, DOCX (Word), CSV',
-                        `Đầy đủ ${SCHOLARLY_APIS_LABEL} nguồn học thuật + Sentence-BERT & MiniLM ONNX INT8`,
+                        '50 bản thảo (.PDF, .DOCX, .BIB, .RIS) / tháng (tối đa 25MB, 100 trang)',
+                        'Kiểm chứng tới 200 trích dẫn / bài & tải lên đồng thời 10 tệp',
+                        'Mở khóa trình đọc đối chiếu trang PDF, giải thích chi tiết & sơ đồ nguồn',
+                        'Tự động chuẩn hóa danh mục (APA, IEEE, BibTeX) & xuất báo cáo Word, PDF, CSV',
+                        `Đối chiếu sâu trên ${SCHOLARLY_APIS_LABEL} thư viện học thuật quốc tế & hiểu ngữ cảnh Việt – Anh`,
                       ]
                     : [
-                        '50 checks (.PDF, .DOCX, .BIB, .RIS) / month (Up to 25MB, 100 pages)',
-                        'Up to 200 citations / doc + 10-file Batch Upload',
-                        'Unlock Document Inspector, Logic Trace & Evidence Graph',
-                        'Export academic reports in PDF, DOCX (Word) & CSV',
-                        `All ${SCHOLARLY_APIS_LABEL} Scholarly APIs + Sentence-BERT & MiniLM ONNX INT8`,
+                        '50 manuscript checks (.PDF, .DOCX, .BIB, .RIS) / month (up to 25MB, 100 pages)',
+                        'Up to 200 citations / document + 10-file simultaneous upload',
+                        'Interactive PDF page-to-source reader, step-by-step reasoning & source map',
+                        'Clean bibliography formatting (APA, IEEE, BibTeX) & Word, PDF, CSV reports',
+                        `Deep cross-checking across ${SCHOLARLY_APIS_LABEL} scholarly libraries with semantic context matching`,
                       ]
                   ).map((item) => (
                     <li key={item} className="flex items-start gap-2">
@@ -325,46 +373,49 @@ export function UpgradeModal({
               className={`rounded-2xl p-5 flex flex-col justify-between relative ${
                 highlightUltra
                   ? 'border-2 border-violet-600 dark:border-violet-500 bg-violet-50/30 dark:bg-violet-950/20 shadow-md'
-                  : 'border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs'
+                  : 'border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm'
               }`}
             >
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-violet-600 text-white">
-                      <Building2 className="h-4 w-4" />
-                    </div>
-                    <div>
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-lg bg-violet-600 text-white shrink-0">
+                        <Building2 className="h-4 w-4" />
+                      </div>
                       <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
                         CITRA Ultra
                       </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {lang === 'vi'
-                          ? 'Phòng Lab, Bộ môn & Hội đồng luận án'
-                          : 'Research Labs, Departments & Review Boards'}
-                      </p>
                     </div>
-                  </div>
-                  <Badge
-                    variant={highlightUltra ? 'default' : 'secondary'}
-                    className={
-                      highlightUltra
-                        ? 'bg-violet-600 text-white text-[10px] font-mono'
-                        : 'text-[10px] font-mono'
-                    }
-                  >
-                    {isUltra
-                      ? lang === 'vi'
-                        ? 'GÓI HIỆN TẠI'
-                        : 'CURRENT PLAN'
-                      : highlightUltra
+                    <Badge
+                      variant={highlightUltra ? 'default' : 'secondary'}
+                      className={
+                        highlightUltra
+                          ? 'bg-violet-600 text-white text-[10px] font-mono whitespace-nowrap shrink-0'
+                          : 'text-[10px] font-mono whitespace-nowrap shrink-0'
+                      }
+                    >
+                      {isUltra
                         ? lang === 'vi'
-                          ? 'KHUYÊN DÙNG NÂNG CẤP'
-                          : 'RECOMMENDED UPGRADE'
-                        : lang === 'vi'
-                          ? 'PHÒNG LAB'
-                          : 'LABS & INSTITUTION'}
-                  </Badge>
+                          ? 'GÓI HIỆN TẠI'
+                          : 'CURRENT PLAN'
+                        : highlightUltra
+                          ? lang === 'vi'
+                            ? 'KHUYÊN DÙNG NÂNG CẤP'
+                            : 'RECOMMENDED UPGRADE'
+                          : lang === 'vi'
+                            ? 'PHÒNG LAB'
+                            : 'LABS & INSTITUTION'}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    {t(
+                      'upgradeModal.ultraAudience',
+                      lang === 'vi'
+                        ? 'Phòng Lab, Bộ môn & Hội đồng luận án'
+                        : 'Research Labs, Departments & Review Boards',
+                    )}
+                  </p>
                 </div>
 
                 <div className="pt-1">
@@ -372,41 +423,60 @@ export function UpgradeModal({
                     <span className="font-display text-3xl font-bold text-slate-900 dark:text-white">
                       ${ultraMonthlyDisplay}
                     </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                    <span className="text-xs text-slate-600 dark:text-slate-400">
                       / {lang === 'vi' ? 'tháng' : 'month'}
                     </span>
                     {billingCycle === 'annual' && (
-                      <span className="text-xs line-through text-slate-400 ml-1">
+                      <span className="text-xs line-through text-slate-500 dark:text-slate-400 ml-1">
                         $200
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">
+                  <p className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300 mt-0.5">
                     {billingCycle === 'annual'
                       ? lang === 'vi'
-                        ? 'Thanh toán $1,920/năm (Tiết kiệm $480/năm)'
+                        ? 'Thanh toán $1.920/năm (Tiết kiệm $480/năm)'
                         : 'Billed $1,920/year (Save $480/year)'
                       : lang === 'vi'
                         ? 'Thanh toán $200 định kỳ hàng tháng'
                         : 'Billed $200 monthly'}
                   </p>
+                  {lang === 'vi' && (
+                    <p
+                      data-testid="modal-ultra-vnd-equivalent"
+                      className="text-[11px] font-mono font-medium text-slate-700 dark:text-slate-300 mt-0.5"
+                    >
+                      {billingCycle === 'annual' ? (
+                        <>
+                          <span className="whitespace-nowrap">≈ 4.000.000 ₫/tháng</span> ·{' '}
+                          <span className="whitespace-nowrap">48.000.000 ₫/năm</span>{' '}
+                          <span className="whitespace-nowrap">qua VNPay</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="whitespace-nowrap">≈ 5.000.000 ₫/tháng</span>{' '}
+                          <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
+                        </>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 <ul className="space-y-2 text-xs text-slate-700 dark:text-slate-300 pt-2 border-t border-slate-200/80 dark:border-slate-800">
                   {(lang === 'vi'
                     ? [
-                        'Không giới hạn lượt kiểm tra (1.000 bài/tháng)',
-                        'Tối đa 100MB & 500 trang (Luận án Tiến sĩ & Sách)',
-                        'Batch Upload công suất lớn tới 50 tài liệu cùng lúc',
-                        'Mở khóa SerpAPI Google Scholar Fallback & Active Link Check',
-                        'Không giới hạn Lớp học, Sinh viên & Xuất Class ZIP',
+                        'Hạn mức quy mô bộ môn lên tới 1.000 bản thảo / tháng',
+                        'Tối đa 100MB & 500 trang / bài (Luận án Tiến sĩ & Sách chuyên khảo)',
+                        'Rà soát hàng loạt công suất lớn tới 50 tài liệu cùng lúc',
+                        'Tra cứu mở rộng trên Google Scholar cho sách hiếm & kiểm tra DOI/liên kết sống',
+                        'Không giới hạn lớp học, sinh viên & tải trọn bộ báo cáo cả lớp (.ZIP)',
                       ]
                     : [
-                        'Unlimited monthly checks (1,000 manuscripts/mo)',
-                        'Up to 100MB & 500 pages (Dissertations & Monographs)',
-                        'High-throughput Batch Upload up to 50 files at once',
-                        'SerpAPI Google Scholar Fallback & Live DOI Reachability',
-                        'Unlimited Classrooms, Students & Full Class ZIP Export',
+                        'Department-scale volume up to 1,000 manuscripts / month',
+                        'Up to 100MB & 500 pages / file (Doctoral Dissertations & Monographs)',
+                        'High-volume batch verification up to 50 files at once',
+                        'Extended Google Scholar discovery for rare books & live DOI/link checks',
+                        'Unlimited classrooms, students & full-cohort archive export (.ZIP)',
                       ]
                   ).map((item) => (
                     <li key={item} className="flex items-start gap-2">
@@ -441,19 +511,22 @@ export function UpgradeModal({
                     ? 'Đang sử dụng gói CITRA Ultra'
                     : 'Current Plan · CITRA Ultra'
                   : lang === 'vi'
-                    ? `Nâng cấp Ultra · $${billingCycle === 'annual' ? '1,920/năm' : '200/tháng'}`
+                    ? `Nâng cấp Ultra · $${billingCycle === 'annual' ? '1.920/năm' : '200/tháng'}`
                     : `Upgrade to Ultra · $${billingCycle === 'annual' ? '1,920/yr' : '200/mo'}`}
               </Button>
             </div>
           </div>
 
           {/* Footer link to full pricing comparison */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 border-t border-slate-200/80 dark:border-slate-800 text-xs text-slate-500">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-2 border-t border-slate-200/80 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400">
             <span className="flex items-center gap-1.5">
-              <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              {lang === 'vi'
-                ? 'Thanh toán bảo mật qua Stripe & VNPay-QR/ATM · Hủy gia hạn bất cứ lúc nào'
-                : 'Secure checkout via Stripe & VNPay-QR/ATM · Cancel anytime with 1 click'}
+              <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              {t(
+                'upgradeModal.secureFooter',
+                lang === 'vi'
+                  ? 'Thanh toán bảo mật qua Stripe & VNPay-QR/ATM · Hủy gia hạn bất cứ lúc nào'
+                  : 'Secure checkout via Stripe & VNPay-QR/ATM · Cancel anytime with 1 click',
+              )}
             </span>
             <button
               type="button"
@@ -463,7 +536,10 @@ export function UpgradeModal({
               }}
               className="inline-flex items-center gap-1 font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
             >
-              {lang === 'vi' ? 'Xem bảng so sánh chi tiết 3 gói' : 'Compare all 3 plans in detail'}
+              {t(
+                'upgradeModal.comparePlansLink',
+                lang === 'vi' ? 'Xem bảng so sánh chi tiết 3 gói' : 'Compare all 3 plans in detail',
+              )}
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>

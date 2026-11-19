@@ -147,6 +147,17 @@ const RULE_LABELS: Record<string, string> = {
   'R-YEAR-MISMATCH': 'Publication year in the citation differs from the canonical registry record',
   'R-DOI-METADATA-MISMATCH': 'Cited DOI differs from the canonical DOI of the matched publication',
   'R-DOI-CONFLICT': 'Conflicting DOI identifiers returned across scholarly registries',
+  R00_PRECONDITION_HALT: 'Stopped early due to missing required bibliographic identifiers',
+  R01_EXACT_DOI: 'Exact DOI resolved and matched to the canonical publication record',
+  R01_DOI_EXACT: 'Exact DOI resolved and matched to the canonical publication record',
+  R01_DOI_MATCH: 'DOI identifier matches the registered scholarly record',
+  R04_AUTHOR_OVERLAP: 'Cited author list aligns with the official publication authors',
+  R05_YEAR_DRIFT: 'Cited publication year differs from the official publication date',
+  R07_VENUE_MISMATCH: 'Cited journal or conference differs from the official publication venue',
+  R09_SEMANTIC_ALIGN: 'In-text claim aligns semantically with the source abstract',
+  R12_GHOST_DOI: 'Cited DOI does not exist in global DOI registration agencies',
+  R14_ZERO_TITLE_HIT: 'Zero scholarly publications match the cited article title',
+  R16_SYNTHETIC_PATTERN: 'Citation exhibits synthetic or AI-fabricated bibliographic patterns',
 };
 
 const RULE_LABELS_VI: Record<string, string> = {
@@ -225,6 +236,17 @@ const RULE_LABELS_VI: Record<string, string> = {
   'R-YEAR-MISMATCH': 'Năm xuất bản trong trích dẫn sai lệch so với bản ghi học thuật chính thức',
   'R-DOI-METADATA-MISMATCH': 'Mã DOI trích dẫn sai lệch so với mã DOI chính thức của ấn phẩm',
   'R-DOI-CONFLICT': 'Các cơ sở dữ liệu học thuật trả về mã DOI mâu thuẫn nhau',
+  R00_PRECONDITION_HALT: 'Tạm dừng đối chiếu do thiếu thông tin định danh thư mục tối thiểu',
+  R01_EXACT_DOI: 'Mã DOI phân giải chính xác và khớp hoàn toàn với bản ghi gốc',
+  R01_DOI_EXACT: 'Mã DOI phân giải chính xác và khớp hoàn toàn với bản ghi gốc',
+  R01_DOI_MATCH: 'Mã DOI khớp với hồ sơ ấn phẩm đã đăng ký trên thư viện học thuật',
+  R04_AUTHOR_OVERLAP: 'Danh sách tác giả trích dẫn khớp với tác giả trên bản ghi gốc',
+  R05_YEAR_DRIFT: 'Năm xuất bản ghi trong bài bị lệch so với năm phát hành chính thức',
+  R07_VENUE_MISMATCH: 'Tên tạp chí hoặc kỷ yếu trích dẫn không khớp với nơi công bố gốc',
+  R09_SEMANTIC_ALIGN: 'Nội dung câu trích dẫn tương đồng ngữ nghĩa với tóm tắt bài báo gốc',
+  R12_GHOST_DOI: 'Mã DOI không tồn tại trên hệ thống đăng ký DOI học thuật toàn cầu',
+  R14_ZERO_TITLE_HIT: 'Không có công trình học thuật nào khớp với tiêu đề được trích dẫn',
+  R16_SYNTHETIC_PATTERN: 'Phát hiện dấu hiệu ghép nối thông tin giả tạo thường gặp ở văn bản AI',
 };
 
 export function getSourceDisplayName(
@@ -448,6 +470,332 @@ export function getVerdictDisplayName(label: string, lang?: 'en' | 'vi'): string
     resource: 'Web resource',
   };
   return labels[label] ?? 'Needs manual review';
+}
+
+export interface PlainVerdictLabel {
+  label: string;
+  actionHint: string;
+  technicalCode: string;
+}
+
+export interface PlainMappingLabel {
+  label: string;
+  actionHint: string;
+  technicalCode: string;
+}
+
+interface BilingualPlainEntry {
+  technicalCode: string;
+  en: { label: string; actionHint: string };
+  vi: { label: string; actionHint: string };
+}
+
+const PLAIN_VERDICT_ENTRIES: Record<string, BilingualPlainEntry> = {
+  VERIFIED: {
+    technicalCode: 'VERIFIED',
+    en: {
+      label: 'Verified Source',
+      actionHint:
+        'Matched with a real publication; author, year, and title are consistent.',
+    },
+    vi: {
+      label: 'Nguồn trích dẫn hợp lệ',
+      actionHint:
+        'Đã đối chiếu khớp với ấn phẩm thực tế về tác giả, năm xuất bản và tiêu đề.',
+    },
+  },
+  LIKELY_VERIFIED: {
+    technicalCode: 'LIKELY_VERIFIED',
+    en: {
+      label: 'Likely Verified Source',
+      actionHint:
+        'Closely matches a real publication; consider adding a DOI or direct link.',
+    },
+    vi: {
+      label: 'Nguồn có độ khớp cao',
+      actionHint:
+        'Khớp chặt với ấn phẩm thực tế; nên bổ sung thêm mã DOI hoặc đường dẫn gốc.',
+    },
+  },
+  METADATA_ERROR: {
+    technicalCode: 'METADATA_ERROR',
+    en: {
+      label: 'Citation Details Mismatch',
+      actionHint:
+        'We found the source, but its author, year, title, or DOI differs—review and update the entry.',
+    },
+    vi: {
+      label: 'Sai lệch thông tin trích dẫn',
+      actionHint:
+        'Tài liệu có thật nhưng tác giả, năm xuất bản, tiêu đề hoặc mã DOI chưa khớp với bản gốc; hãy kiểm tra và cập nhật lại.',
+    },
+  },
+  SOURCE_MISMATCH: {
+    technicalCode: 'SOURCE_MISMATCH',
+    en: {
+      label: 'Wrong Source Linked',
+      actionHint:
+        'The link or DOI points to a different work than the title cited—verify the source.',
+    },
+    vi: {
+      label: 'Nhầm lẫn nguồn trích dẫn',
+      actionHint:
+        'Đường dẫn hoặc mã DOI đang trỏ sang một tài liệu khác với tên bài được trích dẫn; hãy kiểm tra lại nguồn.',
+    },
+  },
+  SUSPECTED_HALLUCINATION: {
+    technicalCode: 'SUSPECTED_HALLUCINATION',
+    en: {
+      label: 'Source Not Found',
+      actionHint:
+        'No matching publication was found in academic libraries—verify the original paper or replace this citation.',
+    },
+    vi: {
+      label: 'Không tìm thấy nguồn gốc',
+      actionHint:
+        'Không tìm thấy tài liệu này trên các thư viện học thuật; hãy kiểm tra lại bản gốc hoặc thay thế nguồn trích dẫn.',
+    },
+  },
+  UNRESOLVED: {
+    technicalCode: 'UNRESOLVED',
+    en: {
+      label: 'Needs Manual Check',
+      actionHint:
+        'This may be a print book, thesis, or local document not indexed online—please verify manually.',
+    },
+    vi: {
+      label: 'Cần kiểm tra thủ công',
+      actionHint:
+        'Có thể là sách in, giáo trình nội bộ hoặc luận văn chưa có bản trực tuyến; vui lòng đối chiếu thủ công.',
+    },
+  },
+  UNVERIFIABLE: {
+    technicalCode: 'UNVERIFIABLE',
+    en: {
+      label: 'Needs Manual Check',
+      actionHint:
+        'This may be a print book, thesis, or local document not indexed online—please verify manually.',
+    },
+    vi: {
+      label: 'Cần kiểm tra thủ công',
+      actionHint:
+        'Có thể là sách in, giáo trình nội bộ hoặc luận văn chưa có bản trực tuyến; vui lòng đối chiếu thủ công.',
+    },
+  },
+  RESOURCE: {
+    technicalCode: 'RESOURCE',
+    en: {
+      label: 'Web Link / Reference Document',
+      actionHint:
+        'Recognized as a general web link or official regulation rather than a journal article (not penalized in your score).',
+    },
+    vi: {
+      label: 'Liên kết web / Tài liệu tham chiếu',
+      actionHint:
+        'Đây là trang web hoặc văn bản quy định chung thay vì bài báo học thuật (không bị tính điểm trừ).',
+    },
+  },
+};
+
+const PLAIN_VERDICT_ALIASES: Record<string, string> = {
+  HALLUCINATED: 'SUSPECTED_HALLUCINATION',
+  LIKELY_HALLUCINATED: 'SUSPECTED_HALLUCINATION',
+  SUSPECTED: 'SUSPECTED_HALLUCINATION',
+  URL_RESOURCE: 'RESOURCE',
+  WEB_RESOURCE: 'RESOURCE',
+};
+
+const PLAIN_MAPPING_ENTRIES: Record<string, BilingualPlainEntry> = {
+  MATCHED: {
+    technicalCode: 'MATCHED',
+    en: {
+      label: 'Linked to Bibliography',
+      actionHint:
+        'In-text citation cleanly connects to its matching bibliography entry.',
+    },
+    vi: {
+      label: 'Đã khớp danh mục tham khảo',
+      actionHint:
+        'Trích dẫn trong bài đã kết nối chính xác với mục tương ứng ở cuối bài.',
+    },
+  },
+  MISSING_REFERENCE: {
+    technicalCode: 'MISSING_REFERENCE',
+    en: {
+      label: 'Missing from Bibliography',
+      actionHint:
+        'Cited in the essay body, but missing from your final reference list—add the full entry at the end.',
+    },
+    vi: {
+      label: 'Thiếu ở danh mục tham khảo',
+      actionHint:
+        'Đã trích dẫn trong bài viết nhưng chưa liệt kê ở danh mục Tài liệu tham khảo cuối bài; hãy bổ sung mục này vào cuối bài.',
+    },
+  },
+  UNCITED_REFERENCE: {
+    technicalCode: 'UNCITED_REFERENCE',
+    en: {
+      label: 'Listed but Never Cited',
+      actionHint:
+        'Appears in your bibliography, but is never cited in the essay text—cite it in-text or remove it.',
+    },
+    vi: {
+      label: 'Có ở danh mục nhưng chưa trích dẫn',
+      actionHint:
+        'Có tên trong danh mục tham khảo cuối bài nhưng chưa được trích dẫn ở đoạn văn nào trong bài; hãy trích dẫn trong bài hoặc lược bỏ.',
+    },
+  },
+  IN_TEXT_MISMATCH: {
+    technicalCode: 'IN_TEXT_MISMATCH',
+    en: {
+      label: 'In-Text Author or Year Mismatch',
+      actionHint:
+        'The author spelling or year in your sentence differs from the bibliography entry—make both match.',
+    },
+    vi: {
+      label: 'Lệch tên tác giả hoặc năm trong bài',
+      actionHint:
+        'Tên tác giả hoặc năm viết trong câu văn chưa khớp với mục tương ứng ở danh mục tham khảo; hãy chỉnh lại cho khớp.',
+    },
+  },
+  DUPLICATE_REFERENCE: {
+    technicalCode: 'DUPLICATE_REFERENCE',
+    en: {
+      label: 'Duplicate Bibliography Entry',
+      actionHint:
+        'This work is listed more than once in your reference list—merge the duplicate entries.',
+    },
+    vi: {
+      label: 'Trùng lặp mục tham khảo',
+      actionHint:
+        'Tài liệu này đang bị liệt kê nhiều lần trong danh mục tham khảo; hãy gộp lại thành một mục.',
+    },
+  },
+  AMBIGUOUS_MAPPING: {
+    technicalCode: 'AMBIGUOUS_MAPPING',
+    en: {
+      label: 'Matches Multiple References',
+      actionHint:
+        'This in-text citation could refer to two or more bibliography entries—add a year suffix (e.g., 2023a, 2023b) to clarify.',
+    },
+    vi: {
+      label: 'Khớp với nhiều mục tham khảo',
+      actionHint:
+        'Trích dẫn trong bài có thể chỉ tới nhiều tài liệu cùng tác giả/năm; hãy thêm ký hiệu phân biệt (như 2023a, 2023b).',
+    },
+  },
+  STYLE_INCONSISTENT: {
+    technicalCode: 'STYLE_INCONSISTENT',
+    en: {
+      label: 'Inconsistent Citation Style',
+      actionHint:
+        'This citation mixes formatting styles (such as APA and IEEE)—format all citations with one consistent style.',
+    },
+    vi: {
+      label: 'Chưa đồng nhất chuẩn trình bày',
+      actionHint:
+        'Cách ghi trích dẫn này khác chuẩn chung của bài viết (ví dụ trộn lẫn kiểu số [1] và kiểu tên–năm); hãy thống nhất một chuẩn.',
+    },
+  },
+  UNRESOLVED: {
+    technicalCode: 'UNRESOLVED',
+    en: {
+      label: 'Needs Link Check',
+      actionHint:
+        'Could not automatically connect this citation to a bibliography entry—please check the pairing manually.',
+    },
+    vi: {
+      label: 'Cần kiểm tra liên kết thủ công',
+      actionHint:
+        'Chưa thể tự động nối trích dẫn này với danh mục cuối bài; vui lòng kiểm tra lại thủ công.',
+    },
+  },
+};
+
+const PLAIN_MAPPING_ALIASES: Record<string, string> = {
+  LINKED: 'MATCHED',
+  MISSING: 'MISSING_REFERENCE',
+  MISSING_REF: 'MISSING_REFERENCE',
+  UNCITED: 'UNCITED_REFERENCE',
+  UNCITED_REF: 'UNCITED_REFERENCE',
+  MISMATCH: 'IN_TEXT_MISMATCH',
+  DUPLICATE: 'DUPLICATE_REFERENCE',
+  AMBIGUOUS: 'AMBIGUOUS_MAPPING',
+  STYLE: 'STYLE_INCONSISTENT',
+  STYLE_ISSUE: 'STYLE_INCONSISTENT',
+};
+
+function normalizeStatusCode(raw: string): string {
+  return String(raw ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_');
+}
+
+// ES2020-compatible equivalent of Object.hasOwn (web/tsconfig.json targets ES2020)
+function hasOwnKey<T extends object>(
+  record: T,
+  key: PropertyKey,
+): key is keyof T {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+export function getPlainVerdictLabel(
+  verdict: string,
+  lang?: 'en' | 'vi',
+): PlainVerdictLabel {
+  const resolved = resolveLang(lang);
+  const normalized = normalizeStatusCode(verdict);
+  const canonicalKey = hasOwnKey(PLAIN_VERDICT_ALIASES, normalized)
+    ? PLAIN_VERDICT_ALIASES[normalized]
+    : normalized;
+  const entry = hasOwnKey(PLAIN_VERDICT_ENTRIES, canonicalKey)
+    ? PLAIN_VERDICT_ENTRIES[canonicalKey]
+    : undefined;
+  if (entry) {
+    const copy = resolved === 'vi' ? entry.vi : entry.en;
+    return {
+      label: copy.label,
+      actionHint: copy.actionHint,
+      technicalCode: entry.technicalCode,
+    };
+  }
+  const fallback = PLAIN_VERDICT_ENTRIES.UNRESOLVED;
+  const copy = resolved === 'vi' ? fallback.vi : fallback.en;
+  return {
+    label: copy.label,
+    actionHint: copy.actionHint,
+    technicalCode: normalized || 'UNRESOLVED',
+  };
+}
+
+export function getPlainMappingLabel(
+  status: string,
+  lang?: 'en' | 'vi',
+): PlainMappingLabel {
+  const resolved = resolveLang(lang);
+  const normalized = normalizeStatusCode(status);
+  const canonicalKey = hasOwnKey(PLAIN_MAPPING_ALIASES, normalized)
+    ? PLAIN_MAPPING_ALIASES[normalized]
+    : normalized;
+  const entry = hasOwnKey(PLAIN_MAPPING_ENTRIES, canonicalKey)
+    ? PLAIN_MAPPING_ENTRIES[canonicalKey]
+    : undefined;
+  if (entry) {
+    const copy = resolved === 'vi' ? entry.vi : entry.en;
+    return {
+      label: copy.label,
+      actionHint: copy.actionHint,
+      technicalCode: entry.technicalCode,
+    };
+  }
+  const fallback = PLAIN_MAPPING_ENTRIES.UNRESOLVED;
+  const copy = resolved === 'vi' ? fallback.vi : fallback.en;
+  return {
+    label: copy.label,
+    actionHint: copy.actionHint,
+    technicalCode: normalized || 'UNRESOLVED',
+  };
 }
 
 function fieldLabels(fields: string[], lang: 'en' | 'vi'): string {

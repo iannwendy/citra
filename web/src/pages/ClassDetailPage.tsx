@@ -288,7 +288,7 @@ export function ClassDetailPage() {
   return (
     <div className="space-y-5 pb-10">
       {/* Clean Class Header */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2.5 flex-wrap mb-3">
@@ -350,7 +350,7 @@ export function ClassDetailPage() {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
             <Button
               type="button"
               variant="outline"
@@ -404,7 +404,7 @@ export function ClassDetailPage() {
 
       {/* Visual Metric & Ring Gauge Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
             {t('teacher.enrolledStudents')}
           </span>
@@ -413,7 +413,7 @@ export function ClassDetailPage() {
           </p>
         </Card>
 
-        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
             {t('teacher.cohortSubmissions')}
           </span>
@@ -422,7 +422,7 @@ export function ClassDetailPage() {
           </p>
         </Card>
 
-        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex items-center justify-between gap-3">
+        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3">
           <div>
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
               {lang === 'vi' ? 'Điểm tin cậy TB' : 'Average CIS'}
@@ -440,7 +440,7 @@ export function ClassDetailPage() {
           />
         </Card>
 
-        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex items-center justify-between gap-3">
+        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3">
           <div>
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400 block">
               {lang === 'vi' ? 'Tài liệu mới (≤ 5 năm)' : '5-Year Recency'}
@@ -959,7 +959,7 @@ export function ClassDetailPage() {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2.5 min-w-0 max-w-full">
                     {isQueuedOrProcessing ? (
                       <>
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/80 border border-amber-200/80 dark:border-amber-800/80 text-xs font-medium text-amber-700 dark:text-amber-300">

@@ -1,8 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Routes, Route } from 'react-router-dom';
 import i18n from '@/i18n';
 import { renderWithProviders, makeUser, screen, fireEvent } from '@/test-utils';
 import { makeVerdict } from '@/test-fixtures';
-import { MappingStatusBadge } from './MappingStatusBadge';
+import { getPlainMappingLabel, getPlainVerdictLabel } from '@/lib/verdictExplanation';
+import {
+  VerdictBadge,
+  VerdictBadgeCompact,
+  VerdictIcon,
+  getVerdictColor,
+  getVerdictUnderlineClass,
+} from './VerdictBadge';
+import { MappingStatusBadge, MappingStatusBadgeCompact } from './MappingStatusBadge';
+import { UpgradeModal } from './UpgradeModal';
 import { RoleBadge } from './RoleBadge';
 import { OverrideControls } from './OverrideControls';
 import { UserFormDialog } from './UserFormDialog';
@@ -120,5 +130,450 @@ describe('Task 5.6 — Localized components in EN and VI', () => {
     );
     expect(screen.getByText(/Trình Khám Phá Mạng Lưới Trích Dẫn & Nguồn 2 Tầng/)).toBeDefined();
     expect(screen.getByText('Tất cả tầng')).toBeDefined();
+  });
+});
+
+describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & UpgradeModal Copy', () => {
+  beforeEach(async () => {
+    vi.restoreAllMocks();
+    await i18n.changeLanguage('en');
+  });
+
+  it('VerdictBadge, VerdictBadgeCompact, and VerdictIcon render localized labels & actionable tooltips in EN and VI with WCAG AA contrast and whitespace-nowrap', async () => {
+    const verdictPairs = [
+      ['VERIFIED', 'verified'],
+      ['METADATA_ERROR', 'metadata_error'],
+      ['SUSPECTED_HALLUCINATION', 'suspected_hallucination'],
+      ['UNRESOLVED', 'unresolved'],
+      ['RESOURCE', 'resource'],
+    ] as const;
+
+    await i18n.changeLanguage('en');
+    const { container: enContainer, unmount: unmountEn } = renderWithProviders(
+      <div>
+        {verdictPairs.flatMap(([upper, lower]) => [
+          <div key={`full-${upper}`} data-testid={`vb-${upper}`}>
+            <VerdictBadge verdict={upper} />
+          </div>,
+          <div key={`full-${lower}`} data-testid={`vb-${lower}`}>
+            <VerdictBadge verdict={lower} />
+          </div>,
+          <div key={`compact-${lower}`} data-testid={`vbc-${lower}`}>
+            <VerdictBadgeCompact verdict={lower} />
+          </div>,
+          <div key={`icon-${lower}`} data-testid={`vbi-${lower}`}>
+            <VerdictIcon verdict={lower} />
+          </div>,
+        ])}
+      </div>,
+    );
+
+    expect(enContainer.textContent).not.toContain('SUSPECTED_HALLUCINATION');
+    expect(enContainer.textContent).not.toContain('METADATA_ERROR');
+    expect(enContainer.innerHTML).not.toContain('text-emerald-600');
+    expect(enContainer.innerHTML).not.toContain('text-amber-600');
+    expect(enContainer.innerHTML).not.toContain('text-red-600');
+    expect(enContainer.innerHTML).toContain('text-emerald-700');
+    expect(enContainer.innerHTML).toContain('text-amber-800');
+    expect(enContainer.innerHTML).toContain('text-red-700');
+
+    for (const [upper, lower] of verdictPairs) {
+      const plainEn = getPlainVerdictLabel(upper, 'en');
+      const upperBadge = screen.getByTestId(`vb-${upper}`).firstElementChild as HTMLElement;
+      const lowerBadge = screen.getByTestId(`vb-${lower}`).firstElementChild as HTMLElement;
+      const compactBadge = screen.getByTestId(`vbc-${lower}`).firstElementChild as HTMLElement;
+      const iconBadge = screen.getByTestId(`vbi-${lower}`).firstElementChild as HTMLElement;
+
+      expect(upperBadge.className).toContain('whitespace-nowrap');
+      expect(lowerBadge.className).toContain('whitespace-nowrap');
+      expect(upperBadge.getAttribute('title')).toContain(plainEn.actionHint);
+      expect(lowerBadge.getAttribute('title')).toContain(plainEn.actionHint);
+      expect(compactBadge.getAttribute('title')).toContain(plainEn.actionHint);
+      expect(iconBadge.getAttribute('title')).toContain(plainEn.actionHint);
+    }
+    unmountEn();
+
+    await i18n.changeLanguage('vi');
+    const { container: viContainer } = renderWithProviders(
+      <div>
+        {verdictPairs.flatMap(([upper, lower]) => [
+          <div key={`vi-full-${upper}`} data-testid={`vi-vb-${upper}`}>
+            <VerdictBadge verdict={upper} />
+          </div>,
+          <div key={`vi-full-${lower}`} data-testid={`vi-vb-${lower}`}>
+            <VerdictBadge verdict={lower} />
+          </div>,
+          <div key={`vi-compact-${lower}`} data-testid={`vi-vbc-${lower}`}>
+            <VerdictBadgeCompact verdict={lower} />
+          </div>,
+          <div key={`vi-icon-${lower}`} data-testid={`vi-vbi-${lower}`}>
+            <VerdictIcon verdict={lower} />
+          </div>,
+        ])}
+      </div>,
+    );
+
+    expect(viContainer.textContent).not.toContain('SUSPECTED_HALLUCINATION');
+    expect(viContainer.textContent).not.toContain('METADATA_ERROR');
+    expect(viContainer.innerHTML).not.toContain('Potentially hallucinated source detected');
+    expect(viContainer.innerHTML).not.toContain('Source verified');
+    expect(viContainer.innerHTML).not.toContain('Suspected hallucination');
+
+    for (const [upper, lower] of verdictPairs) {
+      const plainVi = getPlainVerdictLabel(upper, 'vi');
+      const upperBadge = screen.getByTestId(`vi-vb-${upper}`).firstElementChild as HTMLElement;
+      const lowerBadge = screen.getByTestId(`vi-vb-${lower}`).firstElementChild as HTMLElement;
+      const compactBadge = screen.getByTestId(`vi-vbc-${lower}`).firstElementChild as HTMLElement;
+      const iconBadge = screen.getByTestId(`vi-vbi-${lower}`).firstElementChild as HTMLElement;
+
+      expect(upperBadge.className).toContain('whitespace-nowrap');
+      expect(upperBadge.getAttribute('title')).toContain(plainVi.actionHint);
+      expect(lowerBadge.getAttribute('title')).toContain(plainVi.actionHint);
+      expect(compactBadge.getAttribute('title')).toContain(plainVi.actionHint);
+      expect(iconBadge.getAttribute('title')).toContain(plainVi.actionHint);
+    }
+
+    // Verify getVerdictColor & getVerdictUnderlineClass resolve dark-mode-paired bgClass accurately
+    expect(getVerdictColor('VERIFIED')).toBe('border-emerald-400');
+    expect(getVerdictColor('metadata_error')).toBe('border-amber-400');
+    expect(getVerdictColor('suspected_hallucination')).toBe('border-red-400');
+    expect(getVerdictUnderlineClass('VERIFIED')).toBe('decoration-emerald-500');
+    expect(getVerdictUnderlineClass('metadata_error')).toBe('decoration-amber-500');
+    expect(getVerdictUnderlineClass('suspected_hallucination')).toBe('decoration-red-500');
+  });
+
+  it('MappingStatusBadge and MappingStatusBadgeCompact handle both lowercase and uppercase statuses with localized actionable tooltips and whitespace-nowrap', async () => {
+    const statusPairs = [
+      { lower: 'matched', upper: 'MATCHED', en: 'Linked', vi: 'Đã liên kết' },
+      { lower: 'missing_reference', upper: 'MISSING_REFERENCE', en: 'No Reference', vi: 'Thiếu nguồn' },
+      { lower: 'uncited_reference', upper: 'UNCITED_REFERENCE', en: 'Not Cited', vi: 'Chưa trích dẫn' },
+      { lower: 'in_text_mismatch', upper: 'IN_TEXT_MISMATCH', en: 'Mismatch', vi: 'Sai lệch' },
+      { lower: 'duplicate_reference', upper: 'DUPLICATE_REFERENCE', en: 'Duplicate', vi: 'Trùng lặp' },
+      { lower: 'ambiguous_mapping', upper: 'AMBIGUOUS_MAPPING', en: 'Ambiguous', vi: 'Mơ hồ' },
+      { lower: 'style_inconsistent', upper: 'STYLE_INCONSISTENT', en: 'Style Issue', vi: 'Sai chuẩn' },
+    ] as const;
+
+    expect(getPlainMappingLabel('IN_TEXT_MISMATCH', 'vi').actionHint).toContain('hãy chỉnh lại cho khớp.');
+
+    await i18n.changeLanguage('en');
+    const { container: enContainer, unmount: unmountEn } = renderWithProviders(
+      <div>
+        {statusPairs.map(({ lower, upper }) => (
+          <div key={lower}>
+            <div data-testid={`mb-low-${lower}`}>
+              <MappingStatusBadge status={lower} />
+            </div>
+            <div data-testid={`mb-up-${upper}`}>
+              <MappingStatusBadge status={upper} />
+            </div>
+            <div data-testid={`mbc-up-${upper}`}>
+              <MappingStatusBadgeCompact status={upper} />
+            </div>
+          </div>
+        ))}
+      </div>,
+    );
+
+    expect(enContainer.textContent).not.toContain('Unresolved');
+    expect(enContainer.textContent).not.toContain('IN_TEXT_MISMATCH');
+    expect(enContainer.textContent).not.toContain('MISSING_REFERENCE');
+
+    for (const { lower, upper, en } of statusPairs) {
+      const plainEn = getPlainMappingLabel(upper, 'en');
+      const lowBadge = screen.getByTestId(`mb-low-${lower}`).firstElementChild as HTMLElement;
+      const upBadge = screen.getByTestId(`mb-up-${upper}`).firstElementChild as HTMLElement;
+      const compactBadge = screen.getByTestId(`mbc-up-${upper}`).firstElementChild as HTMLElement;
+
+      expect(lowBadge.textContent).toBe(en);
+      expect(upBadge.textContent).toBe(en);
+      expect(lowBadge.className).toContain('whitespace-nowrap');
+      expect(upBadge.className).toContain('whitespace-nowrap');
+      expect(lowBadge.getAttribute('title')).toContain(plainEn.actionHint);
+      expect(upBadge.getAttribute('title')).toContain(plainEn.actionHint);
+      expect(compactBadge.getAttribute('title')).toContain(plainEn.actionHint);
+    }
+    unmountEn();
+
+    await i18n.changeLanguage('vi');
+    const { container: viContainer } = renderWithProviders(
+      <div>
+        {statusPairs.map(({ lower, upper }) => (
+          <div key={lower}>
+            <div data-testid={`vi-mb-low-${lower}`}>
+              <MappingStatusBadge status={lower} />
+            </div>
+            <div data-testid={`vi-mb-up-${upper}`}>
+              <MappingStatusBadge status={upper} />
+            </div>
+            <div data-testid={`vi-mbc-up-${upper}`}>
+              <MappingStatusBadgeCompact status={upper} />
+            </div>
+          </div>
+        ))}
+      </div>,
+    );
+
+    expect(viContainer.textContent).not.toContain('Chưa xác định');
+    expect(viContainer.textContent).not.toContain('Unresolved');
+
+    for (const { lower, upper, vi: viLabel } of statusPairs) {
+      const plainVi = getPlainMappingLabel(upper, 'vi');
+      const lowBadge = screen.getByTestId(`vi-mb-low-${lower}`).firstElementChild as HTMLElement;
+      const upBadge = screen.getByTestId(`vi-mb-up-${upper}`).firstElementChild as HTMLElement;
+      const compactBadge = screen.getByTestId(`vi-mbc-up-${upper}`).firstElementChild as HTMLElement;
+
+      expect(lowBadge.textContent).toBe(viLabel);
+      expect(upBadge.textContent).toBe(viLabel);
+      expect(upBadge.className).toContain('whitespace-nowrap');
+      expect(lowBadge.getAttribute('title')).toContain(plainVi.actionHint);
+      expect(upBadge.getAttribute('title')).toContain(plainVi.actionHint);
+      expect(compactBadge.getAttribute('title')).toContain(plainVi.actionHint);
+    }
+  });
+
+  it('UpgradeModal renders warm non-tech benefit copy in EN and VI with zero ML/infra jargon, zero Tailwind v4 dead classes, zero feature badge truncation, and Vietnamese VND equivalents', async () => {
+    await i18n.changeLanguage('en');
+    const { unmount: unmountEn } = renderWithProviders(
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <UpgradeModal
+              open={true}
+              onOpenChange={vi.fn()}
+              featureName="Interactive Document Inspector & Full Export"
+            />
+          }
+        />
+      </Routes>,
+      { user: makeUser('user', 'basic') },
+    );
+
+    const enModal = screen.getByTestId('upgrade-modal');
+    expect(enModal.textContent).not.toContain('ONNX INT8');
+    expect(enModal.textContent).not.toContain('MiniLM');
+    expect(enModal.textContent).not.toContain('Sentence-BERT');
+    expect(enModal.textContent).not.toContain('SerpAPI');
+    expect(enModal.innerHTML).not.toContain('shadow-xs');
+    expect(enModal.innerHTML).not.toContain('py-0.2');
+    expect(enModal.innerHTML).not.toContain('class="truncate"');
+    expect(screen.getByTestId('modal-upgrade-pro-btn').textContent).toContain('192');
+    expect(screen.getByTestId('modal-upgrade-ultra-btn').textContent).toContain('1,920');
+
+    fireEvent.click(screen.getByTestId('modal-cycle-monthly'));
+    expect(screen.getByTestId('modal-upgrade-pro-btn').textContent).toContain('20');
+    expect(screen.getByTestId('modal-upgrade-ultra-btn').textContent).toContain('200');
+    unmountEn();
+
+    await i18n.changeLanguage('vi');
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <UpgradeModal
+              open={true}
+              onOpenChange={vi.fn()}
+              featureName="Trình đọc đối chiếu trang PDF & Xuất báo cáo Word"
+            />
+          }
+        />
+      </Routes>,
+      { user: makeUser('teacher', 'pro') },
+    );
+
+    const viModal = screen.getByTestId('upgrade-modal');
+    expect(viModal.textContent).not.toContain('ONNX INT8');
+    expect(viModal.textContent).not.toContain('MiniLM');
+    expect(viModal.textContent).not.toContain('Sentence-BERT');
+    expect(viModal.textContent).not.toContain('SerpAPI');
+    expect(viModal.innerHTML).not.toContain('shadow-xs');
+    expect(viModal.innerHTML).not.toContain('py-0.2');
+    expect(viModal.innerHTML).not.toContain('class="truncate"');
+    expect(viModal.textContent).toContain('400.000 ₫');
+    expect(viModal.textContent).toContain('4.000.000 ₫');
+    expect(viModal.textContent).toContain('$1.920/năm');
+    expect(viModal.textContent).not.toContain('$1,920');
+
+    fireEvent.click(screen.getByTestId('modal-cycle-monthly'));
+    expect(viModal.textContent).toContain('500.000 ₫');
+    expect(viModal.textContent).toContain('5.000.000 ₫');
+    expect(screen.getByTestId('modal-upgrade-ultra-btn').textContent).toContain('200');
+  });
+
+  it('Round 1: eliminates VI machine-translated calques on VerdictBadge (UNRESOLVED & LIKELY_VERIFIED) and enforces triggeredRules parity + actionable tooltips across VerdictBadge, VerdictBadgeCompact, and VerdictIcon', async () => {
+    // 1. EN actionable tooltips & triggeredRules parity across all 3 exports
+    await i18n.changeLanguage('en');
+    const { unmount: unmountEn } = renderWithProviders(
+      <div>
+        <div data-testid="en-vb-inc">
+          <VerdictBadge verdict="METADATA_ERROR" triggeredRules={['R-INCOMPLETE-METADATA']} />
+        </div>
+        <div data-testid="en-vbc-inc">
+          <VerdictBadgeCompact verdict="metadata_error" triggeredRules={['R-INCOMPLETE-METADATA']} />
+        </div>
+        <div data-testid="en-vbi-inc">
+          <VerdictIcon verdict="metadata_error" triggeredRules={['R-INCOMPLETE-METADATA']} />
+        </div>
+        <div data-testid="en-vb-legal">
+          <VerdictBadge verdict="RESOURCE" triggeredRules={['R-VN-LEGAL-VERIFIED']} />
+        </div>
+        <div data-testid="en-vbc-legal">
+          <VerdictBadgeCompact verdict="resource" triggeredRules={['R-VN-LEGAL-VERIFIED']} />
+        </div>
+        <div data-testid="en-vbi-legal">
+          <VerdictIcon verdict="resource" triggeredRules={['R-VN-LEGAL-VERIFIED']} />
+        </div>
+      </div>,
+    );
+
+    const expectedEnIncompleteTitle =
+      'Incomplete Reference — Citation lacks required fields (author, publication year, or venue) rather than being fabricated; add the missing details to complete this entry.';
+    const expectedEnLegalTitle =
+      'Legal Statute — Recognized legal statute or government regulation; no action needed (excluded from academic citation penalty).';
+
+    for (const id of ['en-vb-inc', 'en-vbc-inc', 'en-vbi-inc']) {
+      const el = screen.getByTestId(id).firstElementChild as HTMLElement;
+      expect(el.getAttribute('title')).toBe(expectedEnIncompleteTitle);
+    }
+    for (const id of ['en-vb-legal', 'en-vbc-legal', 'en-vbi-legal']) {
+      const el = screen.getByTestId(id).firstElementChild as HTMLElement;
+      expect(el.getAttribute('title')).toBe(expectedEnLegalTitle);
+      expect(el.querySelector('svg.lucide-scale')).not.toBeNull();
+    }
+    unmountEn();
+
+    // 2. VI natural academic labels (zero calques) + actionable tooltips & triggeredRules parity
+    await i18n.changeLanguage('vi');
+    const { container: viContainer } = renderWithProviders(
+      <div>
+        <div data-testid="vi-vb-unres">
+          <VerdictBadge verdict="UNRESOLVED" />
+        </div>
+        <div data-testid="vi-vb-likely">
+          <VerdictBadge verdict="LIKELY_VERIFIED" />
+        </div>
+        <div data-testid="vi-vb-inc">
+          <VerdictBadge verdict="METADATA_ERROR" triggeredRules={['R-INCOMPLETE-METADATA']} />
+        </div>
+        <div data-testid="vi-vbc-inc">
+          <VerdictBadgeCompact verdict="metadata_error" triggeredRules={['R-INCOMPLETE-METADATA']} />
+        </div>
+        <div data-testid="vi-vbi-inc">
+          <VerdictIcon verdict="metadata_error" triggeredRules={['R-INCOMPLETE-METADATA']} />
+        </div>
+        <div data-testid="vi-vb-legal">
+          <VerdictBadge verdict="RESOURCE" triggeredRules={['R-VN-LEGAL-VERIFIED']} />
+        </div>
+        <div data-testid="vi-vbc-legal">
+          <VerdictBadgeCompact verdict="resource" triggeredRules={['R-VN-LEGAL-VERIFIED']} />
+        </div>
+        <div data-testid="vi-vbi-legal">
+          <VerdictIcon verdict="resource" triggeredRules={['R-VN-LEGAL-VERIFIED']} />
+        </div>
+      </div>,
+    );
+
+    expect(screen.getByTestId('vi-vb-unres').textContent).toBe('Chưa xác minh');
+    expect(screen.getByTestId('vi-vb-likely').textContent).toBe('Độ khớp cao');
+    expect(viContainer.textContent).not.toContain('Chưa giải quyết');
+    expect(viContainer.textContent).not.toContain('Có thể đã xác minh');
+
+    const expectedViIncompleteTitle =
+      'Thiếu quy cách trích dẫn — Mục tham khảo thiếu tác giả, năm xuất bản hoặc nơi công bố (không phải nguồn bịa đặt); hãy bổ sung đầy đủ các thông tin còn thiếu.';
+    const expectedViLegalTitle =
+      'Văn bản Pháp luật — Văn bản quy phạm pháp luật đã nhận diện; không cần chỉnh sửa và không bị tính điểm trừ trích dẫn.';
+
+    for (const id of ['vi-vb-inc', 'vi-vbc-inc', 'vi-vbi-inc']) {
+      const el = screen.getByTestId(id).firstElementChild as HTMLElement;
+      expect(el.getAttribute('title')).toBe(expectedViIncompleteTitle);
+    }
+    for (const id of ['vi-vb-legal', 'vi-vbc-legal', 'vi-vbi-legal']) {
+      const el = screen.getByTestId(id).firstElementChild as HTMLElement;
+      expect(el.getAttribute('title')).toBe(expectedViLegalTitle);
+      expect(el.querySelector('svg.lucide-scale')).not.toBeNull();
+    }
+  });
+
+  it('Round 1: UpgradeModal pins Lock icon with rounded-lg feature pill, wraps VND currency units in whitespace-nowrap, keeps audience subtitles full-width below card header rows, and sets aria-pressed on billing cycle buttons', async () => {
+    await i18n.changeLanguage('en');
+    const { unmount: unmountEn } = renderWithProviders(
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <UpgradeModal
+              open={true}
+              onOpenChange={vi.fn()}
+              featureName="Interactive Document Inspector & Full Export"
+            />
+          }
+        />
+      </Routes>,
+      { user: makeUser('user', 'basic') },
+    );
+
+    expect(screen.getByRole('button', { name: 'Close' })).toBeDefined();
+    expect(screen.getByRole('group', { name: 'Billing cycle toggle' })).toBeDefined();
+    expect(screen.getByTestId('modal-cycle-annual').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('modal-cycle-monthly').getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(screen.getByTestId('modal-cycle-monthly'));
+    expect(screen.getByTestId('modal-cycle-annual').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('modal-cycle-monthly').getAttribute('aria-pressed')).toBe('true');
+    unmountEn();
+
+    await i18n.changeLanguage('vi');
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <UpgradeModal
+              open={true}
+              onOpenChange={vi.fn()}
+              featureName="Trình đọc đối chiếu trang PDF & Xuất báo cáo Word"
+            />
+          }
+        />
+      </Routes>,
+      { user: makeUser('teacher', 'pro') },
+    );
+
+    const viModal = screen.getByTestId('upgrade-modal');
+    const lockSvg = viModal.querySelector('svg.lucide-lock');
+    expect(lockSvg).not.toBeNull();
+    const featurePill = lockSvg!.parentElement as HTMLElement;
+    expect(featurePill.className).toContain('items-start');
+    expect(featurePill.className).toContain('rounded-lg');
+    expect(featurePill.className).not.toContain('rounded-full');
+    expect(featurePill.className).not.toContain('flex-wrap');
+
+    // Localized close & billing group ARIA in VI
+    expect(screen.getByRole('button', { name: 'Đóng' })).toBeDefined();
+    expect(screen.getByRole('group', { name: 'Chọn chu kỳ thanh toán' })).toBeDefined();
+
+    // Non-breaking VND currency units (annual)
+    const proVndAnnual = screen.getByTestId('modal-pro-vnd-equivalent');
+    const ultraVndAnnual = screen.getByTestId('modal-ultra-vnd-equivalent');
+    expect(proVndAnnual.textContent).toBe('≈ 400.000 ₫/tháng · 4.800.000 ₫/năm qua VNPay');
+    expect(ultraVndAnnual.textContent).toBe('≈ 4.000.000 ₫/tháng · 48.000.000 ₫/năm qua VNPay');
+    expect(proVndAnnual.querySelectorAll('span.whitespace-nowrap').length).toBe(3);
+    expect(ultraVndAnnual.querySelectorAll('span.whitespace-nowrap').length).toBe(3);
+
+    // Non-breaking VND currency units (monthly)
+    fireEvent.click(screen.getByTestId('modal-cycle-monthly'));
+    expect(proVndAnnual.textContent).toBe('≈ 500.000 ₫/tháng qua VNPay & thẻ quốc tế');
+    expect(ultraVndAnnual.textContent).toBe('≈ 5.000.000 ₫/tháng qua VNPay & thẻ quốc tế');
+    expect(proVndAnnual.querySelectorAll('span.whitespace-nowrap').length).toBe(2);
+    expect(ultraVndAnnual.querySelectorAll('span.whitespace-nowrap').length).toBe(2);
+
+    // Card header geometry: audience subtitle sits full-width outside the [Icon + Title | Badge] flex-wrap top row
+    const ultraHeading = screen.getByText('CITRA Ultra');
+    const ultraTopRow = ultraHeading.closest('div.justify-between') as HTMLElement;
+    expect(ultraTopRow).not.toBeNull();
+    expect(ultraTopRow.className).toContain('flex-wrap');
+    expect(ultraTopRow.textContent).not.toContain('Phòng Lab, Bộ môn & Hội đồng luận án');
+    expect(ultraTopRow.nextElementSibling?.textContent).toBe('Phòng Lab, Bộ môn & Hội đồng luận án');
   });
 });

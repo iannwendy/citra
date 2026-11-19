@@ -12,7 +12,10 @@ import {
   GraduationCap,
 } from 'lucide-react';
 import { type Lang } from './SolvaPrimitives';
-import { SYMBOLIC_RULES_RANGE } from '@/lib/productFacts';
+import {
+  getPlainVerdictLabel,
+  getPlainMappingLabel,
+} from '@/lib/verdictExplanation';
 import { ScholarlySourceLogo, getScholarlySourceUrl } from './ScholarlySourceLogos';
 import { SubtleNumber } from '@/components/ui/transitions';
 
@@ -116,6 +119,7 @@ function formatSolvaLiveNumber(
   padDigits: number,
   formatThousands: boolean,
   thousandSeparator: string,
+  decimalSeparator: string,
   prefix: string,
   suffix: string
 ): string {
@@ -125,11 +129,11 @@ function formatSolvaLiveNumber(
   if (padDigits > 0 && decimals === 0) {
     body = Math.round(safeNum).toString().padStart(padDigits, '0');
   } else if (!formatThousands) {
-    body = fixed;
+    body = decimalSeparator !== '.' ? fixed.replace('.', decimalSeparator) : fixed;
   } else {
     const [intPart, decPart] = fixed.split('.');
     const withSep = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, thousandSeparator);
-    body = decPart !== undefined ? `${withSep}.${decPart}` : withSep;
+    body = decPart !== undefined ? `${withSep}${decimalSeparator}${decPart}` : withSep;
   }
   return `${prefix}${body}${suffix}`;
 }
@@ -150,6 +154,7 @@ export function SolvaLiveNumber({
   replaySeed = 0,
   formatThousands = false,
   thousandSeparator = ',',
+  decimalSeparator = '.',
   className = '',
 }: {
   value: number;
@@ -162,6 +167,7 @@ export function SolvaLiveNumber({
   replaySeed?: number;
   formatThousands?: boolean;
   thousandSeparator?: string;
+  decimalSeparator?: string;
   className?: string;
 }) {
   const spanRef = useRef<HTMLSpanElement>(null);
@@ -220,6 +226,7 @@ export function SolvaLiveNumber({
           padDigits,
           formatThousands,
           thousandSeparator,
+          decimalSeparator,
           prefix,
           suffix
         );
@@ -252,6 +259,7 @@ export function SolvaLiveNumber({
     padDigits,
     formatThousands,
     thousandSeparator,
+    decimalSeparator,
     prefix,
     suffix,
   ]);
@@ -262,6 +270,7 @@ export function SolvaLiveNumber({
     padDigits,
     formatThousands,
     thousandSeparator,
+    decimalSeparator,
     prefix,
     suffix
   );
@@ -275,7 +284,7 @@ export function SolvaLiveNumber({
 
 /**
  * 1. HERO DASHBOARD MOCKUP
- * Cropped off the right and bottom edge of the 660x521px oil painting frame,
+ * Fully framed on all 4 sides inside the padded `SolvaPainterlyFrame` oil painting backdrop,
  * surrounded by Solva's signature `0 0 0 8px rgba(255,255,255,0.5)` frosted glass ring.
  */
 export function HeroVerificationMockup({
@@ -344,7 +353,7 @@ export function HeroVerificationMockup({
   const apiSources = [
     { name: 'Crossref', ms: selected.latencies[0] },
     { name: 'OpenAlex', ms: selected.latencies[1] },
-    { name: 'SemanticSch', ms: selected.latencies[2] },
+    { name: 'Semantic Scholar', ms: selected.latencies[2] },
   ];
 
   return (
@@ -353,39 +362,48 @@ export function HeroVerificationMockup({
       style={{
         backgroundColor: 'var(--solva-card-elevated)',
       }}
-      className="solva-glass-ring rounded-[10px] w-full max-w-full lg:w-[640px] border border-[#E7E3D9]/80 dark:border-[#332F26] overflow-hidden text-left select-none"
+      className="solva-glass-ring rounded-[10px] w-full max-w-full border border-[#E7E3D9]/80 dark:border-[#332F26] overflow-hidden text-left select-none"
     >
       {/* Top Window Chrome */}
       <div
         style={{ borderColor: 'var(--solva-border)' }}
-        className="px-3 sm:px-4 py-2.5 sm:py-3 border-b flex items-center justify-between gap-2 bg-[#FBFAF6]/90 dark:bg-[#1E1C17] min-w-0"
+        className="px-2.5 sm:px-3.5 py-2.5 border-b flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 bg-[#FBFAF6]/90 dark:bg-[#1E1C17] min-w-0"
       >
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 shrink-0" aria-label="macOS window controls">
-            <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]/60 shadow-2xs" />
-            <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]/60 shadow-2xs" />
-            <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]/60 shadow-2xs" />
+            <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]/60 shadow-sm" />
+            <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]/60 shadow-sm" />
+            <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]/60 shadow-sm" />
           </div>
           <span
             style={{ color: 'var(--solva-ink)' }}
-            className="text-[11px] sm:text-[12px] font-medium truncate ml-1"
+            className="text-[11px] sm:text-[12px] font-medium leading-tight break-all sm:break-normal min-w-0 ml-0.5"
           >
             thesis_citation_audit_2026.pdf
           </span>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[5px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-medium">
+          <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[5px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-medium shrink-0 whitespace-nowrap">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>GROBID TEI · 15 APIs</span>
+            <span>
+              {lang === 'vi' ? 'PDF · DOCX · 15+ Thư viện' : 'PDF · DOCX · 15+ Libraries'}
+            </span>
           </span>
           <span
             style={{
               backgroundColor: 'var(--solva-surface)',
               color: 'var(--solva-ink)',
             }}
-            className="px-2 py-0.5 rounded-[5px] font-mono text-[10px] font-semibold"
+            className="px-2 py-0.5 rounded-[5px] font-mono text-[10px] font-semibold shrink-0 whitespace-nowrap"
           >
-            CIS: <SubtleNumber value={selected.cisScore.toFixed(1)} />
+            {lang === 'vi' ? 'Điểm:' : 'Score:'}{' '}
+            <SubtleNumber
+              value={
+                lang === 'vi'
+                  ? selected.cisScore.toFixed(1).replace('.', ',')
+                  : selected.cisScore.toFixed(1)
+              }
+            />
           </span>
         </div>
       </div>
@@ -395,13 +413,16 @@ export function HeroVerificationMockup({
         {/* Left Queue */}
         <div
           style={{ borderColor: 'var(--solva-border)' }}
-          className="sm:col-span-5 min-w-0 p-3 sm:p-3.5 border-b sm:border-b-0 sm:border-r space-y-2"
+          className="sm:col-span-5 min-w-0 p-2.5 sm:p-3 border-b sm:border-b-0 sm:border-r space-y-2"
         >
-          <div className="flex items-center justify-between gap-2 text-[10px] sm:text-[11px] font-mono">
-            <span style={{ color: 'var(--solva-muted)' }} className="truncate">
-              {lang === 'vi' ? 'DANH SÁCH TRÍCH DẪN' : 'EXTRACTED QUEUE'}
+          <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] font-mono">
+            <span style={{ color: 'var(--solva-muted)' }} className="leading-tight">
+              {lang === 'vi' ? 'TÀI LIỆU TRONG BÀI' : 'REFERENCES IN PAPER'}
             </span>
-            <span style={{ color: 'var(--solva-ink)' }} className="font-semibold shrink-0">
+            <span
+              style={{ color: 'var(--solva-ink)' }}
+              className="font-semibold shrink-0 whitespace-nowrap"
+            >
               <SolvaLiveNumber value={24} replaySeed={replaySeed} durationMs={1350} />{' '}
               {lang === 'vi' ? 'mục' : 'refs'}
             </span>
@@ -409,6 +430,7 @@ export function HeroVerificationMockup({
 
           {citations.map((item, idx) => {
             const isActive = idx === activeStep % citations.length;
+            const plainVerdict = getPlainVerdictLabel(item.l2, lang);
             return (
               <div
                 key={item.marker}
@@ -417,16 +439,16 @@ export function HeroVerificationMockup({
                   backgroundColor: isActive ? 'var(--solva-surface)' : 'transparent',
                   borderColor: isActive ? 'var(--solva-ink)' : 'var(--solva-border)',
                 }}
-                className="p-2.5 rounded-[8px] border transition-[background-color,border-color,opacity] duration-300 cursor-pointer hover:opacity-90"
+                className="p-2 sm:p-2.5 rounded-[8px] border transition-[background-color,border-color,opacity] duration-300 cursor-pointer hover:opacity-90"
               >
-                <div className="flex items-center justify-between gap-1.5 mb-1">
+                <div className="flex items-start justify-between gap-1.5 mb-1">
                   <span
                     style={{ color: 'var(--solva-ink)' }}
-                    className="text-[12px] font-medium truncate"
+                    className="text-[11.5px] sm:text-[12px] font-medium leading-snug min-w-0"
                   >
                     {item.marker} {item.ref}
                   </span>
-                  <span className="font-mono text-[10px] font-semibold text-[#56524A] dark:text-[#A8A296]">
+                  <span className="font-mono text-[10px] font-semibold text-[#56524A] dark:text-[#A8A296] shrink-0 whitespace-nowrap">
                     <SolvaLiveNumber
                       value={item.confNum}
                       suffix="%"
@@ -437,24 +459,24 @@ export function HeroVerificationMockup({
                 </div>
                 <p
                   style={{ color: 'var(--solva-muted)' }}
-                  className="text-[11px] truncate mb-1.5"
+                  className="text-[11px] leading-snug mb-1.5"
                 >
                   {item.title}
                 </p>
-                <div className="flex items-center justify-between gap-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
                   <span
-                    className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded ${
+                    className={`text-[9.5px] font-medium px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap ${
                       item.tone === 'emerald'
-                        ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
+                        ? 'bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300'
                         : item.tone === 'amber'
-                          ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
-                          : 'bg-red-500/12 text-red-700 dark:text-red-300'
+                          ? 'bg-amber-500/[0.12] text-amber-800 dark:text-amber-300'
+                          : 'bg-red-500/[0.12] text-red-700 dark:text-red-300'
                     }`}
                   >
-                    {item.l2}
+                    {plainVerdict.label}
                   </span>
                   {isActive && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                   )}
                 </div>
               </div>
@@ -465,20 +487,20 @@ export function HeroVerificationMockup({
         {/* Right Live Verdict Trace */}
         <div
           key={selected.marker}
-          className="sm:col-span-7 p-4 space-y-3 animate-debugger-switch"
+          className="sm:col-span-7 min-w-0 p-3 sm:p-3.5 xl:p-4 space-y-2.5 sm:space-y-3 animate-debugger-switch"
         >
-          <div className="flex items-start justify-between gap-2">
-            <div>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
               <div
                 style={{ color: 'var(--solva-muted)' }}
                 className="text-[10px] font-mono uppercase tracking-wider"
               >
-                {lang === 'vi' ? 'HỒ SƠ THẨM ĐỊNH TRỰC TIẾP' : 'LIVE VERDICT TRACE'}{' '}
+                {lang === 'vi' ? 'CHI TIẾT KIỂM TRA' : 'CITATION CHECK'}{' '}
                 {selected.marker}
               </div>
               <div
                 style={{ color: 'var(--solva-ink)' }}
-                className="text-[14px] font-medium leading-snug mt-0.5"
+                className="text-[13px] sm:text-[14px] font-medium leading-snug mt-0.5"
               >
                 {selected.title}
               </div>
@@ -488,9 +510,9 @@ export function HeroVerificationMockup({
                 backgroundColor: 'var(--solva-btn-bg)',
                 color: 'var(--solva-btn-fg)',
               }}
-              className="px-2 py-0.5 rounded-[5px] text-[10px] font-mono shrink-0"
+              className="px-2 py-0.5 rounded-[5px] text-[10px] font-medium shrink-0 whitespace-nowrap"
             >
-              {selected.l1}
+              {getPlainMappingLabel(selected.l1, lang).label}
             </span>
           </div>
 
@@ -502,57 +524,92 @@ export function HeroVerificationMockup({
             }}
             className="rounded-[8px] p-2.5 border space-y-1.5 text-[11px]"
           >
-            <div className="flex items-center justify-between">
-              <span style={{ color: 'var(--solva-muted)' }} className="font-mono">
-                DOI:
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+              <div className="inline-flex items-center gap-1.5 min-w-0">
+                <span style={{ color: 'var(--solva-muted)' }} className="font-mono shrink-0">
+                  DOI:
+                </span>
+                <span
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="font-mono break-all sm:break-normal min-w-0"
+                >
+                  {selected.doi}
+                </span>
+              </div>
               <span
-                style={{ color: 'var(--solva-ink)' }}
-                className="font-mono truncate max-w-[180px]"
-              >
-                {selected.doi}
-              </span>
-              <span
-                className={`font-mono text-[10px] font-semibold ${
+                className={`font-mono text-[10px] font-semibold shrink-0 whitespace-nowrap ${
                   selected.tone === 'red'
-                    ? 'text-red-600 dark:text-red-400'
-                    : 'text-emerald-600 dark:text-emerald-400'
+                    ? 'text-red-700 dark:text-red-300'
+                    : 'text-emerald-700 dark:text-emerald-300'
                 }`}
               >
                 {selected.tone === 'red'
                   ? lang === 'vi'
                     ? '404 Không tồn tại'
-                    : '404 Ghost'
+                    : 'Not Found (404)'
                   : lang === 'vi'
                     ? '100% Khớp chuẩn'
                     : '100% Match'}
               </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span style={{ color: 'var(--solva-muted)' }} className="font-mono">
-                {lang === 'vi' ? 'Quy tắc:' : 'Rule:'}
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+              <span style={{ color: 'var(--solva-muted)' }} className="shrink-0">
+                {lang === 'vi' ? 'Chi tiết:' : 'Finding:'}
               </span>
-              <span style={{ color: 'var(--solva-ink)' }} className="font-mono">
-                {selected.tone === 'emerald'
-                  ? 'R01_EXACT_DOI_VERIFIED'
-                  : selected.tone === 'amber'
-                    ? 'R05_YEAR_DRIFT (2018 vs 2019)'
-                    : 'R14_HALLUCINATED_SOURCE'}
+              <span style={{ color: 'var(--solva-ink)' }} className="font-medium">
+                {selected.tone === 'emerald' ? (
+                  lang === 'vi' ? (
+                    'Khớp tên bài, tác giả & năm'
+                  ) : (
+                    'Title, authors & year match'
+                  )
+                ) : selected.tone === 'amber' ? (
+                  lang === 'vi' ? (
+                    <>
+                      Lệch năm xuất bản{' '}
+                      <span className="citra-nowrap-tail whitespace-nowrap">(2018 và 2019)</span>
+                    </>
+                  ) : (
+                    <>
+                      Year differs{' '}
+                      <span className="citra-nowrap-tail whitespace-nowrap">(2018 vs 2019)</span>
+                    </>
+                  )
+                ) : lang === 'vi' ? (
+                  'Không có trên 15+ thư viện'
+                ) : (
+                  'Not found in 15+ libraries'
+                )}
               </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span style={{ color: 'var(--solva-muted)' }} className="font-mono">
-                {lang === 'vi' ? 'Đối sánh ngữ nghĩa:' : 'Semantic Align:'}
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+              <span style={{ color: 'var(--solva-muted)' }} className="shrink-0">
+                {lang === 'vi' ? 'Nội dung trích dẫn:' : 'Content match:'}
               </span>
-              <span className="font-mono text-emerald-700 dark:text-emerald-300 font-medium">
+              <span
+                className={`font-medium ${
+                  selected.tone === 'red'
+                    ? 'text-red-700 dark:text-red-300'
+                    : 'text-emerald-700 dark:text-emerald-300'
+                }`}
+              >
                 {selected.tone === 'red' ? (
-                  lang === 'vi' ? 'KHÔNG THỂ XÁC THỰC (Thiếu bài gốc)' : 'UNVERIFIABLE (No Abstract)'
+                  lang === 'vi' ? (
+                    <>
+                      Chưa đối chiếu{' '}
+                      <span className="citra-nowrap-tail whitespace-nowrap">(Thiếu nguồn)</span>
+                    </>
+                  ) : (
+                    <>
+                      Cannot check{' '}
+                      <span className="citra-nowrap-tail whitespace-nowrap">(No source)</span>
+                    </>
+                  )
                 ) : (
-                  <>
-                    {lang === 'vi' ? 'TƯƠNG ĐỒNG (MiniLM ONNX ' : 'ALIGNED (MiniLM ONNX '}
-                    <SubtleNumber value={selected.nliScore.toFixed(2)} />
-                    )
-                  </>
+                  <span className="citra-nowrap-tail whitespace-nowrap">
+                    {lang === 'vi' ? 'Khớp nội dung (' : 'Matches claim ('}
+                    <SubtleNumber value={Math.round(selected.nliScore * 100)} suffix="%" />)
+                  </span>
                 )}
               </span>
             </div>
@@ -565,10 +622,10 @@ export function HeroVerificationMockup({
               className="text-[10px] font-mono uppercase"
             >
               {lang === 'vi'
-                ? 'ĐỐI CHIẾU CHÉO TRÊN 15+ CSDL HỌC THUẬT QUỐC TẾ'
-                : 'FEDERATED SCHOLARLY API WATERFALL'}
+                ? 'ĐỐI CHIẾU TRÊN 15+ THƯ VIỆN HỌC THUẬT'
+                : 'CHECKED ACROSS 15+ ACADEMIC LIBRARIES'}
             </div>
-            <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
+            <div className="flex flex-wrap gap-1.5 text-[10px] font-mono">
               {apiSources.map((s, idx) => {
                 const isPulsing = idx === activeApiPulse;
                 const liveMs = isPulsing ? Math.max(1, s.ms - 1) : s.ms;
@@ -588,16 +645,19 @@ export function HeroVerificationMockup({
                         ? 'var(--solva-ink)'
                         : 'var(--solva-border)',
                     }}
-                    className="group px-2 py-1.5 rounded-[6px] border flex items-center justify-between gap-1 transition-[background-color,border-color] duration-300 hover:border-[#1C1A15]/60 dark:hover:border-[#FBFAF6]/50 cursor-pointer"
+                    className="group flex-1 min-w-fit px-2 py-1.5 rounded-[6px] border inline-flex items-center justify-between gap-1.5 shrink-0 whitespace-nowrap transition-[background-color,border-color] duration-300 hover:border-[#1C1A15]/60 dark:hover:border-[#FBFAF6]/50 cursor-pointer"
                   >
                     <span
                       style={{ color: 'var(--solva-ink)' }}
-                      className="inline-flex items-center gap-1 truncate group-hover:underline underline-offset-2"
+                      className="inline-flex items-center gap-1 whitespace-nowrap group-hover:underline underline-offset-2"
                     >
                       <ScholarlySourceLogo name={s.name} size={11} />
-                      <span className="truncate">{s.name}</span>
+                      <span>{s.name}</span>
                     </span>
-                    <span style={{ color: 'var(--solva-muted)' }} className="shrink-0">
+                    <span
+                      style={{ color: 'var(--solva-muted)' }}
+                      className="shrink-0 whitespace-nowrap"
+                    >
                       <SubtleNumber value={liveMs} suffix="ms" />
                     </span>
                   </a>
@@ -635,7 +695,7 @@ export function FeatureCardWidget({
   }, [index, isVisible]);
 
   if (index === 0) {
-    // Widget 1: Two-Layer Orthogonal Matrix
+    // Widget 1: Two-Part Check (In-text <-> Reference List & Library Existence)
     const refNums = [14, 18, 14];
     const activeRefNum = refNums[cycleStep % refNums.length];
     const highlightL1 = cycleStep === 0 || cycleStep === 2;
@@ -648,18 +708,23 @@ export function FeatureCardWidget({
           backgroundColor: 'var(--solva-card-elevated)',
           ...getStaggerStyle(0),
         }}
-        className="solva-glass-ring w-[272px] sm:w-[288px] h-[272px] sm:h-[288px] rounded-[16px] p-4 flex flex-col justify-between text-left border border-[#E7E3D9]/70 dark:border-[#332F26]"
+        className="solva-glass-ring w-full max-w-[296px] min-h-[272px] sm:min-h-[288px] h-auto rounded-[16px] p-3.5 sm:p-4 flex flex-col justify-between gap-2.5 text-left border border-[#E7E3D9]/70 dark:border-[#332F26]"
       >
-        <div style={getStaggerStyle(40)} className="flex items-center justify-between">
+        <div
+          style={getStaggerStyle(40)}
+          className="flex flex-wrap items-center justify-between gap-1.5"
+        >
           <span
             style={{ color: 'var(--solva-ink)' }}
-            className="text-[12px] font-medium flex items-center gap-1.5"
+            className="text-[12px] font-medium flex items-center gap-1.5 min-w-0"
           >
-            <Layers className="w-3.5 h-3.5" />
-            {lang === 'vi' ? 'Kiến trúc 2 Tầng Độc lập' : '2-Layer Orthogonal Output'}
+            <Layers className="w-3.5 h-3.5 shrink-0" />
+            <span>
+              {lang === 'vi' ? 'Kiểm tra 2 phần rõ ràng' : 'Two-Part Citation Check'}
+            </span>
           </span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#F4F2EC] dark:bg-[#29261F] text-[#56524A] dark:text-[#A8A296]">
-            L1 × L2
+          <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#F4F2EC] dark:bg-[#29261F] text-[#56524A] dark:text-[#A8A296]">
+            {lang === 'vi' ? 'Phần 1 + 2' : 'Part 1 + 2'}
           </span>
         </div>
 
@@ -672,20 +737,24 @@ export function FeatureCardWidget({
             }}
             className="p-2.5 rounded-[10px] border space-y-1 transition-[border-color,background-color] duration-500"
           >
-            <div className="flex items-center justify-between text-[10px] font-mono">
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[10px] font-mono">
               <span style={{ color: 'var(--solva-muted)' }}>
-                {lang === 'vi' ? 'TẦNG 1 · ĐỐI CHIẾU NGUỒN NỘI BỘ' : 'LAYER 1 · MAPPING'}
+                {lang === 'vi' ? 'PHẦN 1 · TRONG BÀI VIẾT' : 'PART 1 · IN YOUR PAPER'}
               </span>
-              <span className="text-emerald-700 dark:text-emerald-400 font-semibold inline-flex items-center gap-1">
+              <span className="whitespace-nowrap shrink-0 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                MATCHED
+                {lang === 'vi' ? 'Đã khớp' : 'Linked'}
               </span>
             </div>
-            <p style={{ color: 'var(--solva-ink)' }} className="text-[12px] font-medium">
-              {lang === 'vi' ? 'Trong bài [' : 'In-text ['}
-              <SubtleNumber value={activeRefNum} />
-              {lang === 'vi' ? '] ↔ Danh mục #' : '] ↔ Bibliography #'}
-              <SubtleNumber value={activeRefNum} />
+            <p style={{ color: 'var(--solva-ink)' }} className="text-[12px] font-medium leading-snug">
+              {lang === 'vi' ? 'Trong bài ' : 'In-text '}
+              <span className="citra-nowrap-tail whitespace-nowrap">
+                [<SubtleNumber value={activeRefNum} />]
+              </span>
+              {lang === 'vi' ? ' ↔ Danh mục ' : ' ↔ Bibliography '}
+              <span className="citra-nowrap-tail whitespace-nowrap">
+                #<SubtleNumber value={activeRefNum} />
+              </span>
             </p>
           </div>
 
@@ -697,18 +766,17 @@ export function FeatureCardWidget({
             }}
             className="p-2.5 rounded-[10px] border space-y-1 transition-[border-color,background-color] duration-500"
           >
-            <div className="flex items-center justify-between text-[10px] font-mono">
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[10px] font-mono">
               <span style={{ color: 'var(--solva-muted)' }}>
-                {lang === 'vi' ? 'TẦNG 2 · XÁC THỰC NGUỒN GỐC' : 'LAYER 2 · EXISTENCE'}
+                {lang === 'vi' ? 'PHẦN 2 · TRÊN THƯ VIỆN' : 'PART 2 · LIBRARY RECORD'}
               </span>
-              <span className="text-amber-700 dark:text-amber-400 font-semibold">
-                METADATA_ERROR
+              <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-amber-800 dark:text-amber-300 font-semibold">
+                {lang === 'vi' ? 'Lệch thông tin' : 'Details Mismatch'}
               </span>
             </div>
-            <p style={{ color: 'var(--solva-ink)' }} className="text-[12px] font-medium">
-              {lang === 'vi'
-                ? 'DOI hợp lệ · Lệch năm (2020 → 2021)'
-                : 'DOI valid · Year drift (2020 → 2021)'}
+            <p style={{ color: 'var(--solva-ink)' }} className="text-[12px] font-medium leading-snug">
+              {lang === 'vi' ? 'Có bài thật · Lệch năm ' : 'Paper found · Year differs '}
+              <span className="citra-nowrap-tail whitespace-nowrap">(2020 → 2021)</span>
             </p>
           </div>
         </div>
@@ -718,16 +786,16 @@ export function FeatureCardWidget({
             ...getStaggerStyle(260),
             borderColor: 'var(--solva-border)',
           }}
-          className="pt-2.5 border-t flex items-center justify-between text-[11px]"
+          className="pt-2.5 border-t flex flex-wrap items-center justify-between gap-1.5 text-[11px]"
         >
           <span style={{ color: 'var(--solva-muted)' }}>
-            {lang === 'vi' ? '7 trạng thái T1 · 8 nhãn T2' : '7 L1 states · 8 L2 verdicts'}
+            {lang === 'vi' ? 'Gợi ý cách sửa từng mục' : 'Clear, actionable fix hints'}
           </span>
           <span
             style={{ color: 'var(--solva-ink)' }}
-            className="font-mono font-semibold"
+            className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono font-semibold"
           >
-            {lang === 'vi' ? '100% Độc lập' : '100% Orthogonal'}
+            {lang === 'vi' ? 'Rõ ràng 100%' : 'Zero Guesswork'}
           </span>
         </div>
       </div>
@@ -735,38 +803,38 @@ export function FeatureCardWidget({
   }
 
   if (index === 1) {
-    // Widget 2: 15+ Scholarly APIs Waterfall
+    // Widget 2: 15+ Academic Libraries Parallel Lookup
     const apis = [
       {
-        name: 'Crossref REST API',
-        status: lang === 'vi' ? 'Khớp DOI' : 'DOI Exact',
+        name: 'Crossref',
+        status: lang === 'vi' ? 'Khớp DOI' : 'DOI Match',
         baseMs: 38,
         delta: 2,
       },
       {
-        name: 'OpenAlex Works',
-        status: lang === 'vi' ? 'Khớp Work ID' : 'Work ID Match',
+        name: 'OpenAlex',
+        status: lang === 'vi' ? 'Ấn phẩm' : 'Verified',
         baseMs: 49,
         delta: -2,
       },
       {
         name: 'Semantic Scholar',
-        status: lang === 'vi' ? 'Ngữ nghĩa' : 'Embedding',
+        status: lang === 'vi' ? 'Khớp' : 'Match',
         score: 0.96,
         baseMs: 62,
         delta: 3,
       },
       {
-        name: 'PubMed / EuropePMC',
-        status: lang === 'vi' ? 'Xác thực PMID' : 'PMID Verified',
+        name: 'PubMed / Europe PMC',
+        status: lang === 'vi' ? 'Y sinh' : 'Indexed',
         baseMs: 54,
         delta: -1,
       },
       {
-        name: 'SQLite FTS5 Cache',
-        status: lang === 'vi' ? 'Đệm cục bộ' : 'Local Hit',
-        baseMs: 3,
-        delta: 0,
+        name: 'DOAJ / OpenLibrary',
+        status: lang === 'vi' ? 'Sách & Mở' : 'Books & OA',
+        baseMs: 41,
+        delta: -1,
       },
     ];
     return (
@@ -776,19 +844,22 @@ export function FeatureCardWidget({
           backgroundColor: 'var(--solva-card-elevated)',
           ...getStaggerStyle(0),
         }}
-        className="solva-glass-ring w-[272px] sm:w-[288px] h-[272px] sm:h-[288px] rounded-[16px] p-4 flex flex-col justify-between text-left border border-[#E7E3D9]/70 dark:border-[#332F26]"
+        className="solva-glass-ring w-full max-w-[296px] min-h-[272px] sm:min-h-[288px] h-auto rounded-[16px] p-3.5 sm:p-4 flex flex-col justify-between gap-2.5 text-left border border-[#E7E3D9]/70 dark:border-[#332F26]"
       >
-        <div style={getStaggerStyle(40)} className="flex items-center justify-between">
+        <div
+          style={getStaggerStyle(40)}
+          className="flex flex-wrap items-center justify-between gap-1.5"
+        >
           <span
             style={{ color: 'var(--solva-ink)' }}
-            className="text-[12px] font-medium flex items-center gap-1.5"
+            className="text-[12px] font-medium flex items-center gap-1.5 min-w-0"
           >
-            <Database className="w-3.5 h-3.5" />
-            15+ {lang === 'vi' ? 'CSDL Khoa học' : 'Scholarly Indexes'}
+            <Database className="w-3.5 h-3.5 shrink-0" />
+            <span>15+ {lang === 'vi' ? 'Thư viện Học thuật' : 'Academic Libraries'}</span>
           </span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
+          <span className="whitespace-nowrap shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            {lang === 'vi' ? 'SONG SONG' : 'PARALLEL'}
+            {lang === 'vi' ? 'CÙNG LÚC' : 'AT ONCE'}
           </span>
         </div>
 
@@ -809,16 +880,20 @@ export function FeatureCardWidget({
                   backgroundColor: 'var(--solva-surface)',
                   borderColor: isWaveActive ? 'var(--solva-ink)' : 'transparent',
                 }}
-                className="group px-2.5 py-1.5 rounded-[8px] border flex items-center justify-between text-[11px] transition-[border-color,background-color] duration-300 hover:border-[#1C1A15]/50 dark:hover:border-[#FBFAF6]/40 cursor-pointer"
+                className="group px-2 py-1.5 rounded-[8px] border flex flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 text-[11px] transition-[border-color,background-color] duration-300 hover:border-[#1C1A15]/50 dark:hover:border-[#FBFAF6]/40 cursor-pointer"
               >
                 <span
                   style={{ color: 'var(--solva-ink)' }}
-                  className="font-medium truncate inline-flex items-center gap-1.5 group-hover:underline underline-offset-2"
+                  className="font-medium inline-flex items-center gap-1.5 whitespace-nowrap group-hover:underline underline-offset-2"
                 >
-                  <ScholarlySourceLogo name={api.name} size={13} className="opacity-85 group-hover:opacity-100" />
-                  <span className="truncate">{api.name}</span>
+                  <ScholarlySourceLogo
+                    name={api.name}
+                    size={13}
+                    className="opacity-85 group-hover:opacity-100"
+                  />
+                  <span>{api.name}</span>
                 </span>
-                <span className="font-mono text-[10px] text-emerald-700 dark:text-emerald-300 shrink-0 ml-2">
+                <span className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono text-[10px] text-emerald-700 dark:text-emerald-300">
                   {api.score !== undefined ? `${api.status} ${api.score.toFixed(2)}` : api.status} ·{' '}
                   <SubtleNumber value={liveMs} suffix="ms" />
                 </span>
@@ -832,15 +907,18 @@ export function FeatureCardWidget({
             ...getStaggerStyle(310),
             borderColor: 'var(--solva-border)',
           }}
-          className="pt-2 border-t flex items-center justify-between text-[11px]"
+          className="pt-2 border-t flex flex-wrap items-center justify-between gap-1.5 text-[11px]"
         >
           <span style={{ color: 'var(--solva-muted)' }}>
-            + arXiv, DBLP, DOAJ, ORCID
+            {lang === 'vi' ? '+ arXiv, DBLP, ORCID, Pháp luật VN' : '+ arXiv, DBLP, ORCID, VN Laws'}
           </span>
-          <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
+          <span
+            style={{ color: 'var(--solva-ink)' }}
+            className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono font-semibold"
+          >
             <SolvaLiveNumber
               value={200}
-              suffix={lang === 'vi' ? 'M+ Công trình' : 'M+ Works'}
+              suffix={lang === 'vi' ? 'Tr+ Ấn phẩm' : 'M+ Works'}
               replaySeed={replaySeed}
               durationMs={1500}
             />
@@ -850,7 +928,7 @@ export function FeatureCardWidget({
     );
   }
 
-  // Widget 3: Neuro-Symbolic + Sentence-BERT / Multilingual MiniLM ONNX INT8
+  // Widget 3: Details & Abstract Meaning Verification
   const simScores = [0.97, 0.98, 0.97];
   const stancePercents = [94, 96, 94];
   const currentSim = simScores[cycleStep % simScores.length];
@@ -863,18 +941,23 @@ export function FeatureCardWidget({
         backgroundColor: 'var(--solva-card-elevated)',
         ...getStaggerStyle(0),
       }}
-      className="solva-glass-ring w-[272px] sm:w-[288px] h-[272px] sm:h-[288px] rounded-[16px] p-4 flex flex-col justify-between text-left border border-[#E7E3D9]/70 dark:border-[#332F26]"
+      className="solva-glass-ring w-full max-w-[296px] min-h-[272px] sm:min-h-[288px] h-auto rounded-[16px] p-3.5 sm:p-4 flex flex-col justify-between gap-2.5 text-left border border-[#E7E3D9]/70 dark:border-[#332F26]"
     >
-      <div style={getStaggerStyle(40)} className="flex items-center justify-between">
+      <div
+        style={getStaggerStyle(40)}
+        className="flex flex-wrap items-center justify-between gap-1.5"
+      >
         <span
           style={{ color: 'var(--solva-ink)' }}
-          className="text-[12px] font-medium flex items-center gap-1.5"
+          className="text-[12px] font-medium flex items-center gap-1.5 min-w-0"
         >
-          <Scale className="w-3.5 h-3.5" />
-          {lang === 'vi' ? 'Suy luận Logic & Ngữ nghĩa' : 'Neuro-Symbolic & Semantic'}
+          <Scale className="w-3.5 h-3.5 shrink-0" />
+          <span>
+            {lang === 'vi' ? 'Chi tiết & Nội dung bài gốc' : 'Details & Content Match'}
+          </span>
         </span>
-        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:text-[#1C1A15]">
-          {SYMBOLIC_RULES_RANGE}
+        <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:text-[#1C1A15]">
+          {lang === 'vi' ? '30+ Kiểm tra' : '30+ Checks'}
         </span>
       </div>
 
@@ -887,17 +970,20 @@ export function FeatureCardWidget({
           }}
           className="p-2.5 rounded-[10px] border space-y-1 transition-[border-color,background-color] duration-500"
         >
-          <div className="flex items-center justify-between text-[10px] font-mono">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[10px] font-mono">
             <span style={{ color: 'var(--solva-muted)' }}>
-              {lang === 'vi' ? 'ĐỒ THỊ QUY TẮC HÌNH THỨC' : 'SYMBOLIC RULE GRAPH'}
+              {lang === 'vi' ? 'KIỂM TRA THÔNG TIN' : 'DETAILS CHECK'}
             </span>
-            <span className="text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
+            <span className="whitespace-nowrap shrink-0 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               {lang === 'vi' ? 'ĐẠT CHUẨN' : 'PASSED'}
             </span>
           </div>
-          <p style={{ color: 'var(--solva-ink)' }} className="text-[11px] font-mono">
-            R01_DOI ∧ R03_TITLE_SIM (<SubtleNumber value={currentSim.toFixed(2)} />)
+          <p style={{ color: 'var(--solva-ink)' }} className="text-[11.5px] font-medium leading-snug">
+            {lang === 'vi' ? 'Khớp mã DOI & Tiêu đề ' : 'DOI & Title Match '}
+            <span className="citra-nowrap-tail whitespace-nowrap font-mono">
+              (<SubtleNumber value={currentSim.toFixed(2)} />)
+            </span>
           </p>
         </div>
 
@@ -909,11 +995,11 @@ export function FeatureCardWidget({
           }}
           className="p-2.5 rounded-[10px] border space-y-1.5 transition-[border-color,background-color] duration-500"
         >
-          <div className="flex items-center justify-between text-[10px] font-mono">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[10px] font-mono">
             <span style={{ color: 'var(--solva-muted)' }}>
-              {lang === 'vi' ? 'NGỮ NGHĨA MINILM ONNX INT8' : 'MINILM ONNX INT8 ALIGNMENT'}
+              {lang === 'vi' ? 'NỘI DUNG TÓM TẮT' : 'ABSTRACT MEANING'}
             </span>
-            <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
+            <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-emerald-700 dark:text-emerald-300 font-semibold">
               {lang === 'vi' ? 'KHỚP (' : 'ALIGNED ('}
               <SubtleNumber value={currentStance} suffix="%" />)
             </span>
@@ -932,11 +1018,16 @@ export function FeatureCardWidget({
           ...getStaggerStyle(260),
           borderColor: 'var(--solva-border)',
         }}
-        className="pt-2 border-t flex items-center justify-between text-[11px]"
+        className="pt-2 border-t flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[10.5px] sm:text-[11px]"
       >
-        <span style={{ color: 'var(--solva-muted)' }}>Sentence-BERT + MiniLM ONNX INT8</span>
-        <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
-          {lang === 'vi' ? 'AI Giải thích được' : 'Explainable AI'}
+        <span style={{ color: 'var(--solva-muted)' }}>
+          {lang === 'vi' ? 'Hỗ trợ bài viết Việt ↔ Anh' : 'English & Vietnamese'}
+        </span>
+        <span
+          style={{ color: 'var(--solva-ink)' }}
+          className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono font-semibold"
+        >
+          {lang === 'vi' ? 'Giải thích rõ' : 'Clear Reasons'}
         </span>
       </div>
     </div>
@@ -956,6 +1047,7 @@ export function StickyCardWidget({
 }) {
   const { containerRef, isVisible, replaySeed } = useFloralCardAnimation();
   const [activePhase, setActivePhase] = useState(0);
+  const [showXmlSchema, setShowXmlSchema] = useState(false);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -968,9 +1060,32 @@ export function StickyCardWidget({
   }, [index, isVisible]);
 
   if (index === 0) {
-    // Card 0: GROBID TEI-XML + Cross-Validator (Screenshot 0)
+    // Card 0: Human-readable Extracted Citation Preview + Optional XML Schema Toggle
     const xmlIds = [12, 15, 18, 12];
     const currentXmlId = xmlIds[activePhase % xmlIds.length];
+
+    const styleItems = [
+      {
+        key: 'ieee',
+        prefix: 'IEEE ',
+        tail: '[1]–[N]',
+      },
+      {
+        key: 'apa',
+        prefix: 'APA 7th ',
+        tail: '(Author, Yr)',
+      },
+      {
+        key: 'vancouver',
+        prefix: 'Vancouver ',
+        tail: '(1)',
+      },
+      {
+        key: 'acm',
+        prefix: 'ACM / Harvard',
+        tail: null,
+      },
+    ] as const;
 
     return (
       <div
@@ -978,79 +1093,130 @@ export function StickyCardWidget({
         style={{
           backgroundColor: 'var(--solva-card-elevated)',
         }}
-        className="solva-glass-ring w-full max-w-[340px] rounded-[12px] p-5 space-y-3.5 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
+        className="solva-glass-ring w-full max-w-[348px] rounded-[12px] p-4 sm:p-5 space-y-3.5 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-[#1C1A15] dark:text-[#FBFAF6]" />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <FileText className="w-4 h-4 shrink-0 text-[#1C1A15] dark:text-[#FBFAF6]" />
             <span
               style={{ color: 'var(--solva-ink)' }}
-              className="text-[13px] font-medium"
+              className="text-[12.5px] sm:text-[13px] font-medium leading-snug"
             >
               {lang === 'vi'
-                ? 'GROBID TEI-XML + Đối soát đa chuẩn'
-                : 'GROBID TEI-XML + Cross-Validator'}
+                ? 'Thẻ tài liệu bóc tách tự động'
+                : 'Extracted Reference Preview'}
             </span>
           </div>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            {lang === 'vi' ? 'HOẠT ĐỘNG' : 'ACTIVE'}
-          </span>
+          <button
+            type="button"
+            data-testid="xml-schema-preview-toggle"
+            aria-expanded={showXmlSchema}
+            aria-controls="xml-schema-preview-panel"
+            onClick={() => setShowXmlSchema((prev) => !prev)}
+            style={{
+              backgroundColor: 'var(--solva-surface)',
+              borderColor: showXmlSchema ? 'var(--solva-ink)' : 'var(--solva-border)',
+              color: showXmlSchema ? 'var(--solva-ink)' : 'var(--solva-muted)',
+            }}
+            className="inline-flex items-center gap-1 min-h-[36px] sm:min-h-[32px] px-2.5 py-1 text-[11px] font-mono whitespace-nowrap shrink-0 rounded-[6px] border hover:opacity-85 transition-all cursor-pointer"
+          >
+            {showXmlSchema
+              ? lang === 'vi'
+                ? 'Xem dạng thẻ'
+                : 'Card view'
+              : lang === 'vi'
+                ? 'Mã XML'
+                : 'Raw XML'}
+          </button>
         </div>
 
-        <div
-          style={{
-            backgroundColor: 'var(--solva-surface)',
-          }}
-          className="p-3 rounded-[8px] font-mono text-[11px] space-y-1.5"
-        >
+        {showXmlSchema ? (
           <div
+            id="xml-schema-preview-panel"
             style={{
-              color: activePhase === 0 ? 'var(--solva-ink)' : 'var(--solva-muted)',
-              transform: activePhase === 0 ? 'translateX(2px)' : 'translateX(0px)',
+              backgroundColor: 'var(--solva-surface)',
             }}
-            className="transition-[color,transform] duration-300"
+            className="p-2.5 sm:p-3 rounded-[8px] font-mono text-[10px] sm:text-[11px] space-y-1.5 break-all sm:break-normal"
           >
-            &lt;biblStruct xml:id=&quot;b
-            <SubtleNumber value={String(currentXmlId).padStart(2, '0')} />
-            &quot;&gt;
+            <div
+              style={{
+                color: activePhase === 0 ? 'var(--solva-ink)' : 'var(--solva-muted)',
+                transform: activePhase === 0 ? 'translateX(2px)' : 'translateX(0px)',
+              }}
+              className="transition-[color,transform] duration-300"
+            >
+              &lt;biblStruct xml:id=&quot;b
+              <SubtleNumber value={String(currentXmlId).padStart(2, '0')} />
+              &quot;&gt;
+            </div>
+            <div
+              style={{
+                color: 'var(--solva-ink)',
+                transform: activePhase === 1 ? 'translateX(3px)' : 'translateX(0px)',
+              }}
+              className="pl-2.5 sm:pl-3 transition-transform duration-300"
+            >
+              &lt;title&gt;Deep Residual Learning&lt;/title&gt;
+            </div>
+            <div
+              style={{
+                color: 'var(--solva-ink)',
+                transform: activePhase === 2 ? 'translateX(3px)' : 'translateX(0px)',
+              }}
+              className="pl-2.5 sm:pl-3 transition-transform duration-300"
+            >
+              &lt;idno type=&quot;DOI&quot;&gt;10.1109/CVPR.2016.90&lt;/idno&gt;
+            </div>
+            <div
+              style={{
+                color: activePhase === 3 ? 'var(--solva-ink)' : 'var(--solva-muted)',
+                transform: activePhase === 3 ? 'translateX(2px)' : 'translateX(0px)',
+              }}
+              className="transition-[color,transform] duration-300"
+            >
+              &lt;/biblStruct&gt;
+            </div>
           </div>
+        ) : (
           <div
+            id="xml-schema-preview-panel"
             style={{
-              color: 'var(--solva-ink)',
-              transform: activePhase === 1 ? 'translateX(3px)' : 'translateX(0px)',
+              backgroundColor: 'var(--solva-surface)',
+              borderColor: 'var(--solva-border)',
             }}
-            className="pl-3 transition-transform duration-300"
+            className="p-3 rounded-[8px] border space-y-1.5 text-[11px]"
           >
-            &lt;title&gt;Deep Residual Learning&lt;/title&gt;
+            <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <span
+                style={{ color: 'var(--solva-muted)' }}
+                className="font-mono text-[10px]"
+              >
+                {lang === 'vi' ? 'Mục tham khảo #' : 'Reference #'}
+                <SubtleNumber value={String(currentXmlId).padStart(2, '0')} />
+              </span>
+              <span className="whitespace-nowrap shrink-0 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 inline-flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                {lang === 'vi' ? 'Đã khớp trong bài' : 'Linked in text'}
+              </span>
+            </div>
+            <div
+              style={{ color: 'var(--solva-ink)' }}
+              className="font-medium text-[12px] leading-snug"
+            >
+              Deep Residual Learning for Image Recognition
+            </div>
+            <div style={{ color: 'var(--solva-muted)' }} className="leading-snug">
+              K. He, X. Zhang, S. Ren, J. Sun · CVPR 2016
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-1 pt-1 border-t border-[#E7E3D9] dark:border-[#332F26] font-mono text-[10px]">
+              <span style={{ color: 'var(--solva-muted)' }}>DOI:</span>
+              <span style={{ color: 'var(--solva-ink)' }}>10.1109/CVPR.2016.90</span>
+            </div>
           </div>
-          <div
-            style={{
-              color: 'var(--solva-ink)',
-              transform: activePhase === 2 ? 'translateX(3px)' : 'translateX(0px)',
-            }}
-            className="pl-3 transition-transform duration-300"
-          >
-            &lt;idno type=&quot;DOI&quot;&gt;10.1109/CVPR.2016.90&lt;/idno&gt;
-          </div>
-          <div
-            style={{
-              color: activePhase === 3 ? 'var(--solva-ink)' : 'var(--solva-muted)',
-              transform: activePhase === 3 ? 'translateX(2px)' : 'translateX(0px)',
-            }}
-            className="transition-[color,transform] duration-300"
-          >
-            &lt;/biblStruct&gt;
-          </div>
-        </div>
+        )}
 
-        <div className="grid grid-cols-2 gap-2 text-[11px]">
-          {[
-            { key: 'ieee', label: 'IEEE [1]–[N]' },
-            { key: 'apa', label: 'APA 7th (Author, Yr)' },
-            { key: 'vancouver', label: 'Vancouver (1)' },
-            { key: 'acm', label: 'ACM / Harvard' },
-          ].map((item, idx) => {
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-2 text-[10.5px] sm:text-[11px]">
+          {styleItems.map((item, idx) => {
             const isStyleActive = idx === activePhase;
             return (
               <div
@@ -1064,15 +1230,18 @@ export function StickyCardWidget({
                     : 'var(--solva-border)',
                   transform: isStyleActive ? 'translateY(-1px)' : 'translateY(0px)',
                 }}
-                className="px-2.5 py-1.5 rounded-[6px] border flex items-center gap-1.5 transition-[background-color,border-color,transform] duration-300"
+                className="px-2 py-1.5 rounded-[6px] border flex items-center gap-1.5 min-w-0 transition-[background-color,border-color,transform] duration-300"
               >
                 <Check
-                  className={`w-3 h-3 text-emerald-600 shrink-0 transition-transform duration-300 ${
+                  className={`w-3 h-3 text-emerald-700 dark:text-emerald-300 shrink-0 transition-transform duration-300 ${
                     isStyleActive ? 'scale-125' : 'scale-100'
                   }`}
                 />
-                <span style={{ color: 'var(--solva-ink)' }} className="truncate">
-                  {item.label}
+                <span style={{ color: 'var(--solva-ink)' }} className="leading-snug min-w-0">
+                  {item.prefix}
+                  {item.tail && (
+                    <span className="citra-nowrap-tail whitespace-nowrap">{item.tail}</span>
+                  )}
                 </span>
               </div>
             );
@@ -1083,7 +1252,7 @@ export function StickyCardWidget({
   }
 
   if (index === 1) {
-    // Card 1: Symbolic Trace & Instructor Override (Screenshot 1)
+    // Card 1: Explainable Checks & Advisor Sign-Off
     const stanceValues = [0.93, 0.96, 0.93];
     const currentStance = stanceValues[activePhase % stanceValues.length];
 
@@ -1093,109 +1262,117 @@ export function StickyCardWidget({
         style={{
           backgroundColor: 'var(--solva-card-elevated)',
         }}
-        className="solva-glass-ring w-full max-w-[340px] rounded-[12px] p-5 space-y-3.5 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
+        className="solva-glass-ring w-full max-w-[348px] rounded-[12px] p-4 sm:p-5 space-y-3.5 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <GitBranch className="w-4 h-4 text-[#1C1A15] dark:text-[#FBFAF6]" />
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <GitBranch className="w-4 h-4 shrink-0 text-[#1C1A15] dark:text-[#FBFAF6]" />
             <span
               style={{ color: 'var(--solva-ink)' }}
-              className="text-[13px] font-medium"
+              className="text-[12.5px] sm:text-[13px] font-medium leading-snug"
             >
               {lang === 'vi'
-                ? 'Chuỗi suy luận & Quyền thẩm định Giảng viên'
-                : 'Symbolic Trace & Instructor Override'}
+                ? 'Giải thích rõ ràng & Giảng viên duyệt'
+                : 'Clear Reasons & Advisor Review'}
             </span>
           </div>
         </div>
 
         <div className="space-y-2">
-          {/* Rule 1: R01_DOI_EXACT */}
+          {/* Check 1: Exact DOI */}
           <div
             style={{
               backgroundColor: 'var(--solva-surface)',
               borderColor: activePhase === 0 ? 'var(--solva-ink)' : 'transparent',
               transform: activePhase === 0 ? 'translateY(-1px)' : 'translateY(0px)',
             }}
-            className="p-2.5 rounded-[8px] border flex items-center justify-between gap-2 transition-[border-color,transform] duration-300"
+            className="p-2.5 rounded-[8px] border flex items-start sm:items-center justify-between gap-2 transition-[border-color,transform] duration-300"
           >
             <div className="min-w-0">
               <div
                 style={{ color: 'var(--solva-ink)' }}
-                className="text-[11px] font-mono font-semibold"
+                className="text-[11.5px] font-medium leading-snug"
               >
-                R01_DOI_EXACT
+                {lang === 'vi'
+                  ? 'Đã xác nhận mã DOI gốc trên Crossref'
+                  : 'Official DOI confirmed via Crossref'}
               </div>
               <div
                 style={{ color: 'var(--solva-muted)' }}
-                className="text-[11px] truncate"
+                className="text-[10px] font-mono leading-snug mt-0.5"
               >
-                {lang === 'vi'
-                  ? 'Đã xác thực mã DOI chuẩn trên Crossref'
-                  : 'Canonical DOI verified via Crossref'}
+                {lang === 'vi' ? 'Đối chiếu mã DOI chính thức' : 'R01_DOI_EXACT'}
               </div>
             </div>
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300">
+            <span className="citra-nowrap-tail whitespace-nowrap shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300">
               {lang === 'vi' ? 'ĐẠT' : 'PASS'}
             </span>
           </div>
 
-          {/* Rule 2: R05_YEAR_DRIFT */}
+          {/* Check 2: Year comparison */}
           <div
             style={{
               backgroundColor: 'var(--solva-surface)',
               borderColor: activePhase === 1 ? 'var(--solva-ink)' : 'transparent',
               transform: activePhase === 1 ? 'translateY(-1px)' : 'translateY(0px)',
             }}
-            className="p-2.5 rounded-[8px] border flex items-center justify-between gap-2 transition-[border-color,transform] duration-300"
+            className="p-2.5 rounded-[8px] border flex items-start sm:items-center justify-between gap-2 transition-[border-color,transform] duration-300"
           >
             <div className="min-w-0">
               <div
                 style={{ color: 'var(--solva-ink)' }}
-                className="text-[11px] font-mono font-semibold"
+                className="text-[11.5px] font-medium leading-snug"
               >
-                R05_YEAR_DRIFT
+                {lang === 'vi' ? (
+                  <>
+                    Ghi trong bài 2018 · Xuất bản 2019{' '}
+                    <span className="citra-nowrap-tail whitespace-nowrap">(Δ=1 năm)</span>
+                  </>
+                ) : (
+                  <>
+                    Cited 2018 · Published 2019{' '}
+                    <span className="citra-nowrap-tail whitespace-nowrap">(Δ=1yr)</span>
+                  </>
+                )}
               </div>
               <div
                 style={{ color: 'var(--solva-muted)' }}
-                className="text-[11px] truncate"
+                className="text-[10px] font-mono leading-snug mt-0.5"
               >
-                {lang === 'vi'
-                  ? 'Ghi trong bài 2018 · Công bố 2019 (Δ=1 năm)'
-                  : 'Cited 2018 · Published 2019 (Δ=1yr)'}
+                {lang === 'vi' ? 'So sánh năm bản nháp & năm công bố' : 'R05_YEAR_DRIFT'}
               </div>
             </div>
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 bg-amber-500/12 text-amber-700 dark:text-amber-300">
-              {lang === 'vi' ? 'LƯU Ý' : 'WARN'}
+            <span className="citra-nowrap-tail whitespace-nowrap shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-500/[0.12] text-amber-800 dark:text-amber-300">
+              {lang === 'vi' ? 'LƯU Ý' : 'REVIEW'}
             </span>
           </div>
 
-          {/* Rule 3: NLI_CLAIM_STANCE */}
+          {/* Check 3: Abstract support */}
           <div
             style={{
               backgroundColor: 'var(--solva-surface)',
               borderColor: activePhase === 2 ? 'var(--solva-ink)' : 'transparent',
               transform: activePhase === 2 ? 'translateY(-1px)' : 'translateY(0px)',
             }}
-            className="p-2.5 rounded-[8px] border flex items-center justify-between gap-2 transition-[border-color,transform] duration-300"
+            className="p-2.5 rounded-[8px] border flex items-start sm:items-center justify-between gap-2 transition-[border-color,transform] duration-300"
           >
             <div className="min-w-0">
               <div
                 style={{ color: 'var(--solva-ink)' }}
-                className="text-[11px] font-mono font-semibold"
+                className="text-[11.5px] font-medium leading-snug"
               >
-                NLI_CLAIM_STANCE
+                {lang === 'vi'
+                  ? 'Câu trích dẫn khớp tóm tắt bài báo gốc'
+                  : 'Claim supported by paper abstract'}
               </div>
               <div
                 style={{ color: 'var(--solva-muted)' }}
-                className="text-[11px] truncate"
+                className="text-[10px] leading-snug mt-0.5"
               >
-                {lang === 'vi'
-                  ? 'Luận điểm trích dẫn được bài gốc củng cố'
-                  : 'Manuscript claim supported by abstract'}
+                {lang === 'vi' ? 'Đối chiếu nội dung trích dẫn' : 'Abstract content alignment'}
               </div>
             </div>
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300">
+            <span className="citra-nowrap-tail whitespace-nowrap shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300">
               <SubtleNumber value={currentStance.toFixed(2)} />
             </span>
           </div>
@@ -1216,22 +1393,30 @@ export function StickyCardWidget({
       style={{
         backgroundColor: 'var(--solva-card-elevated)',
       }}
-      className="solva-glass-ring w-full max-w-[340px] rounded-[12px] p-5 space-y-3.5 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
+      className="solva-glass-ring w-full max-w-[348px] rounded-[12px] p-4 sm:p-5 space-y-3.5 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
     >
       <div className="flex items-center justify-between gap-2">
         <span
           style={{ color: 'var(--solva-ink)' }}
-          className="text-[13px] font-medium flex items-center gap-1.5 min-w-0"
+          className="text-[12.5px] sm:text-[13px] font-medium flex items-center gap-1.5 min-w-0"
         >
           <Sparkles className="w-4 h-4 shrink-0" />
           <span className="leading-snug">
             {lang === 'vi'
-              ? 'Hành trình Hoàn thiện Chất lượng Bản thảo'
-              : 'Revision Progress & Integrity Score'}
+              ? 'Tiến bộ chất lượng qua từng bản nháp'
+              : 'Draft-to-Submission Progress'}
           </span>
         </span>
-        <span className="text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-300 shrink-0 whitespace-nowrap">
-          <SubtleNumber prefix="+" value={currentCisDelta.toFixed(1)} suffix=" CIS" />
+        <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-300">
+          <SubtleNumber
+            prefix="+"
+            value={
+              lang === 'vi'
+                ? currentCisDelta.toFixed(1).replace('.', ',')
+                : currentCisDelta.toFixed(1)
+            }
+            suffix={lang === 'vi' ? ' điểm' : ' pts'}
+          />
         </span>
       </div>
 
@@ -1239,19 +1424,23 @@ export function StickyCardWidget({
         style={{
           backgroundColor: 'var(--solva-surface)',
         }}
-        className="p-3.5 rounded-[10px] flex items-center justify-between"
+        className="p-3 sm:p-3.5 rounded-[10px] flex items-center justify-between gap-2"
       >
-        <div>
-          <div style={{ color: 'var(--solva-muted)' }} className="text-[11px]">
-            {lang === 'vi' ? 'Bản nháp v1 (Trước rà soát)' : 'Draft v1 (Before Audit)'}
+        <div className="min-w-0">
+          <div style={{ color: 'var(--solva-muted)' }} className="text-[11px] leading-snug">
+            {lang === 'vi' ? 'Bản nháp v1 ' : 'Draft v1 '}
+            <span className="citra-nowrap-tail whitespace-nowrap">
+              {lang === 'vi' ? '(Trước rà soát)' : '(Before Audit)'}
+            </span>
           </div>
           <div
             style={{ color: 'var(--solva-ink)' }}
-            className="font-solva-serif text-[26px] leading-tight"
+            className="font-solva-serif text-[24px] sm:text-[26px] leading-tight mt-0.5"
           >
             <SolvaLiveNumber
               value={68.0}
               decimals={1}
+              decimalSeparator={lang === 'vi' ? ',' : '.'}
               suffix="%"
               replaySeed={replaySeed}
               durationMs={1350}
@@ -1263,28 +1452,41 @@ export function StickyCardWidget({
             color: 'var(--solva-muted)',
             transform: activePhase === 1 ? 'translateX(3px)' : 'translateX(0px)',
           }}
-          className="font-mono text-sm transition-transform duration-500"
+          className="font-mono text-sm shrink-0 transition-transform duration-500"
         >
           →
         </div>
-        <div className="text-right">
-          <div style={{ color: 'var(--solva-muted)' }} className="text-[11px]">
-            {lang === 'vi' ? 'Bản nộp v2 (Đã chuẩn hóa)' : 'Draft v2 (Verified)'}
+        <div className="text-right min-w-0">
+          <div style={{ color: 'var(--solva-muted)' }} className="text-[11px] leading-snug">
+            {lang === 'vi' ? 'Bản nộp v2 ' : 'Draft v2 '}
+            <span className="citra-nowrap-tail whitespace-nowrap">
+              {lang === 'vi' ? '(Đã chuẩn hóa)' : '(Verified)'}
+            </span>
           </div>
-          <div className="font-solva-serif text-[26px] leading-tight text-emerald-700 dark:text-emerald-300">
-            <SubtleNumber value={currentV2.toFixed(1)} suffix="%" />
+          <div className="font-solva-serif text-[24px] sm:text-[26px] leading-tight mt-0.5 text-emerald-700 dark:text-emerald-300">
+            <SubtleNumber
+              value={
+                lang === 'vi'
+                  ? currentV2.toFixed(1).replace('.', ',')
+                  : currentV2.toFixed(1)
+              }
+              suffix="%"
+            />
           </div>
         </div>
       </div>
 
       <div className="space-y-1.5 text-[11px]">
-        <div className="flex items-center justify-between">
-          <span style={{ color: 'var(--solva-muted)' }}>
+        <div className="flex items-center justify-between gap-2">
+          <span style={{ color: 'var(--solva-muted)' }} className="leading-snug">
             {lang === 'vi'
-              ? 'Trích dẫn ảo / DOI hư cấu đã loại bỏ'
-              : 'Hallucinated / Ghost DOIs resolved'}
+              ? 'Nguồn không tồn tại / DOI sai đã thay thế'
+              : 'Unverified / fake DOIs replaced'}
           </span>
-          <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
+          <span
+            style={{ color: 'var(--solva-ink)' }}
+            className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono font-semibold"
+          >
             3 →{' '}
             <SolvaLiveNumber
               value={0}
@@ -1294,13 +1496,16 @@ export function StickyCardWidget({
             />
           </span>
         </div>
-        <div className="flex items-center justify-between">
-          <span style={{ color: 'var(--solva-muted)' }}>
+        <div className="flex items-center justify-between gap-2">
+          <span style={{ color: 'var(--solva-muted)' }} className="leading-snug">
             {lang === 'vi'
-              ? 'Mục tham khảo bị khuyết đã bổ sung'
-              : 'Missing bibliography entries fixed'}
+              ? 'Mục tham khảo còn thiếu đã bổ sung'
+              : 'Missing bibliography entries added'}
           </span>
-          <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
+          <span
+            style={{ color: 'var(--solva-ink)' }}
+            className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono font-semibold"
+          >
             4 →{' '}
             <SolvaLiveNumber
               value={0}
@@ -1340,98 +1545,96 @@ export function PipelineStageVisual({
     {
       badge:
         lang === 'vi'
-          ? 'GIAI ĐOẠN 01 · GROBID TEI-XML & ĐỐI SOÁT ĐA CHUẨN'
-          : 'STAGE 01 · GROBID TEI-XML & CROSS-VALIDATOR',
+          ? 'BƯỚC 01 · ĐỌC BÀI VIẾT & ĐỊNH DẠNG'
+          : 'STAGE 01 · DOCUMENT & STYLE READER',
       title:
         lang === 'vi'
-          ? 'Phân tách cấu trúc bản thảo & Chuẩn hóa trích dẫn đa quy cách'
-          : 'Structural Manuscript Segmentation & Multi-Style Reference Parsing',
+          ? 'Nhận diện trích dẫn trong bài & Danh mục tài liệu cuối bài'
+          : 'Reads In-Text Citations & Reference Lists Automatically',
       metrics: [
         {
-          k: lang === 'vi' ? 'Bộ máy phân tích' : 'Engine',
-          v: lang === 'vi' ? 'GROBID Học sâu + Bộ đối soát đa chuẩn' : 'GROBID CRF/DL + Regex Cross-Validator',
+          k: lang === 'vi' ? 'Định dạng tệp' : 'File Formats',
+          v: 'PDF, Word (.docx), BibTeX, RIS',
         },
         {
-          k: lang === 'vi' ? 'Quy chuẩn hỗ trợ' : 'Supported Styles',
+          k: lang === 'vi' ? 'Chuẩn trình bày' : 'Supported Styles',
           v: 'IEEE, APA 7th, Vancouver, Harvard, ACM',
         },
         {
-          k: lang === 'vi' ? 'Khoanh vùng bố cục' : 'Section Filtering',
-          v: lang === 'vi' ? 'Tách biệt Thân bài & Danh mục tham khảo' : 'Body vs. Bibliography Boundary Lock',
+          k: lang === 'vi' ? 'Tách bố cục' : 'Section Check',
+          v: lang === 'vi' ? 'Tách riêng phần thân bài & Danh mục cuối bài' : 'Cleanly separates body text & bibliography',
         },
       ],
     },
     {
       badge:
         lang === 'vi'
-          ? 'GIAI ĐOẠN 02 · LIÊN HỢP 15+ CSDL HỌC THUẬT QUỐC TẾ'
-          : 'STAGE 02 · 15+ FEDERATED SCHOLARLY INDEXES',
+          ? 'BƯỚC 02 · TRA CỨU 15+ THƯ VIỆN HỌC THUẬT'
+          : 'STAGE 02 · 15+ ACADEMIC LIBRARIES',
       title:
         lang === 'vi'
-          ? 'Truy vấn song song bất đồng bộ kết hợp bộ nhớ đệm SQLite FTS5'
-          : 'Async Parallel Bibliographic Retrieval with SQLite FTS5 Cache',
+          ? 'Đối chiếu song song trên hơn 15 cơ sở dữ liệu uy tín toàn cầu'
+          : 'Simultaneous Lookup Across 15+ Trusted Academic Libraries',
       metrics: [
         {
-          k: lang === 'vi' ? 'Tầng CSDL chủ lực' : 'Primary Tier',
+          k: lang === 'vi' ? 'Thư viện quốc tế' : 'Global Libraries',
           v: 'Crossref, OpenAlex, Semantic Scholar, PubMed',
         },
         {
-          k: lang === 'vi' ? 'Tầng chuyên ngành' : 'Specialized Tier',
-          v: 'arXiv, DBLP, Europe PMC, DOAJ, ORCID',
+          k: lang === 'vi' ? 'Sách & Tạp chí mở' : 'Books & Open Access',
+          v: 'DOAJ, OpenLibrary, arXiv, DBLP, ORCID',
         },
         {
-          k: 'Cache Hit Latency',
-          label: lang === 'vi' ? 'Độ trễ bộ nhớ đệm' : 'Cache Hit Latency',
-          v: '3.2 ms (BM25 + Trigram FTS5)',
-        },
-      ],
-    },
-    {
-      badge:
-        lang === 'vi'
-          ? `GIAI ĐOẠN 03 · ĐỒ THỊ QUY TẮC NEURO-SYMBOLIC (${SYMBOLIC_RULES_RANGE})`
-          : `STAGE 03 · NEURO-SYMBOLIC RULE GRAPH (${SYMBOLIC_RULES_RANGE})`,
-      title:
-        lang === 'vi'
-          ? 'Đối sánh chi tiết từng trường thư mục & Suy luận quy tắc hình thức'
-          : 'Field-Level Metadata Verification & Deterministic Rule Graph',
-      metrics: [
-        {
-          k: 'Title Similarity',
-          label: lang === 'vi' ? 'Độ tương đồng tiêu đề' : 'Title Similarity',
-          v: 'Token Jaccard + Levenshtein + MiniLM (0.98)',
-        },
-        {
-          k: lang === 'vi' ? 'Đối chiếu Tác giả & Năm' : 'Author & Year Check',
-          v: lang === 'vi' ? 'So khớp mờ họ tác giả · Độ lệch chuẩn ±1 năm' : 'Surname Fuzzy Match · ΔYear Tolerance ±1',
-        },
-        {
-          k: lang === 'vi' ? 'Nhận diện DOI giả mạo' : 'Ghost DOI Detection',
-          v: lang === 'vi' ? 'Phân giải định danh HTTP/Handle + Đối chiếu chéo' : 'HTTP/Handle Resolution + Metadata Cross-Check',
+          k: lang === 'vi' ? 'Tốc độ tra cứu' : 'Lookup Speed',
+          v: lang === 'vi' ? '~40 ms đối chiếu song song' : '~40 ms parallel library lookup',
         },
       ],
     },
     {
       badge:
         lang === 'vi'
-          ? 'GIAI ĐOẠN 04 · SENTENCE-BERT & MULTILINGUAL MINILM ONNX INT8'
-          : 'STAGE 04 · SENTENCE-BERT & MULTILINGUAL MINILM ONNX INT8',
+          ? 'BƯỚC 03 · ĐỐI CHIẾU CHI TIẾT TỪNG TRƯỜNG'
+          : 'STAGE 03 · TRANSPARENT VERIFICATION CHECKS',
       title:
         lang === 'vi'
-          ? 'Thẩm định sự tương thích ngữ nghĩa xuyên ngôn ngữ của bài gốc'
-          : 'Cross-Lingual Claim-to-Abstract Semantic Alignment',
+          ? 'So sánh tên bài, tác giả, năm xuất bản, tạp chí và mã DOI'
+          : 'Side-by-Side Title, Author, Year, Journal & DOI Verification',
       metrics: [
         {
-          k: 'Sentence-BERT',
-          v: lang === 'vi' ? 'Độ tương đồng Cosine sâu all-MiniLM-L6-v2' : 'all-MiniLM-L6-v2 Dense Cosine Similarity',
+          k: lang === 'vi' ? 'Tên công trình' : 'Title Check',
+          v: lang === 'vi' ? 'Đối chiếu chính xác & nhận diện lỗi đánh máy' : 'Exact & typo-tolerant title comparison',
         },
         {
-          k: 'Multilingual ONNX',
-          v: lang === 'vi' ? 'Mô hình đa ngôn ngữ MiniLM-L12-v2 ONNX INT8' : 'paraphrase-multilingual-MiniLM-L12-v2 ONNX INT8',
+          k: lang === 'vi' ? 'Tác giả & Năm XB' : 'Authors & Year',
+          v: lang === 'vi' ? 'Kiểm tra họ tên tác giả · nhận biết lệch ±1 năm bản nháp' : 'Author surname check · ±1 year preprint awareness',
         },
         {
-          k: lang === 'vi' ? 'Đối sánh ngữ cảnh' : 'Claim Alignment',
-          v: lang === 'vi' ? 'So khớp ngữ nghĩa câu trích dẫn ↔ tóm tắt bài gốc' : 'Focal In-Text Sentence ↔ Source Abstract Alignment',
+          k: lang === 'vi' ? 'Kiểm tra mã DOI' : 'Link & DOI Safety',
+          v: lang === 'vi' ? 'Xác nhận đường dẫn & mã DOI trỏ đúng tới bài báo thật' : 'Confirms DOIs & web links open real publications',
+        },
+      ],
+    },
+    {
+      badge:
+        lang === 'vi'
+          ? 'BƯỚC 04 · ĐỐI CHIẾU NỘI DUNG & CHUẨN HÓA'
+          : 'STAGE 04 · CONTENT ALIGNMENT & CLEANUP',
+      title:
+        lang === 'vi'
+          ? 'Đảm bảo bài báo gốc đúng với ý trích dẫn & chuẩn hóa danh mục'
+          : 'Verifies Paper Abstracts Support Your Claim & Formats Cleanly',
+      metrics: [
+        {
+          k: lang === 'vi' ? 'Tóm tắt bài gốc' : 'Abstract Match',
+          v: lang === 'vi' ? 'So sánh câu trích dẫn trong bài với tóm tắt ấn phẩm gốc' : 'Compares your cited sentence with the source abstract',
+        },
+        {
+          k: lang === 'vi' ? 'Đa ngôn ngữ' : 'Bilingual Support',
+          v: lang === 'vi' ? 'Hiểu chính xác bài viết tiếng Việt trích dẫn nguồn tiếng Anh' : 'Works seamlessly across Vietnamese & English papers',
+        },
+        {
+          k: lang === 'vi' ? 'Chuẩn hóa nhanh' : 'Clean Export',
+          v: lang === 'vi' ? 'Xuất danh mục chuẩn APA 7th, IEEE, BibTeX & báo cáo Word/PDF' : 'One-click APA 7th, IEEE, BibTeX & Word/PDF report',
         },
       ],
     },
@@ -1454,9 +1657,9 @@ export function PipelineStageVisual({
         >
           {active.badge}
         </span>
-        <span className="px-2 py-0.5 rounded bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold inline-flex items-center gap-1.5">
+        <span className="whitespace-nowrap shrink-0 px-2 py-0.5 rounded bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold inline-flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          {lang === 'vi' ? 'TRỰC TIẾP' : 'LIVE PIPELINE'}
+          {lang === 'vi' ? 'TỰ ĐỘNG' : 'LIVE CHECK'}
         </span>
       </div>
 
@@ -1480,7 +1683,7 @@ export function PipelineStageVisual({
               className="px-3.5 py-2.5 rounded-[8px] border flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[12px] transition-[border-color,background-color] duration-300"
             >
               <span style={{ color: 'var(--solva-muted)' }} className="font-mono">
-                {'label' in m && m.label ? m.label : m.k}
+                {m.k}
               </span>
               <span
                 style={{ color: 'var(--solva-ink)' }}
@@ -1500,13 +1703,13 @@ export function PipelineStageVisual({
         }}
         className="p-3 rounded-[8px] border font-mono text-[11px] flex items-center gap-2"
       >
-        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+        <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-300 shrink-0" />
         <span style={{ color: 'var(--solva-ink)' }}>
           {tabIndex === 0 && (
             <>
               {lang === 'vi'
-                ? 'Đã nhận diện 28 trích dẫn trong bài ([1]–[28]) và liên kết chuẩn xác 27 mục tài liệu tham khảo chỉ trong '
-                : 'Extracted 28 in-text markers ([1]–[28]) and mapped 27 canonical bibliography entries in '}
+                ? 'Đã nhận diện 28 trích dẫn trong bài ([1]–[28]) và nối khớp 27 mục tài liệu cuối bài trong '
+                : 'Found 28 in-text citations ([1]–[28]) and linked 27 bibliography entries in '}
               <SolvaLiveNumber
                 value={340}
                 suffix="ms."
@@ -1518,22 +1721,38 @@ export function PipelineStageVisual({
           {tabIndex === 1 && (
             <>
               {lang === 'vi'
-                ? 'Truy vấn đồng thời 15 cổng API · Khử trùng lặp 64 bản ghi ứng viên · Xác lập hồ sơ học thuật chuẩn nhất.'
-                : 'Queried 15 APIs concurrently · Deduplicated 64 candidate records · Ranked top canonical work.'}
+                ? 'Tra cứu đồng thời 15+ thư viện · Gộp 64 bản ghi trùng lặp · Chọn ra hồ sơ gốc chuẩn nhất.'
+                : 'Checked 15+ libraries at once · Merged 64 duplicate records · Matched official publication.'}
             </>
           )}
           {tabIndex === 2 && (
             <>
-              {lang === 'vi'
-                ? 'Kích hoạt quy tắc R01_EXACT_DOI & R04_AUTHOR_OVERLAP → Phán quyết: VERIFIED (Độ tin cậy: 98.4%).'
-                : 'Triggered R01_EXACT_DOI & R04_AUTHOR_OVERLAP → Verdict: VERIFIED (Confidence: 98.4%).'}
+              {lang === 'vi' ? (
+                <>
+                  Xác nhận khớp mã DOI, tác giả &amp; năm xuất bản → Nguồn trích dẫn hợp lệ{' '}
+                  <span className="citra-nowrap-tail whitespace-nowrap">(Độ tin cậy: 98,4%).</span>
+                </>
+              ) : (
+                <>
+                  Confirmed DOI, author &amp; year match → Verified Source{' '}
+                  <span className="citra-nowrap-tail whitespace-nowrap">(Confidence: 98.4%).</span>
+                </>
+              )}
             </>
           )}
           {tabIndex === 3 && (
             <>
-              {lang === 'vi'
-                ? 'Luận điểm trích dẫn tương thích chặt chẽ với tóm tắt bài gốc (ĐỒNG THUẬN: 0.94 · BÁC BỎ: 0.01 · TRUNG LẬP: 0.05).'
-                : 'In-text claim entails retrieved abstract (SUPPORTS: 0.94 · REFUTES: 0.01 · NEUTRAL: 0.05).'}
+              {lang === 'vi' ? (
+                <>
+                  Câu trích dẫn phù hợp chặt chẽ với tóm tắt bài báo gốc{' '}
+                  <span className="citra-nowrap-tail whitespace-nowrap">(Độ khớp nội dung: 94%).</span>
+                </>
+              ) : (
+                <>
+                  Cited sentence aligns closely with paper abstract{' '}
+                  <span className="citra-nowrap-tail whitespace-nowrap">(Content match: 94%).</span>
+                </>
+              )}
             </>
           )}
         </span>
@@ -1559,19 +1778,19 @@ export function BottomCTAMockup({ lang }: { lang: Lang }) {
 
   const stats = [
     {
-      label: lang === 'vi' ? 'ĐÃ XÁC THỰC' : 'VERIFIED',
+      label: lang === 'vi' ? 'HỢP LỆ' : 'VERIFIED',
       val: 34,
       startVal: 0,
       color: 'text-emerald-700 dark:text-emerald-300',
     },
     {
-      label: lang === 'vi' ? 'LỆCH THÔNG TIN' : 'METADATA DRIFT',
+      label: lang === 'vi' ? 'LỆCH THÔNG TIN' : 'DETAILS MISMATCH',
       val: 2,
       startVal: 0,
-      color: 'text-amber-700 dark:text-amber-300',
+      color: 'text-amber-800 dark:text-amber-300',
     },
     {
-      label: lang === 'vi' ? 'TRÍCH DẪN ẢO' : 'HALLUCINATED',
+      label: lang === 'vi' ? 'KHÔNG TÌM THẤY' : 'NOT FOUND',
       val: 0,
       startVal: 3,
       color: 'text-[#1C1A15] dark:text-[#FBFAF6]',
@@ -1589,20 +1808,20 @@ export function BottomCTAMockup({ lang }: { lang: Lang }) {
     >
       <div
         style={getStaggerStyle(40)}
-        className="flex items-center justify-between gap-3 border-b border-[#E7E3D9] dark:border-[#332F26] pb-3"
+        className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E7E3D9] dark:border-[#332F26] pb-3"
       >
         <div className="min-w-0">
           <div
             style={{ color: 'var(--solva-muted)' }}
-            className="text-[10px] font-mono uppercase truncate"
+            className="text-[10px] font-mono uppercase leading-tight"
           >
             {lang === 'vi'
               ? 'BÁO CÁO KIỂM CHỨNG TOÀN DIỆN'
-              : 'CITATION INTEGRITY AUDIT REPORT'}
+              : 'CITATION INTEGRITY REPORT'}
           </div>
           <div
             style={{ color: 'var(--solva-ink)' }}
-            className="text-[13px] sm:text-[15px] font-medium mt-0.5 truncate"
+            className="text-[13px] sm:text-[15px] font-medium mt-0.5 break-all sm:break-normal"
           >
             thesis_final_v3.pdf
           </div>
@@ -1614,10 +1833,11 @@ export function BottomCTAMockup({ lang }: { lang: Lang }) {
           }}
           className="px-2.5 py-1 rounded-[6px] font-mono text-[11px] font-semibold shrink-0 whitespace-nowrap"
         >
-          CIS{' '}
+          {lang === 'vi' ? 'Điểm' : 'Score'}{' '}
           <SolvaLiveNumber
             value={96.2}
             decimals={1}
+            decimalSeparator={lang === 'vi' ? ',' : '.'}
             replaySeed={replaySeed}
             durationMs={1450}
           />{' '}
@@ -1667,11 +1887,11 @@ export function BottomCTAMockup({ lang }: { lang: Lang }) {
       >
         <span style={{ color: 'var(--solva-ink)' }} className="font-medium">
           {lang === 'vi'
-            ? 'Sẵn sàng xuất báo cáo PDF / JSON & lưu vết kiểm toán'
-            : 'Ready for PDF / JSON export & instructor sign-off'}
+            ? 'Sẵn sàng xuất báo cáo Word / PDF & trình giảng viên'
+            : 'Ready for Word / PDF export & advisor sign-off'}
         </span>
         <span className="font-mono text-emerald-700 dark:text-emerald-300 font-semibold shrink-0 ml-2">
-          {lang === 'vi' ? '100% Truy vết rõ' : '100% Traceable'}
+          {lang === 'vi' ? '100% Minh bạch' : '100% Clear'}
         </span>
       </div>
     </div>
@@ -1699,33 +1919,50 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
     {
       id: '#018',
       file: 'Thesis_018_Neural_RAG.pdf',
-      verdict: lang === 'vi' ? 'DOI NGỤY TẠO' : 'GHOST DOI',
+      verdict: lang === 'vi' ? 'DOI KHÔNG TỒN TẠI' : 'DOI NOT FOUND',
       tone: 'red' as const,
-      rule: 'R12_GHOST_DOI · HTTP 404',
-      detail:
+      rule:
         lang === 'vi'
-          ? 'Phát hiện mã DOI hư cấu 10.1038/s42256-024-99812-x (Mục [14])'
-          : 'Caught fabricated DOI 10.1038/s42256-024-99812-x (Ref [14])',
+          ? 'Không tìm thấy mã DOI trên Crossref (404)'
+          : 'DOI Not Found on Crossref (404)',
+      detail:
+        lang === 'vi' ? (
+          <>
+            Phát hiện mã DOI không có thật 10.1038/s42256-024-99812-x{' '}
+            <span className="citra-nowrap-tail whitespace-nowrap">(Mục{'\u00A0'}[14])</span>
+          </>
+        ) : (
+          <>
+            Caught non-existent DOI 10.1038/s42256-024-99812-x{' '}
+            <span className="citra-nowrap-tail whitespace-nowrap">(Ref{'\u00A0'}[14])</span>
+          </>
+        ),
       cisNum: 74.2,
     },
     {
       id: '#047',
       file: 'Thesis_047_Legal_NLP.pdf',
-      verdict: lang === 'vi' ? 'LỆCH NĂM XB' : 'YEAR DRIFT',
+      verdict: lang === 'vi' ? 'LỆCH NĂM XB' : 'WRONG YEAR',
       tone: 'amber' as const,
-      rule: 'R05_YEAR_DRIFT · Δ=1yr',
+      rule:
+        lang === 'vi'
+          ? 'Lệch 1 năm xuất bản so với bản gốc'
+          : 'Publication Year Off by 1 Year',
       detail:
         lang === 'vi'
-          ? 'Ghi nhầm năm bản nháp arXiv (2018) thay vì kỷ yếu NAACL (2019)'
-          : 'arXiv preprint year (2018) vs. canonical NAACL (2019)',
+          ? 'Ghi nhầm năm bản nháp (2018) thay vì năm công bố chính thức (2019)'
+          : 'Cites draft year (2018) instead of official proceedings year (2019)',
       cisNum: 88.5,
     },
     {
       id: '#104',
       file: 'Thesis_104_BioMed_VLM.pdf',
-      verdict: lang === 'vi' ? 'ĐÃ XÁC THỰC' : 'VERIFIED',
+      verdict: lang === 'vi' ? 'HỢP LỆ' : 'VERIFIED',
       tone: 'emerald' as const,
-      rule: 'R01_EXACT_DOI ∧ R09_NLI',
+      rule:
+        lang === 'vi'
+          ? 'Khớp toàn bộ thông tin & tóm tắt bài gốc'
+          : 'All Details & Abstract Verified',
       detail:
         lang === 'vi'
           ? 'Đồng nhất 38/38 tài liệu tham khảo trên Crossref, PubMed & OpenAlex'
@@ -1752,7 +1989,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
           ...getStaggerStyle(40),
           borderColor: 'var(--solva-border)',
         }}
-        className="flex items-center justify-between gap-2 pb-3 border-b"
+        className="flex items-start sm:items-center justify-between gap-2 pb-3 border-b"
       >
         <div className="min-w-0">
           <div
@@ -1760,29 +1997,32 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
             className="text-[10px] font-mono uppercase tracking-wider flex items-center gap-1.5"
           >
             <GraduationCap className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">
+            <span>
               {lang === 'vi'
-                ? 'HỘI ĐỒNG KHOA KHMT · ĐỢT 1'
+                ? 'HỘI ĐỒNG KHÓA LUẬN · ĐỢT 1'
                 : 'THESIS COMMITTEE · COHORT RUN'}
             </span>
           </div>
           <div
             style={{ color: 'var(--solva-ink)' }}
-            className="text-[14px] sm:text-[15px] font-medium truncate mt-0.5"
+            className="text-[13.5px] sm:text-[15px] font-medium leading-snug mt-0.5"
           >
             <SolvaLiveNumber value={120} replaySeed={replaySeed} durationMs={1300} />{' '}
-            {lang === 'vi' ? 'Khóa luận Tốt nghiệp (' : 'Graduation Theses ('}
-            <SolvaLiveNumber
-              value={4380}
-              formatThousands
-              thousandSeparator={sep}
-              replaySeed={replaySeed}
-              durationMs={1500}
-            />{' '}
-            {lang === 'vi' ? 'trích dẫn)' : 'refs)'}
+            {lang === 'vi' ? 'Khóa luận Tốt nghiệp ' : 'Graduation Theses '}
+            <span className="citra-nowrap-tail whitespace-nowrap">
+              (
+              <SolvaLiveNumber
+                value={4380}
+                formatThousands
+                thousandSeparator={sep}
+                replaySeed={replaySeed}
+                durationMs={1500}
+              />{' '}
+              {lang === 'vi' ? 'trích dẫn)' : 'refs)'}
+            </span>
           </div>
         </div>
-        <span className="px-2 py-0.5 rounded-[6px] bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold shrink-0">
+        <span className="citra-nowrap-tail whitespace-nowrap px-2 py-0.5 rounded-[6px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold shrink-0">
           <SolvaLiveNumber value={48} replaySeed={replaySeed} durationMs={1200} />m{' '}
           <SolvaLiveNumber value={12} replaySeed={replaySeed} durationMs={1350} />s
         </span>
@@ -1792,22 +2032,22 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
       <div style={getStaggerStyle(110)} className="grid grid-cols-3 gap-2 text-center">
         {[
           {
-            label: lang === 'vi' ? 'CHUẨN XÁC' : 'VERIFIED',
+            label: lang === 'vi' ? 'HỢP LỆ' : 'VERIFIED',
             val: 4192,
             format: true,
             color: 'text-emerald-700 dark:text-emerald-300',
           },
           {
-            label: lang === 'vi' ? 'LỆCH NĂM' : 'YEAR DRIFT',
+            label: lang === 'vi' ? 'LỆCH NĂM' : 'WRONG YEAR',
             val: 146,
             format: false,
-            color: 'text-amber-700 dark:text-amber-300',
+            color: 'text-amber-800 dark:text-amber-300',
           },
           {
-            label: lang === 'vi' ? 'DOI NGỤY TẠO' : 'GHOST DOIs',
+            label: lang === 'vi' ? 'KHÔNG TỒN TẠI' : 'NOT FOUND',
             val: 42,
             format: false,
-            color: 'text-red-600 dark:text-red-400',
+            color: 'text-red-700 dark:text-red-300',
           },
         ].map((stat, idx) => (
           <div
@@ -1826,7 +2066,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
             </div>
             <div
               style={{ color: 'var(--solva-muted)' }}
-              className="text-[9px] font-mono mt-1 truncate"
+              className="text-[9px] font-mono mt-1 leading-tight"
             >
               {stat.label}
             </div>
@@ -1851,7 +2091,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
                   ? 'var(--solva-ink)'
                   : 'var(--solva-border)',
               }}
-              className="w-full text-left px-3 py-2 rounded-[8px] border transition-[background-color,border-color] duration-200 cursor-pointer flex items-center justify-between gap-2"
+              className="w-full text-left px-3 py-2 rounded-[8px] border transition-[background-color,border-color] duration-200 cursor-pointer flex flex-wrap items-center justify-between gap-2"
             >
               <div className="flex items-center gap-2 min-w-0">
                 <span
@@ -1869,18 +2109,18 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
                 </span>
                 <span
                   style={{ color: 'var(--solva-ink)' }}
-                  className="text-[12px] font-medium truncate"
+                  className="text-[12px] font-medium break-all sm:break-normal min-w-0"
                 >
                   {item.file}
                 </span>
               </div>
               <span
-                className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded shrink-0 ${
+                className={`citra-nowrap-tail whitespace-nowrap text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded shrink-0 ${
                   item.tone === 'emerald'
-                    ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
+                    ? 'bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300'
                     : item.tone === 'amber'
-                      ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
-                      : 'bg-red-500/12 text-red-700 dark:text-red-300'
+                      ? 'bg-amber-500/[0.12] text-amber-800 dark:text-amber-300'
+                      : 'bg-red-500/[0.12] text-red-700 dark:text-red-300'
                 }`}
               >
                 {item.verdict}
@@ -1890,7 +2130,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
         })}
       </div>
 
-      {/* Active Thesis Rule Trace Footer */}
+      {/* Active Thesis Summary Footer */}
       <div
         key={activeThesis.id}
         style={{
@@ -1899,39 +2139,48 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
         }}
         className="p-2.5 rounded-[8px] border space-y-1 animate-debugger-switch"
       >
-        <div className="flex items-center justify-between text-[10px] font-mono">
+        <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10.5px]">
           <span style={{ color: 'var(--solva-ink)' }} className="font-semibold">
             {activeThesis.rule}
           </span>
-          <span style={{ color: 'var(--solva-muted)' }}>
-            CIS:{' '}
+          <span style={{ color: 'var(--solva-muted)' }} className="font-mono shrink-0 whitespace-nowrap">
+            {lang === 'vi' ? 'Điểm:' : 'Score:'}{' '}
             <strong style={{ color: 'var(--solva-ink)' }}>
-              <SubtleNumber value={activeThesis.cisNum.toFixed(1)} />
+              <SubtleNumber
+                value={
+                  lang === 'vi'
+                    ? activeThesis.cisNum.toFixed(1).replace('.', ',')
+                    : activeThesis.cisNum.toFixed(1)
+                }
+              />
             </strong>
           </span>
         </div>
         <p
           style={{ color: 'var(--solva-muted)' }}
-          className="text-[11px] leading-snug truncate"
+          className="text-[11px] leading-snug"
         >
           {activeThesis.detail}
         </p>
       </div>
 
-      {/* Bottom Action Link to Live Debugger */}
-      <div style={getStaggerStyle(250)} className="pt-0.5 flex items-center justify-between text-[11px]">
+      {/* Bottom Action Link to Live Check */}
+      <div
+        style={getStaggerStyle(250)}
+        className="pt-0.5 flex flex-wrap items-center justify-between gap-2 text-[11px]"
+      >
         <span style={{ color: 'var(--solva-muted)' }} className="font-mono text-[10px]">
-          15+ APIs · GROBID TEI
+          {lang === 'vi' ? '15+ Thư viện học thuật' : '15+ Academic Libraries'}
         </span>
         <a
           href="/#interactive-demo"
           style={{ color: 'var(--solva-ink)' }}
-          className="inline-flex items-center gap-1 font-medium hover:underline"
+          className="whitespace-nowrap shrink-0 inline-flex items-center gap-1 font-medium hover:underline"
         >
           <span>
-            {lang === 'vi' ? 'Soi chiếu trực tiếp' : 'Inspect live trace'}
+            {lang === 'vi' ? 'Kiểm tra thử ngay' : 'Try live check'}
           </span>
-          <ArrowRight className="w-3 h-3" />
+          <ArrowRight className="w-3 h-3 shrink-0" />
         </a>
       </div>
     </div>

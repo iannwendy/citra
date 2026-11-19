@@ -328,7 +328,32 @@ export function ScholarlySourceLogo({
     );
   }
 
-  // 12. GROBID TEI — Official Text Encoding Initiative (TEI 2024) corner-bracket emblem
+  // 12. OpenLibrary — Authentic open-book emblem with spine & scholarly page lines
+  if (key.includes('openlibrary')) {
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.85"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={`shrink-0 ${className}`}
+        aria-hidden="true"
+      >
+        <path d="M2 4h6a4 4 0 0 1 4 4v12a3 3 0 0 0-3-3H2z" />
+        <path d="M22 4h-6a4 4 0 0 0-4 4v12a3 3 0 0 1 3-3h7z" />
+        <path d="M5.5 8.5h3" />
+        <path d="M5.5 11.5h3" />
+        <path d="M15.5 8.5h3" />
+        <path d="M15.5 11.5h3" />
+      </svg>
+    );
+  }
+
+  // 13. GROBID TEI — Official Text Encoding Initiative (TEI 2024) corner-bracket emblem
   if (key.includes('grobid') || key.includes('tei')) {
     return (
       <svg

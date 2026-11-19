@@ -1,5 +1,5 @@
-import { useState, useEffect, useContext, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useLayoutEffect, useContext, useRef } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AuthContext } from '@/contexts/AuthContext';
 import {
@@ -7,10 +7,15 @@ import {
   SYMBOLIC_RULES_RANGE,
 } from '@/lib/productFacts';
 import {
+  getPlainVerdictLabel,
+  getPlainMappingLabel,
+} from '@/lib/verdictExplanation';
+import {
   FileSearch,
   Database,
   Shield,
   ArrowRight,
+  ArrowDown,
   CheckCircle2,
   GitBranch,
   Scale,
@@ -51,6 +56,8 @@ import { SolvaFilmSection } from '@/components/landing/CitraFilm';
 import { ThemeToggle } from '@/contexts/ThemeContext';
 import {
   type Lang,
+  clearAnchorHashJump,
+  notifyAnchorHashJump,
   SolvaScrollReveal,
   SolvaEyebrow,
   SolvaTwoToneHeading,
@@ -73,6 +80,7 @@ import {
   ScholarlySourceLogo,
   getScholarlySourceUrl,
 } from '@/components/landing/ScholarlySourceLogos';
+import { GuestInstantChecker } from '@/components/landing/GuestInstantChecker';
 
 /* ============================================================
    CITRA (SourceLogic) — Warm Editorial AI SaaS Landing Page
@@ -114,14 +122,20 @@ interface DemoCitation {
   };
   sources: Array<{
     name: string;
+    nameVi?: string;
     status: 'matched' | 'partial' | 'none';
     latency: string;
     score: string;
+    scoreVi?: string;
   }>;
   rules: Array<{
     code: string;
     name: string;
     nameVi?: string;
+    plainTitleEn: string;
+    plainTitleVi: string;
+    plainSummaryEn: string;
+    plainSummaryVi: string;
     condition: string;
     status: 'passed' | 'warning' | 'failed';
   }>;
@@ -170,13 +184,19 @@ const DEMO_CITATIONS: DemoCitation[] = [
       { name: 'Crossref', status: 'matched', latency: '42ms', score: '100%' },
       { name: 'Semantic Scholar', status: 'matched', latency: '68ms', score: '100%' },
       { name: 'OpenAlex', status: 'matched', latency: '55ms', score: '99%' },
-      { name: 'arXiv API', status: 'matched', latency: '39ms', score: '100%' },
+      { name: 'arXiv', status: 'matched', latency: '39ms', score: '100%' },
     ],
     rules: [
       {
         code: 'R01_EXACT_DOI',
         name: 'Canonical DOI Resolution',
         nameVi: 'Xác thực định danh DOI chuẩn',
+        plainTitleEn: 'Official DOI Link Confirmed',
+        plainTitleVi: 'Mã DOI trỏ đúng tới bài báo gốc',
+        plainSummaryEn:
+          'The DOI in your reference list opens the exact same paper title in official registries.',
+        plainSummaryVi:
+          'Mã DOI bạn ghi mở ra đúng bài báo có cùng tiêu đề trên hệ thống đăng ký quốc tế.',
         condition: 'cited.doi == canonical.doi ∧ title_sim >= 0.95',
         status: 'passed',
       },
@@ -184,6 +204,12 @@ const DEMO_CITATIONS: DemoCitation[] = [
         code: 'R04_AUTHOR_OVERLAP',
         name: 'Primary Author Surname Verification',
         nameVi: 'Đối chiếu danh sách họ tên tác giả',
+        plainTitleEn: 'All Listed Authors Match',
+        plainTitleVi: 'Trùng khớp danh sách tác giả',
+        plainSummaryEn:
+          'Every author surname in your bibliography matches the published author list.',
+        plainSummaryVi:
+          'Họ tên các tác giả trong danh mục của bạn khớp hoàn toàn với hồ sơ xuất bản chính thức.',
         condition: 'jaccard(cited.authors, canonical.authors) == 1.00',
         status: 'passed',
       },
@@ -191,13 +217,19 @@ const DEMO_CITATIONS: DemoCitation[] = [
         code: 'R09_SEMANTIC_ALIGN',
         name: 'Sentence-BERT + Multilingual MiniLM ONNX INT8 Alignment',
         nameVi: 'Đối sánh ngữ nghĩa (Sentence-BERT + Multilingual MiniLM ONNX INT8)',
+        plainTitleEn: 'Paper Abstract Supports Your Sentence',
+        plainTitleVi: 'Tóm tắt bài gốc củng cố đúng ý trích dẫn',
+        plainSummaryEn:
+          'The cited paper’s abstract directly backs your statement about self-attention in Transformers (96% content match).',
+        plainSummaryVi:
+          'Nội dung tóm tắt của bài báo gốc hoàn toàn phù hợp với câu bạn viết trong bài (độ khớp nội dung 96%).',
         condition: 'cosine_sim(context, abstract) == ALIGNED (0.96)',
         status: 'passed',
       },
     ],
     explanation: {
-      en: 'Exact DOI resolution and 100% bibliographic alignment across 4 independent scholarly indexes. Claim context is entailed by abstract.',
-      vi: 'Mã định danh DOI hợp lệ tuyệt đối; toàn bộ thông tin thư mục đồng nhất 100% trên 4 cơ sở dữ liệu khoa học độc lập. Nội dung tóm tắt của công trình gốc hoàn toàn củng cố cho luận điểm được trích dẫn trong bài.',
+      en: 'Confirmed across 4 independent academic libraries with 100% matching title, authors, year, and DOI. The paper’s abstract directly supports your cited claim.',
+      vi: 'Đã xác nhận khớp 100% tiêu đề, tác giả, năm xuất bản và mã DOI trên 4 thư viện học thuật độc lập. Tóm tắt của công trình gốc củng cố trực tiếp cho ý bạn viết.',
     },
   },
   {
@@ -245,6 +277,12 @@ const DEMO_CITATIONS: DemoCitation[] = [
         code: 'R01_EXACT_DOI',
         name: 'Canonical DOI Resolution',
         nameVi: 'Xác thực định danh DOI chuẩn',
+        plainTitleEn: 'Real Paper Found via DOI',
+        plainTitleVi: 'Tìm thấy bài báo thật qua mã DOI',
+        plainSummaryEn:
+          'DOI 10.18653/v1/N19-1423 is valid and points to the official BERT paper in ACL Anthology.',
+        plainSummaryVi:
+          'Mã DOI 10.18653/v1/N19-1423 hợp lệ và trỏ đúng tới bài báo BERT trên kho ACL Anthology.',
         condition: 'DOI 10.18653/v1/N19-1423 resolves to ACL Anthology work',
         status: 'passed',
       },
@@ -252,6 +290,12 @@ const DEMO_CITATIONS: DemoCitation[] = [
         code: 'R05_YEAR_DRIFT',
         name: 'Publication Year Discrepancy',
         nameVi: 'Sai lệch năm công bố (Bản nháp vs. Kỷ yếu)',
+        plainTitleEn: 'Publication Year Off by 1 Year (2018 vs. 2019)',
+        plainTitleVi: 'Lệch 1 năm xuất bản (ghi 2018 thay vì 2019)',
+        plainSummaryEn:
+          'Your draft cites the 2018 online preprint year, whereas the official conference proceedings were published in 2019.',
+        plainSummaryVi:
+          'Bạn đang ghi năm bản nháp trực tuyến (2018), trong khi bài kỷ yếu chính thức được xuất bản năm 2019.',
         condition: '|cited.year (2018) - canonical.year (2019)| == 1 (arXiv vs Proc.)',
         status: 'warning',
       },
@@ -259,13 +303,19 @@ const DEMO_CITATIONS: DemoCitation[] = [
         code: 'R07_VENUE_MISMATCH',
         name: 'Venue / Container Title Drift',
         nameVi: 'Sai lệch tên Hội nghị / Tạp chí công bố',
+        plainTitleEn: 'Wrong Conference Name Listed',
+        plainTitleVi: 'Ghi nhầm tên hội nghị công bố',
+        plainSummaryEn:
+          'Listed as EMNLP, but the official publication venue is NAACL-HLT 2019.',
+        plainSummaryVi:
+          'Danh mục đang ghi hội nghị EMNLP, nhưng nơi công bố chính thức là NAACL-HLT 2019.',
         condition: 'cited.venue ("EMNLP") != canonical.venue ("NAACL-HLT")',
         status: 'failed',
       },
     ],
     explanation: {
-      en: 'Paper exists and DOI is valid, but manuscript cites preprint year (2018) and wrong conference venue (EMNLP instead of NAACL-HLT 2019).',
-      vi: 'Công trình có thật với mã DOI hợp lệ, nhưng tác giả đã ghi nhầm năm của bản tiền ấn phẩm trên arXiv (2018) và trích dẫn sai tên hội nghị công bố chính thức (ghi EMNLP thay vì NAACL-HLT 2019).',
+      en: 'This paper is real and its DOI is valid, but your entry cites the 2018 draft year and lists the wrong conference (EMNLP instead of NAACL-HLT 2019).',
+      vi: 'Bài báo này hoàn toàn có thật với mã DOI hợp lệ, nhưng mục tham khảo đang ghi nhầm năm bản nháp (2018) và nhầm tên hội nghị (ghi EMNLP thay vì NAACL-HLT 2019).',
     },
   },
   {
@@ -307,6 +357,12 @@ const DEMO_CITATIONS: DemoCitation[] = [
         code: 'R12_GHOST_DOI',
         name: 'Non-Existent DOI Handle',
         nameVi: 'Mã định danh DOI không tồn tại trên hệ thống quốc tế',
+        plainTitleEn: 'DOI Link Does Not Exist (Error 404)',
+        plainTitleVi: 'Mã DOI không tồn tại trên hệ thống quốc tế',
+        plainSummaryEn:
+          'Looking up DOI 10.1038/s42256-024-99812-x returns “Not Found” across official DOI registries.',
+        plainSummaryVi:
+          'Tra cứu mã DOI 10.1038/s42256-024-99812-x trả về kết quả không tồn tại trên toàn bộ hệ thống đăng ký DOI.',
         condition: 'DOI 10.1038/s42256-024-99812-x returns HTTP 404 in Crossref/Handle',
         status: 'failed',
       },
@@ -314,6 +370,12 @@ const DEMO_CITATIONS: DemoCitation[] = [
         code: 'R14_ZERO_TITLE_HIT',
         name: 'No Bibliographic Title Match Across 15+ APIs',
         nameVi: 'Không tìm thấy công trình trùng khớp trên 15+ CSDL học thuật',
+        plainTitleEn: 'No Matching Title Across 15+ Libraries',
+        plainTitleVi: 'Không tìm thấy bài báo nào trùng tên trên 15+ thư viện',
+        plainSummaryEn:
+          'No article with this title or author pair appears in Crossref, OpenAlex, PubMed, or Semantic Scholar.',
+        plainSummaryVi:
+          'Không có công trình nào mang tiêu đề và cặp tác giả này trên Crossref, OpenAlex, PubMed hay Semantic Scholar.',
         condition: 'max_similarity(title, all_candidates) == 0.11 < threshold (0.45)',
         status: 'failed',
       },
@@ -321,13 +383,19 @@ const DEMO_CITATIONS: DemoCitation[] = [
         code: 'R16_SYNTHETIC_PATTERN',
         name: 'Fabricated Reference Signature',
         nameVi: 'Dấu hiệu ghép nối nhân tạo của trích dẫn ảo (AI Hallucination)',
+        plainTitleEn: 'Typical AI-Invented Citation Pattern',
+        plainTitleVi: 'Dấu hiệu điển hình của nguồn do AI tự bịa',
+        plainSummaryEn:
+          'Combines a real journal name (Nature Machine Intelligence) with an invented article number and title.',
+        plainSummaryVi:
+          'Ghép tên một tạp chí uy tín có thật (Nature Machine Intelligence) với mã số bài báo và tiêu đề không tồn tại.',
         condition: 'Valid journal prefix (10.1038) paired with non-existent article suffix',
         status: 'failed',
       },
     ],
     explanation: {
-      en: 'High-risk AI hallucination signature: Plausible journal prefix (Nature Machine Intelligence) combined with a fabricated DOI suffix and non-existent title.',
-      vi: 'Dấu hiệu điển hình của trích dẫn ảo do AI tạo sinh: Ghép nối tiền tố của một tạp chí uy tín có thật (Nature Machine Intelligence) với dãy số DOI hư cấu và một tiêu đề bài báo hoàn toàn không tồn tại.',
+      en: 'Likely AI-invented reference: pairs a real journal name (Nature Machine Intelligence) with a non-existent DOI link and an article title not found in any academic library.',
+      vi: 'Nghi vấn tài liệu do AI tự tạo: ghép tên tạp chí có thật (Nature Machine Intelligence) với mã DOI không tồn tại và tiêu đề bài báo không có trên bất kỳ thư viện học thuật nào.',
     },
   },
   {
@@ -359,14 +427,34 @@ const DEMO_CITATIONS: DemoCitation[] = [
       doi: 'missing',
     },
     sources: [
-      { name: 'GROBID TEI Linker', status: 'none', latency: '4ms', score: 'Unlinked' },
-      { name: 'Regex Cross-Validator', status: 'none', latency: '2ms', score: 'Orphan' },
+      {
+        name: 'Reference List Check',
+        nameVi: 'Đối chiếu Danh mục cuối bài',
+        status: 'none',
+        latency: '4ms',
+        score: 'Not listed',
+        scoreVi: 'Chưa liệt kê',
+      },
+      {
+        name: 'In-Text Citation Scan',
+        nameVi: 'Kiểm tra Trích dẫn trong bài',
+        status: 'none',
+        latency: '2ms',
+        score: 'Cited on p. 14',
+        scoreVi: 'Có ở trang 14',
+      },
     ],
     rules: [
       {
         code: 'L1_MISSING_BIB_ENTRY',
         name: 'In-Text Citation Without Bibliography Target',
         nameVi: 'Trích dẫn trong bài bị khuyết mục tài liệu tham khảo tương ứng',
+        plainTitleEn: 'Cited in Body Text, Missing at the End',
+        plainTitleVi: 'Có trích dẫn trong bài nhưng quên ghi ở cuối bài',
+        plainSummaryEn:
+          'You cited “Smith et al. (2021)” on page 14, but there is no matching Smith (2021) entry in your final reference list.',
+        plainSummaryVi:
+          'Bạn đã trích dẫn “Smith et al. (2021)” ở trang 14, nhưng chưa thêm mục tài liệu Smith (2021) vào Danh mục tham khảo cuối bài.',
         condition: 'in_text("Smith et al., 2021") has no matching biblStruct in References',
         status: 'failed',
       },
@@ -374,13 +462,19 @@ const DEMO_CITATIONS: DemoCitation[] = [
         code: 'R00_PRECONDITION_HALT',
         name: 'Layer 2 Deferred Pending Reference Metadata',
         nameVi: 'Tạm hoãn xác thực Tầng 2 do thiếu thông tin thư mục gốc',
+        plainTitleEn: 'Library Lookup Paused Until Reference Is Added',
+        plainTitleVi: 'Chờ bổ sung tên bài báo để tra cứu thư viện',
+        plainSummaryEn:
+          'Once you add the full title and journal to your bibliography, CITRA will automatically verify whether the source is real.',
+        plainSummaryVi:
+          'Sau khi bạn bổ sung đầy đủ tên bài báo vào danh mục cuối bài, CITRA sẽ tự động tra cứu xác minh trên 15+ thư viện.',
         condition: 'IF reference_entry == NULL → UNRESOLVED (Requires Bibliography Entry)',
         status: 'warning',
       },
     ],
     explanation: {
-      en: 'Layer 1 Consistency Error: Cited in body text on page 14, but corresponding entry is missing from the Bibliography section.',
-      vi: 'Lỗi thiếu nhất quán nội bộ (Tầng 1): Tài liệu được viện dẫn trực tiếp trong phần thân bài tại trang 14, nhưng lại bị bỏ sót hoàn toàn trong Danh mục Tài liệu tham khảo cuối bài.',
+      en: 'Missing bibliography entry: you cited “Smith et al. (2021)” on page 14, but forgot to include the full reference in your Bibliography section at the end.',
+      vi: 'Thiếu mục tham khảo cuối bài: bạn đã trích dẫn “Smith et al. (2021)” tại trang 14 nhưng quên liệt kê thông tin đầy đủ của tài liệu này ở Danh mục tham khảo cuối bài.',
     },
   },
 ];
@@ -399,8 +493,23 @@ function SourceLogicLogo({ size = 24 }: { size?: number }) {
   );
 }
 
+export type WorkspaceRole = 'student' | 'teacher' | 'admin';
+
+function parseWorkspaceRoleFromUrl(search: string, hash: string): WorkspaceRole | null {
+  const roleParam = new URLSearchParams(search).get('role');
+  if (roleParam === 'student' || roleParam === 'teacher' || roleParam === 'admin') {
+    return roleParam;
+  }
+  const normalizedHash = hash.toLowerCase();
+  if (normalizedHash === '#workspaces-student') return 'student';
+  if (normalizedHash === '#workspaces-teacher') return 'teacher';
+  if (normalizedHash === '#workspaces-admin') return 'admin';
+  return null;
+}
+
 export function LandingPage() {
   const { i18n } = useTranslation();
+  const location = useLocation();
   const lang: Lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
   const auth = useContext(AuthContext);
   const isAuthenticated = auth
@@ -409,6 +518,66 @@ export function LandingPage() {
           (auth.isLoading && typeof window !== 'undefined' && localStorage.getItem('token')),
       )
     : typeof window !== 'undefined' && Boolean(localStorage.getItem('token'));
+
+  const [activeWorkspaceRole, setActiveWorkspaceRole] = useState<WorkspaceRole>(
+    () =>
+      parseWorkspaceRoleFromUrl(
+        location.search || (typeof window !== 'undefined' ? window.location.search : ''),
+        location.hash || (typeof window !== 'undefined' ? window.location.hash : ''),
+      ) ?? 'student',
+  );
+
+  useLayoutEffect(() => {
+    if (!location.hash && (typeof window === 'undefined' || !window.location.hash)) {
+      clearAnchorHashJump();
+    }
+  }, [location.key, location.hash]);
+
+  useEffect(() => () => clearAnchorHashJump(), []);
+
+  useEffect(() => {
+    const matchedRole = parseWorkspaceRoleFromUrl(location.search, location.hash);
+    if (matchedRole) {
+      setActiveWorkspaceRole(matchedRole);
+    }
+    if (location.hash) {
+      notifyAnchorHashJump(location.hash);
+      const rawId = location.hash.slice(1);
+      const targetId = rawId.startsWith('workspaces-') ? 'workspaces' : rawId;
+      const targetEl = document.getElementById(targetId);
+      if (targetEl && typeof targetEl.scrollIntoView === 'function') {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    } else if (typeof window === 'undefined' || !window.location.hash) {
+      clearAnchorHashJump();
+    }
+  }, [location.key, location.search, location.hash]);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const matchedRole = parseWorkspaceRoleFromUrl(
+        window.location.search,
+        window.location.hash,
+      );
+      if (matchedRole) {
+        setActiveWorkspaceRole(matchedRole);
+      }
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const selectAndFocusWorkspaceRole = (role: WorkspaceRole) => {
+    setActiveWorkspaceRole(role);
+    const sectionEl = document.getElementById('workspaces');
+    if (sectionEl && typeof sectionEl.scrollIntoView === 'function') {
+      sectionEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    window.requestAnimationFrame(() => {
+      const tabEl = document.getElementById(`workspace-tab-${role}`);
+      tabEl?.focus({ preventScroll: true });
+    });
+  };
 
   const toggleLanguage = () => {
     const next = lang === 'en' ? 'vi' : 'en';
@@ -428,6 +597,7 @@ export function LandingPage() {
       />
       <main id="main-content">
         <SolvaHeroSection lang={lang} isAuthenticated={isAuthenticated} />
+        <GuestInstantChecker lang={lang} isAuthenticated={isAuthenticated} />
         <SolvaFilmSection lang={lang} />
         <SolvaFeaturesSection lang={lang} />
         <SolvaStickySection lang={lang} isAuthenticated={isAuthenticated} />
@@ -437,11 +607,16 @@ export function LandingPage() {
         <SolvaClientResultsSection lang={lang} />
         <SolvaSecuritySection lang={lang} />
         <SolvaTaxonomyPricingSection lang={lang} isAuthenticated={isAuthenticated} />
-        <SolvaRoleTestimonialsSection lang={lang} />
+        <SolvaRoleTestimonialsSection
+          lang={lang}
+          activeRole={activeWorkspaceRole}
+          onSelectRole={setActiveWorkspaceRole}
+          isAuthenticated={isAuthenticated}
+        />
         <SolvaFAQSection lang={lang} />
         <SolvaBottomCTASection lang={lang} isAuthenticated={isAuthenticated} />
       </main>
-      <SolvaFooter lang={lang} />
+      <SolvaFooter lang={lang} onSelectWorkspaceRole={selectAndFocusWorkspaceRole} />
     </div>
   );
 }
@@ -460,6 +635,9 @@ function SolvaHeader({
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const dropdownContainerRef = useRef<HTMLDivElement>(null);
+  const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
+  const mobileToggleRef = useRef<HTMLButtonElement>(null);
   const dropdownPresence = useExitPresence(dropdownOpen, 150);
   const mobileDrawerPresence = useExitPresence(mobileMenuOpen, 150);
   const [headerEntered, setHeaderEntered] = useState(false);
@@ -487,16 +665,37 @@ function SolvaHeader({
   useEffect(() => {
     if (!dropdownOpen && !mobileMenuOpen) return;
     const closeOnScroll = () => setDropdownOpen(false);
+    const closeOnOutsidePointer = (e: MouseEvent | PointerEvent) => {
+      if (!dropdownOpen) return;
+      const target = e.target as Node | null;
+      if (
+        dropdownContainerRef.current &&
+        target &&
+        !dropdownContainerRef.current.contains(target)
+      ) {
+        setDropdownOpen(false);
+      }
+    };
     const closeOnKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setDropdownOpen(false);
-        setMobileMenuOpen(false);
+        if (dropdownOpen) {
+          setDropdownOpen(false);
+          dropdownTriggerRef.current?.focus({ preventScroll: true });
+        }
+        if (mobileMenuOpen) {
+          setMobileMenuOpen(false);
+          mobileToggleRef.current?.focus({ preventScroll: true });
+        }
       }
     };
     window.addEventListener('scroll', closeOnScroll, { passive: true });
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('mousedown', closeOnOutsidePointer);
     window.addEventListener('keydown', closeOnKeyDown);
     return () => {
       window.removeEventListener('scroll', closeOnScroll);
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('mousedown', closeOnOutsidePointer);
       window.removeEventListener('keydown', closeOnKeyDown);
     };
   }, [dropdownOpen, mobileMenuOpen]);
@@ -505,64 +704,64 @@ function SolvaHeader({
     lang === 'vi'
       ? [
           {
-            title: 'Kiến trúc 2 tầng',
-            desc: 'Tách biệt Mapping nội bộ & xác thực nguồn gốc',
+            title: 'Kiểm tra trích dẫn 2 bước',
+            desc: 'Đối chiếu trong bài & xác minh nguồn thật',
             href: '#architecture',
             icon: Layers,
           },
           {
-            title: 'Trình thẩm định trích dẫn',
-            desc: `Đối chiếu thư mục & bộ quy tắc ${SYMBOLIC_RULES_RANGE}`,
-            href: '#interactive-demo',
-            icon: FileSearch,
-          },
-          {
-            title: 'Quy trình 4 giai đoạn',
-            desc: 'Từ phân tích GROBID TEI đến ngữ nghĩa NLI',
+            title: 'Cách hoạt động',
+            desc: '4 bước rõ ràng từ tải bài đến xuất báo cáo',
             href: '#how-it-works',
             icon: GitBranch,
           },
           {
-            title: 'Thực nghiệm 120K bài báo',
-            desc: '99,02% Acc · 99,75% OOD · 0,0395 ECE',
+            title: 'Kiểm tra thử trực quan',
+            desc: 'So sánh chi tiết bài viết với bản ghi thư viện',
+            href: '#interactive-demo',
+            icon: FileSearch,
+          },
+          {
+            title: 'Độ tin cậy thực tế',
+            desc: 'Chính xác 99,02% trên 120.000 bài báo',
             href: '#benchmark-120k',
             icon: Sparkles,
           },
           {
-            title: 'Không gian 3 vai trò',
-            desc: 'Thiết kế riêng cho Sinh viên, Giảng viên & Quản trị',
+            title: 'Dành cho từng vai trò',
+            desc: 'Sinh viên, Giảng viên & Khoa / Trường',
             href: '#workspaces',
             icon: Users,
           },
         ]
       : [
           {
-            title: '2-Layer Architecture',
-            desc: 'Orthogonal Mapping & Verification',
+            title: 'Two-Step Citation Check',
+            desc: 'In-text links & real source verification',
             href: '#architecture',
             icon: Layers,
           },
           {
-            title: 'Citation Debugger',
-            desc: `Live metadata diff & rules ${SYMBOLIC_RULES_RANGE}`,
-            href: '#interactive-demo',
-            icon: FileSearch,
-          },
-          {
-            title: 'Verification Pipeline',
-            desc: 'GROBID TEI to Sentence-BERT + MiniLM ONNX INT8',
+            title: 'How It Works',
+            desc: '4 clear steps from upload to clean report',
             href: '#how-it-works',
             icon: GitBranch,
           },
           {
-            title: '120K-Paper Benchmark',
-            desc: '99.02% Acc · 99.75% OOD · 0.0395 ECE',
+            title: 'Live Citation Check',
+            desc: 'Compare cited details with library records',
+            href: '#interactive-demo',
+            icon: FileSearch,
+          },
+          {
+            title: 'Proven Accuracy',
+            desc: '99.02% accuracy across 120,000 papers',
             href: '#benchmark-120k',
             icon: Sparkles,
           },
           {
-            title: 'Role Workspaces',
-            desc: 'Student, Teacher & Admin views',
+            title: 'Built for Every Role',
+            desc: 'Students, Lecturers & Faculties',
             href: '#workspaces',
             icon: Users,
           },
@@ -583,7 +782,7 @@ function SolvaHeader({
       }}
       className="fixed top-0 left-0 right-0 z-50"
     >
-      <div className="max-w-[1280px] mx-auto px-5 sm:px-6 lg:px-8 xl:px-[40px] h-[64px] lg:h-[76px] flex items-center justify-between gap-2 xl:gap-4">
+      <div className="max-w-[1280px] mx-auto px-5 sm:px-6 lg:px-6 xl:px-[40px] h-[64px] lg:h-[76px] flex items-center justify-between flex-nowrap gap-2 xl:gap-4">
         {/* Left: Brand Logo */}
         <div className="flex items-center shrink-0">
           <Link
@@ -591,7 +790,7 @@ function SolvaHeader({
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             className="inline-flex items-center gap-[8px] rounded-[6px] focus:outline-none"
           >
-            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
               <SourceLogicLogo size={18} />
             </span>
             <span
@@ -606,19 +805,22 @@ function SolvaHeader({
         {/* Center: Solva Navigation Links + Dropdown */}
         <nav
           aria-label="Primary Navigation"
-          className="hidden lg:flex items-center justify-center flex-1 min-w-0 gap-0.5 xl:gap-1"
+          className="hidden xl:flex items-center justify-center flex-1 min-w-0 flex-nowrap gap-0.5 xl:gap-1"
         >
-          {/* Dropdown Trigger (`Platform v` / `Kiến trúc v`) */}
+          {/* Dropdown Trigger (`Platform v` / `Nền tảng v`) */}
           <div
-            className="relative"
+            ref={dropdownContainerRef}
+            className="relative shrink-0"
             onMouseLeave={() => setDropdownOpen(false)}
           >
             <button
+              ref={dropdownTriggerRef}
               type="button"
               onClick={() => setDropdownOpen((prev) => !prev)}
               aria-expanded={dropdownOpen}
+              aria-haspopup="true"
               style={{ color: 'var(--solva-muted)' }}
-              className="inline-flex items-center gap-[5px] h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity cursor-pointer"
+              className="inline-flex items-center gap-[4px] h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[13.5px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity cursor-pointer"
             >
               <span>{lang === 'vi' ? 'Nền tảng' : 'Platform'}</span>
               <SymmetricChevron open={dropdownOpen} size={14} />
@@ -635,7 +837,7 @@ function SolvaHeader({
                     backgroundColor: 'var(--solva-bg)',
                     borderColor: 'var(--solva-border)',
                   }}
-                  className="w-[264px] p-[8px] rounded-[12px] border shadow-[0_4px_16px_rgba(0,0,0,0.06)] space-y-0.5"
+                  className="w-[276px] p-[8px] rounded-[12px] border shadow-[0_4px_16px_rgba(0,0,0,0.06)] space-y-0.5"
                 >
                   {dropdownItems.map((item) => {
                     const Icon = item.icon;
@@ -673,43 +875,43 @@ function SolvaHeader({
           </div>
 
           <a
-            href="#interactive-demo"
+            href="#how-it-works"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[13.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
-            {lang === 'vi' ? 'Trình thẩm định' : 'Inspector'}
+            {lang === 'vi' ? 'Cách hoạt động' : 'How It Works'}
           </a>
 
           <a
-            href="#how-it-works"
+            href="#interactive-demo"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[13.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
-            {lang === 'vi' ? 'Quy trình' : 'Pipeline'}
+            {lang === 'vi' ? 'Kiểm tra thử' : 'Live Check'}
+          </a>
+
+          <a
+            href="#workspaces"
+            style={{ color: 'var(--solva-muted)' }}
+            className="inline-flex items-center h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[13.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
+          >
+            {lang === 'vi' ? 'Dành cho ai' : 'For Whom'}
           </a>
 
           <a
             href="#benchmark-120k"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center gap-1.5 h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
+            className="inline-flex items-center gap-1.5 h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[13.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>{lang === 'vi' ? 'Thực nghiệm 120K' : '120K Benchmark'}</span>
-          </a>
-
-          <a
-            href="#taxonomy"
-            style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
-          >
-            {lang === 'vi' ? 'Gói dịch vụ' : 'Taxonomy'}
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span>{lang === 'vi' ? 'Độ tin cậy' : 'Accuracy'}</span>
           </a>
 
           <Link
             to="/pricing"
             data-testid="landing-pricing-link"
             style={{ color: 'var(--solva-muted)' }}
-            className="inline-flex items-center h-[44px] px-2 xl:px-[10px] rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity"
+            className="inline-flex items-center h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[13.5px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity"
           >
             {lang === 'vi' ? 'Bảng giá' : 'Pricing'}
           </Link>
@@ -742,7 +944,7 @@ function SolvaHeader({
           </Link>
 
           <SolvaButton
-            to={isAuthenticated ? '/dashboard' : '/login'}
+            to={isAuthenticated ? '/dashboard' : '/register'}
             variant="primary"
             className="hidden sm:inline-flex"
           >
@@ -757,6 +959,7 @@ function SolvaHeader({
 
           {/* Mobile Hamburger Button (Solva 2-bar minimalist style + #09 IconSwap) */}
           <button
+            ref={mobileToggleRef}
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-label="Toggle navigation menu"
@@ -765,7 +968,7 @@ function SolvaHeader({
               backgroundColor: 'var(--solva-surface)',
               color: 'var(--solva-ink)',
             }}
-            className="lg:hidden inline-flex items-center justify-center w-[40px] h-[40px] rounded-[8px] cursor-pointer"
+            className="xl:hidden inline-flex items-center justify-center w-[40px] h-[40px] rounded-[8px] cursor-pointer"
           >
             <IconSwap
               active={mobileMenuOpen}
@@ -784,38 +987,38 @@ function SolvaHeader({
             backgroundColor: 'var(--solva-bg)',
             borderColor: 'var(--solva-border)',
           }}
-          className={`lg:hidden border-t border-b px-5 py-4 space-y-2 shadow-lg t-mobile-drawer ${
+          className={`xl:hidden border-t border-b px-5 py-4 space-y-2 shadow-lg t-mobile-drawer ${
             mobileDrawerPresence.phase === 'open' ? 'is-open' : 'is-closing'
           }`}
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {[
               {
-                label: lang === 'vi' ? 'Kiến trúc 2 tầng' : '2-Layer Architecture',
+                label: lang === 'vi' ? 'Kiểm tra trích dẫn 2 bước' : 'Two-Step Citation Check',
                 href: '#architecture',
               },
               {
-                label: lang === 'vi' ? 'Trình thẩm định trích dẫn' : 'Interactive Inspector',
-                href: '#interactive-demo',
-              },
-              {
-                label: lang === 'vi' ? 'Quy trình 4 giai đoạn' : 'Verification Pipeline',
+                label: lang === 'vi' ? 'Cách hoạt động (4 bước)' : 'How It Works',
                 href: '#how-it-works',
               },
               {
-                label: lang === 'vi' ? 'Thực nghiệm 120K bài báo' : '120K-Paper Benchmark',
+                label: lang === 'vi' ? 'Kiểm tra thử trực quan' : 'Live Citation Check',
+                href: '#interactive-demo',
+              },
+              {
+                label: lang === 'vi' ? 'Độ tin cậy (120.000 bài báo)' : 'Proven Accuracy (120K)',
                 href: '#benchmark-120k',
               },
               {
-                label: lang === 'vi' ? 'Gói dịch vụ & Quyền lợi' : 'Verdict Taxonomy',
-                href: '#taxonomy',
-              },
-              {
-                label: lang === 'vi' ? 'Không gian 3 vai trò' : 'Role Workspaces',
+                label: lang === 'vi' ? 'Dành cho ai' : 'For Students & Faculty',
                 href: '#workspaces',
               },
               {
-                label: lang === 'vi' ? 'Giải đáp thắc mắc' : 'FAQ',
+                label: lang === 'vi' ? 'Tóm tắt gói dịch vụ' : 'Plan Summary',
+                href: '#pricing-plans',
+              },
+              {
+                label: lang === 'vi' ? 'Giải đáp thắc mắc' : 'Common Questions',
                 href: '#faq',
               },
             ].map((item) => (
@@ -827,15 +1030,32 @@ function SolvaHeader({
                   backgroundColor: 'var(--solva-surface)',
                   color: 'var(--solva-ink)',
                 }}
-                className="flex items-center justify-between px-3.5 py-2.5 rounded-[10px] font-solva-sans text-[14px] font-medium"
+                className="flex items-center justify-between min-h-[44px] px-3.5 py-2.5 rounded-[10px] font-solva-sans text-[14px] font-medium"
               >
                 <span>{item.label}</span>
-                <ChevronRight className="w-4 h-4 opacity-60" />
+                <ChevronRight className="w-4 h-4 opacity-60 shrink-0" aria-hidden="true" />
               </a>
             ))}
+            <Link
+              to="/pricing"
+              data-testid="mobile-menu-pricing-link"
+              onClick={() => setMobileMenuOpen(false)}
+              style={{
+                backgroundColor: 'var(--solva-surface)',
+                borderColor: 'var(--solva-ink)',
+                color: 'var(--solva-ink)',
+              }}
+              className="flex items-center justify-between min-h-[44px] px-3.5 py-2.5 rounded-[10px] border font-solva-sans text-[14px] font-semibold"
+            >
+              <span className="inline-flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                <span>{lang === 'vi' ? 'Bảng giá' : 'Pricing'}</span>
+              </span>
+              <ChevronRight className="w-4 h-4 opacity-80 shrink-0" aria-hidden="true" />
+            </Link>
           </div>
 
-          <div className="pt-2 flex items-center gap-2">
+          <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
             <SolvaButton
               to={isAuthenticated ? '/dashboard' : '/login'}
               variant="outline"
@@ -891,7 +1111,7 @@ function SolvaHeroSection({
     'ORCID',
     'Unpaywall',
     'DataCite',
-    'GROBID TEI',
+    'OpenLibrary',
   ];
 
   return (
@@ -902,10 +1122,10 @@ function SolvaHeroSection({
       <div className="max-w-[1200px] mx-auto flex flex-col gap-[28px] sm:gap-[36px] lg:gap-[56px]">
         {/* Top 2-Column Content */}
         <div className="flex flex-col lg:flex-row items-center justify-between gap-[28px] sm:gap-[32px] lg:gap-[24px] pt-0 lg:pt-[12px]">
-          {/* Left Column (540px on Desktop) */}
-          <div className="w-full lg:w-[516px] xl:w-[540px] flex flex-col items-start gap-[22px] sm:gap-[28px] lg:gap-[32px] lg:pb-[24px]">
+          {/* Left Column (520px on Desktop) */}
+          <div className="w-full lg:w-[45%] xl:w-[520px] min-w-0 flex flex-col items-start gap-[22px] sm:gap-[28px] lg:gap-[32px] lg:pb-[24px]">
             <div className="flex flex-col items-start gap-[16px] sm:gap-[20px] lg:gap-[24px]">
-              {/* Announcement Badge (`VERIFIED 120K BENCHMARK | 99.02% Acc · 99.75% OOD ->`) */}
+              {/* Announcement Badge (`PROVEN ACCURACY | Tested on 120,000 academic papers ->`) */}
               <SolvaScrollReveal delayMs={40} yOffset={20} blurPx={3}>
                 <a
                   href="#benchmark-120k"
@@ -916,23 +1136,43 @@ function SolvaHeroSection({
                       backgroundColor: 'var(--solva-surface)',
                       color: 'var(--solva-ink)',
                     }}
-                    className="inline-flex items-center gap-1.5 px-[7px] pt-[5px] pb-[4px] rounded-[5px] text-[11px] font-mono font-semibold leading-[12px] border border-[#E7E3D9] dark:border-[#332F26]"
+                    className="inline-flex items-center gap-1.5 px-[7px] pt-[5px] pb-[4px] rounded-[5px] text-[11px] font-mono font-semibold leading-[12px] border border-[#E7E3D9] dark:border-[#332F26] shrink-0 whitespace-nowrap"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    {lang === 'vi' ? 'THỰC NGHIỆM 120K' : '120K BENCHMARK'}
+                    {lang === 'vi' ? 'ĐỘ TIN CẬY ĐÃ KIỂM CHỨNG' : 'PROVEN ACCURACY'}
                   </span>
                   <span
                     style={{ color: 'var(--solva-muted)' }}
                     className="text-[14px] sm:text-[15px] font-normal leading-[21px] group-hover:underline"
                   >
-                    {lang === 'vi'
-                      ? 'Kiểm định trên 120.000 công trình · Độ chính xác 99,02% · 99,75% OOD Guardrail'
-                      : 'Validated on 120,000 papers · 99.02% Acc · 99.75% OOD Guardrail'}
+                    {lang === 'vi' ? (
+                      <>
+                        Kiểm định trên 120.000 bài báo · Chính xác 99,02% khi rà soát{' '}
+                        <span className="citra-nowrap-tail whitespace-nowrap">
+                          trích dẫn{'\u00A0'}
+                          <span
+                            aria-hidden="true"
+                            className="inline-block transition-transform duration-200 group-hover:translate-x-0.5"
+                          >
+                            →
+                          </span>
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        Tested on 120,000 papers · 99.02% accuracy catching citation{' '}
+                        <span className="citra-nowrap-tail whitespace-nowrap">
+                          errors{'\u00A0'}
+                          <span
+                            aria-hidden="true"
+                            className="inline-block transition-transform duration-200 group-hover:translate-x-0.5"
+                          >
+                            →
+                          </span>
+                        </span>
+                      </>
+                    )}
                   </span>
-                  <ArrowRight
-                    style={{ color: 'var(--solva-muted)' }}
-                    className="w-[14px] h-[14px] transition-transform duration-200 group-hover:translate-x-0.5 shrink-0"
-                  />
                 </a>
               </SolvaScrollReveal>
 
@@ -943,25 +1183,25 @@ function SolvaHeroSection({
                 delayMs={85}
                 primary={
                   lang === 'vi'
-                    ? 'Trợ lý thẩm định trích dẫn'
-                    : 'The citation copilot'
+                    ? 'Kiểm chứng mọi trích dẫn'
+                    : 'Submit your thesis or paper'
                 }
                 secondary={
                   lang === 'vi'
-                    ? 'bảo chứng sự thật cho từng trang viết.'
-                    : 'that never hallucinates.'
+                    ? 'trước khi nộp khóa luận & bài báo.'
+                    : 'with every citation verified.'
                 }
               />
 
-              {/* Subtitle (400px–430px max-width, Onest 18px Regular) */}
+              {/* Subtitle (400px–450px max-width, Onest 18px Regular) */}
               <SolvaScrollReveal delayMs={190} yOffset={24} blurPx={3.5}>
                 <p
                   style={{ color: 'var(--solva-muted)' }}
-                  className="font-solva-sans text-[17px] sm:text-[18px] font-normal leading-[25.2px] max-w-[430px]"
+                  className="font-solva-sans text-[17px] sm:text-[18px] font-normal leading-[25.5px] max-w-[460px]"
                 >
                   {lang === 'vi'
-                    ? 'Từ bản thảo PDF thô đến báo cáo thẩm định hoàn chỉnh: CITRA tự động nhận diện từng trích dẫn, đối chiếu chéo qua hơn 15 cơ sở dữ liệu học thuật quốc tế và lý giải minh bạch căn cứ của mọi kết luận.'
-                    : 'CITRA parses every citation in your PDF manuscript, cross-verifies metadata across 15+ scholarly indexes, and explains every rule trace.'}
+                    ? 'Tải lên bài viết PDF, Word hoặc BibTeX. CITRA tự động đối chiếu trích dẫn trong bài với danh mục cuối bài, xác nhận từng tài liệu có thật trên hơn 15 thư viện học thuật và chỉ rõ năm xuất bản sai hay nguồn do AI tự bịa trước khi bạn nộp bài.'
+                    : 'Upload your PDF, Word, or BibTeX draft. CITRA checks that every in-text citation matches your reference list, confirms each source is real across 15+ academic libraries, and highlights wrong years or AI-invented references before submission.'}
                 </p>
               </SolvaScrollReveal>
             </div>
@@ -970,19 +1210,24 @@ function SolvaHeroSection({
             <SolvaScrollReveal delayMs={260} yOffset={24} blurPx={3}>
               <div className="flex flex-wrap items-center gap-3">
                 <SolvaButton
-                  to={isAuthenticated ? '/upload' : '/login'}
+                  to={isAuthenticated ? '/upload' : '/register'}
                   variant="primary"
                 >
                   {isAuthenticated
                     ? lang === 'vi'
-                      ? 'Thẩm định bản thảo PDF'
-                      : 'Verify Manuscript PDF'
+                      ? 'Kiểm tra bản thảo mới'
+                      : 'Check a Manuscript'
                     : lang === 'vi'
                       ? 'Trải nghiệm CITRA miễn phí'
                       : 'Try CITRA Free'}
                 </SolvaButton>
-                <SolvaButton href="#interactive-demo" variant="outline">
-                  {lang === 'vi' ? 'Khám phá Trình thẩm định' : 'Live Citation Debugger'}
+                <SolvaButton href="#try-instant" variant="outline">
+                  <span>
+                    {lang === 'vi'
+                      ? 'Thử dán 3 trích dẫn ngay'
+                      : 'Try 3 Citations Now'}
+                  </span>
+                  <ArrowDown className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                 </SolvaButton>
               </div>
             </SolvaScrollReveal>
@@ -996,77 +1241,87 @@ function SolvaHeroSection({
                   backgroundColor: 'var(--solva-surface)',
                   borderColor: 'var(--solva-border)',
                 }}
-                className="t-learn group block w-full rounded-[12px] border p-3 sm:p-3.5 transition-all duration-200 hover:border-[#1C1A15]/40 dark:hover:border-[#FBFAF6]/30"
+                className="t-learn group block w-full rounded-[12px] border p-3 sm:p-3.5 transition-[border-color,background-color,transform,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:border-[#1C1A15]/40 dark:hover:border-[#FBFAF6]/30"
               >
-                <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-2">
                   <span
                     style={{ color: 'var(--solva-ink)' }}
-                    className="inline-flex items-center gap-1.5 font-mono text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider"
+                    className="inline-flex items-center gap-1.5 font-mono text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider min-w-0"
                   >
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400 shrink-0" />
                     <span>
                       {lang === 'vi'
-                        ? 'BẢO CHỨNG THỰC NGHIỆM · KIỂM ĐỊNH 120.000 CÔNG TRÌNH'
-                        : 'VERIFIED EMPIRICAL BENCHMARK · 120,000 PAPERS'}
+                        ? 'ĐÃ KIỂM ĐỊNH TRÊN 120.000 BÀI BÁO KHOA HỌC'
+                        : 'TESTED ON 120,000 ACADEMIC PAPERS'}
                     </span>
                   </span>
                   <span
                     style={{ color: 'var(--solva-muted)' }}
-                    className="font-mono text-[10px] inline-flex items-center gap-1 shrink-0 group-hover:underline"
+                    className="whitespace-nowrap font-mono text-[10px] inline-flex items-center gap-1 shrink-0 group-hover:underline"
                   >
-                    <span>{lang === 'vi' ? 'Xem báo cáo' : 'Full report'}</span>
+                    <span>{lang === 'vi' ? 'Xem độ tin cậy' : 'See accuracy'}</span>
                     <LearnMoreChevron size={12} />
                   </span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[#E7E3D9] dark:border-[#332F26]">
-                  <div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-x-3 gap-y-2.5 pt-2.5 border-t border-[#E7E3D9] dark:border-[#332F26]">
+                  <div className="min-w-0">
                     <div
                       style={{ color: 'var(--solva-ink)' }}
                       className="font-solva-serif text-[20px] sm:text-[22px] leading-none tracking-[-0.04em]"
                     >
-                      120,000
+                      {lang === 'vi' ? '120.000' : '120,000'}
                     </div>
                     <div
                       style={{ color: 'var(--solva-muted)' }}
-                      className="font-mono text-[10px] mt-1 truncate"
+                      className="font-mono text-[10px] leading-snug mt-1"
                     >
-                      {lang === 'vi' ? 'Công trình · 0% rò rỉ' : 'Papers · 0% leakage'}
+                      {lang === 'vi' ? 'Bài báo kiểm định' : 'Papers tested'}
                     </div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="font-solva-serif text-[20px] sm:text-[22px] leading-none tracking-[-0.04em] text-emerald-700 dark:text-emerald-400">
-                      99.02%
+                      {lang === 'vi' ? '99,02%' : '99.02%'}
                     </div>
                     <div
                       style={{ color: 'var(--solva-muted)' }}
-                      className="font-mono text-[10px] mt-1 truncate"
+                      className="font-mono text-[10px] leading-snug mt-1"
                     >
-                      {lang === 'vi' ? 'Độ chính xác thẩm định' : 'Neuro-Symbolic Acc'}
+                      {lang === 'vi' ? 'Độ chính xác' : 'Overall accuracy'}
                     </div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="font-solva-serif text-[20px] sm:text-[22px] leading-none tracking-[-0.04em] text-emerald-700 dark:text-emerald-400">
-                      99.75%
+                      {lang === 'vi' ? '99,75%' : '99.75%'}
                     </div>
                     <div
                       style={{ color: 'var(--solva-muted)' }}
-                      className="font-mono text-[10px] mt-1 truncate"
+                      className="font-mono text-[10px] leading-snug mt-1"
                     >
-                      {lang === 'vi' ? 'Chắn lỗi biên OOD (2.4K)' : 'OOD Guardrail (2.4K)'}
+                      {lang === 'vi' ? (
+                        <>
+                          Ca trích dẫn khó{' '}
+                          <span className="citra-nowrap-tail whitespace-nowrap">(2,4K)</span>
+                        </>
+                      ) : (
+                        <>
+                          Tricky cases{' '}
+                          <span className="citra-nowrap-tail whitespace-nowrap">(2.4K)</span>
+                        </>
+                      )}
                     </div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div
                       style={{ color: 'var(--solva-ink)' }}
                       className="font-solva-serif text-[20px] sm:text-[22px] leading-none tracking-[-0.04em]"
                     >
-                      0.0395
+                      15+
                     </div>
                     <div
                       style={{ color: 'var(--solva-muted)' }}
-                      className="font-mono text-[10px] mt-1 truncate"
+                      className="font-mono text-[10px] leading-snug mt-1"
                     >
-                      {lang === 'vi' ? 'Sai số ECE (↓6,19×)' : 'Platt ECE (↓6.19×)'}
+                      {lang === 'vi' ? 'Thư viện học thuật' : 'Academic libraries'}
                     </div>
                   </div>
                 </div>
@@ -1074,28 +1329,28 @@ function SolvaHeroSection({
             </SolvaScrollReveal>
           </div>
 
-          {/* Right Column: Painterly Mockup Frame (`660x521px` on Desktop) */}
-          <div className="w-full lg:w-[660px] shrink-0">
+          {/* Right Column: Painterly Mockup Frame (`656px` on XL Desktop, fully framed with zero overhang) */}
+          <div className="w-full lg:w-[55%] xl:w-[656px] min-w-0">
             <SolvaPainterlyFrame
               paintingSrc="/solva/hero-bg.webp"
               priority
               alt="Impressionist wildflower meadow oil painting backdrop"
-              className="w-full min-h-[420px] sm:min-h-[490px] lg:h-[521px] p-4 sm:p-8 lg:p-0"
+              className="w-full min-h-[420px] sm:min-h-[480px] lg:min-h-[521px] p-3.5 sm:p-6 lg:p-4 xl:p-7 flex items-center justify-center"
             >
-              <div className="lg:absolute lg:top-[52px] lg:left-[52px] lg:right-[-24px]">
+              <div className="w-full my-auto">
                 <UIGenerationReveal
                   className="rounded-[10px]"
                   steps={
                     lang === 'vi'
                       ? [
-                          'AGENT.GEN // PHÂN TÍCH AST',
-                          'AGENT.GEN // CÂN CHỈNH S-BERT',
-                          'INSPECTOR SẴN SÀNG · 120FPS',
+                          'ĐỌC DANH MỤC TÀI LIỆU',
+                          'ĐỐI CHIẾU 15+ THƯ VIỆN',
+                          'HOÀN TẤT KIỂM TRA',
                         ]
                       : [
-                          'AGENT.GEN // TRACING AST',
-                          'AGENT.GEN // CALIBRATING S-BERT',
-                          'INSPECTOR READY · 120FPS',
+                          'READING REFERENCES',
+                          'CHECKING 15+ LIBRARIES',
+                          'REPORT READY',
                         ]
                   }
                 >
@@ -1131,7 +1386,7 @@ function SolvaHeroSection({
                     data-testid={`hero-ticker-logo-${slug}-${idx}`}
                     onClick={(e) => e.currentTarget.blur()}
                     style={{ color: 'var(--solva-ink)' }}
-                    className="group inline-flex items-center gap-2.5 px-2.5 py-2 -mx-2.5 -my-1.5 rounded-[8px] shrink-0 select-none cursor-pointer opacity-80 hover:opacity-100 active:opacity-100 focus-visible:opacity-100 hover:-translate-y-[1px] active:scale-[0.98] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15]/30 dark:focus-visible:ring-[#FBFAF6]/30"
+                    className="group inline-flex items-center gap-2.5 px-2.5 py-2 -mx-2.5 -my-1.5 rounded-[8px] shrink-0 select-none cursor-pointer opacity-80 hover:opacity-100 active:opacity-100 focus-visible:opacity-100 hover:-translate-y-[1px] active:scale-[0.98] transition-[transform,opacity,background-color,color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15]/30 dark:focus-visible:ring-[#FBFAF6]/30"
                   >
                     <ScholarlySourceLogo
                       name={apiName}
@@ -1158,10 +1413,64 @@ function SolvaHeroSection({
    Per-Class Zero-False-Accusation Guardrails & Platt Calibration
    ============================================================ */
 function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const [activeView, setActiveView] = useState<'ablation' | 'classes' | 'calibration'>('ablation');
-  const { containerRef: benchTabsRef, pillStyle: benchPill } = useSlidingPill<HTMLDivElement>(activeView);
+  const { containerRef: benchTabsRef, pillStyle: benchPill } = useSlidingPill<HTMLDivElement>(
+    `${activeView}-${showTechnicalDetails}`,
+  );
   const { containerRef: benchRef, replaySeed: benchSeed } = useFloralCardAnimation(5600);
   const sep = lang === 'vi' ? '.' : ',';
+  const decSep = lang === 'vi' ? ',' : '.';
+  const fmtPct = (pct: number) =>
+    lang === 'vi' ? `${pct.toFixed(2).replace('.', ',')}%` : `${pct.toFixed(2)}%`;
+
+  const plainPillars = [
+    {
+      badge:
+        lang === 'vi'
+          ? 'NGUỒN THẬT & TRÍCH DẪN THỰC TẾ'
+          : 'REAL & SYNTHETIC CITATIONS',
+      badgeTone: 'neutral' as const,
+      displayValue: lang === 'vi' ? '120.000' : '120,000',
+      title:
+        lang === 'vi'
+          ? 'Bài báo & trích dẫn đã kiểm định'
+          : 'Academic papers rigorously tested',
+      desc:
+        lang === 'vi'
+          ? 'Thử nghiệm trên hàng trăm nghìn bài báo tạp chí, kỷ yếu, sách chuyên khảo cùng các lỗi sai quy cách thường gặp trong bài làm thực tế của sinh viên và học viên.'
+          : 'Tested across real journal articles, conference papers, books, and realistic citation slips so CITRA handles everyday manuscripts reliably.',
+    },
+    {
+      badge: lang === 'vi' ? 'ĐỘ TIN CẬY VƯỢT TRỘI' : 'HIGH RELIABILITY',
+      badgeTone: 'emerald' as const,
+      displayValue: lang === 'vi' ? '99,02%' : '99.02%',
+      title:
+        lang === 'vi'
+          ? 'Chính xác khi phát hiện nguồn ảo & sai lệch'
+          : 'Accuracy catching fake or mismatched sources',
+      desc:
+        lang === 'vi'
+          ? 'Nhận diện chuẩn xác tài liệu do AI tự bịa, đường dẫn DOI không tồn tại và năm xuất bản sai — đạt 99,75% ngay cả trên 2.400 ca trích dẫn khó.'
+          : 'Spots AI-invented references, broken DOIs, and wrong publication years — maintaining 99.75% accuracy across 2,400 tricky edge-case citations.',
+    },
+    {
+      badge:
+        lang === 'vi'
+          ? 'CÔNG TÂM VỚI NGƯỜI VIẾT'
+          : 'FAIR TO STUDENTS & AUTHORS',
+      badgeTone: 'emerald' as const,
+      displayValue: '0',
+      title:
+        lang === 'vi'
+          ? 'Trường hợp kết luận oan cho tài liệu thật'
+          : 'False accusations on real publications',
+      desc:
+        lang === 'vi'
+          ? 'Không một công trình hợp lệ nào bị gắn cờ nhầm là nguồn bịa đặt trên 6.480 bài kiểm thử chuẩn. Sách in và luận văn nội bộ luôn được chuyển nhẹ nhàng để giảng viên duyệt.'
+          : 'Zero legitimate papers were wrongly flagged as fake across 6,480 verified test works. Print books and local theses are routed politely for advisor review.',
+    },
+  ];
 
   const headlineMetrics = [
     {
@@ -1287,7 +1596,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
           : 'Linear multi-feature scorer without abstention band',
       note:
         lang === 'vi'
-          ? 'Cưỡng ép ra phán quyết cứng ở vùng ranh giới nhạy cảm [0.40, 0.60), dẫn tới sụp đổ 3.33% trên OOD'
+          ? 'Cưỡng ép ra phán quyết cứng ở vùng ranh giới nhạy cảm [0.40, 0.60), dẫn tới sụp đổ 3,33% trên OOD'
           : 'Forces hard verdicts in borderline [0.40, 0.60) cases (3.33% on OOD)',
       acc: 80.13,
       prec: '0.6212',
@@ -1312,10 +1621,10 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       highlight: false,
     },
     {
-      code: 'B5 · ml_hybrid (16D, C = 2.0)',
+      code: 'B5 · HybridMLScorer (16D, C = 2.0)',
       name:
         lang === 'vi'
-          ? 'HybridMLScorer 16 chiều thuần học máy (C = 2.0 — sụp đổ còn 49,88% trên OOD!)'
+          ? 'HybridMLScorer 16 chiều thuần học máy (C = 2.0 — sụp đổ còn 49,88% trên 2.400 mẫu OOD!)'
           : 'Pure 16D HybridMLScorer (C = 2.0 — collapses to 49.88% on 2,400-sample OOD!)',
       note:
         lang === 'vi'
@@ -1349,10 +1658,10 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
     {
       label: 'VERIFIED',
       subtypes: 'V1 – V4',
-      totalSamples: '43,200 (36%)',
-      testSupport: '6,480',
-      precision: '0.9846 (98.5%)',
-      recall: '0.9980 (99.8%)',
+      totalSamples: lang === 'vi' ? '43.200 (36%)' : '43,200 (36%)',
+      testSupport: lang === 'vi' ? '6.480' : '6,480',
+      precision: lang === 'vi' ? '0.9846 (98,5%)' : '0.9846 (98.5%)',
+      recall: lang === 'vi' ? '0.9980 (99,8%)' : '0.9980 (99.8%)',
       f1: '0.9913',
       tone: 'emerald' as const,
       desc:
@@ -1363,10 +1672,10 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
     {
       label: 'SUSPECTED_HALLUCINATION',
       subtypes: 'H1 – H4',
-      totalSamples: '36,000 (30%)',
-      testSupport: '5,400',
-      precision: '0.9993 (99.9%)',
-      recall: '0.9969 (99.7%)',
+      totalSamples: lang === 'vi' ? '36.000 (30%)' : '36,000 (30%)',
+      testSupport: lang === 'vi' ? '5.400' : '5,400',
+      precision: lang === 'vi' ? '0.9993 (99,9%)' : '0.9993 (99.9%)',
+      recall: lang === 'vi' ? '0.9969 (99,7%)' : '0.9969 (99.7%)',
       f1: '0.9981',
       tone: 'red' as const,
       desc:
@@ -1377,10 +1686,10 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
     {
       label: 'METADATA_ERROR',
       subtypes: 'M1 – M5',
-      totalSamples: '26,400 (22%)',
-      testSupport: '3,960',
-      precision: '0.9915 (99.2%)',
-      recall: '0.9684 (96.8%)',
+      totalSamples: lang === 'vi' ? '26.400 (22%)' : '26,400 (22%)',
+      testSupport: lang === 'vi' ? '3.960' : '3,960',
+      precision: lang === 'vi' ? '0.9915 (99,2%)' : '0.9915 (99.2%)',
+      recall: lang === 'vi' ? '0.9684 (96,8%)' : '0.9684 (96.8%)',
       f1: '0.9798',
       tone: 'amber' as const,
       desc:
@@ -1391,10 +1700,10 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
     {
       label: 'UNRESOLVED (Abstention)',
       subtypes: 'U1 – U2',
-      totalSamples: '14,400 (12%)',
-      testSupport: '2,160',
-      precision: '0.9821 (98.2%)',
-      recall: '0.9898 (99.0%)',
+      totalSamples: lang === 'vi' ? '14.400 (12%)' : '14,400 (12%)',
+      testSupport: lang === 'vi' ? '2.160' : '2,160',
+      precision: lang === 'vi' ? '0.9821 (98,2%)' : '0.9821 (98.2%)',
+      recall: lang === 'vi' ? '0.9898 (99,0%)' : '0.9898 (99.0%)',
       f1: '0.9859',
       tone: 'slate' as const,
       desc:
@@ -1412,26 +1721,26 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
     >
       <div
         ref={benchRef}
-        className="max-w-[1200px] mx-auto flex flex-col gap-[28px] sm:gap-[36px] lg:gap-[56px]"
+        className="max-w-[1200px] mx-auto flex flex-col gap-[28px] sm:gap-[36px] lg:gap-[44px]"
       >
-        {/* Top Section Header + International Standards Provenance Pill */}
+        {/* Top Section Header + Plain-Language Trust Callout */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
           <div className="flex flex-col items-start gap-[12px] sm:gap-[16px] max-w-[680px]">
             <SolvaEyebrow>
               {lang === 'vi'
-                ? 'Bảo chứng thực nghiệm · Kiểm định trên 120.000 công trình khoa học'
-                : 'Verified System Highlight · 120,000-Paper Empirical Benchmark'}
+                ? 'Độ tin cậy thực tế · Kiểm định trên 120.000 bài báo khoa học'
+                : 'Proven Accuracy · Tested on 120,000 Academic Papers'}
             </SolvaEyebrow>
             <SolvaTwoToneHeading
               primary={
                 lang === 'vi'
                   ? 'Được kiểm chứng trên 120.000 bài báo.'
-                  : 'Proven across 120,000 papers.'
+                  : 'Tested across 120,000 papers.'
               }
               secondary={
                 lang === 'vi'
-                  ? 'Không rò rỉ dữ liệu. Không một lời kết tội oan.'
-                  : 'Zero data leakage. Zero false accusations.'
+                  ? 'Chính xác, công tâm, không một lời kết luận oan.'
+                  : 'Accurate, fair, and zero false accusations.'
               }
             />
           </div>
@@ -1452,31 +1761,33 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   <span>
                     {lang === 'vi'
-                      ? 'ĐẠT CHUẨN KIỂM ĐỊNH 0% RÒ RỈ DỮ LIỆU'
-                      : 'ZERO-LEAKAGE AUDIT PASSED'}
+                      ? 'KIỂM THỬ ĐỘC LẬP ĐA NGÀNH'
+                      : 'INDEPENDENT CROSS-DISCIPLINE AUDIT'}
                   </span>
                 </span>
-                <span style={{ color: 'var(--solva-muted)' }}>1,000× Bootstrap CI</span>
+                <span style={{ color: 'var(--solva-muted)' }}>
+                  {lang === 'vi' ? '18.000 bài độc lập' : '18,000 Unseen Papers'}
+                </span>
               </div>
               <p
                 style={{ color: 'var(--solva-muted)' }}
                 className="font-solva-sans text-[13px] leading-[19.5px]"
               >
                 {lang === 'vi'
-                  ? 'Thiết kế nghiêm ngặt theo chuẩn mực quốc tế SciFact (EMNLP 2020), FEVER (NAACL 2018), Walters & Wilder (2023), ALCE (EMNLP 2023) và Platt Calibration (ICML 2017) từ kho 129.125 bản ghi (128.105 công trình độc lập).'
-                  : 'Engineered to international verification standards — SciFact (EMNLP 2020), FEVER (NAACL 2018), Walters & Wilder (2023), ALCE (EMNLP 2023) & Platt Calibration (ICML 2017) across 129,125 local records (128,105 unique papers).'}
+                  ? 'Đánh giá khách quan trên 18.000 bài báo kiểm thử hoàn toàn độc lập trải rộng từ Kinh tế, Luật, Nhân văn đến Y sinh và Kỹ thuật — mọi cảnh báo đều đính kèm bằng chứng thư viện rõ ràng.'
+                  : 'Evaluated on 18,000 completely unseen academic papers across Economics, Law, Humanities, Medicine, and STEM — every flag links directly to verifiable library records.'}
               </p>
             </div>
           </SolvaScrollReveal>
         </div>
 
-        {/* 4 Highlighted Metric Cards (`120,000` · `99.02%` · `99.93%` · `0.0395`) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[16px]">
-          {headlineMetrics.map((item, idx) => (
+        {/* Default Surface: 3-Pillar Plain-Language Reassurance Summary */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-[16px]">
+          {plainPillars.map((pillar, idx) => (
             <SolvaScrollReveal
-              key={item.title}
+              key={pillar.title}
               delayMs={idx * 75}
-              yOffset={30}
+              yOffset={28}
               className="h-full"
             >
               <div
@@ -1484,63 +1795,144 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                   backgroundColor: 'var(--solva-surface)',
                   borderColor: 'var(--solva-border)',
                 }}
-                className="rounded-[14px] border p-[20px] sm:p-[24px] h-full flex flex-col justify-between gap-[20px]"
+                className="rounded-[14px] border p-[20px] sm:p-[24px] h-full flex flex-col justify-between gap-[18px]"
               >
-                <div className="space-y-[14px]">
-                  <div className="flex items-center justify-between gap-2">
-                    <span
-                      className={`px-2 py-0.5 rounded-[5px] font-mono text-[10px] font-semibold tracking-wide ${
-                        item.badgeTone === 'emerald'
-                          ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
-                          : item.badgeTone === 'amber'
-                            ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
-                            : 'bg-[#FBFAF6] dark:bg-[#141310] text-[#56524A] dark:text-[#A8A296]'
-                      }`}
-                    >
-                      {item.badge}
-                    </span>
-                  </div>
+                <div className="space-y-[12px]">
+                  <span
+                    className={`inline-flex px-2 py-0.5 rounded-[5px] font-mono text-[10px] font-semibold tracking-wide ${
+                      pillar.badgeTone === 'emerald'
+                        ? 'bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300'
+                        : 'bg-[#FBFAF6] dark:bg-[#141310] text-[#56524A] dark:text-[#A8A296]'
+                    }`}
+                  >
+                    {pillar.badge}
+                  </span>
 
                   <div
                     style={{ color: 'var(--solva-ink)' }}
-                    className="font-solva-serif font-light text-[36px] sm:text-[42px] leading-[1.08] tracking-[-0.05em]"
+                    className="font-solva-serif font-light text-[38px] sm:text-[44px] leading-[1.08] tracking-[-0.05em]"
                   >
-                    <SolvaLiveNumber
-                      value={item.value}
-                      decimals={item.decimals}
-                      suffix={item.suffix}
-                      formatThousands={item.formatThousands}
-                      thousandSeparator={sep}
-                      replaySeed={benchSeed}
-                      durationMs={1400 + idx * 120}
-                    />
+                    {pillar.displayValue}
                   </div>
 
                   <h3
                     style={{ color: 'var(--solva-ink)' }}
-                    className="font-solva-sans text-[16px] sm:text-[17px] font-medium leading-[23px]"
+                    className="font-solva-sans text-[17px] sm:text-[18px] font-medium leading-[24px]"
                   >
-                    {item.title}
+                    {pillar.title}
                   </h3>
                 </div>
 
                 <p
                   style={{ color: 'var(--solva-muted)' }}
-                  className="font-solva-sans text-[13px] leading-[19.5px] pt-3 border-t border-[#E7E3D9] dark:border-[#332F26]"
+                  className="font-solva-sans text-[14px] leading-[21px] pt-3 border-t border-[#E7E3D9] dark:border-[#332F26]"
                 >
-                  {item.desc}
+                  {pillar.desc}
                 </p>
               </div>
             </SolvaScrollReveal>
           ))}
         </div>
 
-        {/* Interactive 3-View Scientific Benchmark Explorer (Nested Bezel `#F4F2EC` -> `#FBFAF6`) */}
-        <SolvaScrollReveal delayMs={140} yOffset={32}>
-          <div
-            style={{ backgroundColor: 'var(--solva-surface)' }}
-            className="w-full rounded-[16px] p-[8px] sm:p-[12px] space-y-3"
+        {/* Progressive Disclosure Toggle for Evaluators, ML Researchers & Thesis Committees */}
+        <div className="flex flex-col items-start sm:items-center">
+          <button
+            type="button"
+            data-testid="benchmark-technical-details-toggle"
+            aria-expanded={showTechnicalDetails}
+            aria-controls="benchmark-technical-details-panel"
+            onClick={() => setShowTechnicalDetails((prev) => !prev)}
+            style={{
+              backgroundColor: 'var(--solva-surface)',
+              borderColor: showTechnicalDetails ? 'var(--solva-ink)' : 'var(--solva-border)',
+              color: 'var(--solva-ink)',
+            }}
+            className="w-full sm:w-auto min-h-[44px] px-4 sm:px-5 py-2.5 rounded-[10px] border font-solva-sans text-[14px] font-medium inline-flex items-center justify-between sm:justify-center gap-2.5 hover:opacity-90 active:scale-[0.99] transition-[transform,opacity,background-color,border-color,color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer"
           >
+            <span>
+              {showTechnicalDetails
+                ? lang === 'vi'
+                  ? 'Ẩn chi tiết phương pháp & bảng số liệu kỹ thuật'
+                  : 'Hide Technical Methodology & Benchmark Tables'
+                : lang === 'vi'
+                  ? 'Xem chi tiết phương pháp & bảng số liệu kỹ thuật'
+                  : 'View Full Technical Methodology & Benchmark Tables'}
+            </span>
+            <SymmetricChevron open={showTechnicalDetails} size={15} />
+          </button>
+        </div>
+
+        <div
+          id="benchmark-technical-details-panel"
+          hidden={!showTechnicalDetails}
+        >
+          {showTechnicalDetails && (
+            <div className="space-y-[24px] animate-debugger-switch">
+            {/* 4 Technical Telemetry Cards (`120,000` · `99.02%` · `99.93%` · `0.0395`) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[16px]">
+              {headlineMetrics.map((item, idx) => (
+                <div
+                  key={item.title}
+                  style={{
+                    backgroundColor: 'var(--solva-surface)',
+                    borderColor: 'var(--solva-border)',
+                  }}
+                  className="rounded-[14px] border p-[20px] sm:p-[24px] h-full flex flex-col justify-between gap-[20px]"
+                >
+                  <div className="space-y-[14px]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded-[5px] font-mono text-[10px] font-semibold tracking-wide ${
+                          item.badgeTone === 'emerald'
+                            ? 'bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300'
+                            : item.badgeTone === 'amber'
+                              ? 'bg-amber-500/[0.12] text-amber-800 dark:text-amber-300'
+                              : 'bg-[#FBFAF6] dark:bg-[#141310] text-[#56524A] dark:text-[#A8A296]'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{ color: 'var(--solva-ink)' }}
+                      className="font-solva-serif font-light text-[36px] sm:text-[42px] leading-[1.08] tracking-[-0.05em]"
+                    >
+                      <SolvaLiveNumber
+                        value={item.value}
+                        decimals={item.decimals}
+                        suffix={item.suffix}
+                        formatThousands={item.formatThousands}
+                        thousandSeparator={sep}
+                        decimalSeparator={item.suffix === '%' ? decSep : '.'}
+                        replaySeed={benchSeed}
+                        durationMs={1400 + idx * 120}
+                      />
+                    </div>
+
+                    <h3
+                      style={{ color: 'var(--solva-ink)' }}
+                      className="font-solva-sans text-[16px] sm:text-[17px] font-medium leading-[23px]"
+                    >
+                      {item.title}
+                    </h3>
+                  </div>
+
+                  <p
+                    style={{ color: 'var(--solva-muted)' }}
+                    className="font-solva-sans text-[13px] leading-[19.5px] pt-3 border-t border-[#E7E3D9] dark:border-[#332F26]"
+                  >
+                    {item.desc}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Interactive 3-View Scientific Benchmark Explorer (Nested Bezel `#F4F2EC` -> `#FBFAF6`) */}
+            <div
+              style={{ backgroundColor: 'var(--solva-surface)' }}
+              className="w-full rounded-[16px] p-[8px] sm:p-[12px] space-y-3"
+            >
             {/* Top Bar: 3 Scientific Audit Views + Dataset Split Summary (#16 Sliding Tabs) */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 px-1 sm:px-2 pt-1">
               <div
@@ -1563,7 +1955,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                       transform: `translate3d(${benchPill.left}px, ${benchPill.top}px, 0)`,
                       transition: benchPill.animate ? undefined : 'none',
                     }}
-                    className="t-tabs-pill rounded-[10px] shadow-2xs"
+                    className="t-tabs-pill rounded-[10px] shadow-sm"
                   />
                 )}
                 {[
@@ -1602,7 +1994,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                         backgroundColor: !benchPill.ready && isActive ? 'var(--solva-bg)' : 'transparent',
                         color: isActive ? 'var(--solva-ink)' : 'var(--solva-muted)',
                       }}
-                      className="t-tab h-[40px] px-3.5 rounded-[10px] font-mono text-[12px] font-medium flex items-center justify-center gap-2 cursor-pointer"
+                      className="t-tab min-h-[44px] h-auto py-2 px-3.5 text-center leading-tight rounded-[10px] font-mono text-[12px] font-medium flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <span>{tab.label}</span>
                     </button>
@@ -1631,7 +2023,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                   {lang === 'vi' ? 'Thẩm định:' : 'Val:'}{' '}
                   <strong>{lang === 'vi' ? '18.000' : '18,000'}</strong> (15%)
                 </span>
-                <span className="px-2.5 py-1 rounded-[6px] bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 font-semibold">
+                <span className="px-2.5 py-1 rounded-[6px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-semibold">
                   {lang === 'vi'
                     ? 'Kiểm thử độc lập: N = 18.000 (15%)'
                     : 'Held-Out Test: N = 18,000 (15%)'}
@@ -1693,7 +2085,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                             ? 'var(--solva-ink)'
                             : 'var(--solva-border)',
                         }}
-                        className="p-3 sm:p-3.5 rounded-[10px] border transition-all"
+                        className="p-3 sm:p-3.5 rounded-[10px] border transition-[background-color,border-color,color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]"
                       >
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 mb-2">
                           <div className="flex flex-wrap items-center gap-2 min-w-0">
@@ -1744,12 +2136,12 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                             <span
                               className={`px-2 py-0.5 rounded font-bold ${
                                 row.highlight
-                                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                  ? 'bg-emerald-500/[0.15] text-emerald-700 dark:text-emerald-300'
                                   : 'bg-[#FBFAF6] dark:bg-[#141310]'
                               }`}
                               style={!row.highlight ? { color: 'var(--solva-ink)' } : undefined}
                             >
-                              {row.acc.toFixed(2)}% Acc
+                              {fmtPct(row.acc)} Acc
                             </span>
                           </div>
                         </div>
@@ -1758,7 +2150,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                         <div className="w-full h-2 rounded-full bg-[#E7E3D9]/70 dark:bg-[#29261F] overflow-hidden">
                           <div
                             style={{ width: `${row.acc}%` }}
-                            className={`h-full rounded-full transition-all duration-700 ${
+                            className={`h-full rounded-full transition-[width,background-color] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                               row.highlight
                                 ? 'bg-emerald-600 dark:bg-emerald-400'
                                 : 'bg-[#8C8577] dark:bg-[#6E685C]'
@@ -1792,9 +2184,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                           : 'Strict academic safety guarantee: 0 fabricated references marked VERIFIED and 0 legitimate papers falsely accused of hallucination.'}
                       </p>
                     </div>
-                    <span className="self-start sm:self-center px-3 py-1 rounded-[8px] bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 font-mono text-[11px] font-semibold shrink-0">
+                    <span className="self-start sm:self-center px-3 py-1 rounded-[8px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[11px] font-semibold shrink-0">
                       {lang === 'vi'
-                        ? 'Độ chính xác chung: 99.02% [98.87%, 99.16%]'
+                        ? 'Độ chính xác chung: 99,02% [98,87%; 99,16%]'
                         : 'Overall Acc: 99.02% [98.87%, 99.16%]'}
                     </span>
                   </div>
@@ -1814,12 +2206,12 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                             <span
                               className={`px-2.5 py-0.5 rounded font-mono text-[11px] font-bold ${
                                 cls.tone === 'emerald'
-                                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                  ? 'bg-emerald-500/[0.15] text-emerald-700 dark:text-emerald-300'
                                   : cls.tone === 'red'
-                                    ? 'bg-red-500/15 text-red-700 dark:text-red-300'
+                                    ? 'bg-red-500/[0.15] text-red-700 dark:text-red-300'
                                     : cls.tone === 'amber'
-                                      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-                                      : 'bg-slate-500/15 text-slate-700 dark:text-slate-300'
+                                      ? 'bg-amber-500/[0.15] text-amber-800 dark:text-amber-300'
+                                      : 'bg-slate-500/[0.15] text-slate-700 dark:text-slate-300'
                               }`}
                             >
                               {cls.label}
@@ -1895,9 +2287,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                           : 'Platt parameters (a = 1.8077, b = 1.1160) fitted strictly on the 18,000-sample Validation split align confidence scores with true empirical accuracy.'}
                       </p>
                     </div>
-                    <span className="self-start sm:self-center px-3 py-1 rounded-[8px] bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 font-mono text-[11px] font-semibold shrink-0">
+                    <span className="self-start sm:self-center px-3 py-1 rounded-[8px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[11px] font-semibold shrink-0">
                       {lang === 'vi'
-                        ? '99.31% Chính xác @ 90% Độ phủ'
+                        ? '99,31% Chính xác @ 90% Độ phủ'
                         : '99.31% Acc @ 90% Coverage'}
                     </span>
                   </div>
@@ -1951,13 +2343,17 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                               <span style={{ color: 'var(--solva-muted)' }}>
                                 {lang === 'vi' ? 'Chính xác @ 70% Phủ:' : 'Acc @ 70% Cov:'}
                               </span>
-                              <strong style={{ color: 'var(--solva-ink)' }}>99.03%</strong>
+                              <strong style={{ color: 'var(--solva-ink)' }}>
+                                {lang === 'vi' ? '99,03%' : '99.03%'}
+                              </strong>
                             </div>
                             <div className="flex justify-between">
                               <span style={{ color: 'var(--solva-muted)' }}>
                                 {lang === 'vi' ? 'Chính xác @ 90% Phủ:' : 'Acc @ 90% Cov:'}
                               </span>
-                              <strong style={{ color: 'var(--solva-ink)' }}>99.08%</strong>
+                              <strong style={{ color: 'var(--solva-ink)' }}>
+                                {lang === 'vi' ? '99,08%' : '99.08%'}
+                              </strong>
                             </div>
                           </div>
                         </div>
@@ -1980,7 +2376,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Sai số ECE:' : 'ECE Error:'}
                               </span>
                               <strong className="text-emerald-700 dark:text-emerald-300">
-                                0.0395 (↓ 6.19×)
+                                {lang === 'vi' ? '0.0395 (↓ 6,19×)' : '0.0395 (↓ 6.19×)'}
                               </strong>
                             </div>
                             <div className="flex justify-between">
@@ -1988,7 +2384,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Điểm Brier:' : 'Brier Score:'}
                               </span>
                               <strong className="text-emerald-700 dark:text-emerald-300">
-                                0.0125 (↓ 7.32×)
+                                {lang === 'vi' ? '0.0125 (↓ 7,32×)' : '0.0125 (↓ 7.32×)'}
                               </strong>
                             </div>
                             <div className="flex justify-between">
@@ -1996,7 +2392,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Chính xác @ 70% Phủ:' : 'Acc @ 70% Cov:'}
                               </span>
                               <strong className="text-emerald-700 dark:text-emerald-300">
-                                99.23%
+                                {lang === 'vi' ? '99,23%' : '99.23%'}
                               </strong>
                             </div>
                             <div className="flex justify-between">
@@ -2004,7 +2400,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Chính xác @ 90% Phủ:' : 'Acc @ 90% Cov:'}
                               </span>
                               <strong className="text-emerald-700 dark:text-emerald-300">
-                                99.31%
+                                {lang === 'vi' ? '99,31%' : '99.31%'}
                               </strong>
                             </div>
                           </div>
@@ -2033,9 +2429,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                         {[
                           {
                             metric: lang === 'vi' ? 'Độ chính xác tổng thể' : 'Overall Accuracy',
-                            est: '99.02%',
-                            ci: '[98.87%, 99.16%]',
-                            se: '±0.07%',
+                            est: lang === 'vi' ? '99,02%' : '99.02%',
+                            ci: lang === 'vi' ? '[98,87%; 99,16%]' : '[98.87%, 99.16%]',
+                            se: lang === 'vi' ? '±0,07%' : '±0.07%',
                           },
                           {
                             metric: lang === 'vi' ? 'Điểm Macro-F1' : 'Macro-F1 Score',
@@ -2080,7 +2476,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
               )}
             </div>
           </div>
-        </SolvaScrollReveal>
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -2096,34 +2494,34 @@ function SolvaFeaturesSection({ lang }: { lang: Lang }) {
       painting: '/solva/feature-1-bg.webp',
       title:
         lang === 'vi'
-          ? 'Thẩm định độc lập trên hai tầng trực giao (L1 × L2)'
-          : 'Verify across two orthogonal layers',
+          ? 'Khớp từng trích dẫn trong bài với danh mục cuối bài'
+          : 'Match every in-text citation to your reference list',
       desc:
         lang === 'vi'
-          ? 'Tách bạch rành mạch giữa tính nhất quán trình bày nội bộ (Tầng 1: Đối chiếu ký hiệu trích dẫn trong bài với Danh mục tài liệu) và tính xác thực học thuật bên ngoài (Tầng 2: Kiểm chứng sự tồn tại thực tế của công trình).'
-          : 'Cleanly decouples internal manuscript consistency (Layer 1: In-text to Bibliography mapping) from external bibliographic existence (Layer 2: Canonical truth).',
+          ? 'Kiểm tra tách biệt hai phần dễ nhầm nhất: mọi trích dẫn trong đoạn văn đã có mặt ở Danh mục tham khảo cuối bài chưa, và ấn phẩm được nêu có thực sự tồn tại ngoài đời thực không.'
+          : 'Checks two essentials separately: whether every in-text citation connects to an entry in your bibliography, and whether each cited publication actually exists.',
     },
     {
       painting: '/solva/feature-2-bg.webp',
       title:
         lang === 'vi'
-          ? 'Truy vấn đồng thời hơn 15 cơ sở dữ liệu khoa học quốc tế'
-          : 'Query 15+ scholarly indexes in parallel',
+          ? 'Đối chiếu cùng lúc trên hơn 15 thư viện học thuật uy tín'
+          : 'Verify sources across 15+ academic libraries at once',
       desc:
         lang === 'vi'
-          ? 'Đối chiếu song song trên Crossref, OpenAlex, Semantic Scholar, PubMed, arXiv, DBLP, DOAJ và ORCID, kết hợp chỉ mục đệm cục bộ SQLite FTS5 phản hồi dưới 10 mili-giây.'
-          : 'Queries Crossref, OpenAlex, Semantic Scholar, PubMed, arXiv, DBLP, DOAJ, and ORCID concurrently with sub-10ms SQLite FTS5 local caching.',
+          ? 'Tra cứu song song trên Crossref, OpenAlex, Semantic Scholar, PubMed, arXiv, DOAJ, OpenLibrary và Cơ sở dữ liệu Văn bản Pháp luật Việt Nam chỉ trong vài giây.'
+          : 'Cross-checks your bibliography simultaneously against Crossref, OpenAlex, Semantic Scholar, PubMed, arXiv, DOAJ, OpenLibrary, and Vietnam’s legal statute registry in seconds.',
     },
     {
       painting: '/solva/feature-3-bg.webp',
       title:
         lang === 'vi'
-          ? 'Hợp nhất suy diễn Neuro-Symbolic & thẩm định ngữ nghĩa'
-          : 'Combine symbolic rules with neural stance',
+          ? 'Đảm bảo bài báo gốc thực sự củng cố cho ý bạn viết'
+          : 'Confirm the cited paper actually supports your point',
       desc:
         lang === 'vi'
-          ? `Kết hợp ${SYMBOLIC_RULES_COUNT} quy tắc suy diễn hình thức (${SYMBOLIC_RULES_RANGE}) cùng mô hình Sentence-BERT và Multilingual MiniLM ONNX INT8 để làm rõ liệu nội dung bài báo gốc có thực sự phù hợp với nhận định đang trích dẫn hay không.`
-          : `Pairs ${SYMBOLIC_RULES_COUNT} formal symbolic rules (${SYMBOLIC_RULES_RANGE}) with Sentence-BERT and Multilingual MiniLM ONNX INT8 embeddings to verify whether cited abstracts align with the claim.`,
+          ? 'So sánh câu trích dẫn trong bài (cả tiếng Việt và tiếng Anh) với tóm tắt của ấn phẩm gốc, phát hiện sớm năm xuất bản sai, nhầm tác giả hoặc trích dẫn lệch ý tác giả.'
+          : 'Compares your cited sentence against the source paper’s abstract across English and Vietnamese, catching wrong years, swapped authors, and misquoted findings with clear reasons.',
     },
   ];
 
@@ -2136,24 +2534,24 @@ function SolvaFeaturesSection({ lang }: { lang: Lang }) {
         {/* Section Headline */}
         <div className="flex flex-col items-start gap-[12px] sm:gap-[16px] max-w-[620px]">
           <SolvaEyebrow>
-            {lang === 'vi' ? 'Nền tảng kiến trúc cốt lõi' : 'What CITRA does'}
+            {lang === 'vi' ? 'CITRA giúp bạn kiểm tra gì' : 'What CITRA checks'}
           </SolvaEyebrow>
           <SolvaTwoToneHeading
             primary={
               lang === 'vi'
-                ? 'Ba trụ cột giúp CITRA'
-                : 'Three ways CITRA'
+                ? 'Ba bước kiểm tra'
+                : 'Three checks behind'
             }
             secondary={
               lang === 'vi'
-                ? 'gìn giữ sự chuẩn xác cho từng danh mục tham khảo.'
-                : 'audits your bibliography.'
+                ? 'giúp danh mục tham khảo luôn chuẩn xác.'
+                : 'every trustworthy bibliography.'
             }
           />
         </div>
 
         {/* 3-Column Feature Cards (`gap: 24px`) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-[24px]">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-[24px]">
           {features.map((feat, idx) => (
             <SolvaScrollReveal
               key={feat.title}
@@ -2161,11 +2559,11 @@ function SolvaFeaturesSection({ lang }: { lang: Lang }) {
               yOffset={36}
               className="flex flex-col gap-[16px] min-w-0"
             >
-              {/* Top 336px Painterly Visual Box */}
+              {/* Top Painterly Visual Box */}
               <SolvaPainterlyFrame
                 paintingSrc={feat.painting}
                 alt={feat.title}
-                className="w-full h-[320px] sm:h-[336px] p-[24px]"
+                className="w-full min-h-[320px] sm:min-h-[344px] p-4 sm:p-5 lg:p-3.5 xl:p-[24px] flex items-center justify-center"
               >
                 <div className="w-full h-full flex items-center justify-center">
                   <FeatureCardWidget index={idx as 0 | 1 | 2} lang={lang} />
@@ -2211,37 +2609,37 @@ function SolvaStickySection({
       painting: '/solva/sticky-1-bg.webp',
       title:
         lang === 'vi'
-          ? 'Bóc tách cấu trúc học thuật bằng GROBID TEI-XML thay vì biểu thức mẫu cứng nhắc'
-          : 'Parsed by GROBID TEI-XML, not brittle templates',
+          ? 'Đọc chuẩn xác danh mục tài liệu ở mọi quy cách trình bày phổ biến'
+          : 'Reads complex reference lists across every major citation style',
       desc:
         lang === 'vi'
-          ? 'Kết hợp mô hình học sâu GROBID cùng bộ kiểm định chéo đa quy chuẩn (IEEE, APA 7th, Vancouver, Harvard, ACM), tự động nhận diện chuẩn xác ranh giới phần Tài liệu tham khảo và giải nén trọn vẹn các cụm trích dẫn gộp [1]–[5].'
-          : 'Combines deep-learning GROBID TEI-XML segmentation with a multi-style cross-validator (IEEE, APA 7th, Vancouver, Harvard, ACM) that locks bibliography boundaries and expands grouped ranges.',
-      cta: lang === 'vi' ? 'Trải nghiệm ngay' : 'Get started',
+          ? 'Tải lên bài viết PDF hoặc Word trình bày theo chuẩn APA 7th, IEEE, Vancouver, Harvard hay ACM. CITRA tự động nhận diện phần Tài liệu tham khảo cuối bài và tách rời từng cụm trích dẫn gộp dạng [1]–[5].'
+          : 'Upload a PDF or Word manuscript in APA 7th, IEEE, Vancouver, Harvard, or ACM style. CITRA cleanly separates body text from your bibliography and expands grouped citations like [1]–[5] automatically.',
+      cta: lang === 'vi' ? 'Kiểm tra miễn phí' : 'Get started',
     },
     {
       painting: '/solva/sticky-2-bg.webp',
       title:
         lang === 'vi'
-          ? 'Minh bạch từng quy tắc cho hội đồng phản biện, phản hồi tức thì cho người viết'
-          : 'Formal rule traces for reviewers, instant feedback for authors',
+          ? 'Giải thích dễ hiểu cho người viết, duyệt nhanh một chạm cho giảng viên'
+          : 'Clear explanations for authors, one-click sign-off for advisors',
       desc:
         lang === 'vi'
-          ? `Mọi phán quyết đều đính kèm vết suy diễn hình thức ${SYMBOLIC_RULES_RANGE} và bảng đối chiếu chi tiết từng trường thư mục (Tiêu đề, Tác giả, Năm, Tạp chí, DOI). Giảng viên có toàn quyền điều chỉnh kết luận (Override) kèm lưu vết kiểm toán bất biến.`
-          : `Every verdict includes a deterministic ${SYMBOLIC_RULES_RANGE} rule trace and field-level edit distances. Instructors can override verdicts with mandatory rationale logged to an immutable audit trail.`,
-      cta: lang === 'vi' ? 'Khám phá hệ quy tắc' : 'Explore rules',
+          ? 'Mỗi trích dẫn cần xem lại đều đặt song song thông tin bạn ghi trong bài và bản ghi gốc trên thư viện. Giảng viên hướng dẫn có thể xác nhận hợp lệ ngay cho giáo trình in hoặc luận văn nội bộ kèm ghi chú.'
+          : 'Every flagged citation shows side-by-side what you wrote versus the official library record. Advisors can approve print textbooks or regional theses in one click with a review note.',
+      cta: lang === 'vi' ? 'Xem cách đối chiếu' : 'See how it works',
     },
     {
       painting: '/solva/sticky-3-bg.webp',
       title:
         lang === 'vi'
-          ? 'Chặn đứng trích dẫn ngụy tạo do AI trước khi bản thảo bước vào hội đồng'
-          : 'Catch hallucinated references before peer review',
+          ? 'Phát hiện sớm trích dẫn do AI tự bịa trước khi nộp hội đồng'
+          : 'Catch AI-invented references before your committee does',
       desc:
         lang === 'vi'
-          ? 'Phát hiện tức thì những tài liệu "ma" do mô hình ngôn ngữ lớn tự suy diễn — như ghép tiền tố nhà xuất bản uy tín với mã DOI không có thật — đồng thời theo dõi sự tiến bộ của Điểm Toàn vẹn Trích dẫn (CIS) qua từng lần chỉnh sửa.'
-          : 'Flags synthetic LLM-generated references — such as real journal prefixes paired with fabricated DOIs — and tracks Citation Integrity Score (CIS) improvements across manuscript revisions.',
-      cta: lang === 'vi' ? 'Thẩm định bản thảo' : 'Audit manuscript',
+          ? 'Các công cụ viết bằng AI thường ghép tên tác giả và tạp chí có thật với bài báo không hề tồn tại. CITRA giúp bạn lọc sạch nguồn ảo và theo dõi Điểm Toàn vẹn Trích dẫn tăng lên qua từng bản sửa.'
+          : 'AI writing tools often combine real journal titles and author names with articles that do not exist. CITRA catches unverified sources early and tracks your Citation Integrity Score across drafts.',
+      cta: lang === 'vi' ? 'Rà soát bài viết' : 'Check manuscript',
     },
   ];
 
@@ -2257,7 +2655,7 @@ function SolvaStickySection({
             primary={lang === 'vi' ? 'Một không gian học thuật.' : 'One workspace.'}
             secondary={
               lang === 'vi'
-                ? 'Mọi trích dẫn đều có bằng chứng bảo chứng.'
+                ? 'Mọi trích dẫn đều được đối chiếu minh bạch.'
                 : 'Every citation, accounted for.'
             }
           />
@@ -2276,12 +2674,12 @@ function SolvaStickySection({
             >
               <div className="grid grid-cols-1 lg:grid-cols-12 items-center">
                 {/* Left Painterly Frame (667x548px equivalent on Desktop) */}
-                <div className="lg:col-span-7">
+                <div className="lg:col-span-7 min-w-0">
                   <SolvaPainterlyFrame
                     paintingSrc={block.painting}
                     alt={block.title}
                     radiusClass="rounded-[10px]"
-                    className="w-full h-[340px] sm:h-[420px] lg:h-[520px] p-6 flex items-center justify-center"
+                    className="w-full min-h-[340px] sm:min-h-[420px] lg:min-h-[520px] p-4 sm:p-6 flex items-center justify-center"
                   >
                     <div className="w-full h-full flex items-center justify-center">
                       <StickyCardWidget index={idx as 0 | 1 | 2} lang={lang} />
@@ -2294,7 +2692,7 @@ function SolvaStickySection({
                   <div className="flex flex-col gap-[12px]">
                     <h3
                       style={{ color: 'var(--solva-ink)' }}
-                      className="font-solva-serif font-light text-[30px] sm:text-[36px] xl:text-[40px] leading-[1.15] tracking-[-0.05em] max-w-[400px]"
+                      className="font-solva-serif font-light text-[30px] sm:text-[36px] xl:text-[40px] leading-[1.15] max-w-[400px]"
                     >
                       {block.title}
                     </h3>
@@ -2307,7 +2705,7 @@ function SolvaStickySection({
                   </div>
 
                   <SolvaButton
-                    to={isAuthenticated ? '/upload' : '/login'}
+                    to={isAuthenticated ? '/upload' : '/register'}
                     variant="primary"
                   >
                     {block.cta}
@@ -2335,6 +2733,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
   const [selectedId, setSelectedId] = useState<string>(DEMO_CITATIONS[1].id);
   const [isAutoPlaying, setIsAutoPlaying] = useState<boolean>(true);
   const [isHoverPaused, setIsHoverPaused] = useState<boolean>(false);
+  const [showTechnicalTrace, setShowTechnicalTrace] = useState<boolean>(false);
   const remainingTourMsRef = useRef<number>(4200);
   const tourStartedAtRef = useRef<number>(0);
   const {
@@ -2345,6 +2744,12 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
 
   const activeCitation =
     DEMO_CITATIONS.find((c) => c.id === selectedId) || DEMO_CITATIONS[0];
+  const activePlainVerdict = getPlainVerdictLabel(activeCitation.verdict, lang);
+  const activePlainMapping = getPlainMappingLabel(activeCitation.mappingStatus, lang);
+  const activeActionHint =
+    activeCitation.mappingStatus === 'MISSING_REFERENCE'
+      ? activePlainMapping.actionHint
+      : activePlainVerdict.actionHint;
 
   useEffect(() => {
     remainingTourMsRef.current = 4200;
@@ -2381,20 +2786,20 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
     switch (status) {
       case 'match':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-emerald-500/12 text-emerald-700 dark:text-emerald-300">
-            <Check className="h-3 w-3" /> {lang === 'vi' ? 'Khớp 100%' : '100% Match'}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+            <Check className="h-3 w-3" /> {lang === 'vi' ? 'Khớp chuẩn' : 'Exact Match'}
           </span>
         );
       case 'partial':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-amber-500/12 text-amber-700 dark:text-amber-300">
-            <AlertTriangle className="h-3 w-3" /> {lang === 'vi' ? 'Tương đồng 86%' : '86% Sim'}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-amber-500/[0.12] text-amber-800 dark:text-amber-300 whitespace-nowrap">
+            <AlertTriangle className="h-3 w-3" /> {lang === 'vi' ? 'Gần khớp' : 'Close Match'}
           </span>
         );
       case 'mismatch':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-red-500/12 text-red-700 dark:text-red-300">
-            <XCircle className="h-3 w-3" /> {lang === 'vi' ? 'Sai lệch' : 'Diff'}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-red-500/[0.12] text-red-700 dark:text-red-300 whitespace-nowrap">
+            <XCircle className="h-3 w-3" /> {lang === 'vi' ? 'Chưa khớp' : 'Different'}
           </span>
         );
       case 'missing':
@@ -2406,24 +2811,24 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
             }}
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold"
           >
-            {lang === 'vi' ? '— Khuyết thông tin' : '— Missing'}
+            {lang === 'vi' ? '— Còn thiếu' : '— Missing'}
           </span>
         );
     }
   };
 
   const fieldLabelMap: Record<'title' | 'authors' | 'year' | 'venue' | 'doi', string> = {
-    title: lang === 'vi' ? 'Tiêu đề' : 'title',
-    authors: lang === 'vi' ? 'Tác giả' : 'authors',
-    year: lang === 'vi' ? 'Năm XB' : 'year',
-    venue: lang === 'vi' ? 'Nơi công bố' : 'venue',
-    doi: 'DOI',
+    title: lang === 'vi' ? 'Tiêu đề' : 'Title',
+    authors: lang === 'vi' ? 'Tác giả' : 'Authors',
+    year: lang === 'vi' ? 'Năm xuất bản' : 'Year',
+    venue: lang === 'vi' ? 'Tạp chí / Kỷ yếu' : 'Journal / Venue',
+    doi: lang === 'vi' ? 'Mã DOI' : 'DOI',
   };
 
   const localizeMetaValue = (val: string) => {
     if (lang !== 'vi') return val;
     if (val === '[Missing from Bibliography Section]') {
-      return '[Khuyết mục tương ứng trong Danh mục Tài liệu tham khảo]';
+      return '[Chưa liệt kê ở Danh mục Tài liệu tham khảo cuối bài]';
     }
     if (val === '—') return '—';
     return val;
@@ -2440,30 +2845,30 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
           <div className="flex flex-col items-start gap-[12px]">
             <SolvaEyebrow>
               {lang === 'vi'
-                ? 'Không gian kiểm nghiệm trích dẫn trực quan'
-                : 'Interactive Citation Debugger'}
+                ? 'Kiểm tra thử trích dẫn trực quan'
+                : 'Live Citation Check'}
             </SolvaEyebrow>
             <SolvaTwoToneHeading
               primary={
                 lang === 'vi'
-                  ? 'Soi chiếu từng trích dẫn.'
+                  ? 'Kiểm tra từng trích dẫn.'
                   : 'Inspect every citation.'
               }
               secondary={
                 lang === 'vi'
-                  ? 'Tường minh từng quy tắc suy diễn.'
-                  : 'Audit every symbolic rule.'
+                  ? 'Hiểu rõ cách sửa chỉ trong vài giây.'
+                  : 'Understand every fix in seconds.'
               }
             />
           </div>
           <SolvaScrollReveal delayMs={80} yOffset={24}>
             <p
               style={{ color: 'var(--solva-muted)' }}
-              className="font-solva-sans text-[16px] leading-[23.2px] max-w-[400px]"
+              className="font-solva-sans text-[16px] leading-[23.2px] max-w-[420px]"
             >
               {lang === 'vi'
-                ? `Chọn bất kỳ trích dẫn mẫu nào bên dưới để quan sát cách CITRA đối sánh siêu dữ liệu song song, đo độ trễ truy vấn đa nguồn và kích hoạt chuỗi luật ${SYMBOLIC_RULES_RANGE}.`
-                : `Select any sample citation below to inspect live side-by-side metadata diffs, multi-source latency, and formal symbolic rule triggers (${SYMBOLIC_RULES_RANGE}).`}
+                ? 'Nhấp vào bất kỳ trích dẫn mẫu nào bên dưới để xem CITRA đặt thông tin bạn ghi cạnh bản ghi thư viện gốc và hướng dẫn cách chỉnh sửa cụ thể.'
+                : 'Click any sample citation below to see how CITRA compares your manuscript entry with official library records and tells you exactly what to update.'}
             </p>
           </SolvaScrollReveal>
         </div>
@@ -2495,563 +2900,679 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="flex items-center gap-1.5 shrink-0" aria-label="macOS window controls">
-                    <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]/60 shadow-2xs" />
-                    <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]/60 shadow-2xs" />
-                    <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]/60 shadow-2xs" />
+                    <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]/60 shadow-sm" />
+                    <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]/60 shadow-sm" />
+                    <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]/60 shadow-sm" />
                   </div>
-                <div
-                  style={{ color: 'var(--solva-ink)' }}
-                  className="flex items-center gap-2 font-mono text-xs min-w-0"
-                >
-                  <FileText className="h-3.5 w-3.5 shrink-0" />
-                  <span className="font-semibold truncate">
-                    thesis_neural_retrieval_2026.pdf
-                  </span>
-                  <span
-                    style={{ color: 'var(--solva-muted)' }}
-                    className="hidden sm:inline"
-                  >
-                    (18 {lang === 'vi' ? 'trang' : 'pages'} · 24{' '}
-                    {lang === 'vi' ? 'trích dẫn' : 'citations'})
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAutoPlaying((prev) => !prev)}
-                  style={{
-                    backgroundColor: 'var(--solva-surface)',
-                    color: 'var(--solva-ink)',
-                    borderColor: 'var(--solva-border)',
-                  }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] border text-[11px] font-mono font-medium cursor-pointer"
-                >
-                  {isAutoPlaying ? (
-                    <>
-                      <Pause className="h-3 w-3" />
-                      <span>{lang === 'vi' ? 'Đang tự động duyệt' : 'Auto-Tour: ON'}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-3 w-3" />
-                      <span>{lang === 'vi' ? 'Tạm dừng duyệt' : 'Auto-Tour: PAUSED'}</span>
-                    </>
-                  )}
-                </button>
-                <div
-                  style={{
-                    backgroundColor: 'var(--solva-btn-bg)',
-                    color: 'var(--solva-btn-fg)',
-                  }}
-                  className="px-2.5 py-1 rounded-[8px] text-[11px] font-mono font-semibold"
-                >
-                  CIS:{' '}
-                  <SolvaLiveNumber
-                    value={84.5}
-                    decimals={1}
-                    replaySeed={debuggerSeed}
-                    durationMs={1400}
-                  />{' '}
-                  / 100
-                </div>
-              </div>
-            </div>
-
-            {/* Split-Pane Debugger Body */}
-            <div className="grid lg:grid-cols-12">
-              {/* Left Pane: Extracted Citations Queue (5 cols) */}
-              <div
-                style={{ borderColor: 'var(--solva-border)' }}
-                className="lg:col-span-5 min-w-0 border-b lg:border-b-0 lg:border-r p-4 sm:p-5 flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span
-                      style={{ color: 'var(--solva-muted)' }}
-                      className="text-xs font-mono uppercase tracking-wider font-semibold"
-                    >
-                      {lang === 'vi'
-                        ? 'Trích dẫn bóc tách từ bản thảo (Chọn để thẩm định)'
-                        : 'Extracted Citations (Select to Inspect)'}
-                    </span>
-                    <span
-                      style={{ color: 'var(--solva-muted)' }}
-                      className="text-[11px] font-mono"
-                    >
-                      {lang === 'vi' ? 'Hiển thị 4 / 24' : '4 / 24 shown'}
-                    </span>
-                  </div>
-
-                  <div className="space-y-2.5" role="listbox" aria-label="Sample Citations">
-                    {DEMO_CITATIONS.map((cit) => {
-                      const isSelected = cit.id === activeCitation.id;
-                      return (
-                        <button
-                          key={cit.id}
-                          type="button"
-                          role="option"
-                          aria-selected={isSelected}
-                          onClick={() => handleSelectCitation(cit.id)}
-                          style={{
-                            backgroundColor: isSelected
-                              ? 'var(--solva-card-elevated)'
-                              : 'var(--solva-surface)',
-                            borderColor: isSelected
-                              ? 'var(--solva-ink)'
-                              : 'var(--solva-border)',
-                          }}
-                          className="relative overflow-hidden w-full text-left p-3.5 rounded-[10px] border transition-[background-color,border-color,color,box-shadow] duration-200 cursor-pointer"
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-1.5">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span
-                                style={{
-                                  backgroundColor: isSelected
-                                    ? 'var(--solva-btn-bg)'
-                                    : 'var(--solva-bg)',
-                                  color: isSelected
-                                    ? 'var(--solva-btn-fg)'
-                                    : 'var(--solva-ink)',
-                                }}
-                                className="font-mono text-xs font-bold px-2 py-0.5 rounded-[5px]"
-                              >
-                                {cit.marker}
-                              </span>
-                              <span
-                                style={{ color: 'var(--solva-ink)' }}
-                                className="font-medium text-sm truncate"
-                              >
-                                {cit.inText}
-                              </span>
-                            </div>
-                            <span
-                              style={{ color: 'var(--solva-muted)' }}
-                              className="font-mono text-[11px] shrink-0"
-                            >
-                              {cit.page}
-                            </span>
-                          </div>
-
-                          <p
-                            style={{ color: 'var(--solva-muted)' }}
-                            className="text-xs line-clamp-1 mb-2.5 font-solva-serif italic"
-                          >
-                            &ldquo;{localizeMetaValue(cit.citedMeta.title)}&rdquo;
-                          </p>
-
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span
-                                className={`verdict-badge ${cit.verdictBadgeClass} text-[10px] px-2 py-0.5 font-mono`}
-                              >
-                                {cit.verdict}
-                              </span>
-                              <span
-                                className={`mapping-badge ${cit.mappingBadgeClass} text-[10px] px-2 py-0.5 font-mono`}
-                              >
-                                {cit.mappingStatus}
-                              </span>
-                            </div>
-                            <span
-                              style={{ color: 'var(--solva-muted)' }}
-                              className="font-mono text-[11px]"
-                            >
-                              {lang === 'vi' ? 'Độ tin cậy:' : 'Conf:'}{' '}
-                              <strong style={{ color: 'var(--solva-ink)' }}>
-                                {cit.confidence}%
-                              </strong>
-                            </span>
-                          </div>
-
-                          {isSelected && isAutoPlaying && (
-                            <span
-                              key={`tour-progress-${cit.id}`}
-                              data-testid="debugger-autotour-progress"
-                              data-paused={isHoverPaused || !debuggerVisible ? 'true' : 'false'}
-                              aria-hidden="true"
-                              className="t-autotour-bar"
-                            />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Manuscript Context Box */}
-                <div
-                  key={`ctx-${activeCitation.id}`}
-                  style={{
-                    backgroundColor: 'var(--solva-surface)',
-                    borderColor: 'var(--solva-border)',
-                  }}
-                  className="mt-5 p-3.5 rounded-[10px] border animate-debugger-switch"
-                >
                   <div
-                    style={{ color: 'var(--solva-muted)' }}
-                    className="flex items-center justify-between text-[11px] font-mono mb-1.5"
-                  >
-                    <span>
-                      {lang === 'vi'
-                        ? `NGỮ CẢNH TRONG BẢN THẢO (${activeCitation.page})`
-                        : `MANUSCRIPT CONTEXT (${activeCitation.page})`}
-                    </span>
-                    <span>GROBID TEI-XML</span>
-                  </div>
-                  <p
                     style={{ color: 'var(--solva-ink)' }}
-                    className="text-xs sm:text-sm leading-relaxed"
+                    className="flex items-center gap-2 font-mono text-xs min-w-0"
                   >
-                    {activeCitation.contextBefore}
-                    <mark
-                      style={{
-                        backgroundColor: 'var(--solva-btn-bg)',
-                        color: 'var(--solva-btn-fg)',
-                      }}
-                      className="px-1.5 py-0.5 rounded font-medium"
+                    <FileText className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-semibold break-all sm:break-normal min-w-0">
+                      thesis_neural_retrieval_2026.pdf
+                    </span>
+                    <span
+                      style={{ color: 'var(--solva-muted)' }}
+                      className="hidden sm:inline"
                     >
-                      {activeCitation.inText}
-                    </mark>
-                    {activeCitation.contextAfter}
-                  </p>
+                      (18 {lang === 'vi' ? 'trang' : 'pages'} · 24{' '}
+                      {lang === 'vi' ? 'trích dẫn' : 'citations'})
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAutoPlaying((prev) => !prev)}
+                    style={{
+                      backgroundColor: 'var(--solva-surface)',
+                      color: 'var(--solva-ink)',
+                      borderColor: 'var(--solva-border)',
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] border text-[11px] font-mono font-medium cursor-pointer"
+                  >
+                    {isAutoPlaying ? (
+                      <>
+                        <Pause className="h-3 w-3" />
+                        <span>{lang === 'vi' ? 'Đang tự động duyệt' : 'Auto-Tour: ON'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-3 w-3" />
+                        <span>{lang === 'vi' ? 'Tạm dừng duyệt' : 'Auto-Tour: PAUSED'}</span>
+                      </>
+                    )}
+                  </button>
+                  <div
+                    style={{
+                      backgroundColor: 'var(--solva-btn-bg)',
+                      color: 'var(--solva-btn-fg)',
+                    }}
+                    className="px-2.5 py-1 rounded-[8px] text-[11px] font-mono font-semibold"
+                  >
+                    {lang === 'vi' ? 'Điểm:' : 'Score:'}{' '}
+                    <SolvaLiveNumber
+                      value={84.5}
+                      decimals={1}
+                      decimalSeparator={lang === 'vi' ? ',' : '.'}
+                      replaySeed={debuggerSeed}
+                      durationMs={1400}
+                    />{' '}
+                    / 100
+                  </div>
                 </div>
               </div>
 
-              {/* Right Pane: Reference Inspector & Symbolic Trace (7 cols) */}
-              <div
-                style={{ backgroundColor: 'var(--solva-card-elevated)' }}
-                className="lg:col-span-7 min-w-0 p-4 sm:p-6 flex flex-col justify-between"
-              >
-                <div>
-                  <div
-                    style={{ borderColor: 'var(--solva-border)' }}
-                    className="flex flex-wrap items-start justify-between gap-4 pb-4 border-b"
-                  >
-                    <div className="min-w-0">
-                      <div
+              {/* Split-Pane Debugger Body */}
+              <div className="grid lg:grid-cols-12">
+                {/* Left Pane: Extracted Citations Queue (5 cols) */}
+                <div
+                  style={{ borderColor: 'var(--solva-border)' }}
+                  className="lg:col-span-5 min-w-0 border-b lg:border-b-0 lg:border-r p-4 sm:p-5 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex flex-wrap items-center justify-between gap-1.5 mb-3">
+                      <span
                         style={{ color: 'var(--solva-muted)' }}
-                        className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1 font-mono text-xs"
+                        className="text-xs font-mono uppercase tracking-wider font-semibold"
                       >
-                        <span>
-                          {lang === 'vi'
-                            ? 'ĐANG THẨM ĐỊNH TÀI LIỆU'
-                            : 'INSPECTING REFERENCE'}
-                        </span>
-                        <strong style={{ color: 'var(--solva-ink)' }}>
-                          {activeCitation.marker}
-                        </strong>
-                        <span>
-                          · {lang === 'vi' ? 'Độ tin cậy' : 'Confidence'}{' '}
-                          <NumberPopIn
-                            value={`${activeCitation.confidence}%`}
-                            data-testid="debugger-active-confidence"
-                          />
-                        </span>
-                      </div>
-                      <h3
-                        style={{ color: 'var(--solva-ink)' }}
-                        className="font-solva-serif font-light text-[22px] sm:text-[26px] leading-[1.2] break-words"
+                        {lang === 'vi'
+                          ? 'Trích dẫn trong bài (Chọn để xem chi tiết)'
+                          : 'Sample Citations (Click to Check)'}
+                      </span>
+                      <span
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="text-[11px] font-mono shrink-0 whitespace-nowrap"
                       >
-                        <SoftTextSwap text={localizeMetaValue(activeCitation.citedMeta.title)} />
-                      </h3>
+                        {lang === 'vi' ? 'Hiển thị 4 / 24' : '4 / 24 shown'}
+                      </span>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`verdict-badge ${activeCitation.verdictBadgeClass} text-xs px-3 py-1 font-mono`}
-                      >
-                        {activeCitation.verdict}
-                      </span>
-                      <span
-                        className={`mapping-badge ${activeCitation.mappingBadgeClass} text-xs px-2.5 py-1 font-mono`}
-                      >
-                        {activeCitation.mappingStatus}
-                      </span>
+                    <div className="space-y-2.5" role="listbox" aria-label="Sample Citations">
+                      {DEMO_CITATIONS.map((cit) => {
+                        const isSelected = cit.id === activeCitation.id;
+                        const plainV = getPlainVerdictLabel(cit.verdict, lang);
+                        const plainM = getPlainMappingLabel(cit.mappingStatus, lang);
+                        return (
+                          <button
+                            key={cit.id}
+                            type="button"
+                            role="option"
+                            aria-selected={isSelected}
+                            onClick={() => handleSelectCitation(cit.id)}
+                            style={{
+                              backgroundColor: isSelected
+                                ? 'var(--solva-card-elevated)'
+                                : 'var(--solva-surface)',
+                              borderColor: isSelected
+                                ? 'var(--solva-ink)'
+                                : 'var(--solva-border)',
+                            }}
+                            className="relative overflow-hidden w-full text-left p-3.5 rounded-[10px] border transition-[background-color,border-color,color,box-shadow] duration-200 cursor-pointer"
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span
+                                  style={{
+                                    backgroundColor: isSelected
+                                      ? 'var(--solva-btn-bg)'
+                                      : 'var(--solva-bg)',
+                                    color: isSelected
+                                      ? 'var(--solva-btn-fg)'
+                                      : 'var(--solva-ink)',
+                                  }}
+                                  className="font-mono text-xs font-bold px-2 py-0.5 rounded-[5px] shrink-0"
+                                >
+                                  {cit.marker}
+                                </span>
+                                <span
+                                  style={{ color: 'var(--solva-ink)' }}
+                                  className="font-medium text-sm min-w-0 break-words"
+                                >
+                                  {cit.inText}
+                                </span>
+                              </div>
+                              <span
+                                style={{ color: 'var(--solva-muted)' }}
+                                className="font-mono text-[11px] shrink-0"
+                              >
+                                {cit.page}
+                              </span>
+                            </div>
+
+                            <p
+                              style={{ color: 'var(--solva-muted)' }}
+                              className="text-xs mb-2.5 font-solva-serif italic leading-snug"
+                            >
+                              &ldquo;{localizeMetaValue(cit.citedMeta.title)}&rdquo;
+                            </p>
+
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span
+                                  className={`verdict-badge ${cit.verdictBadgeClass} text-[10.5px] px-2 py-0.5 font-medium`}
+                                >
+                                  {plainV.label}
+                                </span>
+                                <span
+                                  className={`mapping-badge ${cit.mappingBadgeClass} text-[10.5px] px-2 py-0.5 font-medium`}
+                                >
+                                  {plainM.label}
+                                </span>
+                              </div>
+                              <span
+                                style={{ color: 'var(--solva-muted)' }}
+                                className="font-mono text-[11px] shrink-0 whitespace-nowrap"
+                              >
+                                {lang === 'vi' ? 'Độ tin cậy:' : 'Conf:'}{' '}
+                                <strong style={{ color: 'var(--solva-ink)' }}>
+                                  {cit.confidence}%
+                                </strong>
+                              </span>
+                            </div>
+
+                            {isSelected && isAutoPlaying && (
+                              <span
+                                key={`tour-progress-${cit.id}`}
+                                data-testid="debugger-autotour-progress"
+                                data-paused={isHoverPaused || !debuggerVisible ? 'true' : 'false'}
+                                aria-hidden="true"
+                                className="t-autotour-bar"
+                              />
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* Explanation Callout */}
+                  {/* Manuscript Context Box */}
                   <div
+                    key={`ctx-${activeCitation.id}`}
                     style={{
                       backgroundColor: 'var(--solva-surface)',
                       borderColor: 'var(--solva-border)',
                     }}
-                    className="my-4 p-3.5 rounded-[10px] border flex items-start gap-3"
+                    className="mt-5 p-3.5 rounded-[10px] border animate-debugger-switch"
                   >
-                    <Scale
-                      style={{ color: 'var(--solva-ink)' }}
-                      className="h-4 w-4 shrink-0 mt-0.5"
-                    />
                     <div
                       style={{ color: 'var(--solva-muted)' }}
+                      className="flex items-center justify-between text-[11px] font-mono mb-1.5"
+                    >
+                      <span>
+                        {lang === 'vi'
+                          ? `CÂU VĂN TRONG BÀI (${activeCitation.page})`
+                          : `SENTENCE IN YOUR PAPER (${activeCitation.page})`}
+                      </span>
+                      <span>
+                        {lang === 'vi' ? 'Đoạn trích gốc' : 'In-text excerpt'}
+                      </span>
+                    </div>
+                    <p
+                      style={{ color: 'var(--solva-ink)' }}
                       className="text-xs sm:text-sm leading-relaxed"
                     >
-                      <strong
-                        style={{ color: 'var(--solva-ink)' }}
-                        className="mr-1.5"
+                      {activeCitation.contextBefore}
+                      <mark
+                        style={{
+                          backgroundColor: 'var(--solva-btn-bg)',
+                          color: 'var(--solva-btn-fg)',
+                        }}
+                        className="px-1.5 py-0.5 rounded font-medium"
                       >
-                        {lang === 'vi' ? 'Lập luận Neuro-Symbolic:' : 'Neuro-Symbolic Reasoning:'}
-                      </strong>
-                      <SoftTextSwap
-                        text={
-                          lang === 'vi'
-                            ? activeCitation.explanation.vi
-                            : activeCitation.explanation.en
-                        }
-                      />
-                    </div>
+                        {activeCitation.inText}
+                      </mark>
+                      {activeCitation.contextAfter}
+                    </p>
                   </div>
+                </div>
 
-                  {/* Inspector Tabs (Preserves exact role="tab" labels for E2E tests!) */}
-                  <Tabs defaultValue="diff" className="w-full">
-                    <TabsList
-                      style={{ backgroundColor: 'var(--solva-surface)' }}
-                      className="grid grid-cols-1 sm:grid-cols-3 w-full p-1 rounded-[10px] h-auto gap-1"
+                {/* Right Pane: Plain-Language Verdict & Optional Technical Trace (7 cols) */}
+                <div
+                  style={{ backgroundColor: 'var(--solva-card-elevated)' }}
+                  className="lg:col-span-7 min-w-0 p-4 sm:p-6 flex flex-col justify-between"
+                >
+                  <div>
+                    <div
+                      style={{ borderColor: 'var(--solva-border)' }}
+                      className="flex flex-wrap items-start justify-between gap-4 pb-4 border-b"
                     >
-                      <TabsTrigger
-                        value="diff"
-                        className="w-full text-xs font-mono py-2 sm:py-1.5 px-2.5 rounded-[8px]"
-                      >
-                        {lang === 'vi' ? '1. Đối chiếu Siêu dữ liệu' : '1. Metadata Diff'}
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="rules"
-                        className="w-full text-xs font-mono py-2 sm:py-1.5 px-2.5 rounded-[8px]"
-                      >
-                        {lang === 'vi'
-                          ? `2. Luật Suy diễn (${activeCitation.rules.length})`
-                          : `2. Symbolic Rules (${activeCitation.rules.length})`}
-                      </TabsTrigger>
-                      <TabsTrigger
-                        value="sources"
-                        className="w-full text-xs font-mono py-2 sm:py-1.5 px-2.5 rounded-[8px]"
-                      >
-                        {lang === 'vi' ? '3. Nguồn Truy hồi' : '3. Source Retrieval'}
-                      </TabsTrigger>
-                    </TabsList>
-
-                    {/* TAB 1: Side-by-side Metadata Diff */}
-                    <TabsContent value="diff" className="mt-4 animate-debugger-switch">
-                      <div
-                        style={{ borderColor: 'var(--solva-border)' }}
-                        className="rounded-[10px] border overflow-hidden"
-                      >
-                        <table className="w-full text-left border-collapse block sm:table">
-                          <thead className="hidden sm:table-header-group">
-                            <tr
-                              style={{
-                                backgroundColor: 'var(--solva-surface)',
-                                borderColor: 'var(--solva-border)',
-                                color: 'var(--solva-muted)',
-                              }}
-                              className="border-b text-[11px] font-mono uppercase"
-                            >
-                              <th className="py-2.5 px-3 w-28">
-                                {lang === 'vi' ? 'Trường' : 'Field'}
-                              </th>
-                              <th className="py-2.5 px-3">
-                                {lang === 'vi' ? 'Ghi trong bản thảo' : 'Cited in Manuscript'}
-                              </th>
-                              <th className="py-2.5 px-3">
-                                {lang === 'vi' ? 'Hồ sơ gốc đối chiếu' : 'Canonical Retrieved'}
-                              </th>
-                              <th className="py-2.5 px-3 text-right">
-                                {lang === 'vi' ? 'Kết quả' : 'Status'}
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="block sm:table-row-group divide-y divide-[#E7E3D9] dark:divide-[#332F26] text-xs">
-                            {(
-                              ['title', 'authors', 'year', 'venue', 'doi'] as const
-                            ).map((field) => {
-                              const status = activeCitation.fieldStatus[field];
-                              const citedVal = localizeMetaValue(activeCitation.citedMeta[field]);
-                              const retVal = activeCitation.retrievedMeta
-                                ? activeCitation.retrievedMeta[field]
-                                : lang === 'vi'
-                                  ? '— Không tìm thấy trên các CSDL khoa học —'
-                                  : '— Not Found in External Indexes —';
-
-                              return (
-                                <tr
-                                  key={field}
-                                  className="block sm:table-row p-3 sm:p-0 space-y-1.5 sm:space-y-0"
-                                >
-                                  <td
-                                    style={{ color: 'var(--solva-muted)' }}
-                                    className="block sm:table-cell sm:py-2.5 sm:px-3 font-mono uppercase text-[11px] font-semibold"
-                                  >
-                                    <div className="flex items-center justify-between sm:block">
-                                      <span>{fieldLabelMap[field]}</span>
-                                      <span className="sm:hidden">
-                                        {renderFieldStatusBadge(status)}
-                                      </span>
-                                    </div>
-                                  </td>
-                                  <td
-                                    style={{ color: 'var(--solva-ink)' }}
-                                    className="block sm:table-cell sm:py-2.5 sm:px-3 break-words"
-                                  >
-                                    <SoftTextSwap text={citedVal} />
-                                  </td>
-                                  <td
-                                    style={{ color: 'var(--solva-muted)' }}
-                                    className="block sm:table-cell sm:py-2.5 sm:px-3 break-words font-mono text-[11px]"
-                                  >
-                                    <SoftTextSwap text={retVal} />
-                                  </td>
-                                  <td className="hidden sm:table-cell sm:py-2.5 sm:px-3 text-right whitespace-nowrap">
-                                    {renderFieldStatusBadge(status)}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </TabsContent>
-
-                    {/* TAB 2: Symbolic Rules */}
-                    <TabsContent value="rules" className="mt-4 space-y-2.5 animate-debugger-switch">
-                      {activeCitation.rules.map((rule) => (
+                      <div className="min-w-0">
                         <div
-                          key={rule.code}
-                          style={{
-                            backgroundColor: 'var(--solva-surface)',
-                            borderColor: 'var(--solva-border)',
-                          }}
-                          className="p-3.5 rounded-[10px] border flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                          style={{ color: 'var(--solva-muted)' }}
+                          className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-1 font-mono text-xs"
                         >
-                          <div className="space-y-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span
-                                style={{ color: 'var(--solva-ink)' }}
-                                className="font-mono text-xs font-bold"
-                              >
-                                {rule.code}
-                              </span>
-                              <span
-                                style={{ color: 'var(--solva-ink)' }}
-                                className="text-xs font-medium"
-                              >
-                                {lang === 'vi' && rule.nameVi ? rule.nameVi : rule.name}
-                              </span>
-                            </div>
-                            <p
-                              style={{ color: 'var(--solva-muted)' }}
-                              className="font-mono text-[11px] break-words"
-                            >
-                              {rule.condition}
-                            </p>
-                          </div>
-                          <span
-                            className={`self-start sm:self-center px-2.5 py-0.5 rounded font-mono text-[10px] font-semibold uppercase shrink-0 ${
-                              rule.status === 'passed'
-                                ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
-                                : rule.status === 'warning'
-                                  ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
-                                  : 'bg-red-500/12 text-red-700 dark:text-red-300'
-                            }`}
-                          >
+                          <span>
                             {lang === 'vi'
-                              ? rule.status === 'passed'
-                                ? 'ĐẠT'
-                                : rule.status === 'warning'
-                                  ? 'CẢNH BÁO'
-                                  : 'VI PHẠM'
-                              : rule.status}
+                              ? 'ĐANG KIỂM TRA MỤC'
+                              : 'CHECKING CITATION'}
+                          </span>
+                          <strong style={{ color: 'var(--solva-ink)' }}>
+                            {activeCitation.marker}
+                          </strong>
+                          <span>
+                            · {lang === 'vi' ? 'Độ tin cậy' : 'Confidence'}{' '}
+                            <NumberPopIn
+                              value={`${activeCitation.confidence}%`}
+                              data-testid="debugger-active-confidence"
+                            />
                           </span>
                         </div>
-                      ))}
-                    </TabsContent>
+                        <h3
+                          style={{ color: 'var(--solva-ink)' }}
+                          className="font-solva-serif font-light text-[22px] sm:text-[26px] leading-[1.2] break-words"
+                        >
+                          <SoftTextSwap text={localizeMetaValue(activeCitation.citedMeta.title)} />
+                        </h3>
+                      </div>
 
-                    {/* TAB 3: Source Retrieval */}
-                    <TabsContent value="sources" className="mt-4 animate-debugger-switch">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        {activeCitation.sources.map((src) => {
-                          const srcUrl = getScholarlySourceUrl(src.name);
-                          const cardContent = (
-                            <>
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <span
-                                  style={{
-                                    backgroundColor: 'var(--solva-bg)',
-                                    borderColor: 'var(--solva-border)',
-                                    color: 'var(--solva-ink)',
-                                  }}
-                                  className="w-8 h-8 rounded-[8px] border flex items-center justify-center shrink-0"
-                                >
-                                  <ScholarlySourceLogo name={src.name} size={16} />
-                                </span>
-                                <div className="min-w-0">
-                                  <div
-                                    style={{ color: 'var(--solva-ink)' }}
-                                    className="text-sm font-medium truncate group-hover:underline underline-offset-2"
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`verdict-badge ${activeCitation.verdictBadgeClass} text-xs px-3 py-1 font-medium`}
+                        >
+                          {activePlainVerdict.label}
+                        </span>
+                        <span
+                          className={`mapping-badge ${activeCitation.mappingBadgeClass} text-xs px-2.5 py-1 font-medium`}
+                        >
+                          {activePlainMapping.label}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Plain-Language Finding & Actionable Next-Step Callout */}
+                    <div
+                      style={{
+                        backgroundColor: 'var(--solva-surface)',
+                        borderColor: 'var(--solva-border)',
+                      }}
+                      className="my-4 p-3.5 rounded-[10px] border flex items-start gap-3"
+                    >
+                      <Scale
+                        style={{ color: 'var(--solva-ink)' }}
+                        className="h-4 w-4 shrink-0 mt-0.5"
+                      />
+                      <div className="space-y-1.5 text-xs sm:text-sm leading-relaxed">
+                        <div style={{ color: 'var(--solva-muted)' }}>
+                          <strong
+                            style={{ color: 'var(--solva-ink)' }}
+                            className="mr-1.5"
+                          >
+                            {lang === 'vi' ? 'Kết luận kiểm tra:' : 'What we found:'}
+                          </strong>
+                          <SoftTextSwap
+                            text={
+                              lang === 'vi'
+                                ? activeCitation.explanation.vi
+                                : activeCitation.explanation.en
+                            }
+                          />
+                        </div>
+                        <div
+                          style={{ color: 'var(--solva-ink)' }}
+                          className="text-xs font-medium pt-1 border-t border-[#E7E3D9] dark:border-[#332F26]"
+                        >
+                          <span style={{ color: 'var(--solva-muted)' }} className="mr-1">
+                            {lang === 'vi' ? 'Hướng xử lý gợi ý:' : 'Recommended action:'}
+                          </span>
+                          <span>{activeActionHint}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Human-First Inspector Tabs */}
+                    <Tabs defaultValue="diff" className="w-full">
+                      <TabsList
+                        style={{ backgroundColor: 'var(--solva-surface)' }}
+                        className="grid grid-cols-1 sm:grid-cols-3 w-full p-1 rounded-[10px] h-auto gap-1"
+                      >
+                        <TabsTrigger
+                          value="diff"
+                          className="w-full text-xs font-solva-sans font-medium py-2 sm:py-1.5 px-2.5 rounded-[8px]"
+                        >
+                          {lang === 'vi' ? '1. So sánh thông tin' : '1. Side-by-Side Details'}
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="rules"
+                          className="w-full text-xs font-solva-sans font-medium py-2 sm:py-1.5 px-2.5 rounded-[8px]"
+                        >
+                          {lang === 'vi'
+                            ? `2. Lý do kết luận (${activeCitation.rules.length})`
+                            : `2. Why This Result (${activeCitation.rules.length})`}
+                        </TabsTrigger>
+                        <TabsTrigger
+                          value="sources"
+                          className="w-full text-xs font-solva-sans font-medium py-2 sm:py-1.5 px-2.5 rounded-[8px]"
+                        >
+                          {lang === 'vi' ? '3. Thư viện đã tra cứu' : '3. Libraries Checked'}
+                        </TabsTrigger>
+                      </TabsList>
+
+                      {/* TAB 1: Side-by-side Bibliographic Details */}
+                      <TabsContent value="diff" className="mt-4 animate-debugger-switch">
+                        <div
+                          style={{ borderColor: 'var(--solva-border)' }}
+                          className="rounded-[10px] border overflow-hidden"
+                        >
+                          <table className="w-full text-left border-collapse block sm:table">
+                            <thead className="hidden sm:table-header-group">
+                              <tr
+                                style={{
+                                  backgroundColor: 'var(--solva-surface)',
+                                  borderColor: 'var(--solva-border)',
+                                  color: 'var(--solva-muted)',
+                                }}
+                                className="border-b text-[11px] font-mono uppercase"
+                              >
+                                <th className="py-2.5 px-3 w-32">
+                                  {lang === 'vi' ? 'Thông tin' : 'Detail'}
+                                </th>
+                                <th className="py-2.5 px-3">
+                                  {lang === 'vi' ? 'Bạn ghi trong bài' : 'In Your Manuscript'}
+                                </th>
+                                <th className="py-2.5 px-3">
+                                  {lang === 'vi' ? 'Bản ghi thư viện gốc' : 'Official Library Record'}
+                                </th>
+                                <th className="py-2.5 px-3 text-right">
+                                  {lang === 'vi' ? 'Kết quả' : 'Status'}
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="block sm:table-row-group divide-y divide-[#E7E3D9] dark:divide-[#332F26] text-xs">
+                              {(
+                                ['title', 'authors', 'year', 'venue', 'doi'] as const
+                              ).map((field) => {
+                                const status = activeCitation.fieldStatus[field];
+                                const citedVal = localizeMetaValue(activeCitation.citedMeta[field]);
+                                const retVal = activeCitation.retrievedMeta
+                                  ? activeCitation.retrievedMeta[field]
+                                  : lang === 'vi'
+                                    ? '— Không tìm thấy trên 15+ thư viện học thuật —'
+                                    : '— Not found in academic libraries —';
+
+                                return (
+                                  <tr
+                                    key={field}
+                                    className="block sm:table-row p-3 sm:p-0 space-y-1.5 sm:space-y-0"
                                   >
-                                    {src.name}
-                                  </div>
-                                  <div
-                                    style={{ color: 'var(--solva-muted)' }}
-                                    className="text-xs font-mono"
+                                    <td
+                                      style={{ color: 'var(--solva-muted)' }}
+                                      className="block sm:table-cell sm:py-2.5 sm:px-3 text-[11.5px] font-semibold"
+                                    >
+                                      <div className="flex items-center justify-between sm:block">
+                                        <span>{fieldLabelMap[field]}</span>
+                                        <span className="sm:hidden">
+                                          {renderFieldStatusBadge(status)}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td
+                                      style={{ color: 'var(--solva-ink)' }}
+                                      className="block sm:table-cell sm:py-2.5 sm:px-3 break-words"
+                                    >
+                                      <SoftTextSwap text={citedVal} />
+                                    </td>
+                                    <td
+                                      style={{ color: 'var(--solva-muted)' }}
+                                      className="block sm:table-cell sm:py-2.5 sm:px-3 break-words text-[11.5px]"
+                                    >
+                                      <SoftTextSwap text={retVal} />
+                                    </td>
+                                    <td className="hidden sm:table-cell sm:py-2.5 sm:px-3 text-right whitespace-nowrap">
+                                      {renderFieldStatusBadge(status)}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </TabsContent>
+
+                      {/* TAB 2: Plain-Language Reasons */}
+                      <TabsContent value="rules" className="mt-4 space-y-2.5 animate-debugger-switch">
+                        {activeCitation.rules.map((rule) => (
+                          <div
+                            key={rule.code}
+                            style={{
+                              backgroundColor: 'var(--solva-surface)',
+                              borderColor: 'var(--solva-border)',
+                            }}
+                            className="p-3.5 rounded-[10px] border flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                          >
+                            <div className="space-y-1 min-w-0">
+                              <div
+                                style={{ color: 'var(--solva-ink)' }}
+                                className="text-xs sm:text-[13px] font-medium"
+                              >
+                                {lang === 'vi' ? rule.plainTitleVi : rule.plainTitleEn}
+                              </div>
+                              <p
+                                style={{ color: 'var(--solva-muted)' }}
+                                className="text-xs leading-relaxed break-words"
+                              >
+                                {lang === 'vi' ? rule.plainSummaryVi : rule.plainSummaryEn}
+                              </p>
+                            </div>
+                            <span
+                              className={`self-start sm:self-center px-2.5 py-0.5 rounded text-[10.5px] font-semibold shrink-0 whitespace-nowrap ${
+                                rule.status === 'passed'
+                                  ? 'bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300'
+                                  : rule.status === 'warning'
+                                    ? 'bg-amber-500/[0.12] text-amber-800 dark:text-amber-300'
+                                    : 'bg-red-500/[0.12] text-red-700 dark:text-red-300'
+                              }`}
+                            >
+                              {lang === 'vi'
+                                ? rule.status === 'passed'
+                                  ? 'Đạt'
+                                  : rule.status === 'warning'
+                                    ? 'Cần xem lại'
+                                    : 'Chưa đạt'
+                                : rule.status === 'passed'
+                                  ? 'Confirmed'
+                                  : rule.status === 'warning'
+                                    ? 'Review'
+                                    : 'Issue Found'}
+                            </span>
+                          </div>
+                        ))}
+                      </TabsContent>
+
+                      {/* TAB 3: Libraries Checked */}
+                      <TabsContent value="sources" className="mt-4 animate-debugger-switch">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {activeCitation.sources.map((src) => {
+                            const srcUrl = getScholarlySourceUrl(src.name);
+                            const displayName =
+                              lang === 'vi' && src.nameVi ? src.nameVi : src.name;
+                            const displayScore =
+                              lang === 'vi' && src.scoreVi ? src.scoreVi : src.score;
+                            const cardContent = (
+                              <>
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span
+                                    style={{
+                                      backgroundColor: 'var(--solva-bg)',
+                                      borderColor: 'var(--solva-border)',
+                                      color: 'var(--solva-ink)',
+                                    }}
+                                    className="w-8 h-8 rounded-[8px] border flex items-center justify-center shrink-0"
                                   >
-                                    {lang === 'vi' ? 'Độ trễ:' : 'Latency:'} {src.latency}
+                                    <ScholarlySourceLogo name={src.name} size={16} />
+                                  </span>
+                                  <div className="min-w-0">
+                                    <div
+                                      style={{ color: 'var(--solva-ink)' }}
+                                      className="text-sm font-medium leading-snug group-hover:underline underline-offset-2"
+                                    >
+                                      {displayName}
+                                    </div>
+                                    <div
+                                      style={{ color: 'var(--solva-muted)' }}
+                                      className="text-xs font-mono"
+                                    >
+                                      {lang === 'vi' ? 'Phản hồi:' : 'Response:'} {src.latency}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                              <span
-                                style={{ color: 'var(--solva-ink)' }}
-                                className="font-mono text-xs font-semibold px-2.5 py-1 rounded bg-[#FBFAF6] dark:bg-[#141310]"
-                              >
-                                {lang === 'vi' && src.score === '0 hits'
-                                  ? '0 kết quả'
-                                  : lang === 'vi' && src.score === 'Skipped'
-                                    ? 'Bỏ qua'
-                                    : src.score}
-                              </span>
-                            </>
-                          );
+                                <span
+                                  style={{ color: 'var(--solva-ink)' }}
+                                  className="font-mono text-xs font-semibold px-2.5 py-1 rounded bg-[#FBFAF6] dark:bg-[#141310] shrink-0 whitespace-nowrap"
+                                >
+                                  {displayScore}
+                                </span>
+                              </>
+                            );
 
-                          if (srcUrl) {
+                            if (srcUrl) {
+                              return (
+                                <a
+                                  key={src.name}
+                                  href={srcUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  aria-label={`${src.name} official website`}
+                                  style={{
+                                    backgroundColor: 'var(--solva-surface)',
+                                    borderColor: 'var(--solva-border)',
+                                  }}
+                                  className="group p-3.5 rounded-[10px] border flex items-center justify-between gap-2 transition-[background-color,border-color,color,box-shadow] duration-200 hover:border-[#1C1A15]/40 dark:hover:border-[#FBFAF6]/35"
+                                >
+                                  {cardContent}
+                                </a>
+                              );
+                            }
+
                             return (
-                              <a
+                              <div
                                 key={src.name}
-                                href={srcUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label={`${src.name} official website`}
                                 style={{
                                   backgroundColor: 'var(--solva-surface)',
                                   borderColor: 'var(--solva-border)',
                                 }}
-                                className="group p-3.5 rounded-[10px] border flex items-center justify-between gap-2 transition-[background-color,border-color,color,box-shadow] duration-200 hover:border-[#1C1A15]/40 dark:hover:border-[#FBFAF6]/35"
+                                className="p-3.5 rounded-[10px] border flex items-center justify-between gap-2"
                               >
                                 {cardContent}
-                              </a>
+                              </div>
                             );
-                          }
+                          })}
+                        </div>
+                      </TabsContent>
+                    </Tabs>
 
-                          return (
-                            <div
-                              key={src.name}
-                              style={{
-                                backgroundColor: 'var(--solva-surface)',
-                                borderColor: 'var(--solva-border)',
-                              }}
-                              className="p-3.5 rounded-[10px] border flex items-center justify-between gap-2"
-                            >
-                              {cardContent}
+                    {/* Progressive Disclosure: Technical Rule Trace & Canonical Enums (`R01–R30`) */}
+                    <div
+                      style={{ borderColor: 'var(--solva-border)' }}
+                      className="mt-4 pt-3.5 border-t space-y-3"
+                    >
+                      <button
+                        type="button"
+                        data-testid="debugger-technical-trace-toggle"
+                        aria-expanded={showTechnicalTrace}
+                        aria-controls="debugger-technical-trace-panel"
+                        onClick={() => setShowTechnicalTrace((prev) => !prev)}
+                        style={{
+                          backgroundColor: 'var(--solva-surface)',
+                          borderColor: showTechnicalTrace
+                            ? 'var(--solva-ink)'
+                            : 'var(--solva-border)',
+                          color: 'var(--solva-ink)',
+                        }}
+                        className="w-full min-h-[44px] px-3.5 py-2 rounded-[9px] border font-solva-sans text-xs font-medium flex items-center justify-between gap-2 hover:opacity-90 active:scale-[0.99] transition-[transform,opacity,background-color,border-color,color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer"
+                      >
+                        <span>
+                          {showTechnicalTrace
+                            ? lang === 'vi'
+                              ? 'Ẩn mã quy tắc & công thức kỹ thuật'
+                              : 'Hide Technical Rule Trace & Formulas'
+                            : lang === 'vi'
+                              ? `Tùy chọn: Xem mã quy tắc kỹ thuật (${SYMBOLIC_RULES_RANGE})`
+                              : `Optional: View Technical Rule Trace (${SYMBOLIC_RULES_RANGE})`}
+                        </span>
+                        <SymmetricChevron open={showTechnicalTrace} size={14} />
+                      </button>
+
+                      <div
+                        id="debugger-technical-trace-panel"
+                        hidden={!showTechnicalTrace}
+                      >
+                        {showTechnicalTrace && (
+                          <div
+                            data-testid="debugger-technical-trace-panel"
+                            style={{
+                              backgroundColor: 'var(--solva-surface)',
+                              borderColor: 'var(--solva-border)',
+                            }}
+                            className="p-3.5 rounded-[10px] border space-y-2.5 animate-debugger-switch"
+                          >
+                          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#E7E3D9] dark:border-[#332F26] font-mono text-[11px]">
+                            <span style={{ color: 'var(--solva-muted)' }}>
+                              {lang === 'vi'
+                                ? 'NHÃN HỆ THỐNG CHUẨN (T1 × T2):'
+                                : 'CANONICAL OUTPUT CODES (L1 × L2):'}
+                            </span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span
+                                style={{
+                                  backgroundColor: 'var(--solva-bg)',
+                                  color: 'var(--solva-ink)',
+                                  borderColor: 'var(--solva-border)',
+                                }}
+                                className="px-2 py-0.5 rounded border font-semibold"
+                              >
+                                {activeCitation.verdict}
+                              </span>
+                              <span
+                                style={{
+                                  backgroundColor: 'var(--solva-bg)',
+                                  color: 'var(--solva-ink)',
+                                  borderColor: 'var(--solva-border)',
+                                }}
+                                className="px-2 py-0.5 rounded border font-semibold"
+                              >
+                                {activeCitation.mappingStatus}
+                              </span>
                             </div>
-                          );
-                        })}
+                          </div>
+
+                          <div className="space-y-2">
+                            {activeCitation.rules.map((rule) => (
+                              <div
+                                key={`trace-${rule.code}`}
+                                style={{
+                                  backgroundColor: 'var(--solva-bg)',
+                                  borderColor: 'var(--solva-border)',
+                                }}
+                                className="p-2.5 rounded-[8px] border space-y-1 font-mono text-[11px]"
+                              >
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <span style={{ color: 'var(--solva-ink)' }} className="font-bold">
+                                    {rule.code} · {lang === 'vi' && rule.nameVi ? rule.nameVi : rule.name}
+                                  </span>
+                                  <span style={{ color: 'var(--solva-muted)' }}>
+                                    {rule.status.toUpperCase()}
+                                  </span>
+                                </div>
+                                <div
+                                  style={{ color: 'var(--solva-muted)' }}
+                                  className="break-words leading-snug"
+                                >
+                                  {rule.condition}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       </div>
-                    </TabsContent>
-                  </Tabs>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
           </div>
         </SolvaScrollReveal>
       </div>
@@ -3115,166 +3636,166 @@ function SolvaUseCasesSection({
 
   const tabs = [
     {
-      label: lang === 'vi' ? '1. Bóc tách GROBID TEI' : 'PDF & GROBID TEI',
+      label: lang === 'vi' ? '1. Đọc bài viết' : '1. Read Your Paper',
       icon: FileText,
       painting: '/solva/usecase-1-bg.webp',
       headline:
         lang === 'vi'
-          ? 'Bóc tách trọn vẹn mọi trích dẫn trong bài và danh mục tài liệu chỉ trong vài giây'
-          : 'Every in-text marker and reference parsed in seconds',
+          ? 'Nhận diện trọn vẹn trích dẫn trong bài và danh mục cuối bài chỉ trong vài giây'
+          : 'Finds every in-text citation and bibliography entry in seconds',
       subFeatures: [
         {
           title:
             lang === 'vi'
-              ? 'Phân vùng cấu trúc bản thảo chuẩn xác'
-              : 'Structural section segmentation',
+              ? 'Tách rõ phần thân bài và danh mục tham khảo'
+              : 'Cleanly separates body text from references',
           desc:
             lang === 'vi'
-              ? 'Tự động bóc tách phần nội dung chính, chú thích chân trang và khóa chặt ranh giới Danh mục Tài liệu tham khảo cuối bài.'
-              : 'Separates body paragraphs, footnotes, and locks bibliography boundaries automatically.',
+              ? 'Tự động phân biệt đoạn văn chính, chú thích chân trang và phần Tài liệu tham khảo ở cuối bài.'
+              : 'Identifies body paragraphs, footnotes, and your final bibliography section automatically.',
         },
         {
           title:
             lang === 'vi'
-              ? 'Chuẩn hóa đa quy cách trích dẫn học thuật'
-              : 'Multi-style citation normalization',
+              ? 'Hỗ trợ chuẩn APA 7th, IEEE, Harvard & Vancouver'
+              : 'Supports APA 7th, IEEE, Harvard & Vancouver',
           desc:
             lang === 'vi'
-              ? 'Nhận diện mượt mà cả chuẩn đánh số IEEE [1]–[5], Vancouver, ACM lẫn chuẩn Tác giả – Năm của APA 7th và Harvard.'
-              : 'Handles IEEE numbered ranges [1]–[5], APA 7th author-year, Vancouver, and Harvard.',
+              ? 'Đọc chính xác cả kiểu đánh số [1]–[5] lẫn kiểu Tác giả – Năm phổ biến trong khóa luận và tạp chí.'
+              : 'Handles numbered ranges like [1]–[5] as well as author-year formats across disciplines.',
         },
         {
           title:
             lang === 'vi'
-              ? 'Rà soát tính nhất quán Tầng 1 (Mapping Consistency)'
-              : 'Layer 1 mapping consistency check',
+              ? 'Báo ngay trích dẫn thiếu nguồn hoặc liệt kê thừa'
+              : 'Spots missing or uncited entries right away',
           desc:
             lang === 'vi'
-              ? 'Chỉ ra tức thì các trích dẫn trong bài bị khuyết nguồn cuối bài (MISSING_REFERENCE) hoặc tài liệu liệt kê nhưng chưa từng được viện dẫn (UNCITED).'
-              : 'Flags orphan in-text markers (MISSING_REFERENCE) and uncited bibliography entries on the spot.',
+              ? 'Chỉ rõ những chỗ trích dẫn trong bài nhưng quên liệt kê cuối bài, hoặc tài liệu liệt kê nhưng chưa từng trích dẫn.'
+              : 'Highlights citations in your text that are missing at the end, and bibliography items never cited.',
         },
       ],
     },
     {
-      label: lang === 'vi' ? '2. Truy hồi 15+ API' : '15+ API Retrieval',
+      label: lang === 'vi' ? '2. Tra cứu 15+ thư viện' : '2. Check 15+ Libraries',
       icon: Database,
       painting: '/solva/usecase-2-bg.webp',
       headline:
         lang === 'vi'
-          ? 'Truy vấn liên hợp song song trên hơn 15 cơ sở dữ liệu khoa học toàn cầu'
-          : 'Federated lookup across 15+ global scholarly indexes',
+          ? 'Đối chiếu song song từng tài liệu trên hơn 15 thư viện học thuật uy tín'
+          : 'Looks up every source across 15+ trusted academic libraries at once',
       subFeatures: [
         {
           title:
             lang === 'vi'
-              ? 'Truy hồi phân tầng bất đồng bộ theo độ ưu tiên'
-              : 'Tiered asynchronous waterfall',
+              ? 'Kiểm tra mã DOI, mã y sinh và thông tin sách'
+              : 'Checks DOIs, PubMed IDs, and book catalogs first',
           desc:
             lang === 'vi'
-              ? 'Ưu tiên phân giải định danh chính xác (DOI, PMID, arXiv ID) trước khi mở rộng sang tìm kiếm mờ đa trường theo tiêu đề và tác giả.'
-              : 'Resolves exact DOI, PMID, and arXiv IDs first before cascading to fuzzy title-author search.',
+              ? 'Ưu tiên xác minh mã định danh chính thức trước khi mở rộng tìm kiếm theo tên bài báo và họ tên tác giả.'
+              : 'Verifies exact article and book identifiers first before searching by title and author names.',
         },
         {
           title:
             lang === 'vi'
-              ? 'Chỉ mục đệm cục bộ SQLite FTS5 dưới 10ms'
-              : 'Sub-10ms SQLite FTS5 local cache',
+              ? 'Trả kết quả nhanh cho các ấn phẩm kinh điển'
+              : 'Fast repeat checks for widely cited works',
           desc:
             lang === 'vi'
-              ? 'Lưu trữ các công trình đã xác thực bằng thuật toán xếp hạng BM25 kết hợp Trigram, giúp triệt tiêu tới 80% độ trễ truy vấn mạng.'
-              : 'Caches verified canonical works with BM25 + trigram indexing for instant repeat checks.',
+              ? 'Nhận diện tức thì các công trình kinh điển, giáo trình đại học và văn bản quy phạm pháp luật Việt Nam.'
+              : 'Recognizes seminal papers, university textbooks, and Vietnamese legal statutes in milliseconds.',
         },
         {
           title:
             lang === 'vi'
-              ? 'Hợp nhất thực thể & khử trùng lặp đa nguồn'
-              : 'Cross-source entity deduplication',
+              ? 'Tự động gộp bản nháp và bài đăng tạp chí chính thức'
+              : 'Links preprints and published journal versions',
           desc:
             lang === 'vi'
-              ? 'Tự động quy về một hồ sơ học thuật chuẩn duy nhất giữa bản thảo tiền ấn phẩm arXiv và bài báo chính thức trên tạp chí.'
-              : 'Merges preprint records and published journal versions into a single canonical profile.',
+              ? 'Quy các bản ghi trùng lặp về một hồ sơ chuẩn duy nhất để bạn dễ dàng cập nhật năm xuất bản chính thức.'
+              : 'Combines duplicate database records into one clean reference profile so you cite the final version.',
         },
       ],
     },
     {
-      label: lang === 'vi' ? '3. Luật Neuro-Symbolic' : 'Neuro-Symbolic Rules',
+      label: lang === 'vi' ? '3. Đối chiếu chi tiết' : '3. Compare Details',
       icon: Scale,
       painting: '/solva/usecase-3-bg.webp',
       headline:
         lang === 'vi'
-          ? `Suy diễn tất định, minh bạch trên nền tảng ${SYMBOLIC_RULES_COUNT} quy tắc hình thức ${SYMBOLIC_RULES_RANGE}`
-          : `Deterministic verification grounded in formal rules ${SYMBOLIC_RULES_RANGE}`,
+          ? 'So sánh rõ ràng tên bài, tác giả, năm xuất bản, tạp chí và đường dẫn'
+          : 'Compares title, authors, publication year, journal, and links side by side',
       subFeatures: [
         {
           title:
             lang === 'vi'
-              ? 'Đối sánh độc lập từng trường siêu dữ liệu'
-              : 'Field-level metadata diffing',
+              ? 'Đối chiếu riêng từng thông tin thư mục'
+              : 'Field-by-field comparison',
           desc:
             lang === 'vi'
-              ? 'Tính toán độ tương đồng riêng biệt cho từng trường: Tiêu đề, Họ tên tác giả, Năm công bố, Tạp chí/Hội nghị và mã DOI.'
-              : 'Computes independent similarity scores for Title, Author surnames, Year, Venue, and DOI.',
+              ? 'Kiểm tra độc lập tiêu đề, danh sách tác giả, năm xuất bản, tên tạp chí/hội nghị và đường dẫn DOI.'
+              : 'Checks Title, Author names, Year, Journal/Conference, and DOI individually so you see exact differences.',
         },
         {
           title:
             lang === 'vi'
-              ? 'Radar phát hiện mã DOI ngụy tạo (Ghost DOI)'
-              : 'Ghost DOI & hallucination radar',
+              ? 'Phát hiện đường dẫn hỏng và mã DOI do AI tự tạo'
+              : 'Catches broken links and AI-invented DOIs',
           desc:
             lang === 'vi'
-              ? 'Vạch trần thủ thuật ghép tiền tố nhà xuất bản uy tín (như 10.1038) với chuỗi hậu tố bịa đặt thường gặp ở các mô hình LLM.'
-              : 'Catches valid publisher prefixes (e.g., 10.1038) paired with fabricated article suffixes.',
+              ? 'Nhận diện ngay trường hợp ghép tên tạp chí có thật với mã số bài báo không tồn tại trên hệ thống quốc tế.'
+              : 'Flags real publisher prefixes paired with non-existent article numbers commonly invented by AI tools.',
         },
         {
           title:
             lang === 'vi'
-              ? 'Khước từ mọi phán quyết "hộp đen" cảm tính'
-              : 'Zero black-box guesswork',
+              ? 'Lý do kết luận minh bạch — không phán đoán cảm tính'
+              : 'Transparent reasons — never black-box guesswork',
           desc:
             lang === 'vi'
-              ? 'Mỗi kết luận đưa ra đều đính kèm chính xác chuỗi quy tắc hình thức đã kích hoạt để giảng viên và tác giả dễ dàng kiểm chứng.'
-              : 'Every verdict exposes the exact symbolic rule chain that fired during evaluation.',
+              ? 'Mỗi nhận xét đều chỉ rõ bằng chứng thư viện đối chiếu để người viết và giảng viên dễ dàng kiểm tra.'
+              : 'Every result explains exactly why a source was confirmed or flagged so you stay in full control.',
         },
       ],
     },
     {
-      label: lang === 'vi' ? '4. Ngữ nghĩa & Đồng thuận' : 'Semantic & NLI Stance',
+      label: lang === 'vi' ? '4. Kiểm tra nội dung & Sửa' : '4. Match Meaning & Fix',
       icon: Cpu,
       painting: '/solva/usecase-4-bg.webp',
       headline:
         lang === 'vi'
-          ? 'Thẩm định xem tóm tắt bài báo gốc có thực sự hậu thuẫn cho luận điểm trích dẫn'
-          : 'Verify that cited abstracts actually support the manuscript claim',
+          ? 'Đảm bảo bài báo gốc củng cố đúng ý trích dẫn và chuẩn hóa danh mục'
+          : 'Confirms cited papers support your claim and formats clean fixes',
       subFeatures: [
         {
           title:
             lang === 'vi'
-              ? 'So khớp ngữ nghĩa sâu hai mô hình (Sentence-BERT & MiniLM ONNX INT8)'
-              : 'Dual-model neural semantic matching',
+              ? 'Đối chiếu câu viết trong bài với tóm tắt ấn phẩm gốc'
+              : 'Compares your sentence with the paper’s abstract',
           desc:
             lang === 'vi'
-              ? 'Kết hợp không gian nhúng all-MiniLM-L6-v2 cùng mô hình đa ngôn ngữ paraphrase-multilingual-MiniLM-L12-v2 ONNX INT8 để đo lường sát sao mức độ tương đồng học thuật.'
-              : 'Pairs all-MiniLM-L6-v2 embeddings with paraphrase-multilingual-MiniLM-L12-v2 ONNX INT8 cross-lingual semantic scoring.',
+              ? 'Kiểm tra xem nội dung tóm tắt của tài liệu được trích dẫn có thực sự phù hợp với luận điểm bạn nêu hay không.'
+              : 'Checks whether the retrieved abstract actually backs up the statement in your paragraph.',
         },
         {
           title:
             lang === 'vi'
-              ? 'Đối sánh ngữ nghĩa đa ngôn ngữ (Multilingual MiniLM ONNX INT8)'
-              : 'Multilingual MiniLM ONNX INT8 claim alignment',
+              ? 'Hiểu chính xác bài tiếng Việt trích dẫn nguồn tiếng Anh'
+              : 'Seamless across Vietnamese and English writing',
           desc:
             lang === 'vi'
-              ? 'Đánh giá mức độ tương thích ngữ nghĩa giữa câu trích dẫn trong bản thảo (Tiếng Việt / Tiếng Anh) và tóm tắt công trình gốc với độ trễ mili-giây.'
-              : 'Evaluates cross-lingual semantic alignment between the in-text claim and retrieved abstract in milliseconds.',
+              ? 'Hỗ trợ tự nhiên cho khóa luận, luận văn viết bằng tiếng Việt trích dẫn sách báo quốc tế bằng tiếng Anh.'
+              : 'Handles Vietnamese theses citing English international journals and English manuscripts effortlessly.',
         },
         {
           title:
             lang === 'vi'
-              ? 'Cảnh báo viện dẫn sai lệch tinh thần bài gốc'
-              : 'Context misrepresentation alerts',
+              ? 'Cảnh báo sớm khi trích dẫn lệch ý tác giả gốc'
+              : 'Early alerts for misquoted findings',
           desc:
             lang === 'vi'
-              ? 'Kịp thời phát hiện những trường hợp trích dẫn bài báo có thật nhưng lại diễn giải ngược hoàn toàn với kết quả thực nghiệm của tác giả.'
-              : 'Highlights real papers that are cited to claim the opposite of their actual findings.',
+              ? 'Giúp bạn rà soát lại những chỗ bài báo có thật nhưng kết luận gốc khác với nội dung đang trích dẫn.'
+              : 'Highlights real papers whose findings differ from the claim attached to them before peer review.',
         },
       ],
     },
@@ -3289,16 +3810,16 @@ function SolvaUseCasesSection({
     >
       <div className="max-w-[1200px] mx-auto flex flex-col gap-[28px] sm:gap-[36px] lg:gap-[64px]">
         {/* Headline */}
-        <div className="flex flex-col items-start gap-[12px] max-w-[540px]">
+        <div className="flex flex-col items-start gap-[12px] max-w-[560px]">
           <SolvaEyebrow>
-            {lang === 'vi' ? 'Quy trình thẩm định 4 giai đoạn' : 'Verification pipeline'}
+            {lang === 'vi' ? 'Cách hoạt động trong 4 bước' : 'How it works'}
           </SolvaEyebrow>
           <SolvaTwoToneHeading
-            primary={lang === 'vi' ? 'Một nền tảng thống nhất.' : 'One platform.'}
+            primary={lang === 'vi' ? 'Từ bản thảo tải lên' : 'From uploaded draft'}
             secondary={
               lang === 'vi'
-                ? 'Bốn tầng thẩm định khép kín.'
-                : 'Every verification layer it touches.'
+                ? 'đến danh mục tham khảo đáng tin cậy.'
+                : 'to a verified bibliography.'
             }
           />
         </div>
@@ -3352,10 +3873,10 @@ function SolvaUseCasesSection({
                         isActive && !pipelinePill.ready ? 'var(--solva-bg)' : 'transparent',
                       color: isActive ? 'var(--solva-ink)' : 'var(--solva-muted)',
                     }}
-                    className="t-tab relative overflow-hidden h-[44px] px-3 rounded-[10px] font-solva-sans text-[13px] sm:text-[14px] font-medium flex items-center justify-center gap-[8px] cursor-pointer"
+                    className="t-tab relative overflow-hidden min-h-[44px] py-2 px-2.5 sm:px-3 rounded-[10px] font-solva-sans text-[13px] sm:text-[14px] font-medium flex items-center justify-center gap-[8px] cursor-pointer"
                   >
                     <Icon className="w-4 h-4 shrink-0" />
-                    <span className="truncate">{tab.label}</span>
+                    <span className="leading-tight text-center">{tab.label}</span>
                     {isActive && autoCycleTabs && (
                       <span
                         key={`stage-progress-${idx}`}
@@ -3387,7 +3908,7 @@ function SolvaUseCasesSection({
                     <div className="space-y-[28px]">
                       <h4
                         style={{ color: 'var(--solva-ink)' }}
-                        className="font-solva-serif font-light text-[26px] sm:text-[30px] leading-[1.25] tracking-[-0.05em]"
+                        className="font-solva-serif font-light text-[26px] sm:text-[30px] leading-[1.25]"
                       >
                         {current.headline}
                       </h4>
@@ -3419,7 +3940,7 @@ function SolvaUseCasesSection({
                     </div>
 
                     <SolvaButton
-                      to={isAuthenticated ? '/upload' : '/login'}
+                      to={isAuthenticated ? '/upload' : '/register'}
                       variant="primary"
                       fullWidth
                     >
@@ -3471,23 +3992,23 @@ function SolvaSecuritySection({ lang }: { lang: Lang }) {
       icon: Lock,
       title:
         lang === 'vi'
-          ? 'Phân quyền độc lập theo 3 vai trò (RBAC)'
+          ? 'Phân quyền riêng biệt theo vai trò'
           : 'Role-based access control',
       desc:
         lang === 'vi'
-          ? 'Cô lập chặt chẽ quyền truy cập và tác vụ chuyên môn giữa không gian Sinh viên, Giảng viên hướng dẫn và Quản trị viên.'
-          : 'Capability-based isolation across Student, Teacher, and Administrator workspaces.',
+          ? 'Tách biệt chặt chẽ quyền truy cập và tác vụ chuyên môn giữa không gian Sinh viên, Giảng viên hướng dẫn và Quản trị viên.'
+          : 'Clean workspace boundaries across Student, Lecturer, and Administrator roles.',
     },
     {
       icon: Eye,
       title:
         lang === 'vi'
-          ? 'Nhật ký kiểm toán bất biến (Audit Trail)'
-          : 'Immutable override audit logs',
+          ? 'Lưu lịch sử duyệt bài minh bạch'
+          : 'Transparent review history',
       desc:
         lang === 'vi'
-          ? 'Mọi thao tác điều chỉnh kết luận (Override) của giảng viên đều được lưu vết minh bạch kèm lý do chuyên môn và dấu thời gian.'
-          : 'Every instructor verdict override and administrative action is logged with rationale.',
+          ? 'Mọi thao tác xác nhận thủ công của giảng viên đều được ghi nhận rõ ràng kèm lý do chuyên môn và mốc thời gian.'
+          : 'Every advisor manual approval and faculty action is clearly recorded with rationale and timestamp.',
     },
     {
       icon: FileSearch,
@@ -3583,7 +4104,7 @@ function SolvaSecuritySection({ lang }: { lang: Lang }) {
 /* ============================================================
    SECTION 7: PRICING PLANS & ACADEMIC BENEFITS (`#taxonomy`)
    3 Cards (`Basic`, `Pro Popular`, `Ultra`) + Squircle Billing Toggle
-   + Radial-Masked Watercolor Floral Card (`/solva/pricing-floral.webp`)
+   + Framed Gallery Floral Banner (`/solva/pricing-floral.webp`) & Subgrid Alignment
    ============================================================ */
 function SolvaTaxonomyPricingSection({
   lang,
@@ -3596,50 +4117,91 @@ function SolvaTaxonomyPricingSection({
 
   const tiers = [
     {
-      name: lang === 'vi' ? 'Basic (Khởi đầu Học thuật)' : 'Basic',
-      badge: null,
+      key: 'basic' as const,
+      name: 'Basic',
+      subtitle: lang === 'vi' ? 'Khởi đầu Học thuật' : 'Student Starter',
+      headerTag: lang === 'vi' ? 'MẶC ĐỊNH' : 'DEFAULT',
+      headerEyebrow: (lang === 'vi'
+        ? '01 · MIỄN PHÍ TRỌN ĐỜI'
+        : '01 · FREE FOREVER') as string | null,
+      savingsBadge: null as string | null,
       metricNum: 0,
       unit: lang === 'vi' ? 'tháng · Miễn phí' : 'month',
+      vndNode:
+        lang === 'vi' ? (
+          <>
+            <span className="whitespace-nowrap">0 ₫/tháng</span> ·{' '}
+            <span className="whitespace-nowrap">Không cần thẻ thanh toán</span>
+          </>
+        ) : null,
+      vndTestId: undefined as string | undefined,
       desc:
         lang === 'vi'
-          ? 'Bộ công cụ thẩm định trích dẫn 2 tầng thiết yếu dành cho sinh viên thực hiện tiểu luận chuyên ngành, tổng quan tài liệu và rà soát danh mục tham khảo nhanh.'
-          : 'Essential two-layer citation verification for course essays, literature reviews, and quick bibliography checks.',
+          ? 'Bộ công cụ rà soát trích dẫn thiết yếu dành cho sinh viên thực hiện tiểu luận môn học, tổng quan tài liệu và kiểm tra nhanh danh mục tham khảo.'
+          : 'Essential citation verification for course essays, literature reviews, and quick bibliography checks.',
       includesLabel: lang === 'vi' ? 'Quyền lợi bao gồm:' : 'Includes:',
       items:
         lang === 'vi'
           ? [
               '3 bản thảo / tháng (tối đa 15 trang, 5 MB / tệp)',
               'Hỗ trợ đầy đủ .PDF, .DOCX, .BIB & .RIS (tối đa 30 trích dẫn / bài)',
-              'Bóc tách cấu trúc GROBID TEI-XML & Đa quy chuẩn (IEEE, APA 7th)',
-              'Kho đệm 128K+ FTS5 cục bộ + Crossref, OpenAlex & Văn bản Pháp luật VN',
-              'Hệ phân loại 2 tầng trực giao 13 trạng thái (8 L1 × 5 L2)',
+              'Tự động đối chiếu trích dẫn trong bài & tài liệu tham khảo (APA, IEEE)',
+              'Xác thực trực tiếp qua Crossref, OpenAlex & Văn bản Pháp luật VN',
+              'Chấm điểm toàn vẹn trích dẫn & phân loại chi tiết từng lỗi sai lệch',
+              'Bao gồm báo cáo trực tuyến đầy đủ (Xuất Word/PDF ở gói Pro)',
             ]
           : [
               '3 manuscripts / month (up to 15 pages, 5 MB)',
               'Supports .PDF, .DOCX, .BIB & .RIS (up to 30 citations / doc)',
-              'GROBID TEI-XML & Multi-Style Cross-Validator',
-              '128K+ Local FTS5 + Crossref, OpenAlex & VN Legal',
-              'Full 13-state Two-Layer Orthogonal Taxonomy (8 L1 × 5 L2)',
+              'Automated in-text & bibliography cross-checking (APA, IEEE, Vancouver)',
+              'Verified against Crossref, OpenAlex & Vietnam Legal Registry',
+              'Clear citation integrity score & structured issue breakdown',
+              'Web verification report included (Word/PDF export on Pro)',
             ],
       cta: lang === 'vi' ? 'Bắt đầu miễn phí' : 'Get started free',
       to: isAuthenticated ? '/upload' : '/register',
       featured: false,
     },
     {
-      name: lang === 'vi' ? 'Pro (Khóa luận & Công bố Quốc tế)' : 'Pro',
-      badge: lang === 'vi' ? 'Được chọn nhiều nhất' : 'Popular',
+      key: 'pro' as const,
+      name: 'Pro',
+      subtitle:
+        lang === 'vi' ? 'Khóa luận & Công bố Quốc tế' : 'Thesis Writers & Researchers',
+      headerTag: lang === 'vi' ? '02 · PHỔ BIẾN NHẤT' : '02 · MOST POPULAR',
+      headerEyebrow: null as string | null,
+      savingsBadge: annualBilling
+        ? lang === 'vi'
+          ? 'Tiết kiệm $48/năm'
+          : 'Save $48/yr'
+        : null,
       metricNum: annualBilling ? 16 : 20,
       unit:
         lang === 'vi'
           ? annualBilling
-            ? 'tháng (thanh toán theo năm)'
+            ? 'tháng (trả theo năm)'
             : 'tháng'
           : annualBilling
             ? 'month (billed yearly)'
             : 'month',
+      vndNode:
+        lang === 'vi' ? (
+          annualBilling ? (
+            <>
+              <span className="whitespace-nowrap">≈ 400.000 ₫/tháng</span> ·{' '}
+              <span className="whitespace-nowrap">4.800.000 ₫/năm</span>{' '}
+              <span className="whitespace-nowrap">qua VNPay</span>
+            </>
+          ) : (
+            <>
+              <span className="whitespace-nowrap">≈ 500.000 ₫/tháng</span>{' '}
+              <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
+            </>
+          )
+        ) : null,
+      vndTestId: 'pro-vnd-equivalent',
       desc:
         lang === 'vi'
-          ? 'Truy vấn liên hợp hơn 15 CSDL khoa học quốc tế, đối sánh ngữ nghĩa sâu bằng Sentence-BERT và chuẩn hóa danh mục tự động chỉ với một cú nhấp cho khóa luận, luận văn.'
+          ? 'Tra cứu hơn 15 cơ sở dữ liệu học thuật quốc tế, đối chiếu ngữ nghĩa sâu với tài liệu gốc và chuẩn hóa danh mục tham khảo tự động cho khóa luận, luận văn.'
           : 'Full 15+ scholarly API federation, Sentence-BERT semantic matching, and 1-Click Auto-Fix for graduation theses.',
       includesLabel:
         lang === 'vi'
@@ -3649,38 +4211,65 @@ function SolvaTaxonomyPricingSection({
         lang === 'vi'
           ? [
               '50 bản thảo / tháng (tối đa 100 trang, 25 MB / tệp)',
-              'Tối đa 200 trích dẫn / bản thảo + Tải lên hàng loạt (10 tệp)',
-              'Mở khóa toàn bộ 15+ CSDL học thuật (PubMed, arXiv, DBLP, DOAJ...)',
-              'So khớp ngữ nghĩa sâu Sentence-BERT & Multilingual MiniLM ONNX INT8',
-              'Chuẩn hóa tự động 1-Click (APA, IEEE, BibTeX) & Xuất báo cáo PDF/DOCX',
+              'Tối đa 200 trích dẫn / bài & tải lên đồng thời tới 10 bản thảo',
+              'Mở khóa toàn bộ 15+ nguồn học thuật uy tín (PubMed, arXiv, DBLP, DOAJ...)',
+              'Đối chiếu ngữ nghĩa sâu câu trích dẫn song ngữ Việt ↔ Anh với văn bản gốc',
+              'Tự động chuẩn hóa danh mục (APA, IEEE, BibTeX) & xuất báo cáo Word/PDF',
             ]
           : [
               '50 manuscripts / month (up to 100 pages, 25 MB)',
-              'Up to 200 citations / doc + Batch Upload (10 files)',
-              'All 15+ Scholarly APIs (PubMed, arXiv, DBLP, DOAJ...)',
-              'Sentence-BERT & Multilingual MiniLM ONNX INT8 Alignment',
-              '1-Click Bibliography Auto-Fix (APA, IEEE, BibTeX) & PDF/DOCX Export',
+              'Up to 200 citations / manuscript & multi-file upload (up to 10 files)',
+              'Full 15+ scholarly indexes (PubMed, arXiv, DBLP, DOAJ & Retraction Watch)',
+              'Bilingual semantic claim-to-source evidence verification (EN ↔ VI)',
+              'Automated bibliography formatting (APA, IEEE, BibTeX) & Word/PDF export',
             ],
-      cta: lang === 'vi' ? 'Nâng cấp gói Pro' : 'Start Pro trial',
+      cta: lang === 'vi' ? 'Nâng cấp lên Pro' : 'Upgrade to Pro',
       to: '/pricing',
       featured: true,
     },
     {
-      name: lang === 'vi' ? 'Ultra (Hội đồng & Khoa / Viện)' : 'Ultra',
-      badge: null,
+      key: 'ultra' as const,
+      name: 'Ultra',
+      subtitle:
+        lang === 'vi' ? 'Hội đồng & Khoa / Viện' : 'Research Labs & Review Boards',
+      headerTag: lang === 'vi' ? 'QUY MÔ LỚN' : 'ENTERPRISE LAB',
+      headerEyebrow: (lang === 'vi'
+        ? '03 · BỘ MÔN & HỘI ĐỒNG'
+        : '03 · FACULTY & COHORT') as string | null,
+      savingsBadge: annualBilling
+        ? lang === 'vi'
+          ? 'Tiết kiệm $480/năm'
+          : 'Save $480/yr'
+        : null,
       metricNum: annualBilling ? 160 : 200,
       unit:
         lang === 'vi'
           ? annualBilling
-            ? 'tháng (thanh toán theo năm)'
+            ? 'tháng (trả theo năm)'
             : 'tháng'
           : annualBilling
             ? 'month (billed yearly)'
             : 'month',
+      vndNode:
+        lang === 'vi' ? (
+          annualBilling ? (
+            <>
+              <span className="whitespace-nowrap">≈ 4.000.000 ₫/tháng</span> ·{' '}
+              <span className="whitespace-nowrap">48.000.000 ₫/năm</span>{' '}
+              <span className="whitespace-nowrap">qua VNPay</span>
+            </>
+          ) : (
+            <>
+              <span className="whitespace-nowrap">≈ 5.000.000 ₫/tháng</span>{' '}
+              <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
+            </>
+          )
+        ) : null,
+      vndTestId: 'ultra-vnd-equivalent',
       desc:
         lang === 'vi'
-          ? 'Giải pháp thẩm định toàn diện ở quy mô Bộ môn, Khoa và Hội đồng bảo vệ với kênh tra cứu dự phòng Google Scholar, quản lý lớp học và lưu vết kiểm toán bất biến.'
-          : 'Unlimited institutional verification, Google Scholar fallback, classroom cohort management, and instructor override logs.',
+          ? 'Giải pháp thẩm định chuyên sâu cho Bộ môn, Khoa và Hội đồng bảo vệ với tra cứu mở rộng qua Google Scholar, quản lý đợt nộp bài và nhật ký thẩm định.'
+          : 'High-volume institutional verification with extended Google Scholar discovery, cohort management, and faculty review logs.',
       includesLabel:
         lang === 'vi'
           ? 'Toàn bộ quyền lợi gói Pro, cộng thêm:'
@@ -3688,20 +4277,20 @@ function SolvaTaxonomyPricingSection({
       items:
         lang === 'vi'
           ? [
-              'Không giới hạn bản thảo (1.000 bài/tháng, 500 trang, 100 MB)',
-              'Không giới hạn số trích dẫn / bài + Rà soát hàng loạt (50 tệp)',
-              'Tích hợp kênh dự phòng SerpAPI Google Scholar cho ấn phẩm chuyên khảo hiếm',
-              'Bảng điều khiển Lớp học dành cho Giảng viên & Quyền điều chỉnh nhãn (Override)',
-              'Hàng đợi xử lý ưu tiên, Trung tâm Quản trị & Nhật ký Kiểm toán bất biến',
+              'Tối đa 1.000 bản thảo / tháng (lên đến 500 trang, 100 MB / tệp)',
+              'Không giới hạn số trích dẫn / bài & rà soát đồng thời tới 50 bản thảo',
+              'Tra cứu mở rộng qua Google Scholar cho sách chuyên khảo & ấn phẩm hiếm',
+              'Không gian quản lý lớp học, thu bài theo đợt & điều chỉnh kết luận của giảng viên',
+              'Luồng xử lý ưu tiên, lưu trữ trọn đời & nhật ký thẩm định cấp đơn vị',
             ]
           : [
-              'Unlimited manuscripts (1,000/mo, up to 500 pages, 100 MB)',
-              'Unlimited citations per paper + Batch Upload (50 files)',
-              'SerpAPI Google Scholar Fallback for obscure monographs',
-              'Teacher Classroom Cohort Dashboard & Instructor Override',
-              'Admin Control Plane, Priority Queue & Immutable Audit Logs',
+              'Up to 1,000 manuscripts / month (up to 500 pages, 100 MB each)',
+              'Unlimited citations per paper & bulk cohort upload (up to 50 files)',
+              'Extended Google Scholar discovery for rare monographs & regional works',
+              'Faculty cohort workspace, student submissions & instructor review notes',
+              'Priority processing queue, lifetime history & institutional audit trail',
             ],
-      cta: lang === 'vi' ? 'Khám phá gói Ultra & So sánh' : 'Explore Ultra plan',
+      cta: lang === 'vi' ? 'Khám phá gói Ultra' : 'Explore Ultra plan',
       to: '/pricing',
       featured: false,
     },
@@ -3709,10 +4298,13 @@ function SolvaTaxonomyPricingSection({
 
   return (
     <section
-      id="taxonomy"
+      id="pricing-plans"
       className="scroll-mt-[84px] lg:scroll-mt-[108px] py-[36px] sm:py-[48px] lg:py-[96px] px-5 sm:px-6 lg:px-[40px]"
     >
-      <div className="max-w-[1200px] mx-auto flex flex-col items-center gap-[28px] sm:gap-[36px] lg:gap-[64px]">
+      <div
+        id="taxonomy"
+        className="scroll-mt-[88px] max-w-[1200px] mx-auto flex flex-col items-center gap-[28px] sm:gap-[36px] lg:gap-[64px]"
+      >
         {/* Centered Headline */}
         <div className="flex flex-col items-center text-center gap-[16px] max-w-[580px]">
           <SolvaEyebrow centered>
@@ -3733,12 +4325,19 @@ function SolvaTaxonomyPricingSection({
         <div className="w-full flex flex-col items-center gap-[32px]">
           {/* Tactile Switch (#27 TactileToggle) */}
           <SolvaScrollReveal yOffset={20}>
-            <div className="inline-flex items-center gap-[10px]">
+            <div className="inline-flex flex-wrap items-center justify-center gap-2 sm:gap-[10px]">
               <span
                 style={{ color: 'var(--solva-ink)' }}
-                className="font-solva-sans text-[15px] sm:text-[16px]"
+                className="font-solva-sans text-[14px] sm:text-[16px] whitespace-nowrap"
               >
-                {lang === 'vi' ? 'Thanh toán theo tháng' : 'Monthly'}
+                {lang === 'vi' ? (
+                  <>
+                    <span className="hidden sm:inline">Thanh toán theo tháng</span>
+                    <span className="sm:hidden">Theo tháng</span>
+                  </>
+                ) : (
+                  'Monthly'
+                )}
               </span>
               <TactileToggle
                 checked={annualBilling}
@@ -3748,109 +4347,196 @@ function SolvaTaxonomyPricingSection({
               />
               <span
                 style={{ color: 'var(--solva-ink)' }}
-                className="font-solva-sans text-[15px] sm:text-[16px]"
+                className="font-solva-sans text-[14px] sm:text-[16px] whitespace-nowrap"
               >
-                {lang === 'vi' ? 'Thanh toán theo năm (Tiết kiệm 20%)' : 'Yearly -20%'}
+                {lang === 'vi' ? (
+                  <>
+                    <span className="hidden sm:inline">Theo năm (Tiết kiệm 20%)</span>
+                    <span className="sm:hidden">Theo năm (-20%)</span>
+                  </>
+                ) : (
+                  'Yearly -20%'
+                )}
               </span>
             </div>
           </SolvaScrollReveal>
 
-          {/* 3 Plan Cards (`389x483px` equivalent, `bg: #F4F2EC`, `rounded-[16px]`, `p-[32px]`) */}
-          <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-[16px]">
+          {/* 3 Plan Cards (`lg:grid-cols-3` + 5-row CSS subgrid for horizontal row parity) */}
+          <div className="w-full grid grid-cols-1 gap-y-[16px] lg:grid-cols-3 lg:gap-x-[16px] lg:gap-y-0 items-stretch">
             {tiers.map((tier, idx) => (
               <SolvaScrollReveal
-                key={tier.name}
+                key={tier.key}
                 delayMs={idx * 95}
                 yOffset={36}
-                className="h-full"
+                className="h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid"
               >
                 <div
-                  style={{ backgroundColor: 'var(--solva-surface)' }}
-                  className="relative rounded-[16px] p-[28px] sm:p-[32px] flex flex-col justify-between gap-[24px] overflow-hidden min-h-[483px] h-full"
+                  style={{
+                    backgroundColor: 'var(--solva-surface)',
+                    borderColor: tier.featured ? 'var(--solva-ink)' : 'var(--solva-border)',
+                  }}
+                  className={`relative rounded-[16px] ${
+                    tier.featured
+                      ? 'border-2 shadow-[0_12px_36px_rgba(28,26,21,0.08)]'
+                      : 'border'
+                  } p-[8px] sm:p-[10px] flex flex-col overflow-hidden h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid`}
                 >
-                  {/* Radial-Masked Watercolor Floral Background on Middle Popular Card */}
-                  {tier.featured && (
-                    <>
-                      <div
-                        className="solva-pricing-floral-mask absolute inset-0 pointer-events-none select-none z-0"
-                        aria-hidden="true"
-                      >
-                        <img
-                          src="/solva/pricing-floral.webp"
-                          alt=""
-                          loading="eager"
-                          decoding="async"
-                          {...({ fetchpriority: 'low' } as Record<string, string>)}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="solva-noise-overlay z-0" aria-hidden="true" />
-                    </>
-                  )}
+                  {/* Row 1: Top Architectural / Floral Gallery Header Band (`min-h-[104px]`) */}
+                  <div
+                    className={`relative min-h-[100px] sm:min-h-[104px] rounded-t-[11px] overflow-hidden px-4 sm:px-5 py-3.5 flex flex-col justify-between ${
+                      tier.featured
+                        ? ''
+                        : idx === 0
+                          ? 'bg-gradient-to-b from-[#ECE9E0]/90 via-[#F4F2EC]/55 to-transparent dark:from-[#26231C]/90 dark:via-[#1E1C17]/55 dark:to-transparent'
+                          : 'bg-gradient-to-b from-[#E8E3D6]/95 via-[#F4F2EC]/55 to-transparent dark:from-[#2A261E]/95 dark:via-[#1E1C17]/55 dark:to-transparent'
+                    }`}
+                  >
+                    {tier.featured && (
+                      <>
+                        <div
+                          className="solva-floral-banner-mask absolute inset-0 pointer-events-none select-none z-0"
+                          aria-hidden="true"
+                        >
+                          <img
+                            src="/solva/pricing-floral.webp"
+                            alt=""
+                            loading="eager"
+                            decoding="async"
+                            {...({ fetchpriority: 'low' } as Record<string, string>)}
+                            className="w-full h-full object-cover object-center"
+                          />
+                        </div>
+                        <div className="solva-noise-overlay z-0" aria-hidden="true" />
+                      </>
+                    )}
 
-                  <div className="relative z-10 space-y-[20px]">
-                    {/* Top Tier Name + Popular Badge */}
-                    <div className="flex items-center justify-between gap-2">
-                      <h3
-                        style={{ color: 'var(--solva-ink)' }}
-                        className={`font-solva-sans text-[20px] ${
-                          tier.featured ? 'font-medium' : 'font-normal'
-                        } leading-[27px] tracking-[-0.02em]`}
-                      >
-                        {tier.name}
-                      </h3>
-                      {tier.badge && (
+                    <div className="relative z-10 flex items-start justify-between gap-x-2 gap-y-2 flex-wrap">
+                      {tier.featured ? (
+                        <span
+                          style={{ backgroundColor: '#1C1A15', color: '#FBFAF6' }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] border border-white/15 shadow-sm font-mono text-[11px] font-semibold leading-none tracking-wide whitespace-nowrap shrink-0"
+                        >
+                          <Sparkles className="w-3 h-3 shrink-0" />
+                          <span>{tier.headerTag}</span>
+                        </span>
+                      ) : (
                         <span
                           style={{
-                            backgroundColor: 'var(--solva-btn-bg)',
-                            color: 'var(--solva-btn-fg)',
+                            backgroundColor: 'var(--solva-bg)',
+                            borderColor: 'var(--solva-border)',
+                            color: 'var(--solva-muted)',
                           }}
-                          className="px-[8px] py-[4px] rounded-[6px] font-solva-sans text-[12px] font-medium leading-[12px]"
+                          className="inline-flex items-center px-2.5 py-1 rounded-[6px] border font-mono text-[11px] font-medium leading-none whitespace-nowrap shrink-0"
                         >
-                          {tier.badge}
+                          {tier.headerTag}
+                        </span>
+                      )}
+
+                      {tier.savingsBadge && (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-[6px] bg-[#FBFAF6] text-emerald-800 border border-emerald-700/25 dark:bg-[#141310] dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm font-mono text-[11px] font-semibold leading-none whitespace-nowrap shrink-0">
+                          {tier.savingsBadge}
                         </span>
                       )}
                     </div>
 
-                    {/* Price Display (`Sentient` 40px Light + #02 Per-Digit NumberPopIn) */}
-                    <div className="flex items-baseline gap-1.5">
+                    {tier.headerEyebrow && (
                       <span
-                        style={{ color: 'var(--solva-ink)' }}
-                        className="font-solva-serif font-light text-[36px] sm:text-[40px] leading-[46px] tracking-[-0.05em]"
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="relative z-10 font-mono text-[11px] uppercase tracking-wider whitespace-nowrap"
                       >
-                        <NumberPopIn
-                          value={`$${tier.metricNum}`}
-                          data-testid={`landing-price-${
-                            idx === 0 ? 'basic' : idx === 1 ? 'pro' : 'ultra'
-                          }`}
-                        />
+                        {tier.headerEyebrow}
                       </span>
-                      <span
+                    )}
+                  </div>
+
+                  {/* Rows 2..5: High-Contrast Card Body Surface */}
+                  <div
+                    style={
+                      tier.featured
+                        ? undefined
+                        : {
+                            backgroundColor: 'var(--solva-bg)',
+                            borderColor: 'var(--solva-border)',
+                          }
+                    }
+                    className={`${
+                      tier.featured ? 'solva-pro-card-surface' : 'border'
+                    } relative z-10 rounded-[12px] px-[20px] sm:px-[24px] py-[22px] sm:py-[24px] flex flex-col justify-between gap-[20px] lg:gap-y-0 flex-1 lg:row-span-4 lg:grid lg:grid-rows-subgrid`}
+                  >
+                    {/* Row 2: Tier Title, Subtitle & Description */}
+                    <div className="space-y-[10px] lg:pb-[18px]">
+                      <div>
+                        <h3
+                          style={{ color: 'var(--solva-ink)' }}
+                          className={`font-solva-sans text-[22px] ${
+                            tier.featured ? 'font-medium' : 'font-normal'
+                          } leading-[28px] tracking-[-0.02em]`}
+                        >
+                          {tier.name}
+                        </h3>
+                        <p
+                          style={{ color: 'var(--solva-muted)' }}
+                          className="font-solva-sans text-[13px] mt-0.5"
+                        >
+                          {tier.subtitle}
+                        </p>
+                      </div>
+
+                      <p
                         style={{
                           color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
                         }}
-                        className={`font-solva-sans text-[14px] ${
+                        className={`font-solva-sans text-[15px] leading-[22.5px] ${
                           tier.featured ? 'font-medium' : ''
                         }`}
                       >
-                        <SoftTextSwap text={`/ ${tier.unit}`} />
-                      </span>
+                        {tier.desc}
+                      </p>
                     </div>
 
-                    {/* Description */}
-                    <p
-                      style={{
-                        color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
-                      }}
-                      className={`font-solva-sans text-[15px] sm:text-[16px] leading-[23.2px] ${
-                        tier.featured ? 'font-medium' : ''
-                      }`}
+                    {/* Row 3: Price Display (`Sentient` 40px Light + #02 Per-Digit NumberPopIn) + VI VND Equivalent */}
+                    <div
+                      style={{ borderColor: 'var(--solva-border)' }}
+                      className="pt-[16px] lg:pb-[18px] border-t"
                     >
-                      {tier.desc}
-                    </p>
+                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                        <span
+                          style={{ color: 'var(--solva-ink)' }}
+                          className="font-solva-serif font-light text-[36px] sm:text-[40px] leading-[46px] tracking-[-0.05em]"
+                        >
+                          <NumberPopIn
+                            value={`$${tier.metricNum}`}
+                            data-testid={`landing-price-${tier.key}`}
+                          />
+                        </span>
+                        <span
+                          style={{
+                            color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
+                          }}
+                          className={`font-solva-sans text-[14px] ${
+                            tier.featured ? 'font-medium' : ''
+                          }`}
+                        >
+                          <SoftTextSwap text={`/ ${tier.unit}`} />
+                        </span>
+                      </div>
+                      {tier.vndNode && (
+                        <p
+                          data-testid={tier.vndTestId}
+                          style={{
+                            color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
+                          }}
+                          className={`font-mono text-[12px] mt-1 ${
+                            tier.featured ? 'font-medium' : ''
+                          }`}
+                        >
+                          {tier.vndNode}
+                        </p>
+                      )}
+                    </div>
 
-                    {/* Benefits Checklist */}
-                    <div className="space-y-[10px] pt-1">
+                    {/* Row 4: Benefits Checklist */}
+                    <div className="space-y-[10px] pt-1 lg:pb-[20px]">
                       <div
                         style={{
                           color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
@@ -3889,17 +4575,20 @@ function SolvaTaxonomyPricingSection({
                         ))}
                       </ul>
                     </div>
-                  </div>
 
-                  {/* Bottom CTA Button */}
-                  <div className="relative z-10 pt-2">
-                    <SolvaButton
-                      to={tier.to}
-                      variant={tier.featured ? 'primary' : 'outline'}
-                      fullWidth
+                    {/* Row 5: Bottom CTA Button */}
+                    <div
+                      style={{ borderColor: 'var(--solva-border)' }}
+                      className="pt-[16px] border-t flex items-end"
                     >
-                      {tier.cta}
-                    </SolvaButton>
+                      <SolvaButton
+                        to={tier.to}
+                        variant={tier.featured ? 'primary' : 'outline'}
+                        fullWidth
+                      >
+                        {tier.cta}
+                      </SolvaButton>
+                    </div>
                   </div>
                 </div>
               </SolvaScrollReveal>
@@ -3914,8 +4603,8 @@ function SolvaTaxonomyPricingSection({
                 className="font-solva-sans text-[14px]"
               >
                 {lang === 'vi'
-                  ? 'Thanh toán bảo mật qua cổng Stripe · Đối chiếu trực tiếp với hơn 200 triệu ấn phẩm khoa học từ 15+ cơ sở dữ liệu quốc tế'
-                  : 'Secured by Stripe · Cross-referencing 200M+ canonical works across 15+ global scholarly indexes'}
+                  ? 'Thanh toán bảo mật quốc tế qua Stripe & nội địa VNPay (chuẩn PCI-DSS) · Đối chiếu trực tiếp với hơn 200 triệu ấn phẩm khoa học từ 15+ cơ sở dữ liệu quốc tế'
+                  : 'PCI-DSS encrypted checkout via Stripe & VNPay · Cross-referencing 200M+ canonical works across 15+ global scholarly indexes'}
               </p>
             </div>
           </SolvaScrollReveal>
@@ -3959,7 +4648,7 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
                 paintingSrc="/solva/usecase-4-bg.webp"
                 alt="Impressionist botanical painting backdrop for cohort thesis audit"
                 radiusClass="rounded-[10px]"
-                className="w-full min-h-[380px] sm:min-h-[420px] lg:h-[476px] p-4 sm:p-6 flex items-center justify-center"
+                className="w-full min-h-[380px] sm:min-h-[420px] lg:min-h-[476px] h-full py-5 px-4 sm:p-6 flex items-center justify-center"
               >
                 <div className="w-full flex items-center justify-center">
                   <CohortBatchAuditWidget lang={lang} />
@@ -3972,11 +4661,11 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
               {/* Top Two-Tone Quote + Attribution */}
               <div className="space-y-[24px]">
                 <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-                  <blockquote className="font-solva-serif font-light text-[24px] sm:text-[30px] leading-[1.25] tracking-[-0.05em] max-w-[520px]">
+                  <blockquote className="font-solva-serif font-light text-[24px] sm:text-[30px] leading-[1.25] max-w-[520px]">
                     <span style={{ color: 'var(--solva-ink)' }}>
                       {lang === 'vi'
-                        ? '“Đầu tuần vừa qua, chúng tôi đưa 120 quyển khóa luận tốt nghiệp vào thẩm định trên CITRA. Chỉ trong một buổi sáng, hệ thống đã khoanh vùng chính xác từng mã DOI ngụy tạo và lệch năm xuất bản — '
-                        : '“We ran CITRA across 120 graduation theses on Monday morning. Within an hour, it pinpointed every hallucinated DOI and year drift '}
+                        ? '“Đầu tuần vừa qua, chúng tôi đưa 120 quyển khóa luận tốt nghiệp vào rà soát trên CITRA. Chỉ trong một buổi sáng, hệ thống đã chỉ rõ từng mã DOI không tồn tại và năm xuất bản sai — '
+                        : '“We ran CITRA across 120 graduation theses on Monday morning. Within an hour, it highlighted every broken DOI and wrong publication year '}
                     </span>
                     <span style={{ color: 'var(--solva-muted)' }}>
                       {lang === 'vi'
@@ -4000,7 +4689,7 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
                     className="font-solva-sans text-[14px] font-medium leading-[21px]"
                   >
                     {lang === 'vi'
-                      ? 'Hội đồng Thẩm định Khóa luận & Đạo đức Học thuật'
+                      ? 'PGS.TS. Nguyễn Minh Châu'
                       : 'Dr. Elena Rostova'}
                   </div>
                   <div
@@ -4008,7 +4697,7 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
                     className="font-solva-sans text-[14px] leading-[21px]"
                   >
                     {lang === 'vi'
-                      ? 'Khoa Khoa học Máy tính & Trí tuệ Nhân tạo'
+                      ? 'Chủ tịch Hội đồng Bảo vệ Khóa luận Tốt nghiệp'
                       : 'Chair of Graduate Thesis Review Committee'}
                   </div>
                 </div>
@@ -4022,28 +4711,30 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
                   decimals={0}
                   label={
                     lang === 'vi'
-                      ? 'Công trình khoa học kiểm định thực nghiệm'
-                      : 'Scholarly papers in benchmark audit'
+                      ? 'Bài báo khoa học kiểm định thực tế'
+                      : 'Academic papers tested in benchmark'
                   }
                 />
                 <SolvaAnimatedMetric
                   targetValue={99.02}
                   suffix="%"
                   decimals={2}
+                  decimalSeparator={lang === 'vi' ? ',' : '.'}
                   label={
                     lang === 'vi'
-                      ? 'Độ chính xác Neuro-Symbolic (Macro-F1 0.9888)'
-                      : 'Neuro-Symbolic accuracy (0.9888 F1)'
+                      ? 'Độ chính xác kiểm chứng trích dẫn'
+                      : 'Overall citation verification accuracy'
                   }
                 />
                 <SolvaAnimatedMetric
                   targetValue={99.93}
                   suffix="%"
                   decimals={2}
+                  decimalSeparator={lang === 'vi' ? ',' : '.'}
                   label={
                     lang === 'vi'
-                      ? 'Độ chuẩn xác bắt trích dẫn ngụy tạo (0 kết luận oan)'
-                      : 'Hallucination precision (0 false flags)'
+                      ? 'Độ chuẩn xác phát hiện nguồn ảo (0 kết luận oan)'
+                      : 'Precision catching fake sources (0 false flags)'
                   }
                 />
               </div>
@@ -4057,46 +4748,431 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
 
 /* ============================================================
    SECTION 9: ROLE WORKSPACES & ACADEMIC TESTIMONIALS (`#workspaces`)
-   Solva's 3-Column Staggered Grid (Middle Column Offset by `48px`)
+   Interactive 3-Role Showcase + Solva's 3-Column Staggered Grid
    ============================================================ */
-function SolvaRoleTestimonialsSection({ lang }: { lang: Lang }) {
+function SolvaRoleWorkspacesShowcase({
+  lang,
+  activeRole,
+  onSelectRole,
+  isAuthenticated,
+}: {
+  lang: Lang;
+  activeRole: WorkspaceRole;
+  onSelectRole: (role: WorkspaceRole) => void;
+  isAuthenticated: boolean;
+}) {
+  const isVi = lang === 'vi';
+  const roleOrder: WorkspaceRole[] = ['student', 'teacher', 'admin'];
+
+  const roleConfigs: Record<
+    WorkspaceRole,
+    {
+      tabLabel: string;
+      eyebrow: string;
+      headline: string;
+      summary: string;
+      steps: string[];
+      ctaLabel: string;
+      ctaTo: string;
+      previewTitle: string;
+      previewSubtitle: string;
+      previewMetricLabel: string;
+      previewMetricValue: string;
+      previewRows: Array<{ label: string; badge: string; tone: 'ok' | 'warn' | 'info' }>;
+      icon: typeof GraduationCap;
+    }
+  > = {
+    student: {
+      tabLabel: isVi ? 'Sinh viên & Tác giả' : 'Students & Authors',
+      eyebrow: isVi ? 'DÀNH CHO SINH VIÊN & TÁC GIẢ' : 'FOR STUDENTS & AUTHORS',
+      headline: isVi
+        ? 'Hoàn thiện khóa luận và bài báo với sự tự tin trọn vẹn trước giờ nộp.'
+        : 'Submit your thesis or manuscript with complete bibliographic confidence.',
+      summary: isVi
+        ? 'Rà soát danh mục tham khảo ngay khi đang viết, không sợ sót nguồn hay nhầm năm xuất bản.'
+        : 'Verify every reference while you write — before a reviewer or advisor ever sees a formatting slip.',
+      steps: isVi
+        ? [
+            'Tải tệp PDF, Word (.docx), BibTeX hoặc dán trực tiếp đoạn tài liệu tham khảo để kiểm tra nhanh.',
+            'Phát hiện tức thì trích dẫn thiếu mục tài liệu cuối bài, lệch năm công bố hoặc tài liệu không có thật.',
+            'Chuẩn hóa trích dẫn chuẩn APA, IEEE, Harvard và theo dõi Điểm Toàn vẹn Trích dẫn (Citation Integrity Score) tăng qua từng bản sửa.',
+          ]
+        : [
+            'Upload a PDF, Word (.docx), or bibliography file — or paste references for an instant check while writing.',
+            'Spot missing bibliography entries, wrong publication years, and non-existent AI-suggested papers in seconds.',
+            'Apply clean APA, IEEE, or Harvard fixes and watch your Citation Integrity Score climb across revisions.',
+          ],
+      ctaLabel: isAuthenticated
+        ? isVi
+          ? 'Kiểm tra bản thảo ngay'
+          : 'Check a Manuscript Now'
+        : isVi
+          ? 'Bắt đầu miễn phí cho Tác giả'
+          : 'Start Free Author Check',
+      ctaTo: isAuthenticated ? '/upload' : '/register',
+      previewTitle: isVi ? 'Bản xem trước Khóa luận Tốt nghiệp' : 'Thesis Readiness Snapshot',
+      previewSubtitle: isVi
+        ? 'Bản nộp cuối · 30 tài liệu tham khảo'
+        : 'Final Submission · 30 References Checked',
+      previewMetricLabel: isVi
+        ? 'Điểm Toàn vẹn Trích dẫn'
+        : 'Citation Integrity Score',
+      previewMetricValue: '72% → 98%',
+      previewRows: isVi
+        ? [
+            { label: '28 nguồn học thuật khớp chuẩn quốc tế', badge: 'ĐÃ XÁC THỰC', tone: 'ok' },
+            { label: '2 lỗi ghi nhầm năm bản nháp đã chỉnh sửa', badge: 'ĐÃ CHUẨN HÓA', tone: 'info' },
+            { label: '0 tài liệu tham khảo ngụy tạo tồn đọng', badge: 'SẴN SÀNG NỘP', tone: 'ok' },
+          ]
+        : [
+            { label: '28 scholarly sources matched & confirmed', badge: 'VERIFIED', tone: 'ok' },
+            { label: '2 preprint-to-journal year typos corrected', badge: 'FIXED', tone: 'info' },
+            { label: '0 unresolved phantom references remaining', badge: 'READY', tone: 'ok' },
+          ],
+      icon: GraduationCap,
+    },
+    teacher: {
+      tabLabel: isVi ? 'Giảng viên & Hội đồng' : 'Lecturers & Advisors',
+      eyebrow: isVi ? 'DÀNH CHO GIẢNG VIÊN & HỘI ĐỒNG' : 'FOR LECTURERS & ADVISORS',
+      headline: isVi
+        ? 'Thẩm định trích dẫn cho cả lớp học và hội đồng chỉ trong vài phút.'
+        : 'Review an entire cohort’s bibliography in minutes, not weekends.',
+      summary: isVi
+        ? 'Tập trung thời gian quý báu vào hướng dẫn chuyên môn thay vì tra cứu thủ công từng tiêu đề bài báo.'
+        : 'Spend your advising hours mentoring research depth instead of manually searching reference lists.',
+      steps: isVi
+        ? [
+            'Mở lớp học bằng mã tham gia đơn giản hoặc tải lên cùng lúc tới 50 bài nộp của sinh viên.',
+            'Xem danh sách ưu tiên làm nổi bật các trích dẫn nghi vấn bịa đặt hoặc lệch nội dung so với tóm tắt bài báo gốc.',
+            'Xác nhận hợp lệ một chạm cho giáo trình, sách chuyên khảo in trong nước kèm ghi chú góp ý xây dựng.',
+          ]
+        : [
+            'Open a class cohort with a simple join code, or upload up to 50 student submissions in a single batch.',
+            'Scan a clear review queue highlighting fabricated citations and claims that diverge from the cited paper’s abstract.',
+            'Approve domestic print monographs or regional textbooks in one click and attach constructive advisor feedback.',
+          ],
+      ctaLabel: isVi ? 'Xem gói Giảng viên & Lớp học' : 'Explore Lecturer Plans',
+      ctaTo: '/pricing',
+      previewTitle: isVi ? 'Bảng Tổng hợp Lớp Khóa luận' : 'Cohort Review Dashboard',
+      previewSubtitle: isVi
+        ? 'Hội đồng KLTN · 38 bài nộp của sinh viên'
+        : 'Honors Thesis Cohort · 38 Student Submissions',
+      previewMetricLabel: isVi ? 'Thời gian rà soát tiết kiệm' : 'Manual Lookup Time Saved',
+      previewMetricValue: '~85%',
+      previewRows: isVi
+        ? [
+            { label: '31 quyển đạt chuẩn danh mục tài liệu tham khảo', badge: 'HỢP LỆ', tone: 'ok' },
+            { label: '5 bài cần bổ sung số tập / trang tạp chí', badge: 'GỢI Ý SỬA', tone: 'info' },
+            { label: '2 sách in trong nước chờ giảng viên duyệt', badge: 'DUYỆT 1 CHẠM', tone: 'warn' },
+          ]
+        : [
+            { label: '31 submissions with clean reference lists', badge: 'CLEAN', tone: 'ok' },
+            { label: '5 papers needing minor volume or year fixes', badge: 'GUIDANCE', tone: 'info' },
+            { label: '2 print monographs queued for 1-click approval', badge: 'ADVISOR REVIEW', tone: 'warn' },
+          ],
+      icon: Users,
+    },
+    admin: {
+      tabLabel: isVi ? 'Quản trị Khoa & Trường' : 'Department Admin',
+      eyebrow: isVi ? 'DÀNH CHO KHOA, VIỆN & NHÀ TRƯỜNG' : 'FOR FACULTIES & DEPARTMENTS',
+      headline: isVi
+        ? 'Đồng bộ chuẩn mực trích dẫn và bảo mật học thuật trên toàn đơn vị.'
+        : 'Consistent citation standards and transparent governance across faculties.',
+      summary: isVi
+        ? 'Đảm bảo tính giải trình minh bạch cho hội đồng học thuật và bảo vệ tuyệt đối tài sản trí tuệ của nhà trường.'
+        : 'Equip thesis committees and research labs with clear quotas, accountable review trails, and strict data protection.',
+      steps: isVi
+        ? [
+            'Phân quyền rõ ràng cho Sinh viên, Giảng viên, Quản trị viên và điều phối hạn mức kiểm tra cho từng bộ môn.',
+            'Lưu giữ lịch sử duyệt thủ công minh bạch, không thể chỉnh sửa lùi ngày phục vụ công tác kiểm định chất lượng.',
+            'Bảo vệ tuyệt đối luận văn chưa công bố — không chia sẻ toàn văn ra bất kỳ kho dữ liệu đối chiếu bên ngoài nào.',
+          ]
+        : [
+            'Manage Student, Lecturer, and Administrator accounts and allocate monthly verification quotas across cohorts.',
+            'Maintain a clear, tamper-evident review history of manual citation approvals for academic board accountability.',
+            'Keep unpublished theses strictly private — zero external full-text sharing and full compliance with Law 91/2025/QH15.',
+          ],
+      ctaLabel: isVi ? 'Xem gói cho Khoa & Bộ môn' : 'Compare Institutional Tier',
+      ctaTo: '/pricing',
+      previewTitle: isVi ? 'Tổng quan Quản trị Học thuật Khoa' : 'Faculty Governance Overview',
+      previewSubtitle: isVi
+        ? 'Phân quyền theo vai trò · Bảo mật cấp đơn vị'
+        : 'Role-Isolated Access · Institutional Safeguards',
+      previewMetricLabel: isVi ? 'Chia sẻ toàn văn ra bên ngoài' : 'External Full-Text Sharing',
+      previewMetricValue: '0%',
+      previewRows: isVi
+        ? [
+            { label: 'Phân tách độc lập Sinh viên · Giảng viên · Quản trị', badge: 'ĐÃ KÍCH HOẠT', tone: 'ok' },
+            { label: 'Nhật ký xác nhận của hội đồng minh bạch', badge: 'MINH BẠCH', tone: 'info' },
+            { label: 'Tuân thủ Luật Bảo vệ dữ liệu 91/2025/QH15', badge: 'CHUẨN PHÁP LÝ', tone: 'ok' },
+          ]
+        : [
+            { label: 'Isolated Student, Lecturer & Admin permissions', badge: 'ACTIVE', tone: 'ok' },
+            { label: 'Tamper-evident advisor override history', badge: 'AUDITED', tone: 'info' },
+            { label: 'Aligned with Data Protection Law 91/2025/QH15', badge: 'COMPLIANT', tone: 'ok' },
+          ],
+      icon: Shield,
+    },
+  };
+
+  const current = roleConfigs[activeRole];
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
+    let nextIdx: number | null = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      nextIdx = (idx + 1) % roleOrder.length;
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      nextIdx = (idx - 1 + roleOrder.length) % roleOrder.length;
+    } else if (e.key === 'Home') {
+      nextIdx = 0;
+    } else if (e.key === 'End') {
+      nextIdx = roleOrder.length - 1;
+    }
+    if (nextIdx !== null) {
+      e.preventDefault();
+      const nextRole = roleOrder[nextIdx];
+      onSelectRole(nextRole);
+      document.getElementById(`workspace-tab-${nextRole}`)?.focus();
+    }
+  };
+
+  return (
+    <div data-testid="role-workspaces-showcase" className="w-full flex flex-col gap-[20px]">
+      {/* Accessible 3-Role Segmented Switcher (Mobile-safe stacked pills at 375px, 3-col bar on sm+) */}
+      <div
+        role="tablist"
+        aria-label={isVi ? 'Không gian làm việc theo vai trò học thuật' : 'Academic workspaces by role'}
+        style={{
+          backgroundColor: 'var(--solva-surface)',
+          borderColor: 'var(--solva-border)',
+        }}
+        className="w-full max-w-[780px] grid grid-cols-1 sm:grid-cols-3 gap-1.5 p-1.5 rounded-[14px] border"
+      >
+        {roleOrder.map((roleKey, idx) => {
+          const cfg = roleConfigs[roleKey];
+          const Icon = cfg.icon;
+          const isSelected = activeRole === roleKey;
+          return (
+            <button
+              key={roleKey}
+              id={`workspace-tab-${roleKey}`}
+              data-testid={`workspace-tab-${roleKey}`}
+              type="button"
+              role="tab"
+              aria-selected={isSelected}
+              aria-controls={`workspace-panel-${roleKey}`}
+              tabIndex={isSelected ? 0 : -1}
+              onClick={() => onSelectRole(roleKey)}
+              onKeyDown={(e) => handleTabKeyDown(e, idx)}
+              className={`min-h-[44px] px-3.5 py-2.5 rounded-[10px] inline-flex items-center justify-center gap-2 font-solva-sans text-[14px] font-medium active:scale-[0.99] transition-[transform,opacity,background-color,border-color,color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer ${
+                isSelected
+                  ? 'bg-white dark:bg-[#26231D] text-[#1C1A15] dark:text-[#FBFAF6] shadow-sm border border-[#E7E3D9] dark:border-[#3A352B]'
+                  : 'text-[var(--solva-muted)] hover:text-[var(--solva-ink)] border border-transparent'
+              }`}
+            >
+              <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+              <span>{cfg.tabLabel}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Active Role Panel */}
+      <div
+        id={`workspace-panel-${activeRole}`}
+        role="tabpanel"
+        aria-labelledby={`workspace-tab-${activeRole}`}
+        style={{
+          backgroundColor: 'var(--solva-surface)',
+          borderColor: 'var(--solva-border)',
+        }}
+        className="w-full rounded-[16px] border p-5 sm:p-8 lg:p-10 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center"
+      >
+        {/* Left: Jargon-Free Workflow */}
+        <div className="lg:col-span-7 flex flex-col items-start gap-5">
+          <span
+            style={{
+              backgroundColor: 'var(--solva-bg)',
+              color: 'var(--solva-muted)',
+              borderColor: 'var(--solva-border)',
+            }}
+            className="px-3 py-1 rounded-full border font-mono text-[11px] font-medium tracking-wide"
+          >
+            {current.eyebrow}
+          </span>
+
+          <div className="space-y-2.5">
+            <h3
+              style={{ color: 'var(--solva-ink)' }}
+              className={`font-solva-serif font-light text-[26px] sm:text-[32px] ${
+                isVi ? 'leading-[1.18] tracking-[-0.025em]' : 'leading-[1.1] tracking-[-0.04em]'
+              }`}
+            >
+              {current.headline}
+            </h3>
+            <p
+              style={{ color: 'var(--solva-muted)' }}
+              className="font-solva-sans text-[15.5px] sm:text-[16px] leading-[24px]"
+            >
+              {current.summary}
+            </p>
+          </div>
+
+          <ol className="space-y-3 w-full">
+            {current.steps.map((step, sIdx) => (
+              <li key={step} className="flex items-start gap-3">
+                <span
+                  style={{
+                    backgroundColor: 'var(--solva-bg)',
+                    color: 'var(--solva-ink)',
+                    borderColor: 'var(--solva-border)',
+                  }}
+                  className="mt-0.5 w-6 h-6 rounded-full border font-mono text-[11px] font-semibold flex items-center justify-center shrink-0"
+                >
+                  {sIdx + 1}
+                </span>
+                <span
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="font-solva-sans text-[15px] leading-[22.5px]"
+                >
+                  {step}
+                </span>
+              </li>
+            ))}
+          </ol>
+
+          <div className="pt-1">
+            <SolvaButton to={current.ctaTo} variant="primary">
+              <span>{current.ctaLabel}</span>
+              <ArrowRight className="w-4 h-4 shrink-0" />
+            </SolvaButton>
+          </div>
+        </div>
+
+        {/* Right: Clean Visual Summary Card */}
+        <div className="lg:col-span-5 w-full">
+          <div
+            style={{
+              backgroundColor: 'var(--solva-bg)',
+              borderColor: 'var(--solva-border)',
+            }}
+            className="rounded-[14px] border p-5 sm:p-6 flex flex-col gap-5 shadow-sm"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[#E7E3D9] dark:border-[#332F26]">
+              <div className="space-y-0.5">
+                <div
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="font-solva-sans text-[15.5px] font-semibold leading-snug"
+                >
+                  {current.previewTitle}
+                </div>
+                <div
+                  style={{ color: 'var(--solva-muted)' }}
+                  className="font-solva-sans text-[13px] leading-snug"
+                >
+                  {current.previewSubtitle}
+                </div>
+              </div>
+              <div className="sm:text-right">
+                <div className="font-mono text-[18px] font-semibold text-emerald-700 dark:text-emerald-400">
+                  {current.previewMetricValue}
+                </div>
+                <div
+                  style={{ color: 'var(--solva-muted)' }}
+                  className="font-mono text-[10.5px] uppercase tracking-wider"
+                >
+                  {current.previewMetricLabel}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              {current.previewRows.map((row) => {
+                const badgeClass =
+                  row.tone === 'ok'
+                    ? 'bg-emerald-500/[0.12] text-emerald-800 dark:text-emerald-300 border-emerald-500/25'
+                    : row.tone === 'warn'
+                      ? 'bg-amber-500/[0.12] text-amber-800 dark:text-amber-300 border-amber-500/25'
+                      : 'bg-sky-500/[0.12] text-sky-800 dark:text-sky-300 border-sky-500/25';
+                return (
+                  <div
+                    key={row.label}
+                    style={{
+                      backgroundColor: 'var(--solva-surface)',
+                      borderColor: 'var(--solva-border)',
+                    }}
+                    className="rounded-[10px] border px-3.5 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                  >
+                    <span
+                      style={{ color: 'var(--solva-ink)' }}
+                      className="font-solva-sans text-[13.5px] leading-[19.5px]"
+                    >
+                      {row.label}
+                    </span>
+                    <span
+                      className={`self-start sm:self-auto px-2 py-0.5 rounded-[6px] border font-mono text-[10.5px] font-semibold whitespace-nowrap shrink-0 ${badgeClass}`}
+                    >
+                      {row.badge}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SolvaRoleTestimonialsSection({
+  lang,
+  activeRole,
+  onSelectRole,
+  isAuthenticated,
+}: {
+  lang: Lang;
+  activeRole: WorkspaceRole;
+  onSelectRole: (role: WorkspaceRole) => void;
+  isAuthenticated: boolean;
+}) {
   const columns = [
     // Column 1 (padding-top: 0px)
     [
       {
-        roleBadge: lang === 'vi' ? 'KHÔNG GIAN SINH VIÊN' : 'STUDENT WORKSPACE',
+        roleBadge: lang === 'vi' ? 'SINH VIÊN & HỌC VIÊN' : 'STUDENT WORKSPACE',
         quote:
           lang === 'vi'
-            ? '“Trước ngày nộp quyển khóa luận, mình đưa bản PDF lên CITRA rà soát lần cuối và phát hiện 3 tài liệu bị ghi nhầm năm của bản nháp arXiv thay vì năm công bố chính thức trên IEEE Xplore.”'
-            : '“Before submitting my thesis, I ran my PDF through CITRA and caught three arXiv-to-conference year mismatches in under two minutes.”',
+            ? '“Trước ngày nộp quyển khóa luận, mình đưa bản PDF lên CITRA rà soát lần cuối và phát hiện 3 tài liệu bị ghi nhầm năm bản nháp thay vì năm xuất bản chính thức trên tạp chí.”'
+            : '“Before submitting my thesis, I ran my PDF through CITRA and caught three draft-to-journal year mismatches in under two minutes.”',
         author: lang === 'vi' ? 'Minh Quân' : 'Marcus Chen',
         role:
           lang === 'vi'
-            ? 'Học viên Cao học Khoa học Máy tính · Khóa luận Tốt nghiệp'
-            : 'M.Sc. Computer Science Candidate',
+            ? 'Học viên Cao học · Tác giả Luận văn Tốt nghiệp'
+            : 'Graduate Thesis Author',
       },
       {
-        roleBadge: lang === 'vi' ? 'SINH VIÊN · LIVE SANDBOX' : 'STUDENT · LIVE SANDBOX',
+        roleBadge: lang === 'vi' ? 'KIỂM TRA NHANH KHI ĐANG VIẾT' : 'QUICK REFERENCE CHECK',
         quote:
           lang === 'vi'
-            ? '“Tiện lợi nhất là chế độ Live Sandbox: chỉ cần dán nhanh một đoạn tổng quan tài liệu kèm danh mục tham khảo là kiểm chứng được ngay, không phải chờ biên dịch lại toàn bộ dự án LaTeX.”'
-            : '“The Live Sandbox lets me paste a single literature review section and verify every reference on the spot without compiling my full LaTeX PDF.”',
+            ? '“Tiện lợi nhất là chế độ dán văn bản nhanh: chỉ cần chép một đoạn tổng quan tài liệu kèm danh mục tham khảo vào là kiểm chứng được ngay khi đang viết chương 2.”'
+            : '“Being able to paste a single literature review section and check its references on the spot saves hours while drafting early chapters.”',
         author: lang === 'vi' ? 'Thanh Thảo' : 'Sophia Nguyen',
         role:
           lang === 'vi'
-            ? 'Nghiên cứu sinh Tin Sinh học'
-            : 'Biomedical Informatics Researcher',
+            ? 'Nghiên cứu sinh Kinh tế & Chính sách công'
+            : 'Economics & Public Policy Researcher',
       },
       {
         roleBadge: lang === 'vi' ? 'THEO DÕI TIẾN ĐỘ SỬA BÀI' : 'REVISION TRACKER',
         quote:
           lang === 'vi'
-            ? '“Biểu đồ theo dõi qua từng phiên bản chỉnh sửa giúp mình minh chứng trực quan với thầy hướng dẫn rằng Điểm Toàn vẹn Trích dẫn (CIS) của bản thảo đã tăng từ 71% ở bản nháp đầu lên 98% ở bản nộp cuối.”'
-            : '“The Revision Progress Tracker showed my advisor how my Citation Integrity Score improved from 71% in Draft 1 to 98% in my final submission.”',
+            ? '“Biểu đồ theo dõi qua từng lần sửa bài giúp mình trình bày rõ ràng với cô hướng dẫn rằng Điểm Toàn vẹn Trích dẫn đã tăng từ 71% ở bản nháp đầu lên 98% ở bản nộp cuối.”'
+            : '“The revision progress view showed my advisor how my Citation Integrity Score improved from 71% in Draft 1 to 98% in my final submission.”',
         author: lang === 'vi' ? 'Hoàng Nam' : 'David Alverez',
         role:
           lang === 'vi'
-            ? 'Sinh viên Chương trình Cử nhân Tài năng'
+            ? 'Sinh viên năm cuối · Khóa luận Tốt nghiệp'
             : 'Undergraduate Honors Thesis Author',
       },
     ],
@@ -4106,8 +5182,8 @@ function SolvaRoleTestimonialsSection({ lang }: { lang: Lang }) {
         roleBadge: lang === 'vi' ? 'KHÔNG GIAN GIẢNG VIÊN' : 'TEACHER CLASSROOM',
         quote:
           lang === 'vi'
-            ? '“Thay vì phải tự tay sao chép từng tiêu đề vào Google Scholar cho cả lớp 40 sinh viên làm đồ án, giờ đây tôi có ngay bức tranh tổng thể về các trích dẫn đáng ngờ trên một bảng điều khiển duy nhất.”'
-            : '“Instead of manually copying titles into Google Scholar across 40 student submissions, I see cohort-wide hallucination alerts in one dashboard.”',
+            ? '“Thay vì phải tự tay gõ từng tiêu đề vào công cụ tìm kiếm cho cả lớp 40 sinh viên làm tiểu luận, giờ đây tôi nắm ngay các nguồn trích dẫn cần xem lại trên một bảng tổng hợp duy nhất.”'
+            : '“Instead of manually searching titles across 40 student essays, I can review every unverified citation across my entire class in one calm dashboard.”',
         author: lang === 'vi' ? 'PGS.TS. Trần Hải' : 'Prof. Arthur Pendelton',
         role:
           lang === 'vi'
@@ -4115,62 +5191,62 @@ function SolvaRoleTestimonialsSection({ lang }: { lang: Lang }) {
             : 'Thesis Advisor & Faculty Reviewer',
       },
       {
-        roleBadge: lang === 'vi' ? 'GIẢNG VIÊN · ĐIỀU CHỈNH NHÃN' : 'INSTRUCTOR OVERRIDE',
+        roleBadge: lang === 'vi' ? 'GIẢNG VIÊN · DUYỆT MỘT CHẠM' : 'ADVISOR SIGN-OFF',
         quote:
           lang === 'vi'
-            ? '“Khi sinh viên trích dẫn các ấn phẩm chuyên khảo in trong nước chưa có mã DOI quốc tế, tôi có thể chủ động xác nhận hợp lệ (Override) chỉ bằng một cú nhấp kèm ghi chú chuyên môn cho hội đồng.”'
-            : '“When a student cites a print-only regional monograph, I can override the UNVERIFIABLE status with one click and attach my review note.”',
+            ? '“Khi sinh viên trích dẫn giáo trình hoặc sách chuyên khảo in trong nước chưa có mã DOI quốc tế, tôi có thể xác nhận hợp lệ chỉ bằng một cú nhấp kèm ghi chú hướng dẫn.”'
+            : '“When a student cites a printed domestic textbook or monograph, I can approve it with one click and attach my advisor note for the committee.”',
         author: lang === 'vi' ? 'TS. Lê Thu Hà' : 'Dr. Hannah Lindqvist',
         role:
           lang === 'vi'
             ? 'Chủ tịch Hội đồng Chấm Khóa luận Tốt nghiệp'
-            : 'Senior Lecturer in Computational Linguistics',
+            : 'Senior Lecturer in Humanities & Social Sciences',
       },
       {
-        roleBadge: lang === 'vi' ? 'ĐỐI SÁNH NGỮ NGHĨA ĐA NGÔN NGỮ' : 'SEMANTIC ALIGNMENT',
+        roleBadge: lang === 'vi' ? 'ĐỐI CHIẾU NỘI DUNG BÀI GỐC' : 'ABSTRACT ALIGNMENT',
         quote:
           lang === 'vi'
-            ? '“Điểm đắt giá nhất đối với người làm phản biện là mô-đun Sentence-BERT & Multilingual MiniLM ONNX INT8: hệ thống chỉ ra ngay những vị trí bài báo được trích dẫn có thật nhưng nội dung tóm tắt gốc lại lệch hẳn nhận định của người viết.”'
-            : '“Sentence-BERT + Multilingual MiniLM ONNX INT8 alignment is a game changer — it flags cases where a real paper is cited, yet its abstract diverges from the student’s claim.”',
+            ? '“Tính năng đối chiếu nội dung thực sự hữu ích khi đọc phản biện: hệ thống chỉ ra ngay những chỗ bài báo được trích dẫn có thật nhưng tóm tắt bài gốc lại khác với nhận định của người viết.”'
+            : '“Abstract content matching is invaluable for peer review — it highlights cases where a real paper is cited, yet its abstract says something different from the student’s claim.”',
         author: lang === 'vi' ? 'TS. Nguyễn Hoàng' : 'Dr. Liam O’Connor',
         role:
           lang === 'vi'
-            ? 'Chuyên gia Phương pháp luận & Phản biện Tạp chí'
-            : 'Peer Review Methodologist',
+            ? 'Giảng viên Phương pháp Nghiên cứu Khoa học'
+            : 'Research Methodology Lecturer',
       },
     ],
     // Column 3 (padding-top: 0px)
     [
       {
-        roleBadge: lang === 'vi' ? 'TRUNG TÂM QUẢN TRỊ' : 'ADMIN CONTROL',
+        roleBadge: lang === 'vi' ? 'QUẢN TRỊ KHOA & BỘ MÔN' : 'DEPARTMENT GOVERNANCE',
         quote:
           lang === 'vi'
-            ? '“Phân hệ Quản trị mang lại tầm nhìn thời gian thực về sức khỏe cụm máy chủ GROBID, tỷ lệ trúng bộ nhớ đệm SQLite FTS5, độ trễ của 15 API học thuật và nhật ký kiểm toán bất biến.”'
-            : '“The Admin Control plane gives us live health diagnostics for our GROBID container, SQLite FTS5 cache hit rates, and an immutable audit trail.”',
-        author: lang === 'vi' ? 'Đội ngũ Kỹ thuật CITRA' : 'Victor K.',
+            ? '“Bảng quản trị cấp Khoa giúp chúng tôi theo dõi trực quan hạn mức kiểm tra của từng đợt nộp khóa luận, kết nối 15+ thư viện học thuật và lưu lịch sử duyệt bài minh bạch.”'
+            : '“The department dashboard gives our faculty clear visibility into cohort verification quotas, library coverage, and a complete advisor review history.”',
+        author: lang === 'vi' ? 'Văn phòng Quản lý Khoa học' : 'Victor K.',
         role:
           lang === 'vi'
-            ? 'Quản trị Hạ tầng Công nghệ Học thuật'
-            : 'Academic Infrastructure Administrator',
+            ? 'Quản trị Học thuật & Đảm bảo Chất lượng'
+            : 'Academic Quality & Governance Lead',
       },
       {
-        roleBadge: lang === 'vi' ? 'TRUY HỒI LIÊN HỢP 15+ NGUỒN' : 'FEDERATED RETRIEVAL',
+        roleBadge: lang === 'vi' ? 'BAO PHỦ 15+ THƯ VIỆN' : '15+ ACADEMIC LIBRARIES',
         quote:
           lang === 'vi'
-            ? '“Sự kết hợp nhịp nhàng giữa Crossref, OpenAlex, PubMed, arXiv và DBLP giúp độ bao phủ thư mục trải rộng liền mạch từ khối ngành Kỹ thuật – Máy tính cho tới Y Sinh học.”'
-            : '“Combining Crossref, OpenAlex, PubMed, arXiv, and DBLP gives us seamless bibliographic coverage across both STEM and biomedical faculties.”',
+            ? '“Việc kết hợp Crossref, OpenAlex, DOAJ, PubMed và OpenLibrary giúp bao phủ đồng đều tài liệu từ khối ngành Kinh tế, Luật, Nhân văn cho tới Kỹ thuật và Y sinh.”'
+            : '“Combining Crossref, OpenAlex, DOAJ, PubMed, and OpenLibrary gives us broad coverage across Economics, Law, Humanities, Biomedical, and STEM faculties.”',
         author: lang === 'vi' ? 'ThS. Phạm Khôi' : 'Dr. Priya Nair',
         role:
           lang === 'vi'
-            ? 'Trưởng bộ phận Hệ thống Thư viện Số'
-            : 'Digital Library Systems Lead',
+            ? 'Trưởng bộ phận Thư viện Đại học'
+            : 'University Library Systems Lead',
       },
       {
-        roleBadge: lang === 'vi' ? 'MÔ HÌNH 2 TẦNG TRỰC GIAO' : 'ORTHOGONAL MODEL',
+        roleBadge: lang === 'vi' ? 'PHẢN HỒI MANG TÍNH XÂY DỰNG' : 'CONSTRUCTIVE FEEDBACK',
         quote:
           lang === 'vi'
-            ? '“Nhờ tách bạch Tầng 1 (Quy cách dẫn nguồn nội bộ) và Tầng 2 (Sự tồn tại học thuật bên ngoài), phản hồi gửi tới sinh viên mang tính hướng dẫn xây dựng rõ ràng thay vì quy chụp nặng nề.”'
-            : '“Separating Layer 1 formatting consistency from Layer 2 bibliographic existence makes feedback constructive rather than punitive.”',
+            ? '“Nhờ tách rõ lỗi quên ghi nguồn cuối bài với lỗi nguồn không tồn tại, phản hồi gửi tới sinh viên rất dễ hiểu, mang tính hướng dẫn thay vì gây áp lực nặng nề.”'
+            : '“Separating simple formatting slips from unverified sources makes feedback constructive and reassuring for students rather than punitive.”',
         author: lang === 'vi' ? 'TS. Vũ Đăng' : 'Prof. Claire Beaumont',
         role:
           lang === 'vi'
@@ -4185,7 +5261,10 @@ function SolvaRoleTestimonialsSection({ lang }: { lang: Lang }) {
       id="workspaces"
       className="scroll-mt-[84px] lg:scroll-mt-[108px] py-[32px] sm:py-[48px] lg:py-[96px] px-5 sm:px-6 lg:px-[40px]"
     >
-      <div className="max-w-[1200px] mx-auto flex flex-col gap-[28px] sm:gap-[36px] lg:gap-[64px]">
+      <div id="workspaces-student" className="scroll-mt-[88px]" aria-hidden="true" />
+      <div id="workspaces-teacher" className="scroll-mt-[88px]" aria-hidden="true" />
+      <div id="workspaces-admin" className="scroll-mt-[88px]" aria-hidden="true" />
+      <div className="max-w-[1200px] mx-auto flex flex-col gap-[28px] sm:gap-[36px] lg:gap-[56px]">
         {/* Headline */}
         <div className="flex flex-col items-start gap-[12px] max-w-[540px]">
           <SolvaEyebrow>
@@ -4204,6 +5283,14 @@ function SolvaRoleTestimonialsSection({ lang }: { lang: Lang }) {
             }
           />
         </div>
+
+        {/* Interactive 3-Role Academic Workspace Showcase */}
+        <SolvaRoleWorkspacesShowcase
+          lang={lang}
+          activeRole={activeRole}
+          onSelectRole={onSelectRole}
+          isAuthenticated={isAuthenticated}
+        />
 
         {/* 3-Column Staggered Masonry Grid (`gap: 12px`, Middle Column `lg:pt-[48px]`) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-[12px] items-start">
@@ -4287,34 +5374,34 @@ function SolvaFAQSection({ lang }: { lang: Lang }) {
       id: 'faq-0',
       q:
         lang === 'vi'
-          ? 'CITRA khác biệt như thế nào so với các phần mềm kiểm tra trùng lặp văn bản truyền thống (như Turnitin)?'
-          : 'How is CITRA different from traditional plagiarism checkers like Turnitin?',
+          ? 'CITRA khác gì so với các phần mềm kiểm tra đạo văn như Turnitin?'
+          : 'How is CITRA different from plagiarism checkers like Turnitin?',
       a:
         lang === 'vi'
-          ? 'Các phần mềm đạo văn truyền thống chỉ dừng ở việc so khớp tỷ lệ trùng lặp câu chữ bề mặt. Ngược lại, CITRA đi sâu thẩm định tính chân thực của từng tài liệu tham khảo: phân giải định danh DOI, đối chiếu chéo trên hơn 15 cơ sở dữ liệu khoa học quốc tế để phát hiện các trích dẫn nghi vấn do AI sinh ra (Hallucinated Citations), đồng thời sử dụng mô hình Sentence-BERT & Multilingual MiniLM ONNX INT8 để kiểm chứng mức độ tương thích ngữ nghĩa giữa tóm tắt bài báo gốc và nhận định trong bài viết.'
-          : 'Traditional tools only check text overlap. CITRA verifies bibliographic truth: resolving DOIs, cross-checking 15+ scholarly indexes to flag AI-hallucinated references, and running Sentence-BERT + Multilingual MiniLM ONNX INT8 to verify semantic alignment between cited abstracts and in-text claims.',
+          ? 'Các phần mềm đạo văn truyền thống chỉ kiểm tra tỷ lệ trùng lặp câu chữ. CITRA giải quyết một bài toán hoàn toàn khác: kiểm tra xem từng tài liệu tham khảo bạn trích dẫn có thực sự tồn tại trên hơn 15 thư viện học thuật hay không, thông tin tác giả – năm xuất bản – mã DOI có chính xác không, và tóm tắt bài gốc có phù hợp với ý bạn viết hay không.'
+          : 'Plagiarism checkers only look for copied sentences. CITRA checks whether the references in your paper actually exist across 15+ academic libraries, whether author names, years, and DOIs are accurate, and whether each cited paper’s abstract supports your point.',
     },
     {
       id: 'faq-1',
       q:
         lang === 'vi'
-          ? 'Mô hình 2 tầng trực giao (Two-Layer Orthogonal Model) vận hành ra sao?'
-          : 'How does the Two-Layer Orthogonal Output Model work?',
+          ? 'CITRA phân biệt lỗi trình bày danh mục với nguồn trích dẫn không tồn tại như thế nào?'
+          : 'How does CITRA separate formatting slips from fake or missing sources?',
       a:
         lang === 'vi'
-          ? 'CITRA tách biệt hai chiều thẩm định hoàn toàn độc lập trong hệ phân loại 13 trạng thái: Tầng 1 kiểm tra tính nhất quán nội bộ giữa ký hiệu trích dẫn trong bài và danh mục tài liệu cuối bài (với 8 trạng thái như MATCHED, MISSING_REFERENCE, UNCITED_REFERENCE). Tầng 2 độc lập xác minh sự tồn tại thực tế của công trình trên các cơ sở dữ liệu học thuật toàn cầu (với 5 nhãn xác thực như VERIFIED, METADATA_ERROR, SUSPECTED_HALLUCINATION, UNRESOLVED, RESOURCE).'
-          : 'Layer 1 audits internal manuscript consistency between in-text markers and the bibliography (8 mapping states including MATCHED, MISSING_REFERENCE, UNCITED_REFERENCE). Layer 2 independently audits external bibliographic existence across 15+ APIs (5 validation labels: VERIFIED, METADATA_ERROR, SUSPECTED_HALLUCINATION, UNRESOLVED, RESOURCE) — forming a 13-state Two-Layer Orthogonal Taxonomy.',
+          ? 'CITRA kiểm tra tách biệt hai bước rõ ràng: Bước 1 đối chiếu nội bộ xem mọi trích dẫn trong bài đã có mặt ở Danh mục tham khảo cuối bài chưa (và ngược lại). Bước 2 tra cứu trên các thư viện học thuật để xác nhận tài liệu có thật, chỉ rõ chi tiết lệch năm/tên tạp chí, hoặc cảnh báo các nguồn không tìm thấy.'
+          : 'CITRA runs two independent checks: first, it checks your manuscript internally to ensure every in-text citation links to an entry in your reference list; second, it looks up each work across 15+ libraries to separate minor year/venue typos from non-existent sources.',
     },
     {
       id: 'faq-2',
       q:
         lang === 'vi'
-          ? 'Hệ thống hỗ trợ những quy chuẩn định dạng trích dẫn học thuật nào?'
-          : 'Which academic citation styles does CITRA support?',
+          ? 'Hệ thống hỗ trợ những định dạng tệp và chuẩn trích dẫn nào?'
+          : 'Which file formats and citation styles does CITRA support?',
       a:
         lang === 'vi'
-          ? 'Nhờ kết hợp mô hình học sâu GROBID TEI-XML cùng bộ kiểm định chéo đa quy chuẩn (Multi-Style Cross-Validator), CITRA xử lý chính xác cả nhóm định dạng đánh số như IEEE ([1], [2]–[5]), Vancouver, ACM lẫn nhóm định dạng Tác giả – Năm như APA 7th, Harvard, Chicago và MLA.'
-          : 'Through GROBID TEI-XML paired with our multi-style cross-validator, CITRA supports numbered styles (IEEE [1]–[5], Vancouver, ACM) as well as author-year formats (APA 7th, Harvard, Chicago, MLA).',
+          ? 'Bạn có thể tải lên tệp PDF, Word (.docx), BibTeX (.bib), RIS (.ris) hoặc dán trực tiếp đoạn văn bản. Hệ thống đọc chính xác cả nhóm chuẩn đánh số như IEEE ([1]–[5]), Vancouver, ACM lẫn nhóm chuẩn Tác giả – Năm như APA 7th, Harvard, Chicago, MLA và quy định khóa luận tại Việt Nam.'
+          : 'You can upload PDF, Word (.docx), BibTeX (.bib), or RIS (.ris) files, or paste references directly. CITRA supports numbered styles (IEEE [1]–[5], Vancouver, ACM) as well as author-year formats (APA 7th, Harvard, Chicago, MLA).',
     },
   ];
 
@@ -4323,34 +5410,34 @@ function SolvaFAQSection({ lang }: { lang: Lang }) {
       id: 'faq-3',
       q:
         lang === 'vi'
-          ? 'CITRA có tự động đánh trượt hay quy kết sinh viên vi phạm liêm chính học thuật không?'
+          ? 'CITRA có tự động đánh trượt hay kết luận sinh viên vi phạm học thuật không?'
           : 'Does CITRA automatically accuse students of academic misconduct?',
       a:
         lang === 'vi'
-          ? `Tuyệt đối không. CITRA được thiết kế nhất quán theo triết lý Hệ thống Hỗ trợ Ra Quyết định (Decision-Support System). Hệ thống cung cấp bằng chứng đối chiếu thư mục khách quan cùng vết suy diễn hình thức ${SYMBOLIC_RULES_RANGE} để giảng viên và hội đồng xem xét; quyền phán quyết cuối cùng luôn thuộc về con người.`
-          : `Never. CITRA is strictly a Decision-Support System. It surfaces verifiable bibliographic evidence and formal ${SYMBOLIC_RULES_RANGE} rule traces for human reviewers. Instructors can override any verdict with an audited rationale.`,
+          ? 'Tuyệt đối không. CITRA là công cụ hỗ trợ rà soát và cung cấp bằng chứng thư viện minh bạch để người viết kịp thời chỉnh sửa sai sót trước khi nộp bài; quyền đánh giá và kết luận cuối cùng luôn thuộc về giảng viên và hội đồng chuyên môn.'
+          : 'Never. CITRA is strictly an academic decision-support assistant. It provides verifiable library records and clear fix suggestions so authors can correct slips early, while instructors always retain final judgment.',
     },
     {
       id: 'faq-4',
       q:
         lang === 'vi'
-          ? 'Hệ thống xử lý thế nào khi tài liệu tham khảo là sách chuyên khảo in trong nước hoặc ấn phẩm chưa có mã DOI?'
-          : 'What happens when a citation refers to an offline book or regional paper without a DOI?',
+          ? 'Điều gì xảy ra khi tôi trích dẫn giáo trình in trong nước hoặc luận văn chưa có mã DOI?'
+          : 'What happens when I cite a printed textbook or regional thesis without a DOI?',
       a:
         lang === 'vi'
-          ? 'Thay vì kết luận oan là trích dẫn ngụy tạo, hệ quy tắc suy diễn của CITRA sẽ chủ động khoanh vùng tài liệu đó vào trạng thái UNVERIFIABLE / UNRESOLVED (Cần thẩm định thủ công), giúp giảng viên hướng dẫn dễ dàng rà soát và xác nhận hợp lệ chỉ với một thao tác.'
-          : 'Rather than falsely flagging it as hallucinated, CITRA’s symbolic rule engine classifies offline or non-indexed works as UNVERIFIABLE, queuing them cleanly for instructor review.',
+          ? 'Thay vì gắn cờ nhầm là nguồn bịa đặt, CITRA lịch sự phân loại các ấn phẩm in hoặc tài liệu nội bộ chưa có trên mạng vào nhóm “Cần kiểm tra thủ công”, giúp bạn và giảng viên hướng dẫn dễ dàng đối chiếu và xác nhận hợp lệ chỉ bằng một cú nhấp.'
+          : 'Rather than wrongly calling it fake, CITRA marks offline books or unindexed regional works as “Needs Manual Check,” allowing you or your advisor to review and approve them in one click.',
     },
     {
       id: 'faq-5',
       q:
         lang === 'vi'
-          ? 'Cần bao nhiêu thời gian để thẩm định hoàn chỉnh một quyển khóa luận hoặc bài báo PDF?'
-          : 'How long does it take to verify a full PDF manuscript?',
+          ? 'Mất bao lâu để kiểm tra xong một quyển khóa luận hoặc bài báo hoàn chỉnh?'
+          : 'How long does it take to check a full thesis or journal paper?',
       a:
         lang === 'vi'
-          ? 'Nhờ kiến trúc truy vấn bất đồng bộ song song trên hơn 15 API quốc tế kết hợp chỉ mục đệm cục bộ SQLite FTS5, một bản thảo tiêu chuẩn gồm 25–40 tài liệu tham khảo thường hoàn tất trọn vẹn cả 4 giai đoạn thẩm định chỉ trong vòng 10 đến 25 giây.'
-          : 'With async parallel querying across 15+ APIs and local SQLite FTS5 caching, a standard manuscript with 25–40 references completes all four verification stages in 10 to 25 seconds.',
+          ? 'Nhờ tra cứu song song cùng lúc trên hơn 15 thư viện học thuật, một bài tiểu luận hoặc khóa luận tiêu chuẩn gồm 25–40 tài liệu tham khảo thường hoàn tất toàn bộ quá trình kiểm tra chỉ trong 10 đến 25 giây.'
+          : 'By checking 15+ academic libraries in parallel, a typical paper or thesis with 25–40 references finishes all four verification steps in just 10 to 25 seconds.',
     },
   ];
 
@@ -4385,14 +5472,14 @@ function SolvaFAQSection({ lang }: { lang: Lang }) {
                   className="relative w-[20px] h-[25px] flex items-center justify-center shrink-0"
                 >
                   <Plus
-                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
                       isOpen
                         ? 'rotate-90 opacity-0 scale-75'
                         : 'rotate-0 opacity-100 scale-100'
                     }`}
                   />
                   <Minus
-                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-[250ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
                       isOpen
                         ? 'rotate-0 opacity-100 scale-100'
                         : '-rotate-90 opacity-0 scale-75'
@@ -4508,14 +5595,14 @@ function SolvaBottomCTASection({
                   className="font-solva-sans text-[16px] font-normal leading-[23.2px] max-w-[420px]"
                 >
                   {lang === 'vi'
-                    ? 'Tải lên bản thảo (.PDF, .DOCX, .BIB, .RIS) hoặc dán danh mục tài liệu tham khảo vào Live Sandbox. Nhận ngay báo cáo thẩm định 2 tầng trực giao kèm chuỗi lập luận Neuro-Symbolic chỉ sau vài giây.'
-                    : 'Upload your manuscript (.PDF, .DOCX, .BIB, .RIS) or paste references into the Live Sandbox. Get a complete two-layer verification report in seconds.'}
+                    ? 'Tải lên khóa luận hoặc bài báo (.PDF, .DOCX, .BIB, .RIS) và nhận báo cáo kiểm chứng trích dẫn rõ ràng, dễ hiểu chỉ sau vài giây — tự tin trọn vẹn trước giờ nộp bài.'
+                    : 'Upload your thesis or paper (.PDF, .DOCX, .BIB, .RIS) and receive a clear, actionable citation verification report in seconds — before you submit.'}
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
                 <SolvaButton
-                  to={isAuthenticated ? '/upload' : '/login'}
+                  to={isAuthenticated ? '/upload' : '/register'}
                   variant="primary"
                 >
                   {isAuthenticated
@@ -4538,7 +5625,7 @@ function SolvaBottomCTASection({
                 paintingSrc="/solva/hero-bg.webp"
                 alt="Impressionist floral painting backdrop"
                 radiusClass="rounded-[12px]"
-                className="w-full min-h-[320px] sm:h-[376px] p-6 sm:p-8 flex items-center justify-center"
+                className="w-full min-h-[320px] sm:min-h-[376px] h-full p-6 sm:p-8 flex items-center justify-center"
               >
                 <div className="w-full max-w-[480px]">
                   <BottomCTAMockup lang={lang} />
@@ -4555,34 +5642,60 @@ function SolvaBottomCTASection({
 /* ============================================================
    SECTION 12: FOOTER (Full-Bleed `#F4F2EC`, 4 Menu Columns)
    ============================================================ */
-function SolvaFooter({ lang }: { lang: Lang }) {
-  const columns = [
+function SolvaFooter({
+  lang,
+  onSelectWorkspaceRole,
+}: {
+  lang: Lang;
+  onSelectWorkspaceRole: (role: WorkspaceRole) => void;
+}) {
+  const columns: Array<{
+    header: string;
+    links: Array<{
+      label: string;
+      href?: string;
+      to?: string;
+      role?: WorkspaceRole;
+    }>;
+  }> = [
     {
       header: lang === 'vi' ? 'Nền tảng' : 'Product',
       links: [
-        { label: lang === 'vi' ? 'Thực nghiệm 120K bài báo' : '120K-Paper Benchmark', href: '#benchmark-120k' },
-        { label: lang === 'vi' ? 'Kiểm nghiệm trích dẫn' : 'Citation Debugger', href: '#interactive-demo' },
-        { label: lang === 'vi' ? 'Kiến trúc 2 tầng (L1 × L2)' : '2-Layer Architecture', href: '#architecture' },
-        { label: lang === 'vi' ? 'Quy trình 4 giai đoạn' : 'Verification Pipeline', href: '#how-it-works' },
-        { label: lang === 'vi' ? 'Gói dịch vụ & Quyền lợi' : 'Pricing & Benefits', href: '#taxonomy' },
+        { label: lang === 'vi' ? 'Cách hoạt động' : 'How It Works', href: '#how-it-works' },
+        { label: lang === 'vi' ? 'Kiểm tra thử trích dẫn' : 'Live Citation Check', href: '#interactive-demo' },
+        { label: lang === 'vi' ? 'Kiểm tra 2 bước rõ ràng' : 'Two-Step Citation Check', href: '#architecture' },
+        { label: lang === 'vi' ? 'Độ tin cậy (120.000 bài)' : 'Proven Accuracy (120K)', href: '#benchmark-120k' },
+        { label: lang === 'vi' ? 'Gói dịch vụ & Quyền lợi' : 'Pricing & Plans', href: '#pricing-plans' },
       ],
     },
     {
       header: lang === 'vi' ? 'Không gian học thuật' : 'Workspaces',
       links: [
-        { label: lang === 'vi' ? 'Dành cho Sinh viên & Tác giả' : 'Student Workspace', href: '#workspaces' },
-        { label: lang === 'vi' ? 'Dành cho Giảng viên & Hội đồng' : 'Teacher Classroom', href: '#workspaces' },
-        { label: lang === 'vi' ? 'Trung tâm Quản trị' : 'Admin Control', href: '#workspaces' },
+        {
+          label: lang === 'vi' ? 'Dành cho Sinh viên & Tác giả' : 'Student Workspace',
+          href: '#workspaces-student',
+          role: 'student',
+        },
+        {
+          label: lang === 'vi' ? 'Dành cho Giảng viên & Hội đồng' : 'Teacher Classroom',
+          href: '#workspaces-teacher',
+          role: 'teacher',
+        },
+        {
+          label: lang === 'vi' ? 'Trung tâm Quản trị' : 'Admin Control',
+          href: '#workspaces-admin',
+          role: 'admin',
+        },
         { label: lang === 'vi' ? 'Bảng giá chi tiết' : 'Pricing Plans', to: '/pricing' },
       ],
     },
     {
-      header: lang === 'vi' ? 'Công nghệ cốt lõi' : 'Technology',
+      header: lang === 'vi' ? 'Điểm nổi bật' : 'Capabilities',
       links: [
-        { label: 'GROBID TEI-XML', href: '#how-it-works' },
-        { label: lang === 'vi' ? 'Liên hợp 15+ API Khoa học' : '15+ Scholarly APIs', href: '#architecture' },
-        { label: lang === 'vi' ? 'Hệ quy tắc Neuro-Symbolic' : 'Neuro-Symbolic Rules', href: '#interactive-demo' },
-        { label: lang === 'vi' ? 'Ngữ nghĩa Sentence-BERT + MiniLM ONNX' : 'Sentence-BERT + MiniLM ONNX INT8', href: '#how-it-works' },
+        { label: lang === 'vi' ? 'Đọc chuẩn APA, IEEE, Harvard' : 'APA, IEEE & Harvard Reader', href: '#how-it-works' },
+        { label: lang === 'vi' ? 'Tra cứu 15+ thư viện học thuật' : '15+ Academic Libraries', href: '#architecture' },
+        { label: lang === 'vi' ? 'Đối chiếu chi tiết từng trường' : 'Side-by-Side Detail Checks', href: '#interactive-demo' },
+        { label: lang === 'vi' ? 'Đối chiếu nội dung Việt ↔ Anh' : 'Bilingual Abstract Matching', href: '#how-it-works' },
       ],
     },
     {
@@ -4597,6 +5710,10 @@ function SolvaFooter({ lang }: { lang: Lang }) {
               ? 'Chính sách bảo vệ dữ liệu'
               : 'Personal Data Policy',
           to: '/privacy',
+        },
+        {
+          label: lang === 'vi' ? 'Điều khoản dịch vụ' : 'Terms of Service',
+          to: '/terms',
         },
       ],
     },
@@ -4613,7 +5730,7 @@ function SolvaFooter({ lang }: { lang: Lang }) {
           {/* Left Brand Info */}
           <div className="w-full lg:w-[389px] flex flex-col items-start gap-[16px]">
             <Link to="/" className="inline-flex items-center gap-[10px]">
-              <span className="w-[32px] h-[32px] rounded-[8px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+              <span className="w-[32px] h-[32px] rounded-[8px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
                 <SourceLogicLogo size={20} />
               </span>
               <span
@@ -4629,8 +5746,8 @@ function SolvaFooter({ lang }: { lang: Lang }) {
               className="font-solva-sans text-[16px] font-normal leading-[23.2px] max-w-[310px]"
             >
               {lang === 'vi'
-                ? 'Nền tảng thẩm định nguồn trích dẫn học thuật đa nguồn, vận hành trên kiến trúc Neuro-Symbolic hai tầng trực giao.'
-                : 'Academic source verification workspace powered by a two-layer Neuro-Symbolic and 15+ API engine.'}
+                ? 'Không gian kiểm chứng trích dẫn học thuật giúp sinh viên, nhà nghiên cứu và giảng viên tự tin với mọi danh mục tài liệu tham khảo.'
+                : 'Academic citation verification workspace helping students, researchers, and faculty submit every paper with verified references.'}
             </p>
           </div>
 
@@ -4658,6 +5775,29 @@ function SolvaFooter({ lang }: { lang: Lang }) {
                       ) : (
                         <a
                           href={lnk.href}
+                          onClick={
+                            lnk.role
+                              ? (e) => {
+                                  if (
+                                    e.metaKey ||
+                                    e.ctrlKey ||
+                                    e.shiftKey ||
+                                    e.altKey ||
+                                    e.button !== 0
+                                  ) {
+                                    return;
+                                  }
+                                  e.preventDefault();
+                                  if (lnk.href) {
+                                    window.history.replaceState(null, '', lnk.href);
+                                    notifyAnchorHashJump(
+                                      lnk.href.startsWith('#') ? lnk.href : window.location.hash,
+                                    );
+                                  }
+                                  onSelectWorkspaceRole(lnk.role!);
+                                }
+                              : undefined
+                          }
                           style={{ color: 'var(--solva-muted)' }}
                           className="font-solva-sans text-[16px] font-normal leading-[23.2px] hover:opacity-75 transition-opacity"
                         >
@@ -4679,8 +5819,8 @@ function SolvaFooter({ lang }: { lang: Lang }) {
         >
           <p style={{ color: 'var(--solva-muted)' }}>
             {lang === 'vi'
-              ? '© 2026 CITRA · Không gian Thẩm định Liêm chính Học thuật SourceLogic. Bảo lưu mọi quyền.'
-              : '© 2026 CITRA · SourceLogic Academic Integrity Workspace. All rights reserved.'}
+              ? '© 2026 CITRA — Không gian Kiểm chứng Trích dẫn Học thuật. Bảo lưu mọi quyền.'
+              : '© 2026 CITRA — Academic Citation Integrity Workspace. All rights reserved.'}
           </p>
           <p style={{ color: 'var(--solva-muted)' }}>
             {lang === 'vi'

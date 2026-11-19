@@ -165,6 +165,7 @@
 
   html {
     scroll-behavior: smooth;
+    scroll-padding-top: 88px;
     overflow-x: clip;
   }
 
@@ -291,7 +292,7 @@
   }
 
   .verdict-badge-metadata-error {
-    @apply bg-amber-50 text-amber-700 border border-amber-200;
+    @apply bg-amber-50 text-amber-800 border border-amber-200;
   }
   .dark .verdict-badge-metadata-error {
     @apply bg-amber-950 text-amber-300 border-amber-800;
@@ -311,10 +312,12 @@
     @apply bg-red-950 text-red-300 border-red-800;
   }
 
-  .verdict-badge-unverifiable {
-    @apply bg-slate-100 text-slate-600 border border-slate-200;
+  .verdict-badge-unverifiable,
+  .verdict-badge-unresolved {
+    @apply bg-slate-100 text-slate-700 border border-slate-200;
   }
-  .dark .verdict-badge-unverifiable {
+  .dark .verdict-badge-unverifiable,
+  .dark .verdict-badge-unresolved {
     @apply bg-slate-800 text-slate-300 border-slate-700;
   }
 
@@ -342,7 +345,7 @@
   }
 
   .mapping-badge-uncited {
-    @apply bg-amber-50 text-amber-700;
+    @apply bg-amber-50 text-amber-800;
   }
   .dark .mapping-badge-uncited {
     @apply bg-amber-950 text-amber-300;
@@ -1351,6 +1354,9 @@
    ============================================================ */
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
@@ -1370,6 +1376,7 @@
   --solva-border: #E7E3D9;
   --solva-border-subtle: rgba(28, 26, 21, 0.06);
   --solva-ink: #1C1A15;
+  --solva-accent: #1C1A15;
   --solva-muted: #56524A;
   --solva-subtle: #8C887E;
   --solva-card-elevated: #FFFFFF;
@@ -1388,6 +1395,7 @@
   --solva-border: #332F26;
   --solva-border-subtle: rgba(251, 250, 246, 0.08);
   --solva-ink: #FBFAF6;
+  --solva-accent: #FBFAF6;
   --solva-muted: #A8A296;
   --solva-subtle: #7A756B;
   --solva-card-elevated: #1A1814;
@@ -1465,6 +1473,40 @@ html[lang='vi'] .font-solva-serif,
     rgb(0, 0, 0) 22%,
     rgba(0, 0, 0, 0) 100%
   );
+}
+
+.solva-floral-banner-mask {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.95) 0%,
+    rgba(0, 0, 0, 0.72) 45%,
+    rgba(0, 0, 0, 0.22) 80%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.95) 0%,
+    rgba(0, 0, 0, 0.72) 45%,
+    rgba(0, 0, 0, 0.22) 80%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+.solva-pro-card-surface {
+  background-color: rgba(250, 249, 245, 0.96);
+  border: 1px solid rgba(28, 26, 21, 0.08);
+  box-shadow: 0 1px 2px rgba(28, 26, 21, 0.04);
+}
+
+.dark .solva-pro-card-surface {
+  background-color: rgba(22, 20, 16, 0.95);
+  border: 1px solid rgba(251, 250, 246, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+}
+
+.citra-nowrap-tail {
+  white-space: nowrap;
+  display: inline;
 }
 
 @keyframes solvaMarquee {

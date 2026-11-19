@@ -1,13 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, act } from '@testing-library/react';
+import { render, act, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import i18n from '@/i18n';
+import { ThemeProvider } from '@/contexts/ThemeContext';
+import { CitraMotionProvider } from '@/components/ui/motion-primitives';
+import { LandingPage } from '@/pages/LandingPage';
 import {
   SolvaScrollReveal,
   SolvaTwoToneHeading,
   SolvaAnimatedMetric,
+  SolvaStickyStackCard,
 } from './SolvaPrimitives';
 import {
+  HeroVerificationMockup,
   StickyCardWidget,
   FeatureCardWidget,
+  PipelineStageVisual,
   CohortBatchAuditWidget,
 } from './SolvaMockupWidgets';
 
@@ -253,5 +261,440 @@ describe('Task 5: Editorial Calm, Scroll Latch & Honest Scholarly Telemetry', ()
       vi.advanceTimersByTime(16);
     });
     expect(container.textContent).toContain('120 Graduation Theses (4,380 refs)');
+  });
+
+  it('supports configurable baseTopDesktop and baseTopMobile on SolvaStickyStackCard while preserving 92/76 defaults', () => {
+    const { getByTestId, unmount } = render(
+      <div>
+        <SolvaStickyStackCard index={0} total={3}>
+          <div>Default card 0</div>
+        </SolvaStickyStackCard>
+      </div>,
+    );
+    expect(getByTestId('solva-sticky-card-0').style.top).toBe('92px');
+    unmount();
+
+    const { getByTestId: getCustomByTestId } = render(
+      <div>
+        <SolvaStickyStackCard index={0} total={3} baseTopDesktop={132} baseTopMobile={118}>
+          <div>Subnav-cleared card 0</div>
+        </SolvaStickyStackCard>
+        <SolvaStickyStackCard index={1} total={3} baseTopDesktop={132} baseTopMobile={118}>
+          <div>Subnav-cleared card 1</div>
+        </SolvaStickyStackCard>
+      </div>,
+    );
+    expect(getCustomByTestId('solva-sticky-card-0').style.top).toBe('132px');
+    expect(getCustomByTestId('solva-sticky-card-1').style.top).toBe('160px');
+
+    Object.defineProperty(window, 'innerWidth', {
+      value: 390,
+      configurable: true,
+      writable: true,
+    });
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+      vi.advanceTimersByTime(50);
+    });
+    expect(getCustomByTestId('solva-sticky-card-0').style.top).toBe('118px');
+    expect(getCustomByTestId('solva-sticky-card-1').style.top).toBe('136px');
+  });
+});
+
+describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & VI)', () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
+  });
+
+  afterEach(async () => {
+    await i18n.changeLanguage('en');
+    vi.restoreAllMocks();
+  });
+
+  function renderLandingApp() {
+    return render(
+      <CitraMotionProvider>
+        <ThemeProvider defaultTheme="light">
+          <MemoryRouter initialEntries={['/']}>
+            <LandingPage />
+          </MemoryRouter>
+        </ThemeProvider>
+      </CitraMotionProvider>,
+    );
+  }
+
+  it('HeroVerificationMockup and Hero generation header pill render full source names with zero .truncate or right-edge overhang in EN and VI', async () => {
+    for (const lang of ['en', 'vi'] as const) {
+      await i18n.changeLanguage(lang);
+
+      // Verify all 3 citation steps in HeroVerificationMockup have zero .truncate and full source names
+      for (const step of [0, 1, 2]) {
+        const { container, unmount } = render(
+          <HeroVerificationMockup lang={lang} activeStep={step} />,
+        );
+        const text = container.textContent ?? '';
+
+        expect(text).toContain('Crossref');
+        expect(text).toContain('OpenAlex');
+        expect(text).toContain('Semantic Scholar');
+        expect(text).not.toContain('SemanticSch');
+        expect(text).not.toContain('Semant..');
+        expect(text).not.toContain('...');
+        expect(text).not.toContain('…');
+
+        // Zero .truncate classes anywhere inside HeroVerificationMockup
+        expect(container.querySelectorAll('.truncate')).toHaveLength(0);
+
+        // Source chips and top/verdict badges use whitespace-nowrap + shrink-0 so they never break mid-chip
+        const semanticLink = container.querySelector(
+          'a[aria-label="Semantic Scholar official website"]',
+        );
+        expect(semanticLink).not.toBeNull();
+        expect(semanticLink?.className).toContain('whitespace-nowrap');
+        expect(semanticLink?.className).toContain('shrink-0');
+
+        unmount();
+      }
+
+      // Also verify LandingPage Hero right frame does not push mockup past right edge (no lg:right-[-24px])
+      // and generation header pill displays concise non-clipped S-BERT status without .truncate
+      const prevMotion = (globalThis as { __CITRA_ENABLE_TEST_MOTION__?: boolean })
+        .__CITRA_ENABLE_TEST_MOTION__;
+      (globalThis as { __CITRA_ENABLE_TEST_MOTION__?: boolean }).__CITRA_ENABLE_TEST_MOTION__ =
+        true;
+      const origMatchMedia = window.matchMedia;
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+
+      let now = 1000;
+      vi.spyOn(performance, 'now').mockImplementation(() => now);
+      const rafQueue: FrameRequestCallback[] = [];
+      vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+        rafQueue.push(cb);
+        return rafQueue.length;
+      });
+      vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+
+      try {
+        const landing = renderLandingApp();
+        const heroSection = landing.container.querySelector('#hero') as HTMLElement;
+        expect(heroSection).not.toBeNull();
+        expect(heroSection.innerHTML).not.toContain('right-[-24px]');
+
+        const targetEl = heroSection.querySelector('.t-gen-target') as HTMLElement;
+        if (targetEl) {
+          Object.defineProperty(targetEl, 'getBoundingClientRect', {
+            configurable: true,
+            value: () => ({
+              left: 20,
+              top: 20,
+              right: 620,
+              bottom: 420,
+              width: 600,
+              height: 400,
+              x: 20,
+              y: 20,
+              toJSON: () => ({}),
+            }),
+          });
+        }
+
+        // Advance into step 2 (middle of generation -> S-BERT calibration step)
+        act(() => {
+          const b1 = rafQueue.splice(0, rafQueue.length);
+          b1.forEach((cb) => cb(now));
+          now += 720;
+          const b2 = rafQueue.splice(0, rafQueue.length);
+          b2.forEach((cb) => cb(now));
+        });
+
+        const genTag = heroSection.querySelector('.t-gen-tag') as HTMLElement | null;
+        expect(genTag).not.toBeNull();
+        expect(genTag?.className ?? '').not.toContain('truncate');
+        expect(genTag?.textContent ?? '').toContain(
+          lang === 'vi' ? 'ĐỐI CHIẾU 15+ THƯ VIỆN' : 'CHECKING 15+ LIBRARIES',
+        );
+        expect(genTag?.textContent ?? '').not.toContain('...');
+        expect((genTag?.textContent ?? '').length).toBeLessThanOrEqual(24);
+
+        landing.unmount();
+      } finally {
+        window.matchMedia = origMatchMedia;
+        if (prevMotion === undefined) {
+          delete (globalThis as { __CITRA_ENABLE_TEST_MOTION__?: boolean })
+            .__CITRA_ENABLE_TEST_MOTION__;
+        } else {
+          (globalThis as { __CITRA_ENABLE_TEST_MOTION__?: boolean }).__CITRA_ENABLE_TEST_MOTION__ =
+            prevMotion;
+        }
+        vi.restoreAllMocks();
+      }
+    }
+  });
+
+  it('hero-benchmark-120k-strip localizes decimal/thousand separators (99,02% & 99,75% in VI; 99.02% & 99.75% in EN) with zero .truncate or ellipsis', async () => {
+    for (const lang of ['en', 'vi'] as const) {
+      await i18n.changeLanguage(lang);
+      const { getByTestId, unmount } = renderLandingApp();
+
+      const strip = getByTestId('hero-benchmark-120k-strip');
+      expect(strip.querySelectorAll('.truncate')).toHaveLength(0);
+
+      const stripText = strip.textContent ?? '';
+      expect(stripText).not.toContain('...');
+      expect(stripText).not.toContain('…');
+      expect(stripText).toContain(lang === 'vi' ? '99,02%' : '99.02%');
+      expect(stripText).toContain(lang === 'vi' ? '99,75%' : '99.75%');
+      expect(stripText).not.toContain(lang === 'vi' ? '99.02%' : '99,02%');
+      expect(stripText).not.toContain(lang === 'vi' ? '99.75%' : '99,75%');
+      expect(stripText).toContain('15+');
+      expect(stripText).toContain(lang === 'vi' ? '120.000' : '120,000');
+      expect(stripText).toContain(lang === 'vi' ? '(2,4K)' : '(2.4K)');
+
+      unmount();
+    }
+  });
+
+  it('Hero top announcement pill binds its final word + arrow inside .citra-nowrap-tail (whitespace-nowrap) in EN and VI so → never orphans on narrow mobile', async () => {
+    Object.defineProperty(window, 'innerWidth', {
+      value: 375,
+      configurable: true,
+      writable: true,
+    });
+
+    for (const lang of ['en', 'vi'] as const) {
+      await i18n.changeLanguage(lang);
+      const { container, unmount } = renderLandingApp();
+
+      const hero = container.querySelector('#hero') as HTMLElement;
+      const benchmarkLinks = Array.from(
+        hero.querySelectorAll('a[href="#benchmark-120k"]'),
+      ) as HTMLAnchorElement[];
+      const announcementPill = benchmarkLinks.find(
+        (a) => a.getAttribute('data-testid') !== 'hero-benchmark-120k-strip',
+      );
+      expect(announcementPill).toBeDefined();
+
+      // Must NOT leave a standalone <svg> arrow as a direct flex child of the wrapping <a>
+      const directChildSvgs = Array.from(announcementPill!.children).filter(
+        (el) => el.tagName.toLowerCase() === 'svg',
+      );
+      expect(directChildSvgs).toHaveLength(0);
+
+      const nowrapTail = announcementPill!.querySelector('.citra-nowrap-tail');
+      expect(nowrapTail).not.toBeNull();
+      expect(nowrapTail?.className).toContain('whitespace-nowrap');
+      // Must bind at least one word character together with →
+      expect((nowrapTail?.textContent ?? '').trim()).toMatch(/\S+\s*→$/);
+
+      unmount();
+    }
+  });
+
+  it('Architecture Card 3 and all parenthetical/percentage badges in FeatureCardWidget and StickyCardWidget wrap status + (XX%) in .citra-nowrap-tail without .truncate', () => {
+    for (const lang of ['en', 'vi'] as const) {
+      // Architecture Card 3 (FeatureCardWidget index=2)
+      const card3 = render(<FeatureCardWidget index={2} lang={lang} />);
+      expect(card3.container.querySelectorAll('.truncate')).toHaveLength(0);
+
+      const expectedBadgePrefix = lang === 'vi' ? 'KHỚP (' : 'ALIGNED (';
+      const nowrapBadges = Array.from(
+        card3.container.querySelectorAll('.citra-nowrap-tail'),
+      );
+      const alignedBadge = nowrapBadges.find((el) =>
+        (el.textContent ?? '').includes(expectedBadgePrefix),
+      );
+      expect(alignedBadge).toBeDefined();
+      expect(alignedBadge?.className).toContain('whitespace-nowrap');
+      expect((alignedBadge?.textContent ?? '').trim()).toBe(
+        lang === 'vi' ? 'KHỚP (94%)' : 'ALIGNED (94%)',
+      );
+
+      // Also check (0.97) in Card 3 symbolic rule expression is bound inside .citra-nowrap-tail
+      expect(
+        nowrapBadges.some((el) => (el.textContent ?? '').trim() === '(0.97)'),
+      ).toBe(true);
+      card3.unmount();
+
+      // FeatureCardWidget index=0 & index=1 and StickyCardWidget index=0, 1, 2
+      const others = render(
+        <div>
+          <div data-testid="feat-0">
+            <FeatureCardWidget index={0} lang={lang} />
+          </div>
+          <div data-testid="feat-1">
+            <FeatureCardWidget index={1} lang={lang} />
+          </div>
+          <div data-testid="sticky-0">
+            <StickyCardWidget index={0} lang={lang} />
+          </div>
+          <div data-testid="sticky-1">
+            <StickyCardWidget index={1} lang={lang} />
+          </div>
+          <div data-testid="sticky-2">
+            <StickyCardWidget index={2} lang={lang} />
+          </div>
+        </div>,
+      );
+
+      expect(others.container.querySelectorAll('.truncate')).toHaveLength(0);
+
+      const feat0Tails = Array.from(
+        within(others.getByTestId('feat-0'))
+          .getAllByText((_c, el) => Boolean(el?.classList.contains('citra-nowrap-tail'))),
+      ).map((el) => (el.textContent ?? '').trim());
+      expect(feat0Tails.some((t) => t.includes('2020') && t.endsWith('2021)'))).toBe(true);
+
+      const sticky0Tails = Array.from(
+        others.getByTestId('sticky-0').querySelectorAll('.citra-nowrap-tail'),
+      ).map((el) => (el.textContent ?? '').trim());
+      expect(sticky0Tails).toContain('(Author, Yr)');
+      expect(sticky0Tails).toContain('(1)');
+
+      const sticky1Tails = Array.from(
+        others.getByTestId('sticky-1').querySelectorAll('.citra-nowrap-tail'),
+      ).map((el) => (el.textContent ?? '').trim());
+      expect(sticky1Tails).toContain(lang === 'vi' ? '(Δ=1 năm)' : '(Δ=1yr)');
+
+      const sticky2Tails = Array.from(
+        others.getByTestId('sticky-2').querySelectorAll('.citra-nowrap-tail'),
+      ).map((el) => (el.textContent ?? '').trim());
+      expect(sticky2Tails).toContain(
+        lang === 'vi' ? '(Trước rà soát)' : '(Before Audit)',
+      );
+      expect(sticky2Tails).toContain(
+        lang === 'vi' ? '(Đã chuẩn hóa)' : '(Verified)',
+      );
+
+      others.unmount();
+    }
+  });
+
+  it('SolvaClientResultsSection and SolvaBottomCTASection painterly frames use flexible min-h-[...] h-full without rigid h-[476px] or h-[376px] vertical clipping', async () => {
+    const rigidPixelHeightPattern = /(?:^|\s|(?:sm|md|lg|xl):)h-\[\d+px\]/;
+
+    for (const lang of ['en', 'vi'] as const) {
+      await i18n.changeLanguage(lang);
+      const { container, unmount } = renderLandingApp();
+
+      const cohortBackdropImg = container.querySelector(
+        'img[alt="Impressionist botanical painting backdrop for cohort thesis audit"]',
+      );
+      const cohortFrame = cohortBackdropImg?.parentElement;
+      expect(cohortFrame).not.toBeNull();
+      expect(cohortFrame?.className).toContain('min-h-[380px]');
+      expect(cohortFrame?.className).toContain('sm:min-h-[420px]');
+      expect(cohortFrame?.className).toContain('lg:min-h-[476px]');
+      expect(cohortFrame?.className).toContain('h-full');
+      expect(cohortFrame?.className).not.toMatch(rigidPixelHeightPattern);
+
+      const ctaBackdropImg = container.querySelector(
+        'img[alt="Impressionist floral painting backdrop"]',
+      );
+      const ctaFrame = ctaBackdropImg?.parentElement;
+      expect(ctaFrame).not.toBeNull();
+      expect(ctaFrame?.className).toContain('min-h-[320px]');
+      expect(ctaFrame?.className).toContain('sm:min-h-[376px]');
+      expect(ctaFrame?.className).toContain('h-full');
+      expect(ctaFrame?.className).not.toMatch(rigidPixelHeightPattern);
+
+      unmount();
+    }
+  });
+
+  it('HeroVerificationMockup DOI match status badge and mockup widgets use WCAG AA text-emerald-700 / text-red-700 in Light mode', () => {
+    for (const lang of ['en', 'vi'] as const) {
+      for (const step of [0, 1, 2]) {
+        const { getByText, container, unmount } = render(
+          <HeroVerificationMockup lang={lang} activeStep={step} />,
+        );
+        const expectedLabel =
+          step === 2
+            ? lang === 'vi'
+              ? '404 Không tồn tại'
+              : 'Not Found (404)'
+            : lang === 'vi'
+              ? '100% Khớp chuẩn'
+              : '100% Match';
+        const statusBadge = getByText(expectedLabel);
+        if (step === 2) {
+          expect(statusBadge.className).toContain('text-red-700');
+          expect(statusBadge.className).toContain('dark:text-red-300');
+          expect(statusBadge.className).not.toContain('text-red-600');
+        } else {
+          expect(statusBadge.className).toContain('text-emerald-700');
+          expect(statusBadge.className).toContain('dark:text-emerald-300');
+          expect(statusBadge.className).not.toContain('text-emerald-600');
+        }
+        expect(
+          container.querySelectorAll(
+            '.text-emerald-600, .text-amber-600, .text-amber-700, .text-red-600',
+          ),
+        ).toHaveLength(0);
+        unmount();
+      }
+
+      const widgets = render(
+        <div>
+          <CohortBatchAuditWidget lang={lang} />
+          <StickyCardWidget index={0} lang={lang} />
+          <PipelineStageVisual tabIndex={0} lang={lang} />
+        </div>,
+      );
+      expect(
+        widgets.container.querySelectorAll(
+          '.text-emerald-600, .text-amber-600, .text-amber-700, .text-red-600',
+        ),
+      ).toHaveLength(0);
+      widgets.unmount();
+    }
+  });
+
+  it('guards [14] / #14 in FeatureCardWidget, (Mục [14]) / (Ref [14]) in CohortBatchAuditWidget, and #interactive-demo mobile filename & queue counter', async () => {
+    for (const lang of ['en', 'vi'] as const) {
+      // 1. FeatureCardWidget index=0 wraps [14] and #14 inside .citra-nowrap-tail.whitespace-nowrap
+      const feat0 = render(<FeatureCardWidget index={0} lang={lang} />);
+      const feat0Tails = Array.from(
+        feat0.container.querySelectorAll('.citra-nowrap-tail.whitespace-nowrap'),
+      ).map((el) => (el.textContent ?? '').trim());
+      expect(feat0Tails).toContain('[14]');
+      expect(feat0Tails).toContain('#14');
+      feat0.unmount();
+
+      // 2. CohortBatchAuditWidget binds (Mục\u00A0[14]) / (Ref\u00A0[14]) with non-breaking space
+      const cohort = render(<CohortBatchAuditWidget lang={lang} />);
+      const expectedRefSuffix = lang === 'vi' ? '(Mục\u00A0[14])' : '(Ref\u00A0[14])';
+      expect(cohort.container.textContent ?? '').toContain(expectedRefSuffix);
+      cohort.unmount();
+
+      // 3. #interactive-demo chrome filename & queue counter
+      await i18n.changeLanguage(lang);
+      const landing = renderLandingApp();
+      const demo = landing.container.querySelector('#interactive-demo') as HTMLElement;
+      expect(demo).not.toBeNull();
+
+      const filenameEl = within(demo).getByText('thesis_neural_retrieval_2026.pdf');
+      expect(filenameEl.className).not.toContain('truncate');
+      expect(filenameEl.className).toContain('break-all');
+      expect(filenameEl.className).toContain('sm:break-normal');
+
+      const counterEl = within(demo).getByText(
+        lang === 'vi' ? 'Hiển thị 4 / 24' : '4 / 24 shown',
+      );
+      expect(counterEl.className).toContain('shrink-0');
+      expect(counterEl.className).toContain('whitespace-nowrap');
+      expect(counterEl.parentElement?.className ?? '').toContain('flex-wrap');
+      expect(counterEl.parentElement?.className ?? '').toContain('gap-1.5');
+
+      landing.unmount();
+    }
   });
 });

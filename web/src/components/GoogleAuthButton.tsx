@@ -98,6 +98,7 @@ function GoogleLogoIcon() {
 interface GoogleAuthButtonProps {
   onError: (msg: string) => void;
   disabled?: boolean;
+  compact?: boolean;
   beforeAuth?: () => boolean;
   googlePayloadExtras?: Partial<GoogleLoginPayload>;
 }
@@ -105,6 +106,7 @@ interface GoogleAuthButtonProps {
 export function GoogleAuthButton({
   onError,
   disabled = false,
+  compact = false,
   beforeAuth,
   googlePayloadExtras,
 }: GoogleAuthButtonProps) {
@@ -241,7 +243,7 @@ export function GoogleAuthButton({
   };
 
   return (
-    <div className="mt-4 space-y-3.5">
+    <div className={compact ? 'mt-2.5 space-y-2' : 'mt-4 space-y-3.5'}>
       <div className="relative flex items-center justify-center">
         <div className="absolute inset-0 flex items-center">
           <div
@@ -270,7 +272,9 @@ export function GoogleAuthButton({
           borderColor: 'var(--solva-border)',
           color: 'var(--solva-ink)',
         }}
-        className="group relative w-full h-[44px] px-4 rounded-[11px] border font-solva-sans text-[14px] font-medium flex items-center justify-center gap-2.5 transition-all duration-200 hover:-translate-y-[1px] hover:shadow-sm active:scale-[0.985] disabled:opacity-50 disabled:pointer-events-none cursor-pointer select-none"
+        className={`group relative w-full ${
+          compact ? 'h-9 rounded-[10px] text-[13.5px]' : 'h-[44px] rounded-[11px] text-[14px]'
+        } px-4 border font-solva-sans font-medium flex items-center justify-center gap-2.5 transition-all duration-200 hover:-translate-y-[1px] hover:shadow-sm active:scale-[0.985] disabled:opacity-50 disabled:pointer-events-none cursor-pointer select-none`}
       >
         {googleLoading ? (
           <>

@@ -54,6 +54,11 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
 
     // 3. Verify Benchmark 120K 3-view switcher uses #16 Sliding Tabs (.t-tabs-pill + .t-tab)
     const benchSection = page.getByTestId('benchmark-120k-section');
+    await benchSection.scrollIntoViewIfNeeded();
+    const benchDetailsToggle = benchSection.getByTestId('benchmark-technical-details-toggle');
+    if ((await benchDetailsToggle.getAttribute('aria-expanded')) === 'false') {
+      await benchDetailsToggle.click();
+    }
     await expect(benchSection.locator('.t-tabs-pill')).toBeVisible();
     const benchTabs = benchSection.getByRole('tab');
     await expect(benchTabs).toHaveCount(3);
@@ -63,13 +68,19 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
     await benchTabs.nth(2).click();
     await expect(benchTabs.nth(2)).toHaveAttribute('data-pill-active', 'true');
 
-    // 4. Verify Platform nav dropdown (#05 Dropdown + #21 SymmetricChevron) smooth .is-open -> .is-closing exit
+    // 4. Verify Platform nav dropdown (#05 Dropdown + #21 SymmetricChevron) smooth .is-open -> .is-closing exit on Escape & outside click
     const navTrigger = page.getByRole('button', { name: /Platform|Nền tảng/i }).first();
     await expect(navTrigger).toBeVisible();
     await navTrigger.click();
     const dropdownMenu = page.locator('.t-dropdown.is-open').first();
     await expect(dropdownMenu).toBeVisible();
     await page.keyboard.press('Escape');
+    await expect(page.locator('.t-dropdown')).toHaveCount(0, { timeout: 2000 });
+    await expect(navTrigger).toBeFocused();
+
+    await navTrigger.click();
+    await expect(page.locator('.t-dropdown.is-open').first()).toBeVisible();
+    await page.mouse.click(24, 220);
     await expect(page.locator('.t-dropdown')).toHaveCount(0, { timeout: 2000 });
 
     // 5. Verify Interactive Debugger (#interactive-demo): Auto-Tour progress bar, hover pause, and per-digit NumberPopIn
@@ -259,6 +270,7 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
       '/register',
       '/forgot-password',
       '/privacy',
+      '/terms',
     ]) {
       await page.goto(publicRoute);
       await page.waitForTimeout(250);
@@ -274,13 +286,19 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
       ).toBeLessThanOrEqual(430);
     }
 
-    // Verify mobile hamburger menu on LandingPage uses IconSwap (.t-icon-swap)
-    await page.goto('/');
-    const mobileMenuBtn = page.getByRole('button', { name: 'Toggle navigation menu' });
-    await expect(mobileMenuBtn).toBeVisible();
-    await expect(mobileMenuBtn.locator('.t-icon-swap')).toHaveAttribute('data-state', 'a');
-    await mobileMenuBtn.click();
-    await expect(mobileMenuBtn.locator('.t-icon-swap')).toHaveAttribute('data-state', 'b');
+    // Verify mobile hamburger menu on LandingPage, PrivacyPolicyPage & TermsOfServicePage uses IconSwap (.t-icon-swap) and dismisses via Escape with focus restoration
+    for (const drawerRoute of ['/', '/privacy', '/terms']) {
+      await page.goto(drawerRoute);
+      const mobileMenuBtn = page.getByRole('button', { name: 'Toggle navigation menu' });
+      await expect(mobileMenuBtn).toBeVisible();
+      await expect(mobileMenuBtn.locator('.t-icon-swap')).toHaveAttribute('data-state', 'a');
+      await mobileMenuBtn.click();
+      await expect(mobileMenuBtn.locator('.t-icon-swap')).toHaveAttribute('data-state', 'b');
+      await expect(page.locator('.t-mobile-drawer.is-open')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(mobileMenuBtn).toHaveAttribute('aria-expanded', 'false');
+      await expect(mobileMenuBtn).toBeFocused();
+    }
 
     // B) Authenticated routes on iPhone 14 Pro Max (430x932)
     setupAuthenticatedPage(page);

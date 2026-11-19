@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { AuthContext } from '@/contexts/AuthContext';
 import { api, type User } from '@/api/client';
-import '@/i18n';
+import i18n from '@/i18n';
+import { APP_VERSION } from '@/version';
+import { AuthSplitShell } from '@/components/AuthSplitShell';
 import { PricingPage } from './PricingPage';
 import { LandingPage } from './LandingPage';
 import { StripeDemoCheckoutPage } from './StripeDemoCheckoutPage';
@@ -1660,5 +1662,899 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     expect(proBtn.textContent).toMatch(/Included in Ultra|Đã bao gồm trong gói Ultra/i);
     expect(ultraBtn.disabled).toBe(true);
     expect(ultraBtn.textContent).toMatch(/Current Active Ultra Plan|Đang sử dụng gói Ultra/i);
+  });
+
+  it('PricingPage hides evaluator test-card copy (4242, 4444, Stripe Demo) when VITE_DEMO_MODE is unset and renders encrypted Stripe & VNPay copy in EN and VI', async () => {
+    try {
+      vi.stubEnv('VITE_DEMO_MODE', '');
+      await i18n.changeLanguage('en');
+      const { container: enContainer, unmount: unmountEn } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const enText = enContainer.textContent ?? '';
+      expect(enText).not.toContain('4242');
+      expect(enText).not.toContain('4444');
+      expect(enText.toLowerCase()).not.toContain('test card');
+      expect(enText.toLowerCase()).not.toContain('stripe demo');
+      expect(enText).toMatch(/PCI-DSS/i);
+      expect(enText).toMatch(/TLS 1\.3/i);
+      expect(enText).toMatch(/Stripe/i);
+      expect(enText).toMatch(/VNPay/i);
+      unmountEn();
+
+      await i18n.changeLanguage('vi');
+      const { container: viContainer, unmount: unmountVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const viText = viContainer.textContent ?? '';
+      expect(viText).not.toContain('4242');
+      expect(viText).not.toContain('4444');
+      expect(viText.toLowerCase()).not.toContain('thẻ kiểm thử');
+      expect(viText.toLowerCase()).not.toContain('thẻ thử nghiệm');
+      expect(viText.toLowerCase()).not.toContain('stripe demo');
+      expect(viText).not.toContain('Settings ->');
+      expect(viText).toContain('(Cài đặt → Quản lý Gói cước)');
+      expect(viText).toMatch(/PCI-DSS/i);
+      expect(viText).toMatch(/TLS 1\.3/i);
+      expect(viText).toMatch(/Stripe/i);
+      expect(viText).toMatch(/VNPay/i);
+      unmountVi();
+    } finally {
+      vi.unstubAllEnvs();
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('PricingPage exposes evaluator test-card autofill guidance (4242 / 4444) only when VITE_DEMO_MODE is "true"', async () => {
+    try {
+      vi.stubEnv('VITE_DEMO_MODE', 'true');
+
+      await i18n.changeLanguage('en');
+      const { container: enContainer, unmount: unmountEn } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const enText = enContainer.textContent ?? '';
+      expect(enText).toContain('4242');
+      expect(enText).toContain('4444');
+      expect(enText.toLowerCase()).toContain('test card');
+      unmountEn();
+
+      await i18n.changeLanguage('vi');
+      const { container: viContainer, unmount: unmountVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const viText = viContainer.textContent ?? '';
+      expect(viText).toContain('4242');
+      expect(viText).toContain('4444');
+      expect(viText.toLowerCase()).toContain('thẻ kiểm thử');
+      unmountVi();
+    } finally {
+      vi.unstubAllEnvs();
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('LandingPage and PricingPage footers present unified CITRA brand identity without standalone SourceLogic, while AuthSplitShell frames SourceLogic v{APP_VERSION} as engine version with zero left-panel buttons', async () => {
+    try {
+      await i18n.changeLanguage('en');
+      const { container: landingEn, unmount: unmountLandingEn } = renderWithAuth(<LandingPage />, {
+        user: null,
+        initialEntries: ['/'],
+      });
+      const landingFooterEn = landingEn.querySelector('footer')?.textContent ?? '';
+      expect(landingFooterEn).toContain('© 2026 CITRA — Academic Citation Integrity Workspace');
+      expect(landingFooterEn).not.toContain('SourceLogic');
+      expect(landingEn.textContent ?? '').not.toContain('SourceLogic');
+      unmountLandingEn();
+
+      const { container: pricingEn, unmount: unmountPricingEn } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const pricingFooterEn = pricingEn.querySelector('footer')?.textContent ?? '';
+      expect(pricingFooterEn).toContain('© 2026 CITRA — Academic Citation Integrity Workspace');
+      expect(pricingFooterEn).not.toContain('SourceLogic');
+      expect(pricingEn.textContent ?? '').not.toContain('SourceLogic');
+      unmountPricingEn();
+
+      await i18n.changeLanguage('vi');
+      const { container: landingVi, unmount: unmountLandingVi } = renderWithAuth(<LandingPage />, {
+        user: null,
+        initialEntries: ['/'],
+      });
+      const landingFooterVi = landingVi.querySelector('footer')?.textContent ?? '';
+      expect(landingFooterVi).toContain('© 2026 CITRA — Không gian Kiểm chứng Trích dẫn Học thuật');
+      expect(landingFooterVi).not.toContain('SourceLogic');
+      unmountLandingVi();
+
+      const { container: pricingVi, unmount: unmountPricingVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const pricingFooterVi = pricingVi.querySelector('footer')?.textContent ?? '';
+      expect(pricingFooterVi).toContain('© 2026 CITRA — Không gian Kiểm chứng Trích dẫn Học thuật');
+      expect(pricingFooterVi).not.toContain('SourceLogic');
+      unmountPricingVi();
+
+      const { container: authContainer, unmount: unmountAuth } = renderWithAuth(
+        <AuthSplitShell>
+          <div data-testid="auth-form-slot">Form</div>
+        </AuthSplitShell>,
+        { user: null, initialEntries: ['/login'] },
+      );
+      expect(authContainer.textContent ?? '').toContain(`Engine: SourceLogic v${APP_VERSION}`);
+      expect(authContainer.textContent ?? '').toContain(`SourceLogic v${APP_VERSION}`);
+      const srPrefix = authContainer.querySelector('span.sr-only');
+      expect(srPrefix?.textContent).toBe('Engine: ');
+      expect(srPrefix?.className).toContain('xl:not-sr-only');
+      const leftPanel = authContainer.firstElementChild?.firstElementChild as HTMLElement | null;
+      expect(leftPanel).not.toBeNull();
+      expect(leftPanel?.querySelectorAll('button').length).toBe(0);
+      unmountAuth();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.3 — separates floral header banner (.solva-floral-banner-mask) from high-contrast .solva-pro-card-surface body on both LandingPage and PricingPage and aligns tier rows via subgrid', async () => {
+    await i18n.changeLanguage('en');
+
+    // 1. LandingPage (#taxonomy) Pro card
+    const { container: landingContainer, unmount: unmountLanding } = renderWithAuth(
+      <LandingPage />,
+      { user: null, initialEntries: ['/'] },
+    );
+    const taxonomySection = landingContainer.querySelector('#taxonomy') as HTMLElement;
+    expect(taxonomySection).not.toBeNull();
+
+    const landingFloralBanner = taxonomySection.querySelector('.solva-floral-banner-mask');
+    expect(landingFloralBanner).not.toBeNull();
+    expect(landingFloralBanner?.querySelector('img[src="/solva/pricing-floral.webp"]')).not.toBeNull();
+    expect(taxonomySection.querySelector('.solva-pricing-floral-mask')).toBeNull();
+
+    const landingProSurface = taxonomySection.querySelector('.solva-pro-card-surface') as HTMLElement;
+    expect(landingProSurface).not.toBeNull();
+    expect(landingProSurface.contains(screen.getByTestId('landing-price-pro'))).toBe(true);
+    expect(
+      landingProSurface.textContent,
+    ).toMatch(/Full 15\+ scholarly API federation, Sentence-BERT semantic matching/i);
+    expect(landingProSurface.textContent).toContain('50 manuscripts / month (up to 100 pages, 25 MB)');
+    expect(landingFloralBanner?.contains(landingProSurface)).toBe(false);
+
+    // Subgrid alignment on Desktop 3-column grid
+    expect(taxonomySection.querySelectorAll('[class*="lg:grid-rows-subgrid"]').length).toBeGreaterThanOrEqual(3);
+    unmountLanding();
+
+    // 2. PricingPage plan-card-pro (authenticated -> xl: subgrid; public -> lg: subgrid)
+    const { unmount: unmountAuthPricing } = renderWithAuth(<PricingPage />, {
+      user: createMockUser(),
+      initialEntries: ['/pricing'],
+    });
+    const proCard = screen.getByTestId('plan-card-pro');
+    const pricingFloralBanner = proCard.querySelector('.solva-floral-banner-mask');
+    expect(pricingFloralBanner).not.toBeNull();
+    expect(pricingFloralBanner?.querySelector('img[src="/solva/pricing-floral.webp"]')).not.toBeNull();
+    expect(proCard.querySelector('.solva-pricing-floral-mask')).toBeNull();
+
+    const pricingProSurface = proCard.querySelector('.solva-pro-card-surface') as HTMLElement;
+    expect(pricingProSurface).not.toBeNull();
+    expect(pricingProSurface.contains(screen.getByTestId('pro-price-display'))).toBe(true);
+    expect(pricingProSurface.contains(screen.getByTestId('select-pro-btn'))).toBe(true);
+    expect(pricingProSurface.textContent).toMatch(
+      /Comprehensive citation verification across 15\+ scholarly indexes/i,
+    );
+    expect(pricingFloralBanner?.contains(pricingProSurface)).toBe(false);
+
+    for (const cardId of ['plan-card-basic', 'plan-card-pro', 'plan-card-ultra']) {
+      expect(screen.getByTestId(cardId).className).toContain('xl:grid-rows-subgrid');
+      expect(screen.getByTestId(cardId).className).not.toContain('lg:grid-rows-subgrid');
+    }
+    unmountAuthPricing();
+
+    const { unmount: unmountPublicPricing } = renderWithAuth(<PricingPage />, {
+      user: null,
+      initialEntries: ['/pricing'],
+    });
+    for (const cardId of ['plan-card-basic', 'plan-card-pro', 'plan-card-ultra']) {
+      expect(screen.getByTestId(cardId).className).toContain('lg:grid-rows-subgrid');
+    }
+    unmountPublicPricing();
+  });
+
+  it('Task 1.3 — enforces whitespace-nowrap shrink-0 on Save $48/yr and Save $480/yr badges in EN and VI so pills never split onto 2 lines', async () => {
+    try {
+      await i18n.changeLanguage('en');
+      const { unmount: unmountEn } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+
+      const save48En = screen.getByText('Save $48/yr');
+      const save480En = screen.getByText('Save $480/yr');
+      expect(save48En.className).toContain('whitespace-nowrap');
+      expect(save48En.className).toContain('shrink-0');
+      expect(save480En.className).toContain('whitespace-nowrap');
+      expect(save480En.className).toContain('shrink-0');
+      unmountEn();
+
+      await i18n.changeLanguage('vi');
+      const { unmount: unmountVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+
+      const save48Vi = screen.getByText('Tiết kiệm $48/năm');
+      const save480Vi = screen.getByText('Tiết kiệm $480/năm');
+      expect(save48Vi.className).toContain('whitespace-nowrap');
+      expect(save48Vi.className).toContain('shrink-0');
+      expect(save480Vi.className).toContain('whitespace-nowrap');
+      expect(save480Vi.className).toContain('shrink-0');
+      unmountVi();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.3 — removes misleading "Start Pro trial" CTA on LandingPage and replaces punitive "No PDF..." Basic lines with constructive framing', async () => {
+    try {
+      await i18n.changeLanguage('en');
+      const { container: landingEn, unmount: unmountLandingEn } = renderWithAuth(<LandingPage />, {
+        user: null,
+        initialEntries: ['/'],
+      });
+      const taxonomyEn = landingEn.querySelector('#taxonomy') as HTMLElement;
+      expect(taxonomyEn.textContent).not.toMatch(/Start Pro trial/i);
+      expect(taxonomyEn.textContent).toContain('Upgrade to Pro');
+      unmountLandingEn();
+
+      const { unmount: unmountPricingEn } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const basicEnText = screen.getByTestId('plan-card-basic').textContent ?? '';
+      expect(basicEnText).not.toContain('No PDF, DOCX');
+      expect(basicEnText).not.toContain('No Document Inspector');
+      expect(basicEnText).not.toContain('No multi-file Batch Upload');
+      expect(basicEnText).toMatch(/Word\/PDF export on Pro/i);
+      unmountPricingEn();
+
+      await i18n.changeLanguage('vi');
+      const { unmount: unmountPricingVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const basicViText = screen.getByTestId('plan-card-basic').textContent ?? '';
+      expect(basicViText).not.toContain('Không hỗ trợ xuất báo cáo PDF');
+      expect(basicViText).not.toContain('Không hỗ trợ tải lên hàng loạt');
+      expect(basicViText).toMatch(/xuất Word\/PDF ở gói Pro/i);
+      unmountPricingVi();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.3 — renders data-testid="pro-vnd-equivalent" when language is vi while preserving exact "$16" / "$20" textContent on landing-price-pro and pro-price-display', async () => {
+    try {
+      // English: no VND equivalent node
+      await i18n.changeLanguage('en');
+      const { unmount: unmountEn } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      expect(screen.queryByTestId('pro-vnd-equivalent')).toBeNull();
+      expect(screen.getByTestId('pro-price-display').textContent).toBe('$16');
+      unmountEn();
+
+      // Vietnamese on LandingPage: monthly default ($20 / ~500.000 ₫), toggle to annual ($16 / ~400.000 ₫)
+      await i18n.changeLanguage('vi');
+      const { unmount: unmountLandingVi } = renderWithAuth(<LandingPage />, {
+        user: null,
+        initialEntries: ['/'],
+      });
+      const landingPricePro = screen.getByTestId('landing-price-pro');
+      const landingVnd = screen.getByTestId('pro-vnd-equivalent');
+      expect(landingPricePro.textContent).toBe('$20');
+      expect(landingPricePro.contains(landingVnd)).toBe(false);
+      expect(landingVnd.textContent).toContain('500.000 ₫');
+
+      fireEvent.click(screen.getByTestId('landing-billing-toggle'));
+      expect(screen.getByTestId('landing-price-pro').textContent).toBe('$16');
+      expect(screen.getByTestId('pro-vnd-equivalent').textContent).toContain('400.000 ₫');
+      unmountLandingVi();
+
+      // Vietnamese on PricingPage: annual default ($16 / ~400.000 ₫), toggle to monthly ($20 / ~500.000 ₫)
+      const { unmount: unmountPricingVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const proDisplay = screen.getByTestId('pro-price-display');
+      const pricingVnd = screen.getByTestId('pro-vnd-equivalent');
+      expect(proDisplay.textContent).toBe('$16');
+      expect(proDisplay.contains(pricingVnd)).toBe(false);
+      expect(pricingVnd.textContent).toContain('400.000 ₫');
+
+      fireEvent.click(screen.getByTestId('billing-toggle-monthly'));
+      expect(screen.getByTestId('pro-price-display').textContent).toBe('$20');
+      expect(screen.getByTestId('pro-vnd-equivalent').textContent).toContain('500.000 ₫');
+      unmountPricingVi();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.3 Round 1 — switches authenticated PricingPage grid/subgrid to xl: to prevent 1024px AppLayout sidebar crush and keeps narrow-column & adminLocked CTAs concise', async () => {
+    try {
+      await i18n.changeLanguage('en');
+      const { unmount: unmountPublic } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const publicBasicCard = screen.getByTestId('plan-card-basic');
+      const publicGrid = publicBasicCard.parentElement?.parentElement as HTMLElement;
+      expect(publicGrid.className).toContain('lg:grid-cols-3');
+      expect(publicGrid.className).not.toContain('xl:grid-cols-3');
+
+      // Upgrade CTAs wrap price suffix inside hidden 2xl:inline while preserving .textContent
+      const pubProBtn = screen.getByTestId('select-pro-btn');
+      const pubUltraBtn = screen.getByTestId('select-ultra-btn');
+      expect(pubProBtn.textContent).toContain('Upgrade to Pro · $192/yr');
+      expect(pubUltraBtn.textContent).toContain('Upgrade to Ultra · $1,920/yr');
+      expect(pubProBtn.querySelector('span.hidden.2xl\\:inline')).not.toBeNull();
+      expect(pubUltraBtn.querySelector('span.hidden.2xl\\:inline')).not.toBeNull();
+      unmountPublic();
+
+      // Authenticated user inside AppLayout -> xl:grid-cols-3 + xl:grid-rows-subgrid
+      const { unmount: unmountAuth } = renderWithAuth(
+        <AppLayout>
+          <PricingPage />
+        </AppLayout>,
+        { user: createMockUser({ plan_tier: 'basic' }), initialEntries: ['/pricing'] },
+      );
+      const authBasicCard = screen.getByTestId('plan-card-basic');
+      const authGrid = authBasicCard.parentElement?.parentElement as HTMLElement;
+      expect(authGrid.className).toContain('xl:grid-cols-3');
+      expect(authGrid.className).not.toContain('lg:grid-cols-3');
+      const authProSurface = screen
+        .getByTestId('plan-card-pro')
+        .querySelector('.solva-pro-card-surface') as HTMLElement;
+      expect(authProSurface.className).toContain('xl:row-span-4');
+      expect(authProSurface.className).not.toContain('lg:row-span-4');
+      unmountAuth();
+
+      // Admin user EN & VI concise adminLocked CTA copy
+      const adminUser = createMockUser({ role: 'admin', plan_tier: 'ultra' });
+      const { unmount: unmountAdminEn } = renderWithAuth(<PricingPage />, {
+        user: adminUser,
+        initialEntries: ['/pricing'],
+      });
+      expect(screen.getByTestId('select-basic-btn').textContent).toContain('Included with Admin');
+      expect(screen.getByTestId('select-pro-btn').textContent).toContain('Included with Admin');
+      expect(screen.getByTestId('select-ultra-btn').textContent).toContain('Current Plan · Ultra (Admin)');
+      expect(
+        screen.getByTestId('select-ultra-btn').querySelector('span.hidden.2xl\\:inline')?.textContent,
+      ).toBe(' Plan');
+      unmountAdminEn();
+
+      await i18n.changeLanguage('vi');
+      const { unmount: unmountAdminVi } = renderWithAuth(<PricingPage />, {
+        user: adminUser,
+        initialEntries: ['/pricing'],
+      });
+      expect(screen.getByTestId('select-basic-btn').textContent).toContain('Mở sẵn cho Quản trị');
+      expect(screen.getByTestId('select-pro-btn').textContent).toContain('Mở sẵn cho Quản trị');
+      expect(screen.getByTestId('select-ultra-btn').textContent).toContain('Gói Quản trị · Ultra');
+      unmountAdminVi();
+
+      // Public VI Ultra CTA uses Vietnamese dot thousands separator ($1.920/năm) inside hidden 2xl:inline
+      const { unmount: unmountPubVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const viUltraBtn = screen.getByTestId('select-ultra-btn');
+      expect(viUltraBtn.textContent).toContain('Nâng cấp lên Ultra · $1.920/năm');
+      expect(viUltraBtn.querySelector('span.hidden.2xl\\:inline')).not.toBeNull();
+      unmountPubVi();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.3 Round 1 — enforces var(--solva-muted) WCAG AA contrast on $20/$200 strikethroughs, aria-pressed on billing toggles, whitespace-nowrap VND spans, and clean VI annual billing copy', async () => {
+    try {
+      await i18n.changeLanguage('en');
+      const { container: enContainer, unmount: unmountEn } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+
+      // aria-pressed on billing cycle toggle buttons
+      const monthlyBtn = screen.getByTestId('billing-toggle-monthly');
+      const annualBtn = screen.getByTestId('billing-toggle-annual');
+      expect(annualBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(monthlyBtn.getAttribute('aria-pressed')).toBe('false');
+
+      // Strikethrough $20 & $200 use var(--solva-muted), never var(--solva-subtle)
+      const strikethroughs = Array.from(enContainer.querySelectorAll('.line-through'));
+      expect(strikethroughs.map((el) => el.textContent)).toEqual(['$20', '$200']);
+      for (const el of strikethroughs) {
+        expect(el.getAttribute('style')).toContain('var(--solva-muted)');
+        expect(el.getAttribute('style')).not.toContain('var(--solva-subtle)');
+      }
+
+      fireEvent.click(monthlyBtn);
+      expect(monthlyBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(annualBtn.getAttribute('aria-pressed')).toBe('false');
+      unmountEn();
+
+      // Vietnamese VND clauses wrapped in whitespace-nowrap + clean annual helper copy
+      await i18n.changeLanguage('vi');
+      const { unmount: unmountLandingVi } = renderWithAuth(<LandingPage />, {
+        user: null,
+        initialEntries: ['/'],
+      });
+      fireEvent.click(screen.getByTestId('landing-billing-toggle'));
+      const landingProVnd = screen.getByTestId('pro-vnd-equivalent');
+      expect(landingProVnd.getAttribute('style')).toContain('var(--solva-ink)');
+      expect(landingProVnd.className).toContain('font-medium');
+      expect(landingProVnd.querySelectorAll('span.whitespace-nowrap').length).toBeGreaterThanOrEqual(3);
+      expect(landingProVnd.textContent).toContain('400.000 ₫');
+      expect(landingProVnd.textContent).toContain('4.800.000 ₫/năm');
+      unmountLandingVi();
+
+      const { unmount: unmountPricingVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const pricingProVnd = screen.getByTestId('pro-vnd-equivalent');
+      const pricingUltraVnd = screen.getByTestId('ultra-vnd-equivalent');
+      expect(pricingProVnd.querySelectorAll('span.whitespace-nowrap').length).toBeGreaterThanOrEqual(3);
+      expect(pricingUltraVnd.querySelectorAll('span.whitespace-nowrap').length).toBeGreaterThanOrEqual(3);
+
+      const proCardViText = screen.getByTestId('plan-card-pro').textContent ?? '';
+      const ultraCardViText = screen.getByTestId('plan-card-ultra').textContent ?? '';
+      expect(proCardViText).toContain('Thanh toán $192/năm (Tiết kiệm $48/năm — Giảm 20%)');
+      expect(proCardViText).not.toContain('>2 tháng');
+      expect(ultraCardViText).toContain('$1.920/năm');
+      expect(ultraCardViText).not.toContain('$1,920');
+      unmountPricingVi();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.3 Round 1 — eliminates ML/SQL/XML/vendor jargon and Vietlish inside all 3 pricing cards on LandingPage and PricingPage and numbers badges 01 -> 02 -> 03', async () => {
+    const forbiddenJargon = [
+      /GROBID/i,
+      /TEI-XML/i,
+      /FTS5/i,
+      /128K\+/i,
+      /trực giao/i,
+      /Orthogonal/i,
+      /8 L1 × 5 L2/i,
+      /<->/,
+      /MiniLM/i,
+      /ONNX/i,
+      /INT8/i,
+      /Neuro-Symbolic/i,
+      /HF,\s*RFC/i,
+      /SerpAPI/i,
+      /Admin Control Plane/i,
+      /Batch Upload 10 files/i,
+      /Link[- ]Rot/i,
+      /Fair-use/i,
+    ];
+    const forbiddenVietlish = [
+      /Document Inspector/i,
+      /Logic Trace/i,
+      /Class ZIP/i,
+      /Batch Upload/i,
+      /Classrooms/i,
+      /Override/i,
+    ];
+
+    try {
+      for (const locale of ['en', 'vi'] as const) {
+        await i18n.changeLanguage(locale);
+
+        const { container: landingContainer, unmount: unmountLanding } = renderWithAuth(
+          <LandingPage />,
+          { user: null, initialEntries: ['/'] },
+        );
+        const taxonomy = landingContainer.querySelector('#taxonomy') as HTMLElement;
+        const landingCardsText = taxonomy.textContent ?? '';
+        for (const pattern of forbiddenJargon) {
+          expect(landingCardsText).not.toMatch(pattern);
+        }
+        if (locale === 'vi') {
+          for (const pattern of forbiddenVietlish) {
+            expect(landingCardsText).not.toMatch(pattern);
+          }
+          expect(landingCardsText).toContain('02 · PHỔ BIẾN NHẤT');
+          expect(landingCardsText).not.toContain('02 · KHUYÊN DÙNG');
+        } else {
+          expect(landingCardsText).toContain('02 · MOST POPULAR');
+          expect(landingCardsText).not.toContain('02 · RECOMMENDED');
+        }
+        expect(taxonomy.querySelectorAll('[class*="gap-y-2"]').length).toBeGreaterThanOrEqual(3);
+        unmountLanding();
+
+        const { unmount: unmountPricing } = renderWithAuth(<PricingPage />, {
+          user: null,
+          initialEntries: ['/pricing'],
+        });
+        const pricingCardsText = [
+          screen.getByTestId('plan-card-basic').textContent ?? '',
+          screen.getByTestId('plan-card-pro').textContent ?? '',
+          screen.getByTestId('plan-card-ultra').textContent ?? '',
+        ].join(' ');
+
+        for (const pattern of forbiddenJargon) {
+          expect(pricingCardsText).not.toMatch(pattern);
+        }
+        if (locale === 'vi') {
+          for (const pattern of forbiddenVietlish) {
+            expect(pricingCardsText).not.toMatch(pattern);
+          }
+          expect(screen.getByTestId('plan-card-pro').textContent).toContain('02 · PHỔ BIẾN NHẤT');
+        } else {
+          expect(screen.getByTestId('plan-card-pro').textContent).toContain('02 · MOST POPULAR');
+        }
+        for (const cardId of ['plan-card-basic', 'plan-card-pro', 'plan-card-ultra']) {
+          expect(
+            screen.getByTestId(cardId).querySelector('[class*="gap-y-2"]'),
+          ).not.toBeNull();
+        }
+        unmountPricing();
+      }
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.4 — LandingPage mobile drawer renders accessible Pricing / Bảng giá link (data-testid="mobile-menu-pricing-link") with >=44px tap target and closes menu on click', async () => {
+    try {
+      await i18n.changeLanguage('en');
+      const { unmount: unmountEn } = renderWithAuth(
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/pricing" element={<div data-testid="mobile-pricing-dest">Pricing Route</div>} />
+        </Routes>,
+        { user: null, initialEntries: ['/'] },
+      );
+
+      expect(screen.queryByTestId('mobile-menu-pricing-link')).toBeNull();
+      const menuBtn = screen.getByRole('button', { name: /toggle navigation menu/i });
+      fireEvent.click(menuBtn);
+      expect(menuBtn.getAttribute('aria-expanded')).toBe('true');
+
+      const pricingLinkEn = screen.getByTestId('mobile-menu-pricing-link');
+      expect(pricingLinkEn.getAttribute('href')).toBe('/pricing');
+      expect(pricingLinkEn.textContent?.trim()).toBe('Pricing');
+      expect(pricingLinkEn.className).toContain('min-h-[44px]');
+
+      fireEvent.click(pricingLinkEn);
+      expect(screen.getByTestId('mobile-pricing-dest')).toBeDefined();
+      unmountEn();
+
+      // Verify Vietnamese label and drawer close state
+      await i18n.changeLanguage('vi');
+      const { unmount: unmountVi } = renderWithAuth(<LandingPage />, {
+        user: null,
+        initialEntries: ['/'],
+      });
+      const menuBtnVi = screen.getByRole('button', { name: /toggle navigation menu/i });
+      fireEvent.click(menuBtnVi);
+      const pricingLinkVi = screen.getByTestId('mobile-menu-pricing-link');
+      expect(pricingLinkVi.getAttribute('href')).toBe('/pricing');
+      expect(pricingLinkVi.textContent?.trim()).toBe('Bảng giá');
+      expect(pricingLinkVi.className).toContain('min-h-[44px]');
+
+      fireEvent.click(pricingLinkVi);
+      expect(menuBtnVi.getAttribute('aria-expanded')).toBe('false');
+      unmountVi();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.4 — PricingSolvaHeader desktop nav enforces single-line discipline (flex-nowrap, whitespace-nowrap shrink-0) in EN and VI while preserving Platform dropdown', async () => {
+    try {
+      for (const locale of ['en', 'vi'] as const) {
+        await i18n.changeLanguage(locale);
+        const { container, unmount } = renderWithAuth(<PricingPage />, {
+          user: null,
+          initialEntries: ['/pricing'],
+        });
+
+        // Root uses overflow-x-clip instead of overflow-x-hidden so position:sticky works cleanly
+        const root = screen.getByTestId('pricing-page');
+        expect(root.className).toContain('overflow-x-clip');
+        expect(root.className).not.toContain('overflow-x-hidden');
+
+        const header = container.querySelector('header') as HTMLElement;
+        expect(header).not.toBeNull();
+        const headerBar = header.firstElementChild as HTMLElement;
+        expect(headerBar.className).toContain('flex-nowrap');
+
+        const nav = container.querySelector('nav[aria-label="Pricing Navigation"]') as HTMLElement;
+        expect(nav).not.toBeNull();
+        expect(nav.className).toContain('flex-nowrap');
+        expect(nav.className).toContain('min-w-0');
+
+        // Every direct interactive link/button in center nav must enforce whitespace-nowrap + shrink-0
+        const navControls = [
+          ...Array.from(nav.querySelectorAll(':scope > a')),
+          ...Array.from(nav.querySelectorAll(':scope > div > button')),
+        ];
+        expect(navControls.length).toBeGreaterThanOrEqual(4);
+        for (const ctrl of navControls) {
+          expect(ctrl.className).toContain('whitespace-nowrap');
+          expect(ctrl.className).toContain('shrink-0');
+        }
+
+        if (locale === 'vi') {
+          expect(nav.textContent).not.toContain('Câu hỏi thường gặp');
+          expect(nav.textContent).not.toContain('Benchmark 120K');
+          expect(nav.textContent).toContain('Thực nghiệm 120K');
+        }
+
+        unmount();
+      }
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.4 — PricingPage #compare-matrix renders mobile-compare-tier-tabs switching cleanly between Basic, Pro, and Ultra feature cards + CTA while preserving semantic 4-column desktop table', async () => {
+    const createSessionSpy = vi.spyOn(api, 'createCheckoutSession').mockResolvedValue({
+      session_id: 'cs_test_mobile_matrix',
+      checkout_url: '/billing/checkout?session_id=cs_test_mobile_matrix',
+      mode: 'stripe_demo',
+      plan_tier: 'pro',
+      plan_name: 'Pro',
+      billing_cycle: 'annual',
+      amount_usd: 192,
+      transaction_id: 9,
+    });
+
+    await i18n.changeLanguage('en');
+
+    // 1. Public view (!user) -> md:hidden mobile switcher + hidden md:block desktop table
+    const { container: pubContainer, unmount: unmountPublic } = renderWithAuth(<PricingPage />, {
+      user: null,
+      initialEntries: ['/pricing'],
+    });
+
+    const compareSection = pubContainer.querySelector('#compare-matrix') as HTMLElement;
+    expect(compareSection).not.toBeNull();
+
+    const tierTabs = within(compareSection).getByTestId('mobile-compare-tier-tabs');
+    expect(tierTabs.getAttribute('role')).toBe('tablist');
+    expect(tierTabs.className).toContain('md:hidden');
+
+    const tabs = within(tierTabs).getAllByRole('tab');
+    expect(tabs).toHaveLength(3);
+    for (const tab of tabs) {
+      expect(tab.className).toContain('min-h-[44px]');
+    }
+
+    const [basicTab, proTab, ultraTab] = tabs;
+    expect(basicTab.textContent).toMatch(/Basic/i);
+    expect(proTab.textContent).toMatch(/Pro/i);
+    expect(ultraTab.textContent).toMatch(/Ultra/i);
+
+    // Switch to Basic -> Basic quotas + Not included badges + Basic CTA
+    fireEvent.click(basicTab);
+    expect(basicTab.getAttribute('aria-selected')).toBe('true');
+    expect(proTab.getAttribute('aria-selected')).toBe('false');
+    expect(ultraTab.getAttribute('aria-selected')).toBe('false');
+    const panelBasic = within(compareSection).getByTestId('mobile-compare-tier-panel');
+    expect(panelBasic.textContent).toContain('3 manuscripts / mo');
+    expect(panelBasic.textContent).toContain('5 MB');
+    expect(panelBasic.textContent).toContain('15 pages');
+    expect(panelBasic.textContent).toContain('Not included');
+
+    // Switch to Pro -> Pro quotas + Included badges + Pro CTA
+    fireEvent.click(proTab);
+    expect(proTab.getAttribute('aria-selected')).toBe('true');
+    expect(panelBasic.textContent).toContain('50 manuscripts / mo');
+    expect(panelBasic.textContent).toContain('25 MB');
+    expect(panelBasic.textContent).toContain('100 pages');
+    expect(panelBasic.textContent).toContain('Included');
+
+    // Switch to Ultra -> Ultra quotas + Ultra CTA
+    fireEvent.click(ultraTab);
+    expect(ultraTab.getAttribute('aria-selected')).toBe('true');
+    expect(panelBasic.textContent).toContain('Up to 1,000 / mo');
+    expect(panelBasic.textContent).toContain('100 MB');
+    expect(panelBasic.textContent).toContain('500 pages');
+    expect(panelBasic.textContent).toContain('Lifetime Retention');
+
+    // Desktop 4-column semantic table preserved inside hidden md:block + overflow-x-auto
+    const desktopTable = compareSection.querySelector('table') as HTMLTableElement;
+    expect(desktopTable).not.toBeNull();
+    expect(desktopTable.querySelectorAll('thead th')).toHaveLength(4);
+    expect(desktopTable.querySelectorAll('tbody tr')).toHaveLength(13);
+    const desktopTableWrap = desktopTable.closest('[data-testid="desktop-compare-table-wrap"]') as HTMLElement;
+    expect(desktopTableWrap).not.toBeNull();
+    expect(desktopTableWrap.className).toContain('hidden');
+    expect(desktopTableWrap.className).toContain('md:block');
+    unmountPublic();
+
+    // 2. Authenticated view (Boolean(user) inside AppLayout) -> lg:hidden mobile switcher + hidden lg:block desktop table + bottom CTA checkout
+    const { container: authContainer, unmount: unmountAuth } = renderWithAuth(
+      <Routes>
+        <Route
+          path="/pricing"
+          element={
+            <AppLayout>
+              <PricingPage />
+            </AppLayout>
+          }
+        />
+        <Route path="/billing/checkout" element={<div data-testid="matrix-checkout-dest">Checkout</div>} />
+      </Routes>,
+      { user: createMockUser({ plan_tier: 'basic' }), initialEntries: ['/pricing'] },
+    );
+
+    const authCompare = authContainer.querySelector('#compare-matrix') as HTMLElement;
+    const authTabs = within(authCompare).getByTestId('mobile-compare-tier-tabs');
+    expect(authTabs.className).toContain('lg:hidden');
+
+    const authDesktopWrap = within(authCompare).getByTestId('desktop-compare-table-wrap');
+    expect(authDesktopWrap.className).toContain('hidden');
+    expect(authDesktopWrap.className).toContain('lg:block');
+
+    fireEvent.click(within(authTabs).getAllByRole('tab')[1]); // Select Pro tab
+    fireEvent.click(within(authCompare).getByTestId('mobile-compare-tier-cta'));
+
+    await waitFor(() => {
+      expect(createSessionSpy).toHaveBeenCalledWith({
+        plan_tier: 'pro',
+        billing_cycle: 'annual',
+      });
+    });
+    unmountAuth();
+  });
+
+  it('Task 1.4 — eliminates engineering/vendor jargon and Vietlish in COMPARISON_MATRIX and PricingPage hero subtitle across EN and VI', async () => {
+    const forbiddenJargon = [
+      /Local 128K\+/i,
+      /HF,\s*RFC/i,
+      /Hugging Face/i,
+      /IETF RFC/i,
+      /OpenAIRE\/HAL/i,
+      /Sentence-BERT/i,
+      /Evidence DAG/i,
+      /Bounding-Box/i,
+      /SerpAPI/i,
+    ];
+    const forbiddenMatrixVietlish = [
+      /Batch Check/i,
+      /Batch Upload/i,
+      /Document Inspector/i,
+      /Override/i,
+      /Auto-Fix Studio/i,
+      /Class ZIP/i,
+      /Web View/i,
+      /docs \/ mo/i,
+      /15 pages/i,
+      /Unlimited Lifetime/i,
+    ];
+
+    try {
+      for (const locale of ['en', 'vi'] as const) {
+        await i18n.changeLanguage(locale);
+        const { container, unmount } = renderWithAuth(<PricingPage />, {
+          user: null,
+          initialEntries: ['/pricing'],
+        });
+
+        const heroHeading = container.querySelector('h1');
+        const heroBlock = heroHeading?.closest('div.max-w-\\[760px\\]') ?? heroHeading?.parentElement?.parentElement;
+        const heroSubtitleText = heroBlock?.querySelector('p')?.textContent ?? '';
+        expect(heroSubtitleText.length).toBeGreaterThan(40);
+
+        const compareSection = container.querySelector('#compare-matrix') as HTMLElement;
+        const compareText = compareSection.textContent ?? '';
+
+        for (const pattern of forbiddenJargon) {
+          expect(heroSubtitleText).not.toMatch(pattern);
+          expect(compareText).not.toMatch(pattern);
+        }
+
+        if (locale === 'vi') {
+          for (const pattern of forbiddenMatrixVietlish) {
+            expect(compareText).not.toMatch(pattern);
+          }
+        }
+
+        unmount();
+      }
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 3.3 Round 1 — PricingPage harmonizes non-tech copy across Platform dropdown, Section 3 quote/metrics, FAQ, and Footer, sets lang + data-lang, and removes dead Tailwind v4 tokens', async () => {
+    const forbiddenPricingPageJargon = [
+      /GROBID/i,
+      /TEI-XML/i,
+      /Sentence-BERT/i,
+      /MiniLM/i,
+      /ONNX/i,
+      /INT8/i,
+      /SerpAPI/i,
+      /Orthogonal Mapping/i,
+      /Citation Debugger/i,
+      /0[.,]0395 ECE/i,
+      /99[.,]75% OOD/i,
+      /mã DOI ảo giác/i,
+      /Class ZIP/i,
+      /L1 × L2/i,
+      /Neuro-Symbolic/i,
+    ];
+
+    try {
+      for (const locale of ['en', 'vi'] as const) {
+        await i18n.changeLanguage(locale);
+        const { container, unmount } = renderWithAuth(<PricingPage />, {
+          user: null,
+          initialEntries: ['/pricing'],
+        });
+
+        const root = screen.getByTestId('pricing-page');
+        expect(root.getAttribute('lang')).toBe(locale);
+        expect(root.getAttribute('data-lang')).toBe(locale);
+        expect(root.innerHTML).not.toContain('shadow-2xs');
+        expect(root.innerHTML).not.toContain('duration-250');
+
+        // Open Platform / Nền tảng dropdown so its items are included in DOM text audit
+        const nav = container.querySelector('nav[aria-label="Pricing Navigation"]') as HTMLElement;
+        const dropdownBtn = within(nav).getByRole('button', {
+          name: locale === 'vi' ? /Nền tảng/i : /Platform/i,
+        });
+        fireEvent.click(dropdownBtn);
+
+        // Expand all FAQ items in #pricing-faq
+        const faqButtons = Array.from(
+          container.querySelectorAll('#pricing-faq button[aria-expanded]'),
+        ) as HTMLButtonElement[];
+        expect(faqButtons.length).toBe(6);
+        for (const btn of faqButtons) {
+          if (btn.getAttribute('aria-expanded') === 'false') {
+            fireEvent.click(btn);
+          }
+        }
+
+        const fullPageText = container.textContent ?? '';
+        for (const pattern of forbiddenPricingPageJargon) {
+          expect(fullPageText).not.toMatch(pattern);
+        }
+
+        if (locale === 'vi') {
+          expect(nav.textContent).toContain('Thực nghiệm 120K');
+          expect(fullPageText).toContain('mã DOI không tồn tại');
+          expect(fullPageText).toContain('Thư viện & kho dữ liệu học thuật uy tín');
+          expect(fullPageText).toContain('Độ chính xác kiểm chứng trích dẫn');
+          expect(fullPageText).toContain('Độ chuẩn xác phát hiện nguồn ảo (0 kết luận oan)');
+          expect(fullPageText).toContain('99,02%');
+          expect(fullPageText).toContain('99,93%');
+        } else {
+          expect(nav.textContent).toContain('120K Benchmark');
+          expect(fullPageText).toContain('Trusted academic libraries & indexes');
+          expect(fullPageText).toContain('Overall citation verification accuracy');
+          expect(fullPageText).toContain('Unverified-source precision (zero false accusations)');
+        }
+
+        unmount();
+      }
+    } finally {
+      await i18n.changeLanguage('en');
+    }
   });
 });

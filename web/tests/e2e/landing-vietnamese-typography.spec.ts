@@ -194,9 +194,9 @@ test.describe('Landing Page — Full Vietnamese Typography & Sentient Glyph Veri
     const platformBtn = page.locator('header nav button', { hasText: 'Nền tảng' });
     await expect(platformBtn).toBeVisible();
     await platformBtn.click();
-    await expect(page.locator('header nav a', { hasText: 'Kiến trúc 2 tầng' })).toBeVisible();
-    await expect(page.locator('header nav a', { hasText: 'Trình thẩm định trích dẫn' })).toBeVisible();
-    await expect(page.locator('header nav a', { hasText: 'Thực nghiệm 120K bài báo' })).toBeVisible();
+    await expect(page.locator('header nav a', { hasText: 'Kiểm tra trích dẫn 2 bước' })).toBeVisible();
+    await expect(page.locator('header nav a', { hasText: 'Kiểm tra thử trực quan' })).toBeVisible();
+    await expect(page.locator('header nav a', { hasText: 'Độ tin cậy thực tế' })).toBeVisible();
     await platformBtn.click();
 
     // B. Interactive Citation Debugger (#interactive-demo) — cycle through all 4 demo citations in Vietnamese
@@ -205,18 +205,18 @@ test.describe('Landing Page — Full Vietnamese Typography & Sentient Glyph Veri
     await expect(debuggerSection).toBeVisible();
 
     for (const marker of ['Vaswani et al. [1]', '(Devlin et al., 2018)', '(Robertson & Walker, 2024)', 'Smith et al. (2021)']) {
-      const btn = debuggerSection.getByRole('button', { name: new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) }).first();
+      const btn = debuggerSection.getByRole('option', { name: new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) }).first();
       if (await btn.isVisible()) {
         await btn.click();
       }
     }
-    await expect(debuggerSection).toContainText(/Danh mục Tài liệu tham khảo|trích dẫn/i);
+    await expect(debuggerSection).toContainText(/Danh mục Tài liệu tham khảo|danh mục tham khảo|trích dẫn/i);
 
     // C. 120K Benchmark Section (#benchmark-120k)
     const benchmarkSection = page.locator('#benchmark-120k');
     await benchmarkSection.scrollIntoViewIfNeeded();
     await expect(benchmarkSection).toBeVisible();
-    await expect(benchmarkSection).toContainText(/120\.000|98,6%|120K/i);
+    await expect(benchmarkSection).toContainText(/120\.000|99,02%/i);
 
     // D. Role Workspaces Section (#workspaces)
     const workspacesSection = page.locator('#workspaces');
@@ -254,8 +254,8 @@ test.describe('Landing Page — Full Vietnamese Typography & Sentient Glyph Veri
     await mobileMenuBtn.click();
     const mobileNav = page.locator('header nav[aria-label="Mobile Navigation"]');
     await expect(mobileNav).toBeVisible();
-    await expect(mobileNav).toContainText('Kiến trúc 2 tầng');
-    await expect(mobileNav).toContainText('Trình thẩm định trích dẫn');
+    await expect(mobileNav).toContainText('Kiểm tra trích dẫn 2 bước');
+    await expect(mobileNav).toContainText('Kiểm tra thử trực quan');
 
     const isOverflowingMobile = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth
@@ -274,31 +274,87 @@ test.describe('Landing Page — Full Vietnamese Typography & Sentient Glyph Veri
       localStorage.setItem('i18nextLng', 'vi');
     });
 
-    // 1. Check 1280x800 desktop navbar bounds: every Vietnamese nav item & CTA must stay within 0..1280px and single-line
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/');
-    await page.evaluate(() => document.fonts.ready);
-
-    const navLabels = [
+    // 1. Check 1440x900 and 1280x800 desktop navbar bounds: every Vietnamese nav item & CTA must stay within viewport, single-line, and strictly non-overlapping with logo & right controls
+    const desktopNavLabels = [
       'Nền tảng',
-      'Trình thẩm định',
-      'Quy trình',
-      'Thực nghiệm 120K',
-      'Gói dịch vụ',
+      'Cách hoạt động',
+      'Kiểm tra thử',
+      'Dành cho ai',
+      'Độ tin cậy',
       'Bảng giá',
       'Đăng nhập',
       'Trải nghiệm miễn phí',
     ];
 
-    for (const label of navLabels) {
-      const item = page.locator('header').getByText(label, { exact: true }).first();
-      await expect(item).toBeVisible();
-      const box = await item.boundingBox();
-      expect(box).not.toBeNull();
-      expect(box!.x).toBeGreaterThanOrEqual(0);
-      expect(box!.x + box!.width).toBeLessThanOrEqual(1280);
-      expect(box!.height).toBeLessThanOrEqual(48);
+    for (const desktopVp of [
+      { width: 1440, height: 900 },
+      { width: 1280, height: 800 },
+    ]) {
+      await page.setViewportSize(desktopVp);
+      await page.goto('/');
+      await page.evaluate(() => document.fonts.ready);
+
+      for (const label of desktopNavLabels) {
+        const item = page.locator('header').getByText(label, { exact: true }).first();
+        await expect(item).toBeVisible();
+        const box = await item.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(desktopVp.width);
+        expect(box!.height).toBeLessThanOrEqual(48);
+      }
+
+      const navLayout = await page.evaluate(() => {
+        const headerRow = document.querySelector('header > div') as HTMLElement;
+        const logoCluster = headerRow.children[0] as HTMLElement;
+        const nav = headerRow.querySelector('nav[aria-label="Primary Navigation"]') as HTMLElement;
+        const rightCluster = headerRow.children[2] as HTMLElement;
+        return {
+          navScrollWidth: nav.scrollWidth,
+          navClientWidth: nav.clientWidth,
+          logoBox: logoCluster.getBoundingClientRect(),
+          navBox: nav.getBoundingClientRect(),
+          rightClusterBox: rightCluster.getBoundingClientRect(),
+        };
+      });
+
+      expect(navLayout.navScrollWidth).toBeLessThanOrEqual(navLayout.navClientWidth);
+      expect(navLayout.logoBox.x + navLayout.logoBox.width).toBeLessThanOrEqual(
+        navLayout.navBox.x
+      );
+      expect(navLayout.navBox.x + navLayout.navBox.width).toBeLessThanOrEqual(
+        navLayout.rightClusterBox.x
+      );
     }
+
+    // 1b. Check 1024x768 tablet landscape in Vietnamese: desktop nav collapses cleanly into hamburger drawer with zero sibling collision
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.goto('/');
+    await page.evaluate(() => document.fonts.ready);
+
+    await expect(page.locator('header nav[aria-label="Primary Navigation"]')).toBeHidden();
+    const tabletHamburger = page.locator('header button[aria-label="Toggle navigation menu"]');
+    await expect(tabletHamburger).toBeVisible();
+
+    const tabletHeaderLayout = await page.evaluate(() => {
+      const headerRow = document.querySelector('header > div') as HTMLElement;
+      const logoCluster = headerRow.children[0] as HTMLElement;
+      const rightCluster = headerRow.children[2] as HTMLElement;
+      return {
+        logoBox: logoCluster.getBoundingClientRect(),
+        rightClusterBox: rightCluster.getBoundingClientRect(),
+      };
+    });
+    expect(
+      tabletHeaderLayout.logoBox.x + tabletHeaderLayout.logoBox.width
+    ).toBeLessThanOrEqual(tabletHeaderLayout.rightClusterBox.x);
+
+    await tabletHamburger.click();
+    const tabletDrawer = page.locator('header nav[aria-label="Mobile Navigation"]');
+    await expect(tabletDrawer).toBeVisible();
+    await expect(tabletDrawer).toContainText('Kiểm tra trích dẫn 2 bước');
+    await expect(tabletDrawer).toContainText('Kiểm tra thử trực quan');
+    await tabletHamburger.click();
 
     // 2. Verify all major anchor sections exist, render Vietnamese text, and have zero horizontal overflow across viewports
     const sectionIds = [
@@ -307,6 +363,7 @@ test.describe('Landing Page — Full Vietnamese Typography & Sentient Glyph Veri
       '#how-it-works',
       '#benchmark-120k',
       '#taxonomy',
+      '#pricing-plans',
       '#workspaces',
       '#faq',
     ];

@@ -26,7 +26,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import {
   Card,
   CardContent,
@@ -37,12 +36,72 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { IconSwap } from '@/components/ui/transitions';
 
+/**
+ * Derives a valid 3–50 character username (`/^[a-zA-Z0-9._-]{3,50}$/` without
+ * leading/trailing punctuation or consecutive dots) from an email or name.
+ */
+export function deriveUsernameFromEmailOrName(input: string): string {
+  const raw = String(input ?? '').trim();
+  if (!raw) return '';
+
+  const hasAt = raw.includes('@');
+  const base = hasAt ? raw.split('@')[0] : raw;
+  const ascii = base
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase();
+
+  let cleaned = ascii
+    .replace(/\+/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9._-]/g, '_')
+    .replace(/\.{2,}/g, '.')
+    .replace(/_{2,}/g, '_')
+    .replace(/^[-._]+|[-._]+$/g, '');
+
+  if (!cleaned) {
+    return hasAt ? 'scholar_user' : '';
+  }
+
+  if (cleaned.length > 50) {
+    cleaned = cleaned.slice(0, 50).replace(/^[-._]+|[-._]+$/g, '');
+  }
+
+  if (!cleaned) {
+    return hasAt ? 'scholar_user' : '';
+  }
+
+  if (cleaned.length < 3) {
+    cleaned = `${cleaned}_user`.slice(0, 50).replace(/^[-._]+|[-._]+$/g, '');
+  }
+
+  return cleaned;
+}
+
+const SIMPLE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+type RegisterInvalidField =
+  | 'full_name'
+  | 'email'
+  | 'username'
+  | 'password'
+  | 'confirm_password'
+  | 'privacy_consent'
+  | null;
+
+const getSolvaInputBorderClasses = (invalid: boolean) =>
+  invalid
+    ? 'is-error border-red-600 dark:border-red-400 focus-visible:ring-2 focus-visible:ring-red-600/20 dark:focus-visible:ring-red-400/25 focus-visible:border-red-600 dark:focus-visible:border-red-400 placeholder:text-[#78736A] dark:placeholder:text-[#969084]'
+    : 'border-[#E7E3D9] dark:border-[#332F26] focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20 focus-visible:border-[#1C1A15] dark:focus-visible:border-[#FBFAF6] placeholder:text-[#78736A] dark:placeholder:text-[#969084]';
+
 export function RegisterPage() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
 
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
+  const [usernameManuallyEdited, setUsernameManuallyEdited] = useState(false);
   const [email, setEmail] = useState('');
   const [institution, setInstitution] = useState('');
   const [password, setPassword] = useState('');
@@ -50,6 +109,7 @@ export function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [privacyConsent, setPrivacyConsent] = useState(false);
   const [consentShake, setConsentShake] = useState(false);
+  const [invalidField, setInvalidField] = useState<RegisterInvalidField>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -67,9 +127,53 @@ export function RegisterPage() {
     return () => window.clearInterval(timer);
   }, [cooldown]);
 
+  const handleEmailChange = (nextEmail: string) => {
+    setEmail(nextEmail);
+    if (error) setError('');
+    if (invalidField) setInvalidField(null);
+    if (!usernameManuallyEdited) {
+      if (nextEmail.includes('@')) {
+        const localDerived = deriveUsernameFromEmailOrName(
+          nextEmail.trim().split('@')[0],
+        );
+        if (localDerived) {
+          setUsername(localDerived);
+        } else {
+          setUsername(
+            deriveUsernameFromEmailOrName(fullName) ||
+              deriveUsernameFromEmailOrName(nextEmail),
+          );
+        }
+      } else {
+        setUsername(deriveUsernameFromEmailOrName(nextEmail));
+      }
+    }
+  };
+
+  const handleUsernameChange = (nextUsername: string) => {
+    setUsername(nextUsername);
+    setUsernameManuallyEdited(nextUsername.trim().length > 0);
+    if (error) setError('');
+    if (invalidField) setInvalidField(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setInvalidField(null);
+
+    if (!fullName.trim()) {
+      setInvalidField('full_name');
+      setError(t('auth.registerMissingFullName'));
+      return;
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !SIMPLE_EMAIL_RE.test(normalizedEmail)) {
+      setInvalidField('email');
+      setError(t('auth.registerInvalidEmail'));
+      return;
+    }
 
     const trimmedUsername = username.trim();
     if (
@@ -77,42 +181,31 @@ export function RegisterPage() {
       /^[._-]|[._-]$/.test(trimmedUsername) ||
       trimmedUsername.includes('..')
     ) {
-      setError(
-        lang === 'vi'
-          ? 'Tên đăng nhập phải từ 3–50 ký tự (chữ cái, chữ số, ., _, -), không bắt đầu/kết thúc bằng dấu câu hoặc lặp dấu chấm.'
-          : 'Username must be 3–50 characters (letters, numbers, ., _, -), without leading/trailing punctuation or consecutive dots.',
-      );
+      setInvalidField('username');
+      setError(t('auth.registerInvalidUsername'));
       return;
     }
 
     if (password.length < 6 || !password.trim()) {
-      setError(
-        lang === 'vi'
-          ? 'Mật khẩu phải có tối thiểu 6 ký tự và không chỉ gồm khoảng trắng.'
-          : 'Password must be at least 6 characters and not whitespace-only.',
-      );
+      setInvalidField('password');
+      setError(t('auth.registerPasswordTooShort'));
       return;
     }
 
-    if (new TextEncoder().encode(password).length > 72) {
-      setError(
-        lang === 'vi'
-          ? 'Mật khẩu không được vượt quá 72 byte UTF-8.'
-          : 'Password must not exceed 72 UTF-8 bytes.',
-      );
+    if (password.length > 64 || new TextEncoder().encode(password).length > 72) {
+      setInvalidField('password');
+      setError(t('auth.registerPasswordTooLong'));
       return;
     }
 
     if (password !== confirmPassword) {
-      setError(
-        lang === 'vi'
-          ? 'Mật khẩu xác nhận không khớp.'
-          : 'Passwords do not match.',
-      );
+      setInvalidField('confirm_password');
+      setError(t('auth.registerPasswordMismatch'));
       return;
     }
 
     if (!privacyConsent) {
+      setInvalidField('privacy_consent');
       setError(t('privacyCompliance.consentRequiredError'));
       setConsentShake(false);
       window.requestAnimationFrame(() => setConsentShake(true));
@@ -123,7 +216,7 @@ export function RegisterPage() {
     try {
       const resp = await api.register({
         username: trimmedUsername,
-        email: email.trim().toLowerCase(),
+        email: normalizedEmail,
         password,
         full_name: fullName.trim() || undefined,
         institution: institution.trim() || undefined,
@@ -134,7 +227,15 @@ export function RegisterPage() {
       setRegisteredEmail(resp.email);
       setCooldown(60);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      const msg = err instanceof Error ? err.message : 'Registration failed';
+      if (/email/i.test(msg)) {
+        setInvalidField('email');
+      } else if (/username|tên đăng nhập/i.test(msg)) {
+        setInvalidField('username');
+      } else if (/password|mật khẩu/i.test(msg)) {
+        setInvalidField('password');
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -158,8 +259,16 @@ export function RegisterPage() {
     }
   };
 
+  const fullNameInvalid = Boolean(error) && invalidField === 'full_name';
+  const emailInvalid = Boolean(error) && invalidField === 'email';
+  const usernameInvalid = Boolean(error) && invalidField === 'username';
+  const passwordInvalid = Boolean(error) && invalidField === 'password';
+  const confirmPasswordInvalid =
+    Boolean(error) && invalidField === 'confirm_password';
+  const consentInvalid = Boolean(error) && invalidField === 'privacy_consent';
+
   return (
-    <AuthSplitShell maxWidthClass="max-w-[480px]">
+    <AuthSplitShell maxWidthClass="max-w-[500px]" compactRightPanel>
       <Card
         style={{
           backgroundColor: 'var(--solva-card-elevated)',
@@ -181,36 +290,68 @@ export function RegisterPage() {
              Post-Registration: Check Your Email Confirmation View
              ============================================================ */
           <>
-            <CardHeader className="space-y-2 pb-4 pt-6 px-6 sm:px-7">
+            <CardHeader className="space-y-2 pb-3.5 pt-5 px-5 sm:px-6">
               <div className="flex items-center justify-between gap-2">
-                <Badge
-                  variant="outline"
-                  className="font-mono text-[10px] uppercase tracking-wider px-2.5 py-0.5 bg-emerald-50/80 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-200/70 dark:border-emerald-800/70"
+                <div
+                  style={{
+                    backgroundColor: 'var(--solva-surface)',
+                    borderColor: 'var(--solva-border)',
+                    color: 'var(--solva-ink)',
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-[6px] border font-mono text-[10px] uppercase tracking-wider font-semibold"
                 >
-                  <Mail className="h-3 w-3 mr-1 shrink-0" />
-                  {t('auth.activateBadge')}
-                </Badge>
+                  <Mail className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>{t('auth.activateBadge')}</span>
+                </div>
               </div>
-              <CardTitle className="font-display text-2xl font-bold tracking-tight text-slate-900 dark:text-white pt-1">
-                {t('auth.checkEmailTitle')}
+              <CardTitle
+                style={{ color: 'var(--solva-ink)' }}
+                className={`font-solva-serif font-light text-[26px] sm:text-[30px] pt-0.5 ${
+                  lang === 'vi'
+                    ? 'leading-[1.15] tracking-[-0.03em]'
+                    : 'leading-[1.08] tracking-[-0.04em]'
+                }`}
+              >
+                {t('auth.checkEmailTitle').normalize('NFC')}
               </CardTitle>
-              <CardDescription className="text-sm text-slate-600 dark:text-slate-400">
+              <CardDescription
+                style={{ color: 'var(--solva-muted)' }}
+                className="font-solva-sans text-[13.5px] leading-relaxed"
+              >
                 {t('auth.checkEmailSubtitle')}
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="px-6 sm:px-7 pb-6 space-y-5">
+            <CardContent className="px-5 sm:px-6 pb-5 space-y-4">
               {/* Target Email Pill */}
-              <div className="p-3.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/70 flex items-center justify-between gap-3">
+              <div
+                style={{
+                  backgroundColor: 'var(--solva-surface)',
+                  borderColor: 'var(--solva-border)',
+                }}
+                className="p-3.5 rounded-[12px] border flex items-center justify-between gap-3"
+              >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="p-2 rounded-lg bg-indigo-600 text-white shrink-0">
+                  <div
+                    style={{
+                      backgroundColor: 'var(--solva-btn-bg)',
+                      color: 'var(--solva-btn-fg)',
+                    }}
+                    className="p-2 rounded-[8px] shrink-0"
+                  >
                     <Mail className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[11px] font-mono uppercase tracking-wider text-indigo-600 dark:text-indigo-400 font-semibold">
+                    <p
+                      style={{ color: 'var(--solva-muted)' }}
+                      className="text-[11px] font-mono uppercase tracking-wider font-semibold"
+                    >
                       @{username}
                     </p>
-                    <p className="text-sm font-mono font-bold text-slate-900 dark:text-white truncate">
+                    <p
+                      style={{ color: 'var(--solva-ink)' }}
+                      className="text-sm font-mono font-bold break-all"
+                    >
                       {registeredEmail}
                     </p>
                   </div>
@@ -219,16 +360,16 @@ export function RegisterPage() {
               </div>
 
               {resendMessage && (
-                <Alert className="border-emerald-200/90 dark:border-emerald-800/80 bg-emerald-50/90 dark:bg-emerald-950/50">
+                <Alert className="rounded-[12px] border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  <AlertDescription className="text-xs sm:text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                  <AlertDescription className="text-xs sm:text-sm font-medium text-emerald-900 dark:text-emerald-200">
                     {resendMessage}
                   </AlertDescription>
                 </Alert>
               )}
 
               {error && (
-                <Alert variant="destructive">
+                <Alert variant="destructive" className="rounded-[12px]">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription className="text-xs sm:text-sm font-medium">
                     {error}
@@ -237,25 +378,37 @@ export function RegisterPage() {
               )}
 
               {/* 3-Step Activation Checklist */}
-              <div className="rounded-xl bg-slate-50/90 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 p-4 space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <div
+                style={{
+                  backgroundColor: 'var(--solva-surface)',
+                  borderColor: 'var(--solva-border)',
+                }}
+                className="rounded-[12px] border p-3.5 space-y-2.5"
+              >
+                <p
+                  style={{ color: 'var(--solva-muted)' }}
+                  className="text-[11px] font-mono font-semibold uppercase tracking-wider"
+                >
                   {t('auth.checkEmailStepsTitle')}
                 </p>
-                <ol className="space-y-2.5 text-xs sm:text-sm text-slate-700 dark:text-slate-300">
+                <ol
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="space-y-2 text-xs sm:text-[13px] font-solva-sans"
+                >
                   <li className="flex items-start gap-2.5">
-                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-mono text-xs font-bold shrink-0 mt-0.5">
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-mono text-xs font-bold shrink-0 mt-0.5">
                       1
                     </span>
                     <span>{t('auth.checkEmailStep1')}</span>
                   </li>
                   <li className="flex items-start gap-2.5">
-                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-mono text-xs font-bold shrink-0 mt-0.5">
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-mono text-xs font-bold shrink-0 mt-0.5">
                       2
                     </span>
                     <span>{t('auth.checkEmailStep2')}</span>
                   </li>
                   <li className="flex items-start gap-2.5">
-                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-mono text-xs font-bold shrink-0 mt-0.5">
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-mono text-xs font-bold shrink-0 mt-0.5">
                       3
                     </span>
                     <span>{t('auth.checkEmailStep3')}</span>
@@ -269,7 +422,7 @@ export function RegisterPage() {
                   variant="outline"
                   disabled={cooldown > 0 || resending}
                   onClick={handleResend}
-                  className="flex-1 h-10 rounded-xl text-xs font-semibold cursor-pointer"
+                  className="flex-1 h-10 rounded-[11px] text-xs font-semibold border-[#E7E3D9] dark:border-[#332F26] bg-[var(--solva-surface)] text-[var(--solva-ink)] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] hover:border-[#D4CFC3] dark:hover:border-[#3F3A30] hover:text-[var(--solva-ink)] dark:hover:text-[var(--solva-ink)] cursor-pointer"
                 >
                   <RefreshCw
                     className={`h-3.5 w-3.5 mr-1.5 ${resending ? 'animate-spin' : ''}`}
@@ -283,175 +436,263 @@ export function RegisterPage() {
                   </span>
                 </Button>
 
-                <Button
-                  asChild
-                  className="flex-1 h-10 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white"
+                <Link
+                  to="/login"
+                  style={{
+                    backgroundColor: 'var(--solva-btn-bg)',
+                    color: 'var(--solva-btn-fg)',
+                  }}
+                  className="flex-1 h-10 px-4 rounded-[11px] font-solva-sans text-xs font-semibold inline-flex items-center justify-center gap-1.5 hover:opacity-90 transition-opacity"
                 >
-                  <Link to="/login">
-                    <span>{t('auth.backToSignIn')}</span>
-                    <ArrowRight className="h-3.5 w-3.5 ml-1" />
-                  </Link>
-                </Button>
+                  <span>{t('auth.backToSignIn')}</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
               </div>
             </CardContent>
           </>
         ) : (
           /* ============================================================
-             Registration Form View
+             Registration Form View (Engineered to fit cleanly inside 1440×900)
              ============================================================ */
           <>
-            <CardHeader className="space-y-1.5 pb-4 pt-5 sm:pt-6 px-4 sm:px-7">
+            <CardHeader className="space-y-1 pb-2.5 pt-3.5 sm:pt-4 px-5 sm:px-6">
               <div className="flex items-center justify-between gap-2">
-                <Badge
-                  variant="outline"
-                  className="font-mono text-[10px] uppercase tracking-wider px-2.5 py-0.5 bg-indigo-50/80 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border-indigo-200/70 dark:border-indigo-800/70"
+                <div
+                  style={{
+                    backgroundColor: 'var(--solva-surface)',
+                    borderColor: 'var(--solva-border)',
+                    color: 'var(--solva-ink)',
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[6px] border font-mono text-[10px] uppercase tracking-wider font-semibold whitespace-nowrap"
                 >
-                  <UserPlus className="h-3 w-3 mr-1 shrink-0" />
-                  {t('auth.registerBadge')}
-                </Badge>
+                  <UserPlus className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>{t('auth.registerBadge')}</span>
+                </div>
               </div>
 
-              <CardTitle className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white pt-1">
-                {t('auth.registerTitle')}
+              <CardTitle
+                style={{ color: 'var(--solva-ink)' }}
+                className={`font-solva-serif font-light text-[25px] sm:text-[28px] pt-0.5 ${
+                  lang === 'vi'
+                    ? 'leading-[1.15] tracking-[-0.03em]'
+                    : 'leading-[1.08] tracking-[-0.04em]'
+                }`}
+              >
+                {t('auth.registerTitle').normalize('NFC')}
               </CardTitle>
-              <CardDescription className="text-sm text-slate-600 dark:text-slate-400">
+              <CardDescription
+                style={{ color: 'var(--solva-muted)' }}
+                className="font-solva-sans text-[13px] leading-snug"
+              >
                 {t('auth.registerSubtitle')}
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="px-4 sm:px-7 pb-5 sm:pb-6">
+            <CardContent className="px-5 sm:px-6 pb-3.5 sm:pb-4">
               {error && (
-                <Alert variant="destructive" className="mb-4">
+                <Alert
+                  id="register-form-error"
+                  variant="destructive"
+                  className="mb-2.5 py-2 rounded-[10px]"
+                >
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription className="text-xs sm:text-sm font-medium">
+                  <AlertDescription className="text-xs font-medium">
                     {error}
                   </AlertDescription>
                 </Alert>
               )}
 
-              <form onSubmit={handleSubmit} className="space-y-3.5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Full Name */}
-                  <div className="space-y-1.5">
+              <form onSubmit={handleSubmit} noValidate className="space-y-2.5">
+                {/* Row 1: Full Name + Email Address (True Email-First Tab Order) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
                     <Label
                       htmlFor="full_name"
-                      className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300"
+                      style={{ color: 'var(--solva-ink)' }}
+                      className="font-mono text-[10.5px] font-semibold uppercase tracking-wider"
                     >
                       {t('auth.fullName')}
                     </Label>
                     <div className="relative">
-                      <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
-                        <User className="h-4 w-4" />
+                      <div
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                      >
+                        <User className="h-3.5 w-3.5" />
                       </div>
                       <Input
                         id="full_name"
                         type="text"
                         value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
+                        aria-invalid={fullNameInvalid}
+                        aria-describedby={
+                          fullNameInvalid ? 'register-form-error' : undefined
+                        }
+                        onChange={(e) => {
+                          setFullName(e.target.value);
+                          if (error) setError('');
+                          if (invalidField) setInvalidField(null);
+                        }}
                         required
                         autoComplete="name"
-                        className="h-10 pl-9 bg-slate-50/60 dark:bg-slate-950/60"
+                        style={{
+                          backgroundColor: 'var(--solva-surface)',
+                          color: 'var(--solva-ink)',
+                        }}
+                        className={`t-input ${getSolvaInputBorderClasses(fullNameInvalid)} h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]`}
                         placeholder={t('auth.fullNamePlaceholder')}
                       />
                     </div>
                   </div>
 
-                  {/* Username */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="email"
+                      style={{ color: 'var(--solva-ink)' }}
+                      className="font-mono text-[10.5px] font-semibold uppercase tracking-wider"
+                    >
+                      {t('auth.email')}
+                    </Label>
+                    <div className="relative">
+                      <div
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                      >
+                        <Mail className="h-3.5 w-3.5" />
+                      </div>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={email}
+                        aria-invalid={emailInvalid}
+                        aria-describedby={
+                          emailInvalid ? 'register-form-error' : undefined
+                        }
+                        onChange={(e) => handleEmailChange(e.target.value)}
+                        required
+                        autoComplete="email"
+                        style={{
+                          backgroundColor: 'var(--solva-surface)',
+                          color: 'var(--solva-ink)',
+                        }}
+                        className={`t-input ${getSolvaInputBorderClasses(emailInvalid)} h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]`}
+                        placeholder={t('auth.emailPlaceholder')}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Row 2: Username (auto-suggested from Email until manually edited) + Institution (Optional) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
                     <Label
                       htmlFor="username"
-                      className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300"
+                      style={{ color: 'var(--solva-ink)' }}
+                      className="font-mono text-[10.5px] font-semibold uppercase tracking-wider"
                     >
                       {t('auth.username')}
                     </Label>
                     <div className="relative">
-                      <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 font-mono text-xs font-bold">
+                      <div
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-xs font-bold"
+                      >
                         @
                       </div>
                       <Input
                         id="username"
                         type="text"
                         value={username}
-                        onChange={(e) => setUsername(e.target.value)}
+                        aria-invalid={usernameInvalid}
+                        aria-describedby={
+                          usernameInvalid ? 'register-form-error' : undefined
+                        }
+                        onChange={(e) => handleUsernameChange(e.target.value)}
                         required
                         autoComplete="username"
-                        className="h-10 pl-8 bg-slate-50/60 dark:bg-slate-950/60"
+                        style={{
+                          backgroundColor: 'var(--solva-surface)',
+                          color: 'var(--solva-ink)',
+                        }}
+                        className={`t-input ${getSolvaInputBorderClasses(usernameInvalid)} h-9 pl-7 rounded-[10px] font-solva-sans text-[13.5px]`}
                         placeholder={t('auth.usernamePlaceholder')}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="institution"
+                      style={{ color: 'var(--solva-ink)' }}
+                      className="font-mono text-[10.5px] font-semibold uppercase tracking-wider"
+                    >
+                      {t('auth.institution')}
+                    </Label>
+                    <div className="relative">
+                      <div
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                      >
+                        <Building2 className="h-3.5 w-3.5" />
+                      </div>
+                      <Input
+                        id="institution"
+                        type="text"
+                        value={institution}
+                        onChange={(e) => {
+                          setInstitution(e.target.value);
+                          if (error) setError('');
+                          if (invalidField) setInvalidField(null);
+                        }}
+                        autoComplete="organization"
+                        style={{
+                          backgroundColor: 'var(--solva-surface)',
+                          color: 'var(--solva-ink)',
+                        }}
+                        className={`t-input ${getSolvaInputBorderClasses(false)} h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]`}
+                        placeholder={t('auth.institutionPlaceholder')}
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Email Address */}
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="email"
-                    className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300"
-                  >
-                    {t('auth.email')}
-                  </Label>
-                  <div className="relative">
-                    <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
-                      <Mail className="h-4 w-4" />
-                    </div>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      autoComplete="email"
-                      className="h-10 pl-10 bg-slate-50/60 dark:bg-slate-950/60"
-                      placeholder={t('auth.emailPlaceholder')}
-                    />
-                  </div>
-                </div>
-
-                {/* Institution / Affiliation */}
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="institution"
-                    className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300"
-                  >
-                    {t('auth.institution')}
-                  </Label>
-                  <div className="relative">
-                    <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
-                      <Building2 className="h-4 w-4" />
-                    </div>
-                    <Input
-                      id="institution"
-                      type="text"
-                      value={institution}
-                      onChange={(e) => setInstitution(e.target.value)}
-                      autoComplete="organization"
-                      className="h-10 pl-10 bg-slate-50/60 dark:bg-slate-950/60"
-                      placeholder={t('auth.institutionPlaceholder')}
-                    />
-                  </div>
-                </div>
-
-                {/* Password & Confirm Password */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
+                {/* Row 3: Password & Confirm Password */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
                     <Label
                       htmlFor="password"
-                      className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300"
+                      style={{ color: 'var(--solva-ink)' }}
+                      className="font-mono text-[10.5px] font-semibold uppercase tracking-wider"
                     >
                       {t('auth.password')}
                     </Label>
                     <div className="relative">
-                      <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
-                        <KeyRound className="h-4 w-4" />
+                      <div
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                      >
+                        <KeyRound className="h-3.5 w-3.5" />
                       </div>
                       <Input
                         id="password"
                         type={showPassword ? 'text' : 'password'}
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        aria-invalid={passwordInvalid}
+                        aria-describedby={
+                          passwordInvalid ? 'register-form-error' : undefined
+                        }
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          if (error) setError('');
+                          if (invalidField) setInvalidField(null);
+                        }}
                         required
                         autoComplete="new-password"
-                        className="h-10 pl-9 pr-9 bg-slate-50/60 dark:bg-slate-950/60"
+                        style={{
+                          backgroundColor: 'var(--solva-surface)',
+                          color: 'var(--solva-ink)',
+                        }}
+                        className={`t-input ${getSolvaInputBorderClasses(passwordInvalid)} h-9 pl-8 pr-8 rounded-[10px] font-solva-sans text-[13.5px]`}
                         placeholder={t('auth.passwordPlaceholder')}
                       />
                       <button
@@ -460,36 +701,62 @@ export function RegisterPage() {
                         aria-label={
                           showPassword ? 'Hide characters' : 'Show characters'
                         }
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                        title={
+                          lang === 'vi'
+                            ? showPassword
+                              ? 'Ẩn mật khẩu'
+                              : 'Hiện mật khẩu'
+                            : undefined
+                        }
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-[6px] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] transition-colors cursor-pointer"
                       >
                         <IconSwap
                           active={showPassword}
-                          iconA={<Eye className="h-4 w-4" />}
-                          iconB={<EyeOff className="h-4 w-4" />}
+                          iconA={<Eye className="h-3.5 w-3.5" />}
+                          iconB={<EyeOff className="h-3.5 w-3.5" />}
                         />
                       </button>
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <Label
                       htmlFor="confirm_password"
-                      className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300"
+                      style={{ color: 'var(--solva-ink)' }}
+                      className="font-mono text-[10.5px] font-semibold uppercase tracking-wider"
                     >
                       {t('auth.confirmPassword')}
                     </Label>
                     <div className="relative">
-                      <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
-                        <KeyRound className="h-4 w-4" />
+                      <div
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+                      >
+                        <KeyRound className="h-3.5 w-3.5" />
                       </div>
                       <Input
                         id="confirm_password"
                         type={showPassword ? 'text' : 'password'}
                         value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        aria-invalid={confirmPasswordInvalid}
+                        aria-describedby={
+                          confirmPasswordInvalid
+                            ? 'register-form-error'
+                            : undefined
+                        }
+                        onChange={(e) => {
+                          setConfirmPassword(e.target.value);
+                          if (error) setError('');
+                          if (invalidField) setInvalidField(null);
+                        }}
                         required
                         autoComplete="new-password"
-                        className="h-10 pl-9 bg-slate-50/60 dark:bg-slate-950/60"
+                        style={{
+                          backgroundColor: 'var(--solva-surface)',
+                          color: 'var(--solva-ink)',
+                        }}
+                        className={`t-input ${getSolvaInputBorderClasses(confirmPasswordInvalid)} h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]`}
                         placeholder={t('auth.confirmPasswordPlaceholder')}
                       />
                     </div>
@@ -502,40 +769,48 @@ export function RegisterPage() {
                   confirmPassword={confirmPassword}
                 />
 
-                {/* Explicit Personal Data Protection Consent (Luật 91/2025/QH15 & NĐ 356/2025/NĐ-CP) */}
+                {/* Concise Statutory Consent (Luật 91/2025/QH15 & NĐ 356/2025/NĐ-CP) */}
                 <div
                   style={{
                     backgroundColor: privacyConsent
                       ? undefined
                       : 'var(--solva-surface)',
-                    borderColor: privacyConsent
-                      ? undefined
-                      : 'var(--solva-border)',
                   }}
-                  className={`rounded-[12px] border p-3.5 transition-all duration-200 ${
-                    privacyConsent
-                      ? 'bg-emerald-50/75 dark:bg-emerald-950/35 border-emerald-300/90 dark:border-emerald-800/80'
-                      : ''
-                  } ${consentShake ? 'animate-error-shake border-red-400 dark:border-red-700' : ''}`}
+                  className={`rounded-[10px] border px-3 py-2 transition-all duration-200 ${
+                    consentInvalid
+                      ? 'is-error border-red-600 dark:border-red-400'
+                      : privacyConsent
+                        ? 'bg-emerald-50/75 dark:bg-emerald-950/35 border-emerald-300/90 dark:border-emerald-800/80'
+                        : 'border-[#E7E3D9] dark:border-[#332F26]'
+                  } ${consentShake ? 'animate-error-shake' : ''}`}
                 >
-                  <label className="flex items-start gap-3 cursor-pointer select-none group">
-                    <span className="relative mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none group">
+                    <span className="relative mt-0.5 flex h-[17px] w-[17px] shrink-0 items-center justify-center">
                       <input
                         type="checkbox"
                         checked={privacyConsent}
+                        aria-invalid={consentInvalid}
+                        aria-describedby={
+                          consentInvalid ? 'register-form-error' : undefined
+                        }
                         onChange={(e) => {
                           setPrivacyConsent(e.target.checked);
                           setConsentShake(false);
-                          if (e.target.checked && error) setError('');
+                          if (e.target.checked) {
+                            if (error) setError('');
+                            if (invalidField) setInvalidField(null);
+                          }
                         }}
                         data-testid="register-privacy-consent-checkbox"
                         className="peer sr-only"
                       />
                       <span
-                        className={`flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border transition-all duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-[#1C1A15] dark:peer-focus-visible:ring-[#FBFAF6] ${
-                          privacyConsent
-                            ? 'bg-[#1C1A15] border-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:border-[#FBFAF6] dark:text-[#1C1A15]'
-                            : 'bg-white dark:bg-[#141310] border-[#D4CFC3] dark:border-[#3F3A30] group-hover:border-[#1C1A15] dark:group-hover:border-[#FBFAF6]'
+                        className={`flex h-[17px] w-[17px] items-center justify-center rounded-[5px] border transition-all duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-[#1C1A15] dark:peer-focus-visible:ring-[#FBFAF6] ${
+                          consentInvalid
+                            ? 'bg-white dark:bg-[#141310] border-red-600 dark:border-red-400'
+                            : privacyConsent
+                              ? 'bg-[#1C1A15] border-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:border-[#FBFAF6] dark:text-[#1C1A15]'
+                              : 'bg-white dark:bg-[#141310] border-[#D4CFC3] dark:border-[#3F3A30] group-hover:border-[#1C1A15] dark:group-hover:border-[#FBFAF6]'
                         }`}
                       >
                         {privacyConsent && (
@@ -543,50 +818,67 @@ export function RegisterPage() {
                         )}
                       </span>
                     </span>
-                    <span className="font-solva-sans text-[12px] leading-[18.5px] text-[#56524A] dark:text-[#A8A296]">
-                      <span className="inline-flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-[#1C1A15] dark:text-[#FBFAF6] mr-1.5">
+                    <span className="font-solva-sans text-[11.5px] leading-[16.5px] text-[#56524A] dark:text-[#A8A296]">
+                      <span className="inline-flex items-center gap-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-[#1C1A15] dark:text-[#FBFAF6] mr-1 whitespace-nowrap">
                         <ShieldCheck className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
                         <span>91/2025/QH15</span>
                       </span>
-                      {t('privacyCompliance.consentCheckboxPrefix')}
+                      {t('privacyCompliance.registerConsentPrefix')}
                       <Link
                         to="/privacy"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-medium text-[#1C1A15] dark:text-[#FBFAF6] underline underline-offset-3 decoration-[#1C1A15]/40 dark:decoration-[#FBFAF6]/40 hover:opacity-80 transition-opacity"
+                        className="font-medium text-[#1C1A15] dark:text-[#FBFAF6] underline underline-offset-4 decoration-[#1C1A15]/40 dark:decoration-[#FBFAF6]/40 hover:opacity-80 transition-opacity"
                       >
                         {t('privacyCompliance.policyLinkLabel')}
                       </Link>
-                      {t('privacyCompliance.consentCheckboxSuffix')}
+                      {lang === 'vi' ? ' và ' : ' and '}
+                      <Link
+                        to="/terms"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-[#1C1A15] dark:text-[#FBFAF6] underline underline-offset-4 decoration-[#1C1A15]/40 dark:decoration-[#FBFAF6]/40 hover:opacity-80 transition-opacity"
+                      >
+                        {lang === 'vi' ? 'Điều khoản Dịch vụ' : 'Terms of Service'}
+                      </Link>
+                      {t('privacyCompliance.registerConsentSuffix')}
                     </span>
                   </label>
                 </div>
 
-                <Button
+                <button
                   type="submit"
                   disabled={loading}
-                  size="lg"
-                  className="w-full h-11 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 mt-1 cursor-pointer"
+                  style={{
+                    backgroundColor: 'var(--solva-btn-bg)',
+                    color: 'var(--solva-btn-fg)',
+                  }}
+                  className="group relative w-full h-10 px-5 rounded-[10px] font-solva-sans text-[14px] font-medium flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.985] disabled:opacity-55 disabled:pointer-events-none cursor-pointer select-none"
                 >
                   {loading ? (
                     <>
-                      <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                      <div className="h-4 w-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
                       <span>{t('auth.creatingAccount')}</span>
                     </>
                   ) : (
                     <>
                       <span>{t('auth.createAccountBtn')}</span>
-                      <ArrowRight className="h-4 w-4" />
+                      <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
                     </>
                   )}
-                </Button>
+                </button>
               </form>
 
               <GoogleAuthButton
-                onError={setError}
+                compact
+                onError={(msg) => {
+                  setInvalidField(null);
+                  setError(msg);
+                }}
                 disabled={loading}
                 beforeAuth={() => {
                   if (!privacyConsent) {
+                    setInvalidField('privacy_consent');
                     setError(t('privacyCompliance.consentRequiredError'));
                     setConsentShake(false);
                     window.requestAnimationFrame(() => setConsentShake(true));
@@ -600,11 +892,18 @@ export function RegisterPage() {
                 }}
               />
 
-              <div className="mt-5 pt-4 border-t border-slate-200/70 dark:border-slate-800/70 text-center text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+              <div
+                style={{
+                  borderColor: 'var(--solva-border)',
+                  color: 'var(--solva-muted)',
+                }}
+                className="mt-3 pt-2.5 border-t text-center font-solva-sans text-xs sm:text-[13px]"
+              >
                 <span>{t('auth.alreadyHaveAccount')} </span>
                 <Link
                   to="/login"
-                  className="font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 hover:underline transition-colors"
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="font-semibold underline underline-offset-4 decoration-[#1C1A15]/35 dark:decoration-[#FBFAF6]/35 hover:decoration-current transition-colors"
                 >
                   {t('auth.signInInstead')}
                 </Link>

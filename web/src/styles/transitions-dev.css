@@ -474,6 +474,7 @@
   transition:
     transform var(--dropdown-open-dur) var(--dropdown-ease),
     opacity   var(--dropdown-open-dur) var(--dropdown-ease);
+  transition-delay: 0ms;
   will-change: transform, opacity;
 }
 .t-dropdown[data-origin="top-right"]     { transform-origin: top right; }
@@ -485,18 +486,21 @@
   transform: scale(1);
   opacity: 1;
   pointer-events: auto;
-  animation: t-dropdown-in var(--dropdown-open-dur) var(--dropdown-ease) both;
+  animation: t-dropdown-in var(--dropdown-open-dur) var(--dropdown-ease) 0ms both;
 }
 .t-dropdown.is-closing {
   transform: scale(var(--dropdown-closing-scale));
   opacity: 0;
   pointer-events: none;
-  animation: t-dropdown-out var(--dropdown-close-dur) var(--dropdown-ease) both;
+  transition:
+    transform var(--dropdown-close-dur) var(--dropdown-ease) 0ms,
+    opacity   var(--dropdown-close-dur) var(--dropdown-ease) 0ms;
+  animation: t-dropdown-out var(--dropdown-close-dur) var(--dropdown-ease) 0ms both;
 }
 @keyframes t-dropdown-in {
   from {
     opacity: 0;
-    transform: translate3d(0, -4px, 0) scale(var(--dropdown-pre-scale));
+    transform: translate3d(0, calc(var(--distance-micro) * -1), 0) scale(var(--dropdown-pre-scale));
   }
   to {
     opacity: 1;
@@ -510,7 +514,7 @@
   }
   to {
     opacity: 0;
-    transform: translate3d(0, -3px, 0) scale(var(--dropdown-closing-scale));
+    transform: translate3d(0, calc(var(--distance-micro) * -0.75), 0) scale(var(--dropdown-closing-scale));
   }
 }
 
@@ -519,16 +523,16 @@
   will-change: transform, opacity;
 }
 .t-mobile-drawer.is-open {
-  animation: t-mobile-drawer-in 240ms var(--dropdown-ease) both;
+  animation: t-mobile-drawer-in var(--dropdown-open-dur) var(--dropdown-ease) 0ms both;
 }
 .t-mobile-drawer.is-closing {
   pointer-events: none;
-  animation: t-mobile-drawer-out var(--dropdown-close-dur) var(--dropdown-ease) both;
+  animation: t-mobile-drawer-out var(--dropdown-close-dur) var(--dropdown-ease) 0ms both;
 }
 @keyframes t-mobile-drawer-in {
   from {
     opacity: 0;
-    transform: translate3d(0, -8px, 0);
+    transform: translate3d(0, calc(var(--distance-base) * -1), 0);
   }
   to {
     opacity: 1;
@@ -542,7 +546,7 @@
   }
   to {
     opacity: 0;
-    transform: translate3d(0, -6px, 0);
+    transform: translate3d(0, calc(var(--distance-small) * -1), 0);
   }
 }
 

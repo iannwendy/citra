@@ -42,6 +42,9 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<'username' | 'password' | null>(null);
+  const [invalidField, setInvalidField] = useState<
+    'username' | 'password' | 'credentials' | null
+  >(null);
   const [capsLockOn, setCapsLockOn] = useState(false);
   const [error, setError] = useState('');
   const [needsActivation, setNeedsActivation] = useState(false);
@@ -66,6 +69,7 @@ export function LoginPage() {
     setUsername('admin');
     setPassword('admin123');
     setError('');
+    setInvalidField(null);
     setNeedsActivation(false);
     setResentSuccess('');
     setCopiedDemo(true);
@@ -81,15 +85,32 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setInvalidField(null);
     setNeedsActivation(false);
     setResentSuccess('');
+
+    if (!username.trim()) {
+      triggerShake();
+      setInvalidField('username');
+      setError(t('auth.loginMissingIdentifier'));
+      return;
+    }
+
+    if (!password) {
+      triggerShake();
+      setInvalidField('password');
+      setError(t('auth.loginMissingPassword'));
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await login(username, password);
+      await login(username.trim(), password);
       navigate('/dashboard');
     } catch (err) {
       triggerShake();
+      setInvalidField('credentials');
       const msg = err instanceof Error ? err.message : t('auth.loginError');
       if (msg.includes('ACCOUNT_NOT_ACTIVATED')) {
         setNeedsActivation(true);
@@ -121,6 +142,18 @@ export function LoginPage() {
       setResending(false);
     }
   };
+
+  const usernameInvalid =
+    Boolean(error) &&
+    (invalidField === 'username' || invalidField === 'credentials');
+  const passwordInvalid =
+    Boolean(error) &&
+    (invalidField === 'password' || invalidField === 'credentials');
+
+  const getSolvaInputBorderClasses = (invalid: boolean) =>
+    invalid
+      ? 'is-error border-red-600 dark:border-red-400 focus-visible:ring-2 focus-visible:ring-red-600/20 dark:focus-visible:ring-red-400/25 focus-visible:border-red-600 dark:focus-visible:border-red-400 placeholder:text-[#78736A] dark:placeholder:text-[#969084]'
+      : 'border-[#E7E3D9] dark:border-[#332F26] focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20 focus-visible:border-[#1C1A15] dark:focus-visible:border-[#FBFAF6] placeholder:text-[#78736A] dark:placeholder:text-[#969084]';
 
   return (
     <AuthSplitShell>
@@ -154,7 +187,7 @@ export function LoginPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
               <Lock className="h-3 w-3 shrink-0 opacity-80" />
               <span>
-                {lang === 'vi' ? 'Xác thực Hệ thống' : 'Workspace Sign In'}
+                {lang === 'vi' ? 'Đăng nhập Không gian' : 'Workspace Sign In'}
               </span>
             </div>
 
@@ -163,7 +196,7 @@ export function LoginPage() {
               className="inline-flex items-center gap-1 font-mono text-[10px] whitespace-nowrap shrink-0"
             >
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>SSO · RBAC</span>
+              <span>{t('auth.loginSecurityChip')}</span>
             </span>
           </div>
 
@@ -176,9 +209,13 @@ export function LoginPage() {
               transition:
                 'opacity 520ms cubic-bezier(0.22, 1, 0.36, 1), transform 520ms cubic-bezier(0.22, 1, 0.36, 1)',
             }}
-            className="font-solva-serif font-light text-[30px] sm:text-[34px] leading-[1.08] tracking-[-0.04em] pt-0.5"
+            className={`font-solva-serif font-light text-[30px] sm:text-[34px] pt-0.5 ${
+              lang === 'vi'
+                ? 'leading-[1.15] tracking-[-0.03em]'
+                : 'leading-[1.08] tracking-[-0.04em]'
+            }`}
           >
-            {t('auth.welcomeBack')}
+            {t('auth.welcomeBack').normalize('NFC')}
           </CardTitle>
 
           <CardDescription
@@ -207,6 +244,7 @@ export function LoginPage() {
           {/* Error Message */}
           {error && (
             <Alert
+              id="login-form-error"
               variant="destructive"
               className="mb-4 rounded-[12px] animate-error-shake"
             >
@@ -218,8 +256,8 @@ export function LoginPage() {
           )}
 
           {/* Login Form (Contains ZERO <button><svg> before #password Eye toggle) */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Username / Email Input */}
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
+            {/* Email or Username Input */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <Label
@@ -227,7 +265,7 @@ export function LoginPage() {
                   style={{ color: 'var(--solva-ink)' }}
                   className="font-mono text-[11px] font-semibold uppercase tracking-wider"
                 >
-                  {t('auth.username')}
+                  {t('auth.emailOrUsername')}
                 </Label>
                 {username.trim().length > 0 && (
                   <span
@@ -236,7 +274,7 @@ export function LoginPage() {
                       borderColor: 'var(--solva-border)',
                       color: 'var(--solva-muted)',
                     }}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold border"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold border whitespace-nowrap"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                     {isEmailFormat ? 'EMAIL' : 'USERNAME'}
@@ -264,9 +302,15 @@ export function LoginPage() {
                   id="username"
                   type="text"
                   value={username}
+                  aria-invalid={usernameInvalid}
+                  aria-describedby={usernameInvalid ? 'login-form-error' : undefined}
                   onFocus={() => setFocusedField('username')}
                   onBlur={() => setFocusedField(null)}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    if (error) setError('');
+                    if (invalidField) setInvalidField(null);
+                  }}
                   required
                   autoComplete="username"
                   style={{
@@ -274,14 +318,10 @@ export function LoginPage() {
                       focusedField === 'username'
                         ? 'var(--solva-card-elevated)'
                         : 'var(--solva-surface)',
-                    borderColor:
-                      focusedField === 'username'
-                        ? 'var(--solva-ink)'
-                        : 'var(--solva-border)',
                     color: 'var(--solva-ink)',
                   }}
-                  className={`t-input ${error ? 'is-error' : ''} ${isShaking ? 'is-shaking' : ''} h-11 pl-10 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20`}
-                  placeholder={t('auth.usernamePlaceholder')}
+                  className={`t-input ${getSolvaInputBorderClasses(usernameInvalid)} ${isShaking ? 'is-shaking' : ''} h-11 pl-10 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200`}
+                  placeholder={t('auth.emailOrUsernamePlaceholder')}
                 />
               </div>
             </div>
@@ -298,7 +338,7 @@ export function LoginPage() {
                 </Label>
                 <div className="flex items-center gap-2">
                   {capsLockOn && (
-                    <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 font-mono text-[9px] font-semibold">
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 font-mono text-[9px] font-semibold whitespace-nowrap">
                       CAPS LOCK
                     </span>
                   )}
@@ -328,6 +368,8 @@ export function LoginPage() {
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
+                  aria-invalid={passwordInvalid}
+                  aria-describedby={passwordInvalid ? 'login-form-error' : undefined}
                   onFocus={() => setFocusedField('password')}
                   onBlur={() => {
                     setFocusedField(null);
@@ -335,7 +377,11 @@ export function LoginPage() {
                   }}
                   onKeyDown={handlePasswordKeyEvent}
                   onKeyUp={handlePasswordKeyEvent}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError('');
+                    if (invalidField) setInvalidField(null);
+                  }}
                   required
                   autoComplete="current-password"
                   style={{
@@ -343,13 +389,9 @@ export function LoginPage() {
                       focusedField === 'password'
                         ? 'var(--solva-card-elevated)'
                         : 'var(--solva-surface)',
-                    borderColor:
-                      focusedField === 'password'
-                        ? 'var(--solva-ink)'
-                        : 'var(--solva-border)',
                     color: 'var(--solva-ink)',
                   }}
-                  className={`t-input ${error ? 'is-error' : ''} ${isShaking ? 'is-shaking' : ''} h-11 pl-10 pr-11 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20`}
+                  className={`t-input ${getSolvaInputBorderClasses(passwordInvalid)} ${isShaking ? 'is-shaking' : ''} h-11 pl-10 pr-11 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200`}
                   placeholder={t('auth.passwordPlaceholder')}
                 />
                 {/* IMPORTANT: First <button> with <svg> in DOM for E2E test compatibility */}
@@ -357,6 +399,13 @@ export function LoginPage() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? 'Hide characters' : 'Show characters'}
+                  title={
+                    lang === 'vi'
+                      ? showPassword
+                        ? 'Ẩn mật khẩu'
+                        : 'Hiện mật khẩu'
+                      : undefined
+                  }
                   style={{ color: 'var(--solva-muted)' }}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-[8px] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] transition-colors cursor-pointer"
                 >
@@ -426,7 +475,13 @@ export function LoginPage() {
           </form>
 
           {/* Google OAuth Sign-In (placed after form so #password Eye toggle remains first SVG button) */}
-          <GoogleAuthButton onError={setError} disabled={loading} />
+          <GoogleAuthButton
+            onError={(msg) => {
+              setInvalidField(null);
+              setError(msg);
+            }}
+            disabled={loading}
+          />
 
           {/* Create Account Link */}
           <div
@@ -472,7 +527,7 @@ export function LoginPage() {
                   borderColor: 'var(--solva-border)',
                   color: 'var(--solva-ink)',
                 }}
-                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-[11px] font-mono font-semibold rounded-[7px] border hover:opacity-85 transition-opacity cursor-pointer shrink-0 shadow-2xs"
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-[11px] font-mono font-semibold rounded-[7px] border hover:opacity-85 transition-opacity cursor-pointer shrink-0 shadow-sm"
               >
                 {copiedDemo ? (
                   <>

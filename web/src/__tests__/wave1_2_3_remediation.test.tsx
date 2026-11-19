@@ -1156,7 +1156,7 @@ describe('Track 5 Remediation Suite (Wave 1, 2 & 3)', () => {
       expect(landingSrc).not.toMatch(/15-verdict|15 nhãn phán quyết/i);
       expect(landingSrc).toContain('/solva/pricing-floral.webp');
       expect(landingSrc).toMatch(/Sentence-BERT/i);
-      expect(pricingSrc).toMatch(/Sentence-BERT/i);
+      expect(pricingSrc).toMatch(/Bilingual Abstract Matching|Đối chiếu nội dung/i);
 
       expect(remediationSrc).not.toContain('NGUỒN BỊA ĐẶT / ẢO GIÁC AI — CẦN LOẠI BỎ');
       expect(remediationSrc).toContain('NGHI VẤN NGUỒN BỊA ĐẶT / ẢO GIÁC AI — CẦN KIỂM TRA');

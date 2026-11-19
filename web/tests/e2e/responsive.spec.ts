@@ -326,7 +326,7 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
       clearAuthState(page);
       await page.setViewportSize({ width: vp.width, height: vp.height });
 
-      const publicRoutes = ['/', '/login', '/register', '/forgot-password'];
+      const publicRoutes = ['/', '/pricing', '/login', '/register', '/forgot-password'];
       for (const route of publicRoutes) {
         await page.goto(route);
         await page.waitForLoadState('domcontentloaded');
@@ -350,19 +350,178 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
     await menuBtn.click();
 
     // Mobile drawer links should be visible
-    await expect(page.getByRole('link', { name: /2-layer architecture|kiến trúc 2 tầng/i }).first()).toBeVisible();
+    await expect(
+      page.getByRole('link', { name: /two-step citation check|kiểm tra trích dẫn 2 bước/i }).first()
+    ).toBeVisible();
 
     // Close mobile navigation menu
     await menuBtn.click();
 
     // Switch interactive Citation Debugger tabs on mobile (375px)
-    const rulesTab = page.getByRole('tab', { name: /2\.\s*symbolic rules/i });
+    const rulesTab = page.getByRole('tab', { name: /2\.\s*(why this result|lý do kết luận)/i });
     await rulesTab.click();
-    await assertNoHorizontalOverflow(page, '/ (Symbolic Rules tab) @ 375x812');
+    await assertNoHorizontalOverflow(page, '/ (Why This Result tab) @ 375x812');
 
-    const retrievalTab = page.getByRole('tab', { name: /3\.\s*source retrieval/i });
+    const retrievalTab = page.getByRole('tab', { name: /3\.\s*(libraries checked|thư viện đã tra cứu)/i });
     await retrievalTab.click();
-    await assertNoHorizontalOverflow(page, '/ (Source Retrieval tab) @ 375x812');
+    await assertNoHorizontalOverflow(page, '/ (Libraries Checked tab) @ 375x812');
+  });
+
+  test('LandingPage mobile-menu-pricing-link navigates to /pricing, mobile-compare-tier-tabs has zero clipping at 375x812, and PricingSolvaHeader stays single-line at 1024px & 1440px in EN and VI', async ({
+    page,
+  }) => {
+    clearAuthState(page);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+
+    const menuBtn = page.getByRole('button', { name: /toggle navigation menu/i });
+    await expect(menuBtn).toBeVisible();
+    await menuBtn.click();
+
+    const mobilePricingLink = page.getByTestId('mobile-menu-pricing-link');
+    await expect(mobilePricingLink).toBeVisible();
+    const linkBox = await mobilePricingLink.boundingBox();
+    expect(linkBox).not.toBeNull();
+    expect(linkBox!.height).toBeGreaterThanOrEqual(44);
+
+    await mobilePricingLink.click();
+    await expect(page).toHaveURL(/\/pricing$/);
+    await page.waitForLoadState('domcontentloaded');
+    await assertNoHorizontalOverflow(page, '/pricing @ 375x812');
+
+    // Verify mobile-compare-tier-tabs in EN and VI at 375x812 & 390x844
+    for (const vp of [
+      { width: 375, height: 812, label: '375x812' },
+      { width: 390, height: 844, label: '390x844' },
+    ]) {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+
+      for (const expectedLang of ['EN', 'VI'] as const) {
+        const langBtn = page.locator('header button[title*="English"], header button[title*="Tiếng Việt"]');
+        const currentLangText = (await langBtn.textContent())?.trim();
+        if (currentLangText !== expectedLang) {
+          await langBtn.click();
+        }
+
+        const compareMatrix = page.locator('#compare-matrix');
+        await compareMatrix.scrollIntoViewIfNeeded();
+        await page.waitForTimeout(150);
+
+        const tierTabs = page.getByTestId('mobile-compare-tier-tabs');
+        await expect(tierTabs).toBeVisible();
+        await expect(compareMatrix.locator('table')).toBeHidden();
+
+        const tabsBox = await tierTabs.boundingBox();
+        expect(tabsBox).not.toBeNull();
+        expect(tabsBox!.x).toBeGreaterThanOrEqual(0);
+        expect(tabsBox!.x + tabsBox!.width).toBeLessThanOrEqual(vp.width);
+
+        const tabButtons = tierTabs.getByRole('tab');
+        await expect(tabButtons).toHaveCount(3);
+
+        for (let idx = 0; idx < 3; idx++) {
+          await tabButtons.nth(idx).click();
+          const metrics = await page.evaluate(() => {
+            const tablist = document.querySelector('[data-testid="mobile-compare-tier-tabs"]') as HTMLElement;
+            const panel = document.querySelector('[data-testid="mobile-compare-tier-panel"]') as HTMLElement;
+            const tabs = Array.from(tablist.querySelectorAll<HTMLElement>('[role="tab"]'));
+            const tabRects = tabs.map((t) => t.getBoundingClientRect());
+            const clippedTabs = tabs.filter((t) => t.scrollWidth > t.clientWidth + 1).map((t) => t.textContent);
+            const clippedPanelNodes = Array.from(panel.querySelectorAll<HTMLElement>('*'))
+              .filter((el) => {
+                const st = window.getComputedStyle(el);
+                return (
+                  (st.overflowX === 'hidden' || st.textOverflow === 'ellipsis') &&
+                  el.scrollWidth > el.clientWidth + 1
+                );
+              })
+              .map((el) => el.textContent?.slice(0, 40));
+            return {
+              minTabHeight: Math.min(...tabRects.map((r) => r.height)),
+              tabRowDeltaY:
+                Math.max(...tabRects.map((r) => r.top)) - Math.min(...tabRects.map((r) => r.top)),
+              clippedTabs,
+              clippedPanelNodes,
+              panelOverflows: panel.scrollWidth > panel.clientWidth + 1,
+            };
+          });
+
+          expect(metrics.minTabHeight).toBeGreaterThanOrEqual(44);
+          expect(metrics.tabRowDeltaY).toBeLessThanOrEqual(2);
+          expect(metrics.clippedTabs).toEqual([]);
+          expect(metrics.clippedPanelNodes).toEqual([]);
+          expect(metrics.panelOverflows).toBe(false);
+          await assertNoHorizontalOverflow(
+            page,
+            `/pricing (#compare-matrix tab ${idx} ${expectedLang}) @ ${vp.label}`
+          );
+        }
+
+        // Scroll partway down #compare-matrix and verify sticky switcher clears fixed header cleanly
+        await page.evaluate(() => {
+          const panel = document.querySelector('[data-testid="mobile-compare-tier-panel"]');
+          if (panel) {
+            const rect = panel.getBoundingClientRect();
+            window.scrollBy(0, rect.top + 120);
+          }
+        });
+        await page.waitForTimeout(100);
+        const stickyClearance = await page.evaluate(() => {
+          const header = document.querySelector('header') as HTMLElement;
+          const tablist = document.querySelector('[data-testid="mobile-compare-tier-tabs"]') as HTMLElement;
+          return {
+            headerBottom: header.getBoundingClientRect().bottom,
+            tablistTop: tablist.getBoundingClientRect().top,
+          };
+        });
+        expect(stickyClearance.tablistTop).toBeGreaterThanOrEqual(stickyClearance.headerBottom);
+      }
+    }
+
+    // Verify PricingSolvaHeader stays strictly single-line at 1024x768 and 1440x900 in EN and VI
+    for (const vp of [
+      { width: 1024, height: 768, label: '1024x768' },
+      { width: 1440, height: 900, label: '1440x900' },
+    ]) {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await page.evaluate(() => window.scrollTo(0, 0));
+
+      for (const expectedLang of ['EN', 'VI'] as const) {
+        const langBtn = page.locator('header button[title*="English"], header button[title*="Tiếng Việt"]');
+        const currentLangText = (await langBtn.textContent())?.trim();
+        if (currentLangText !== expectedLang) {
+          await langBtn.click();
+        }
+
+        await expect(page.getByTestId('mobile-compare-tier-tabs')).toBeHidden();
+        await expect(page.locator('#compare-matrix table')).toBeVisible();
+
+        const headerMetrics = await page.evaluate(() => {
+          const header = document.querySelector('header') as HTMLElement;
+          const nav = document.querySelector('nav[aria-label="Pricing Navigation"]') as HTMLElement;
+          const controls = [
+            ...Array.from(nav.querySelectorAll<HTMLElement>(':scope > a')),
+            ...Array.from(nav.querySelectorAll<HTMLElement>(':scope > div > button')),
+          ];
+          const rects = controls.map((el) => el.getBoundingClientRect());
+          const centersY = rects.map((r) => r.top + r.height / 2);
+          const wrappedControls = controls
+            .filter((el) => el.getBoundingClientRect().height > 48)
+            .map((el) => el.textContent);
+          return {
+            headerHeight: header.getBoundingClientRect().height,
+            centerDeltaY: Math.max(...centersY) - Math.min(...centersY),
+            wrappedControls,
+          };
+        });
+
+        expect(headerMetrics.headerHeight).toBeLessThanOrEqual(78);
+        expect(headerMetrics.centerDeltaY).toBeLessThanOrEqual(2);
+        expect(headerMetrics.wrappedControls).toEqual([]);
+        await assertNoHorizontalOverflow(page, `/pricing (${expectedLang}) @ ${vp.label}`);
+      }
+    }
   });
 
   test('Solva Editorial LandingPage 12-section interactive states, pipeline tabs, taxonomy switch, and FAQ accordion work cleanly', async ({
@@ -396,12 +555,15 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
     const platformBtn = page.getByRole('button', { name: /platform|nền tảng/i });
     await expect(platformBtn).toBeVisible();
     await platformBtn.click();
-    await expect(page.getByText(/orthogonal mapping & verification|tách biệt mapping/i)).toBeVisible();
+    await expect(
+      page.getByText(/in-text links & real source verification|đối chiếu trong bài & xác minh nguồn thật/i)
+    ).toBeVisible();
 
-    // 1.5. Test 120K-Paper Benchmark section & interactive 3-tab explorer
+    // 1.5. Test 120K-Paper Benchmark section & progressive-disclosure 3-tab explorer
     await expect(page.getByTestId('hero-benchmark-120k-strip')).toBeVisible();
     const benchSection = page.getByTestId('benchmark-120k-section');
     await expect(benchSection).toBeVisible();
+    await benchSection.getByTestId('benchmark-technical-details-toggle').click();
     await expect(benchSection.getByText(/B5 · HybridMLScorer/i)).toBeVisible();
 
     const classesTab = benchSection.getByRole('tab', {
@@ -414,12 +576,14 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
       name: /platt calibration & 95% ci|hiệu chỉnh platt & bootstrap 95% ci/i,
     });
     await calibrationTab.click();
-    await expect(benchSection.getByText(/0\.0433/i).first()).toBeVisible();
+    await expect(benchSection.getByText(/0\.0395/i).first()).toBeVisible();
 
     // 2. Test Use Cases / Pipeline 4-tab switcher
-    const stage3Btn = page.getByRole('tab', { name: /neuro-symbolic rules|3\. luật neuro-symbolic/i });
+    const stage3Btn = page.getByRole('tab', {
+      name: /3\.\s*compare details|3\.\s*đối chiếu chi tiết/i,
+    });
     await stage3Btn.click();
-    await expect(page.getByText(/STAGE 03/i)).toBeVisible();
+    await expect(page.getByText(/STAGE 03|BƯỚC 03/i)).toBeVisible();
 
     // 3. Test Pricing Plans & Benefits squircle billing switch (Monthly $20 -> Yearly -20% $16)
     const billingSwitch = page.getByRole('switch', { name: /toggle billing cycle/i });
@@ -434,7 +598,7 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
 
     // 4. Test FAQ 2-column independent accordion
     const faqItem2 = page.getByRole('button', {
-      name: /how does the two-layer orthogonal output model work|mô hình 2 tầng trực giao/i,
+      name: /how does citra separate formatting slips|citra phân biệt lỗi trình bày/i,
     });
     await expect(faqItem2).toHaveAttribute('aria-expanded', 'false');
     await faqItem2.click();
@@ -460,7 +624,7 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
       { slug: 'orcid', href: 'https://orcid.org' },
       { slug: 'unpaywall', href: 'https://unpaywall.org' },
       { slug: 'datacite', href: 'https://datacite.org' },
-      { slug: 'grobid-tei', href: 'https://grobid.readthedocs.io' },
+      { slug: 'openlibrary', href: 'https://openlibrary.org' },
     ];
 
     for (const vp of [
