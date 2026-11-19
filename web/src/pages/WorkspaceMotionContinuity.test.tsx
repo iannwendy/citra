@@ -435,4 +435,36 @@ describe('Task 7 — Core Workspace Continuity', () => {
     expect(sidebar.className).toContain('-translate-x-full');
     expect(popover.getAttribute('data-open')).toBe('false');
   });
+
+  it('AppLayout hides NotificationCenterButton across desktop sidebar (expanded & collapsed rail) and mobile header', () => {
+    localStorage.removeItem('citra.sidebar.collapsed');
+
+    renderWorkspace(
+      <Routes>
+        <Route
+          path="/dashboard"
+          element={
+            <AppLayout>
+              <div data-testid="dash-view">Dashboard</div>
+            </AppLayout>
+          }
+        />
+      </Routes>,
+      ['/dashboard'],
+    );
+
+    const sidebar = screen.getByTestId('app-sidebar');
+    expect(sidebar.getAttribute('data-collapsed')).toBe('false');
+    expect(sidebar.querySelector('[data-testid="notification-center-trigger-desktop"]')).toBeNull();
+    expect(screen.queryByTestId('notification-center-trigger-desktop')).toBeNull();
+    expect(screen.queryByTestId('notification-center-trigger-mobile')).toBeNull();
+
+    // Collapse into 72px rail and verify notification button remains absent everywhere
+    fireEvent.click(screen.getByTestId('sidebar-collapse-toggle'));
+    expect(sidebar.getAttribute('data-collapsed')).toBe('true');
+    expect(sidebar.querySelector('[data-testid="notification-center-trigger-desktop"]')).toBeNull();
+    expect(screen.queryByTestId('notification-center-trigger-desktop')).toBeNull();
+    expect(screen.queryByTestId('notification-center-trigger-mobile')).toBeNull();
+    expect(sidebar.querySelector('a[href="/sandbox"]')).toBeNull();
+  });
 });

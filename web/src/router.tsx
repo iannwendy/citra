@@ -445,6 +445,7 @@ export const router = createBrowserRouter([
           },
           // Legacy route redirects
           { path: '/home', element: <Navigate to="/dashboard" replace /> },
+          { path: '/sanbox', element: <Navigate to="/sandbox" replace /> },
         ],
       },
 

@@ -19,9 +19,11 @@ test.describe('Navigation', () => {
     await expect(page).toHaveURL(/\/upload/);
   });
 
-  test('should navigate from Dashboard to Live Sandbox via sidebar', async ({ page }) => {
-    await page.getByRole('link', { name: /live sandbox/i }).first().click();
+  test('should hide Live Sandbox from sidebar while keeping direct /sandbox URL accessible', async ({ page }) => {
+    await expect(page.locator('aside').getByRole('link', { name: /live sandbox/i })).toHaveCount(0);
+    await page.goto('/sandbox');
     await expect(page).toHaveURL(/\/sandbox/);
+    await expect(page.getByTestId('sandbox-page')).toBeVisible();
   });
 
   test('should navigate from Dashboard to History via sidebar', async ({ page }) => {

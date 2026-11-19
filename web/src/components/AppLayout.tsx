@@ -17,7 +17,6 @@ import {
   FileText,
   Globe,
   Sparkles,
-  FlaskConical,
   Tag,
   Loader2,
   CheckCircle2,
@@ -39,7 +38,7 @@ import { useVerificationProgress } from '@/contexts/VerificationProgressContext'
 import { getQuotaView } from '@/lib/quotaDisplay';
 import { useRole, type UserCapability, type UserRole } from '@/hooks/useRole';
 import { useTheme } from '@/contexts/ThemeContext';
-import { NotificationCenterButton, useToast } from '@/contexts/ToastContext';
+import { useToast } from '@/contexts/ToastContext';
 import { HelpModal } from './HelpModal';
 import { GoogleOnboardingModal } from './GoogleOnboardingModal';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -75,7 +74,6 @@ const SIDEBAR_GROUPS: NavGroup[] = [
       { path: '/dashboard', labelKey: 'nav.dashboard', icon: FileSearch, capability: 'upload_essay' },
       { path: '/upload', labelKey: 'nav.newCheck', icon: Upload, capability: 'upload_essay' },
       { path: '/batch-upload', labelKey: 'nav.batchCheck', icon: Layers, requiresBatch: true },
-      { path: '/sandbox', labelKey: 'nav.liveSandbox', icon: FlaskConical, capability: 'upload_essay' },
       { path: '/history', labelKey: 'nav.history', icon: History, capability: 'view_own_history' },
     ],
   },
@@ -353,8 +351,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          {(isSingleCheckInFlight || isBatchActive) && (
+        {(isSingleCheckInFlight || isBatchActive) && (
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               data-testid="mobile-active-progress-pill"
@@ -378,9 +376,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   : `${batchStats.completed}/${batchStats.total}`}
               </span>
             </button>
-          )}
-          <NotificationCenterButton lang={currentLang} compact />
-        </div>
+          </div>
+        )}
       </header>
 
       {/* Mobile overlay */}
@@ -405,7 +402,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         `}
       >
         <div className="flex flex-col h-full">
-          {/* Logo, Notification Bell & ChatGPT-Style Sidebar Collapse / Expand Header */}
+          {/* Logo & ChatGPT-Style Sidebar Collapse / Expand Header */}
           {isDesktopCollapsed ? (
             <div className="py-3 px-2 border-b border-slate-200/80 dark:border-slate-800/80 bg-gradient-to-b from-slate-50/60 to-transparent dark:from-slate-950/40 flex flex-col items-center gap-2 shrink-0">
               <button
@@ -442,7 +439,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 />
                 <PanelLeftOpen className="h-4 w-4 text-slate-700 dark:text-slate-200 absolute opacity-0 scale-75 group-hover/rail-logo:opacity-100 group-hover/rail-logo:scale-100 group-focus-visible/rail-logo:opacity-100 group-focus-visible/rail-logo:scale-100 transition-all duration-150" />
               </button>
-              <NotificationCenterButton lang={currentLang} />
             </div>
           ) : (
             <div className="min-h-14 lg:min-h-0 px-3.5 py-2.5 lg:py-3 border-b border-slate-200/80 dark:border-slate-800/80 bg-gradient-to-b from-slate-50/60 to-transparent dark:from-slate-950/40 flex items-center justify-between gap-2 shrink-0">
@@ -479,7 +475,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </button>
 
               <div className="hidden lg:flex items-center gap-1 shrink-0">
-                <NotificationCenterButton lang={currentLang} />
                 <button
                   type="button"
                   data-testid="sidebar-collapse-toggle"

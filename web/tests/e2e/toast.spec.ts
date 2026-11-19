@@ -127,44 +127,17 @@ test.describe('Toast Integration', () => {
     await expect(page.locator('[role="alert"]')).toHaveCount(0);
   });
 
-  test('should open Notification Center drawer and display notification history', async ({
+  test('should omit Notification Center trigger button on both desktop sidebar and mobile header', async ({
     page,
   }) => {
     await page.goto('/settings');
     await waitForAuth(page);
 
-    await page.getByTestId('sidebar-account-trigger').click();
-    const popover = page.getByTestId('sidebar-account-popover');
-    await expect(popover).toHaveAttribute('data-open', 'true');
-    await popover.getByRole('button', { name: 'vi', exact: true }).click();
-    await expect(page.getByTestId('citra-toast-success').first()).toBeVisible();
-    await page.getByTestId('sidebar-account-trigger').click();
+    await expect(page.getByTestId('notification-center-trigger-desktop')).toHaveCount(0);
+    await expect(page.getByTestId('notification-center-trigger-mobile')).toHaveCount(0);
 
-    // Verify notification icon is geometrically centered inside its trigger button
-    const trigger = page.getByTestId('notification-center-trigger-desktop');
-    await expect(trigger).toBeVisible();
-    const btnBox = await trigger.boundingBox();
-    const svgBox = await trigger.locator('svg').boundingBox();
-    expect(btnBox).not.toBeNull();
-    expect(svgBox).not.toBeNull();
-    if (btnBox && svgBox) {
-      const btnCx = btnBox.x + btnBox.width / 2;
-      const btnCy = btnBox.y + btnBox.height / 2;
-      const svgCx = svgBox.x + svgBox.width / 2;
-      const svgCy = svgBox.y + svgBox.height / 2;
-      expect(Math.abs(btnCx - svgCx)).toBeLessThanOrEqual(0.5);
-      expect(Math.abs(btnCy - svgCy)).toBeLessThanOrEqual(0.5);
-    }
-
-    // Open Notification Center from desktop sidebar trigger
-    await trigger.click();
-
-    const panel = page.getByTestId('notification-center-panel');
-    await expect(panel).toBeVisible();
-    await expect(panel.getByRole('listitem').first()).toBeVisible();
-
-    // Clear history inside Notification Center
-    await page.getByTestId('notification-clear-history-btn').click();
-    await expect(panel.getByRole('listitem')).toHaveCount(0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByTestId('notification-center-trigger-desktop')).toHaveCount(0);
+    await expect(page.getByTestId('notification-center-trigger-mobile')).toHaveCount(0);
   });
 });

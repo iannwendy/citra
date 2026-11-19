@@ -67,13 +67,15 @@ describe('Batch Check entry points', () => {
     expect(screen.queryByRole('link', { name: /batch check/i })).toBeNull();
   });
 
-  it('places Live Sandbox below Batch Check in the workspace sidebar', () => {
+  it('omits Live Sandbox from the workspace sidebar while keeping core workspace order', () => {
     renderWithProviders(
       <AppLayout>
         <div />
       </AppLayout>,
       { user: makeUser('user', 'pro') },
     );
+
+    expect(screen.queryByRole('link', { name: /live sandbox/i })).toBeNull();
 
     const navLinks = screen
       .getAllByRole('link')
@@ -88,7 +90,6 @@ describe('Batch Check entry points', () => {
       '/dashboard',
       '/upload',
       '/batch-upload',
-      '/sandbox',
       '/history',
     ]);
   });
