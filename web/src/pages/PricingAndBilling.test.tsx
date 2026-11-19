@@ -1829,8 +1829,11 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     expect(taxonomySection.querySelectorAll('[class*="lg:grid-rows-subgrid"]').length).toBeGreaterThanOrEqual(3);
     unmountLanding();
 
-    // 2. PricingPage plan-card-pro
-    renderWithAuth(<PricingPage />, { user: createMockUser(), initialEntries: ['/pricing'] });
+    // 2. PricingPage plan-card-pro (authenticated -> xl: subgrid; public -> lg: subgrid)
+    const { unmount: unmountAuthPricing } = renderWithAuth(<PricingPage />, {
+      user: createMockUser(),
+      initialEntries: ['/pricing'],
+    });
     const proCard = screen.getByTestId('plan-card-pro');
     const pricingFloralBanner = proCard.querySelector('.solva-floral-banner-mask');
     expect(pricingFloralBanner).not.toBeNull();
@@ -1841,12 +1844,25 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     expect(pricingProSurface).not.toBeNull();
     expect(pricingProSurface.contains(screen.getByTestId('pro-price-display'))).toBe(true);
     expect(pricingProSurface.contains(screen.getByTestId('select-pro-btn'))).toBe(true);
-    expect(pricingProSurface.textContent).toMatch(/Full Neuro-Symbolic pipeline/i);
+    expect(pricingProSurface.textContent).toMatch(
+      /Comprehensive citation verification across 15\+ scholarly indexes/i,
+    );
     expect(pricingFloralBanner?.contains(pricingProSurface)).toBe(false);
 
     for (const cardId of ['plan-card-basic', 'plan-card-pro', 'plan-card-ultra']) {
+      expect(screen.getByTestId(cardId).className).toContain('xl:grid-rows-subgrid');
+      expect(screen.getByTestId(cardId).className).not.toContain('lg:grid-rows-subgrid');
+    }
+    unmountAuthPricing();
+
+    const { unmount: unmountPublicPricing } = renderWithAuth(<PricingPage />, {
+      user: null,
+      initialEntries: ['/pricing'],
+    });
+    for (const cardId of ['plan-card-basic', 'plan-card-pro', 'plan-card-ultra']) {
       expect(screen.getByTestId(cardId).className).toContain('lg:grid-rows-subgrid');
     }
+    unmountPublicPricing();
   });
 
   it('Task 1.3 — enforces whitespace-nowrap shrink-0 on Save $48/yr and Save $480/yr badges in EN and VI so pills never split onto 2 lines', async () => {
@@ -1965,6 +1981,235 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       expect(screen.getByTestId('pro-price-display').textContent).toBe('$20');
       expect(screen.getByTestId('pro-vnd-equivalent').textContent).toContain('500.000 ₫');
       unmountPricingVi();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.3 Round 1 — switches authenticated PricingPage grid/subgrid to xl: to prevent 1024px AppLayout sidebar crush and keeps narrow-column & adminLocked CTAs concise', async () => {
+    try {
+      await i18n.changeLanguage('en');
+      const { unmount: unmountPublic } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const publicBasicCard = screen.getByTestId('plan-card-basic');
+      const publicGrid = publicBasicCard.parentElement?.parentElement as HTMLElement;
+      expect(publicGrid.className).toContain('lg:grid-cols-3');
+      expect(publicGrid.className).not.toContain('xl:grid-cols-3');
+
+      // Upgrade CTAs wrap price suffix inside hidden 2xl:inline while preserving .textContent
+      const pubProBtn = screen.getByTestId('select-pro-btn');
+      const pubUltraBtn = screen.getByTestId('select-ultra-btn');
+      expect(pubProBtn.textContent).toContain('Upgrade to Pro · $192/yr');
+      expect(pubUltraBtn.textContent).toContain('Upgrade to Ultra · $1,920/yr');
+      expect(pubProBtn.querySelector('span.hidden.2xl\\:inline')).not.toBeNull();
+      expect(pubUltraBtn.querySelector('span.hidden.2xl\\:inline')).not.toBeNull();
+      unmountPublic();
+
+      // Authenticated user inside AppLayout -> xl:grid-cols-3 + xl:grid-rows-subgrid
+      const { unmount: unmountAuth } = renderWithAuth(
+        <AppLayout>
+          <PricingPage />
+        </AppLayout>,
+        { user: createMockUser({ plan_tier: 'basic' }), initialEntries: ['/pricing'] },
+      );
+      const authBasicCard = screen.getByTestId('plan-card-basic');
+      const authGrid = authBasicCard.parentElement?.parentElement as HTMLElement;
+      expect(authGrid.className).toContain('xl:grid-cols-3');
+      expect(authGrid.className).not.toContain('lg:grid-cols-3');
+      const authProSurface = screen
+        .getByTestId('plan-card-pro')
+        .querySelector('.solva-pro-card-surface') as HTMLElement;
+      expect(authProSurface.className).toContain('xl:row-span-4');
+      expect(authProSurface.className).not.toContain('lg:row-span-4');
+      unmountAuth();
+
+      // Admin user EN & VI concise adminLocked CTA copy
+      const adminUser = createMockUser({ role: 'admin', plan_tier: 'ultra' });
+      const { unmount: unmountAdminEn } = renderWithAuth(<PricingPage />, {
+        user: adminUser,
+        initialEntries: ['/pricing'],
+      });
+      expect(screen.getByTestId('select-basic-btn').textContent).toContain('Included with Admin');
+      expect(screen.getByTestId('select-pro-btn').textContent).toContain('Included with Admin');
+      expect(screen.getByTestId('select-ultra-btn').textContent).toContain('Current Plan · Ultra (Admin)');
+      expect(
+        screen.getByTestId('select-ultra-btn').querySelector('span.hidden.2xl\\:inline')?.textContent,
+      ).toBe(' Plan');
+      unmountAdminEn();
+
+      await i18n.changeLanguage('vi');
+      const { unmount: unmountAdminVi } = renderWithAuth(<PricingPage />, {
+        user: adminUser,
+        initialEntries: ['/pricing'],
+      });
+      expect(screen.getByTestId('select-basic-btn').textContent).toContain('Mở sẵn cho Quản trị');
+      expect(screen.getByTestId('select-pro-btn').textContent).toContain('Mở sẵn cho Quản trị');
+      expect(screen.getByTestId('select-ultra-btn').textContent).toContain('Gói Quản trị · Ultra');
+      unmountAdminVi();
+
+      // Public VI Ultra CTA uses Vietnamese dot thousands separator ($1.920/năm) inside hidden 2xl:inline
+      const { unmount: unmountPubVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const viUltraBtn = screen.getByTestId('select-ultra-btn');
+      expect(viUltraBtn.textContent).toContain('Nâng cấp lên Ultra · $1.920/năm');
+      expect(viUltraBtn.querySelector('span.hidden.2xl\\:inline')).not.toBeNull();
+      unmountPubVi();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.3 Round 1 — enforces var(--solva-muted) WCAG AA contrast on $20/$200 strikethroughs, aria-pressed on billing toggles, whitespace-nowrap VND spans, and clean VI annual billing copy', async () => {
+    try {
+      await i18n.changeLanguage('en');
+      const { container: enContainer, unmount: unmountEn } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+
+      // aria-pressed on billing cycle toggle buttons
+      const monthlyBtn = screen.getByTestId('billing-toggle-monthly');
+      const annualBtn = screen.getByTestId('billing-toggle-annual');
+      expect(annualBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(monthlyBtn.getAttribute('aria-pressed')).toBe('false');
+
+      // Strikethrough $20 & $200 use var(--solva-muted), never var(--solva-subtle)
+      const strikethroughs = Array.from(enContainer.querySelectorAll('.line-through'));
+      expect(strikethroughs.map((el) => el.textContent)).toEqual(['$20', '$200']);
+      for (const el of strikethroughs) {
+        expect(el.getAttribute('style')).toContain('var(--solva-muted)');
+        expect(el.getAttribute('style')).not.toContain('var(--solva-subtle)');
+      }
+
+      fireEvent.click(monthlyBtn);
+      expect(monthlyBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(annualBtn.getAttribute('aria-pressed')).toBe('false');
+      unmountEn();
+
+      // Vietnamese VND clauses wrapped in whitespace-nowrap + clean annual helper copy
+      await i18n.changeLanguage('vi');
+      const { unmount: unmountLandingVi } = renderWithAuth(<LandingPage />, {
+        user: null,
+        initialEntries: ['/'],
+      });
+      fireEvent.click(screen.getByTestId('landing-billing-toggle'));
+      const landingProVnd = screen.getByTestId('pro-vnd-equivalent');
+      expect(landingProVnd.getAttribute('style')).toContain('var(--solva-ink)');
+      expect(landingProVnd.className).toContain('font-medium');
+      expect(landingProVnd.querySelectorAll('span.whitespace-nowrap').length).toBeGreaterThanOrEqual(3);
+      expect(landingProVnd.textContent).toContain('400.000 ₫');
+      expect(landingProVnd.textContent).toContain('4.800.000 ₫/năm');
+      unmountLandingVi();
+
+      const { unmount: unmountPricingVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const pricingProVnd = screen.getByTestId('pro-vnd-equivalent');
+      const pricingUltraVnd = screen.getByTestId('ultra-vnd-equivalent');
+      expect(pricingProVnd.querySelectorAll('span.whitespace-nowrap').length).toBeGreaterThanOrEqual(3);
+      expect(pricingUltraVnd.querySelectorAll('span.whitespace-nowrap').length).toBeGreaterThanOrEqual(3);
+
+      const proCardViText = screen.getByTestId('plan-card-pro').textContent ?? '';
+      const ultraCardViText = screen.getByTestId('plan-card-ultra').textContent ?? '';
+      expect(proCardViText).toContain('Thanh toán $192/năm (Tiết kiệm $48/năm — Giảm 20%)');
+      expect(proCardViText).not.toContain('>2 tháng');
+      expect(ultraCardViText).toContain('$1.920/năm');
+      expect(ultraCardViText).not.toContain('$1,920');
+      unmountPricingVi();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.3 Round 1 — eliminates ML/SQL/XML/vendor jargon and Vietlish inside all 3 pricing cards on LandingPage and PricingPage and numbers badges 01 -> 02 -> 03', async () => {
+    const forbiddenJargon = [
+      /GROBID/i,
+      /TEI-XML/i,
+      /FTS5/i,
+      /128K\+/i,
+      /trực giao/i,
+      /Orthogonal/i,
+      /8 L1 × 5 L2/i,
+      /<->/,
+      /MiniLM/i,
+      /ONNX/i,
+      /INT8/i,
+      /Neuro-Symbolic/i,
+      /HF,\s*RFC/i,
+      /SerpAPI/i,
+      /Admin Control Plane/i,
+      /Batch Upload 10 files/i,
+      /Link[- ]Rot/i,
+      /Fair-use/i,
+    ];
+    const forbiddenVietlish = [
+      /Document Inspector/i,
+      /Logic Trace/i,
+      /Class ZIP/i,
+      /Batch Upload/i,
+      /Classrooms/i,
+      /Override/i,
+    ];
+
+    try {
+      for (const locale of ['en', 'vi'] as const) {
+        await i18n.changeLanguage(locale);
+
+        const { container: landingContainer, unmount: unmountLanding } = renderWithAuth(
+          <LandingPage />,
+          { user: null, initialEntries: ['/'] },
+        );
+        const taxonomy = landingContainer.querySelector('#taxonomy') as HTMLElement;
+        const landingCardsText = taxonomy.textContent ?? '';
+        for (const pattern of forbiddenJargon) {
+          expect(landingCardsText).not.toMatch(pattern);
+        }
+        if (locale === 'vi') {
+          for (const pattern of forbiddenVietlish) {
+            expect(landingCardsText).not.toMatch(pattern);
+          }
+          expect(landingCardsText).toContain('02 · PHỔ BIẾN NHẤT');
+          expect(landingCardsText).not.toContain('02 · KHUYÊN DÙNG');
+        } else {
+          expect(landingCardsText).toContain('02 · MOST POPULAR');
+          expect(landingCardsText).not.toContain('02 · RECOMMENDED');
+        }
+        expect(taxonomy.querySelectorAll('[class*="gap-y-2"]').length).toBeGreaterThanOrEqual(3);
+        unmountLanding();
+
+        const { unmount: unmountPricing } = renderWithAuth(<PricingPage />, {
+          user: null,
+          initialEntries: ['/pricing'],
+        });
+        const pricingCardsText = [
+          screen.getByTestId('plan-card-basic').textContent ?? '',
+          screen.getByTestId('plan-card-pro').textContent ?? '',
+          screen.getByTestId('plan-card-ultra').textContent ?? '',
+        ].join(' ');
+
+        for (const pattern of forbiddenJargon) {
+          expect(pricingCardsText).not.toMatch(pattern);
+        }
+        if (locale === 'vi') {
+          for (const pattern of forbiddenVietlish) {
+            expect(pricingCardsText).not.toMatch(pattern);
+          }
+          expect(screen.getByTestId('plan-card-pro').textContent).toContain('02 · PHỔ BIẾN NHẤT');
+        } else {
+          expect(screen.getByTestId('plan-card-pro').textContent).toContain('02 · MOST POPULAR');
+        }
+        for (const cardId of ['plan-card-basic', 'plan-card-pro', 'plan-card-ultra']) {
+          expect(
+            screen.getByTestId(cardId).querySelector('[class*="gap-y-2"]'),
+          ).not.toBeNull();
+        }
+        unmountPricing();
+      }
     } finally {
       await i18n.changeLanguage('en');
     }

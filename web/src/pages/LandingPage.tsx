@@ -3600,33 +3600,41 @@ function SolvaTaxonomyPricingSection({
       name: 'Basic',
       subtitle: lang === 'vi' ? 'Khởi đầu Học thuật' : 'Student Starter',
       headerTag: lang === 'vi' ? 'MẶC ĐỊNH' : 'DEFAULT',
-      headerEyebrow: lang === 'vi' ? '01 · MIỄN PHÍ TRỌN ĐỜI' : '01 · FREE FOREVER',
+      headerEyebrow: (lang === 'vi'
+        ? '01 · MIỄN PHÍ TRỌN ĐỜI'
+        : '01 · FREE FOREVER') as string | null,
       savingsBadge: null as string | null,
       metricNum: 0,
       unit: lang === 'vi' ? 'tháng · Miễn phí' : 'month',
-      vndLine: lang === 'vi' ? '0 ₫/tháng · Không cần thẻ thanh toán' : null,
+      vndNode:
+        lang === 'vi' ? (
+          <>
+            <span className="whitespace-nowrap">0 ₫/tháng</span> ·{' '}
+            <span className="whitespace-nowrap">Không cần thẻ thanh toán</span>
+          </>
+        ) : null,
       vndTestId: undefined as string | undefined,
       desc:
         lang === 'vi'
-          ? 'Bộ công cụ thẩm định trích dẫn 2 tầng thiết yếu dành cho sinh viên thực hiện tiểu luận chuyên ngành, tổng quan tài liệu và rà soát danh mục tham khảo nhanh.'
-          : 'Essential two-layer citation verification for course essays, literature reviews, and quick bibliography checks.',
+          ? 'Bộ công cụ rà soát trích dẫn thiết yếu dành cho sinh viên thực hiện tiểu luận môn học, tổng quan tài liệu và kiểm tra nhanh danh mục tham khảo.'
+          : 'Essential citation verification for course essays, literature reviews, and quick bibliography checks.',
       includesLabel: lang === 'vi' ? 'Quyền lợi bao gồm:' : 'Includes:',
       items:
         lang === 'vi'
           ? [
               '3 bản thảo / tháng (tối đa 15 trang, 5 MB / tệp)',
               'Hỗ trợ đầy đủ .PDF, .DOCX, .BIB & .RIS (tối đa 30 trích dẫn / bài)',
-              'Bóc tách cấu trúc GROBID TEI-XML & Đa quy chuẩn (IEEE, APA 7th)',
-              'Kho đệm 128K+ FTS5 cục bộ + Crossref, OpenAlex & Văn bản Pháp luật VN',
-              'Hệ phân loại 2 tầng trực giao 13 trạng thái (8 L1 × 5 L2)',
+              'Tự động đối chiếu trích dẫn trong bài & tài liệu tham khảo (APA, IEEE)',
+              'Xác thực trực tiếp qua Crossref, OpenAlex & Văn bản Pháp luật VN',
+              'Chấm điểm toàn vẹn trích dẫn & phân loại chi tiết từng lỗi sai lệch',
               'Bao gồm báo cáo trực tuyến đầy đủ (Xuất Word/PDF ở gói Pro)',
             ]
           : [
               '3 manuscripts / month (up to 15 pages, 5 MB)',
               'Supports .PDF, .DOCX, .BIB & .RIS (up to 30 citations / doc)',
-              'GROBID TEI-XML & Multi-Style Cross-Validator',
-              '128K+ Local FTS5 + Crossref, OpenAlex & VN Legal',
-              'Full 13-state Two-Layer Orthogonal Taxonomy (8 L1 × 5 L2)',
+              'Automated in-text & bibliography cross-checking (APA, IEEE, Vancouver)',
+              'Verified against Crossref, OpenAlex & Vietnam Legal Registry',
+              'Clear citation integrity score & structured issue breakdown',
               'Web verification report included (Word/PDF export on Pro)',
             ],
       cta: lang === 'vi' ? 'Bắt đầu miễn phí' : 'Get started free',
@@ -3638,8 +3646,8 @@ function SolvaTaxonomyPricingSection({
       name: 'Pro',
       subtitle:
         lang === 'vi' ? 'Khóa luận & Công bố Quốc tế' : 'Thesis Writers & Researchers',
-      headerTag: lang === 'vi' ? 'PHỔ BIẾN NHẤT' : 'MOST POPULAR',
-      headerEyebrow: lang === 'vi' ? '02 · KHUYÊN DÙNG' : '02 · RECOMMENDED',
+      headerTag: lang === 'vi' ? '02 · PHỔ BIẾN NHẤT' : '02 · MOST POPULAR',
+      headerEyebrow: null as string | null,
       savingsBadge: annualBilling
         ? lang === 'vi'
           ? 'Tiết kiệm $48/năm'
@@ -3654,16 +3662,25 @@ function SolvaTaxonomyPricingSection({
           : annualBilling
             ? 'month (billed yearly)'
             : 'month',
-      vndLine:
-        lang === 'vi'
-          ? annualBilling
-            ? '≈ 400.000 ₫/tháng · 4.800.000 ₫/năm qua VNPay'
-            : '≈ 500.000 ₫/tháng qua VNPay & thẻ quốc tế'
-          : null,
+      vndNode:
+        lang === 'vi' ? (
+          annualBilling ? (
+            <>
+              <span className="whitespace-nowrap">≈ 400.000 ₫/tháng</span> ·{' '}
+              <span className="whitespace-nowrap">4.800.000 ₫/năm</span>{' '}
+              <span className="whitespace-nowrap">qua VNPay</span>
+            </>
+          ) : (
+            <>
+              <span className="whitespace-nowrap">≈ 500.000 ₫/tháng</span>{' '}
+              <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
+            </>
+          )
+        ) : null,
       vndTestId: 'pro-vnd-equivalent',
       desc:
         lang === 'vi'
-          ? 'Truy vấn liên hợp hơn 15 CSDL khoa học quốc tế, đối sánh ngữ nghĩa sâu bằng Sentence-BERT và chuẩn hóa danh mục tự động chỉ với một cú nhấp cho khóa luận, luận văn.'
+          ? 'Tra cứu hơn 15 cơ sở dữ liệu học thuật quốc tế, đối chiếu ngữ nghĩa sâu với tài liệu gốc và chuẩn hóa danh mục tham khảo tự động cho khóa luận, luận văn.'
           : 'Full 15+ scholarly API federation, Sentence-BERT semantic matching, and 1-Click Auto-Fix for graduation theses.',
       includesLabel:
         lang === 'vi'
@@ -3673,17 +3690,17 @@ function SolvaTaxonomyPricingSection({
         lang === 'vi'
           ? [
               '50 bản thảo / tháng (tối đa 100 trang, 25 MB / tệp)',
-              'Tối đa 200 trích dẫn / bản thảo + Tải lên hàng loạt (10 tệp)',
-              'Mở khóa toàn bộ 15+ CSDL học thuật (PubMed, arXiv, DBLP, DOAJ...)',
-              'So khớp ngữ nghĩa sâu Sentence-BERT & Multilingual MiniLM ONNX INT8',
-              'Chuẩn hóa tự động 1-Click (APA, IEEE, BibTeX) & Xuất báo cáo PDF/DOCX',
+              'Tối đa 200 trích dẫn / bài & tải lên đồng thời tới 10 bản thảo',
+              'Mở khóa toàn bộ 15+ nguồn học thuật uy tín (PubMed, arXiv, DBLP, DOAJ...)',
+              'Đối chiếu ngữ nghĩa sâu câu trích dẫn song ngữ Việt ↔ Anh với văn bản gốc',
+              'Tự động chuẩn hóa danh mục (APA, IEEE, BibTeX) & xuất báo cáo Word/PDF',
             ]
           : [
               '50 manuscripts / month (up to 100 pages, 25 MB)',
-              'Up to 200 citations / doc + Batch Upload (10 files)',
-              'All 15+ Scholarly APIs (PubMed, arXiv, DBLP, DOAJ...)',
-              'Sentence-BERT & Multilingual MiniLM ONNX INT8 Alignment',
-              '1-Click Bibliography Auto-Fix (APA, IEEE, BibTeX) & PDF/DOCX Export',
+              'Up to 200 citations / manuscript & multi-file upload (up to 10 files)',
+              'Full 15+ scholarly indexes (PubMed, arXiv, DBLP, DOAJ & Retraction Watch)',
+              'Bilingual semantic claim-to-source evidence verification (EN ↔ VI)',
+              'Automated bibliography formatting (APA, IEEE, BibTeX) & Word/PDF export',
             ],
       cta: lang === 'vi' ? 'Nâng cấp lên Pro' : 'Upgrade to Pro',
       to: '/pricing',
@@ -3695,7 +3712,9 @@ function SolvaTaxonomyPricingSection({
       subtitle:
         lang === 'vi' ? 'Hội đồng & Khoa / Viện' : 'Research Labs & Review Boards',
       headerTag: lang === 'vi' ? 'QUY MÔ LỚN' : 'ENTERPRISE LAB',
-      headerEyebrow: lang === 'vi' ? '03 · BỘ MÔN & HỘI ĐỒNG' : '03 · FACULTY & COHORT',
+      headerEyebrow: (lang === 'vi'
+        ? '03 · BỘ MÔN & HỘI ĐỒNG'
+        : '03 · FACULTY & COHORT') as string | null,
       savingsBadge: annualBilling
         ? lang === 'vi'
           ? 'Tiết kiệm $480/năm'
@@ -3710,17 +3729,26 @@ function SolvaTaxonomyPricingSection({
           : annualBilling
             ? 'month (billed yearly)'
             : 'month',
-      vndLine:
-        lang === 'vi'
-          ? annualBilling
-            ? '≈ 4.000.000 ₫/tháng · 48.000.000 ₫/năm qua VNPay'
-            : '≈ 5.000.000 ₫/tháng qua VNPay & thẻ quốc tế'
-          : null,
+      vndNode:
+        lang === 'vi' ? (
+          annualBilling ? (
+            <>
+              <span className="whitespace-nowrap">≈ 4.000.000 ₫/tháng</span> ·{' '}
+              <span className="whitespace-nowrap">48.000.000 ₫/năm</span>{' '}
+              <span className="whitespace-nowrap">qua VNPay</span>
+            </>
+          ) : (
+            <>
+              <span className="whitespace-nowrap">≈ 5.000.000 ₫/tháng</span>{' '}
+              <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
+            </>
+          )
+        ) : null,
       vndTestId: 'ultra-vnd-equivalent',
       desc:
         lang === 'vi'
-          ? 'Giải pháp thẩm định toàn diện ở quy mô Bộ môn, Khoa và Hội đồng bảo vệ với kênh tra cứu dự phòng Google Scholar, quản lý lớp học và lưu vết kiểm toán bất biến.'
-          : 'Unlimited institutional verification, Google Scholar fallback, classroom cohort management, and instructor override logs.',
+          ? 'Giải pháp thẩm định chuyên sâu cho Bộ môn, Khoa và Hội đồng bảo vệ với tra cứu mở rộng qua Google Scholar, quản lý đợt nộp bài và nhật ký thẩm định.'
+          : 'High-volume institutional verification with extended Google Scholar discovery, cohort management, and faculty review logs.',
       includesLabel:
         lang === 'vi'
           ? 'Toàn bộ quyền lợi gói Pro, cộng thêm:'
@@ -3728,18 +3756,18 @@ function SolvaTaxonomyPricingSection({
       items:
         lang === 'vi'
           ? [
-              'Không giới hạn bản thảo (1.000 bài/tháng, 500 trang, 100 MB)',
-              'Không giới hạn số trích dẫn / bài + Rà soát hàng loạt (50 tệp)',
-              'Tích hợp kênh dự phòng SerpAPI Google Scholar cho ấn phẩm chuyên khảo hiếm',
-              'Bảng điều khiển Lớp học dành cho Giảng viên & Quyền điều chỉnh nhãn (Override)',
-              'Hàng đợi xử lý ưu tiên, Trung tâm Quản trị & Nhật ký Kiểm toán bất biến',
+              'Tối đa 1.000 bản thảo / tháng (lên đến 500 trang, 100 MB / tệp)',
+              'Không giới hạn số trích dẫn / bài & rà soát đồng thời tới 50 bản thảo',
+              'Tra cứu mở rộng qua Google Scholar cho sách chuyên khảo & ấn phẩm hiếm',
+              'Không gian quản lý lớp học, thu bài theo đợt & điều chỉnh kết luận của giảng viên',
+              'Luồng xử lý ưu tiên, lưu trữ trọn đời & nhật ký thẩm định cấp đơn vị',
             ]
           : [
-              'Unlimited manuscripts (1,000/mo, up to 500 pages, 100 MB)',
-              'Unlimited citations per paper + Batch Upload (50 files)',
-              'SerpAPI Google Scholar Fallback for obscure monographs',
-              'Teacher Classroom Cohort Dashboard & Instructor Override',
-              'Admin Control Plane, Priority Queue & Immutable Audit Logs',
+              'Up to 1,000 manuscripts / month (up to 500 pages, 100 MB each)',
+              'Unlimited citations per paper & bulk cohort upload (up to 50 files)',
+              'Extended Google Scholar discovery for rare monographs & regional works',
+              'Faculty cohort workspace, student submissions & instructor review notes',
+              'Priority processing queue, lifetime history & institutional audit trail',
             ],
       cta: lang === 'vi' ? 'Khám phá gói Ultra' : 'Explore Ultra plan',
       to: '/pricing',
@@ -3858,7 +3886,7 @@ function SolvaTaxonomyPricingSection({
                       </>
                     )}
 
-                    <div className="relative z-10 flex items-start justify-between gap-2 flex-wrap">
+                    <div className="relative z-10 flex items-start justify-between gap-x-2 gap-y-2 flex-wrap">
                       {tier.featured ? (
                         <span
                           style={{ backgroundColor: '#1C1A15', color: '#FBFAF6' }}
@@ -3887,7 +3915,7 @@ function SolvaTaxonomyPricingSection({
                       )}
                     </div>
 
-                    {!tier.featured && (
+                    {tier.headerEyebrow && (
                       <span
                         style={{ color: 'var(--solva-muted)' }}
                         className="relative z-10 font-mono text-[11px] uppercase tracking-wider whitespace-nowrap"
@@ -3968,13 +3996,17 @@ function SolvaTaxonomyPricingSection({
                           <SoftTextSwap text={`/ ${tier.unit}`} />
                         </span>
                       </div>
-                      {tier.vndLine && (
+                      {tier.vndNode && (
                         <p
                           data-testid={tier.vndTestId}
-                          style={{ color: 'var(--solva-muted)' }}
-                          className="font-mono text-[12px] mt-1"
+                          style={{
+                            color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
+                          }}
+                          className={`font-mono text-[12px] mt-1 ${
+                            tier.featured ? 'font-medium' : ''
+                          }`}
                         >
-                          {tier.vndLine}
+                          {tier.vndNode}
                         </p>
                       )}
                     </div>

@@ -350,6 +350,17 @@ export function PricingPage() {
       planTier === 'pro' &&
       (!user.billing_cycle || user.billing_cycle === billingCycle),
   );
+  const tierGridClass = user
+    ? 'w-full grid grid-cols-1 gap-y-[16px] xl:grid-cols-3 xl:gap-x-[16px] xl:gap-y-0 items-stretch'
+    : 'w-full grid grid-cols-1 gap-y-[16px] lg:grid-cols-3 lg:gap-x-[16px] lg:gap-y-0 items-stretch';
+  const subgridSpan5Class = user
+    ? 'xl:row-span-5 xl:grid xl:grid-rows-subgrid'
+    : 'lg:row-span-5 lg:grid lg:grid-rows-subgrid';
+  const subgridBodyClass = user
+    ? 'xl:gap-y-0 xl:row-span-4 xl:grid xl:grid-rows-subgrid'
+    : 'lg:gap-y-0 lg:row-span-4 lg:grid lg:grid-rows-subgrid';
+  const subgridRowPb18Class = user ? 'xl:pb-[18px]' : 'lg:pb-[18px]';
+  const subgridRowPb20Class = user ? 'xl:pb-[20px]' : 'lg:pb-[20px]';
 
   return (
     <div
@@ -500,6 +511,7 @@ export function PricingPage() {
                     <button
                       type="button"
                       data-testid="billing-toggle-monthly"
+                      aria-pressed={billingCycle === 'monthly'}
                       data-pill-active={billingCycle === 'monthly' ? 'true' : 'false'}
                       onClick={() => setBillingCycle('monthly')}
                       style={
@@ -533,6 +545,7 @@ export function PricingPage() {
                     <button
                       type="button"
                       data-testid="billing-toggle-annual"
+                      aria-pressed={billingCycle === 'annual'}
                       data-pill-active={billingCycle === 'annual' ? 'true' : 'false'}
                       onClick={() => setBillingCycle('annual')}
                       style={
@@ -575,7 +588,7 @@ export function PricingPage() {
                       text={
                         billingCycle === 'annual'
                           ? lang === 'vi'
-                            ? '✨ Đang áp dụng ưu đãi trả theo năm: Tặng tương đương > 2 tháng sử dụng miễn phí!'
+                            ? '✨ Đang áp dụng ưu đãi trả theo năm: Tiết kiệm 20% (tương đương hơn 2 tháng miễn phí)!'
                             : '✨ Annual discount active: Equivalent to over 2 months free!'
                           : lang === 'vi'
                             ? '💡 Mẹo: Chuyển sang gói theo Năm để tiết kiệm ngay $48/năm (Pro) hoặc $480/năm (Ultra).'
@@ -610,27 +623,25 @@ export function PricingPage() {
                 3 SOLVA EDITORIAL PRICING CARDS (Basic · Pro Floral · Ultra)
                 5-Row CSS Subgrid Alignment + High-Contrast Pro Body Surface
                 ============================================================ */}
-            <div
-              className="w-full grid grid-cols-1 gap-y-[16px] lg:grid-cols-3 lg:gap-x-[16px] lg:gap-y-0 items-stretch"
-            >
+            <div className={tierGridClass}>
               {/* 1. BASIC TIER */}
               <SolvaScrollReveal
                 delayMs={0}
                 yOffset={36}
                 triggerRatio={0.99}
-                className="h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid"
+                className={`h-full ${subgridSpan5Class}`}
               >
                 <div
                   style={{
                     backgroundColor: 'var(--solva-surface)',
                     borderColor: 'var(--solva-border)',
                   }}
-                  className="relative rounded-[16px] border p-[8px] sm:p-[10px] flex flex-col overflow-hidden h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid"
+                  className={`relative rounded-[16px] border p-[8px] sm:p-[10px] flex flex-col overflow-hidden h-full ${subgridSpan5Class}`}
                   data-testid="plan-card-basic"
                 >
                   {/* Row 1: Top Architectural Gallery Header Band */}
                   <div className="relative min-h-[100px] sm:min-h-[104px] rounded-t-[11px] px-4 sm:px-5 py-3.5 flex flex-col justify-between bg-gradient-to-b from-[#ECE9E0]/90 via-[#F4F2EC]/55 to-transparent dark:from-[#26231C]/90 dark:via-[#1E1C17]/55 dark:to-transparent">
-                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="flex items-start justify-between gap-x-2 gap-y-2 flex-wrap">
                       <span
                         style={{
                           backgroundColor: 'var(--solva-bg)',
@@ -656,10 +667,10 @@ export function PricingPage() {
                       backgroundColor: 'var(--solva-bg)',
                       borderColor: 'var(--solva-border)',
                     }}
-                    className="relative z-10 rounded-[12px] border px-[20px] sm:px-[24px] py-[22px] sm:py-[24px] flex flex-col justify-between gap-[20px] lg:gap-y-0 flex-1 lg:row-span-4 lg:grid lg:grid-rows-subgrid"
+                    className={`relative z-10 rounded-[12px] border px-[20px] sm:px-[24px] py-[22px] sm:py-[24px] flex flex-col justify-between gap-[20px] flex-1 ${subgridBodyClass}`}
                   >
                     {/* Row 2: Header & Description */}
-                    <div className="space-y-[14px] lg:pb-[18px]">
+                    <div className={`space-y-[14px] ${subgridRowPb18Class}`}>
                       <div className="flex items-center gap-3">
                         <div
                           style={{
@@ -702,7 +713,7 @@ export function PricingPage() {
                     {/* Row 3: Price Display (`Sentient` 44px Light) */}
                     <div
                       style={{ borderColor: 'var(--solva-border)' }}
-                      className="pt-[16px] lg:pb-[18px] border-t"
+                      className={`pt-[16px] ${subgridRowPb18Class} border-t`}
                     >
                       <div className="flex items-baseline gap-1.5">
                         <span
@@ -731,13 +742,14 @@ export function PricingPage() {
                           style={{ color: 'var(--solva-muted)' }}
                           className="font-mono text-[12px] mt-1"
                         >
-                          0 ₫/tháng · Khởi tạo tức thì
+                          <span className="whitespace-nowrap">0 ₫/tháng</span> ·{' '}
+                          <span className="whitespace-nowrap">Khởi tạo tức thì</span>
                         </p>
                       )}
                     </div>
 
                     {/* Row 4: Features Checklist (Constructive Basic Framing) */}
-                    <div className="space-y-[10px] pt-1 lg:pb-[20px]">
+                    <div className={`space-y-[10px] pt-1 ${subgridRowPb20Class}`}>
                       <p
                         style={{ color: 'var(--solva-ink)' }}
                         className="font-mono text-[11px] font-semibold uppercase tracking-wider"
@@ -747,20 +759,20 @@ export function PricingPage() {
                       <ul className="space-y-[9px]">
                         {(lang === 'vi'
                           ? [
-                              '3 lượt kiểm tra (.PDF, .DOCX, .BIB, .RIS) / tháng',
+                              '3 lượt kiểm tra bản thảo (.PDF, .DOCX, .BIB, .RIS) / tháng',
                               'Dung lượng tối đa 5 MB / tệp tải lên',
-                              'Giới hạn tối đa 15 trang & 30 trích dẫn / bài',
-                              'Layer 1: Đối chiếu trích dẫn trong bài & Danh mục',
-                              'Tra cứu Local 128K+ papers, Crossref & OpenAlex',
-                              'Hệ phân loại 2 tầng 13 trạng thái & Điểm CIS',
+                              'Tối đa 15 trang & 30 trích dẫn mỗi tài liệu',
+                              'Tự động đối chiếu trích dẫn trong bài với danh mục tham khảo',
+                              'Xác thực xuất bản qua Crossref, OpenAlex & Văn bản Pháp luật VN',
+                              'Điểm toàn vẹn trích dẫn & phân loại chi tiết từng lỗi sai lệch',
                             ]
                           : [
                               '3 manuscript checks (.PDF, .DOCX, .BIB, .RIS) / month',
                               'Maximum 5 MB file size per upload',
                               'Up to 15 pages & 30 citations per document',
-                              'Layer 1 In-text <-> Bibliography Linking',
-                              'Local 128K+ DB, Crossref & OpenAlex lookup',
-                              '13-state Two-Layer Taxonomy & CIS Score',
+                              'Automated in-text to bibliography cross-checking',
+                              'Verified against Crossref, OpenAlex & Vietnam Legal Registry',
+                              'Citation integrity score & structured issue breakdown',
                             ]
                         ).map((feat) => (
                           <li
@@ -774,13 +786,13 @@ export function PricingPage() {
                         {(lang === 'vi'
                           ? [
                               'Báo cáo trực tuyến đầy đủ · Mở khóa xuất Word/PDF ở gói Pro',
-                              'Bảng tổng hợp kết luận · Mở khóa Document Inspector ở gói Pro',
-                              'Kiểm tra từng bản thảo · Mở khóa tải hàng loạt ở gói Pro',
+                              'Bảng tổng hợp kết luận · Mở khóa đối chiếu trang PDF ở gói Pro',
+                              'Kiểm tra từng bản thảo · Mở khóa tải nhiều tệp cùng lúc ở gói Pro',
                             ]
                           : [
                               'Web verification report included (Word/PDF export on Pro)',
-                              'Summary verdict table included (Document Inspector on Pro)',
-                              'Single-manuscript check per upload (Batch Upload on Pro)',
+                              'Summary verdict table included (interactive PDF reader on Pro)',
+                              'Single-manuscript check per upload (multi-file upload on Pro)',
                             ]
                         ).map((item) => (
                           <li
@@ -808,8 +820,8 @@ export function PricingPage() {
                       >
                         {adminLocked
                           ? lang === 'vi'
-                            ? 'Đã bao gồm trong quyền Quản trị'
-                            : 'Included with Admin access'
+                            ? 'Mở sẵn cho Quản trị'
+                            : 'Included with Admin'
                           : user && planTier === 'basic'
                             ? lang === 'vi'
                               ? 'Đang sử dụng gói Basic'
@@ -828,19 +840,19 @@ export function PricingPage() {
                 delayMs={95}
                 yOffset={36}
                 triggerRatio={0.99}
-                className="h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid"
+                className={`h-full ${subgridSpan5Class}`}
               >
                 <CardHoverTilt
                   maxTilt={3.5}
-                  className="h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid"
-                  cardClassName="h-full rounded-[16px] lg:row-span-5 lg:grid lg:grid-rows-subgrid"
+                  className={`h-full ${subgridSpan5Class}`}
+                  cardClassName={`h-full rounded-[16px] ${subgridSpan5Class}`}
                 >
                   <div
                     style={{
                       backgroundColor: 'var(--solva-surface)',
                       borderColor: 'var(--solva-ink)',
                     }}
-                    className="relative rounded-[16px] border-2 p-[8px] sm:p-[10px] flex flex-col overflow-hidden h-full shadow-[0_12px_36px_rgba(28,26,21,0.08)] lg:row-span-5 lg:grid lg:grid-rows-subgrid"
+                    className={`relative rounded-[16px] border-2 p-[8px] sm:p-[10px] flex flex-col overflow-hidden h-full shadow-[0_12px_36px_rgba(28,26,21,0.08)] ${subgridSpan5Class}`}
                     data-testid="plan-card-pro"
                   >
                     {/* Row 1: Top Gallery Floral Painting Banner (`/solva/pricing-floral.webp`) */}
@@ -860,7 +872,7 @@ export function PricingPage() {
                       </div>
                       <div className="solva-noise-overlay z-0" aria-hidden="true" />
 
-                      <div className="relative z-10 flex items-start justify-between gap-2 flex-wrap">
+                      <div className="relative z-10 flex items-start justify-between gap-x-2 gap-y-2 flex-wrap">
                         <span
                           style={{
                             backgroundColor: '#1C1A15',
@@ -870,7 +882,7 @@ export function PricingPage() {
                         >
                           <Sparkles className="w-3 h-3 shrink-0" />
                           <span>
-                            {lang === 'vi' ? 'PHỔ BIẾN NHẤT' : 'MOST POPULAR'}
+                            {lang === 'vi' ? '02 · PHỔ BIẾN NHẤT' : '02 · MOST POPULAR'}
                           </span>
                         </span>
                         {billingCycle === 'annual' && (
@@ -882,9 +894,11 @@ export function PricingPage() {
                     </div>
 
                     {/* Rows 2..5: High-Contrast Pro Card Surface (WCAG AAA in Light & Dark) */}
-                    <div className="solva-pro-card-surface relative z-10 rounded-[12px] px-[20px] sm:px-[24px] py-[22px] sm:py-[24px] flex flex-col justify-between gap-[20px] lg:gap-y-0 flex-1 lg:row-span-4 lg:grid lg:grid-rows-subgrid">
+                    <div
+                      className={`solva-pro-card-surface relative z-10 rounded-[12px] px-[20px] sm:px-[24px] py-[22px] sm:py-[24px] flex flex-col justify-between gap-[20px] flex-1 ${subgridBodyClass}`}
+                    >
                       {/* Row 2: Header & Description */}
-                      <div className="space-y-[14px] lg:pb-[18px]">
+                      <div className={`space-y-[14px] ${subgridRowPb18Class}`}>
                         <div className="flex items-center gap-3">
                           <div
                             style={{
@@ -918,15 +932,15 @@ export function PricingPage() {
                           className="font-solva-sans text-[15px] leading-[22.5px]"
                         >
                           {lang === 'vi'
-                            ? 'Mở khóa toàn bộ công nghệ Neuro-Symbolic, kiểm tra khóa luận/luận văn dài và xuất báo cáo chuẩn hội đồng.'
-                            : 'Full Neuro-Symbolic pipeline for full-length theses, research manuscripts, and lecturer grading.'}
+                            ? 'Thẩm định toàn diện khóa luận, luận văn thạc sĩ và bài báo khoa học với hơn 15 nguồn học thuật quốc tế cùng xuất báo cáo chuẩn hội đồng.'
+                            : 'Comprehensive citation verification across 15+ scholarly indexes for full-length theses, research manuscripts, and faculty grading.'}
                         </p>
                       </div>
 
                       {/* Row 3: Price Display (`Sentient` 44px Light + #02 Per-Digit NumberPopIn + VI VND Context) */}
                       <div
                         style={{ borderColor: 'var(--solva-border)' }}
-                        className="pt-[16px] lg:pb-[18px] border-t"
+                        className={`pt-[16px] ${subgridRowPb18Class} border-t`}
                       >
                         <div className="flex items-baseline gap-2 flex-wrap">
                           <span
@@ -944,7 +958,7 @@ export function PricingPage() {
                           </span>
                           {billingCycle === 'annual' && (
                             <span
-                              style={{ color: 'var(--solva-subtle)' }}
+                              style={{ color: 'var(--solva-muted)' }}
                               className="text-[14px] line-through font-mono"
                             >
                               $20
@@ -957,7 +971,7 @@ export function PricingPage() {
                         >
                           {billingCycle === 'annual'
                             ? lang === 'vi'
-                              ? 'Thanh toán $192 / năm (Tương đương tặng >2 tháng miễn phí)'
+                              ? 'Thanh toán $192/năm (Tiết kiệm $48/năm — Giảm 20%)'
                               : 'Billed $192 annually ($16/mo equivalent — Save 20%)'
                             : lang === 'vi'
                               ? 'Thanh toán $20 định kỳ hàng tháng (Hoặc $16/tháng khi trả năm)'
@@ -969,15 +983,24 @@ export function PricingPage() {
                             style={{ color: 'var(--solva-ink)' }}
                             className="font-mono text-[12px] font-medium mt-1"
                           >
-                            {billingCycle === 'annual'
-                              ? '≈ 400.000 ₫/tháng · 4.800.000 ₫/năm qua VNPay'
-                              : '≈ 500.000 ₫/tháng qua VNPay & thẻ quốc tế'}
+                            {billingCycle === 'annual' ? (
+                              <>
+                                <span className="whitespace-nowrap">≈ 400.000 ₫/tháng</span> ·{' '}
+                                <span className="whitespace-nowrap">4.800.000 ₫/năm</span>{' '}
+                                <span className="whitespace-nowrap">qua VNPay</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="whitespace-nowrap">≈ 500.000 ₫/tháng</span>{' '}
+                                <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
+                              </>
+                            )}
                           </p>
                         )}
                       </div>
 
                       {/* Row 4: Features Checklist */}
-                      <div className="space-y-[10px] pt-1 lg:pb-[20px]">
+                      <div className={`space-y-[10px] pt-1 ${subgridRowPb20Class}`}>
                         <p
                           style={{ color: 'var(--solva-ink)' }}
                           className="font-mono text-[11px] font-semibold uppercase tracking-wider"
@@ -989,28 +1012,28 @@ export function PricingPage() {
                         <ul className="space-y-[9px]">
                           {(lang === 'vi'
                             ? [
-                                '50 lượt kiểm tra (.PDF, .DOCX, .BIB, .RIS) mỗi tháng (Gấp 16 lần)',
-                                'Tối đa 25 MB & 100 trang / bài (Đủ cho Khóa luận & Luận văn ThS)',
-                                'Kiểm chứng tới 200 trích dẫn / bài + Batch Upload 10 files',
-                                'Đầy đủ 15+ nguồn học thuật & kỹ thuật (+DataCite, DOAJ, HAL, NCBI/bioRxiv, HF, RFC)',
-                                'Phát hiện bài báo bị rút hồi (Retraction Watch) & cứu hộ Link Rot qua Wayback Machine',
-                                'Sentence-BERT + Multilingual MiniLM ONNX INT8 đối chiếu câu bằng chứng',
-                                'Cầu nối ngữ nghĩa đa ngôn ngữ (Tiếng Việt ↔ Tiếng Anh)',
-                                'Mở khóa Document Inspector, Logic Trace & Đồ thị trích dẫn',
-                                'Xuất báo cáo chuẩn học thuật ra PDF, DOCX (Word), CSV & JSON',
-                                'Quản lý tới 3 Lớp học (Classrooms) & Ghi đè kết luận (Override)',
+                                '50 lượt kiểm tra (.PDF, .DOCX, .BIB, .RIS) mỗi tháng (gấp 16 lần gói Basic)',
+                                'Tối đa 25 MB & 100 trang / bài (trọn vẹn Khóa luận & Luận văn Thạc sĩ)',
+                                'Kiểm chứng tới 200 trích dẫn / bài & tải lên đồng thời 10 tệp',
+                                'Tra cứu hơn 15 cơ sở dữ liệu học thuật quốc tế (PubMed, arXiv, DOAJ, DBLP, DataCite...)',
+                                'Cảnh báo bài báo bị rút hồi (Retraction Watch) & khôi phục liên kết hỏng qua Wayback Machine',
+                                'Đối chiếu ngữ nghĩa sâu giữa câu trích dẫn và nội dung tài liệu gốc',
+                                'Kiểm chứng trích dẫn chéo đa ngôn ngữ (Tiếng Việt ↔ Tiếng Anh)',
+                                'Mở khóa trình đọc đối chiếu trang PDF, giải thích suy luận & đồ thị trích dẫn',
+                                'Tự động chuẩn hóa danh mục (APA, IEEE, BibTeX) & xuất báo cáo Word, PDF, CSV, JSON',
+                                'Quản lý tới 3 lớp học & quyền giảng viên điều chỉnh kết luận thẩm định',
                               ]
                             : [
-                                '50 manuscript checks (.PDF, .DOCX, .BIB, .RIS) / month (16x Basic)',
-                                'Up to 25 MB & 100 pages per document (Full Master/BS Theses)',
-                                'Up to 200 citations / doc + 10-file concurrent Batch Upload',
-                                'All 15+ Scholarly & Technical APIs (+DataCite, DOAJ, HAL, NCBI/bioRxiv, HF, RFC)',
-                                'Retraction Watch Detection & Wayback Machine Link-Rot Rescue',
-                                'Sentence-BERT + Multilingual MiniLM ONNX INT8 semantic alignment',
-                                'Cross-lingual semantic bridging (Vietnamese ↔ English)',
-                                'Unlock Document Inspector, Logic Trace & Evidence Graph',
-                                'Export academic reports in PDF, DOCX (Word), CSV & JSON',
-                                'Manage up to 3 Classroom Cohorts & Verdict Overrides',
+                                '50 manuscript checks (.PDF, .DOCX, .BIB, .RIS) / month (16× Basic)',
+                                'Up to 25 MB & 100 pages per document (Full Bachelor & Master Theses)',
+                                'Up to 200 citations per document & multi-file upload (up to 10 files)',
+                                'Full 15+ scholarly indexes (PubMed, arXiv, DOAJ, DBLP, DataCite & Europe PMC)',
+                                'Retracted paper alerts (Retraction Watch) & broken URL archive recovery (Wayback Machine)',
+                                'Deep semantic evidence matching between cited claims and source papers',
+                                'Cross-lingual citation verification (Vietnamese ↔ English)',
+                                'Interactive PDF source-to-page reader, step-by-step reasoning & citation graph',
+                                'Automated bibliography formatting (APA, IEEE, BibTeX) & Word, PDF, CSV, JSON export',
+                                'Manage up to 3 classroom cohorts & instructor verdict review',
                               ]
                           ).map((feat) => (
                             <li
@@ -1054,25 +1077,53 @@ export function PricingPage() {
                             <CreditCard className="h-4 w-4 shrink-0" />
                           )}
                           <span>
-                            {adminLocked
-                              ? lang === 'vi'
-                                ? 'Đã bao gồm trong quyền Quản trị'
-                                : 'Included with Admin access'
-                              : user && planTier === 'ultra'
-                                ? lang === 'vi'
-                                  ? 'Đã bao gồm trong gói Ultra'
-                                  : 'Included in Ultra Plan'
-                                : isCurrentPro
-                                  ? lang === 'vi'
-                                    ? 'Đang sử dụng gói Pro này'
-                                    : 'Current Active Pro Plan'
-                                  : lang === 'vi'
-                                    ? `Nâng cấp lên Pro · $${
-                                        billingCycle === 'annual' ? '192/năm' : '20/tháng'
-                                      }`
-                                    : `Upgrade to Pro · $${
-                                        billingCycle === 'annual' ? '192/yr' : '20/mo'
-                                      }`}
+                            {adminLocked ? (
+                              lang === 'vi' ? (
+                                'Mở sẵn cho Quản trị'
+                              ) : (
+                                'Included with Admin'
+                              )
+                            ) : user && planTier === 'ultra' ? (
+                              lang === 'vi' ? (
+                                <>
+                                  Đã bao gồm{' '}
+                                  <span className="hidden 2xl:inline">trong </span>gói Ultra
+                                </>
+                              ) : (
+                                <>
+                                  Included in Ultra
+                                  <span className="hidden 2xl:inline"> Plan</span>
+                                </>
+                              )
+                            ) : isCurrentPro ? (
+                              lang === 'vi' ? (
+                                <>
+                                  Đang sử dụng gói Pro
+                                  <span className="hidden 2xl:inline"> này</span>
+                                </>
+                              ) : (
+                                <>
+                                  Current <span className="hidden 2xl:inline">Active </span>
+                                  Pro Plan
+                                </>
+                              )
+                            ) : lang === 'vi' ? (
+                              <>
+                                Nâng cấp lên Pro
+                                <span className="hidden 2xl:inline">
+                                  {` · $${
+                                    billingCycle === 'annual' ? '192/năm' : '20/tháng'
+                                  }`}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                Upgrade to Pro
+                                <span className="hidden 2xl:inline">
+                                  {` · $${billingCycle === 'annual' ? '192/yr' : '20/mo'}`}
+                                </span>
+                              </>
+                            )}
                           </span>
                         </SolvaPlanActionButton>
                       </div>
@@ -1086,19 +1137,19 @@ export function PricingPage() {
                 delayMs={190}
                 yOffset={36}
                 triggerRatio={0.99}
-                className="h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid"
+                className={`h-full ${subgridSpan5Class}`}
               >
                 <div
                   style={{
                     backgroundColor: 'var(--solva-surface)',
                     borderColor: 'var(--solva-border)',
                   }}
-                  className="relative rounded-[16px] border p-[8px] sm:p-[10px] flex flex-col overflow-hidden h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid"
+                  className={`relative rounded-[16px] border p-[8px] sm:p-[10px] flex flex-col overflow-hidden h-full ${subgridSpan5Class}`}
                   data-testid="plan-card-ultra"
                 >
                   {/* Row 1: Top Architectural Gallery Header Band */}
                   <div className="relative min-h-[100px] sm:min-h-[104px] rounded-t-[11px] px-4 sm:px-5 py-3.5 flex flex-col justify-between bg-gradient-to-b from-[#E8E3D6]/95 via-[#F4F2EC]/55 to-transparent dark:from-[#2A261E]/95 dark:via-[#1E1C17]/55 dark:to-transparent">
-                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                    <div className="flex items-start justify-between gap-x-2 gap-y-2 flex-wrap">
                       <span
                         style={{
                           backgroundColor: 'var(--solva-bg)',
@@ -1129,10 +1180,10 @@ export function PricingPage() {
                       backgroundColor: 'var(--solva-bg)',
                       borderColor: 'var(--solva-border)',
                     }}
-                    className="relative z-10 rounded-[12px] border px-[20px] sm:px-[24px] py-[22px] sm:py-[24px] flex flex-col justify-between gap-[20px] lg:gap-y-0 flex-1 lg:row-span-4 lg:grid lg:grid-rows-subgrid"
+                    className={`relative z-10 rounded-[12px] border px-[20px] sm:px-[24px] py-[22px] sm:py-[24px] flex flex-col justify-between gap-[20px] flex-1 ${subgridBodyClass}`}
                   >
                     {/* Row 2: Header & Description */}
-                    <div className="space-y-[14px] lg:pb-[18px]">
+                    <div className={`space-y-[14px] ${subgridRowPb18Class}`}>
                       <div className="flex items-center gap-3">
                         <div
                           style={{
@@ -1167,15 +1218,15 @@ export function PricingPage() {
                         className="font-solva-sans text-[15px] leading-[22.5px]"
                       >
                         {lang === 'vi'
-                          ? 'Hiệu năng tối đa không giới hạn cho nhóm nghiên cứu, bộ môn đại học và hội đồng chấm luận án Tiến sĩ.'
-                          : 'Unrestricted verification scale for university departments, research labs, and doctoral committees.'}
+                          ? 'Năng lực thẩm định quy mô lớn cho nhóm nghiên cứu, bộ môn đại học và hội đồng chấm luận án Tiến sĩ.'
+                          : 'High-volume verification scale for university departments, research labs, and doctoral committees.'}
                       </p>
                     </div>
 
                     {/* Row 3: Price Display (`Sentient` 44px Light + #02 Per-Digit NumberPopIn + VI VND Context) */}
                     <div
                       style={{ borderColor: 'var(--solva-border)' }}
-                      className="pt-[16px] lg:pb-[18px] border-t"
+                      className={`pt-[16px] ${subgridRowPb18Class} border-t`}
                     >
                       <div className="flex items-baseline gap-2 flex-wrap">
                         <span
@@ -1193,7 +1244,7 @@ export function PricingPage() {
                         </span>
                         {billingCycle === 'annual' && (
                           <span
-                            style={{ color: 'var(--solva-subtle)' }}
+                            style={{ color: 'var(--solva-muted)' }}
                             className="text-[14px] line-through font-mono"
                           >
                             $200
@@ -1206,7 +1257,7 @@ export function PricingPage() {
                       >
                         {billingCycle === 'annual'
                           ? lang === 'vi'
-                            ? 'Thanh toán $1,920 / năm (Tiết kiệm $480 / năm — Giảm 20%)'
+                            ? 'Thanh toán $1.920/năm (Tiết kiệm $480/năm — Giảm 20%)'
                             : 'Billed $1,920 annually ($160/mo equivalent — Save $480)'
                           : lang === 'vi'
                             ? 'Thanh toán $200 định kỳ hàng tháng (Hoặc $160/tháng khi trả năm)'
@@ -1218,15 +1269,24 @@ export function PricingPage() {
                           style={{ color: 'var(--solva-muted)' }}
                           className="font-mono text-[12px] mt-1"
                         >
-                          {billingCycle === 'annual'
-                            ? '≈ 4.000.000 ₫/tháng · 48.000.000 ₫/năm qua VNPay'
-                            : '≈ 5.000.000 ₫/tháng qua VNPay & thẻ quốc tế'}
+                          {billingCycle === 'annual' ? (
+                            <>
+                              <span className="whitespace-nowrap">≈ 4.000.000 ₫/tháng</span> ·{' '}
+                              <span className="whitespace-nowrap">48.000.000 ₫/năm</span>{' '}
+                              <span className="whitespace-nowrap">qua VNPay</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="whitespace-nowrap">≈ 5.000.000 ₫/tháng</span>{' '}
+                              <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
+                            </>
+                          )}
                         </p>
                       )}
                     </div>
 
                     {/* Row 4: Features Checklist */}
-                    <div className="space-y-[10px] pt-1 lg:pb-[20px]">
+                    <div className={`space-y-[10px] pt-1 ${subgridRowPb20Class}`}>
                       <p
                         style={{ color: 'var(--solva-ink)' }}
                         className="font-mono text-[11px] font-semibold uppercase tracking-wider"
@@ -1238,24 +1298,24 @@ export function PricingPage() {
                       <ul className="space-y-[9px]">
                         {(lang === 'vi'
                           ? [
-                              'Không giới hạn lượt kiểm tra (Fair-use: 1.000 tài liệu/tháng)',
+                              'Hạn mức cấp đơn vị lên tới 1.000 bản thảo / tháng',
                               'Tối đa 100 MB & 500 trang / bài (Luận án Tiến sĩ & Sách chuyên khảo)',
                               'Không giới hạn số lượng trích dẫn trong mỗi tài liệu',
-                              'Kích hoạt SerpAPI Google Scholar Fallback cho trích dẫn khó',
-                              'Kiểm tra sống/chết đường dẫn DOI & URL thời gian thực',
-                              'Batch Upload công suất lớn: Tối đa 50 PDF cùng lúc',
-                              'Không giới hạn Lớp học, Sinh viên & Xuất báo cáo Class ZIP',
-                              'Lưu trữ lịch sử vĩnh viễn & Luồng xử lý ưu tiên 24/7',
+                              'Tra cứu mở rộng qua Google Scholar cho sách chuyên khảo & ấn phẩm hiếm',
+                              'Kiểm tra tình trạng hoạt động của mã DOI & đường dẫn trực tuyến theo thời gian thực',
+                              'Rà soát hàng loạt công suất lớn: tối đa 50 bản thảo PDF/DOCX cùng lúc',
+                              'Không giới hạn lớp học, sinh viên & tải trọn bộ báo cáo cả lớp (.ZIP)',
+                              'Lưu trữ lịch sử báo cáo vĩnh viễn & luồng xử lý ưu tiên 24/7',
                             ]
                           : [
-                              'Unlimited monthly checks (Fair-use: 1,000 manuscripts/mo)',
-                              'Up to 100 MB & 500 pages (Doctoral Dissertations & Books)',
+                              'Institutional volume up to 1,000 manuscripts / month',
+                              'Up to 100 MB & 500 pages per document (Doctoral Dissertations & Books)',
                               'Unlimited citations verified per manuscript',
-                              'SerpAPI Google Scholar Fallback for obscure literature',
-                              'Real-time Active DOI & URL Reachability Validator',
-                              'High-throughput Batch Upload: Up to 50 PDFs at once',
-                              'Unlimited Classroom Cohorts, Students & Class ZIP Export',
-                              'Lifetime report retention & 24/7 priority compute queue',
+                              'Extended Google Scholar discovery for rare monographs & regional literature',
+                              'Real-time live DOI & URL reachability verification',
+                              'Bulk cohort verification: upload up to 50 manuscripts at once',
+                              'Unlimited classroom cohorts, students & full-cohort archive export (.ZIP)',
+                              'Lifetime report retention & 24/7 priority processing queue',
                             ]
                         ).map((feat) => (
                           <li
@@ -1290,21 +1350,39 @@ export function PricingPage() {
                           <CreditCard className="h-4 w-4 shrink-0" />
                         )}
                         <span>
-                          {adminLocked
-                            ? lang === 'vi'
-                              ? 'Gói hiện tại · Ultra (Quản trị viên)'
-                              : 'Current Plan · Ultra (Admin)'
-                            : isCurrentUltra
-                              ? lang === 'vi'
-                                ? 'Đang sử dụng gói Ultra'
-                                : 'Current Active Ultra Plan'
-                              : lang === 'vi'
-                                ? `Nâng cấp lên Ultra · $${
-                                    billingCycle === 'annual' ? '1,920/năm' : '200/tháng'
-                                  }`
-                                : `Upgrade to Ultra · $${
-                                    billingCycle === 'annual' ? '1,920/yr' : '200/mo'
-                                  }`}
+                          {adminLocked ? (
+                            lang === 'vi' ? (
+                              'Gói Quản trị · Ultra'
+                            ) : (
+                              <>
+                                Current<span className="hidden 2xl:inline"> Plan</span> · Ultra (Admin)
+                              </>
+                            )
+                          ) : isCurrentUltra ? (
+                            lang === 'vi' ? (
+                              'Đang sử dụng gói Ultra'
+                            ) : (
+                              <>
+                                Current <span className="hidden 2xl:inline">Active </span>Ultra Plan
+                              </>
+                            )
+                          ) : lang === 'vi' ? (
+                            <>
+                              Nâng cấp lên Ultra
+                              <span className="hidden 2xl:inline">
+                                {` · $${
+                                  billingCycle === 'annual' ? '1.920/năm' : '200/tháng'
+                                }`}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              Upgrade to Ultra
+                              <span className="hidden 2xl:inline">
+                                {` · $${billingCycle === 'annual' ? '1,920/yr' : '200/mo'}`}
+                              </span>
+                            </>
+                          )}
                         </span>
                       </SolvaPlanActionButton>
                     </div>
