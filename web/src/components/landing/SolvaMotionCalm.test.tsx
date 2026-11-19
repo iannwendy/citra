@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, act } from '@testing-library/react';
+import { render, act, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import i18n from '@/i18n';
+import { ThemeProvider } from '@/contexts/ThemeContext';
+import { CitraMotionProvider } from '@/components/ui/motion-primitives';
+import { LandingPage } from '@/pages/LandingPage';
 import {
   SolvaScrollReveal,
   SolvaTwoToneHeading,
@@ -7,6 +12,7 @@ import {
   SolvaStickyStackCard,
 } from './SolvaPrimitives';
 import {
+  HeroVerificationMockup,
   StickyCardWidget,
   FeatureCardWidget,
   CohortBatchAuditWidget,
@@ -291,5 +297,278 @@ describe('Task 5: Editorial Calm, Scroll Latch & Honest Scholarly Telemetry', ()
     });
     expect(getCustomByTestId('solva-sticky-card-0').style.top).toBe('118px');
     expect(getCustomByTestId('solva-sticky-card-1').style.top).toBe('136px');
+  });
+});
+
+describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & VI)', () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
+  });
+
+  afterEach(async () => {
+    await i18n.changeLanguage('en');
+    vi.restoreAllMocks();
+  });
+
+  function renderLandingApp() {
+    return render(
+      <CitraMotionProvider>
+        <ThemeProvider defaultTheme="light">
+          <MemoryRouter initialEntries={['/']}>
+            <LandingPage />
+          </MemoryRouter>
+        </ThemeProvider>
+      </CitraMotionProvider>,
+    );
+  }
+
+  it('HeroVerificationMockup and Hero generation header pill render full source names with zero .truncate or right-edge overhang in EN and VI', async () => {
+    for (const lang of ['en', 'vi'] as const) {
+      await i18n.changeLanguage(lang);
+
+      // Verify all 3 citation steps in HeroVerificationMockup have zero .truncate and full source names
+      for (const step of [0, 1, 2]) {
+        const { container, unmount } = render(
+          <HeroVerificationMockup lang={lang} activeStep={step} />,
+        );
+        const text = container.textContent ?? '';
+
+        expect(text).toContain('Crossref');
+        expect(text).toContain('OpenAlex');
+        expect(text).toContain('Semantic Scholar');
+        expect(text).not.toContain('SemanticSch');
+        expect(text).not.toContain('Semant..');
+        expect(text).not.toContain('...');
+        expect(text).not.toContain('…');
+
+        // Zero .truncate classes anywhere inside HeroVerificationMockup
+        expect(container.querySelectorAll('.truncate')).toHaveLength(0);
+
+        // Source chips and top/verdict badges use whitespace-nowrap + shrink-0 so they never break mid-chip
+        const semanticLink = container.querySelector(
+          'a[aria-label="Semantic Scholar official website"]',
+        );
+        expect(semanticLink).not.toBeNull();
+        expect(semanticLink?.className).toContain('whitespace-nowrap');
+        expect(semanticLink?.className).toContain('shrink-0');
+
+        unmount();
+      }
+
+      // Also verify LandingPage Hero right frame does not push mockup past right edge (no lg:right-[-24px])
+      // and generation header pill displays concise non-clipped S-BERT status without .truncate
+      const prevMotion = (globalThis as { __CITRA_ENABLE_TEST_MOTION__?: boolean })
+        .__CITRA_ENABLE_TEST_MOTION__;
+      (globalThis as { __CITRA_ENABLE_TEST_MOTION__?: boolean }).__CITRA_ENABLE_TEST_MOTION__ =
+        true;
+      const origMatchMedia = window.matchMedia;
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }));
+
+      let now = 1000;
+      vi.spyOn(performance, 'now').mockImplementation(() => now);
+      const rafQueue: FrameRequestCallback[] = [];
+      vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+        rafQueue.push(cb);
+        return rafQueue.length;
+      });
+      vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+
+      try {
+        const landing = renderLandingApp();
+        const heroSection = landing.container.querySelector('#hero') as HTMLElement;
+        expect(heroSection).not.toBeNull();
+        expect(heroSection.innerHTML).not.toContain('right-[-24px]');
+
+        const targetEl = heroSection.querySelector('.t-gen-target') as HTMLElement;
+        if (targetEl) {
+          Object.defineProperty(targetEl, 'getBoundingClientRect', {
+            configurable: true,
+            value: () => ({
+              left: 20,
+              top: 20,
+              right: 620,
+              bottom: 420,
+              width: 600,
+              height: 400,
+              x: 20,
+              y: 20,
+              toJSON: () => ({}),
+            }),
+          });
+        }
+
+        // Advance into step 2 (middle of generation -> S-BERT calibration step)
+        act(() => {
+          const b1 = rafQueue.splice(0, rafQueue.length);
+          b1.forEach((cb) => cb(now));
+          now += 720;
+          const b2 = rafQueue.splice(0, rafQueue.length);
+          b2.forEach((cb) => cb(now));
+        });
+
+        const genTag = heroSection.querySelector('.t-gen-tag') as HTMLElement | null;
+        expect(genTag).not.toBeNull();
+        expect(genTag?.className ?? '').not.toContain('truncate');
+        expect(genTag?.textContent ?? '').toContain('S-BERT');
+        expect(genTag?.textContent ?? '').not.toContain('S-BER...');
+        expect((genTag?.textContent ?? '').length).toBeLessThanOrEqual(24);
+
+        landing.unmount();
+      } finally {
+        window.matchMedia = origMatchMedia;
+        if (prevMotion === undefined) {
+          delete (globalThis as { __CITRA_ENABLE_TEST_MOTION__?: boolean })
+            .__CITRA_ENABLE_TEST_MOTION__;
+        } else {
+          (globalThis as { __CITRA_ENABLE_TEST_MOTION__?: boolean }).__CITRA_ENABLE_TEST_MOTION__ =
+            prevMotion;
+        }
+        vi.restoreAllMocks();
+      }
+    }
+  });
+
+  it('hero-benchmark-120k-strip contains zero .truncate classes and zero ellipsis across all 4 proof items in EN and VI', async () => {
+    for (const lang of ['en', 'vi'] as const) {
+      await i18n.changeLanguage(lang);
+      const { getByTestId, unmount } = renderLandingApp();
+
+      const strip = getByTestId('hero-benchmark-120k-strip');
+      expect(strip.querySelectorAll('.truncate')).toHaveLength(0);
+
+      const stripText = strip.textContent ?? '';
+      expect(stripText).not.toContain('...');
+      expect(stripText).not.toContain('…');
+      expect(stripText).toContain('99.02%');
+      expect(stripText).toContain('99.75%');
+      expect(stripText).toContain('15+');
+      expect(stripText).toContain(lang === 'vi' ? '120.000' : '120,000');
+
+      unmount();
+    }
+  });
+
+  it('Hero top announcement pill binds its final word + arrow inside .citra-nowrap-tail (whitespace-nowrap) in EN and VI so → never orphans on narrow mobile', async () => {
+    Object.defineProperty(window, 'innerWidth', {
+      value: 375,
+      configurable: true,
+      writable: true,
+    });
+
+    for (const lang of ['en', 'vi'] as const) {
+      await i18n.changeLanguage(lang);
+      const { container, unmount } = renderLandingApp();
+
+      const hero = container.querySelector('#hero') as HTMLElement;
+      const benchmarkLinks = Array.from(
+        hero.querySelectorAll('a[href="#benchmark-120k"]'),
+      ) as HTMLAnchorElement[];
+      const announcementPill = benchmarkLinks.find(
+        (a) => a.getAttribute('data-testid') !== 'hero-benchmark-120k-strip',
+      );
+      expect(announcementPill).toBeDefined();
+
+      // Must NOT leave a standalone <svg> arrow as a direct flex child of the wrapping <a>
+      const directChildSvgs = Array.from(announcementPill!.children).filter(
+        (el) => el.tagName.toLowerCase() === 'svg',
+      );
+      expect(directChildSvgs).toHaveLength(0);
+
+      const nowrapTail = announcementPill!.querySelector('.citra-nowrap-tail');
+      expect(nowrapTail).not.toBeNull();
+      expect(nowrapTail?.className).toContain('whitespace-nowrap');
+      // Must bind at least one word character together with →
+      expect((nowrapTail?.textContent ?? '').trim()).toMatch(/\S+\s*→$/);
+
+      unmount();
+    }
+  });
+
+  it('Architecture Card 3 and all parenthetical/percentage badges in FeatureCardWidget and StickyCardWidget wrap status + (XX%) in .citra-nowrap-tail without .truncate', () => {
+    for (const lang of ['en', 'vi'] as const) {
+      // Architecture Card 3 (FeatureCardWidget index=2)
+      const card3 = render(<FeatureCardWidget index={2} lang={lang} />);
+      expect(card3.container.querySelectorAll('.truncate')).toHaveLength(0);
+
+      const expectedBadgePrefix = lang === 'vi' ? 'KHỚP (' : 'ALIGNED (';
+      const nowrapBadges = Array.from(
+        card3.container.querySelectorAll('.citra-nowrap-tail'),
+      );
+      const alignedBadge = nowrapBadges.find((el) =>
+        (el.textContent ?? '').includes(expectedBadgePrefix),
+      );
+      expect(alignedBadge).toBeDefined();
+      expect(alignedBadge?.className).toContain('whitespace-nowrap');
+      expect((alignedBadge?.textContent ?? '').trim()).toBe(
+        lang === 'vi' ? 'KHỚP (94%)' : 'ALIGNED (94%)',
+      );
+
+      // Also check (0.97) in Card 3 symbolic rule expression is bound inside .citra-nowrap-tail
+      expect(
+        nowrapBadges.some((el) => (el.textContent ?? '').trim() === '(0.97)'),
+      ).toBe(true);
+      card3.unmount();
+
+      // FeatureCardWidget index=0 & index=1 and StickyCardWidget index=0, 1, 2
+      const others = render(
+        <div>
+          <div data-testid="feat-0">
+            <FeatureCardWidget index={0} lang={lang} />
+          </div>
+          <div data-testid="feat-1">
+            <FeatureCardWidget index={1} lang={lang} />
+          </div>
+          <div data-testid="sticky-0">
+            <StickyCardWidget index={0} lang={lang} />
+          </div>
+          <div data-testid="sticky-1">
+            <StickyCardWidget index={1} lang={lang} />
+          </div>
+          <div data-testid="sticky-2">
+            <StickyCardWidget index={2} lang={lang} />
+          </div>
+        </div>,
+      );
+
+      expect(others.container.querySelectorAll('.truncate')).toHaveLength(0);
+
+      const feat0Tails = Array.from(
+        within(others.getByTestId('feat-0'))
+          .getAllByText((_c, el) => Boolean(el?.classList.contains('citra-nowrap-tail'))),
+      ).map((el) => (el.textContent ?? '').trim());
+      expect(feat0Tails.some((t) => t.includes('2020') && t.endsWith('2021)'))).toBe(true);
+
+      const sticky0Tails = Array.from(
+        others.getByTestId('sticky-0').querySelectorAll('.citra-nowrap-tail'),
+      ).map((el) => (el.textContent ?? '').trim());
+      expect(sticky0Tails).toContain('(Author, Yr)');
+      expect(sticky0Tails).toContain('(1)');
+
+      const sticky1Tails = Array.from(
+        others.getByTestId('sticky-1').querySelectorAll('.citra-nowrap-tail'),
+      ).map((el) => (el.textContent ?? '').trim());
+      expect(sticky1Tails).toContain(lang === 'vi' ? '(Δ=1 năm)' : '(Δ=1yr)');
+
+      const sticky2Tails = Array.from(
+        others.getByTestId('sticky-2').querySelectorAll('.citra-nowrap-tail'),
+      ).map((el) => (el.textContent ?? '').trim());
+      expect(sticky2Tails).toContain(
+        lang === 'vi' ? '(Trước rà soát)' : '(Before Audit)',
+      );
+      expect(sticky2Tails).toContain(
+        lang === 'vi' ? '(Đã chuẩn hóa)' : '(Verified)',
+      );
+
+      others.unmount();
+    }
   });
 });

@@ -326,16 +326,16 @@ export function SolvaEyebrow({
   return (
     <SolvaScrollReveal yOffset={20} blurPx={2.5} scaleFrom={0.99}>
       <div
-        className={`inline-flex items-center gap-[6px] pl-[2px] font-solva-sans ${
+        className={`inline-flex items-start gap-[6px] pl-[2px] max-w-full min-w-0 font-solva-sans ${
           centered ? 'justify-center' : ''
         }`}
       >
         <span
-          className="w-[10px] h-[5px] rounded-[50px] shrink-0"
+          className="w-[10px] h-[5px] mt-[7px] rounded-[50px] shrink-0"
           style={{ backgroundColor: 'var(--solva-muted)' }}
         />
         <span
-          className="text-[15px] font-normal leading-[19.5px]"
+          className="text-[15px] font-normal leading-[19.5px] min-w-0"
           style={{ color: 'var(--solva-muted)' }}
         >
           {children}
@@ -539,7 +539,7 @@ export function SolvaButton({
   className?: string;
   testId?: string;
 }) {
-  const baseClasses = `group relative inline-flex items-center justify-center h-[44px] px-[16px] pt-[1px] rounded-[10px] font-solva-sans text-[14px] font-medium leading-[21px] transition-[background-color,border-color,color,opacity,box-shadow] duration-200 cursor-pointer select-none ${
+  const baseClasses = `group relative inline-flex items-center justify-center max-w-full h-[44px] px-[16px] pt-[1px] rounded-[10px] font-solva-sans text-[14px] font-medium leading-[21px] transition-[background-color,border-color,color,opacity,box-shadow] duration-200 cursor-pointer select-none ${
     fullWidth ? 'w-full' : ''
   } ${className}`;
 
@@ -656,7 +656,7 @@ export function SolvaPainterlyFrame({
       lastParallaxRef.current = clamped;
 
       const imgY = (clamped * -10).toFixed(2);
-      const innerY = (clamped * 8).toFixed(2);
+      const innerY = (clamped * 3.5).toFixed(2);
 
       schedule(() => {
         if (imgRef.current) {
@@ -697,7 +697,7 @@ export function SolvaPainterlyFrame({
           willChange: 'transform',
           backfaceVisibility: 'hidden',
         }}
-        className="relative z-10 w-full h-full"
+        className="relative z-10 w-full h-full min-w-0"
       >
         {children}
       </div>

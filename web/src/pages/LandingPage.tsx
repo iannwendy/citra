@@ -660,7 +660,7 @@ function SolvaHeader({
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             className="inline-flex items-center gap-[8px] rounded-[6px] focus:outline-none"
           >
-            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
               <SourceLogicLogo size={18} />
             </span>
             <span
@@ -921,7 +921,7 @@ function SolvaHeader({
             </Link>
           </div>
 
-          <div className="pt-2 flex items-center gap-2">
+          <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
             <SolvaButton
               to={isAuthenticated ? '/dashboard' : '/login'}
               variant="outline"
@@ -988,8 +988,8 @@ function SolvaHeroSection({
       <div className="max-w-[1200px] mx-auto flex flex-col gap-[28px] sm:gap-[36px] lg:gap-[56px]">
         {/* Top 2-Column Content */}
         <div className="flex flex-col lg:flex-row items-center justify-between gap-[28px] sm:gap-[32px] lg:gap-[24px] pt-0 lg:pt-[12px]">
-          {/* Left Column (540px on Desktop) */}
-          <div className="w-full lg:w-[516px] xl:w-[540px] flex flex-col items-start gap-[22px] sm:gap-[28px] lg:gap-[32px] lg:pb-[24px]">
+          {/* Left Column (520px on Desktop) */}
+          <div className="w-full lg:w-[45%] xl:w-[520px] min-w-0 flex flex-col items-start gap-[22px] sm:gap-[28px] lg:gap-[32px] lg:pb-[24px]">
             <div className="flex flex-col items-start gap-[16px] sm:gap-[20px] lg:gap-[24px]">
               {/* Announcement Badge (`VERIFIED 120K BENCHMARK | 99.02% Acc · 99.75% OOD ->`) */}
               <SolvaScrollReveal delayMs={40} yOffset={20} blurPx={3}>
@@ -1002,7 +1002,7 @@ function SolvaHeroSection({
                       backgroundColor: 'var(--solva-surface)',
                       color: 'var(--solva-ink)',
                     }}
-                    className="inline-flex items-center gap-1.5 px-[7px] pt-[5px] pb-[4px] rounded-[5px] text-[11px] font-mono font-semibold leading-[12px] border border-[#E7E3D9] dark:border-[#332F26]"
+                    className="inline-flex items-center gap-1.5 px-[7px] pt-[5px] pb-[4px] rounded-[5px] text-[11px] font-mono font-semibold leading-[12px] border border-[#E7E3D9] dark:border-[#332F26] shrink-0 whitespace-nowrap"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     {lang === 'vi' ? 'THỰC NGHIỆM 120K' : '120K BENCHMARK'}
@@ -1011,14 +1011,34 @@ function SolvaHeroSection({
                     style={{ color: 'var(--solva-muted)' }}
                     className="text-[14px] sm:text-[15px] font-normal leading-[21px] group-hover:underline"
                   >
-                    {lang === 'vi'
-                      ? 'Kiểm định trên 120.000 công trình · Độ chính xác 99,02% · 99,75% OOD Guardrail'
-                      : 'Validated on 120,000 papers · 99.02% Acc · 99.75% OOD Guardrail'}
+                    {lang === 'vi' ? (
+                      <>
+                        Kiểm định trên 120.000 công trình · Độ chính xác 99,02% · 99,75% chắn{' '}
+                        <span className="citra-nowrap-tail whitespace-nowrap">
+                          lỗi biên{'\u00A0'}
+                          <span
+                            aria-hidden="true"
+                            className="inline-block transition-transform duration-200 group-hover:translate-x-0.5"
+                          >
+                            →
+                          </span>
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        Validated on 120,000 papers · 99.02% Acc · 99.75% OOD{' '}
+                        <span className="citra-nowrap-tail whitespace-nowrap">
+                          Guardrail{'\u00A0'}
+                          <span
+                            aria-hidden="true"
+                            className="inline-block transition-transform duration-200 group-hover:translate-x-0.5"
+                          >
+                            →
+                          </span>
+                        </span>
+                      </>
+                    )}
                   </span>
-                  <ArrowRight
-                    style={{ color: 'var(--solva-muted)' }}
-                    className="w-[14px] h-[14px] transition-transform duration-200 group-hover:translate-x-0.5 shrink-0"
-                  />
                 </a>
               </SolvaScrollReveal>
 
@@ -1084,75 +1104,85 @@ function SolvaHeroSection({
                 }}
                 className="t-learn group block w-full rounded-[12px] border p-3 sm:p-3.5 transition-all duration-200 hover:border-[#1C1A15]/40 dark:hover:border-[#FBFAF6]/30"
               >
-                <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-2">
                   <span
                     style={{ color: 'var(--solva-ink)' }}
-                    className="inline-flex items-center gap-1.5 font-mono text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider"
+                    className="inline-flex items-center gap-1.5 font-mono text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider min-w-0"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <span>
                       {lang === 'vi'
-                        ? 'BẢO CHỨNG THỰC NGHIỆM · KIỂM ĐỊNH 120.000 CÔNG TRÌNH'
+                        ? 'BẢO CHỨNG THỰC NGHIỆM · 120.000 CÔNG TRÌNH'
                         : 'VERIFIED EMPIRICAL BENCHMARK · 120,000 PAPERS'}
                     </span>
                   </span>
                   <span
                     style={{ color: 'var(--solva-muted)' }}
-                    className="font-mono text-[10px] inline-flex items-center gap-1 shrink-0 group-hover:underline"
+                    className="citra-nowrap-tail whitespace-nowrap font-mono text-[10px] inline-flex items-center gap-1 shrink-0 group-hover:underline"
                   >
                     <span>{lang === 'vi' ? 'Xem báo cáo' : 'Full report'}</span>
                     <LearnMoreChevron size={12} />
                   </span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[#E7E3D9] dark:border-[#332F26]">
-                  <div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-x-3 gap-y-2.5 pt-2.5 border-t border-[#E7E3D9] dark:border-[#332F26]">
+                  <div className="min-w-0">
                     <div
                       style={{ color: 'var(--solva-ink)' }}
                       className="font-solva-serif text-[20px] sm:text-[22px] leading-none tracking-[-0.04em]"
                     >
-                      120,000
+                      {lang === 'vi' ? '120.000' : '120,000'}
                     </div>
                     <div
                       style={{ color: 'var(--solva-muted)' }}
-                      className="font-mono text-[10px] mt-1 truncate"
+                      className="font-mono text-[10px] leading-snug mt-1"
                     >
-                      {lang === 'vi' ? 'Công trình · 0% rò rỉ' : 'Papers · 0% leakage'}
+                      {lang === 'vi' ? 'Bài báo kiểm định' : 'Papers audited'}
                     </div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="font-solva-serif text-[20px] sm:text-[22px] leading-none tracking-[-0.04em] text-emerald-700 dark:text-emerald-400">
                       99.02%
                     </div>
                     <div
                       style={{ color: 'var(--solva-muted)' }}
-                      className="font-mono text-[10px] mt-1 truncate"
+                      className="font-mono text-[10px] leading-snug mt-1"
                     >
-                      {lang === 'vi' ? 'Độ chính xác thẩm định' : 'Neuro-Symbolic Acc'}
+                      {lang === 'vi' ? 'Độ chính xác' : 'Audit accuracy'}
                     </div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="font-solva-serif text-[20px] sm:text-[22px] leading-none tracking-[-0.04em] text-emerald-700 dark:text-emerald-400">
                       99.75%
                     </div>
                     <div
                       style={{ color: 'var(--solva-muted)' }}
-                      className="font-mono text-[10px] mt-1 truncate"
+                      className="font-mono text-[10px] leading-snug mt-1"
                     >
-                      {lang === 'vi' ? 'Chắn lỗi biên OOD (2.4K)' : 'OOD Guardrail (2.4K)'}
+                      {lang === 'vi' ? (
+                        <>
+                          Chắn OOD{' '}
+                          <span className="citra-nowrap-tail whitespace-nowrap">(2,4K)</span>
+                        </>
+                      ) : (
+                        <>
+                          OOD Guard{' '}
+                          <span className="citra-nowrap-tail whitespace-nowrap">(2.4K)</span>
+                        </>
+                      )}
                     </div>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div
                       style={{ color: 'var(--solva-ink)' }}
                       className="font-solva-serif text-[20px] sm:text-[22px] leading-none tracking-[-0.04em]"
                     >
-                      0.0395
+                      15+
                     </div>
                     <div
                       style={{ color: 'var(--solva-muted)' }}
-                      className="font-mono text-[10px] mt-1 truncate"
+                      className="font-mono text-[10px] leading-snug mt-1"
                     >
-                      {lang === 'vi' ? 'Sai số ECE (↓6,19×)' : 'Platt ECE (↓6.19×)'}
+                      {lang === 'vi' ? 'CSDL học thuật' : 'Scholarly DBs'}
                     </div>
                   </div>
                 </div>
@@ -1160,28 +1190,28 @@ function SolvaHeroSection({
             </SolvaScrollReveal>
           </div>
 
-          {/* Right Column: Painterly Mockup Frame (`660x521px` on Desktop) */}
-          <div className="w-full lg:w-[660px] shrink-0">
+          {/* Right Column: Painterly Mockup Frame (`656px` on XL Desktop, fully framed with zero overhang) */}
+          <div className="w-full lg:w-[55%] xl:w-[656px] min-w-0">
             <SolvaPainterlyFrame
               paintingSrc="/solva/hero-bg.webp"
               priority
               alt="Impressionist wildflower meadow oil painting backdrop"
-              className="w-full min-h-[420px] sm:min-h-[490px] lg:h-[521px] p-4 sm:p-8 lg:p-0"
+              className="w-full min-h-[420px] sm:min-h-[480px] lg:min-h-[521px] p-3.5 sm:p-6 lg:p-4 xl:p-7 flex items-center justify-center"
             >
-              <div className="lg:absolute lg:top-[52px] lg:left-[52px] lg:right-[-24px]">
+              <div className="w-full my-auto">
                 <UIGenerationReveal
                   className="rounded-[10px]"
                   steps={
                     lang === 'vi'
                       ? [
-                          'AGENT.GEN // PHÂN TÍCH AST',
-                          'AGENT.GEN // CÂN CHỈNH S-BERT',
-                          'INSPECTOR SẴN SÀNG · 120FPS',
+                          'PHÂN TÍCH TRÍCH DẪN',
+                          'CÂN CHỈNH S-BERT',
+                          'SẴN SÀNG THẨM ĐỊNH',
                         ]
                       : [
-                          'AGENT.GEN // TRACING AST',
-                          'AGENT.GEN // CALIBRATING S-BERT',
-                          'INSPECTOR READY · 120FPS',
+                          'TRACING CITATION AST',
+                          'CALIBRATING S-BERT',
+                          'INSPECTOR READY',
                         ]
                   }
                 >
@@ -1577,9 +1607,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                     <span
                       className={`px-2 py-0.5 rounded-[5px] font-mono text-[10px] font-semibold tracking-wide ${
                         item.badgeTone === 'emerald'
-                          ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
+                          ? 'bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300'
                           : item.badgeTone === 'amber'
-                            ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
+                            ? 'bg-amber-500/[0.12] text-amber-700 dark:text-amber-300'
                             : 'bg-[#FBFAF6] dark:bg-[#141310] text-[#56524A] dark:text-[#A8A296]'
                       }`}
                     >
@@ -1649,7 +1679,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                       transform: `translate3d(${benchPill.left}px, ${benchPill.top}px, 0)`,
                       transition: benchPill.animate ? undefined : 'none',
                     }}
-                    className="t-tabs-pill rounded-[10px] shadow-2xs"
+                    className="t-tabs-pill rounded-[10px] shadow-sm"
                   />
                 )}
                 {[
@@ -1717,7 +1747,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                   {lang === 'vi' ? 'Thẩm định:' : 'Val:'}{' '}
                   <strong>{lang === 'vi' ? '18.000' : '18,000'}</strong> (15%)
                 </span>
-                <span className="px-2.5 py-1 rounded-[6px] bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 font-semibold">
+                <span className="px-2.5 py-1 rounded-[6px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-semibold">
                   {lang === 'vi'
                     ? 'Kiểm thử độc lập: N = 18.000 (15%)'
                     : 'Held-Out Test: N = 18,000 (15%)'}
@@ -1830,7 +1860,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                             <span
                               className={`px-2 py-0.5 rounded font-bold ${
                                 row.highlight
-                                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                  ? 'bg-emerald-500/[0.15] text-emerald-700 dark:text-emerald-300'
                                   : 'bg-[#FBFAF6] dark:bg-[#141310]'
                               }`}
                               style={!row.highlight ? { color: 'var(--solva-ink)' } : undefined}
@@ -1878,7 +1908,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                           : 'Strict academic safety guarantee: 0 fabricated references marked VERIFIED and 0 legitimate papers falsely accused of hallucination.'}
                       </p>
                     </div>
-                    <span className="self-start sm:self-center px-3 py-1 rounded-[8px] bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 font-mono text-[11px] font-semibold shrink-0">
+                    <span className="self-start sm:self-center px-3 py-1 rounded-[8px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[11px] font-semibold shrink-0">
                       {lang === 'vi'
                         ? 'Độ chính xác chung: 99.02% [98.87%, 99.16%]'
                         : 'Overall Acc: 99.02% [98.87%, 99.16%]'}
@@ -1900,12 +1930,12 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                             <span
                               className={`px-2.5 py-0.5 rounded font-mono text-[11px] font-bold ${
                                 cls.tone === 'emerald'
-                                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                  ? 'bg-emerald-500/[0.15] text-emerald-700 dark:text-emerald-300'
                                   : cls.tone === 'red'
-                                    ? 'bg-red-500/15 text-red-700 dark:text-red-300'
+                                    ? 'bg-red-500/[0.15] text-red-700 dark:text-red-300'
                                     : cls.tone === 'amber'
-                                      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-                                      : 'bg-slate-500/15 text-slate-700 dark:text-slate-300'
+                                      ? 'bg-amber-500/[0.15] text-amber-700 dark:text-amber-300'
+                                      : 'bg-slate-500/[0.15] text-slate-700 dark:text-slate-300'
                               }`}
                             >
                               {cls.label}
@@ -1981,7 +2011,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                           : 'Platt parameters (a = 1.8077, b = 1.1160) fitted strictly on the 18,000-sample Validation split align confidence scores with true empirical accuracy.'}
                       </p>
                     </div>
-                    <span className="self-start sm:self-center px-3 py-1 rounded-[8px] bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 font-mono text-[11px] font-semibold shrink-0">
+                    <span className="self-start sm:self-center px-3 py-1 rounded-[8px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[11px] font-semibold shrink-0">
                       {lang === 'vi'
                         ? '99.31% Chính xác @ 90% Độ phủ'
                         : '99.31% Acc @ 90% Coverage'}
@@ -2239,7 +2269,7 @@ function SolvaFeaturesSection({ lang }: { lang: Lang }) {
         </div>
 
         {/* 3-Column Feature Cards (`gap: 24px`) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-[24px]">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-[24px]">
           {features.map((feat, idx) => (
             <SolvaScrollReveal
               key={feat.title}
@@ -2247,11 +2277,11 @@ function SolvaFeaturesSection({ lang }: { lang: Lang }) {
               yOffset={36}
               className="flex flex-col gap-[16px] min-w-0"
             >
-              {/* Top 336px Painterly Visual Box */}
+              {/* Top Painterly Visual Box */}
               <SolvaPainterlyFrame
                 paintingSrc={feat.painting}
                 alt={feat.title}
-                className="w-full h-[320px] sm:h-[336px] p-[24px]"
+                className="w-full min-h-[320px] sm:min-h-[344px] p-4 sm:p-5 lg:p-3.5 xl:p-[24px] flex items-center justify-center"
               >
                 <div className="w-full h-full flex items-center justify-center">
                   <FeatureCardWidget index={idx as 0 | 1 | 2} lang={lang} />
@@ -2362,12 +2392,12 @@ function SolvaStickySection({
             >
               <div className="grid grid-cols-1 lg:grid-cols-12 items-center">
                 {/* Left Painterly Frame (667x548px equivalent on Desktop) */}
-                <div className="lg:col-span-7">
+                <div className="lg:col-span-7 min-w-0">
                   <SolvaPainterlyFrame
                     paintingSrc={block.painting}
                     alt={block.title}
                     radiusClass="rounded-[10px]"
-                    className="w-full h-[340px] sm:h-[420px] lg:h-[520px] p-6 flex items-center justify-center"
+                    className="w-full min-h-[340px] sm:min-h-[420px] lg:min-h-[520px] p-4 sm:p-6 flex items-center justify-center"
                   >
                     <div className="w-full h-full flex items-center justify-center">
                       <StickyCardWidget index={idx as 0 | 1 | 2} lang={lang} />
@@ -2467,19 +2497,19 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
     switch (status) {
       case 'match':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-emerald-500/12 text-emerald-700 dark:text-emerald-300">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
             <Check className="h-3 w-3" /> {lang === 'vi' ? 'Khớp 100%' : '100% Match'}
           </span>
         );
       case 'partial':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-amber-500/12 text-amber-700 dark:text-amber-300">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 whitespace-nowrap">
             <AlertTriangle className="h-3 w-3" /> {lang === 'vi' ? 'Tương đồng 86%' : '86% Sim'}
           </span>
         );
       case 'mismatch':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-red-500/12 text-red-700 dark:text-red-300">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-red-500/[0.12] text-red-700 dark:text-red-300 whitespace-nowrap">
             <XCircle className="h-3 w-3" /> {lang === 'vi' ? 'Sai lệch' : 'Diff'}
           </span>
         );
@@ -2581,9 +2611,9 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="flex items-center gap-1.5 shrink-0" aria-label="macOS window controls">
-                    <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]/60 shadow-2xs" />
-                    <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]/60 shadow-2xs" />
-                    <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]/60 shadow-2xs" />
+                    <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]/60 shadow-sm" />
+                    <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]/60 shadow-sm" />
+                    <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]/60 shadow-sm" />
                   </div>
                 <div
                   style={{ color: 'var(--solva-ink)' }}
@@ -3033,12 +3063,12 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                             </p>
                           </div>
                           <span
-                            className={`self-start sm:self-center px-2.5 py-0.5 rounded font-mono text-[10px] font-semibold uppercase shrink-0 ${
+                            className={`self-start sm:self-center px-2.5 py-0.5 rounded font-mono text-[10px] font-semibold uppercase shrink-0 whitespace-nowrap ${
                               rule.status === 'passed'
-                                ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
+                                ? 'bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300'
                                 : rule.status === 'warning'
-                                  ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
-                                  : 'bg-red-500/12 text-red-700 dark:text-red-300'
+                                  ? 'bg-amber-500/[0.12] text-amber-700 dark:text-amber-300'
+                                  : 'bg-red-500/[0.12] text-red-700 dark:text-red-300'
                             }`}
                           >
                             {lang === 'vi'
@@ -3074,7 +3104,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                                 <div className="min-w-0">
                                   <div
                                     style={{ color: 'var(--solva-ink)' }}
-                                    className="text-sm font-medium truncate group-hover:underline underline-offset-2"
+                                    className="text-sm font-medium leading-snug group-hover:underline underline-offset-2"
                                   >
                                     {src.name}
                                   </div>
@@ -3438,10 +3468,10 @@ function SolvaUseCasesSection({
                         isActive && !pipelinePill.ready ? 'var(--solva-bg)' : 'transparent',
                       color: isActive ? 'var(--solva-ink)' : 'var(--solva-muted)',
                     }}
-                    className="t-tab relative overflow-hidden h-[44px] px-3 rounded-[10px] font-solva-sans text-[13px] sm:text-[14px] font-medium flex items-center justify-center gap-[8px] cursor-pointer"
+                    className="t-tab relative overflow-hidden min-h-[44px] py-2 px-2.5 sm:px-3 rounded-[10px] font-solva-sans text-[13px] sm:text-[14px] font-medium flex items-center justify-center gap-[8px] cursor-pointer"
                   >
                     <Icon className="w-4 h-4 shrink-0" />
-                    <span className="truncate">{tab.label}</span>
+                    <span className="leading-tight text-center">{tab.label}</span>
                     {isActive && autoCycleTabs && (
                       <span
                         key={`stage-progress-${idx}`}
@@ -5293,7 +5323,7 @@ function SolvaFooter({
           {/* Left Brand Info */}
           <div className="w-full lg:w-[389px] flex flex-col items-start gap-[16px]">
             <Link to="/" className="inline-flex items-center gap-[10px]">
-              <span className="w-[32px] h-[32px] rounded-[8px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+              <span className="w-[32px] h-[32px] rounded-[8px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
                 <SourceLogicLogo size={20} />
               </span>
               <span

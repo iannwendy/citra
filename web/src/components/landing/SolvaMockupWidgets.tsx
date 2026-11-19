@@ -344,7 +344,7 @@ export function HeroVerificationMockup({
   const apiSources = [
     { name: 'Crossref', ms: selected.latencies[0] },
     { name: 'OpenAlex', ms: selected.latencies[1] },
-    { name: 'SemanticSch', ms: selected.latencies[2] },
+    { name: 'Semantic Scholar', ms: selected.latencies[2] },
   ];
 
   return (
@@ -353,37 +353,37 @@ export function HeroVerificationMockup({
       style={{
         backgroundColor: 'var(--solva-card-elevated)',
       }}
-      className="solva-glass-ring rounded-[10px] w-full max-w-full lg:w-[640px] border border-[#E7E3D9]/80 dark:border-[#332F26] overflow-hidden text-left select-none"
+      className="solva-glass-ring rounded-[10px] w-full max-w-full border border-[#E7E3D9]/80 dark:border-[#332F26] overflow-hidden text-left select-none"
     >
       {/* Top Window Chrome */}
       <div
         style={{ borderColor: 'var(--solva-border)' }}
-        className="px-3 sm:px-4 py-2.5 sm:py-3 border-b flex items-center justify-between gap-2 bg-[#FBFAF6]/90 dark:bg-[#1E1C17] min-w-0"
+        className="px-2.5 sm:px-3.5 py-2.5 border-b flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 bg-[#FBFAF6]/90 dark:bg-[#1E1C17] min-w-0"
       >
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 shrink-0" aria-label="macOS window controls">
-            <span className="w-3 h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]/60 shadow-2xs" />
-            <span className="w-3 h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]/60 shadow-2xs" />
-            <span className="w-3 h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]/60 shadow-2xs" />
+            <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-[#FF5F56] border border-[#E0443E]/60 shadow-sm" />
+            <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-[#FFBD2E] border border-[#DEA123]/60 shadow-sm" />
+            <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-[#27C93F] border border-[#1AAB29]/60 shadow-sm" />
           </div>
           <span
             style={{ color: 'var(--solva-ink)' }}
-            className="text-[11px] sm:text-[12px] font-medium truncate ml-1"
+            className="text-[11px] sm:text-[12px] font-medium leading-tight break-all sm:break-normal min-w-0 ml-0.5"
           >
             thesis_citation_audit_2026.pdf
           </span>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[5px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-medium">
+          <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[5px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-medium shrink-0 whitespace-nowrap">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>GROBID TEI · 15 APIs</span>
+            <span>{lang === 'vi' ? 'GROBID TEI · 15+ CSDL' : 'GROBID TEI · 15 APIs'}</span>
           </span>
           <span
             style={{
               backgroundColor: 'var(--solva-surface)',
               color: 'var(--solva-ink)',
             }}
-            className="px-2 py-0.5 rounded-[5px] font-mono text-[10px] font-semibold"
+            className="px-2 py-0.5 rounded-[5px] font-mono text-[10px] font-semibold shrink-0 whitespace-nowrap"
           >
             CIS: <SubtleNumber value={selected.cisScore.toFixed(1)} />
           </span>
@@ -395,13 +395,16 @@ export function HeroVerificationMockup({
         {/* Left Queue */}
         <div
           style={{ borderColor: 'var(--solva-border)' }}
-          className="sm:col-span-5 min-w-0 p-3 sm:p-3.5 border-b sm:border-b-0 sm:border-r space-y-2"
+          className="sm:col-span-5 min-w-0 p-2.5 sm:p-3 border-b sm:border-b-0 sm:border-r space-y-2"
         >
-          <div className="flex items-center justify-between gap-2 text-[10px] sm:text-[11px] font-mono">
-            <span style={{ color: 'var(--solva-muted)' }} className="truncate">
+          <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] font-mono">
+            <span style={{ color: 'var(--solva-muted)' }} className="leading-tight">
               {lang === 'vi' ? 'DANH SÁCH TRÍCH DẪN' : 'EXTRACTED QUEUE'}
             </span>
-            <span style={{ color: 'var(--solva-ink)' }} className="font-semibold shrink-0">
+            <span
+              style={{ color: 'var(--solva-ink)' }}
+              className="font-semibold shrink-0 whitespace-nowrap"
+            >
               <SolvaLiveNumber value={24} replaySeed={replaySeed} durationMs={1350} />{' '}
               {lang === 'vi' ? 'mục' : 'refs'}
             </span>
@@ -417,16 +420,16 @@ export function HeroVerificationMockup({
                   backgroundColor: isActive ? 'var(--solva-surface)' : 'transparent',
                   borderColor: isActive ? 'var(--solva-ink)' : 'var(--solva-border)',
                 }}
-                className="p-2.5 rounded-[8px] border transition-[background-color,border-color,opacity] duration-300 cursor-pointer hover:opacity-90"
+                className="p-2 sm:p-2.5 rounded-[8px] border transition-[background-color,border-color,opacity] duration-300 cursor-pointer hover:opacity-90"
               >
-                <div className="flex items-center justify-between gap-1.5 mb-1">
+                <div className="flex items-start justify-between gap-1.5 mb-1">
                   <span
                     style={{ color: 'var(--solva-ink)' }}
-                    className="text-[12px] font-medium truncate"
+                    className="text-[11.5px] sm:text-[12px] font-medium leading-snug min-w-0"
                   >
                     {item.marker} {item.ref}
                   </span>
-                  <span className="font-mono text-[10px] font-semibold text-[#56524A] dark:text-[#A8A296]">
+                  <span className="font-mono text-[10px] font-semibold text-[#56524A] dark:text-[#A8A296] shrink-0 whitespace-nowrap">
                     <SolvaLiveNumber
                       value={item.confNum}
                       suffix="%"
@@ -437,24 +440,24 @@ export function HeroVerificationMockup({
                 </div>
                 <p
                   style={{ color: 'var(--solva-muted)' }}
-                  className="text-[11px] truncate mb-1.5"
+                  className="text-[11px] leading-snug mb-1.5"
                 >
                   {item.title}
                 </p>
-                <div className="flex items-center justify-between gap-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
                   <span
-                    className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded ${
+                    className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap ${
                       item.tone === 'emerald'
-                        ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
+                        ? 'bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300'
                         : item.tone === 'amber'
-                          ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
-                          : 'bg-red-500/12 text-red-700 dark:text-red-300'
+                          ? 'bg-amber-500/[0.12] text-amber-700 dark:text-amber-300'
+                          : 'bg-red-500/[0.12] text-red-700 dark:text-red-300'
                     }`}
                   >
                     {item.l2}
                   </span>
                   {isActive && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                   )}
                 </div>
               </div>
@@ -465,10 +468,10 @@ export function HeroVerificationMockup({
         {/* Right Live Verdict Trace */}
         <div
           key={selected.marker}
-          className="sm:col-span-7 p-4 space-y-3 animate-debugger-switch"
+          className="sm:col-span-7 min-w-0 p-3 sm:p-3.5 xl:p-4 space-y-2.5 sm:space-y-3 animate-debugger-switch"
         >
-          <div className="flex items-start justify-between gap-2">
-            <div>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
               <div
                 style={{ color: 'var(--solva-muted)' }}
                 className="text-[10px] font-mono uppercase tracking-wider"
@@ -478,7 +481,7 @@ export function HeroVerificationMockup({
               </div>
               <div
                 style={{ color: 'var(--solva-ink)' }}
-                className="text-[14px] font-medium leading-snug mt-0.5"
+                className="text-[13px] sm:text-[14px] font-medium leading-snug mt-0.5"
               >
                 {selected.title}
               </div>
@@ -488,7 +491,7 @@ export function HeroVerificationMockup({
                 backgroundColor: 'var(--solva-btn-bg)',
                 color: 'var(--solva-btn-fg)',
               }}
-              className="px-2 py-0.5 rounded-[5px] text-[10px] font-mono shrink-0"
+              className="px-2 py-0.5 rounded-[5px] text-[10px] font-mono font-semibold shrink-0 whitespace-nowrap"
             >
               {selected.l1}
             </span>
@@ -502,18 +505,20 @@ export function HeroVerificationMockup({
             }}
             className="rounded-[8px] p-2.5 border space-y-1.5 text-[11px]"
           >
-            <div className="flex items-center justify-between">
-              <span style={{ color: 'var(--solva-muted)' }} className="font-mono">
-                DOI:
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+              <div className="inline-flex items-center gap-1.5 min-w-0">
+                <span style={{ color: 'var(--solva-muted)' }} className="font-mono shrink-0">
+                  DOI:
+                </span>
+                <span
+                  style={{ color: 'var(--solva-ink)' }}
+                  className="font-mono break-all sm:break-normal min-w-0"
+                >
+                  {selected.doi}
+                </span>
+              </div>
               <span
-                style={{ color: 'var(--solva-ink)' }}
-                className="font-mono truncate max-w-[180px]"
-              >
-                {selected.doi}
-              </span>
-              <span
-                className={`font-mono text-[10px] font-semibold ${
+                className={`font-mono text-[10px] font-semibold shrink-0 whitespace-nowrap ${
                   selected.tone === 'red'
                     ? 'text-red-600 dark:text-red-400'
                     : 'text-emerald-600 dark:text-emerald-400'
@@ -528,31 +533,45 @@ export function HeroVerificationMockup({
                     : '100% Match'}
               </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span style={{ color: 'var(--solva-muted)' }} className="font-mono">
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+              <span style={{ color: 'var(--solva-muted)' }} className="font-mono shrink-0">
                 {lang === 'vi' ? 'Quy tắc:' : 'Rule:'}
               </span>
               <span style={{ color: 'var(--solva-ink)' }} className="font-mono">
-                {selected.tone === 'emerald'
-                  ? 'R01_EXACT_DOI_VERIFIED'
-                  : selected.tone === 'amber'
-                    ? 'R05_YEAR_DRIFT (2018 vs 2019)'
-                    : 'R14_HALLUCINATED_SOURCE'}
+                {selected.tone === 'emerald' ? (
+                  'R01_EXACT_DOI_VERIFIED'
+                ) : selected.tone === 'amber' ? (
+                  <>
+                    R05_YEAR_DRIFT{' '}
+                    <span className="citra-nowrap-tail whitespace-nowrap">(2018 vs 2019)</span>
+                  </>
+                ) : (
+                  'R14_HALLUCINATED_SOURCE'
+                )}
               </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span style={{ color: 'var(--solva-muted)' }} className="font-mono">
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+              <span style={{ color: 'var(--solva-muted)' }} className="font-mono shrink-0">
                 {lang === 'vi' ? 'Đối sánh ngữ nghĩa:' : 'Semantic Align:'}
               </span>
               <span className="font-mono text-emerald-700 dark:text-emerald-300 font-medium">
                 {selected.tone === 'red' ? (
-                  lang === 'vi' ? 'KHÔNG THỂ XÁC THỰC (Thiếu bài gốc)' : 'UNVERIFIABLE (No Abstract)'
+                  lang === 'vi' ? (
+                    <>
+                      KHÔNG THỂ XÁC THỰC{' '}
+                      <span className="citra-nowrap-tail whitespace-nowrap">(Thiếu bài gốc)</span>
+                    </>
+                  ) : (
+                    <>
+                      UNVERIFIABLE{' '}
+                      <span className="citra-nowrap-tail whitespace-nowrap">(No Abstract)</span>
+                    </>
+                  )
                 ) : (
-                  <>
-                    {lang === 'vi' ? 'TƯƠNG ĐỒNG (MiniLM ONNX ' : 'ALIGNED (MiniLM ONNX '}
-                    <SubtleNumber value={selected.nliScore.toFixed(2)} />
-                    )
-                  </>
+                  <span className="citra-nowrap-tail whitespace-nowrap">
+                    {lang === 'vi' ? 'TƯƠNG ĐỒNG (' : 'ALIGNED ('}
+                    <SubtleNumber value={selected.nliScore.toFixed(2)} />)
+                  </span>
                 )}
               </span>
             </div>
@@ -568,7 +587,7 @@ export function HeroVerificationMockup({
                 ? 'ĐỐI CHIẾU CHÉO TRÊN 15+ CSDL HỌC THUẬT QUỐC TẾ'
                 : 'FEDERATED SCHOLARLY API WATERFALL'}
             </div>
-            <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono">
+            <div className="flex flex-wrap gap-1.5 text-[10px] font-mono">
               {apiSources.map((s, idx) => {
                 const isPulsing = idx === activeApiPulse;
                 const liveMs = isPulsing ? Math.max(1, s.ms - 1) : s.ms;
@@ -588,16 +607,19 @@ export function HeroVerificationMockup({
                         ? 'var(--solva-ink)'
                         : 'var(--solva-border)',
                     }}
-                    className="group px-2 py-1.5 rounded-[6px] border flex items-center justify-between gap-1 transition-[background-color,border-color] duration-300 hover:border-[#1C1A15]/60 dark:hover:border-[#FBFAF6]/50 cursor-pointer"
+                    className="group flex-1 min-w-fit px-2 py-1.5 rounded-[6px] border inline-flex items-center justify-between gap-1.5 shrink-0 whitespace-nowrap transition-[background-color,border-color] duration-300 hover:border-[#1C1A15]/60 dark:hover:border-[#FBFAF6]/50 cursor-pointer"
                   >
                     <span
                       style={{ color: 'var(--solva-ink)' }}
-                      className="inline-flex items-center gap-1 truncate group-hover:underline underline-offset-2"
+                      className="inline-flex items-center gap-1 whitespace-nowrap group-hover:underline underline-offset-2"
                     >
                       <ScholarlySourceLogo name={s.name} size={11} />
-                      <span className="truncate">{s.name}</span>
+                      <span>{s.name}</span>
                     </span>
-                    <span style={{ color: 'var(--solva-muted)' }} className="shrink-0">
+                    <span
+                      style={{ color: 'var(--solva-muted)' }}
+                      className="shrink-0 whitespace-nowrap"
+                    >
                       <SubtleNumber value={liveMs} suffix="ms" />
                     </span>
                   </a>
@@ -648,17 +670,22 @@ export function FeatureCardWidget({
           backgroundColor: 'var(--solva-card-elevated)',
           ...getStaggerStyle(0),
         }}
-        className="solva-glass-ring w-[272px] sm:w-[288px] h-[272px] sm:h-[288px] rounded-[16px] p-4 flex flex-col justify-between text-left border border-[#E7E3D9]/70 dark:border-[#332F26]"
+        className="solva-glass-ring w-full max-w-[296px] min-h-[272px] sm:min-h-[288px] h-auto rounded-[16px] p-3.5 sm:p-4 flex flex-col justify-between gap-2.5 text-left border border-[#E7E3D9]/70 dark:border-[#332F26]"
       >
-        <div style={getStaggerStyle(40)} className="flex items-center justify-between">
+        <div
+          style={getStaggerStyle(40)}
+          className="flex flex-wrap items-center justify-between gap-1.5"
+        >
           <span
             style={{ color: 'var(--solva-ink)' }}
-            className="text-[12px] font-medium flex items-center gap-1.5"
+            className="text-[12px] font-medium flex items-center gap-1.5 min-w-0"
           >
-            <Layers className="w-3.5 h-3.5" />
-            {lang === 'vi' ? 'Kiến trúc 2 Tầng Độc lập' : '2-Layer Orthogonal Output'}
+            <Layers className="w-3.5 h-3.5 shrink-0" />
+            <span>
+              {lang === 'vi' ? 'Kiến trúc 2 Tầng Độc lập' : '2-Layer Orthogonal Output'}
+            </span>
           </span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#F4F2EC] dark:bg-[#29261F] text-[#56524A] dark:text-[#A8A296]">
+          <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#F4F2EC] dark:bg-[#29261F] text-[#56524A] dark:text-[#A8A296]">
             L1 × L2
           </span>
         </div>
@@ -672,16 +699,16 @@ export function FeatureCardWidget({
             }}
             className="p-2.5 rounded-[10px] border space-y-1 transition-[border-color,background-color] duration-500"
           >
-            <div className="flex items-center justify-between text-[10px] font-mono">
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[10px] font-mono">
               <span style={{ color: 'var(--solva-muted)' }}>
-                {lang === 'vi' ? 'TẦNG 1 · ĐỐI CHIẾU NGUỒN NỘI BỘ' : 'LAYER 1 · MAPPING'}
+                {lang === 'vi' ? 'TẦNG 1 · ĐỐI CHIẾU NỘI BỘ' : 'LAYER 1 · MAPPING'}
               </span>
-              <span className="text-emerald-700 dark:text-emerald-400 font-semibold inline-flex items-center gap-1">
+              <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-emerald-700 dark:text-emerald-400 font-semibold inline-flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 MATCHED
               </span>
             </div>
-            <p style={{ color: 'var(--solva-ink)' }} className="text-[12px] font-medium">
+            <p style={{ color: 'var(--solva-ink)' }} className="text-[12px] font-medium leading-snug">
               {lang === 'vi' ? 'Trong bài [' : 'In-text ['}
               <SubtleNumber value={activeRefNum} />
               {lang === 'vi' ? '] ↔ Danh mục #' : '] ↔ Bibliography #'}
@@ -697,18 +724,17 @@ export function FeatureCardWidget({
             }}
             className="p-2.5 rounded-[10px] border space-y-1 transition-[border-color,background-color] duration-500"
           >
-            <div className="flex items-center justify-between text-[10px] font-mono">
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[10px] font-mono">
               <span style={{ color: 'var(--solva-muted)' }}>
-                {lang === 'vi' ? 'TẦNG 2 · XÁC THỰC NGUỒN GỐC' : 'LAYER 2 · EXISTENCE'}
+                {lang === 'vi' ? 'TẦNG 2 · XÁC THỰC NGUỒN' : 'LAYER 2 · EXISTENCE'}
               </span>
-              <span className="text-amber-700 dark:text-amber-400 font-semibold">
+              <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-amber-700 dark:text-amber-400 font-semibold">
                 METADATA_ERROR
               </span>
             </div>
-            <p style={{ color: 'var(--solva-ink)' }} className="text-[12px] font-medium">
-              {lang === 'vi'
-                ? 'DOI hợp lệ · Lệch năm (2020 → 2021)'
-                : 'DOI valid · Year drift (2020 → 2021)'}
+            <p style={{ color: 'var(--solva-ink)' }} className="text-[12px] font-medium leading-snug">
+              {lang === 'vi' ? 'DOI hợp lệ · Lệch năm ' : 'DOI valid · Year drift '}
+              <span className="citra-nowrap-tail whitespace-nowrap">(2020 → 2021)</span>
             </p>
           </div>
         </div>
@@ -718,14 +744,14 @@ export function FeatureCardWidget({
             ...getStaggerStyle(260),
             borderColor: 'var(--solva-border)',
           }}
-          className="pt-2.5 border-t flex items-center justify-between text-[11px]"
+          className="pt-2.5 border-t flex flex-wrap items-center justify-between gap-1.5 text-[11px]"
         >
           <span style={{ color: 'var(--solva-muted)' }}>
             {lang === 'vi' ? '7 trạng thái T1 · 8 nhãn T2' : '7 L1 states · 8 L2 verdicts'}
           </span>
           <span
             style={{ color: 'var(--solva-ink)' }}
-            className="font-mono font-semibold"
+            className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono font-semibold"
           >
             {lang === 'vi' ? '100% Độc lập' : '100% Orthogonal'}
           </span>
@@ -739,32 +765,32 @@ export function FeatureCardWidget({
     const apis = [
       {
         name: 'Crossref REST API',
-        status: lang === 'vi' ? 'Khớp DOI' : 'DOI Exact',
+        status: lang === 'vi' ? 'Khớp DOI' : 'DOI',
         baseMs: 38,
         delta: 2,
       },
       {
         name: 'OpenAlex Works',
-        status: lang === 'vi' ? 'Khớp Work ID' : 'Work ID Match',
+        status: 'Work ID',
         baseMs: 49,
         delta: -2,
       },
       {
         name: 'Semantic Scholar',
-        status: lang === 'vi' ? 'Ngữ nghĩa' : 'Embedding',
+        status: lang === 'vi' ? 'Khớp' : 'Sim',
         score: 0.96,
         baseMs: 62,
         delta: 3,
       },
       {
         name: 'PubMed / EuropePMC',
-        status: lang === 'vi' ? 'Xác thực PMID' : 'PMID Verified',
+        status: 'PMID',
         baseMs: 54,
         delta: -1,
       },
       {
         name: 'SQLite FTS5 Cache',
-        status: lang === 'vi' ? 'Đệm cục bộ' : 'Local Hit',
+        status: lang === 'vi' ? 'Đệm' : 'Cache',
         baseMs: 3,
         delta: 0,
       },
@@ -776,17 +802,20 @@ export function FeatureCardWidget({
           backgroundColor: 'var(--solva-card-elevated)',
           ...getStaggerStyle(0),
         }}
-        className="solva-glass-ring w-[272px] sm:w-[288px] h-[272px] sm:h-[288px] rounded-[16px] p-4 flex flex-col justify-between text-left border border-[#E7E3D9]/70 dark:border-[#332F26]"
+        className="solva-glass-ring w-full max-w-[296px] min-h-[272px] sm:min-h-[288px] h-auto rounded-[16px] p-3.5 sm:p-4 flex flex-col justify-between gap-2.5 text-left border border-[#E7E3D9]/70 dark:border-[#332F26]"
       >
-        <div style={getStaggerStyle(40)} className="flex items-center justify-between">
+        <div
+          style={getStaggerStyle(40)}
+          className="flex flex-wrap items-center justify-between gap-1.5"
+        >
           <span
             style={{ color: 'var(--solva-ink)' }}
-            className="text-[12px] font-medium flex items-center gap-1.5"
+            className="text-[12px] font-medium flex items-center gap-1.5 min-w-0"
           >
-            <Database className="w-3.5 h-3.5" />
-            15+ {lang === 'vi' ? 'CSDL Khoa học' : 'Scholarly Indexes'}
+            <Database className="w-3.5 h-3.5 shrink-0" />
+            <span>15+ {lang === 'vi' ? 'CSDL Khoa học' : 'Scholarly Indexes'}</span>
           </span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
+          <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             {lang === 'vi' ? 'SONG SONG' : 'PARALLEL'}
           </span>
@@ -809,16 +838,20 @@ export function FeatureCardWidget({
                   backgroundColor: 'var(--solva-surface)',
                   borderColor: isWaveActive ? 'var(--solva-ink)' : 'transparent',
                 }}
-                className="group px-2.5 py-1.5 rounded-[8px] border flex items-center justify-between text-[11px] transition-[border-color,background-color] duration-300 hover:border-[#1C1A15]/50 dark:hover:border-[#FBFAF6]/40 cursor-pointer"
+                className="group px-2 py-1.5 rounded-[8px] border flex flex-wrap items-center justify-between gap-x-1.5 gap-y-0.5 text-[11px] transition-[border-color,background-color] duration-300 hover:border-[#1C1A15]/50 dark:hover:border-[#FBFAF6]/40 cursor-pointer"
               >
                 <span
                   style={{ color: 'var(--solva-ink)' }}
-                  className="font-medium truncate inline-flex items-center gap-1.5 group-hover:underline underline-offset-2"
+                  className="font-medium inline-flex items-center gap-1.5 whitespace-nowrap group-hover:underline underline-offset-2"
                 >
-                  <ScholarlySourceLogo name={api.name} size={13} className="opacity-85 group-hover:opacity-100" />
-                  <span className="truncate">{api.name}</span>
+                  <ScholarlySourceLogo
+                    name={api.name}
+                    size={13}
+                    className="opacity-85 group-hover:opacity-100"
+                  />
+                  <span>{api.name}</span>
                 </span>
-                <span className="font-mono text-[10px] text-emerald-700 dark:text-emerald-300 shrink-0 ml-2">
+                <span className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono text-[10px] text-emerald-700 dark:text-emerald-300">
                   {api.score !== undefined ? `${api.status} ${api.score.toFixed(2)}` : api.status} ·{' '}
                   <SubtleNumber value={liveMs} suffix="ms" />
                 </span>
@@ -832,12 +865,15 @@ export function FeatureCardWidget({
             ...getStaggerStyle(310),
             borderColor: 'var(--solva-border)',
           }}
-          className="pt-2 border-t flex items-center justify-between text-[11px]"
+          className="pt-2 border-t flex flex-wrap items-center justify-between gap-1.5 text-[11px]"
         >
           <span style={{ color: 'var(--solva-muted)' }}>
             + arXiv, DBLP, DOAJ, ORCID
           </span>
-          <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
+          <span
+            style={{ color: 'var(--solva-ink)' }}
+            className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono font-semibold"
+          >
             <SolvaLiveNumber
               value={200}
               suffix={lang === 'vi' ? 'M+ Công trình' : 'M+ Works'}
@@ -863,17 +899,22 @@ export function FeatureCardWidget({
         backgroundColor: 'var(--solva-card-elevated)',
         ...getStaggerStyle(0),
       }}
-      className="solva-glass-ring w-[272px] sm:w-[288px] h-[272px] sm:h-[288px] rounded-[16px] p-4 flex flex-col justify-between text-left border border-[#E7E3D9]/70 dark:border-[#332F26]"
+      className="solva-glass-ring w-full max-w-[296px] min-h-[272px] sm:min-h-[288px] h-auto rounded-[16px] p-3.5 sm:p-4 flex flex-col justify-between gap-2.5 text-left border border-[#E7E3D9]/70 dark:border-[#332F26]"
     >
-      <div style={getStaggerStyle(40)} className="flex items-center justify-between">
+      <div
+        style={getStaggerStyle(40)}
+        className="flex flex-wrap items-center justify-between gap-1.5"
+      >
         <span
           style={{ color: 'var(--solva-ink)' }}
-          className="text-[12px] font-medium flex items-center gap-1.5"
+          className="text-[12px] font-medium flex items-center gap-1.5 min-w-0"
         >
-          <Scale className="w-3.5 h-3.5" />
-          {lang === 'vi' ? 'Suy luận Logic & Ngữ nghĩa' : 'Neuro-Symbolic & Semantic'}
+          <Scale className="w-3.5 h-3.5 shrink-0" />
+          <span>
+            {lang === 'vi' ? 'Suy luận Logic & Ngữ nghĩa' : 'Neuro-Symbolic & Semantic'}
+          </span>
         </span>
-        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:text-[#1C1A15]">
+        <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:text-[#1C1A15]">
           {SYMBOLIC_RULES_RANGE}
         </span>
       </div>
@@ -887,17 +928,20 @@ export function FeatureCardWidget({
           }}
           className="p-2.5 rounded-[10px] border space-y-1 transition-[border-color,background-color] duration-500"
         >
-          <div className="flex items-center justify-between text-[10px] font-mono">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[10px] font-mono">
             <span style={{ color: 'var(--solva-muted)' }}>
-              {lang === 'vi' ? 'ĐỒ THỊ QUY TẮC HÌNH THỨC' : 'SYMBOLIC RULE GRAPH'}
+              {lang === 'vi' ? 'ĐỒ THỊ QUY TẮC' : 'SYMBOLIC RULE GRAPH'}
             </span>
-            <span className="text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
+            <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               {lang === 'vi' ? 'ĐẠT CHUẨN' : 'PASSED'}
             </span>
           </div>
-          <p style={{ color: 'var(--solva-ink)' }} className="text-[11px] font-mono">
-            R01_DOI ∧ R03_TITLE_SIM (<SubtleNumber value={currentSim.toFixed(2)} />)
+          <p style={{ color: 'var(--solva-ink)' }} className="text-[11px] font-mono leading-snug">
+            R01_DOI ∧ R03_TITLE_SIM{' '}
+            <span className="citra-nowrap-tail whitespace-nowrap">
+              (<SubtleNumber value={currentSim.toFixed(2)} />)
+            </span>
           </p>
         </div>
 
@@ -909,11 +953,11 @@ export function FeatureCardWidget({
           }}
           className="p-2.5 rounded-[10px] border space-y-1.5 transition-[border-color,background-color] duration-500"
         >
-          <div className="flex items-center justify-between text-[10px] font-mono">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[10px] font-mono">
             <span style={{ color: 'var(--solva-muted)' }}>
-              {lang === 'vi' ? 'NGỮ NGHĨA MINILM ONNX INT8' : 'MINILM ONNX INT8 ALIGNMENT'}
+              {lang === 'vi' ? 'NGỮ NGHĨA MINILM ONNX' : 'MINILM SEMANTIC ALIGN'}
             </span>
-            <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
+            <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-emerald-700 dark:text-emerald-300 font-semibold">
               {lang === 'vi' ? 'KHỚP (' : 'ALIGNED ('}
               <SubtleNumber value={currentStance} suffix="%" />)
             </span>
@@ -932,10 +976,13 @@ export function FeatureCardWidget({
           ...getStaggerStyle(260),
           borderColor: 'var(--solva-border)',
         }}
-        className="pt-2 border-t flex items-center justify-between text-[11px]"
+        className="pt-2 border-t flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[10.5px] sm:text-[11px]"
       >
-        <span style={{ color: 'var(--solva-muted)' }}>Sentence-BERT + MiniLM ONNX INT8</span>
-        <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
+        <span style={{ color: 'var(--solva-muted)' }}>Sentence-BERT · MiniLM ONNX</span>
+        <span
+          style={{ color: 'var(--solva-ink)' }}
+          className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono font-semibold"
+        >
           {lang === 'vi' ? 'AI Giải thích được' : 'Explainable AI'}
         </span>
       </div>
@@ -972,27 +1019,50 @@ export function StickyCardWidget({
     const xmlIds = [12, 15, 18, 12];
     const currentXmlId = xmlIds[activePhase % xmlIds.length];
 
+    const styleItems = [
+      {
+        key: 'ieee',
+        prefix: 'IEEE ',
+        tail: '[1]–[N]',
+      },
+      {
+        key: 'apa',
+        prefix: 'APA 7th ',
+        tail: '(Author, Yr)',
+      },
+      {
+        key: 'vancouver',
+        prefix: 'Vancouver ',
+        tail: '(1)',
+      },
+      {
+        key: 'acm',
+        prefix: 'ACM / Harvard',
+        tail: null,
+      },
+    ] as const;
+
     return (
       <div
         ref={containerRef}
         style={{
           backgroundColor: 'var(--solva-card-elevated)',
         }}
-        className="solva-glass-ring w-full max-w-[340px] rounded-[12px] p-5 space-y-3.5 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
+        className="solva-glass-ring w-full max-w-[348px] rounded-[12px] p-4 sm:p-5 space-y-3.5 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-[#1C1A15] dark:text-[#FBFAF6]" />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <FileText className="w-4 h-4 shrink-0 text-[#1C1A15] dark:text-[#FBFAF6]" />
             <span
               style={{ color: 'var(--solva-ink)' }}
-              className="text-[13px] font-medium"
+              className="text-[12.5px] sm:text-[13px] font-medium leading-snug"
             >
               {lang === 'vi'
                 ? 'GROBID TEI-XML + Đối soát đa chuẩn'
                 : 'GROBID TEI-XML + Cross-Validator'}
             </span>
           </div>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1.5">
+          <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             {lang === 'vi' ? 'HOẠT ĐỘNG' : 'ACTIVE'}
           </span>
@@ -1002,7 +1072,7 @@ export function StickyCardWidget({
           style={{
             backgroundColor: 'var(--solva-surface)',
           }}
-          className="p-3 rounded-[8px] font-mono text-[11px] space-y-1.5"
+          className="p-2.5 sm:p-3 rounded-[8px] font-mono text-[10px] sm:text-[11px] space-y-1.5 break-all sm:break-normal"
         >
           <div
             style={{
@@ -1020,7 +1090,7 @@ export function StickyCardWidget({
               color: 'var(--solva-ink)',
               transform: activePhase === 1 ? 'translateX(3px)' : 'translateX(0px)',
             }}
-            className="pl-3 transition-transform duration-300"
+            className="pl-2.5 sm:pl-3 transition-transform duration-300"
           >
             &lt;title&gt;Deep Residual Learning&lt;/title&gt;
           </div>
@@ -1029,7 +1099,7 @@ export function StickyCardWidget({
               color: 'var(--solva-ink)',
               transform: activePhase === 2 ? 'translateX(3px)' : 'translateX(0px)',
             }}
-            className="pl-3 transition-transform duration-300"
+            className="pl-2.5 sm:pl-3 transition-transform duration-300"
           >
             &lt;idno type=&quot;DOI&quot;&gt;10.1109/CVPR.2016.90&lt;/idno&gt;
           </div>
@@ -1044,13 +1114,8 @@ export function StickyCardWidget({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 text-[11px]">
-          {[
-            { key: 'ieee', label: 'IEEE [1]–[N]' },
-            { key: 'apa', label: 'APA 7th (Author, Yr)' },
-            { key: 'vancouver', label: 'Vancouver (1)' },
-            { key: 'acm', label: 'ACM / Harvard' },
-          ].map((item, idx) => {
+        <div className="grid grid-cols-2 gap-1.5 sm:gap-2 text-[10.5px] sm:text-[11px]">
+          {styleItems.map((item, idx) => {
             const isStyleActive = idx === activePhase;
             return (
               <div
@@ -1064,15 +1129,18 @@ export function StickyCardWidget({
                     : 'var(--solva-border)',
                   transform: isStyleActive ? 'translateY(-1px)' : 'translateY(0px)',
                 }}
-                className="px-2.5 py-1.5 rounded-[6px] border flex items-center gap-1.5 transition-[background-color,border-color,transform] duration-300"
+                className="px-2 py-1.5 rounded-[6px] border flex items-center gap-1.5 min-w-0 transition-[background-color,border-color,transform] duration-300"
               >
                 <Check
                   className={`w-3 h-3 text-emerald-600 shrink-0 transition-transform duration-300 ${
                     isStyleActive ? 'scale-125' : 'scale-100'
                   }`}
                 />
-                <span style={{ color: 'var(--solva-ink)' }} className="truncate">
-                  {item.label}
+                <span style={{ color: 'var(--solva-ink)' }} className="leading-snug min-w-0">
+                  {item.prefix}
+                  {item.tail && (
+                    <span className="citra-nowrap-tail whitespace-nowrap">{item.tail}</span>
+                  )}
                 </span>
               </div>
             );
@@ -1093,14 +1161,14 @@ export function StickyCardWidget({
         style={{
           backgroundColor: 'var(--solva-card-elevated)',
         }}
-        className="solva-glass-ring w-full max-w-[340px] rounded-[12px] p-5 space-y-3.5 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
+        className="solva-glass-ring w-full max-w-[348px] rounded-[12px] p-4 sm:p-5 space-y-3.5 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <GitBranch className="w-4 h-4 text-[#1C1A15] dark:text-[#FBFAF6]" />
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <GitBranch className="w-4 h-4 shrink-0 text-[#1C1A15] dark:text-[#FBFAF6]" />
             <span
               style={{ color: 'var(--solva-ink)' }}
-              className="text-[13px] font-medium"
+              className="text-[12.5px] sm:text-[13px] font-medium leading-snug"
             >
               {lang === 'vi'
                 ? 'Chuỗi suy luận & Quyền thẩm định Giảng viên'
@@ -1117,7 +1185,7 @@ export function StickyCardWidget({
               borderColor: activePhase === 0 ? 'var(--solva-ink)' : 'transparent',
               transform: activePhase === 0 ? 'translateY(-1px)' : 'translateY(0px)',
             }}
-            className="p-2.5 rounded-[8px] border flex items-center justify-between gap-2 transition-[border-color,transform] duration-300"
+            className="p-2.5 rounded-[8px] border flex items-start sm:items-center justify-between gap-2 transition-[border-color,transform] duration-300"
           >
             <div className="min-w-0">
               <div
@@ -1128,14 +1196,14 @@ export function StickyCardWidget({
               </div>
               <div
                 style={{ color: 'var(--solva-muted)' }}
-                className="text-[11px] truncate"
+                className="text-[11px] leading-snug"
               >
                 {lang === 'vi'
                   ? 'Đã xác thực mã DOI chuẩn trên Crossref'
                   : 'Canonical DOI verified via Crossref'}
               </div>
             </div>
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300">
+            <span className="citra-nowrap-tail whitespace-nowrap shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300">
               {lang === 'vi' ? 'ĐẠT' : 'PASS'}
             </span>
           </div>
@@ -1147,7 +1215,7 @@ export function StickyCardWidget({
               borderColor: activePhase === 1 ? 'var(--solva-ink)' : 'transparent',
               transform: activePhase === 1 ? 'translateY(-1px)' : 'translateY(0px)',
             }}
-            className="p-2.5 rounded-[8px] border flex items-center justify-between gap-2 transition-[border-color,transform] duration-300"
+            className="p-2.5 rounded-[8px] border flex items-start sm:items-center justify-between gap-2 transition-[border-color,transform] duration-300"
           >
             <div className="min-w-0">
               <div
@@ -1158,14 +1226,22 @@ export function StickyCardWidget({
               </div>
               <div
                 style={{ color: 'var(--solva-muted)' }}
-                className="text-[11px] truncate"
+                className="text-[11px] leading-snug"
               >
-                {lang === 'vi'
-                  ? 'Ghi trong bài 2018 · Công bố 2019 (Δ=1 năm)'
-                  : 'Cited 2018 · Published 2019 (Δ=1yr)'}
+                {lang === 'vi' ? (
+                  <>
+                    Ghi trong bài 2018 · Công bố 2019{' '}
+                    <span className="citra-nowrap-tail whitespace-nowrap">(Δ=1 năm)</span>
+                  </>
+                ) : (
+                  <>
+                    Cited 2018 · Published 2019{' '}
+                    <span className="citra-nowrap-tail whitespace-nowrap">(Δ=1yr)</span>
+                  </>
+                )}
               </div>
             </div>
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 bg-amber-500/12 text-amber-700 dark:text-amber-300">
+            <span className="citra-nowrap-tail whitespace-nowrap shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-500/[0.12] text-amber-700 dark:text-amber-300">
               {lang === 'vi' ? 'LƯU Ý' : 'WARN'}
             </span>
           </div>
@@ -1177,7 +1253,7 @@ export function StickyCardWidget({
               borderColor: activePhase === 2 ? 'var(--solva-ink)' : 'transparent',
               transform: activePhase === 2 ? 'translateY(-1px)' : 'translateY(0px)',
             }}
-            className="p-2.5 rounded-[8px] border flex items-center justify-between gap-2 transition-[border-color,transform] duration-300"
+            className="p-2.5 rounded-[8px] border flex items-start sm:items-center justify-between gap-2 transition-[border-color,transform] duration-300"
           >
             <div className="min-w-0">
               <div
@@ -1188,14 +1264,14 @@ export function StickyCardWidget({
               </div>
               <div
                 style={{ color: 'var(--solva-muted)' }}
-                className="text-[11px] truncate"
+                className="text-[11px] leading-snug"
               >
                 {lang === 'vi'
                   ? 'Luận điểm trích dẫn được bài gốc củng cố'
                   : 'Manuscript claim supported by abstract'}
               </div>
             </div>
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300">
+            <span className="citra-nowrap-tail whitespace-nowrap shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300">
               <SubtleNumber value={currentStance.toFixed(2)} />
             </span>
           </div>
@@ -1216,12 +1292,12 @@ export function StickyCardWidget({
       style={{
         backgroundColor: 'var(--solva-card-elevated)',
       }}
-      className="solva-glass-ring w-full max-w-[340px] rounded-[12px] p-5 space-y-3.5 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
+      className="solva-glass-ring w-full max-w-[348px] rounded-[12px] p-4 sm:p-5 space-y-3.5 text-left border border-[#E7E3D9]/80 dark:border-[#332F26]"
     >
       <div className="flex items-center justify-between gap-2">
         <span
           style={{ color: 'var(--solva-ink)' }}
-          className="text-[13px] font-medium flex items-center gap-1.5 min-w-0"
+          className="text-[12.5px] sm:text-[13px] font-medium flex items-center gap-1.5 min-w-0"
         >
           <Sparkles className="w-4 h-4 shrink-0" />
           <span className="leading-snug">
@@ -1230,7 +1306,7 @@ export function StickyCardWidget({
               : 'Revision Progress & Integrity Score'}
           </span>
         </span>
-        <span className="text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-300 shrink-0 whitespace-nowrap">
+        <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-300">
           <SubtleNumber prefix="+" value={currentCisDelta.toFixed(1)} suffix=" CIS" />
         </span>
       </div>
@@ -1239,15 +1315,18 @@ export function StickyCardWidget({
         style={{
           backgroundColor: 'var(--solva-surface)',
         }}
-        className="p-3.5 rounded-[10px] flex items-center justify-between"
+        className="p-3 sm:p-3.5 rounded-[10px] flex items-center justify-between gap-2"
       >
-        <div>
-          <div style={{ color: 'var(--solva-muted)' }} className="text-[11px]">
-            {lang === 'vi' ? 'Bản nháp v1 (Trước rà soát)' : 'Draft v1 (Before Audit)'}
+        <div className="min-w-0">
+          <div style={{ color: 'var(--solva-muted)' }} className="text-[11px] leading-snug">
+            {lang === 'vi' ? 'Bản nháp v1 ' : 'Draft v1 '}
+            <span className="citra-nowrap-tail whitespace-nowrap">
+              {lang === 'vi' ? '(Trước rà soát)' : '(Before Audit)'}
+            </span>
           </div>
           <div
             style={{ color: 'var(--solva-ink)' }}
-            className="font-solva-serif text-[26px] leading-tight"
+            className="font-solva-serif text-[24px] sm:text-[26px] leading-tight mt-0.5"
           >
             <SolvaLiveNumber
               value={68.0}
@@ -1263,28 +1342,34 @@ export function StickyCardWidget({
             color: 'var(--solva-muted)',
             transform: activePhase === 1 ? 'translateX(3px)' : 'translateX(0px)',
           }}
-          className="font-mono text-sm transition-transform duration-500"
+          className="font-mono text-sm shrink-0 transition-transform duration-500"
         >
           →
         </div>
-        <div className="text-right">
-          <div style={{ color: 'var(--solva-muted)' }} className="text-[11px]">
-            {lang === 'vi' ? 'Bản nộp v2 (Đã chuẩn hóa)' : 'Draft v2 (Verified)'}
+        <div className="text-right min-w-0">
+          <div style={{ color: 'var(--solva-muted)' }} className="text-[11px] leading-snug">
+            {lang === 'vi' ? 'Bản nộp v2 ' : 'Draft v2 '}
+            <span className="citra-nowrap-tail whitespace-nowrap">
+              {lang === 'vi' ? '(Đã chuẩn hóa)' : '(Verified)'}
+            </span>
           </div>
-          <div className="font-solva-serif text-[26px] leading-tight text-emerald-700 dark:text-emerald-300">
+          <div className="font-solva-serif text-[24px] sm:text-[26px] leading-tight mt-0.5 text-emerald-700 dark:text-emerald-300">
             <SubtleNumber value={currentV2.toFixed(1)} suffix="%" />
           </div>
         </div>
       </div>
 
       <div className="space-y-1.5 text-[11px]">
-        <div className="flex items-center justify-between">
-          <span style={{ color: 'var(--solva-muted)' }}>
+        <div className="flex items-center justify-between gap-2">
+          <span style={{ color: 'var(--solva-muted)' }} className="leading-snug">
             {lang === 'vi'
               ? 'Trích dẫn ảo / DOI hư cấu đã loại bỏ'
               : 'Hallucinated / Ghost DOIs resolved'}
           </span>
-          <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
+          <span
+            style={{ color: 'var(--solva-ink)' }}
+            className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono font-semibold"
+          >
             3 →{' '}
             <SolvaLiveNumber
               value={0}
@@ -1294,13 +1379,16 @@ export function StickyCardWidget({
             />
           </span>
         </div>
-        <div className="flex items-center justify-between">
-          <span style={{ color: 'var(--solva-muted)' }}>
+        <div className="flex items-center justify-between gap-2">
+          <span style={{ color: 'var(--solva-muted)' }} className="leading-snug">
             {lang === 'vi'
               ? 'Mục tham khảo bị khuyết đã bổ sung'
               : 'Missing bibliography entries fixed'}
           </span>
-          <span style={{ color: 'var(--solva-ink)' }} className="font-mono font-semibold">
+          <span
+            style={{ color: 'var(--solva-ink)' }}
+            className="citra-nowrap-tail whitespace-nowrap shrink-0 font-mono font-semibold"
+          >
             4 →{' '}
             <SolvaLiveNumber
               value={0}
@@ -1454,7 +1542,7 @@ export function PipelineStageVisual({
         >
           {active.badge}
         </span>
-        <span className="px-2 py-0.5 rounded bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold inline-flex items-center gap-1.5">
+        <span className="citra-nowrap-tail whitespace-nowrap shrink-0 px-2 py-0.5 rounded bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold inline-flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
           {lang === 'vi' ? 'TRỰC TIẾP' : 'LIVE PIPELINE'}
         </span>
@@ -1524,16 +1612,33 @@ export function PipelineStageVisual({
           )}
           {tabIndex === 2 && (
             <>
-              {lang === 'vi'
-                ? 'Kích hoạt quy tắc R01_EXACT_DOI & R04_AUTHOR_OVERLAP → Phán quyết: VERIFIED (Độ tin cậy: 98.4%).'
-                : 'Triggered R01_EXACT_DOI & R04_AUTHOR_OVERLAP → Verdict: VERIFIED (Confidence: 98.4%).'}
+              {lang === 'vi' ? (
+                <>
+                  Kích hoạt quy tắc R01_EXACT_DOI &amp; R04_AUTHOR_OVERLAP → Phán quyết: VERIFIED{' '}
+                  <span className="citra-nowrap-tail whitespace-nowrap">(Độ tin cậy: 98.4%).</span>
+                </>
+              ) : (
+                <>
+                  Triggered R01_EXACT_DOI &amp; R04_AUTHOR_OVERLAP → Verdict: VERIFIED{' '}
+                  <span className="citra-nowrap-tail whitespace-nowrap">(Confidence: 98.4%).</span>
+                </>
+              )}
             </>
           )}
           {tabIndex === 3 && (
             <>
-              {lang === 'vi'
-                ? 'Luận điểm trích dẫn tương thích chặt chẽ với tóm tắt bài gốc (ĐỒNG THUẬN: 0.94 · BÁC BỎ: 0.01 · TRUNG LẬP: 0.05).'
-                : 'In-text claim entails retrieved abstract (SUPPORTS: 0.94 · REFUTES: 0.01 · NEUTRAL: 0.05).'}
+              {lang === 'vi' ? (
+                <>
+                  Luận điểm trích dẫn tương thích chặt chẽ với tóm tắt bài gốc (ĐỒNG THUẬN: 0.94 ·
+                  BÁC BỎ: 0.01 ·{' '}
+                  <span className="citra-nowrap-tail whitespace-nowrap">TRUNG LẬP: 0.05).</span>
+                </>
+              ) : (
+                <>
+                  In-text claim entails retrieved abstract (SUPPORTS: 0.94 · REFUTES: 0.01 ·{' '}
+                  <span className="citra-nowrap-tail whitespace-nowrap">NEUTRAL: 0.05).</span>
+                </>
+              )}
             </>
           )}
         </span>
@@ -1589,12 +1694,12 @@ export function BottomCTAMockup({ lang }: { lang: Lang }) {
     >
       <div
         style={getStaggerStyle(40)}
-        className="flex items-center justify-between gap-3 border-b border-[#E7E3D9] dark:border-[#332F26] pb-3"
+        className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E7E3D9] dark:border-[#332F26] pb-3"
       >
         <div className="min-w-0">
           <div
             style={{ color: 'var(--solva-muted)' }}
-            className="text-[10px] font-mono uppercase truncate"
+            className="text-[10px] font-mono uppercase leading-tight"
           >
             {lang === 'vi'
               ? 'BÁO CÁO KIỂM CHỨNG TOÀN DIỆN'
@@ -1602,7 +1707,7 @@ export function BottomCTAMockup({ lang }: { lang: Lang }) {
           </div>
           <div
             style={{ color: 'var(--solva-ink)' }}
-            className="text-[13px] sm:text-[15px] font-medium mt-0.5 truncate"
+            className="text-[13px] sm:text-[15px] font-medium mt-0.5 break-all sm:break-normal"
           >
             thesis_final_v3.pdf
           </div>
@@ -1752,7 +1857,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
           ...getStaggerStyle(40),
           borderColor: 'var(--solva-border)',
         }}
-        className="flex items-center justify-between gap-2 pb-3 border-b"
+        className="flex items-start sm:items-center justify-between gap-2 pb-3 border-b"
       >
         <div className="min-w-0">
           <div
@@ -1760,7 +1865,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
             className="text-[10px] font-mono uppercase tracking-wider flex items-center gap-1.5"
           >
             <GraduationCap className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">
+            <span>
               {lang === 'vi'
                 ? 'HỘI ĐỒNG KHOA KHMT · ĐỢT 1'
                 : 'THESIS COMMITTEE · COHORT RUN'}
@@ -1768,21 +1873,24 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
           </div>
           <div
             style={{ color: 'var(--solva-ink)' }}
-            className="text-[14px] sm:text-[15px] font-medium truncate mt-0.5"
+            className="text-[13.5px] sm:text-[15px] font-medium leading-snug mt-0.5"
           >
             <SolvaLiveNumber value={120} replaySeed={replaySeed} durationMs={1300} />{' '}
-            {lang === 'vi' ? 'Khóa luận Tốt nghiệp (' : 'Graduation Theses ('}
-            <SolvaLiveNumber
-              value={4380}
-              formatThousands
-              thousandSeparator={sep}
-              replaySeed={replaySeed}
-              durationMs={1500}
-            />{' '}
-            {lang === 'vi' ? 'trích dẫn)' : 'refs)'}
+            {lang === 'vi' ? 'Khóa luận Tốt nghiệp ' : 'Graduation Theses '}
+            <span className="citra-nowrap-tail whitespace-nowrap">
+              (
+              <SolvaLiveNumber
+                value={4380}
+                formatThousands
+                thousandSeparator={sep}
+                replaySeed={replaySeed}
+                durationMs={1500}
+              />{' '}
+              {lang === 'vi' ? 'trích dẫn)' : 'refs)'}
+            </span>
           </div>
         </div>
-        <span className="px-2 py-0.5 rounded-[6px] bg-emerald-500/12 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold shrink-0">
+        <span className="citra-nowrap-tail whitespace-nowrap px-2 py-0.5 rounded-[6px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold shrink-0">
           <SolvaLiveNumber value={48} replaySeed={replaySeed} durationMs={1200} />m{' '}
           <SolvaLiveNumber value={12} replaySeed={replaySeed} durationMs={1350} />s
         </span>
@@ -1826,7 +1934,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
             </div>
             <div
               style={{ color: 'var(--solva-muted)' }}
-              className="text-[9px] font-mono mt-1 truncate"
+              className="text-[9px] font-mono mt-1 leading-tight"
             >
               {stat.label}
             </div>
@@ -1851,7 +1959,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
                   ? 'var(--solva-ink)'
                   : 'var(--solva-border)',
               }}
-              className="w-full text-left px-3 py-2 rounded-[8px] border transition-[background-color,border-color] duration-200 cursor-pointer flex items-center justify-between gap-2"
+              className="w-full text-left px-3 py-2 rounded-[8px] border transition-[background-color,border-color] duration-200 cursor-pointer flex flex-wrap items-center justify-between gap-2"
             >
               <div className="flex items-center gap-2 min-w-0">
                 <span
@@ -1869,18 +1977,18 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
                 </span>
                 <span
                   style={{ color: 'var(--solva-ink)' }}
-                  className="text-[12px] font-medium truncate"
+                  className="text-[12px] font-medium break-all sm:break-normal min-w-0"
                 >
                   {item.file}
                 </span>
               </div>
               <span
-                className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded shrink-0 ${
+                className={`citra-nowrap-tail whitespace-nowrap text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded shrink-0 ${
                   item.tone === 'emerald'
-                    ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
+                    ? 'bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300'
                     : item.tone === 'amber'
-                      ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
-                      : 'bg-red-500/12 text-red-700 dark:text-red-300'
+                      ? 'bg-amber-500/[0.12] text-amber-700 dark:text-amber-300'
+                      : 'bg-red-500/[0.12] text-red-700 dark:text-red-300'
                 }`}
               >
                 {item.verdict}
@@ -1899,11 +2007,11 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
         }}
         className="p-2.5 rounded-[8px] border space-y-1 animate-debugger-switch"
       >
-        <div className="flex items-center justify-between text-[10px] font-mono">
+        <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] font-mono">
           <span style={{ color: 'var(--solva-ink)' }} className="font-semibold">
             {activeThesis.rule}
           </span>
-          <span style={{ color: 'var(--solva-muted)' }}>
+          <span style={{ color: 'var(--solva-muted)' }} className="shrink-0 whitespace-nowrap">
             CIS:{' '}
             <strong style={{ color: 'var(--solva-ink)' }}>
               <SubtleNumber value={activeThesis.cisNum.toFixed(1)} />
@@ -1912,26 +2020,29 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
         </div>
         <p
           style={{ color: 'var(--solva-muted)' }}
-          className="text-[11px] leading-snug truncate"
+          className="text-[11px] leading-snug"
         >
           {activeThesis.detail}
         </p>
       </div>
 
       {/* Bottom Action Link to Live Debugger */}
-      <div style={getStaggerStyle(250)} className="pt-0.5 flex items-center justify-between text-[11px]">
+      <div
+        style={getStaggerStyle(250)}
+        className="pt-0.5 flex flex-wrap items-center justify-between gap-2 text-[11px]"
+      >
         <span style={{ color: 'var(--solva-muted)' }} className="font-mono text-[10px]">
           15+ APIs · GROBID TEI
         </span>
         <a
           href="/#interactive-demo"
           style={{ color: 'var(--solva-ink)' }}
-          className="inline-flex items-center gap-1 font-medium hover:underline"
+          className="citra-nowrap-tail whitespace-nowrap shrink-0 inline-flex items-center gap-1 font-medium hover:underline"
         >
           <span>
             {lang === 'vi' ? 'Soi chiếu trực tiếp' : 'Inspect live trace'}
           </span>
-          <ArrowRight className="w-3 h-3" />
+          <ArrowRight className="w-3 h-3 shrink-0" />
         </a>
       </div>
     </div>
