@@ -100,6 +100,68 @@ function handleGlobalResize() {
   requestScrollFrame(true);
 }
 
+function handleGlobalHashChange() {
+  requestScrollFrame(true);
+}
+
+function resolveAnchorTargetElement(): Element | null {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return null;
+  const rawHash = window.location.hash;
+  if (!rawHash || rawHash.length <= 1) return null;
+  let rawId = rawHash.slice(1);
+  try {
+    rawId = decodeURIComponent(rawId);
+  } catch {
+    // Keep raw fragment if URI decoding fails
+  }
+  if (!rawId) return null;
+  const canonicalId = rawId.startsWith('workspaces-') ? 'workspaces' : rawId;
+  return document.getElementById(canonicalId) ?? document.getElementById(rawId);
+}
+
+function isRevealedByAnchorJump(el: Element | null): boolean {
+  if (!el) return false;
+  const target = resolveAnchorTargetElement();
+  if (!target) return false;
+  if (target === el || target.contains(el) || el.contains(target)) {
+    return true;
+  }
+  if (typeof target.compareDocumentPosition === 'function') {
+    const pos = target.compareDocumentPosition(el);
+    // Element precedes target in DOM order -> already scrolled past during anchor jump
+    if ((pos & Node.DOCUMENT_POSITION_PRECEDING) !== 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function useOSReducedMotion(): boolean {
+  const [reduced, setReduced] = useState<boolean>(() => isOSReducedMotion());
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+    const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReduced(mql.matches);
+    const onChange = (event: MediaQueryListEvent) => {
+      setReduced(Boolean(event.matches));
+    };
+    if (typeof mql.addEventListener === 'function') {
+      mql.addEventListener('change', onChange);
+      return () => mql.removeEventListener('change', onChange);
+    }
+    if (typeof mql.addListener === 'function') {
+      mql.addListener(onChange);
+      return () => mql.removeListener(onChange);
+    }
+    return undefined;
+  }, []);
+
+  return reduced;
+}
+
 function getSharedObserver(): IntersectionObserver | null {
   if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') {
     return null;
@@ -164,6 +226,7 @@ function subscribeToScroll(
       capture: true,
     });
     window.addEventListener('resize', handleGlobalResize, { passive: true });
+    window.addEventListener('hashchange', handleGlobalHashChange);
   }
 
   requestScrollFrame(false);
@@ -179,6 +242,7 @@ function subscribeToScroll(
       activeScrollTop = null;
       window.removeEventListener('scroll', handleGlobalScroll, true);
       window.removeEventListener('resize', handleGlobalResize);
+      window.removeEventListener('hashchange', handleGlobalHashChange);
     }
   };
 }
@@ -216,7 +280,7 @@ export function SolvaScrollReveal({
   reversible?: boolean;
   className?: string;
 }) {
-  const reduced = isOSReducedMotion();
+  const reduced = useOSReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
   const phaseRef = useRef<'visible' | 'below' | 'above'>(reduced ? 'visible' : 'below');
   const latchedRef = useRef<boolean>(reduced);
@@ -227,6 +291,8 @@ export function SolvaScrollReveal({
 
   useEffect(() => {
     if (reduced) {
+      latchedRef.current = true;
+      phaseRef.current = 'visible';
       setPhase('visible');
       setSettled(true);
       return;
@@ -236,8 +302,40 @@ export function SolvaScrollReveal({
     if (!reversible && latchedRef.current) return;
 
     let unsub: (() => void) | null = null;
+    const revealImmediately = () => {
+      if (!reversible && latchedRef.current) return true;
+      if (isRevealedByAnchorJump(el)) {
+        latchedRef.current = true;
+        phaseRef.current = 'visible';
+        setPhase('visible');
+        setSettled(true);
+        unsub?.();
+        return true;
+      }
+      return false;
+    };
+
+    if (revealImmediately()) {
+      return;
+    }
+
+    const onHashJump = () => {
+      revealImmediately();
+    };
+    window.addEventListener('hashchange', onHashJump);
+
     unsub = subscribeToScroll(el, (vh, _vw, schedule) => {
       if (!reversible && latchedRef.current) return;
+      if (isRevealedByAnchorJump(el)) {
+        latchedRef.current = true;
+        phaseRef.current = 'visible';
+        schedule(() => {
+          setPhase('visible');
+          setSettled(true);
+          unsub?.();
+        });
+        return;
+      }
       const rect = el.getBoundingClientRect();
 
       if (!reversible) {
@@ -267,6 +365,7 @@ export function SolvaScrollReveal({
       }
     });
     return () => {
+      window.removeEventListener('hashchange', onHashJump);
       unsub?.();
     };
   }, [triggerRatio, reversible, reduced]);
@@ -372,7 +471,7 @@ export function SolvaTwoToneHeading({
   reversible?: boolean;
   className?: string;
 }) {
-  const reduced = isOSReducedMotion();
+  const reduced = useOSReducedMotion();
   const ref = useRef<HTMLHeadingElement>(null);
   const phaseRef = useRef<'visible' | 'below' | 'above'>(reduced ? 'visible' : 'below');
   const latchedRef = useRef<boolean>(reduced);
@@ -383,6 +482,8 @@ export function SolvaTwoToneHeading({
 
   useEffect(() => {
     if (reduced) {
+      latchedRef.current = true;
+      phaseRef.current = 'visible';
       setPhase('visible');
       setWordsSettled(true);
       return;
@@ -392,8 +493,40 @@ export function SolvaTwoToneHeading({
     if (!reversible && latchedRef.current) return;
 
     let unsub: (() => void) | null = null;
+    const revealHeadingImmediately = () => {
+      if (!reversible && latchedRef.current) return true;
+      if (isRevealedByAnchorJump(el)) {
+        latchedRef.current = true;
+        phaseRef.current = 'visible';
+        setPhase('visible');
+        setWordsSettled(true);
+        unsub?.();
+        return true;
+      }
+      return false;
+    };
+
+    if (revealHeadingImmediately()) {
+      return;
+    }
+
+    const onHashJump = () => {
+      revealHeadingImmediately();
+    };
+    window.addEventListener('hashchange', onHashJump);
+
     unsub = subscribeToScroll(el, (vh, _vw, schedule) => {
       if (!reversible && latchedRef.current) return;
+      if (isRevealedByAnchorJump(el)) {
+        latchedRef.current = true;
+        phaseRef.current = 'visible';
+        schedule(() => {
+          setPhase('visible');
+          setWordsSettled(true);
+          unsub?.();
+        });
+        return;
+      }
       const rect = el.getBoundingClientRect();
 
       if (!reversible) {
@@ -423,6 +556,7 @@ export function SolvaTwoToneHeading({
       }
     });
     return () => {
+      window.removeEventListener('hashchange', onHashJump);
       unsub?.();
     };
   }, [reversible, reduced]);
@@ -941,7 +1075,7 @@ export function SolvaAnimatedMetric({
   decimalSeparator?: string;
   label: string;
 }) {
-  const reduced = isOSReducedMotion();
+  const reduced = useOSReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
   const numRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState<boolean>(reduced);
@@ -1009,8 +1143,42 @@ export function SolvaAnimatedMetric({
     }
 
     let unsub: (() => void) | null = null;
+    const revealMetricImmediately = () => {
+      if (hasAnimated.current) return true;
+      if (isRevealedByAnchorJump(el)) {
+        hasAnimated.current = true;
+        setIsVisible(true);
+        if (numRef.current) {
+          numRef.current.textContent = formatMetric(targetValue);
+        }
+        unsub?.();
+        return true;
+      }
+      return false;
+    };
+
+    if (revealMetricImmediately()) {
+      return;
+    }
+
+    const onHashJump = () => {
+      revealMetricImmediately();
+    };
+    window.addEventListener('hashchange', onHashJump);
+
     unsub = subscribeToScroll(el, (vh, _vw, schedule) => {
       if (hasAnimated.current) return;
+      if (isRevealedByAnchorJump(el)) {
+        hasAnimated.current = true;
+        schedule(() => {
+          setIsVisible(true);
+          if (numRef.current) {
+            numRef.current.textContent = formatMetric(targetValue);
+          }
+          unsub?.();
+        });
+        return;
+      }
       const rect = el.getBoundingClientRect();
       if (rect.top <= vh * 0.93) {
         hasAnimated.current = true;
@@ -1023,6 +1191,7 @@ export function SolvaAnimatedMetric({
     });
 
     return () => {
+      window.removeEventListener('hashchange', onHashJump);
       unsub?.();
       if (animRafRef.current !== null) {
         cancelAnimationFrame(animRafRef.current);

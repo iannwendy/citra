@@ -7,6 +7,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { AuthContext } from '@/contexts/AuthContext';
 import { CitraMotionProvider } from '@/components/ui/motion-primitives';
+import { SolvaScrollReveal } from '@/components/landing/SolvaPrimitives';
 import { LandingPage } from '@/pages/LandingPage';
 import { PricingPage } from '@/pages/PricingPage';
 
@@ -280,5 +281,198 @@ describe('Task 6 — Landing Page & Pricing Interactive Choreography', () => {
     fireEvent.click(secondPricingFaqBtn);
     expect(pricingPanel.getAttribute('data-open')).toBe('true');
     expect(pricingPanel.style.transition).toContain('300ms');
+  });
+
+  it('SolvaHeader & PricingSolvaHeader dismiss Platform dropdown on outside-click and Escape (restoring trigger focus), and dismiss mobile drawers on Escape', () => {
+    const { container, unmount } = renderLanding();
+
+    const desktopNav = container.querySelector(
+      'header nav[aria-label="Primary Navigation"]',
+    ) as HTMLElement;
+    const platformBtn = within(desktopNav).getByRole('button', {
+      name: /Platform/i,
+    });
+
+    // 1. LandingPage Platform dropdown: open -> Escape dismisses & restores focus to trigger
+    expect(platformBtn.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(platformBtn);
+    expect(platformBtn.getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('.t-dropdown.is-open')).not.toBeNull();
+
+    // Move focus away from trigger, then press Escape -> restores focus to platformBtn
+    document.body.focus();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(platformBtn.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(platformBtn);
+
+    // 2. LandingPage Platform dropdown: open -> outside pointerDown/mouseDown on document.body dismisses cleanly
+    fireEvent.click(platformBtn);
+    expect(platformBtn.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.pointerDown(document.body);
+    fireEvent.mouseDown(document.body);
+    expect(platformBtn.getAttribute('aria-expanded')).toBe('false');
+
+    // 3. LandingPage mobile navigation drawer: open -> Escape dismisses & restores focus to mobile toggle
+    const mobileToggle = screen.getByRole('button', {
+      name: /Toggle navigation menu/i,
+    });
+    expect(mobileToggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(mobileToggle);
+    expect(mobileToggle.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(mobileToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(mobileToggle);
+
+    unmount();
+
+    // 4. PricingPage Platform dropdown: open -> Escape dismisses & restores focus; outside click dismisses
+    const pricingView = renderPricing();
+    const pricingNav = pricingView.container.querySelector(
+      'header nav[aria-label="Pricing Navigation"]',
+    ) as HTMLElement;
+    const pricingPlatformBtn = within(pricingNav).getByRole('button', {
+      name: /Platform/i,
+    });
+
+    expect(pricingPlatformBtn.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(pricingPlatformBtn);
+    expect(pricingPlatformBtn.getAttribute('aria-expanded')).toBe('true');
+
+    document.body.focus();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(pricingPlatformBtn.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(pricingPlatformBtn);
+
+    fireEvent.click(pricingPlatformBtn);
+    expect(pricingPlatformBtn.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.pointerDown(document.body);
+    fireEvent.mouseDown(document.body);
+    expect(pricingPlatformBtn.getAttribute('aria-expanded')).toBe('false');
+
+    // 5. PricingPage mobile navigation drawer: open -> Escape dismisses & restores focus
+    const pricingMobileToggle = screen.getByRole('button', {
+      name: /Toggle navigation menu/i,
+    });
+    fireEvent.click(pricingMobileToggle);
+    expect(pricingMobileToggle.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(pricingMobileToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(pricingMobileToggle);
+  });
+
+  it('SolvaScrollReveal immediately reveals content on #hash anchor jump without blank opacity:0 gaps and mounts visible under prefers-reduced-motion: reduce', () => {
+    window.history.replaceState(null, '', '/');
+
+    // Mock element off-screen below fold (rect.top = 2400 > vh = 900) so scroll reveal starts hidden
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({
+        top: 2400,
+        bottom: 2600,
+        left: 0,
+        right: 800,
+        width: 800,
+        height: 200,
+        x: 0,
+        y: 2400,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+    const { container, unmount } = render(
+      <section id="benchmark-120k">
+        <SolvaScrollReveal>
+          <div data-testid="anchor-reveal-payload">120,000 Papers Verified</div>
+        </SolvaScrollReveal>
+      </section>,
+    );
+
+    const revealWrapper = container.querySelector('#benchmark-120k > div') as HTMLElement;
+    expect(revealWrapper).not.toBeNull();
+    // Before anchor jump while off-screen below the fold, wrapper starts cloaked
+    expect(Number.parseFloat(revealWrapper.style.opacity)).toBeLessThan(0.05);
+
+    // Simulate anchor jump to #benchmark-120k -> SolvaScrollReveal inside target section reveals immediately (zero blank white gap!)
+    act(() => {
+      window.history.replaceState(null, '', '#benchmark-120k');
+      window.dispatchEvent(new Event('hashchange'));
+    });
+
+    expect(revealWrapper.style.opacity).toBe('1');
+    expect(revealWrapper.style.filter).toBe('none');
+
+    unmount();
+    window.history.replaceState(null, '', '/');
+
+    // Verify prefers-reduced-motion: reduce mounts immediately visible with no opacity/transform cloaking
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+
+    const reducedView = render(
+      <section id="reduced-section">
+        <SolvaScrollReveal>
+          <div>Reduced Motion Safe Content</div>
+        </SolvaScrollReveal>
+      </section>,
+    );
+
+    const reducedWrapper = reducedView.container.querySelector(
+      '#reduced-section > div',
+    ) as HTMLElement;
+    expect(reducedWrapper.style.opacity).toBe('1');
+    expect(reducedWrapper.style.transform).toBe('none');
+    expect(reducedWrapper.style.transitionProperty).toBe('none');
+
+    rectSpy.mockRestore();
+  });
+
+  it('keeps progressive-disclosure aria-controls non-dangling when collapsed and preserves Cmd/Ctrl+click on SolvaFooter role links', () => {
+    const { container } = renderLanding();
+
+    // 1. Both progressive-disclosure toggles always reference an existing DOM id even when collapsed
+    const benchToggle = screen.getByTestId('benchmark-technical-details-toggle');
+    expect(benchToggle.getAttribute('aria-expanded')).toBe('false');
+    const benchTarget = container.querySelector('#benchmark-technical-details-panel');
+    expect(benchTarget).not.toBeNull();
+    expect(benchTarget?.hasAttribute('hidden')).toBe(true);
+
+    const traceToggle = screen.getByTestId('debugger-technical-trace-toggle');
+    expect(traceToggle.getAttribute('aria-expanded')).toBe('false');
+    const traceTarget = container.querySelector('#debugger-technical-trace-panel');
+    expect(traceTarget).not.toBeNull();
+    expect(traceTarget?.hasAttribute('hidden')).toBe(true);
+
+    // 2. Footer role link allows Cmd/Ctrl+click (does NOT preventDefault) while normal left-click smooth-scrolls & prevents default
+    const footer = container.querySelector('footer') as HTMLElement;
+    const teacherLink = within(footer).getByRole('link', {
+      name: /Teacher Classroom/i,
+    });
+
+    const cmdClickEvent = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      metaKey: true,
+    });
+    const cmdNotCancelled = teacherLink.dispatchEvent(cmdClickEvent);
+    expect(cmdNotCancelled).toBe(true);
+
+    const plainClickEvent = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    });
+    const plainNotCancelled = teacherLink.dispatchEvent(plainClickEvent);
+    expect(plainNotCancelled).toBe(false);
   });
 });

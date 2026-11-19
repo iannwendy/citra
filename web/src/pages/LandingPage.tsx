@@ -622,6 +622,9 @@ function SolvaHeader({
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const dropdownContainerRef = useRef<HTMLDivElement>(null);
+  const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
+  const mobileToggleRef = useRef<HTMLButtonElement>(null);
   const dropdownPresence = useExitPresence(dropdownOpen, 150);
   const mobileDrawerPresence = useExitPresence(mobileMenuOpen, 150);
   const [headerEntered, setHeaderEntered] = useState(false);
@@ -649,16 +652,37 @@ function SolvaHeader({
   useEffect(() => {
     if (!dropdownOpen && !mobileMenuOpen) return;
     const closeOnScroll = () => setDropdownOpen(false);
+    const closeOnOutsidePointer = (e: MouseEvent | PointerEvent) => {
+      if (!dropdownOpen) return;
+      const target = e.target as Node | null;
+      if (
+        dropdownContainerRef.current &&
+        target &&
+        !dropdownContainerRef.current.contains(target)
+      ) {
+        setDropdownOpen(false);
+      }
+    };
     const closeOnKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setDropdownOpen(false);
-        setMobileMenuOpen(false);
+        if (dropdownOpen) {
+          setDropdownOpen(false);
+          dropdownTriggerRef.current?.focus({ preventScroll: true });
+        }
+        if (mobileMenuOpen) {
+          setMobileMenuOpen(false);
+          mobileToggleRef.current?.focus({ preventScroll: true });
+        }
       }
     };
     window.addEventListener('scroll', closeOnScroll, { passive: true });
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('mousedown', closeOnOutsidePointer);
     window.addEventListener('keydown', closeOnKeyDown);
     return () => {
       window.removeEventListener('scroll', closeOnScroll);
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('mousedown', closeOnOutsidePointer);
       window.removeEventListener('keydown', closeOnKeyDown);
     };
   }, [dropdownOpen, mobileMenuOpen]);
@@ -772,13 +796,16 @@ function SolvaHeader({
         >
           {/* Dropdown Trigger (`Platform v` / `Nền tảng v`) */}
           <div
+            ref={dropdownContainerRef}
             className="relative shrink-0"
             onMouseLeave={() => setDropdownOpen(false)}
           >
             <button
+              ref={dropdownTriggerRef}
               type="button"
               onClick={() => setDropdownOpen((prev) => !prev)}
               aria-expanded={dropdownOpen}
+              aria-haspopup="true"
               style={{ color: 'var(--solva-muted)' }}
               className="inline-flex items-center gap-[4px] h-[44px] px-1.5 xl:px-[10px] rounded-[8px] font-solva-sans text-[13.5px] xl:text-[15px] font-normal whitespace-nowrap hover:opacity-80 transition-opacity cursor-pointer"
             >
@@ -919,6 +946,7 @@ function SolvaHeader({
 
           {/* Mobile Hamburger Button (Solva 2-bar minimalist style + #09 IconSwap) */}
           <button
+            ref={mobileToggleRef}
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-label="Toggle navigation menu"
@@ -1200,7 +1228,7 @@ function SolvaHeroSection({
                   backgroundColor: 'var(--solva-surface)',
                   borderColor: 'var(--solva-border)',
                 }}
-                className="t-learn group block w-full rounded-[12px] border p-3 sm:p-3.5 transition-all duration-200 hover:border-[#1C1A15]/40 dark:hover:border-[#FBFAF6]/30"
+                className="t-learn group block w-full rounded-[12px] border p-3 sm:p-3.5 transition-[border-color,background-color,transform,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:border-[#1C1A15]/40 dark:hover:border-[#FBFAF6]/30"
               >
                 <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-2">
                   <span
@@ -1345,7 +1373,7 @@ function SolvaHeroSection({
                     data-testid={`hero-ticker-logo-${slug}-${idx}`}
                     onClick={(e) => e.currentTarget.blur()}
                     style={{ color: 'var(--solva-ink)' }}
-                    className="group inline-flex items-center gap-2.5 px-2.5 py-2 -mx-2.5 -my-1.5 rounded-[8px] shrink-0 select-none cursor-pointer opacity-80 hover:opacity-100 active:opacity-100 focus-visible:opacity-100 hover:-translate-y-[1px] active:scale-[0.98] transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15]/30 dark:focus-visible:ring-[#FBFAF6]/30"
+                    className="group inline-flex items-center gap-2.5 px-2.5 py-2 -mx-2.5 -my-1.5 rounded-[8px] shrink-0 select-none cursor-pointer opacity-80 hover:opacity-100 active:opacity-100 focus-visible:opacity-100 hover:-translate-y-[1px] active:scale-[0.98] transition-[transform,opacity,background-color,color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15]/30 dark:focus-visible:ring-[#FBFAF6]/30"
                   >
                     <ScholarlySourceLogo
                       name={apiName}
@@ -1806,7 +1834,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
               borderColor: showTechnicalDetails ? 'var(--solva-ink)' : 'var(--solva-border)',
               color: 'var(--solva-ink)',
             }}
-            className="w-full sm:w-auto min-h-[44px] px-4 sm:px-5 py-2.5 rounded-[10px] border font-solva-sans text-[14px] font-medium inline-flex items-center justify-between sm:justify-center gap-2.5 hover:opacity-90 transition-all cursor-pointer"
+            className="w-full sm:w-auto min-h-[44px] px-4 sm:px-5 py-2.5 rounded-[10px] border font-solva-sans text-[14px] font-medium inline-flex items-center justify-between sm:justify-center gap-2.5 hover:opacity-90 active:scale-[0.99] transition-[transform,opacity,background-color,border-color,color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer"
           >
             <span>
               {showTechnicalDetails
@@ -1821,11 +1849,12 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
           </button>
         </div>
 
-        {showTechnicalDetails && (
-          <div
-            id="benchmark-technical-details-panel"
-            className="space-y-[24px] animate-debugger-switch"
-          >
+        <div
+          id="benchmark-technical-details-panel"
+          hidden={!showTechnicalDetails}
+        >
+          {showTechnicalDetails && (
+            <div className="space-y-[24px] animate-debugger-switch">
             {/* 4 Technical Telemetry Cards (`120,000` · `99.02%` · `99.93%` · `0.0395`) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[16px]">
               {headlineMetrics.map((item, idx) => (
@@ -2043,7 +2072,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                             ? 'var(--solva-ink)'
                             : 'var(--solva-border)',
                         }}
-                        className="p-3 sm:p-3.5 rounded-[10px] border transition-all"
+                        className="p-3 sm:p-3.5 rounded-[10px] border transition-[background-color,border-color,color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]"
                       >
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 mb-2">
                           <div className="flex flex-wrap items-center gap-2 min-w-0">
@@ -2108,7 +2137,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                         <div className="w-full h-2 rounded-full bg-[#E7E3D9]/70 dark:bg-[#29261F] overflow-hidden">
                           <div
                             style={{ width: `${row.acc}%` }}
-                            className={`h-full rounded-full transition-all duration-700 ${
+                            className={`h-full rounded-full transition-[width,background-color] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                               row.highlight
                                 ? 'bg-emerald-600 dark:bg-emerald-400'
                                 : 'bg-[#8C8577] dark:bg-[#6E685C]'
@@ -2434,8 +2463,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
               )}
             </div>
           </div>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -3438,7 +3468,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                             : 'var(--solva-border)',
                           color: 'var(--solva-ink)',
                         }}
-                        className="w-full min-h-[44px] px-3.5 py-2 rounded-[9px] border font-solva-sans text-xs font-medium flex items-center justify-between gap-2 hover:opacity-90 transition-all cursor-pointer"
+                        className="w-full min-h-[44px] px-3.5 py-2 rounded-[9px] border font-solva-sans text-xs font-medium flex items-center justify-between gap-2 hover:opacity-90 active:scale-[0.99] transition-[transform,opacity,background-color,border-color,color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer"
                       >
                         <span>
                           {showTechnicalTrace
@@ -3452,16 +3482,19 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                         <SymmetricChevron open={showTechnicalTrace} size={14} />
                       </button>
 
-                      {showTechnicalTrace && (
-                        <div
-                          id="debugger-technical-trace-panel"
-                          data-testid="debugger-technical-trace-panel"
-                          style={{
-                            backgroundColor: 'var(--solva-surface)',
-                            borderColor: 'var(--solva-border)',
-                          }}
-                          className="p-3.5 rounded-[10px] border space-y-2.5 animate-debugger-switch"
-                        >
+                      <div
+                        id="debugger-technical-trace-panel"
+                        hidden={!showTechnicalTrace}
+                      >
+                        {showTechnicalTrace && (
+                          <div
+                            data-testid="debugger-technical-trace-panel"
+                            style={{
+                              backgroundColor: 'var(--solva-surface)',
+                              borderColor: 'var(--solva-border)',
+                            }}
+                            className="p-3.5 rounded-[10px] border space-y-2.5 animate-debugger-switch"
+                          >
                           <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#E7E3D9] dark:border-[#332F26] font-mono text-[11px]">
                             <span style={{ color: 'var(--solva-muted)' }}>
                               {lang === 'vi'
@@ -3521,6 +3554,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                           </div>
                         </div>
                       )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -4917,7 +4951,7 @@ function SolvaRoleWorkspacesShowcase({
               tabIndex={isSelected ? 0 : -1}
               onClick={() => onSelectRole(roleKey)}
               onKeyDown={(e) => handleTabKeyDown(e, idx)}
-              className={`min-h-[44px] px-3.5 py-2.5 rounded-[10px] inline-flex items-center justify-center gap-2 font-solva-sans text-[14px] font-medium transition-all cursor-pointer ${
+              className={`min-h-[44px] px-3.5 py-2.5 rounded-[10px] inline-flex items-center justify-center gap-2 font-solva-sans text-[14px] font-medium active:scale-[0.99] transition-[transform,opacity,background-color,border-color,color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer ${
                 isSelected
                   ? 'bg-white dark:bg-[#26231D] text-[#1C1A15] dark:text-[#FBFAF6] shadow-sm border border-[#E7E3D9] dark:border-[#3A352B]'
                   : 'text-[var(--solva-muted)] hover:text-[var(--solva-ink)] border border-transparent'
@@ -5731,6 +5765,15 @@ function SolvaFooter({
                           onClick={
                             lnk.role
                               ? (e) => {
+                                  if (
+                                    e.metaKey ||
+                                    e.ctrlKey ||
+                                    e.shiftKey ||
+                                    e.altKey ||
+                                    e.button !== 0
+                                  ) {
+                                    return;
+                                  }
                                   e.preventDefault();
                                   if (lnk.href) {
                                     window.history.replaceState(null, '', lnk.href);

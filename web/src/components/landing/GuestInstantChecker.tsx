@@ -650,7 +650,7 @@ export function GuestInstantChecker({
                         ? 'var(--solva-btn-bg)'
                         : 'var(--solva-border)',
                     }}
-                    className="min-h-[44px] px-3.5 py-2 rounded-[10px] border font-solva-sans text-xs sm:text-[13px] font-medium inline-flex items-center gap-2 transition-colors cursor-pointer hover:opacity-90"
+                    className="min-h-[44px] px-3.5 py-2 rounded-[10px] border font-solva-sans text-xs sm:text-[13px] font-medium inline-flex items-center gap-2 hover:opacity-90 active:scale-[0.985] transition-[transform,opacity,background-color,border-color,color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5 shrink-0 opacity-80" />
                     <span>{lang === 'vi' ? preset.labelVi : preset.labelEn}</span>
@@ -742,7 +742,7 @@ export function GuestInstantChecker({
                     backgroundColor: 'var(--solva-btn-bg)',
                     color: 'var(--solva-btn-fg)',
                   }}
-                  className="min-h-[44px] px-5 py-2.5 rounded-[10px] font-solva-sans text-sm font-medium inline-flex items-center justify-center gap-2 transition-opacity hover:opacity-90 disabled:opacity-60 cursor-pointer"
+                  className="min-h-[44px] px-5 py-2.5 rounded-[10px] font-solva-sans text-sm font-medium inline-flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.985] transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] disabled:opacity-60 cursor-pointer"
                 >
                   {isLoading ? (
                     <>
@@ -1201,7 +1201,7 @@ export function GuestInstantChecker({
                         : 'var(--solva-border)',
                       color: 'var(--solva-ink)',
                     }}
-                    className="w-full min-h-[44px] px-4 py-2.5 rounded-[10px] border font-solva-sans text-xs font-medium flex items-center justify-between gap-2 hover:opacity-90 transition-colors cursor-pointer"
+                    className="w-full min-h-[44px] px-4 py-2.5 rounded-[10px] border font-solva-sans text-xs font-medium flex items-center justify-between gap-2 hover:opacity-90 active:scale-[0.99] transition-[transform,opacity,background-color,border-color,color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer"
                   >
                     <span>
                       {showTechnicalTrace

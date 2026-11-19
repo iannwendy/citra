@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -2286,6 +2286,9 @@ function PricingSolvaHeader({
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const dropdownContainerRef = useRef<HTMLDivElement>(null);
+  const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
+  const mobileToggleRef = useRef<HTMLButtonElement>(null);
   const dropdownPresence = useExitPresence(dropdownOpen, 150);
   const mobileDrawerPresence = useExitPresence(mobileMenuOpen, 150);
   const [headerEntered, setHeaderEntered] = useState(false);
@@ -2313,16 +2316,37 @@ function PricingSolvaHeader({
   useEffect(() => {
     if (!dropdownOpen && !mobileMenuOpen) return;
     const closeOnScroll = () => setDropdownOpen(false);
+    const closeOnOutsidePointer = (e: MouseEvent | PointerEvent) => {
+      if (!dropdownOpen) return;
+      const target = e.target as Node | null;
+      if (
+        dropdownContainerRef.current &&
+        target &&
+        !dropdownContainerRef.current.contains(target)
+      ) {
+        setDropdownOpen(false);
+      }
+    };
     const closeOnKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setDropdownOpen(false);
-        setMobileMenuOpen(false);
+        if (dropdownOpen) {
+          setDropdownOpen(false);
+          dropdownTriggerRef.current?.focus({ preventScroll: true });
+        }
+        if (mobileMenuOpen) {
+          setMobileMenuOpen(false);
+          mobileToggleRef.current?.focus({ preventScroll: true });
+        }
       }
     };
     window.addEventListener('scroll', closeOnScroll, { passive: true });
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('mousedown', closeOnOutsidePointer);
     window.addEventListener('keydown', closeOnKeyDown);
     return () => {
       window.removeEventListener('scroll', closeOnScroll);
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('mousedown', closeOnOutsidePointer);
       window.removeEventListener('keydown', closeOnKeyDown);
     };
   }, [dropdownOpen, mobileMenuOpen]);
@@ -2453,11 +2477,17 @@ function PricingSolvaHeader({
             {lang === 'vi' ? 'Trang chủ' : 'Home'}
           </Link>
 
-          <div className="relative shrink-0" onMouseLeave={() => setDropdownOpen(false)}>
+          <div
+            ref={dropdownContainerRef}
+            className="relative shrink-0"
+            onMouseLeave={() => setDropdownOpen(false)}
+          >
             <button
+              ref={dropdownTriggerRef}
               type="button"
               onClick={() => setDropdownOpen((prev) => !prev)}
               aria-expanded={dropdownOpen}
+              aria-haspopup="true"
               style={{ color: 'var(--solva-muted)' }}
               className="inline-flex items-center gap-[5px] h-[40px] px-2.5 xl:px-3 rounded-[8px] font-solva-sans text-[14px] xl:text-[15px] font-normal whitespace-nowrap shrink-0 hover:opacity-80 transition-opacity cursor-pointer"
             >
@@ -2570,6 +2600,7 @@ function PricingSolvaHeader({
           </SolvaButton>
 
           <button
+            ref={mobileToggleRef}
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-label="Toggle navigation menu"

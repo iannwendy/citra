@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { AuthContext } from '@/contexts/AuthContext';
 import { ThemeToggle } from '@/contexts/ThemeContext';
+import { IconSwap, useExitPresence } from '@/components/ui/transitions';
 import {
   SCHOLARLY_APIS_LABEL,
   isDemoEvaluatorMode,
@@ -524,6 +525,8 @@ function PrivacySolvaHeader({
   isAuthenticated: boolean;
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileToggleRef = useRef<HTMLButtonElement>(null);
+  const mobileDrawerPresence = useExitPresence(mobileMenuOpen, 150);
   const [headerEntered, setHeaderEntered] = useState(false);
   const [headerSettled, setHeaderSettled] = useState(false);
 
@@ -535,6 +538,18 @@ function PrivacySolvaHeader({
       window.clearTimeout(settleTimer);
     };
   }, []);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const closeOnKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileMenuOpen(false);
+        mobileToggleRef.current?.focus({ preventScroll: true });
+      }
+    };
+    window.addEventListener('keydown', closeOnKeyDown);
+    return () => window.removeEventListener('keydown', closeOnKeyDown);
+  }, [mobileMenuOpen]);
 
   const sectionLinks = getPolicySectionLinks(lang);
   const globalLinks =
@@ -686,6 +701,7 @@ function PrivacySolvaHeader({
 
           {/* Mobile Hamburger Button */}
           <button
+            ref={mobileToggleRef}
             type="button"
             onClick={() => setMobileMenuOpen((prev) => !prev)}
             aria-label="Toggle navigation menu"
@@ -696,20 +712,26 @@ function PrivacySolvaHeader({
             }}
             className="lg:hidden inline-flex items-center justify-center w-[40px] h-[40px] rounded-[8px] cursor-pointer shrink-0"
           >
-            {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            <IconSwap
+              active={mobileMenuOpen}
+              iconA={<Menu className="w-4 h-4" />}
+              iconB={<X className="w-4 h-4" />}
+            />
           </button>
         </div>
       </div>
 
       {/* Mobile Drawer */}
-      {mobileMenuOpen && (
+      {mobileDrawerPresence.mounted && (
         <nav
           aria-label="Mobile Privacy Navigation"
           style={{
             backgroundColor: 'var(--solva-bg)',
             borderColor: 'var(--solva-border)',
           }}
-          className="lg:hidden border-t border-b px-5 py-4 space-y-2 shadow-lg animate-debugger-switch"
+          className={`lg:hidden border-t border-b px-5 py-4 space-y-2 shadow-lg t-mobile-drawer ${
+            mobileDrawerPresence.phase === 'open' ? 'is-open' : 'is-closing'
+          }`}
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
             {sectionLinks.map((item) => (
@@ -1184,14 +1206,14 @@ function PrivacyRightsAccordion({ lang }: { lang: Lang }) {
                   className="relative w-[20px] h-[25px] flex items-center justify-center shrink-0"
                 >
                   <Plus
-                    className={`w-4 h-4 absolute transition-all duration-350 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                       isOpen
                         ? 'rotate-90 opacity-0 scale-75'
                         : 'rotate-0 opacity-100 scale-100'
                     }`}
                   />
                   <Minus
-                    className={`w-4 h-4 absolute transition-all duration-350 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    className={`w-4 h-4 absolute transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                       isOpen
                         ? 'rotate-0 opacity-100 scale-100'
                         : '-rotate-90 opacity-0 scale-75'
