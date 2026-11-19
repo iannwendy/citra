@@ -249,23 +249,23 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
   - Catch-all `*` route -> `NotFoundPage` (helpful bilingual 404 page with quick links to Home, Instant Checker, Pricing, and Sign In — replacing silent catch-all redirect to `/`).
   - Interactive 3-Role Showcase (`Student & Author`, `Lecturer & Thesis Advisor`, `Department Admin`) inside `#workspaces` on `LandingPage` (with URL/click tab selection so Footer links `Student Workspace`, `Teacher Classroom`, and `Admin Control` open the corresponding role tab!).
 
-- [ ] **Step 1: Write failing tests in `web/src/pages/PublicRoutesAndIA.test.tsx`**
+- [x] **Step 1: Write failing tests in `web/src/pages/PublicRoutesAndIA.test.tsx`**
   Assert:
   1. `LandingPage` top navbar no longer renders duplicate `"Gói dịch vụ"` + `"Bảng giá"` in `vi`; pricing section responds cleanly without conflating Verdict Taxonomy with Pricing.
   2. `#workspaces` renders interactive role tabs (`student`, `teacher`, `admin`) with concrete non-tech workflows before testimonials, and clicking Footer `Teacher Classroom` activates/focuses the Teacher view.
   3. Navigating to `/terms` renders `TermsOfServicePage` (`data-testid="terms-page"`) in EN & VI, linked from Footers and `RegisterPage`.
   4. Navigating to an unknown route `/nonexistent-xyz` renders `NotFoundPage` (`data-testid="not-found-page"`) with a clear `"Back to Home"` CTA instead of silently redirecting.
-- [ ] **Step 2: Run `PublicRoutesAndIA.test.tsx` to confirm failure**
+- [x] **Step 2: Run `PublicRoutesAndIA.test.tsx` to confirm failure**
   Run: `cd web && npx vitest run src/pages/PublicRoutesAndIA.test.tsx`
   Expected: FAIL.
-- [ ] **Step 3: Implement IA anchor cleanup, 3-Role Workspace Showcase, `TermsOfServicePage.tsx`, and `NotFoundPage.tsx`**
+- [x] **Step 3: Implement IA anchor cleanup, 3-Role Workspace Showcase, `TermsOfServicePage.tsx`, and `NotFoundPage.tsx`**
   Wire `/terms` (and `PAGE_TITLE_ROUTES` entry `'Terms of Service'`) plus `*` -> `NotFoundPage` in `web/src/router.tsx` (checking all existing tests for any expectation on unknown routes). Keep `id="taxonomy"` aliased or anchored cleanly if any test queries `#taxonomy` (`LandingInteractiveMotion.test.tsx` tests `landing-billing-toggle` by testid, let's verify all `#taxonomy` references across `web/src/` and `web/tests/` so nothing breaks!).
-- [ ] **Step 4: Run full frontend verification gate**
+- [x] **Step 4: Run full frontend verification gate**
   Run: `cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
   Expected: PASS.
-- [ ] **Step 5: Run Triad Review & Critic Loop + Browser Navigation Check**
+- [x] **Step 5: Run Triad Review & Critic Loop + Browser Navigation Check**
   Click every header, dropdown, and footer link on `/`, `/pricing`, `/privacy`, `/terms`, and `/unknown-404` across Desktop & Mobile; verify smooth `scroll-padding-top` alignment and zero dead/misleading destinations; loop until `APPROVED`.
-- [ ] **Step 6: Tick checkboxes & commit**
+- [x] **Step 6: Tick checkboxes & commit**
   ```bash
   git add web/src/pages/TermsOfServicePage.tsx web/src/pages/NotFoundPage.tsx web/src/router.tsx web/src/pages/LandingPage.tsx web/src/pages/PricingPage.tsx web/src/pages/PublicRoutesAndIA.test.tsx
   git commit -m "feat(ia): add interactive 3-role workspaces showcase, /terms page, editorial 404 page, and clean nav anchors"
