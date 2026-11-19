@@ -292,7 +292,7 @@
   }
 
   .verdict-badge-metadata-error {
-    @apply bg-amber-50 text-amber-700 border border-amber-200;
+    @apply bg-amber-50 text-amber-800 border border-amber-200;
   }
   .dark .verdict-badge-metadata-error {
     @apply bg-amber-950 text-amber-300 border-amber-800;
@@ -312,10 +312,12 @@
     @apply bg-red-950 text-red-300 border-red-800;
   }
 
-  .verdict-badge-unverifiable {
-    @apply bg-slate-100 text-slate-600 border border-slate-200;
+  .verdict-badge-unverifiable,
+  .verdict-badge-unresolved {
+    @apply bg-slate-100 text-slate-700 border border-slate-200;
   }
-  .dark .verdict-badge-unverifiable {
+  .dark .verdict-badge-unverifiable,
+  .dark .verdict-badge-unresolved {
     @apply bg-slate-800 text-slate-300 border-slate-700;
   }
 
@@ -343,7 +345,7 @@
   }
 
   .mapping-badge-uncited {
-    @apply bg-amber-50 text-amber-700;
+    @apply bg-amber-50 text-amber-800;
   }
   .dark .mapping-badge-uncited {
     @apply bg-amber-950 text-amber-300;

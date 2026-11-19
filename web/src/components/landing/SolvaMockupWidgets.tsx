@@ -119,6 +119,7 @@ function formatSolvaLiveNumber(
   padDigits: number,
   formatThousands: boolean,
   thousandSeparator: string,
+  decimalSeparator: string,
   prefix: string,
   suffix: string
 ): string {
@@ -128,11 +129,11 @@ function formatSolvaLiveNumber(
   if (padDigits > 0 && decimals === 0) {
     body = Math.round(safeNum).toString().padStart(padDigits, '0');
   } else if (!formatThousands) {
-    body = fixed;
+    body = decimalSeparator !== '.' ? fixed.replace('.', decimalSeparator) : fixed;
   } else {
     const [intPart, decPart] = fixed.split('.');
     const withSep = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, thousandSeparator);
-    body = decPart !== undefined ? `${withSep}.${decPart}` : withSep;
+    body = decPart !== undefined ? `${withSep}${decimalSeparator}${decPart}` : withSep;
   }
   return `${prefix}${body}${suffix}`;
 }
@@ -153,6 +154,7 @@ export function SolvaLiveNumber({
   replaySeed = 0,
   formatThousands = false,
   thousandSeparator = ',',
+  decimalSeparator = '.',
   className = '',
 }: {
   value: number;
@@ -165,6 +167,7 @@ export function SolvaLiveNumber({
   replaySeed?: number;
   formatThousands?: boolean;
   thousandSeparator?: string;
+  decimalSeparator?: string;
   className?: string;
 }) {
   const spanRef = useRef<HTMLSpanElement>(null);
@@ -223,6 +226,7 @@ export function SolvaLiveNumber({
           padDigits,
           formatThousands,
           thousandSeparator,
+          decimalSeparator,
           prefix,
           suffix
         );
@@ -255,6 +259,7 @@ export function SolvaLiveNumber({
     padDigits,
     formatThousands,
     thousandSeparator,
+    decimalSeparator,
     prefix,
     suffix,
   ]);
@@ -265,6 +270,7 @@ export function SolvaLiveNumber({
     padDigits,
     formatThousands,
     thousandSeparator,
+    decimalSeparator,
     prefix,
     suffix
   );
@@ -391,7 +397,13 @@ export function HeroVerificationMockup({
             className="px-2 py-0.5 rounded-[5px] font-mono text-[10px] font-semibold shrink-0 whitespace-nowrap"
           >
             {lang === 'vi' ? 'Điểm:' : 'Score:'}{' '}
-            <SubtleNumber value={selected.cisScore.toFixed(1)} />
+            <SubtleNumber
+              value={
+                lang === 'vi'
+                  ? selected.cisScore.toFixed(1).replace('.', ',')
+                  : selected.cisScore.toFixed(1)
+              }
+            />
           </span>
         </div>
       </div>
@@ -457,7 +469,7 @@ export function HeroVerificationMockup({
                       item.tone === 'emerald'
                         ? 'bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300'
                         : item.tone === 'amber'
-                          ? 'bg-amber-500/[0.12] text-amber-700 dark:text-amber-300'
+                          ? 'bg-amber-500/[0.12] text-amber-800 dark:text-amber-300'
                           : 'bg-red-500/[0.12] text-red-700 dark:text-red-300'
                     }`}
                   >
@@ -729,7 +741,7 @@ export function FeatureCardWidget({
               <span style={{ color: 'var(--solva-muted)' }}>
                 {lang === 'vi' ? 'PHẦN 1 · TRONG BÀI VIẾT' : 'PART 1 · IN YOUR PAPER'}
               </span>
-              <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
+              <span className="whitespace-nowrap shrink-0 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 {lang === 'vi' ? 'Đã khớp' : 'Linked'}
               </span>
@@ -758,7 +770,7 @@ export function FeatureCardWidget({
               <span style={{ color: 'var(--solva-muted)' }}>
                 {lang === 'vi' ? 'PHẦN 2 · TRÊN THƯ VIỆN' : 'PART 2 · LIBRARY RECORD'}
               </span>
-              <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-amber-700 dark:text-amber-300 font-semibold">
+              <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-amber-800 dark:text-amber-300 font-semibold">
                 {lang === 'vi' ? 'Lệch thông tin' : 'Details Mismatch'}
               </span>
             </div>
@@ -845,7 +857,7 @@ export function FeatureCardWidget({
             <Database className="w-3.5 h-3.5 shrink-0" />
             <span>15+ {lang === 'vi' ? 'Thư viện Học thuật' : 'Academic Libraries'}</span>
           </span>
-          <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
+          <span className="whitespace-nowrap shrink-0 text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             {lang === 'vi' ? 'CÙNG LÚC' : 'AT ONCE'}
           </span>
@@ -906,7 +918,7 @@ export function FeatureCardWidget({
           >
             <SolvaLiveNumber
               value={200}
-              suffix={lang === 'vi' ? 'M+ Ấn phẩm' : 'M+ Works'}
+              suffix={lang === 'vi' ? 'Tr+ Ấn phẩm' : 'M+ Works'}
               replaySeed={replaySeed}
               durationMs={1500}
             />
@@ -962,7 +974,7 @@ export function FeatureCardWidget({
             <span style={{ color: 'var(--solva-muted)' }}>
               {lang === 'vi' ? 'KIỂM TRA THÔNG TIN' : 'DETAILS CHECK'}
             </span>
-            <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
+            <span className="whitespace-nowrap shrink-0 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               {lang === 'vi' ? 'ĐẠT CHUẨN' : 'PASSED'}
             </span>
@@ -1099,26 +1111,28 @@ export function StickyCardWidget({
             type="button"
             data-testid="xml-schema-preview-toggle"
             aria-expanded={showXmlSchema}
+            aria-controls="xml-schema-preview-panel"
             onClick={() => setShowXmlSchema((prev) => !prev)}
             style={{
               backgroundColor: 'var(--solva-surface)',
-              borderColor: 'var(--solva-border)',
-              color: 'var(--solva-muted)',
+              borderColor: showXmlSchema ? 'var(--solva-ink)' : 'var(--solva-border)',
+              color: showXmlSchema ? 'var(--solva-ink)' : 'var(--solva-muted)',
             }}
-            className="citra-nowrap-tail whitespace-nowrap shrink-0 text-[10px] font-mono px-2 py-1 rounded border hover:opacity-85 transition-opacity cursor-pointer"
+            className="inline-flex items-center gap-1 min-h-[36px] sm:min-h-[32px] px-2.5 py-1 text-[11px] font-mono whitespace-nowrap shrink-0 rounded-[6px] border hover:opacity-85 transition-all cursor-pointer"
           >
             {showXmlSchema
               ? lang === 'vi'
                 ? 'Xem dạng thẻ'
                 : 'Card view'
               : lang === 'vi'
-                ? 'Xem cấu trúc XML'
-                : 'Inspect XML'}
+                ? 'Mã XML'
+                : 'Raw XML'}
           </button>
         </div>
 
         {showXmlSchema ? (
           <div
+            id="xml-schema-preview-panel"
             style={{
               backgroundColor: 'var(--solva-surface)',
             }}
@@ -1165,6 +1179,7 @@ export function StickyCardWidget({
           </div>
         ) : (
           <div
+            id="xml-schema-preview-panel"
             style={{
               backgroundColor: 'var(--solva-surface)',
               borderColor: 'var(--solva-border)',
@@ -1179,7 +1194,7 @@ export function StickyCardWidget({
                 {lang === 'vi' ? 'Mục tham khảo #' : 'Reference #'}
                 <SubtleNumber value={String(currentXmlId).padStart(2, '0')} />
               </span>
-              <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 inline-flex items-center gap-1">
+              <span className="whitespace-nowrap shrink-0 text-[10px] font-medium text-emerald-700 dark:text-emerald-300 inline-flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 {lang === 'vi' ? 'Đã khớp trong bài' : 'Linked in text'}
               </span>
@@ -1286,7 +1301,7 @@ export function StickyCardWidget({
                 style={{ color: 'var(--solva-muted)' }}
                 className="text-[10px] font-mono leading-snug mt-0.5"
               >
-                R01_DOI_EXACT
+                {lang === 'vi' ? 'Đối chiếu mã DOI chính thức' : 'R01_DOI_EXACT'}
               </div>
             </div>
             <span className="citra-nowrap-tail whitespace-nowrap shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300">
@@ -1324,10 +1339,10 @@ export function StickyCardWidget({
                 style={{ color: 'var(--solva-muted)' }}
                 className="text-[10px] font-mono leading-snug mt-0.5"
               >
-                R05_YEAR_DRIFT
+                {lang === 'vi' ? 'So sánh năm bản nháp & năm công bố' : 'R05_YEAR_DRIFT'}
               </div>
             </div>
-            <span className="citra-nowrap-tail whitespace-nowrap shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-500/[0.12] text-amber-700 dark:text-amber-300">
+            <span className="citra-nowrap-tail whitespace-nowrap shrink-0 px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-500/[0.12] text-amber-800 dark:text-amber-300">
               {lang === 'vi' ? 'LƯU Ý' : 'REVIEW'}
             </span>
           </div>
@@ -1395,7 +1410,11 @@ export function StickyCardWidget({
         <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-300">
           <SubtleNumber
             prefix="+"
-            value={currentCisDelta.toFixed(1)}
+            value={
+              lang === 'vi'
+                ? currentCisDelta.toFixed(1).replace('.', ',')
+                : currentCisDelta.toFixed(1)
+            }
             suffix={lang === 'vi' ? ' điểm' : ' pts'}
           />
         </span>
@@ -1421,6 +1440,7 @@ export function StickyCardWidget({
             <SolvaLiveNumber
               value={68.0}
               decimals={1}
+              decimalSeparator={lang === 'vi' ? ',' : '.'}
               suffix="%"
               replaySeed={replaySeed}
               durationMs={1350}
@@ -1444,7 +1464,14 @@ export function StickyCardWidget({
             </span>
           </div>
           <div className="font-solva-serif text-[24px] sm:text-[26px] leading-tight mt-0.5 text-emerald-700 dark:text-emerald-300">
-            <SubtleNumber value={currentV2.toFixed(1)} suffix="%" />
+            <SubtleNumber
+              value={
+                lang === 'vi'
+                  ? currentV2.toFixed(1).replace('.', ',')
+                  : currentV2.toFixed(1)
+              }
+              suffix="%"
+            />
           </div>
         </div>
       </div>
@@ -1630,7 +1657,7 @@ export function PipelineStageVisual({
         >
           {active.badge}
         </span>
-        <span className="citra-nowrap-tail whitespace-nowrap shrink-0 px-2 py-0.5 rounded bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold inline-flex items-center gap-1.5">
+        <span className="whitespace-nowrap shrink-0 px-2 py-0.5 rounded bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-semibold inline-flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
           {lang === 'vi' ? 'TỰ ĐỘNG' : 'LIVE CHECK'}
         </span>
@@ -1760,7 +1787,7 @@ export function BottomCTAMockup({ lang }: { lang: Lang }) {
       label: lang === 'vi' ? 'LỆCH THÔNG TIN' : 'DETAILS MISMATCH',
       val: 2,
       startVal: 0,
-      color: 'text-amber-700 dark:text-amber-300',
+      color: 'text-amber-800 dark:text-amber-300',
     },
     {
       label: lang === 'vi' ? 'KHÔNG TÌM THẤY' : 'NOT FOUND',
@@ -1810,6 +1837,7 @@ export function BottomCTAMockup({ lang }: { lang: Lang }) {
           <SolvaLiveNumber
             value={96.2}
             decimals={1}
+            decimalSeparator={lang === 'vi' ? ',' : '.'}
             replaySeed={replaySeed}
             durationMs={1450}
           />{' '}
@@ -2013,7 +2041,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
             label: lang === 'vi' ? 'LỆCH NĂM' : 'WRONG YEAR',
             val: 146,
             format: false,
-            color: 'text-amber-700 dark:text-amber-300',
+            color: 'text-amber-800 dark:text-amber-300',
           },
           {
             label: lang === 'vi' ? 'KHÔNG TỒN TẠI' : 'NOT FOUND',
@@ -2091,7 +2119,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
                   item.tone === 'emerald'
                     ? 'bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300'
                     : item.tone === 'amber'
-                      ? 'bg-amber-500/[0.12] text-amber-700 dark:text-amber-300'
+                      ? 'bg-amber-500/[0.12] text-amber-800 dark:text-amber-300'
                       : 'bg-red-500/[0.12] text-red-700 dark:text-red-300'
                 }`}
               >
@@ -2118,7 +2146,13 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
           <span style={{ color: 'var(--solva-muted)' }} className="font-mono shrink-0 whitespace-nowrap">
             {lang === 'vi' ? 'Điểm:' : 'Score:'}{' '}
             <strong style={{ color: 'var(--solva-ink)' }}>
-              <SubtleNumber value={activeThesis.cisNum.toFixed(1)} />
+              <SubtleNumber
+                value={
+                  lang === 'vi'
+                    ? activeThesis.cisNum.toFixed(1).replace('.', ',')
+                    : activeThesis.cisNum.toFixed(1)
+                }
+              />
             </strong>
           </span>
         </div>
@@ -2141,7 +2175,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
         <a
           href="/#interactive-demo"
           style={{ color: 'var(--solva-ink)' }}
-          className="citra-nowrap-tail whitespace-nowrap shrink-0 inline-flex items-center gap-1 font-medium hover:underline"
+          className="whitespace-nowrap shrink-0 inline-flex items-center gap-1 font-medium hover:underline"
         >
           <span>
             {lang === 'vi' ? 'Kiểm tra thử ngay' : 'Try live check'}

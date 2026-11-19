@@ -274,8 +274,8 @@ test.describe('Landing Page — Full Vietnamese Typography & Sentient Glyph Veri
       localStorage.setItem('i18nextLng', 'vi');
     });
 
-    // 1. Check 1280x800 and 1024x768 desktop navbar bounds: every Vietnamese nav item & CTA must stay within viewport and single-line
-    const navLabels = [
+    // 1. Check 1440x900 and 1280x800 desktop navbar bounds: every Vietnamese nav item & CTA must stay within viewport, single-line, and strictly non-overlapping with logo & right controls
+    const desktopNavLabels = [
       'Nền tảng',
       'Cách hoạt động',
       'Kiểm tra thử',
@@ -286,21 +286,75 @@ test.describe('Landing Page — Full Vietnamese Typography & Sentient Glyph Veri
       'Trải nghiệm miễn phí',
     ];
 
-    for (const desktopWidth of [1280, 1024]) {
-      await page.setViewportSize({ width: desktopWidth, height: 800 });
+    for (const desktopVp of [
+      { width: 1440, height: 900 },
+      { width: 1280, height: 800 },
+    ]) {
+      await page.setViewportSize(desktopVp);
       await page.goto('/');
       await page.evaluate(() => document.fonts.ready);
 
-      for (const label of navLabels) {
+      for (const label of desktopNavLabels) {
         const item = page.locator('header').getByText(label, { exact: true }).first();
         await expect(item).toBeVisible();
         const box = await item.boundingBox();
         expect(box).not.toBeNull();
         expect(box!.x).toBeGreaterThanOrEqual(0);
-        expect(box!.x + box!.width).toBeLessThanOrEqual(desktopWidth);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(desktopVp.width);
         expect(box!.height).toBeLessThanOrEqual(48);
       }
+
+      const navLayout = await page.evaluate(() => {
+        const headerRow = document.querySelector('header > div') as HTMLElement;
+        const logoCluster = headerRow.children[0] as HTMLElement;
+        const nav = headerRow.querySelector('nav[aria-label="Primary Navigation"]') as HTMLElement;
+        const rightCluster = headerRow.children[2] as HTMLElement;
+        return {
+          navScrollWidth: nav.scrollWidth,
+          navClientWidth: nav.clientWidth,
+          logoBox: logoCluster.getBoundingClientRect(),
+          navBox: nav.getBoundingClientRect(),
+          rightClusterBox: rightCluster.getBoundingClientRect(),
+        };
+      });
+
+      expect(navLayout.navScrollWidth).toBeLessThanOrEqual(navLayout.navClientWidth);
+      expect(navLayout.logoBox.x + navLayout.logoBox.width).toBeLessThanOrEqual(
+        navLayout.navBox.x
+      );
+      expect(navLayout.navBox.x + navLayout.navBox.width).toBeLessThanOrEqual(
+        navLayout.rightClusterBox.x
+      );
     }
+
+    // 1b. Check 1024x768 tablet landscape in Vietnamese: desktop nav collapses cleanly into hamburger drawer with zero sibling collision
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.goto('/');
+    await page.evaluate(() => document.fonts.ready);
+
+    await expect(page.locator('header nav[aria-label="Primary Navigation"]')).toBeHidden();
+    const tabletHamburger = page.locator('header button[aria-label="Toggle navigation menu"]');
+    await expect(tabletHamburger).toBeVisible();
+
+    const tabletHeaderLayout = await page.evaluate(() => {
+      const headerRow = document.querySelector('header > div') as HTMLElement;
+      const logoCluster = headerRow.children[0] as HTMLElement;
+      const rightCluster = headerRow.children[2] as HTMLElement;
+      return {
+        logoBox: logoCluster.getBoundingClientRect(),
+        rightClusterBox: rightCluster.getBoundingClientRect(),
+      };
+    });
+    expect(
+      tabletHeaderLayout.logoBox.x + tabletHeaderLayout.logoBox.width
+    ).toBeLessThanOrEqual(tabletHeaderLayout.rightClusterBox.x);
+
+    await tabletHamburger.click();
+    const tabletDrawer = page.locator('header nav[aria-label="Mobile Navigation"]');
+    await expect(tabletDrawer).toBeVisible();
+    await expect(tabletDrawer).toContainText('Kiểm tra trích dẫn 2 bước');
+    await expect(tabletDrawer).toContainText('Kiểm tra thử trực quan');
+    await tabletHamburger.click();
 
     // 2. Verify all major anchor sections exist, render Vietnamese text, and have zero horizontal overflow across viewports
     const sectionIds = [

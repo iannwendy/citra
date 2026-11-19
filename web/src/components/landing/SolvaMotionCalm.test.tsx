@@ -635,7 +635,9 @@ describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & 
           expect(statusBadge.className).not.toContain('text-emerald-600');
         }
         expect(
-          container.querySelectorAll('.text-emerald-600, .text-amber-600, .text-red-600'),
+          container.querySelectorAll(
+            '.text-emerald-600, .text-amber-600, .text-amber-700, .text-red-600',
+          ),
         ).toHaveLength(0);
         unmount();
       }
@@ -648,7 +650,9 @@ describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & 
         </div>,
       );
       expect(
-        widgets.container.querySelectorAll('.text-emerald-600, .text-amber-600, .text-red-600'),
+        widgets.container.querySelectorAll(
+          '.text-emerald-600, .text-amber-600, .text-amber-700, .text-red-600',
+        ),
       ).toHaveLength(0);
       widgets.unmount();
     }

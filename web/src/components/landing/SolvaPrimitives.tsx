@@ -931,12 +931,14 @@ export function SolvaAnimatedMetric({
   suffix = '',
   prefix = '',
   decimals = 0,
+  decimalSeparator = '.',
   label,
 }: {
   targetValue: number;
   suffix?: string;
   prefix?: string;
   decimals?: number;
+  decimalSeparator?: string;
   label: string;
 }) {
   const reduced = isOSReducedMotion();
@@ -949,9 +951,12 @@ export function SolvaAnimatedMetric({
   const formatMetric = useCallback(
     (val: number) => {
       const safeVal = Math.abs(val) < 1e-9 ? 0 : val;
-      return `${prefix}${safeVal.toFixed(decimals)}${suffix}`;
+      const formatted = safeVal.toFixed(decimals);
+      const localized =
+        decimalSeparator !== '.' ? formatted.replace('.', decimalSeparator) : formatted;
+      return `${prefix}${localized}${suffix}`;
     },
-    [prefix, decimals, suffix]
+    [prefix, decimals, decimalSeparator, suffix]
   );
 
   useEffect(() => {

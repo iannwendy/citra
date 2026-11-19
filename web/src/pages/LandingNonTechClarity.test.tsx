@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -8,6 +10,11 @@ import {
   getPlainVerdictLabel,
   getPlainMappingLabel,
 } from '@/lib/verdictExplanation';
+import {
+  FeatureCardWidget,
+  StickyCardWidget,
+} from '@/components/landing/SolvaMockupWidgets';
+import { ScholarlySourceLogo } from '@/components/landing/ScholarlySourceLogos';
 import { LandingPage } from '@/pages/LandingPage';
 
 describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclosure (EN & VI)', () => {
@@ -317,6 +324,122 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
         // Even with technical drawers expanded in VI, thousand separators strictly use dots
         expect(container.textContent ?? '').not.toMatch(/\b\d{1,3},\d{3}\b/);
       }
+
+      unmount();
+    }
+  });
+
+  it('6. wires aria-controls + matching DOM id on all 3 progressive-disclosure toggles, avoids citra-nowrap-tail + inline-flex cascade, localizes StickyCardWidget(1) rules in VI, styles Citation [4] verdict badge, and renders an OpenLibrary book icon', async () => {
+    const cssSource = fs.readFileSync(
+      path.resolve(__dirname, '../index.css'),
+      'utf-8',
+    );
+
+    // A. OpenLibrary renders a dedicated open-book SVG rather than the SQLite cylinder fallback (<ellipse>)
+    const { container: openLibIcon } = render(
+      <ScholarlySourceLogo name="OpenLibrary" size={18} />,
+    );
+    expect(openLibIcon.querySelector('svg')).not.toBeNull();
+    expect(openLibIcon.querySelector('ellipse')).toBeNull();
+
+    // B. Status dots inside FeatureCardWidget & StickyCardWidget parents never pair .citra-nowrap-tail with inline-flex / flex
+    for (const lang of ['en', 'vi'] as const) {
+      const { container: widgetsC, unmount: unmountW } = render(
+        <div>
+          <FeatureCardWidget index={0} lang={lang} />
+          <FeatureCardWidget index={1} lang={lang} />
+          <FeatureCardWidget index={2} lang={lang} />
+          <StickyCardWidget index={0} lang={lang} />
+          <StickyCardWidget index={1} lang={lang} />
+          <StickyCardWidget index={2} lang={lang} />
+        </div>,
+      );
+
+      widgetsC.querySelectorAll('.citra-nowrap-tail').forEach((el) => {
+        expect(el.className).not.toMatch(/\b(inline-flex|flex)\b/);
+        expect(el.tagName.toLowerCase()).not.toBe('button');
+      });
+
+      unmountW();
+    }
+
+    // C. StickyCardWidget(1) in VI contains zero R01_DOI_EXACT or R05_YEAR_DRIFT strings (while preserving them in EN)
+    const { container: sticky1Vi, unmount: unmountStickyVi } = render(
+      <StickyCardWidget index={1} lang="vi" />,
+    );
+    expect(sticky1Vi.textContent).not.toContain('R01_DOI_EXACT');
+    expect(sticky1Vi.textContent).not.toContain('R05_YEAR_DRIFT');
+    expect(sticky1Vi.textContent).toContain('Đối chiếu mã DOI chính thức');
+    expect(sticky1Vi.textContent).toContain('So sánh năm bản nháp & năm công bố');
+    unmountStickyVi();
+
+    const { container: sticky1En, unmount: unmountStickyEn } = render(
+      <StickyCardWidget index={1} lang="en" />,
+    );
+    expect(sticky1En.textContent).toContain('R01_DOI_EXACT');
+    expect(sticky1En.textContent).toContain('R05_YEAR_DRIFT');
+    unmountStickyEn();
+
+    // D. All 3 progressive-disclosure toggles carry aria-controls pointing to a real DOM id, and Citation [4] uses a defined .verdict-badge-* rule in index.css
+    for (const lang of ['en', 'vi'] as const) {
+      await i18n.changeLanguage(lang);
+      const { container, unmount } = renderLanding();
+
+      // Ensure desktop navbar uses xl:flex (1280px+) and hamburger/drawer use xl:hidden so 1024px VI never collides
+      const desktopNav = container.querySelector(
+        'header nav[aria-label="Primary Navigation"]',
+      ) as HTMLElement;
+      expect(desktopNav.className).toContain('xl:flex');
+      expect(desktopNav.className).not.toContain('lg:flex');
+
+      const hamburgerBtn = screen.getByRole('button', {
+        name: /toggle navigation menu/i,
+      });
+      expect(hamburgerBtn.className).toContain('xl:hidden');
+      expect(hamburgerBtn.className).not.toContain('lg:hidden');
+
+      // Zero .citra-nowrap-tail paired with inline-flex anywhere on LandingPage
+      container.querySelectorAll('.citra-nowrap-tail').forEach((el) => {
+        expect(el.className).not.toMatch(/\b(inline-flex|flex)\b/);
+      });
+
+      // Toggle 1: benchmark-technical-details-toggle -> benchmark-technical-details-panel
+      const benchToggle = screen.getByTestId('benchmark-technical-details-toggle');
+      const benchControlsId = benchToggle.getAttribute('aria-controls');
+      expect(benchControlsId).toBe('benchmark-technical-details-panel');
+      fireEvent.click(benchToggle);
+      expect(container.querySelector(`#${benchControlsId}`)).not.toBeNull();
+
+      // Toggle 2: debugger-technical-trace-toggle -> debugger-technical-trace-panel + min-h-[44px] + "Optional:" / "Tùy chọn:"
+      const traceToggle = screen.getByTestId('debugger-technical-trace-toggle');
+      expect(traceToggle.className).toContain('min-h-[44px]');
+      expect(traceToggle.textContent).toContain(
+        lang === 'vi' ? 'Tùy chọn:' : 'Optional:',
+      );
+      const traceControlsId = traceToggle.getAttribute('aria-controls');
+      expect(traceControlsId).toBe('debugger-technical-trace-panel');
+      fireEvent.click(traceToggle);
+      expect(container.querySelector(`#${traceControlsId}`)).not.toBeNull();
+
+      // Toggle 3: xml-schema-preview-toggle -> xml-schema-preview-panel (present both collapsed and expanded)
+      const xmlToggle = screen.getByTestId('xml-schema-preview-toggle');
+      const xmlControlsId = xmlToggle.getAttribute('aria-controls');
+      expect(xmlControlsId).toBe('xml-schema-preview-panel');
+      expect(container.querySelector(`#${xmlControlsId}`)).not.toBeNull();
+      fireEvent.click(xmlToggle);
+      expect(container.querySelector(`#${xmlControlsId}`)).not.toBeNull();
+
+      // Citation [4] ([4] Smith et al. (2021)) verdict badge uses a defined .verdict-badge-* CSS class in index.css
+      const demo = container.querySelector('#interactive-demo') as HTMLElement;
+      const citation4Option = within(demo).getAllByRole('option')[3];
+      const verdictBadgeEl = citation4Option.querySelector('.verdict-badge') as HTMLElement;
+      expect(verdictBadgeEl).not.toBeNull();
+      const variantClass = Array.from(verdictBadgeEl.classList).find((cls) =>
+        cls.startsWith('verdict-badge-'),
+      );
+      expect(variantClass).toBeDefined();
+      expect(cssSource).toMatch(new RegExp(`\\.${variantClass}\\b`));
+      expect(cssSource).toMatch(new RegExp(`\\.dark\\s+[^{]*\\.${variantClass}\\b`));
 
       unmount();
     }

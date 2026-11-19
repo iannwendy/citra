@@ -765,11 +765,11 @@ function SolvaHeader({
         {/* Center: Solva Navigation Links + Dropdown */}
         <nav
           aria-label="Primary Navigation"
-          className="hidden lg:flex items-center justify-center flex-1 min-w-0 flex-nowrap gap-0.5 xl:gap-1"
+          className="hidden xl:flex items-center justify-center flex-1 min-w-0 flex-nowrap gap-0.5 xl:gap-1"
         >
           {/* Dropdown Trigger (`Platform v` / `Nền tảng v`) */}
           <div
-            className="relative"
+            className="relative shrink-0"
             onMouseLeave={() => setDropdownOpen(false)}
           >
             <button
@@ -924,7 +924,7 @@ function SolvaHeader({
               backgroundColor: 'var(--solva-surface)',
               color: 'var(--solva-ink)',
             }}
-            className="lg:hidden inline-flex items-center justify-center w-[40px] h-[40px] rounded-[8px] cursor-pointer"
+            className="xl:hidden inline-flex items-center justify-center w-[40px] h-[40px] rounded-[8px] cursor-pointer"
           >
             <IconSwap
               active={mobileMenuOpen}
@@ -943,7 +943,7 @@ function SolvaHeader({
             backgroundColor: 'var(--solva-bg)',
             borderColor: 'var(--solva-border)',
           }}
-          className={`lg:hidden border-t border-b px-5 py-4 space-y-2 shadow-lg t-mobile-drawer ${
+          className={`xl:hidden border-t border-b px-5 py-4 space-y-2 shadow-lg t-mobile-drawer ${
             mobileDrawerPresence.phase === 'open' ? 'is-open' : 'is-closing'
           }`}
         >
@@ -1208,7 +1208,7 @@ function SolvaHeroSection({
                   </span>
                   <span
                     style={{ color: 'var(--solva-muted)' }}
-                    className="citra-nowrap-tail whitespace-nowrap font-mono text-[10px] inline-flex items-center gap-1 shrink-0 group-hover:underline"
+                    className="whitespace-nowrap font-mono text-[10px] inline-flex items-center gap-1 shrink-0 group-hover:underline"
                   >
                     <span>{lang === 'vi' ? 'Xem độ tin cậy' : 'See accuracy'}</span>
                     <LearnMoreChevron size={12} />
@@ -1371,6 +1371,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
   );
   const { containerRef: benchRef, replaySeed: benchSeed } = useFloralCardAnimation(5600);
   const sep = lang === 'vi' ? '.' : ',';
+  const decSep = lang === 'vi' ? ',' : '.';
+  const fmtPct = (pct: number) =>
+    lang === 'vi' ? `${pct.toFixed(2).replace('.', ',')}%` : `${pct.toFixed(2)}%`;
 
   const plainPillars = [
     {
@@ -1544,7 +1547,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
           : 'Linear multi-feature scorer without abstention band',
       note:
         lang === 'vi'
-          ? 'Cưỡng ép ra phán quyết cứng ở vùng ranh giới nhạy cảm [0.40, 0.60), dẫn tới sụp đổ 3.33% trên OOD'
+          ? 'Cưỡng ép ra phán quyết cứng ở vùng ranh giới nhạy cảm [0.40, 0.60), dẫn tới sụp đổ 3,33% trên OOD'
           : 'Forces hard verdicts in borderline [0.40, 0.60) cases (3.33% on OOD)',
       acc: 80.13,
       prec: '0.6212',
@@ -1608,8 +1611,8 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       subtypes: 'V1 – V4',
       totalSamples: lang === 'vi' ? '43.200 (36%)' : '43,200 (36%)',
       testSupport: lang === 'vi' ? '6.480' : '6,480',
-      precision: '0.9846 (98.5%)',
-      recall: '0.9980 (99.8%)',
+      precision: lang === 'vi' ? '0.9846 (98,5%)' : '0.9846 (98.5%)',
+      recall: lang === 'vi' ? '0.9980 (99,8%)' : '0.9980 (99.8%)',
       f1: '0.9913',
       tone: 'emerald' as const,
       desc:
@@ -1622,8 +1625,8 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       subtypes: 'H1 – H4',
       totalSamples: lang === 'vi' ? '36.000 (30%)' : '36,000 (30%)',
       testSupport: lang === 'vi' ? '5.400' : '5,400',
-      precision: '0.9993 (99.9%)',
-      recall: '0.9969 (99.7%)',
+      precision: lang === 'vi' ? '0.9993 (99,9%)' : '0.9993 (99.9%)',
+      recall: lang === 'vi' ? '0.9969 (99,7%)' : '0.9969 (99.7%)',
       f1: '0.9981',
       tone: 'red' as const,
       desc:
@@ -1636,8 +1639,8 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       subtypes: 'M1 – M5',
       totalSamples: lang === 'vi' ? '26.400 (22%)' : '26,400 (22%)',
       testSupport: lang === 'vi' ? '3.960' : '3,960',
-      precision: '0.9915 (99.2%)',
-      recall: '0.9684 (96.8%)',
+      precision: lang === 'vi' ? '0.9915 (99,2%)' : '0.9915 (99.2%)',
+      recall: lang === 'vi' ? '0.9684 (96,8%)' : '0.9684 (96.8%)',
       f1: '0.9798',
       tone: 'amber' as const,
       desc:
@@ -1650,8 +1653,8 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
       subtypes: 'U1 – U2',
       totalSamples: lang === 'vi' ? '14.400 (12%)' : '14,400 (12%)',
       testSupport: lang === 'vi' ? '2.160' : '2,160',
-      precision: '0.9821 (98.2%)',
-      recall: '0.9898 (99.0%)',
+      precision: lang === 'vi' ? '0.9821 (98,2%)' : '0.9821 (98.2%)',
+      recall: lang === 'vi' ? '0.9898 (99,0%)' : '0.9898 (99.0%)',
       f1: '0.9859',
       tone: 'slate' as const,
       desc:
@@ -1788,6 +1791,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
             type="button"
             data-testid="benchmark-technical-details-toggle"
             aria-expanded={showTechnicalDetails}
+            aria-controls="benchmark-technical-details-panel"
             onClick={() => setShowTechnicalDetails((prev) => !prev)}
             style={{
               backgroundColor: 'var(--solva-surface)',
@@ -1810,7 +1814,10 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
         </div>
 
         {showTechnicalDetails && (
-          <div className="space-y-[24px] animate-debugger-switch">
+          <div
+            id="benchmark-technical-details-panel"
+            className="space-y-[24px] animate-debugger-switch"
+          >
             {/* 4 Technical Telemetry Cards (`120,000` · `99.02%` · `99.93%` · `0.0395`) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[16px]">
               {headlineMetrics.map((item, idx) => (
@@ -1829,7 +1836,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                           item.badgeTone === 'emerald'
                             ? 'bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300'
                             : item.badgeTone === 'amber'
-                              ? 'bg-amber-500/[0.12] text-amber-700 dark:text-amber-300'
+                              ? 'bg-amber-500/[0.12] text-amber-800 dark:text-amber-300'
                               : 'bg-[#FBFAF6] dark:bg-[#141310] text-[#56524A] dark:text-[#A8A296]'
                         }`}
                       >
@@ -1847,6 +1854,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                         suffix={item.suffix}
                         formatThousands={item.formatThousands}
                         thousandSeparator={sep}
+                        decimalSeparator={item.suffix === '%' ? decSep : '.'}
                         replaySeed={benchSeed}
                         durationMs={1400 + idx * 120}
                       />
@@ -1936,7 +1944,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                         backgroundColor: !benchPill.ready && isActive ? 'var(--solva-bg)' : 'transparent',
                         color: isActive ? 'var(--solva-ink)' : 'var(--solva-muted)',
                       }}
-                      className="t-tab h-[40px] px-3.5 rounded-[10px] font-mono text-[12px] font-medium flex items-center justify-center gap-2 cursor-pointer"
+                      className="t-tab min-h-[44px] h-auto py-2 px-3.5 text-center leading-tight rounded-[10px] font-mono text-[12px] font-medium flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <span>{tab.label}</span>
                     </button>
@@ -2083,7 +2091,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                               }`}
                               style={!row.highlight ? { color: 'var(--solva-ink)' } : undefined}
                             >
-                              {row.acc.toFixed(2)}% Acc
+                              {fmtPct(row.acc)} Acc
                             </span>
                           </div>
                         </div>
@@ -2128,7 +2136,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                     </div>
                     <span className="self-start sm:self-center px-3 py-1 rounded-[8px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[11px] font-semibold shrink-0">
                       {lang === 'vi'
-                        ? 'Độ chính xác chung: 99.02% [98.87%, 99.16%]'
+                        ? 'Độ chính xác chung: 99,02% [98,87%; 99,16%]'
                         : 'Overall Acc: 99.02% [98.87%, 99.16%]'}
                     </span>
                   </div>
@@ -2152,7 +2160,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                   : cls.tone === 'red'
                                     ? 'bg-red-500/[0.15] text-red-700 dark:text-red-300'
                                     : cls.tone === 'amber'
-                                      ? 'bg-amber-500/[0.15] text-amber-700 dark:text-amber-300'
+                                      ? 'bg-amber-500/[0.15] text-amber-800 dark:text-amber-300'
                                       : 'bg-slate-500/[0.15] text-slate-700 dark:text-slate-300'
                               }`}
                             >
@@ -2231,7 +2239,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                     </div>
                     <span className="self-start sm:self-center px-3 py-1 rounded-[8px] bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300 font-mono text-[11px] font-semibold shrink-0">
                       {lang === 'vi'
-                        ? '99.31% Chính xác @ 90% Độ phủ'
+                        ? '99,31% Chính xác @ 90% Độ phủ'
                         : '99.31% Acc @ 90% Coverage'}
                     </span>
                   </div>
@@ -2285,13 +2293,17 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                               <span style={{ color: 'var(--solva-muted)' }}>
                                 {lang === 'vi' ? 'Chính xác @ 70% Phủ:' : 'Acc @ 70% Cov:'}
                               </span>
-                              <strong style={{ color: 'var(--solva-ink)' }}>99.03%</strong>
+                              <strong style={{ color: 'var(--solva-ink)' }}>
+                                {lang === 'vi' ? '99,03%' : '99.03%'}
+                              </strong>
                             </div>
                             <div className="flex justify-between">
                               <span style={{ color: 'var(--solva-muted)' }}>
                                 {lang === 'vi' ? 'Chính xác @ 90% Phủ:' : 'Acc @ 90% Cov:'}
                               </span>
-                              <strong style={{ color: 'var(--solva-ink)' }}>99.08%</strong>
+                              <strong style={{ color: 'var(--solva-ink)' }}>
+                                {lang === 'vi' ? '99,08%' : '99.08%'}
+                              </strong>
                             </div>
                           </div>
                         </div>
@@ -2314,7 +2326,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Sai số ECE:' : 'ECE Error:'}
                               </span>
                               <strong className="text-emerald-700 dark:text-emerald-300">
-                                0.0395 (↓ 6.19×)
+                                {lang === 'vi' ? '0.0395 (↓ 6,19×)' : '0.0395 (↓ 6.19×)'}
                               </strong>
                             </div>
                             <div className="flex justify-between">
@@ -2322,7 +2334,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Điểm Brier:' : 'Brier Score:'}
                               </span>
                               <strong className="text-emerald-700 dark:text-emerald-300">
-                                0.0125 (↓ 7.32×)
+                                {lang === 'vi' ? '0.0125 (↓ 7,32×)' : '0.0125 (↓ 7.32×)'}
                               </strong>
                             </div>
                             <div className="flex justify-between">
@@ -2330,7 +2342,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Chính xác @ 70% Phủ:' : 'Acc @ 70% Cov:'}
                               </span>
                               <strong className="text-emerald-700 dark:text-emerald-300">
-                                99.23%
+                                {lang === 'vi' ? '99,23%' : '99.23%'}
                               </strong>
                             </div>
                             <div className="flex justify-between">
@@ -2338,7 +2350,7 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                                 {lang === 'vi' ? 'Chính xác @ 90% Phủ:' : 'Acc @ 90% Cov:'}
                               </span>
                               <strong className="text-emerald-700 dark:text-emerald-300">
-                                99.31%
+                                {lang === 'vi' ? '99,31%' : '99.31%'}
                               </strong>
                             </div>
                           </div>
@@ -2367,9 +2379,9 @@ function SolvaBenchmark120KSection({ lang }: { lang: Lang }) {
                         {[
                           {
                             metric: lang === 'vi' ? 'Độ chính xác tổng thể' : 'Overall Accuracy',
-                            est: '99.02%',
-                            ci: '[98.87%, 99.16%]',
-                            se: '±0.07%',
+                            est: lang === 'vi' ? '99,02%' : '99.02%',
+                            ci: lang === 'vi' ? '[98,87%; 99,16%]' : '[98.87%, 99.16%]',
+                            se: lang === 'vi' ? '±0,07%' : '±0.07%',
                           },
                           {
                             metric: lang === 'vi' ? 'Điểm Macro-F1' : 'Macro-F1 Score',
@@ -2592,7 +2604,7 @@ function SolvaStickySection({
             primary={lang === 'vi' ? 'Một không gian học thuật.' : 'One workspace.'}
             secondary={
               lang === 'vi'
-                ? 'Mọi trích dẫn đều có bằng chứng bảo chứng.'
+                ? 'Mọi trích dẫn đều được đối chiếu minh bạch.'
                 : 'Every citation, accounted for.'
             }
           />
@@ -2729,7 +2741,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
         );
       case 'partial':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-amber-500/[0.12] text-amber-700 dark:text-amber-300 whitespace-nowrap">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[6px] text-[11px] font-mono font-semibold bg-amber-500/[0.12] text-amber-800 dark:text-amber-300 whitespace-nowrap">
             <AlertTriangle className="h-3 w-3" /> {lang === 'vi' ? 'Gần khớp' : 'Close Match'}
           </span>
         );
@@ -2893,6 +2905,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                     <SolvaLiveNumber
                       value={84.5}
                       decimals={1}
+                      decimalSeparator={lang === 'vi' ? ',' : '.'}
                       replaySeed={debuggerSeed}
                       durationMs={1400}
                     />{' '}
@@ -3297,7 +3310,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                                 rule.status === 'passed'
                                   ? 'bg-emerald-500/[0.12] text-emerald-700 dark:text-emerald-300'
                                   : rule.status === 'warning'
-                                    ? 'bg-amber-500/[0.12] text-amber-700 dark:text-amber-300'
+                                    ? 'bg-amber-500/[0.12] text-amber-800 dark:text-amber-300'
                                     : 'bg-red-500/[0.12] text-red-700 dark:text-red-300'
                               }`}
                             >
@@ -3408,6 +3421,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                         type="button"
                         data-testid="debugger-technical-trace-toggle"
                         aria-expanded={showTechnicalTrace}
+                        aria-controls="debugger-technical-trace-panel"
                         onClick={() => setShowTechnicalTrace((prev) => !prev)}
                         style={{
                           backgroundColor: 'var(--solva-surface)',
@@ -3416,22 +3430,23 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                             : 'var(--solva-border)',
                           color: 'var(--solva-ink)',
                         }}
-                        className="w-full min-h-[40px] px-3.5 py-2 rounded-[9px] border font-solva-sans text-xs font-medium flex items-center justify-between gap-2 hover:opacity-90 transition-all cursor-pointer"
+                        className="w-full min-h-[44px] px-3.5 py-2 rounded-[9px] border font-solva-sans text-xs font-medium flex items-center justify-between gap-2 hover:opacity-90 transition-all cursor-pointer"
                       >
                         <span>
                           {showTechnicalTrace
                             ? lang === 'vi'
-                              ? 'Ẩn bằng chứng kỹ thuật & mã quy tắc'
-                              : 'Hide Technical Trace & Rule Formulas'
+                              ? 'Ẩn mã quy tắc & công thức kỹ thuật'
+                              : 'Hide Technical Rule Trace & Formulas'
                             : lang === 'vi'
-                              ? `Xem bằng chứng kỹ thuật (${SYMBOLIC_RULES_RANGE})`
-                              : `View Technical Trace (${SYMBOLIC_RULES_RANGE})`}
+                              ? `Tùy chọn: Xem mã quy tắc kỹ thuật (${SYMBOLIC_RULES_RANGE})`
+                              : `Optional: View Technical Rule Trace (${SYMBOLIC_RULES_RANGE})`}
                         </span>
                         <SymmetricChevron open={showTechnicalTrace} size={14} />
                       </button>
 
                       {showTechnicalTrace && (
                         <div
+                          id="debugger-technical-trace-panel"
                           data-testid="debugger-technical-trace-panel"
                           style={{
                             backgroundColor: 'var(--solva-surface)',
@@ -4533,7 +4548,7 @@ function SolvaTaxonomyPricingSection({
                 className="font-solva-sans text-[14px]"
               >
                 {lang === 'vi'
-                  ? 'Thanh toán mã hóa chuẩn PCI-DSS qua cổng Stripe & VNPay · Đối chiếu trực tiếp với hơn 200 triệu ấn phẩm khoa học từ 15+ cơ sở dữ liệu quốc tế'
+                  ? 'Thanh toán bảo mật quốc tế qua Stripe & nội địa VNPay (chuẩn PCI-DSS) · Đối chiếu trực tiếp với hơn 200 triệu ấn phẩm khoa học từ 15+ cơ sở dữ liệu quốc tế'
                   : 'PCI-DSS encrypted checkout via Stripe & VNPay · Cross-referencing 200M+ canonical works across 15+ global scholarly indexes'}
               </p>
             </div>
@@ -4619,7 +4634,7 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
                     className="font-solva-sans text-[14px] font-medium leading-[21px]"
                   >
                     {lang === 'vi'
-                      ? 'Hội đồng Thẩm định Khóa luận & Đạo đức Học thuật'
+                      ? 'PGS.TS. Nguyễn Minh Châu'
                       : 'Dr. Elena Rostova'}
                   </div>
                   <div
@@ -4627,7 +4642,7 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
                     className="font-solva-sans text-[14px] leading-[21px]"
                   >
                     {lang === 'vi'
-                      ? 'Hội đồng Bảo vệ Khóa luận Tốt nghiệp Đa ngành'
+                      ? 'Chủ tịch Hội đồng Bảo vệ Khóa luận Tốt nghiệp'
                       : 'Chair of Graduate Thesis Review Committee'}
                   </div>
                 </div>
@@ -4649,6 +4664,7 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
                   targetValue={99.02}
                   suffix="%"
                   decimals={2}
+                  decimalSeparator={lang === 'vi' ? ',' : '.'}
                   label={
                     lang === 'vi'
                       ? 'Độ chính xác kiểm chứng trích dẫn'
@@ -4659,6 +4675,7 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
                   targetValue={99.93}
                   suffix="%"
                   decimals={2}
+                  decimalSeparator={lang === 'vi' ? ',' : '.'}
                   label={
                     lang === 'vi'
                       ? 'Độ chuẩn xác phát hiện nguồn ảo (0 kết luận oan)'
