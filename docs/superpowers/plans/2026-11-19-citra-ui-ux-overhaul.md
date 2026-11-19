@@ -208,24 +208,24 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
 **Interfaces:**
 - Produces: `data-testid="mobile-compare-tier-tabs"` (`md:hidden`) alongside desktop comparison table (`hidden md:block`) inside `#compare-matrix`; `data-testid="mobile-menu-pricing-link"` inside `LandingPage` mobile drawer.
 
-- [ ] **Step 1: Write failing tests in `web/src/pages/PricingAndBilling.test.tsx`**
+- [x] **Step 1: Write failing tests in `web/src/pages/PricingAndBilling.test.tsx`**
   Assert:
   1. `LandingPage` mobile menu renders an accessible link to `/pricing` (`Pricing` / `Bảng giá`).
   2. `PricingPage` `#compare-matrix` renders `data-testid="mobile-compare-tier-tabs"` switching cleanly between `Basic`, `Pro`, and `Ultra` feature cards without horizontal clipping on mobile viewports, while preserving the full 4-column comparison table for `md:` and up.
   3. `PricingSolvaHeader` desktop nav fits cleanly on 1 line at `1440px` without wrapping.
-- [ ] **Step 2: Run targeted Vitest suite to confirm failure**
+- [x] **Step 2: Run targeted Vitest suite to confirm failure**
   Run: `cd web && npx vitest run src/pages/PricingAndBilling.test.tsx`
   Expected: FAIL (`mobile-compare-tier-tabs` and `mobile-menu-pricing-link` missing).
-- [ ] **Step 3: Implement Mobile Segmented Comparison Switcher, Header Diet & Mobile `Pricing` Nav Item**
+- [x] **Step 3: Implement Mobile Segmented Comparison Switcher, Header Diet & Mobile `Pricing` Nav Item**
   1. In `LandingPage.tsx` mobile drawer, add `/pricing` (`Bảng giá` / `Pricing`) with clear visual prominence.
   2. In `PricingPage.tsx` `PricingSolvaHeader`, streamline center nav links so `1440px` stays strictly single-line.
   3. In `PricingPage.tsx` `#compare-matrix`, add a sticky `md:hidden` segmented control (`[Basic ($0)] [Pro ★] [Ultra]`) using `useSlidingPill` / crisp active state that renders 100%-width feature cards for the selected plan with zero clipped characters.
-- [ ] **Step 4: Run full frontend verification gate + responsive E2E check**
+- [x] **Step 4: Run full frontend verification gate + responsive E2E check**
   Run: `cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
   Expected: PASS.
-- [ ] **Step 5: Run Triad Review & Critic Loop + Browser Mobile Check (`390×844` & `375×812` on `/` and `/pricing`)**
+- [x] **Step 5: Run Triad Review & Critic Loop + Browser Mobile Check (`390×844` & `375×812` on `/` and `/pricing`)**
   Verify `scrollWidth <= innerWidth`, zero clipped text in `#compare-matrix` on `390×844`, and working `Pricing` link in mobile menu; loop until `APPROVED`.
-- [ ] **Step 6: Tick checkboxes & commit**
+- [x] **Step 6: Tick checkboxes & commit**
   ```bash
   git add web/src/pages/PricingPage.tsx web/src/pages/LandingPage.tsx web/src/pages/PricingAndBilling.test.tsx web/tests/e2e/responsive.spec.ts
   git commit -m "fix(responsive): add mobile segmented comparison matrix on /pricing and Pricing link in mobile menu"
