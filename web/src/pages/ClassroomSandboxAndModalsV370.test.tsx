@@ -237,6 +237,12 @@ describe('v3.70.0 Classroom, Pending Reviews, Sandbox, Modals & RuleInspector', 
       screen.getByTestId('shared-hallucination-essay-link-104').getAttribute('href'),
     ).toBe('/verification/report/104');
 
+    // Header action row allows wrapping within narrow mobile cards (no shrink-0 overflow)
+    const editClassBtn = screen.getByTestId('edit-class-btn');
+    expect(editClassBtn.parentElement?.className).toContain('min-w-0');
+    expect(editClassBtn.parentElement?.className).toContain('max-w-full');
+    expect(editClassBtn.parentElement?.className).not.toContain('shrink-0');
+
     // Smart routing for ClassEssay rows
     const completedRow = screen.getByTestId('class-essay-row-101');
     expect(completedRow.getAttribute('href')).toBe('/verification/report/101');

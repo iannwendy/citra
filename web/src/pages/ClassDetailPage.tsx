@@ -350,7 +350,7 @@ export function ClassDetailPage() {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
             <Button
               type="button"
               variant="outline"
@@ -959,7 +959,7 @@ export function ClassDetailPage() {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2.5 min-w-0 max-w-full">
                     {isQueuedOrProcessing ? (
                       <>
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/80 border border-amber-200/80 dark:border-amber-800/80 text-xs font-medium text-amber-700 dark:text-amber-300">
