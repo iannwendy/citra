@@ -210,7 +210,7 @@ export function AuthSplitShell({
       desc: t('auth.featureRetrievalDesc'),
       tag:
         lang === 'vi'
-          ? `${LOCAL_PAPERS_LABEL} bài · ${SCHOLARLY_APIS_LABEL} CSDL`
+          ? `${LOCAL_PAPERS_LABEL} bài · ${SCHOLARLY_APIS_LABEL} thư viện`
           : `${LOCAL_PAPERS_LABEL} ACL · ${SCHOLARLY_APIS_LABEL} APIs`,
       accentClass:
         'bg-[#1C1A15]/[0.08] text-[#1C1A15] dark:bg-[#FBFAF6]/10 dark:text-[#FBFAF6] border-[#1C1A15]/15 dark:border-[#FBFAF6]/20',
@@ -221,7 +221,7 @@ export function AuthSplitShell({
       desc: t('auth.featureVerificationDesc'),
       tag:
         lang === 'vi'
-          ? `Luật ${SYMBOLIC_RULES_RANGE} · CIS`
+          ? `Quy tắc ${SYMBOLIC_RULES_RANGE}`
           : `Rules ${SYMBOLIC_RULES_RANGE} · CIS`,
       accentClass:
         'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20',
@@ -655,7 +655,7 @@ export function AuthSplitShell({
                   }}
                   className="group p-2.5 xl:p-3 rounded-[12px] border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm flex flex-col justify-between gap-1.5"
                 >
-                  <div className="flex items-center justify-between gap-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5">
                     <div
                       className={`p-1.5 rounded-[8px] border shrink-0 ${item.accentClass}`}
                     >

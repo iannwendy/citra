@@ -26,6 +26,11 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const SIMPLE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+const getSolvaInputBorderClasses = (invalid: boolean) =>
+  invalid
+    ? 'is-error border-red-600 dark:border-red-400 focus-visible:ring-2 focus-visible:ring-red-600/20 dark:focus-visible:ring-red-400/25 focus-visible:border-red-600 dark:focus-visible:border-red-400 placeholder:text-[#78736A] dark:placeholder:text-[#969084]'
+    : 'border-[#E7E3D9] dark:border-[#332F26] focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20 focus-visible:border-[#1C1A15] dark:focus-visible:border-[#FBFAF6] placeholder:text-[#78736A] dark:placeholder:text-[#969084]';
+
 export function ForgotPasswordPage() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.startsWith('vi') ? 'vi' : 'en';
@@ -142,7 +147,11 @@ export function ForgotPasswordPage() {
 
         <CardContent className="px-5 sm:px-7 pb-5 sm:pb-6">
           {error && (
-            <Alert variant="destructive" className="mb-4 rounded-[12px]">
+            <Alert
+              id="forgot-form-error"
+              variant="destructive"
+              className="mb-4 rounded-[12px]"
+            >
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="text-xs sm:text-sm font-medium">
                 {error}
@@ -181,7 +190,7 @@ export function ForgotPasswordPage() {
                   variant="outline"
                   disabled={cooldown > 0 || loading}
                   onClick={handleResend}
-                  className="flex-1 h-10 rounded-[11px] text-xs font-semibold cursor-pointer"
+                  className="flex-1 h-10 rounded-[11px] text-xs font-semibold border-[#E7E3D9] dark:border-[#332F26] bg-[var(--solva-surface)] text-[var(--solva-ink)] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] hover:border-[#D4CFC3] dark:hover:border-[#3F3A30] hover:text-[var(--solva-ink)] dark:hover:text-[var(--solva-ink)] cursor-pointer"
                 >
                   <RefreshCw
                     className={`h-3.5 w-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`}
@@ -227,6 +236,8 @@ export function ForgotPasswordPage() {
                     id="email"
                     type="email"
                     value={email}
+                    aria-invalid={Boolean(error)}
+                    aria-describedby={error ? 'forgot-form-error' : undefined}
                     onChange={(e) => {
                       setEmail(e.target.value);
                       if (error) setError('');
@@ -235,10 +246,9 @@ export function ForgotPasswordPage() {
                     autoComplete="email"
                     style={{
                       backgroundColor: 'var(--solva-surface)',
-                      borderColor: 'var(--solva-border)',
                       color: 'var(--solva-ink)',
                     }}
-                    className="h-11 pl-10 rounded-[11px] font-solva-sans text-[14px]"
+                    className={`t-input ${getSolvaInputBorderClasses(Boolean(error))} h-11 pl-10 rounded-[11px] font-solva-sans text-[14px]`}
                     placeholder={t('auth.forgotEmailPlaceholder')}
                   />
                 </div>

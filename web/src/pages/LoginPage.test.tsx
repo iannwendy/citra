@@ -263,4 +263,80 @@ describe('LoginPage', () => {
 
     unmountVi();
   });
+
+  it('Task 2.2 Round 1 — wires aria-invalid and aria-describedby="login-form-error" on invalid submit & server failure, clears on edit, uses Solva warm focus rings, and removes VI feature-tag acronyms', async () => {
+    await i18n.changeLanguage('en');
+    const loginMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Invalid username or password'));
+    const { container: enContainer, unmount: unmountEn } = renderLoginPage(loginMock);
+
+    const usernameInput = enContainer.querySelector('#username') as HTMLInputElement;
+    const passwordInput = enContainer.querySelector('#password') as HTMLInputElement;
+
+    // Inline style must NOT lock borderColor so Tailwind focus-visible:border-* works
+    expect(usernameInput.style.borderColor).toBe('');
+    expect(passwordInput.style.borderColor).toBe('');
+    expect(usernameInput.className).toContain('placeholder:text-[#78736A]');
+
+    // 1. Empty submit -> #username is invalid and linked to #login-form-error
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+    expect(enContainer.querySelector('#login-form-error')).not.toBeNull();
+    expect(usernameInput.getAttribute('aria-invalid')).toBe('true');
+    expect(usernameInput.getAttribute('aria-describedby')).toBe('login-form-error');
+    expect(passwordInput.getAttribute('aria-invalid')).toBe('false');
+
+    // Editing #username clears aria-invalid and aria-describedby
+    fireEvent.change(usernameInput, { target: { value: 'minh@tdtu.edu.vn' } });
+    expect(usernameInput.getAttribute('aria-invalid')).toBe('false');
+    expect(usernameInput.getAttribute('aria-describedby')).toBeNull();
+
+    // 2. Missing password -> #password is invalid and linked to #login-form-error
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+    expect(enContainer.querySelector('#login-form-error')).not.toBeNull();
+    expect(passwordInput.getAttribute('aria-invalid')).toBe('true');
+    expect(passwordInput.getAttribute('aria-describedby')).toBe('login-form-error');
+    expect(usernameInput.getAttribute('aria-invalid')).toBe('false');
+
+    // Editing #password clears aria-invalid and aria-describedby
+    fireEvent.change(passwordInput, { target: { value: 'wrongpass' } });
+    expect(passwordInput.getAttribute('aria-invalid')).toBe('false');
+    expect(passwordInput.getAttribute('aria-describedby')).toBeNull();
+
+    // 3. Server auth failure -> both #username and #password reflect aria-invalid="true"
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+    await waitFor(() => {
+      expect(usernameInput.getAttribute('aria-invalid')).toBe('true');
+      expect(passwordInput.getAttribute('aria-invalid')).toBe('true');
+      expect(usernameInput.getAttribute('aria-describedby')).toBe('login-form-error');
+      expect(passwordInput.getAttribute('aria-describedby')).toBe('login-form-error');
+    });
+
+    unmountEn();
+
+    // 4. Vietnamese hover title on Eye button + acronym-free feature card tags + non-tech Google fallback
+    await i18n.changeLanguage('vi');
+    const { container: viContainer, unmount: unmountVi } = renderLoginPage();
+    const eyeBtnVi = screen.getByRole('button', { name: 'Show characters' });
+    expect(eyeBtnVi.getAttribute('title')).toBe('Hiện mật khẩu');
+    fireEvent.click(eyeBtnVi);
+    expect(
+      screen.getByRole('button', { name: 'Hide characters' }).getAttribute('title'),
+    ).toBe('Ẩn mật khẩu');
+
+    const leftPanelVi = viContainer.firstElementChild?.firstElementChild as HTMLElement;
+    expect(leftPanelVi.textContent).toContain('thư viện');
+    expect(leftPanelVi.textContent).toContain('Quy tắc R01–R30');
+    expect(leftPanelVi.textContent).not.toContain('CSDL');
+    expect(leftPanelVi.textContent).not.toContain('Luật R01–R30 · CIS');
+
+    fireEvent.click(screen.getByTestId('google-auth-button'));
+    await waitFor(() => {
+      const alertText = screen.getByRole('alert').textContent ?? '';
+      expect(alertText).not.toContain('.env');
+      expect(alertText).not.toContain('GOOGLE_CLIENT_ID');
+    });
+
+    unmountVi();
+  });
 });

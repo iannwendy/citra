@@ -42,6 +42,9 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [focusedField, setFocusedField] = useState<'username' | 'password' | null>(null);
+  const [invalidField, setInvalidField] = useState<
+    'username' | 'password' | 'credentials' | null
+  >(null);
   const [capsLockOn, setCapsLockOn] = useState(false);
   const [error, setError] = useState('');
   const [needsActivation, setNeedsActivation] = useState(false);
@@ -66,6 +69,7 @@ export function LoginPage() {
     setUsername('admin');
     setPassword('admin123');
     setError('');
+    setInvalidField(null);
     setNeedsActivation(false);
     setResentSuccess('');
     setCopiedDemo(true);
@@ -81,17 +85,20 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setInvalidField(null);
     setNeedsActivation(false);
     setResentSuccess('');
 
     if (!username.trim()) {
       triggerShake();
+      setInvalidField('username');
       setError(t('auth.loginMissingIdentifier'));
       return;
     }
 
     if (!password) {
       triggerShake();
+      setInvalidField('password');
       setError(t('auth.loginMissingPassword'));
       return;
     }
@@ -103,6 +110,7 @@ export function LoginPage() {
       navigate('/dashboard');
     } catch (err) {
       triggerShake();
+      setInvalidField('credentials');
       const msg = err instanceof Error ? err.message : t('auth.loginError');
       if (msg.includes('ACCOUNT_NOT_ACTIVATED')) {
         setNeedsActivation(true);
@@ -134,6 +142,18 @@ export function LoginPage() {
       setResending(false);
     }
   };
+
+  const usernameInvalid =
+    Boolean(error) &&
+    (invalidField === 'username' || invalidField === 'credentials');
+  const passwordInvalid =
+    Boolean(error) &&
+    (invalidField === 'password' || invalidField === 'credentials');
+
+  const getSolvaInputBorderClasses = (invalid: boolean) =>
+    invalid
+      ? 'is-error border-red-600 dark:border-red-400 focus-visible:ring-2 focus-visible:ring-red-600/20 dark:focus-visible:ring-red-400/25 focus-visible:border-red-600 dark:focus-visible:border-red-400 placeholder:text-[#78736A] dark:placeholder:text-[#969084]'
+      : 'border-[#E7E3D9] dark:border-[#332F26] focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20 focus-visible:border-[#1C1A15] dark:focus-visible:border-[#FBFAF6] placeholder:text-[#78736A] dark:placeholder:text-[#969084]';
 
   return (
     <AuthSplitShell>
@@ -224,6 +244,7 @@ export function LoginPage() {
           {/* Error Message */}
           {error && (
             <Alert
+              id="login-form-error"
               variant="destructive"
               className="mb-4 rounded-[12px] animate-error-shake"
             >
@@ -281,11 +302,14 @@ export function LoginPage() {
                   id="username"
                   type="text"
                   value={username}
+                  aria-invalid={usernameInvalid}
+                  aria-describedby={usernameInvalid ? 'login-form-error' : undefined}
                   onFocus={() => setFocusedField('username')}
                   onBlur={() => setFocusedField(null)}
                   onChange={(e) => {
                     setUsername(e.target.value);
                     if (error) setError('');
+                    if (invalidField) setInvalidField(null);
                   }}
                   required
                   autoComplete="username"
@@ -294,13 +318,9 @@ export function LoginPage() {
                       focusedField === 'username'
                         ? 'var(--solva-card-elevated)'
                         : 'var(--solva-surface)',
-                    borderColor:
-                      focusedField === 'username'
-                        ? 'var(--solva-ink)'
-                        : 'var(--solva-border)',
                     color: 'var(--solva-ink)',
                   }}
-                  className={`t-input ${error ? 'is-error' : ''} ${isShaking ? 'is-shaking' : ''} h-11 pl-10 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20`}
+                  className={`t-input ${getSolvaInputBorderClasses(usernameInvalid)} ${isShaking ? 'is-shaking' : ''} h-11 pl-10 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200`}
                   placeholder={t('auth.emailOrUsernamePlaceholder')}
                 />
               </div>
@@ -348,6 +368,8 @@ export function LoginPage() {
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
+                  aria-invalid={passwordInvalid}
+                  aria-describedby={passwordInvalid ? 'login-form-error' : undefined}
                   onFocus={() => setFocusedField('password')}
                   onBlur={() => {
                     setFocusedField(null);
@@ -358,6 +380,7 @@ export function LoginPage() {
                   onChange={(e) => {
                     setPassword(e.target.value);
                     if (error) setError('');
+                    if (invalidField) setInvalidField(null);
                   }}
                   required
                   autoComplete="current-password"
@@ -366,13 +389,9 @@ export function LoginPage() {
                       focusedField === 'password'
                         ? 'var(--solva-card-elevated)'
                         : 'var(--solva-surface)',
-                    borderColor:
-                      focusedField === 'password'
-                        ? 'var(--solva-ink)'
-                        : 'var(--solva-border)',
                     color: 'var(--solva-ink)',
                   }}
-                  className={`t-input ${error ? 'is-error' : ''} ${isShaking ? 'is-shaking' : ''} h-11 pl-10 pr-11 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200 focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20`}
+                  className={`t-input ${getSolvaInputBorderClasses(passwordInvalid)} ${isShaking ? 'is-shaking' : ''} h-11 pl-10 pr-11 rounded-[11px] font-solva-sans text-[14px] transition-all duration-200`}
                   placeholder={t('auth.passwordPlaceholder')}
                 />
                 {/* IMPORTANT: First <button> with <svg> in DOM for E2E test compatibility */}
@@ -380,6 +399,13 @@ export function LoginPage() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? 'Hide characters' : 'Show characters'}
+                  title={
+                    lang === 'vi'
+                      ? showPassword
+                        ? 'Ẩn mật khẩu'
+                        : 'Hiện mật khẩu'
+                      : undefined
+                  }
                   style={{ color: 'var(--solva-muted)' }}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 rounded-[8px] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] transition-colors cursor-pointer"
                 >
@@ -449,7 +475,13 @@ export function LoginPage() {
           </form>
 
           {/* Google OAuth Sign-In (placed after form so #password Eye toggle remains first SVG button) */}
-          <GoogleAuthButton onError={setError} disabled={loading} />
+          <GoogleAuthButton
+            onError={(msg) => {
+              setInvalidField(null);
+              setError(msg);
+            }}
+            disabled={loading}
+          />
 
           {/* Create Account Link */}
           <div

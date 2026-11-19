@@ -44,7 +44,8 @@ export function deriveUsernameFromEmailOrName(input: string): string {
   const raw = String(input ?? '').trim();
   if (!raw) return '';
 
-  const base = raw.includes('@') ? raw.split('@')[0] : raw;
+  const hasAt = raw.includes('@');
+  const base = hasAt ? raw.split('@')[0] : raw;
   const ascii = base
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -59,13 +60,19 @@ export function deriveUsernameFromEmailOrName(input: string): string {
     .replace(/_{2,}/g, '_')
     .replace(/^[-._]+|[-._]+$/g, '');
 
-  if (!cleaned) return '';
+  if (!cleaned) {
+    return hasAt ? 'scholar_user' : '';
+  }
 
   if (cleaned.length > 50) {
     cleaned = cleaned.slice(0, 50).replace(/^[-._]+|[-._]+$/g, '');
   }
 
-  if (cleaned.length > 0 && cleaned.length < 3) {
+  if (!cleaned) {
+    return hasAt ? 'scholar_user' : '';
+  }
+
+  if (cleaned.length < 3) {
     cleaned = `${cleaned}_user`.slice(0, 50).replace(/^[-._]+|[-._]+$/g, '');
   }
 
@@ -73,6 +80,20 @@ export function deriveUsernameFromEmailOrName(input: string): string {
 }
 
 const SIMPLE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+type RegisterInvalidField =
+  | 'full_name'
+  | 'email'
+  | 'username'
+  | 'password'
+  | 'confirm_password'
+  | 'privacy_consent'
+  | null;
+
+const getSolvaInputBorderClasses = (invalid: boolean) =>
+  invalid
+    ? 'is-error border-red-600 dark:border-red-400 focus-visible:ring-2 focus-visible:ring-red-600/20 dark:focus-visible:ring-red-400/25 focus-visible:border-red-600 dark:focus-visible:border-red-400 placeholder:text-[#78736A] dark:placeholder:text-[#969084]'
+    : 'border-[#E7E3D9] dark:border-[#332F26] focus-visible:ring-2 focus-visible:ring-[#1C1A15]/15 dark:focus-visible:ring-[#FBFAF6]/20 focus-visible:border-[#1C1A15] dark:focus-visible:border-[#FBFAF6] placeholder:text-[#78736A] dark:placeholder:text-[#969084]';
 
 export function RegisterPage() {
   const { t, i18n } = useTranslation();
@@ -88,6 +109,7 @@ export function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [privacyConsent, setPrivacyConsent] = useState(false);
   const [consentShake, setConsentShake] = useState(false);
+  const [invalidField, setInvalidField] = useState<RegisterInvalidField>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -108,28 +130,47 @@ export function RegisterPage() {
   const handleEmailChange = (nextEmail: string) => {
     setEmail(nextEmail);
     if (error) setError('');
+    if (invalidField) setInvalidField(null);
     if (!usernameManuallyEdited) {
-      setUsername(deriveUsernameFromEmailOrName(nextEmail));
+      if (nextEmail.includes('@')) {
+        const localDerived = deriveUsernameFromEmailOrName(
+          nextEmail.trim().split('@')[0],
+        );
+        if (localDerived) {
+          setUsername(localDerived);
+        } else {
+          setUsername(
+            deriveUsernameFromEmailOrName(fullName) ||
+              deriveUsernameFromEmailOrName(nextEmail),
+          );
+        }
+      } else {
+        setUsername(deriveUsernameFromEmailOrName(nextEmail));
+      }
     }
   };
 
   const handleUsernameChange = (nextUsername: string) => {
     setUsername(nextUsername);
-    setUsernameManuallyEdited(true);
+    setUsernameManuallyEdited(nextUsername.trim().length > 0);
     if (error) setError('');
+    if (invalidField) setInvalidField(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setInvalidField(null);
 
     if (!fullName.trim()) {
+      setInvalidField('full_name');
       setError(t('auth.registerMissingFullName'));
       return;
     }
 
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !SIMPLE_EMAIL_RE.test(normalizedEmail)) {
+      setInvalidField('email');
       setError(t('auth.registerInvalidEmail'));
       return;
     }
@@ -140,42 +181,31 @@ export function RegisterPage() {
       /^[._-]|[._-]$/.test(trimmedUsername) ||
       trimmedUsername.includes('..')
     ) {
-      setError(
-        lang === 'vi'
-          ? 'Tên đăng nhập phải từ 3–50 ký tự (chữ cái, chữ số, ., _, -), không bắt đầu/kết thúc bằng dấu câu hoặc lặp dấu chấm.'
-          : 'Username must be 3–50 characters (letters, numbers, ., _, -), without leading/trailing punctuation or consecutive dots.',
-      );
+      setInvalidField('username');
+      setError(t('auth.registerInvalidUsername'));
       return;
     }
 
     if (password.length < 6 || !password.trim()) {
-      setError(
-        lang === 'vi'
-          ? 'Mật khẩu phải có tối thiểu 6 ký tự và không chỉ gồm khoảng trắng.'
-          : 'Password must be at least 6 characters and not whitespace-only.',
-      );
+      setInvalidField('password');
+      setError(t('auth.registerPasswordTooShort'));
       return;
     }
 
-    if (new TextEncoder().encode(password).length > 72) {
-      setError(
-        lang === 'vi'
-          ? 'Mật khẩu không được vượt quá 72 byte UTF-8.'
-          : 'Password must not exceed 72 UTF-8 bytes.',
-      );
+    if (password.length > 64 || new TextEncoder().encode(password).length > 72) {
+      setInvalidField('password');
+      setError(t('auth.registerPasswordTooLong'));
       return;
     }
 
     if (password !== confirmPassword) {
-      setError(
-        lang === 'vi'
-          ? 'Mật khẩu xác nhận không khớp.'
-          : 'Passwords do not match.',
-      );
+      setInvalidField('confirm_password');
+      setError(t('auth.registerPasswordMismatch'));
       return;
     }
 
     if (!privacyConsent) {
+      setInvalidField('privacy_consent');
       setError(t('privacyCompliance.consentRequiredError'));
       setConsentShake(false);
       window.requestAnimationFrame(() => setConsentShake(true));
@@ -197,7 +227,15 @@ export function RegisterPage() {
       setRegisteredEmail(resp.email);
       setCooldown(60);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      const msg = err instanceof Error ? err.message : 'Registration failed';
+      if (/email/i.test(msg)) {
+        setInvalidField('email');
+      } else if (/username|tên đăng nhập/i.test(msg)) {
+        setInvalidField('username');
+      } else if (/password|mật khẩu/i.test(msg)) {
+        setInvalidField('password');
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -220,6 +258,14 @@ export function RegisterPage() {
       setResending(false);
     }
   };
+
+  const fullNameInvalid = Boolean(error) && invalidField === 'full_name';
+  const emailInvalid = Boolean(error) && invalidField === 'email';
+  const usernameInvalid = Boolean(error) && invalidField === 'username';
+  const passwordInvalid = Boolean(error) && invalidField === 'password';
+  const confirmPasswordInvalid =
+    Boolean(error) && invalidField === 'confirm_password';
+  const consentInvalid = Boolean(error) && invalidField === 'privacy_consent';
 
   return (
     <AuthSplitShell maxWidthClass="max-w-[500px]" compactRightPanel>
@@ -376,7 +422,7 @@ export function RegisterPage() {
                   variant="outline"
                   disabled={cooldown > 0 || resending}
                   onClick={handleResend}
-                  className="flex-1 h-10 rounded-[11px] text-xs font-semibold cursor-pointer"
+                  className="flex-1 h-10 rounded-[11px] text-xs font-semibold border-[#E7E3D9] dark:border-[#332F26] bg-[var(--solva-surface)] text-[var(--solva-ink)] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] hover:border-[#D4CFC3] dark:hover:border-[#3F3A30] hover:text-[var(--solva-ink)] dark:hover:text-[var(--solva-ink)] cursor-pointer"
                 >
                   <RefreshCw
                     className={`h-3.5 w-3.5 mr-1.5 ${resending ? 'animate-spin' : ''}`}
@@ -444,7 +490,11 @@ export function RegisterPage() {
 
             <CardContent className="px-5 sm:px-6 pb-3.5 sm:pb-4">
               {error && (
-                <Alert variant="destructive" className="mb-2.5 py-2 rounded-[10px]">
+                <Alert
+                  id="register-form-error"
+                  variant="destructive"
+                  className="mb-2.5 py-2 rounded-[10px]"
+                >
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription className="text-xs font-medium">
                     {error}
@@ -453,7 +503,7 @@ export function RegisterPage() {
               )}
 
               <form onSubmit={handleSubmit} noValidate className="space-y-2.5">
-                {/* Row 1: Full Name + Username (auto-suggested from Email until manually edited) */}
+                {/* Row 1: Full Name + Email Address (True Email-First Tab Order) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div className="space-y-1">
                     <Label
@@ -474,59 +524,27 @@ export function RegisterPage() {
                         id="full_name"
                         type="text"
                         value={fullName}
+                        aria-invalid={fullNameInvalid}
+                        aria-describedby={
+                          fullNameInvalid ? 'register-form-error' : undefined
+                        }
                         onChange={(e) => {
                           setFullName(e.target.value);
                           if (error) setError('');
+                          if (invalidField) setInvalidField(null);
                         }}
                         required
                         autoComplete="name"
                         style={{
                           backgroundColor: 'var(--solva-surface)',
-                          borderColor: 'var(--solva-border)',
                           color: 'var(--solva-ink)',
                         }}
-                        className="h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]"
+                        className={`t-input ${getSolvaInputBorderClasses(fullNameInvalid)} h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]`}
                         placeholder={t('auth.fullNamePlaceholder')}
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <Label
-                      htmlFor="username"
-                      style={{ color: 'var(--solva-ink)' }}
-                      className="font-mono text-[10.5px] font-semibold uppercase tracking-wider"
-                    >
-                      {t('auth.username')}
-                    </Label>
-                    <div className="relative">
-                      <div
-                        style={{ color: 'var(--solva-muted)' }}
-                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-xs font-bold"
-                      >
-                        @
-                      </div>
-                      <Input
-                        id="username"
-                        type="text"
-                        value={username}
-                        onChange={(e) => handleUsernameChange(e.target.value)}
-                        required
-                        autoComplete="username"
-                        style={{
-                          backgroundColor: 'var(--solva-surface)',
-                          borderColor: 'var(--solva-border)',
-                          color: 'var(--solva-ink)',
-                        }}
-                        className="h-9 pl-7 rounded-[10px] font-solva-sans text-[13.5px]"
-                        placeholder={t('auth.usernamePlaceholder')}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Row 2: Email Address + Institution (Optional) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div className="space-y-1">
                     <Label
                       htmlFor="email"
@@ -546,16 +564,58 @@ export function RegisterPage() {
                         id="email"
                         type="email"
                         value={email}
+                        aria-invalid={emailInvalid}
+                        aria-describedby={
+                          emailInvalid ? 'register-form-error' : undefined
+                        }
                         onChange={(e) => handleEmailChange(e.target.value)}
                         required
                         autoComplete="email"
                         style={{
                           backgroundColor: 'var(--solva-surface)',
-                          borderColor: 'var(--solva-border)',
                           color: 'var(--solva-ink)',
                         }}
-                        className="h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]"
+                        className={`t-input ${getSolvaInputBorderClasses(emailInvalid)} h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]`}
                         placeholder={t('auth.emailPlaceholder')}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Row 2: Username (auto-suggested from Email until manually edited) + Institution (Optional) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="username"
+                      style={{ color: 'var(--solva-ink)' }}
+                      className="font-mono text-[10.5px] font-semibold uppercase tracking-wider"
+                    >
+                      {t('auth.username')}
+                    </Label>
+                    <div className="relative">
+                      <div
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-xs font-bold"
+                      >
+                        @
+                      </div>
+                      <Input
+                        id="username"
+                        type="text"
+                        value={username}
+                        aria-invalid={usernameInvalid}
+                        aria-describedby={
+                          usernameInvalid ? 'register-form-error' : undefined
+                        }
+                        onChange={(e) => handleUsernameChange(e.target.value)}
+                        required
+                        autoComplete="username"
+                        style={{
+                          backgroundColor: 'var(--solva-surface)',
+                          color: 'var(--solva-ink)',
+                        }}
+                        className={`t-input ${getSolvaInputBorderClasses(usernameInvalid)} h-9 pl-7 rounded-[10px] font-solva-sans text-[13.5px]`}
+                        placeholder={t('auth.usernamePlaceholder')}
                       />
                     </div>
                   </div>
@@ -579,14 +639,17 @@ export function RegisterPage() {
                         id="institution"
                         type="text"
                         value={institution}
-                        onChange={(e) => setInstitution(e.target.value)}
+                        onChange={(e) => {
+                          setInstitution(e.target.value);
+                          if (error) setError('');
+                          if (invalidField) setInvalidField(null);
+                        }}
                         autoComplete="organization"
                         style={{
                           backgroundColor: 'var(--solva-surface)',
-                          borderColor: 'var(--solva-border)',
                           color: 'var(--solva-ink)',
                         }}
-                        className="h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]"
+                        className={`t-input ${getSolvaInputBorderClasses(false)} h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]`}
                         placeholder={t('auth.institutionPlaceholder')}
                       />
                     </div>
@@ -614,18 +677,22 @@ export function RegisterPage() {
                         id="password"
                         type={showPassword ? 'text' : 'password'}
                         value={password}
+                        aria-invalid={passwordInvalid}
+                        aria-describedby={
+                          passwordInvalid ? 'register-form-error' : undefined
+                        }
                         onChange={(e) => {
                           setPassword(e.target.value);
                           if (error) setError('');
+                          if (invalidField) setInvalidField(null);
                         }}
                         required
                         autoComplete="new-password"
                         style={{
                           backgroundColor: 'var(--solva-surface)',
-                          borderColor: 'var(--solva-border)',
                           color: 'var(--solva-ink)',
                         }}
-                        className="h-9 pl-8 pr-8 rounded-[10px] font-solva-sans text-[13.5px]"
+                        className={`t-input ${getSolvaInputBorderClasses(passwordInvalid)} h-9 pl-8 pr-8 rounded-[10px] font-solva-sans text-[13.5px]`}
                         placeholder={t('auth.passwordPlaceholder')}
                       />
                       <button
@@ -633,6 +700,13 @@ export function RegisterPage() {
                         onClick={() => setShowPassword(!showPassword)}
                         aria-label={
                           showPassword ? 'Hide characters' : 'Show characters'
+                        }
+                        title={
+                          lang === 'vi'
+                            ? showPassword
+                              ? 'Ẩn mật khẩu'
+                              : 'Hiện mật khẩu'
+                            : undefined
                         }
                         style={{ color: 'var(--solva-muted)' }}
                         className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-[6px] hover:bg-[#ECE9E0] dark:hover:bg-[#29261F] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] transition-colors cursor-pointer"
@@ -665,18 +739,24 @@ export function RegisterPage() {
                         id="confirm_password"
                         type={showPassword ? 'text' : 'password'}
                         value={confirmPassword}
+                        aria-invalid={confirmPasswordInvalid}
+                        aria-describedby={
+                          confirmPasswordInvalid
+                            ? 'register-form-error'
+                            : undefined
+                        }
                         onChange={(e) => {
                           setConfirmPassword(e.target.value);
                           if (error) setError('');
+                          if (invalidField) setInvalidField(null);
                         }}
                         required
                         autoComplete="new-password"
                         style={{
                           backgroundColor: 'var(--solva-surface)',
-                          borderColor: 'var(--solva-border)',
                           color: 'var(--solva-ink)',
                         }}
-                        className="h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]"
+                        className={`t-input ${getSolvaInputBorderClasses(confirmPasswordInvalid)} h-9 pl-8 rounded-[10px] font-solva-sans text-[13.5px]`}
                         placeholder={t('auth.confirmPasswordPlaceholder')}
                       />
                     </div>
@@ -695,34 +775,42 @@ export function RegisterPage() {
                     backgroundColor: privacyConsent
                       ? undefined
                       : 'var(--solva-surface)',
-                    borderColor: privacyConsent
-                      ? undefined
-                      : 'var(--solva-border)',
                   }}
                   className={`rounded-[10px] border px-3 py-2 transition-all duration-200 ${
-                    privacyConsent
-                      ? 'bg-emerald-50/75 dark:bg-emerald-950/35 border-emerald-300/90 dark:border-emerald-800/80'
-                      : ''
-                  } ${consentShake ? 'animate-error-shake border-red-400 dark:border-red-700' : ''}`}
+                    consentInvalid
+                      ? 'is-error border-red-600 dark:border-red-400'
+                      : privacyConsent
+                        ? 'bg-emerald-50/75 dark:bg-emerald-950/35 border-emerald-300/90 dark:border-emerald-800/80'
+                        : 'border-[#E7E3D9] dark:border-[#332F26]'
+                  } ${consentShake ? 'animate-error-shake' : ''}`}
                 >
                   <label className="flex items-start gap-2.5 cursor-pointer select-none group">
                     <span className="relative mt-0.5 flex h-[17px] w-[17px] shrink-0 items-center justify-center">
                       <input
                         type="checkbox"
                         checked={privacyConsent}
+                        aria-invalid={consentInvalid}
+                        aria-describedby={
+                          consentInvalid ? 'register-form-error' : undefined
+                        }
                         onChange={(e) => {
                           setPrivacyConsent(e.target.checked);
                           setConsentShake(false);
-                          if (e.target.checked && error) setError('');
+                          if (e.target.checked) {
+                            if (error) setError('');
+                            if (invalidField) setInvalidField(null);
+                          }
                         }}
                         data-testid="register-privacy-consent-checkbox"
                         className="peer sr-only"
                       />
                       <span
                         className={`flex h-[17px] w-[17px] items-center justify-center rounded-[5px] border transition-all duration-200 peer-focus-visible:ring-2 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-[#1C1A15] dark:peer-focus-visible:ring-[#FBFAF6] ${
-                          privacyConsent
-                            ? 'bg-[#1C1A15] border-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:border-[#FBFAF6] dark:text-[#1C1A15]'
-                            : 'bg-white dark:bg-[#141310] border-[#D4CFC3] dark:border-[#3F3A30] group-hover:border-[#1C1A15] dark:group-hover:border-[#FBFAF6]'
+                          consentInvalid
+                            ? 'bg-white dark:bg-[#141310] border-red-600 dark:border-red-400'
+                            : privacyConsent
+                              ? 'bg-[#1C1A15] border-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:border-[#FBFAF6] dark:text-[#1C1A15]'
+                              : 'bg-white dark:bg-[#141310] border-[#D4CFC3] dark:border-[#3F3A30] group-hover:border-[#1C1A15] dark:group-hover:border-[#FBFAF6]'
                         }`}
                       >
                         {privacyConsent && (
@@ -783,10 +871,14 @@ export function RegisterPage() {
 
               <GoogleAuthButton
                 compact
-                onError={setError}
+                onError={(msg) => {
+                  setInvalidField(null);
+                  setError(msg);
+                }}
                 disabled={loading}
                 beforeAuth={() => {
                   if (!privacyConsent) {
+                    setInvalidField('privacy_consent');
                     setError(t('privacyCompliance.consentRequiredError'));
                     setConsentShake(false);
                     window.requestAnimationFrame(() => setConsentShake(true));
