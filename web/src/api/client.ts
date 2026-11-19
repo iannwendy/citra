@@ -378,6 +378,7 @@ export interface SandboxInstantVerdictItem {
   composite_label?: string | null;
   sources_succeeded?: string[];
   used_local_db?: boolean;
+  remediated_apa?: string | null;
 }
 
 export interface SandboxInstantVerifyResponse {
@@ -393,7 +394,8 @@ export interface SandboxInstantVerifyResponse {
     unresolved?: number;
   };
   results: SandboxInstantVerdictItem[];
-  remediation?: RemediatedBibliographyResponse;
+  remediation?: RemediatedBibliographyResponse | null;
+  remediated_apa?: string | null;
 }
 
 export interface AnalysisReport {
@@ -636,7 +638,7 @@ export interface CacheClearResponse {
 // --- Helpers ---
 
 const PUBLIC_AUTH_PATH_RE =
-  /^\/auth\/(login|google|register|activate|forgot-password|reset-password|resend-activation|verify-reset-token)(\b|\/|\?|$)/;
+  /^(\/auth\/(login|google|register|activate|forgot-password|reset-password|resend-activation|verify-reset-token)|\/essays\/sandbox\/public-verify)(\b|\/|\?|$)/;
 
 function notifyUnauthorizedIfProtected(path: string, status: number): void {
   if (status !== 401 || PUBLIC_AUTH_PATH_RE.test(path)) return;
@@ -1808,6 +1810,48 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     }),
+
+  verifyPublicGuestCitations: async (payload: {
+    references_text: string;
+    lang?: 'vi' | 'en';
+    style?: 'apa' | 'ieee';
+  }): Promise<SandboxInstantVerifyResponse> => {
+    const resp = await fetch(`${BASE_URL}/essays/sandbox/public-verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      let parsedDetail: string | null = null;
+      try {
+        const err = JSON.parse(text);
+        if (typeof err?.detail === 'string') {
+          parsedDetail = err.detail;
+        } else if (
+          err?.detail &&
+          typeof err.detail === 'object' &&
+          !Array.isArray(err.detail) &&
+          typeof err.detail.message === 'string'
+        ) {
+          parsedDetail = err.detail.message;
+        }
+      } catch {
+        // Keep raw text when response body is not JSON
+      }
+      const retryAfterRaw = resp.headers.get('Retry-After');
+      const retryAfterSec = retryAfterRaw ? Number.parseInt(retryAfterRaw, 10) : NaN;
+      const errorObj = new Error(
+        `API ${resp.status}: ${parsedDetail ?? text}`,
+      ) as Error & { status?: number; retryAfterSeconds?: number };
+      errorObj.status = resp.status;
+      if (Number.isFinite(retryAfterSec) && retryAfterSec > 0) {
+        errorObj.retryAfterSeconds = retryAfterSec;
+      }
+      throw errorObj;
+    }
+    return resp.json();
+  },
 
   overrideVerdict: (id: number, body: OverrideRequest) =>
     request<Verdict>(`/essays/${id}/verdicts/${body.verdict_id}/override`, {

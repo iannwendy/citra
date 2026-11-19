@@ -77,6 +77,7 @@ import {
   ScholarlySourceLogo,
   getScholarlySourceUrl,
 } from '@/components/landing/ScholarlySourceLogos';
+import { GuestInstantChecker } from '@/components/landing/GuestInstantChecker';
 
 /* ============================================================
    CITRA (SourceLogic) — Warm Editorial AI SaaS Landing Page
@@ -582,6 +583,7 @@ export function LandingPage() {
       />
       <main id="main-content">
         <SolvaHeroSection lang={lang} isAuthenticated={isAuthenticated} />
+        <GuestInstantChecker lang={lang} isAuthenticated={isAuthenticated} />
         <SolvaFilmSection lang={lang} />
         <SolvaFeaturesSection lang={lang} />
         <SolvaStickySection lang={lang} isAuthenticated={isAuthenticated} />
@@ -1177,8 +1179,10 @@ function SolvaHeroSection({
                       ? 'Trải nghiệm CITRA miễn phí'
                       : 'Try CITRA Free'}
                 </SolvaButton>
-                <SolvaButton href="#interactive-demo" variant="outline">
-                  {lang === 'vi' ? 'Xem kiểm tra mẫu' : 'See Live Check'}
+                <SolvaButton href="#try-instant" variant="outline">
+                  {lang === 'vi'
+                    ? 'Thử dán 3 trích dẫn ngay ↓'
+                    : 'Try 3 Citations Now ↓'}
                 </SolvaButton>
               </div>
             </SolvaScrollReveal>

@@ -67,6 +67,18 @@ SANDBOX_VERIFY_WINDOW_SECONDS: float = float(
 _sandbox_verify_rate_lock = threading.Lock()
 _sandbox_verify_rate_buckets: dict[tuple[int, str], list[float]] = {}
 
+PUBLIC_SANDBOX_MAX_REQUESTS: int = int(
+    os.getenv("CITRA_PUBLIC_SANDBOX_MAX_REQUESTS", "6")
+)
+PUBLIC_SANDBOX_WINDOW_SECONDS: float = float(
+    os.getenv("CITRA_PUBLIC_SANDBOX_WINDOW_SECONDS", "60")
+)
+PUBLIC_SANDBOX_MAX_CHARS: int = 1500
+PUBLIC_SANDBOX_MAX_REFERENCES: int = 3
+_PUBLIC_SANDBOX_MAX_BUCKET_KEYS: int = 4096
+_public_sandbox_rate_lock = threading.Lock()
+_public_sandbox_rate_buckets: dict[str, list[float]] = {}
+
 SSE_POLL_INTERVAL_SECONDS: float = 1.0
 SSE_HEARTBEAT_INTERVAL_SECONDS: float = 15.0
 SSE_DISCONNECT_CHECK_SECONDS: float = 0.25
@@ -2772,6 +2784,61 @@ def _enforce_sandbox_verify_rate_limit(current_user: User) -> None:
         _sandbox_verify_rate_buckets[bucket_key] = timestamps
 
 
+def _enforce_public_sandbox_rate_limit(
+    request: Request,
+    *,
+    is_en: bool = True,
+    consume: bool = True,
+) -> None:
+    """Enforce sliding-window per-IP rate limit (default 6 req / 60s) on /sandbox/public-verify."""
+    from integrity_checker.api.routes.auth import _extract_client_ip
+
+    max_reqs = max(1, int(PUBLIC_SANDBOX_MAX_REQUESTS))
+    window_s = max(1.0, float(PUBLIC_SANDBOX_WINDOW_SECONDS))
+    client_ip = _extract_client_ip(request)
+    now = time.monotonic()
+    cutoff = now - window_s
+
+    with _public_sandbox_rate_lock:
+        timestamps = [
+            ts for ts in _public_sandbox_rate_buckets.get(client_ip, []) if ts > cutoff
+        ]
+        if len(timestamps) >= max_reqs:
+            retry_after = max(1, int(math.ceil(window_s - (now - timestamps[0]))))
+            _public_sandbox_rate_buckets[client_ip] = timestamps
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"Guest preview allows up to {max_reqs} live checks per {int(window_s)} seconds. "
+                    f"Please wait {retry_after}s or create a free account to check full manuscripts."
+                    if is_en
+                    else (
+                        f"Bản dùng thử nhanh hỗ trợ tối đa {max_reqs} lượt kiểm tra mỗi {int(window_s)} giây. "
+                        f"Vui lòng đợi {retry_after} giây hoặc tạo tài khoản miễn phí để kiểm tra toàn bộ bài viết."
+                    )
+                ),
+                headers={"Retry-After": str(retry_after)},
+            )
+        if consume:
+            timestamps.append(now)
+            _public_sandbox_rate_buckets[client_ip] = timestamps
+            if len(_public_sandbox_rate_buckets) > _PUBLIC_SANDBOX_MAX_BUCKET_KEYS:
+                expired_ips = [
+                    ip_key
+                    for ip_key, ts_list in _public_sandbox_rate_buckets.items()
+                    if not ts_list or ts_list[-1] <= cutoff
+                ]
+                for ip_key in expired_ips:
+                    _public_sandbox_rate_buckets.pop(ip_key, None)
+                while len(_public_sandbox_rate_buckets) > _PUBLIC_SANDBOX_MAX_BUCKET_KEYS:
+                    oldest_ip = next(iter(_public_sandbox_rate_buckets))
+                    _public_sandbox_rate_buckets.pop(oldest_ip, None)
+        elif timestamps:
+            _public_sandbox_rate_buckets[client_ip] = timestamps
+        else:
+            _public_sandbox_rate_buckets.pop(client_ip, None)
+
+
 @router.post("/sandbox/verify")
 async def verify_sandbox_citations_instant(
     payload: dict[str, Any],
@@ -2779,7 +2846,6 @@ async def verify_sandbox_citations_instant(
     pipeline: IntegrityPipeline = Depends(get_pipeline),
 ) -> dict[str, Any]:
     """Instant 3-second live citation & Layer-1/Layer-2 verification without leaving UploadPage."""
-    from integrity_checker.export.bibliography_formatter import build_remediated_bibliography
     from integrity_checker.extraction.base import Document, Page
     from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
@@ -2929,9 +2995,34 @@ async def verify_sandbox_citations_instant(
         )
 
     parsed_citations = parsed_citations[:20]
+    include_remediation = not (policy.tier == "basic" and current_user.role == "user")
+    return await _execute_instant_citations_verification(
+        pipeline=pipeline,
+        parsed_citations=parsed_citations,
+        layer1_statuses=layer1_statuses,
+        style=style,
+        allow_serpapi_flag=allow_serpapi_flag,
+        include_remediation=include_remediation,
+        t0=t0,
+    )
+
+
+async def _execute_instant_citations_verification(
+    *,
+    pipeline: IntegrityPipeline,
+    parsed_citations: list[Any],
+    layer1_statuses: list[dict[str, Any]],
+    style: str,
+    allow_serpapi_flag: bool,
+    include_remediation: bool,
+    t0: float,
+) -> dict[str, Any]:
+    """Shared concurrent verification & serialization engine for /sandbox/verify and /sandbox/public-verify."""
+    from integrity_checker.export.bibliography_formatter import build_remediated_bibliography
+
     sem = asyncio.Semaphore(8)
 
-    async def _retrieve_one(c: Citation):
+    async def _retrieve_one(c: Any):
         from integrity_checker.models.source import SourceResult
 
         async with sem:
@@ -3343,12 +3434,26 @@ async def verify_sandbox_citations_instant(
         raw_verdict_dicts_for_remediation.append(v_dict)
 
     remediation: dict[str, Any] | None = None
-    if not (policy.tier == "basic" and current_user.role == "user"):
+    remediated_apa: str | None = None
+    if include_remediation:
         remediation = build_remediated_bibliography(
             essay_id=0,
             verdicts=raw_verdict_dicts_for_remediation,
             style=style,
         )
+        rem_entries = remediation.get("entries") or []
+        for v_item, r_entry in zip(verdict_items, rem_entries, strict=False):
+            if not r_entry.get("is_hallucination"):
+                v_item["remediated_apa"] = r_entry.get("apa") or r_entry.get("remediated_text")
+            else:
+                v_item["remediated_apa"] = None
+        non_halluc_apas = [
+            str(r_entry.get("apa") or r_entry.get("remediated_text") or "").strip()
+            for r_entry in rem_entries
+            if not r_entry.get("is_hallucination")
+            and str(r_entry.get("apa") or r_entry.get("remediated_text") or "").strip()
+        ]
+        remediated_apa = "\n\n".join(non_halluc_apas) if non_halluc_apas else None
     elapsed = round(time.monotonic() - t0, 2)
 
     verified_cnt = sum(1 for v in verdict_items if v["label"] == "verified")
@@ -3378,4 +3483,181 @@ async def verify_sandbox_citations_instant(
         },
         "results": verdict_items,
         "remediation": remediation,
+        "remediated_apa": remediated_apa,
     }
+
+
+@router.post("/sandbox/public-verify")
+async def verify_public_guest_citations(
+    request: Request,
+    payload: dict[str, Any],
+    pipeline: IntegrityPipeline = Depends(get_pipeline),
+) -> dict[str, Any]:
+    """Public IP-rate-limited instant guest citation checker (max 3 references / 1,500 chars, zero SerpAPI)."""
+    from integrity_checker.extraction.base import Document, Page
+    from integrity_checker.models.citation import Citation, CitationStyle, CitationType
+
+    t0 = time.monotonic()
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON request payload.")
+
+    lang_code = str(payload.get("lang") or "vi").strip().lower()
+    is_en = lang_code.startswith("en")
+    style = str(payload.get("style") or "apa").strip().lower()
+    if style not in {"apa", "ieee"}:
+        style = "apa"
+
+    # Short-circuit already-throttled client IPs before running any regex/reference parsing
+    _enforce_public_sandbox_rate_limit(request, is_en=is_en, consume=False)
+
+    raw_references_text = str(payload.get("references_text") or "").strip()
+    if not raw_references_text:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Please paste 1 to 3 references to verify."
+                if is_en
+                else "Vui lòng dán từ 1 đến 3 trích dẫn để kiểm tra."
+            ),
+        )
+
+    if len(raw_references_text) > PUBLIC_SANDBOX_MAX_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Instant guest check supports up to {PUBLIC_SANDBOX_MAX_CHARS:,} characters "
+                f"(up to {PUBLIC_SANDBOX_MAX_REFERENCES} references). Create a free account to upload "
+                "your full PDF or Word manuscript."
+                if is_en
+                else (
+                    f"Bản kiểm tra nhanh hỗ trợ tối đa 1.500 ký tự "
+                    f"(tối đa {PUBLIC_SANDBOX_MAX_REFERENCES} trích dẫn). Vui lòng tạo tài khoản miễn phí "
+                    "để tải lên toàn bộ file PDF hoặc Word."
+                )
+            ),
+        )
+
+    raw_lines = [ln.strip() for ln in raw_references_text.splitlines()]
+    if raw_lines and re.match(
+        r"^(?:references|bibliography|works\s+cited|tài\s+liệu\s+tham\s+khảo)\s*:?$",
+        raw_lines[0],
+        flags=re.IGNORECASE,
+    ):
+        raw_lines = raw_lines[1:]
+    clean_body = "\n".join(raw_lines).strip()
+    if not clean_body:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Please paste at least 1 reference entry to verify."
+                if is_en
+                else "Vui lòng dán ít nhất 1 mục tài liệu tham khảo để kiểm tra."
+            ),
+        )
+
+    fake_doc = Document(
+        file_path="public_guest_sandbox.pdf",
+        num_pages=1,
+        pages=[
+            Page(
+                page_num=1,
+                text=f"References\n{clean_body}\n",
+                has_text_layer=True,
+            )
+        ],
+        parser_used="sandbox",
+    )
+    parsed_citations = pipeline.ref_parser.parse_reference_section(fake_doc)
+
+    non_empty_lines = [ln for ln in raw_lines if ln]
+    paragraphs = [
+        blk.strip()
+        for blk in re.split(r"\n\s*\n+", clean_body)
+        if len(blk.strip()) > 12
+    ]
+    numbered_starters = sum(
+        1
+        for ln in non_empty_lines
+        if re.match(r"^(?:\[\s*\d+[a-z]?\s*\]|\d+[a-z]?[\.\)])\s+\S", ln)
+    )
+    year_bearing_lines = sum(
+        1
+        for ln in non_empty_lines
+        if len(ln) > 15
+        and re.search(
+            r"\b(?:19|20)\d{2}[a-z]?\b",
+            re.sub(r"(?:https?://\S+|10\.\d{4,9}/\S+)", "", ln),
+        )
+    )
+    fallback_line_count = len(non_empty_lines) if not parsed_citations else 0
+    estimated_reference_count = max(
+        len(parsed_citations),
+        len(paragraphs),
+        numbered_starters,
+        year_bearing_lines,
+        fallback_line_count,
+    )
+
+    if estimated_reference_count > PUBLIC_SANDBOX_MAX_REFERENCES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Instant guest check supports up to {PUBLIC_SANDBOX_MAX_REFERENCES} references at a time. "
+                "Create a free account to upload and verify your full PDF, Word, or BibTeX manuscript."
+                if is_en
+                else (
+                    f"Bản kiểm tra nhanh hỗ trợ tối đa {PUBLIC_SANDBOX_MAX_REFERENCES} trích dẫn mỗi lượt. "
+                    "Hãy tạo tài khoản miễn phí để tải lên và kiểm tra toàn bộ file PDF, Word hoặc BibTeX của bạn."
+                )
+            ),
+        )
+
+    if not parsed_citations:
+        candidate_lines = [ln for ln in non_empty_lines if len(ln) >= 8]
+        if not candidate_lines:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Please enter a complete citation (author, year, and title) to verify."
+                    if is_en
+                    else "Vui lòng nhập đầy đủ thông tin trích dẫn (tác giả, năm và tiêu đề) để kiểm tra."
+                ),
+            )
+        for line in candidate_lines[:PUBLIC_SANDBOX_MAX_REFERENCES]:
+            parsed_citations.append(
+                Citation(
+                    raw_text=line,
+                    citation_type=CitationType.REFERENCE_LIST,
+                    style=CitationStyle.IEEE if style == "ieee" else CitationStyle.APA,
+                    page_num=1,
+                    mapping_status="matched",
+                    mapping_confidence=1.0,
+                )
+            )
+
+    parsed_citations = parsed_citations[:PUBLIC_SANDBOX_MAX_REFERENCES]
+    layer1_statuses = [
+        {
+            "status": "matched",
+            "note": (
+                "Direct bibliography verification."
+                if is_en
+                else "Kiểm tra trực tiếp danh mục tham khảo."
+            ),
+        }
+        for _ in parsed_citations
+    ]
+
+    # Consume 1 IP rate-limit token and run verification with paid SerpAPI strictly disabled
+    _enforce_public_sandbox_rate_limit(request, is_en=is_en, consume=True)
+
+    return await _execute_instant_citations_verification(
+        pipeline=pipeline,
+        parsed_citations=parsed_citations,
+        layer1_statuses=layer1_statuses,
+        style=style,
+        allow_serpapi_flag=False,
+        include_remediation=True,
+        t0=t0,
+    )
+
