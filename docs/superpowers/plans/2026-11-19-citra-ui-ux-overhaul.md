@@ -73,19 +73,19 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
     - `getPlainVerdictLabel(verdict: string, lang: 'en' | 'vi'): { label: string; actionHint: string; technicalCode: string }`
     - `getPlainMappingLabel(status: string, lang: 'en' | 'vi'): { label: string; technicalCode: string }`
 
-- [ ] **Step 1: Write failing unit tests in `web/src/lib/verdictExplanation.test.ts`**
+- [x] **Step 1: Write failing unit tests in `web/src/lib/verdictExplanation.test.ts`**
   Assert `getPlainVerdictLabel('SUSPECTED_HALLUCINATION', 'vi')` returns human-friendly Vietnamese (`label: 'Không tìm thấy nguồn gốc'`, `technicalCode: 'SUSPECTED_HALLUCINATION'`, non-empty `actionHint`), `getPlainVerdictLabel('METADATA_ERROR', 'en')` returns `label: 'Citation Details Mismatch'`, `getPlainMappingLabel('MISSING_REFERENCE', 'vi')` returns `'Thiếu ở danh mục tham khảo'`, and verify `web/src/index.css` defines `scroll-padding-top: 88px` and `.solva-pro-card-surface`.
-- [ ] **Step 2: Run Vitest to confirm failure**
+- [x] **Step 2: Run Vitest to confirm failure**
   Run: `cd web && npx vitest run src/lib/verdictExplanation.test.ts`
   Expected: FAIL (`getPlainVerdictLabel is not a function`).
-- [ ] **Step 3: Implement tokens in `web/src/index.css` and plain-language mappers in `web/src/lib/verdictExplanation.ts`**
+- [x] **Step 3: Implement tokens in `web/src/index.css` and plain-language mappers in `web/src/lib/verdictExplanation.ts`**
   Map all 5 Layer-2 labels (`VERIFIED`, `METADATA_ERROR`, `SUSPECTED_HALLUCINATION`, `UNRESOLVED`/`UNVERIFIABLE`, `RESOURCE`) and all 7 Layer-1 statuses (`MATCHED`, `MISSING_REFERENCE`, `UNCITED_REFERENCE`, `IN_TEXT_MISMATCH`, `DUPLICATE_REFERENCE`, `AMBIGUOUS_MAPPING`, `STYLE_INCONSISTENT`) to crystal-clear EN & VI student/lecturer labels + 1-sentence action hints.
-- [ ] **Step 4: Run full frontend verification gate**
+- [x] **Step 4: Run full frontend verification gate**
   Run: `cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
   Expected: PASS (0 lint/TS errors, all Vitest suites green).
-- [ ] **Step 5: Run Triad Review & Critic Loop (`spec-code-reviewer` + `ux-nontech-critic`)**
+- [x] **Step 5: Run Triad Review & Critic Loop (`spec-code-reviewer` + `ux-nontech-critic`)**
   Verify plain-language copy reads naturally to non-tech Vietnamese & English readers and CSS tokens maintain editorial warmth in Light & Dark modes; iterate until both agents return `APPROVED`.
-- [ ] **Step 6: Tick checkboxes & commit**
+- [x] **Step 6: Tick checkboxes & commit**
   ```bash
   git add web/src/index.css web/src/lib/verdictExplanation.ts web/src/lib/verdictExplanation.test.ts
   git commit -m "feat(ux): add scroll-padding tokens, pro-card contrast surface, and plain-language verdict mappers"
