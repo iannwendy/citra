@@ -108,19 +108,19 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
 **Interfaces:**
 - Produces: `IS_DEMO_EVALUATOR_MODE: boolean` in `web/src/lib/productFacts.ts` (`import.meta.env.VITE_DEMO_MODE === 'true'`).
 
-- [ ] **Step 1: Write failing tests in `web/src/lib/productFacts.test.ts` and `web/src/pages/PricingAndBilling.test.tsx`**
+- [x] **Step 1: Write failing tests in `web/src/lib/productFacts.test.ts` and `web/src/pages/PricingAndBilling.test.tsx`**
   Assert that when `VITE_DEMO_MODE` is unset/false on `PricingPage`, rendered FAQ and trust cards do NOT expose `"4242"`, `"4444"`, or `"test card autofill"`, and instead display production-grade encrypted Stripe & VNPay billing copy in both `en` and `vi`; assert `LandingPage` and `PricingPage` footers lead with `© 2026 CITRA` without confusing standalone `SourceLogic` product naming (while keeping `SourceLogic v${APP_VERSION}` subtle engine tag in `AuthSplitShell` per Global Constraint 3).
-- [ ] **Step 2: Run targeted Vitest suites to confirm failure**
+- [x] **Step 2: Run targeted Vitest suites to confirm failure**
   Run: `cd web && npx vitest run src/lib/productFacts.test.ts src/pages/PricingAndBilling.test.tsx`
   Expected: FAIL (`PricingPage` currently renders `"4242"` unconditionally).
-- [ ] **Step 3: Implement `IS_DEMO_EVALUATOR_MODE` gating & brand unification**
+- [x] **Step 3: Implement `IS_DEMO_EVALUATOR_MODE` gating & brand unification**
   Update `PricingPage.tsx` FAQ & Trust Strip copy so test-card instructions only appear when `IS_DEMO_EVALUATOR_MODE` is true; standardize footer copyright & brand colophons across `LandingPage.tsx` and `PricingPage.tsx` (`StripeDemoCheckoutPage.tsx` remains untouched so checkout sandbox tests stay green).
-- [ ] **Step 4: Run full frontend verification gate**
+- [x] **Step 4: Run full frontend verification gate**
   Run: `cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
   Expected: PASS.
-- [ ] **Step 5: Run Triad Review & Critic Loop + Browser Visual Check on `/` and `/pricing`**
+- [x] **Step 5: Run Triad Review & Critic Loop + Browser Visual Check on `/` and `/pricing`**
   Confirm zero leaked evaluator/test-card strings and cohesive `CITRA` branding in EN & VI; loop until `APPROVED`.
-- [ ] **Step 6: Tick checkboxes & commit**
+- [x] **Step 6: Tick checkboxes & commit**
   ```bash
   git add web/src/lib/productFacts.ts web/src/lib/productFacts.test.ts web/src/pages/PricingPage.tsx web/src/pages/LandingPage.tsx web/src/components/AuthSplitShell.tsx web/src/pages/PricingAndBilling.test.tsx
   git commit -m "fix(trust): unify CITRA brand presentation and gate evaluator test-card copy behind demo mode"
