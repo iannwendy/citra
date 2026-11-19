@@ -275,7 +275,7 @@ export function SolvaLiveNumber({
 
 /**
  * 1. HERO DASHBOARD MOCKUP
- * Cropped off the right and bottom edge of the 660x521px oil painting frame,
+ * Fully framed on all 4 sides inside the padded `SolvaPainterlyFrame` oil painting backdrop,
  * surrounded by Solva's signature `0 0 0 8px rgba(255,255,255,0.5)` frosted glass ring.
  */
 export function HeroVerificationMockup({
@@ -520,8 +520,8 @@ export function HeroVerificationMockup({
               <span
                 className={`font-mono text-[10px] font-semibold shrink-0 whitespace-nowrap ${
                   selected.tone === 'red'
-                    ? 'text-red-600 dark:text-red-400'
-                    : 'text-emerald-600 dark:text-emerald-400'
+                    ? 'text-red-700 dark:text-red-300'
+                    : 'text-emerald-700 dark:text-emerald-300'
                 }`}
               >
                 {selected.tone === 'red'
@@ -703,16 +703,20 @@ export function FeatureCardWidget({
               <span style={{ color: 'var(--solva-muted)' }}>
                 {lang === 'vi' ? 'TẦNG 1 · ĐỐI CHIẾU NỘI BỘ' : 'LAYER 1 · MAPPING'}
               </span>
-              <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-emerald-700 dark:text-emerald-400 font-semibold inline-flex items-center gap-1">
+              <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-emerald-700 dark:text-emerald-300 font-semibold inline-flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 MATCHED
               </span>
             </div>
             <p style={{ color: 'var(--solva-ink)' }} className="text-[12px] font-medium leading-snug">
-              {lang === 'vi' ? 'Trong bài [' : 'In-text ['}
-              <SubtleNumber value={activeRefNum} />
-              {lang === 'vi' ? '] ↔ Danh mục #' : '] ↔ Bibliography #'}
-              <SubtleNumber value={activeRefNum} />
+              {lang === 'vi' ? 'Trong bài ' : 'In-text '}
+              <span className="citra-nowrap-tail whitespace-nowrap">
+                [<SubtleNumber value={activeRefNum} />]
+              </span>
+              {lang === 'vi' ? ' ↔ Danh mục ' : ' ↔ Bibliography '}
+              <span className="citra-nowrap-tail whitespace-nowrap">
+                #<SubtleNumber value={activeRefNum} />
+              </span>
             </p>
           </div>
 
@@ -728,7 +732,7 @@ export function FeatureCardWidget({
               <span style={{ color: 'var(--solva-muted)' }}>
                 {lang === 'vi' ? 'TẦNG 2 · XÁC THỰC NGUỒN' : 'LAYER 2 · EXISTENCE'}
               </span>
-              <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-amber-700 dark:text-amber-400 font-semibold">
+              <span className="citra-nowrap-tail whitespace-nowrap shrink-0 text-amber-700 dark:text-amber-300 font-semibold">
                 METADATA_ERROR
               </span>
             </div>
@@ -1132,7 +1136,7 @@ export function StickyCardWidget({
                 className="px-2 py-1.5 rounded-[6px] border flex items-center gap-1.5 min-w-0 transition-[background-color,border-color,transform] duration-300"
               >
                 <Check
-                  className={`w-3 h-3 text-emerald-600 shrink-0 transition-transform duration-300 ${
+                  className={`w-3 h-3 text-emerald-700 dark:text-emerald-300 shrink-0 transition-transform duration-300 ${
                     isStyleActive ? 'scale-125' : 'scale-100'
                   }`}
                 />
@@ -1588,7 +1592,7 @@ export function PipelineStageVisual({
         }}
         className="p-3 rounded-[8px] border font-mono text-[11px] flex items-center gap-2"
       >
-        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+        <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-emerald-300 shrink-0" />
         <span style={{ color: 'var(--solva-ink)' }}>
           {tabIndex === 0 && (
             <>
@@ -1808,9 +1812,17 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
       tone: 'red' as const,
       rule: 'R12_GHOST_DOI · HTTP 404',
       detail:
-        lang === 'vi'
-          ? 'Phát hiện mã DOI hư cấu 10.1038/s42256-024-99812-x (Mục [14])'
-          : 'Caught fabricated DOI 10.1038/s42256-024-99812-x (Ref [14])',
+        lang === 'vi' ? (
+          <>
+            Phát hiện mã DOI hư cấu 10.1038/s42256-024-99812-x{' '}
+            <span className="citra-nowrap-tail whitespace-nowrap">(Mục{'\u00A0'}[14])</span>
+          </>
+        ) : (
+          <>
+            Caught fabricated DOI 10.1038/s42256-024-99812-x{' '}
+            <span className="citra-nowrap-tail whitespace-nowrap">(Ref{'\u00A0'}[14])</span>
+          </>
+        ),
       cisNum: 74.2,
     },
     {
@@ -1915,7 +1927,7 @@ export function CohortBatchAuditWidget({ lang }: { lang: Lang }) {
             label: lang === 'vi' ? 'DOI NGỤY TẠO' : 'GHOST DOIs',
             val: 42,
             format: false,
-            color: 'text-red-600 dark:text-red-400',
+            color: 'text-red-700 dark:text-red-300',
           },
         ].map((stat, idx) => (
           <div

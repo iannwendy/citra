@@ -1141,7 +1141,7 @@ function SolvaHeroSection({
                   </div>
                   <div className="min-w-0">
                     <div className="font-solva-serif text-[20px] sm:text-[22px] leading-none tracking-[-0.04em] text-emerald-700 dark:text-emerald-400">
-                      99.02%
+                      {lang === 'vi' ? '99,02%' : '99.02%'}
                     </div>
                     <div
                       style={{ color: 'var(--solva-muted)' }}
@@ -1152,7 +1152,7 @@ function SolvaHeroSection({
                   </div>
                   <div className="min-w-0">
                     <div className="font-solva-serif text-[20px] sm:text-[22px] leading-none tracking-[-0.04em] text-emerald-700 dark:text-emerald-400">
-                      99.75%
+                      {lang === 'vi' ? '99,75%' : '99.75%'}
                     </div>
                     <div
                       style={{ color: 'var(--solva-muted)' }}
@@ -2620,7 +2620,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                   className="flex items-center gap-2 font-mono text-xs min-w-0"
                 >
                   <FileText className="h-3.5 w-3.5 shrink-0" />
-                  <span className="font-semibold truncate">
+                  <span className="font-semibold break-all sm:break-normal min-w-0">
                     thesis_neural_retrieval_2026.pdf
                   </span>
                   <span
@@ -2683,7 +2683,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                 className="lg:col-span-5 min-w-0 border-b lg:border-b-0 lg:border-r p-4 sm:p-5 flex flex-col justify-between"
               >
                 <div>
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 mb-3">
                     <span
                       style={{ color: 'var(--solva-muted)' }}
                       className="text-xs font-mono uppercase tracking-wider font-semibold"
@@ -2694,7 +2694,7 @@ function SolvaInteractiveDebuggerSection({ lang }: { lang: Lang }) {
                     </span>
                     <span
                       style={{ color: 'var(--solva-muted)' }}
-                      className="text-[11px] font-mono"
+                      className="text-[11px] font-mono shrink-0 whitespace-nowrap"
                     >
                       {lang === 'vi' ? 'Hiển thị 4 / 24' : '4 / 24 shown'}
                     </span>
@@ -4243,7 +4243,7 @@ function SolvaClientResultsSection({ lang }: { lang: Lang }) {
                 paintingSrc="/solva/usecase-4-bg.webp"
                 alt="Impressionist botanical painting backdrop for cohort thesis audit"
                 radiusClass="rounded-[10px]"
-                className="w-full min-h-[380px] sm:min-h-[420px] lg:h-[476px] p-4 sm:p-6 flex items-center justify-center"
+                className="w-full min-h-[380px] sm:min-h-[420px] lg:min-h-[476px] h-full py-5 px-4 sm:p-6 flex items-center justify-center"
               >
                 <div className="w-full flex items-center justify-center">
                   <CohortBatchAuditWidget lang={lang} />
@@ -5218,7 +5218,7 @@ function SolvaBottomCTASection({
                 paintingSrc="/solva/hero-bg.webp"
                 alt="Impressionist floral painting backdrop"
                 radiusClass="rounded-[12px]"
-                className="w-full min-h-[320px] sm:h-[376px] p-6 sm:p-8 flex items-center justify-center"
+                className="w-full min-h-[320px] sm:min-h-[376px] h-full p-6 sm:p-8 flex items-center justify-center"
               >
                 <div className="w-full max-w-[480px]">
                   <BottomCTAMockup lang={lang} />

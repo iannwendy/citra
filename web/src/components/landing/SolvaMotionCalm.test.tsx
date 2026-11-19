@@ -15,6 +15,7 @@ import {
   HeroVerificationMockup,
   StickyCardWidget,
   FeatureCardWidget,
+  PipelineStageVisual,
   CohortBatchAuditWidget,
 } from './SolvaMockupWidgets';
 
@@ -437,7 +438,7 @@ describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & 
     }
   });
 
-  it('hero-benchmark-120k-strip contains zero .truncate classes and zero ellipsis across all 4 proof items in EN and VI', async () => {
+  it('hero-benchmark-120k-strip localizes decimal/thousand separators (99,02% & 99,75% in VI; 99.02% & 99.75% in EN) with zero .truncate or ellipsis', async () => {
     for (const lang of ['en', 'vi'] as const) {
       await i18n.changeLanguage(lang);
       const { getByTestId, unmount } = renderLandingApp();
@@ -448,10 +449,13 @@ describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & 
       const stripText = strip.textContent ?? '';
       expect(stripText).not.toContain('...');
       expect(stripText).not.toContain('…');
-      expect(stripText).toContain('99.02%');
-      expect(stripText).toContain('99.75%');
+      expect(stripText).toContain(lang === 'vi' ? '99,02%' : '99.02%');
+      expect(stripText).toContain(lang === 'vi' ? '99,75%' : '99.75%');
+      expect(stripText).not.toContain(lang === 'vi' ? '99.02%' : '99,02%');
+      expect(stripText).not.toContain(lang === 'vi' ? '99.75%' : '99,75%');
       expect(stripText).toContain('15+');
       expect(stripText).toContain(lang === 'vi' ? '120.000' : '120,000');
+      expect(stripText).toContain(lang === 'vi' ? '(2,4K)' : '(2.4K)');
 
       unmount();
     }
@@ -569,6 +573,122 @@ describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & 
       );
 
       others.unmount();
+    }
+  });
+
+  it('SolvaClientResultsSection and SolvaBottomCTASection painterly frames use flexible min-h-[...] h-full without rigid h-[476px] or h-[376px] vertical clipping', async () => {
+    const rigidPixelHeightPattern = /(?:^|\s|(?:sm|md|lg|xl):)h-\[\d+px\]/;
+
+    for (const lang of ['en', 'vi'] as const) {
+      await i18n.changeLanguage(lang);
+      const { container, unmount } = renderLandingApp();
+
+      const cohortBackdropImg = container.querySelector(
+        'img[alt="Impressionist botanical painting backdrop for cohort thesis audit"]',
+      );
+      const cohortFrame = cohortBackdropImg?.parentElement;
+      expect(cohortFrame).not.toBeNull();
+      expect(cohortFrame?.className).toContain('min-h-[380px]');
+      expect(cohortFrame?.className).toContain('sm:min-h-[420px]');
+      expect(cohortFrame?.className).toContain('lg:min-h-[476px]');
+      expect(cohortFrame?.className).toContain('h-full');
+      expect(cohortFrame?.className).not.toMatch(rigidPixelHeightPattern);
+
+      const ctaBackdropImg = container.querySelector(
+        'img[alt="Impressionist floral painting backdrop"]',
+      );
+      const ctaFrame = ctaBackdropImg?.parentElement;
+      expect(ctaFrame).not.toBeNull();
+      expect(ctaFrame?.className).toContain('min-h-[320px]');
+      expect(ctaFrame?.className).toContain('sm:min-h-[376px]');
+      expect(ctaFrame?.className).toContain('h-full');
+      expect(ctaFrame?.className).not.toMatch(rigidPixelHeightPattern);
+
+      unmount();
+    }
+  });
+
+  it('HeroVerificationMockup DOI match status badge and mockup widgets use WCAG AA text-emerald-700 / text-red-700 in Light mode', () => {
+    for (const lang of ['en', 'vi'] as const) {
+      for (const step of [0, 1, 2]) {
+        const { getByText, container, unmount } = render(
+          <HeroVerificationMockup lang={lang} activeStep={step} />,
+        );
+        const expectedLabel =
+          step === 2
+            ? lang === 'vi'
+              ? '404 Không tồn tại'
+              : '404 Ghost'
+            : lang === 'vi'
+              ? '100% Khớp chuẩn'
+              : '100% Match';
+        const statusBadge = getByText(expectedLabel);
+        if (step === 2) {
+          expect(statusBadge.className).toContain('text-red-700');
+          expect(statusBadge.className).toContain('dark:text-red-300');
+          expect(statusBadge.className).not.toContain('text-red-600');
+        } else {
+          expect(statusBadge.className).toContain('text-emerald-700');
+          expect(statusBadge.className).toContain('dark:text-emerald-300');
+          expect(statusBadge.className).not.toContain('text-emerald-600');
+        }
+        expect(
+          container.querySelectorAll('.text-emerald-600, .text-amber-600, .text-red-600'),
+        ).toHaveLength(0);
+        unmount();
+      }
+
+      const widgets = render(
+        <div>
+          <CohortBatchAuditWidget lang={lang} />
+          <StickyCardWidget index={0} lang={lang} />
+          <PipelineStageVisual tabIndex={0} lang={lang} />
+        </div>,
+      );
+      expect(
+        widgets.container.querySelectorAll('.text-emerald-600, .text-amber-600, .text-red-600'),
+      ).toHaveLength(0);
+      widgets.unmount();
+    }
+  });
+
+  it('guards [14] / #14 in FeatureCardWidget, (Mục [14]) / (Ref [14]) in CohortBatchAuditWidget, and #interactive-demo mobile filename & queue counter', async () => {
+    for (const lang of ['en', 'vi'] as const) {
+      // 1. FeatureCardWidget index=0 wraps [14] and #14 inside .citra-nowrap-tail.whitespace-nowrap
+      const feat0 = render(<FeatureCardWidget index={0} lang={lang} />);
+      const feat0Tails = Array.from(
+        feat0.container.querySelectorAll('.citra-nowrap-tail.whitespace-nowrap'),
+      ).map((el) => (el.textContent ?? '').trim());
+      expect(feat0Tails).toContain('[14]');
+      expect(feat0Tails).toContain('#14');
+      feat0.unmount();
+
+      // 2. CohortBatchAuditWidget binds (Mục\u00A0[14]) / (Ref\u00A0[14]) with non-breaking space
+      const cohort = render(<CohortBatchAuditWidget lang={lang} />);
+      const expectedRefSuffix = lang === 'vi' ? '(Mục\u00A0[14])' : '(Ref\u00A0[14])';
+      expect(cohort.container.textContent ?? '').toContain(expectedRefSuffix);
+      cohort.unmount();
+
+      // 3. #interactive-demo chrome filename & queue counter
+      await i18n.changeLanguage(lang);
+      const landing = renderLandingApp();
+      const demo = landing.container.querySelector('#interactive-demo') as HTMLElement;
+      expect(demo).not.toBeNull();
+
+      const filenameEl = within(demo).getByText('thesis_neural_retrieval_2026.pdf');
+      expect(filenameEl.className).not.toContain('truncate');
+      expect(filenameEl.className).toContain('break-all');
+      expect(filenameEl.className).toContain('sm:break-normal');
+
+      const counterEl = within(demo).getByText(
+        lang === 'vi' ? 'Hiển thị 4 / 24' : '4 / 24 shown',
+      );
+      expect(counterEl.className).toContain('shrink-0');
+      expect(counterEl.className).toContain('whitespace-nowrap');
+      expect(counterEl.parentElement?.className ?? '').toContain('flex-wrap');
+      expect(counterEl.parentElement?.className ?? '').toContain('gap-1.5');
+
+      landing.unmount();
     }
   });
 });
