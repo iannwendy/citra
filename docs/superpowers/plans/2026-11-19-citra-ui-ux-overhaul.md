@@ -504,7 +504,7 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
 **Interfaces:**
 - Verifies all tasks `0.1`–`3.2` end-to-end across viewports `375×812`, `390×844`, `768×1024`, `1024×768`, and `1440×900` in Light & Dark modes and EN & VI locales.
 
-- [ ] **Step 1: Write comprehensive Playwright E2E suite `web/tests/e2e/citra-ux-overhaul.spec.ts`**
+- [x] **Step 1: Write comprehensive Playwright E2E suite `web/tests/e2e/citra-ux-overhaul.spec.ts`**
   Cover:
   1. Zero horizontal overflow (`scrollWidth <= innerWidth`) across all 5 viewports on `/`, `/pricing`, `/login`, `/register`, `/forgot-password`, `/privacy`, `/terms`, and `/missing-route-404`.
   2. `RegisterPage` submit button bounding box completely within `1440×900` viewport height (`bottom <= 900`).
@@ -512,7 +512,7 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
   4. `GuestInstantChecker` 1-click preset & custom input check on `/` without login.
   5. Mobile menu `Pricing` navigation and Mobile `/pricing` segmented comparison switcher (`390×844`).
   6. Light & Dark theme toggle + `EN <-> VI` toggle with zero raw uppercase enum leaks (`SUSPECTED_HALLUCINATION`, `METADATA_ERROR`) on default marketing surfaces.
-- [ ] **Step 2: Execute full Playwright E2E suite, full Vitest suite, full Backend Pytest suite, and Production Build**
+- [x] **Step 2: Execute full Playwright E2E suite, full Vitest suite, full Backend Pytest suite, and Production Build**
   Run:
   ```bash
   .venv/bin/python -m ruff check src/ tests/ scripts/
@@ -521,9 +521,9 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
   cd web && npx playwright test tests/e2e/citra-ux-overhaul.spec.ts tests/e2e/responsive.spec.ts tests/e2e/landing-vietnamese-typography.spec.ts
   ```
   Expected: 100% PASS across every suite.
-- [ ] **Step 3: Final Whole-Branch Triad Audit (`spec-code-reviewer` + `ux-nontech-critic` + live `browser` tour)**
+- [x] **Step 3: Final Whole-Branch Triad Audit (`spec-code-reviewer` + `ux-nontech-critic` + live `browser` tour)**
   Perform a complete top-to-bottom live browser tour across all public & auth surfaces in Desktop & Mobile, Light & Dark, EN & VI. Fix any micro-imperfection caught until the Principal UI/UX & Non-Tech Critic awards **10/10 Sign-Off**.
-- [ ] **Step 4: Tick final checkboxes & commit**
+- [x] **Step 4: Tick final checkboxes & commit**
   ```bash
   git add web/tests/e2e/citra-ux-overhaul.spec.ts docs/superpowers/plans/2026-11-19-citra-ui-ux-overhaul.md
   git commit -m "test(e2e): add comprehensive multi-viewport UI/UX overhaul verification suite"
