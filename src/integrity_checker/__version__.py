@@ -1,3 +1,3 @@
 """Version của package."""
 
-__version__ = "3.84.5"
+__version__ = "3.84.6"

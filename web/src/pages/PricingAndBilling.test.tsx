@@ -1799,4 +1799,174 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
       await i18n.changeLanguage('en');
     }
   });
+
+  it('Task 1.3 — separates floral header banner (.solva-floral-banner-mask) from high-contrast .solva-pro-card-surface body on both LandingPage and PricingPage and aligns tier rows via subgrid', async () => {
+    await i18n.changeLanguage('en');
+
+    // 1. LandingPage (#taxonomy) Pro card
+    const { container: landingContainer, unmount: unmountLanding } = renderWithAuth(
+      <LandingPage />,
+      { user: null, initialEntries: ['/'] },
+    );
+    const taxonomySection = landingContainer.querySelector('#taxonomy') as HTMLElement;
+    expect(taxonomySection).not.toBeNull();
+
+    const landingFloralBanner = taxonomySection.querySelector('.solva-floral-banner-mask');
+    expect(landingFloralBanner).not.toBeNull();
+    expect(landingFloralBanner?.querySelector('img[src="/solva/pricing-floral.webp"]')).not.toBeNull();
+    expect(taxonomySection.querySelector('.solva-pricing-floral-mask')).toBeNull();
+
+    const landingProSurface = taxonomySection.querySelector('.solva-pro-card-surface') as HTMLElement;
+    expect(landingProSurface).not.toBeNull();
+    expect(landingProSurface.contains(screen.getByTestId('landing-price-pro'))).toBe(true);
+    expect(
+      landingProSurface.textContent,
+    ).toMatch(/Full 15\+ scholarly API federation, Sentence-BERT semantic matching/i);
+    expect(landingProSurface.textContent).toContain('50 manuscripts / month (up to 100 pages, 25 MB)');
+    expect(landingFloralBanner?.contains(landingProSurface)).toBe(false);
+
+    // Subgrid alignment on Desktop 3-column grid
+    expect(taxonomySection.querySelectorAll('[class*="lg:grid-rows-subgrid"]').length).toBeGreaterThanOrEqual(3);
+    unmountLanding();
+
+    // 2. PricingPage plan-card-pro
+    renderWithAuth(<PricingPage />, { user: createMockUser(), initialEntries: ['/pricing'] });
+    const proCard = screen.getByTestId('plan-card-pro');
+    const pricingFloralBanner = proCard.querySelector('.solva-floral-banner-mask');
+    expect(pricingFloralBanner).not.toBeNull();
+    expect(pricingFloralBanner?.querySelector('img[src="/solva/pricing-floral.webp"]')).not.toBeNull();
+    expect(proCard.querySelector('.solva-pricing-floral-mask')).toBeNull();
+
+    const pricingProSurface = proCard.querySelector('.solva-pro-card-surface') as HTMLElement;
+    expect(pricingProSurface).not.toBeNull();
+    expect(pricingProSurface.contains(screen.getByTestId('pro-price-display'))).toBe(true);
+    expect(pricingProSurface.contains(screen.getByTestId('select-pro-btn'))).toBe(true);
+    expect(pricingProSurface.textContent).toMatch(/Full Neuro-Symbolic pipeline/i);
+    expect(pricingFloralBanner?.contains(pricingProSurface)).toBe(false);
+
+    for (const cardId of ['plan-card-basic', 'plan-card-pro', 'plan-card-ultra']) {
+      expect(screen.getByTestId(cardId).className).toContain('lg:grid-rows-subgrid');
+    }
+  });
+
+  it('Task 1.3 — enforces whitespace-nowrap shrink-0 on Save $48/yr and Save $480/yr badges in EN and VI so pills never split onto 2 lines', async () => {
+    try {
+      await i18n.changeLanguage('en');
+      const { unmount: unmountEn } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+
+      const save48En = screen.getByText('Save $48/yr');
+      const save480En = screen.getByText('Save $480/yr');
+      expect(save48En.className).toContain('whitespace-nowrap');
+      expect(save48En.className).toContain('shrink-0');
+      expect(save480En.className).toContain('whitespace-nowrap');
+      expect(save480En.className).toContain('shrink-0');
+      unmountEn();
+
+      await i18n.changeLanguage('vi');
+      const { unmount: unmountVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+
+      const save48Vi = screen.getByText('Tiết kiệm $48/năm');
+      const save480Vi = screen.getByText('Tiết kiệm $480/năm');
+      expect(save48Vi.className).toContain('whitespace-nowrap');
+      expect(save48Vi.className).toContain('shrink-0');
+      expect(save480Vi.className).toContain('whitespace-nowrap');
+      expect(save480Vi.className).toContain('shrink-0');
+      unmountVi();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.3 — removes misleading "Start Pro trial" CTA on LandingPage and replaces punitive "No PDF..." Basic lines with constructive framing', async () => {
+    try {
+      await i18n.changeLanguage('en');
+      const { container: landingEn, unmount: unmountLandingEn } = renderWithAuth(<LandingPage />, {
+        user: null,
+        initialEntries: ['/'],
+      });
+      const taxonomyEn = landingEn.querySelector('#taxonomy') as HTMLElement;
+      expect(taxonomyEn.textContent).not.toMatch(/Start Pro trial/i);
+      expect(taxonomyEn.textContent).toContain('Upgrade to Pro');
+      unmountLandingEn();
+
+      const { unmount: unmountPricingEn } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const basicEnText = screen.getByTestId('plan-card-basic').textContent ?? '';
+      expect(basicEnText).not.toContain('No PDF, DOCX');
+      expect(basicEnText).not.toContain('No Document Inspector');
+      expect(basicEnText).not.toContain('No multi-file Batch Upload');
+      expect(basicEnText).toMatch(/Word\/PDF export on Pro/i);
+      unmountPricingEn();
+
+      await i18n.changeLanguage('vi');
+      const { unmount: unmountPricingVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const basicViText = screen.getByTestId('plan-card-basic').textContent ?? '';
+      expect(basicViText).not.toContain('Không hỗ trợ xuất báo cáo PDF');
+      expect(basicViText).not.toContain('Không hỗ trợ tải lên hàng loạt');
+      expect(basicViText).toMatch(/xuất Word\/PDF ở gói Pro/i);
+      unmountPricingVi();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('Task 1.3 — renders data-testid="pro-vnd-equivalent" when language is vi while preserving exact "$16" / "$20" textContent on landing-price-pro and pro-price-display', async () => {
+    try {
+      // English: no VND equivalent node
+      await i18n.changeLanguage('en');
+      const { unmount: unmountEn } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      expect(screen.queryByTestId('pro-vnd-equivalent')).toBeNull();
+      expect(screen.getByTestId('pro-price-display').textContent).toBe('$16');
+      unmountEn();
+
+      // Vietnamese on LandingPage: monthly default ($20 / ~500.000 ₫), toggle to annual ($16 / ~400.000 ₫)
+      await i18n.changeLanguage('vi');
+      const { unmount: unmountLandingVi } = renderWithAuth(<LandingPage />, {
+        user: null,
+        initialEntries: ['/'],
+      });
+      const landingPricePro = screen.getByTestId('landing-price-pro');
+      const landingVnd = screen.getByTestId('pro-vnd-equivalent');
+      expect(landingPricePro.textContent).toBe('$20');
+      expect(landingPricePro.contains(landingVnd)).toBe(false);
+      expect(landingVnd.textContent).toContain('500.000 ₫');
+
+      fireEvent.click(screen.getByTestId('landing-billing-toggle'));
+      expect(screen.getByTestId('landing-price-pro').textContent).toBe('$16');
+      expect(screen.getByTestId('pro-vnd-equivalent').textContent).toContain('400.000 ₫');
+      unmountLandingVi();
+
+      // Vietnamese on PricingPage: annual default ($16 / ~400.000 ₫), toggle to monthly ($20 / ~500.000 ₫)
+      const { unmount: unmountPricingVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const proDisplay = screen.getByTestId('pro-price-display');
+      const pricingVnd = screen.getByTestId('pro-vnd-equivalent');
+      expect(proDisplay.textContent).toBe('$16');
+      expect(proDisplay.contains(pricingVnd)).toBe(false);
+      expect(pricingVnd.textContent).toContain('400.000 ₫');
+
+      fireEvent.click(screen.getByTestId('billing-toggle-monthly'));
+      expect(screen.getByTestId('pro-price-display').textContent).toBe('$20');
+      expect(screen.getByTestId('pro-vnd-equivalent').textContent).toContain('500.000 ₫');
+      unmountPricingVi();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
 });

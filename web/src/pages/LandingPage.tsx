@@ -3583,7 +3583,7 @@ function SolvaSecuritySection({ lang }: { lang: Lang }) {
 /* ============================================================
    SECTION 7: PRICING PLANS & ACADEMIC BENEFITS (`#taxonomy`)
    3 Cards (`Basic`, `Pro Popular`, `Ultra`) + Squircle Billing Toggle
-   + Radial-Masked Watercolor Floral Card (`/solva/pricing-floral.webp`)
+   + Framed Gallery Floral Banner (`/solva/pricing-floral.webp`) & Subgrid Alignment
    ============================================================ */
 function SolvaTaxonomyPricingSection({
   lang,
@@ -3596,10 +3596,16 @@ function SolvaTaxonomyPricingSection({
 
   const tiers = [
     {
-      name: lang === 'vi' ? 'Basic (Khởi đầu Học thuật)' : 'Basic',
-      badge: null,
+      key: 'basic' as const,
+      name: 'Basic',
+      subtitle: lang === 'vi' ? 'Khởi đầu Học thuật' : 'Student Starter',
+      headerTag: lang === 'vi' ? 'MẶC ĐỊNH' : 'DEFAULT',
+      headerEyebrow: lang === 'vi' ? '01 · MIỄN PHÍ TRỌN ĐỜI' : '01 · FREE FOREVER',
+      savingsBadge: null as string | null,
       metricNum: 0,
       unit: lang === 'vi' ? 'tháng · Miễn phí' : 'month',
+      vndLine: lang === 'vi' ? '0 ₫/tháng · Không cần thẻ thanh toán' : null,
+      vndTestId: undefined as string | undefined,
       desc:
         lang === 'vi'
           ? 'Bộ công cụ thẩm định trích dẫn 2 tầng thiết yếu dành cho sinh viên thực hiện tiểu luận chuyên ngành, tổng quan tài liệu và rà soát danh mục tham khảo nhanh.'
@@ -3613,6 +3619,7 @@ function SolvaTaxonomyPricingSection({
               'Bóc tách cấu trúc GROBID TEI-XML & Đa quy chuẩn (IEEE, APA 7th)',
               'Kho đệm 128K+ FTS5 cục bộ + Crossref, OpenAlex & Văn bản Pháp luật VN',
               'Hệ phân loại 2 tầng trực giao 13 trạng thái (8 L1 × 5 L2)',
+              'Bao gồm báo cáo trực tuyến đầy đủ (Xuất Word/PDF ở gói Pro)',
             ]
           : [
               '3 manuscripts / month (up to 15 pages, 5 MB)',
@@ -3620,23 +3627,40 @@ function SolvaTaxonomyPricingSection({
               'GROBID TEI-XML & Multi-Style Cross-Validator',
               '128K+ Local FTS5 + Crossref, OpenAlex & VN Legal',
               'Full 13-state Two-Layer Orthogonal Taxonomy (8 L1 × 5 L2)',
+              'Web verification report included (Word/PDF export on Pro)',
             ],
       cta: lang === 'vi' ? 'Bắt đầu miễn phí' : 'Get started free',
       to: isAuthenticated ? '/upload' : '/register',
       featured: false,
     },
     {
-      name: lang === 'vi' ? 'Pro (Khóa luận & Công bố Quốc tế)' : 'Pro',
-      badge: lang === 'vi' ? 'Được chọn nhiều nhất' : 'Popular',
+      key: 'pro' as const,
+      name: 'Pro',
+      subtitle:
+        lang === 'vi' ? 'Khóa luận & Công bố Quốc tế' : 'Thesis Writers & Researchers',
+      headerTag: lang === 'vi' ? 'PHỔ BIẾN NHẤT' : 'MOST POPULAR',
+      headerEyebrow: lang === 'vi' ? '02 · KHUYÊN DÙNG' : '02 · RECOMMENDED',
+      savingsBadge: annualBilling
+        ? lang === 'vi'
+          ? 'Tiết kiệm $48/năm'
+          : 'Save $48/yr'
+        : null,
       metricNum: annualBilling ? 16 : 20,
       unit:
         lang === 'vi'
           ? annualBilling
-            ? 'tháng (thanh toán theo năm)'
+            ? 'tháng (trả theo năm)'
             : 'tháng'
           : annualBilling
             ? 'month (billed yearly)'
             : 'month',
+      vndLine:
+        lang === 'vi'
+          ? annualBilling
+            ? '≈ 400.000 ₫/tháng · 4.800.000 ₫/năm qua VNPay'
+            : '≈ 500.000 ₫/tháng qua VNPay & thẻ quốc tế'
+          : null,
+      vndTestId: 'pro-vnd-equivalent',
       desc:
         lang === 'vi'
           ? 'Truy vấn liên hợp hơn 15 CSDL khoa học quốc tế, đối sánh ngữ nghĩa sâu bằng Sentence-BERT và chuẩn hóa danh mục tự động chỉ với một cú nhấp cho khóa luận, luận văn.'
@@ -3661,22 +3685,38 @@ function SolvaTaxonomyPricingSection({
               'Sentence-BERT & Multilingual MiniLM ONNX INT8 Alignment',
               '1-Click Bibliography Auto-Fix (APA, IEEE, BibTeX) & PDF/DOCX Export',
             ],
-      cta: lang === 'vi' ? 'Nâng cấp gói Pro' : 'Start Pro trial',
+      cta: lang === 'vi' ? 'Nâng cấp lên Pro' : 'Upgrade to Pro',
       to: '/pricing',
       featured: true,
     },
     {
-      name: lang === 'vi' ? 'Ultra (Hội đồng & Khoa / Viện)' : 'Ultra',
-      badge: null,
+      key: 'ultra' as const,
+      name: 'Ultra',
+      subtitle:
+        lang === 'vi' ? 'Hội đồng & Khoa / Viện' : 'Research Labs & Review Boards',
+      headerTag: lang === 'vi' ? 'QUY MÔ LỚN' : 'ENTERPRISE LAB',
+      headerEyebrow: lang === 'vi' ? '03 · BỘ MÔN & HỘI ĐỒNG' : '03 · FACULTY & COHORT',
+      savingsBadge: annualBilling
+        ? lang === 'vi'
+          ? 'Tiết kiệm $480/năm'
+          : 'Save $480/yr'
+        : null,
       metricNum: annualBilling ? 160 : 200,
       unit:
         lang === 'vi'
           ? annualBilling
-            ? 'tháng (thanh toán theo năm)'
+            ? 'tháng (trả theo năm)'
             : 'tháng'
           : annualBilling
             ? 'month (billed yearly)'
             : 'month',
+      vndLine:
+        lang === 'vi'
+          ? annualBilling
+            ? '≈ 4.000.000 ₫/tháng · 48.000.000 ₫/năm qua VNPay'
+            : '≈ 5.000.000 ₫/tháng qua VNPay & thẻ quốc tế'
+          : null,
+      vndTestId: 'ultra-vnd-equivalent',
       desc:
         lang === 'vi'
           ? 'Giải pháp thẩm định toàn diện ở quy mô Bộ môn, Khoa và Hội đồng bảo vệ với kênh tra cứu dự phòng Google Scholar, quản lý lớp học và lưu vết kiểm toán bất biến.'
@@ -3701,7 +3741,7 @@ function SolvaTaxonomyPricingSection({
               'Teacher Classroom Cohort Dashboard & Instructor Override',
               'Admin Control Plane, Priority Queue & Immutable Audit Logs',
             ],
-      cta: lang === 'vi' ? 'Khám phá gói Ultra & So sánh' : 'Explore Ultra plan',
+      cta: lang === 'vi' ? 'Khám phá gói Ultra' : 'Explore Ultra plan',
       to: '/pricing',
       featured: false,
     },
@@ -3733,12 +3773,19 @@ function SolvaTaxonomyPricingSection({
         <div className="w-full flex flex-col items-center gap-[32px]">
           {/* Tactile Switch (#27 TactileToggle) */}
           <SolvaScrollReveal yOffset={20}>
-            <div className="inline-flex items-center gap-[10px]">
+            <div className="inline-flex flex-wrap items-center justify-center gap-2 sm:gap-[10px]">
               <span
                 style={{ color: 'var(--solva-ink)' }}
-                className="font-solva-sans text-[15px] sm:text-[16px]"
+                className="font-solva-sans text-[14px] sm:text-[16px] whitespace-nowrap"
               >
-                {lang === 'vi' ? 'Thanh toán theo tháng' : 'Monthly'}
+                {lang === 'vi' ? (
+                  <>
+                    <span className="hidden sm:inline">Thanh toán theo tháng</span>
+                    <span className="sm:hidden">Theo tháng</span>
+                  </>
+                ) : (
+                  'Monthly'
+                )}
               </span>
               <TactileToggle
                 checked={annualBilling}
@@ -3748,109 +3795,192 @@ function SolvaTaxonomyPricingSection({
               />
               <span
                 style={{ color: 'var(--solva-ink)' }}
-                className="font-solva-sans text-[15px] sm:text-[16px]"
+                className="font-solva-sans text-[14px] sm:text-[16px] whitespace-nowrap"
               >
-                {lang === 'vi' ? 'Thanh toán theo năm (Tiết kiệm 20%)' : 'Yearly -20%'}
+                {lang === 'vi' ? (
+                  <>
+                    <span className="hidden sm:inline">Theo năm (Tiết kiệm 20%)</span>
+                    <span className="sm:hidden">Theo năm (-20%)</span>
+                  </>
+                ) : (
+                  'Yearly -20%'
+                )}
               </span>
             </div>
           </SolvaScrollReveal>
 
-          {/* 3 Plan Cards (`389x483px` equivalent, `bg: #F4F2EC`, `rounded-[16px]`, `p-[32px]`) */}
-          <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-[16px]">
+          {/* 3 Plan Cards (`lg:grid-cols-3` + 5-row CSS subgrid for horizontal row parity) */}
+          <div className="w-full grid grid-cols-1 gap-y-[16px] lg:grid-cols-3 lg:gap-x-[16px] lg:gap-y-0 items-stretch">
             {tiers.map((tier, idx) => (
               <SolvaScrollReveal
-                key={tier.name}
+                key={tier.key}
                 delayMs={idx * 95}
                 yOffset={36}
-                className="h-full"
+                className="h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid"
               >
                 <div
-                  style={{ backgroundColor: 'var(--solva-surface)' }}
-                  className="relative rounded-[16px] p-[28px] sm:p-[32px] flex flex-col justify-between gap-[24px] overflow-hidden min-h-[483px] h-full"
+                  style={{
+                    backgroundColor: 'var(--solva-surface)',
+                    borderColor: tier.featured ? 'var(--solva-ink)' : 'var(--solva-border)',
+                  }}
+                  className={`relative rounded-[16px] ${
+                    tier.featured
+                      ? 'border-2 shadow-[0_12px_36px_rgba(28,26,21,0.08)]'
+                      : 'border'
+                  } p-[8px] sm:p-[10px] flex flex-col overflow-hidden h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid`}
                 >
-                  {/* Radial-Masked Watercolor Floral Background on Middle Popular Card */}
-                  {tier.featured && (
-                    <>
-                      <div
-                        className="solva-pricing-floral-mask absolute inset-0 pointer-events-none select-none z-0"
-                        aria-hidden="true"
-                      >
-                        <img
-                          src="/solva/pricing-floral.webp"
-                          alt=""
-                          loading="eager"
-                          decoding="async"
-                          {...({ fetchpriority: 'low' } as Record<string, string>)}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="solva-noise-overlay z-0" aria-hidden="true" />
-                    </>
-                  )}
+                  {/* Row 1: Top Architectural / Floral Gallery Header Band (`min-h-[104px]`) */}
+                  <div
+                    className={`relative min-h-[100px] sm:min-h-[104px] rounded-t-[11px] overflow-hidden px-4 sm:px-5 py-3.5 flex flex-col justify-between ${
+                      tier.featured
+                        ? ''
+                        : idx === 0
+                          ? 'bg-gradient-to-b from-[#ECE9E0]/90 via-[#F4F2EC]/55 to-transparent dark:from-[#26231C]/90 dark:via-[#1E1C17]/55 dark:to-transparent'
+                          : 'bg-gradient-to-b from-[#E8E3D6]/95 via-[#F4F2EC]/55 to-transparent dark:from-[#2A261E]/95 dark:via-[#1E1C17]/55 dark:to-transparent'
+                    }`}
+                  >
+                    {tier.featured && (
+                      <>
+                        <div
+                          className="solva-floral-banner-mask absolute inset-0 pointer-events-none select-none z-0"
+                          aria-hidden="true"
+                        >
+                          <img
+                            src="/solva/pricing-floral.webp"
+                            alt=""
+                            loading="eager"
+                            decoding="async"
+                            {...({ fetchpriority: 'low' } as Record<string, string>)}
+                            className="w-full h-full object-cover object-center"
+                          />
+                        </div>
+                        <div className="solva-noise-overlay z-0" aria-hidden="true" />
+                      </>
+                    )}
 
-                  <div className="relative z-10 space-y-[20px]">
-                    {/* Top Tier Name + Popular Badge */}
-                    <div className="flex items-center justify-between gap-2">
-                      <h3
-                        style={{ color: 'var(--solva-ink)' }}
-                        className={`font-solva-sans text-[20px] ${
-                          tier.featured ? 'font-medium' : 'font-normal'
-                        } leading-[27px] tracking-[-0.02em]`}
-                      >
-                        {tier.name}
-                      </h3>
-                      {tier.badge && (
+                    <div className="relative z-10 flex items-start justify-between gap-2 flex-wrap">
+                      {tier.featured ? (
+                        <span
+                          style={{ backgroundColor: '#1C1A15', color: '#FBFAF6' }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] border border-white/15 shadow-sm font-mono text-[11px] font-semibold leading-none tracking-wide whitespace-nowrap shrink-0"
+                        >
+                          <Sparkles className="w-3 h-3 shrink-0" />
+                          <span>{tier.headerTag}</span>
+                        </span>
+                      ) : (
                         <span
                           style={{
-                            backgroundColor: 'var(--solva-btn-bg)',
-                            color: 'var(--solva-btn-fg)',
+                            backgroundColor: 'var(--solva-bg)',
+                            borderColor: 'var(--solva-border)',
+                            color: 'var(--solva-muted)',
                           }}
-                          className="px-[8px] py-[4px] rounded-[6px] font-solva-sans text-[12px] font-medium leading-[12px]"
+                          className="inline-flex items-center px-2.5 py-1 rounded-[6px] border font-mono text-[11px] font-medium leading-none whitespace-nowrap shrink-0"
                         >
-                          {tier.badge}
+                          {tier.headerTag}
+                        </span>
+                      )}
+
+                      {tier.savingsBadge && (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-[6px] bg-[#FBFAF6] text-emerald-800 border border-emerald-700/25 dark:bg-[#141310] dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm font-mono text-[11px] font-semibold leading-none whitespace-nowrap shrink-0">
+                          {tier.savingsBadge}
                         </span>
                       )}
                     </div>
 
-                    {/* Price Display (`Sentient` 40px Light + #02 Per-Digit NumberPopIn) */}
-                    <div className="flex items-baseline gap-1.5">
+                    {!tier.featured && (
                       <span
-                        style={{ color: 'var(--solva-ink)' }}
-                        className="font-solva-serif font-light text-[36px] sm:text-[40px] leading-[46px] tracking-[-0.05em]"
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="relative z-10 font-mono text-[11px] uppercase tracking-wider whitespace-nowrap"
                       >
-                        <NumberPopIn
-                          value={`$${tier.metricNum}`}
-                          data-testid={`landing-price-${
-                            idx === 0 ? 'basic' : idx === 1 ? 'pro' : 'ultra'
-                          }`}
-                        />
+                        {tier.headerEyebrow}
                       </span>
-                      <span
+                    )}
+                  </div>
+
+                  {/* Rows 2..5: High-Contrast Card Body Surface */}
+                  <div
+                    style={
+                      tier.featured
+                        ? undefined
+                        : {
+                            backgroundColor: 'var(--solva-bg)',
+                            borderColor: 'var(--solva-border)',
+                          }
+                    }
+                    className={`${
+                      tier.featured ? 'solva-pro-card-surface' : 'border'
+                    } relative z-10 rounded-[12px] px-[20px] sm:px-[24px] py-[22px] sm:py-[24px] flex flex-col justify-between gap-[20px] lg:gap-y-0 flex-1 lg:row-span-4 lg:grid lg:grid-rows-subgrid`}
+                  >
+                    {/* Row 2: Tier Title, Subtitle & Description */}
+                    <div className="space-y-[10px] lg:pb-[18px]">
+                      <div>
+                        <h3
+                          style={{ color: 'var(--solva-ink)' }}
+                          className={`font-solva-sans text-[22px] ${
+                            tier.featured ? 'font-medium' : 'font-normal'
+                          } leading-[28px] tracking-[-0.02em]`}
+                        >
+                          {tier.name}
+                        </h3>
+                        <p
+                          style={{ color: 'var(--solva-muted)' }}
+                          className="font-solva-sans text-[13px] mt-0.5"
+                        >
+                          {tier.subtitle}
+                        </p>
+                      </div>
+
+                      <p
                         style={{
                           color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
                         }}
-                        className={`font-solva-sans text-[14px] ${
+                        className={`font-solva-sans text-[15px] leading-[22.5px] ${
                           tier.featured ? 'font-medium' : ''
                         }`}
                       >
-                        <SoftTextSwap text={`/ ${tier.unit}`} />
-                      </span>
+                        {tier.desc}
+                      </p>
                     </div>
 
-                    {/* Description */}
-                    <p
-                      style={{
-                        color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
-                      }}
-                      className={`font-solva-sans text-[15px] sm:text-[16px] leading-[23.2px] ${
-                        tier.featured ? 'font-medium' : ''
-                      }`}
+                    {/* Row 3: Price Display (`Sentient` 40px Light + #02 Per-Digit NumberPopIn) + VI VND Equivalent */}
+                    <div
+                      style={{ borderColor: 'var(--solva-border)' }}
+                      className="pt-[16px] lg:pb-[18px] border-t"
                     >
-                      {tier.desc}
-                    </p>
+                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                        <span
+                          style={{ color: 'var(--solva-ink)' }}
+                          className="font-solva-serif font-light text-[36px] sm:text-[40px] leading-[46px] tracking-[-0.05em]"
+                        >
+                          <NumberPopIn
+                            value={`$${tier.metricNum}`}
+                            data-testid={`landing-price-${tier.key}`}
+                          />
+                        </span>
+                        <span
+                          style={{
+                            color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
+                          }}
+                          className={`font-solva-sans text-[14px] ${
+                            tier.featured ? 'font-medium' : ''
+                          }`}
+                        >
+                          <SoftTextSwap text={`/ ${tier.unit}`} />
+                        </span>
+                      </div>
+                      {tier.vndLine && (
+                        <p
+                          data-testid={tier.vndTestId}
+                          style={{ color: 'var(--solva-muted)' }}
+                          className="font-mono text-[12px] mt-1"
+                        >
+                          {tier.vndLine}
+                        </p>
+                      )}
+                    </div>
 
-                    {/* Benefits Checklist */}
-                    <div className="space-y-[10px] pt-1">
+                    {/* Row 4: Benefits Checklist */}
+                    <div className="space-y-[10px] pt-1 lg:pb-[20px]">
                       <div
                         style={{
                           color: tier.featured ? 'var(--solva-ink)' : 'var(--solva-muted)',
@@ -3889,17 +4019,20 @@ function SolvaTaxonomyPricingSection({
                         ))}
                       </ul>
                     </div>
-                  </div>
 
-                  {/* Bottom CTA Button */}
-                  <div className="relative z-10 pt-2">
-                    <SolvaButton
-                      to={tier.to}
-                      variant={tier.featured ? 'primary' : 'outline'}
-                      fullWidth
+                    {/* Row 5: Bottom CTA Button */}
+                    <div
+                      style={{ borderColor: 'var(--solva-border)' }}
+                      className="pt-[16px] border-t flex items-end"
                     >
-                      {tier.cta}
-                    </SolvaButton>
+                      <SolvaButton
+                        to={tier.to}
+                        variant={tier.featured ? 'primary' : 'outline'}
+                        fullWidth
+                      >
+                        {tier.cta}
+                      </SolvaButton>
+                    </div>
                   </div>
                 </div>
               </SolvaScrollReveal>

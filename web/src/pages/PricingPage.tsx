@@ -240,11 +240,11 @@ function SolvaPlanActionButton({
       onClick={onClick}
       data-testid={testId}
       style={variantStyle}
-      className={`group relative inline-flex items-center justify-center w-full h-[46px] px-[18px] pt-[1px] rounded-[10px] font-solva-sans text-[14px] font-medium leading-[21px] transition-[background-color,border-color,color,opacity,box-shadow] duration-200 select-none ${
+      className={`group relative inline-flex items-center justify-center w-full max-w-full overflow-hidden h-[46px] px-3 sm:px-[16px] pt-[1px] rounded-[10px] font-solva-sans text-[13px] xl:text-[14px] font-medium leading-[21px] transition-[background-color,border-color,color,opacity,box-shadow] duration-200 select-none ${
         disabled ? 'opacity-55 cursor-not-allowed' : 'cursor-pointer hover:opacity-95'
       }`}
     >
-      <span className="pointer-events-none relative h-[21px] overflow-hidden flex flex-col items-center">
+      <span className="pointer-events-none relative h-[21px] max-w-full overflow-hidden flex flex-col items-center">
         <span
           className={`flex flex-col transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
             disabled ? '' : 'group-hover:-translate-y-[21px]'
@@ -480,7 +480,7 @@ export function PricingPage() {
                       backgroundColor: 'var(--solva-surface)',
                       borderColor: 'var(--solva-border)',
                     }}
-                    className="relative inline-flex items-center p-[5px] rounded-[12px] border gap-1"
+                    className="relative inline-flex max-w-full items-center p-[5px] rounded-[12px] border gap-1"
                     role="group"
                     aria-label="Billing cycle selector"
                   >
@@ -515,9 +515,19 @@ export function PricingPage() {
                               color: 'var(--solva-muted)',
                             }
                       }
-                      className="t-tab px-4 sm:px-5 py-2 rounded-[8px] font-solva-sans text-[13px] sm:text-[14px] font-medium cursor-pointer"
+                      className="t-tab px-3 sm:px-5 py-2 rounded-[8px] font-solva-sans text-[12px] sm:text-[14px] font-medium whitespace-nowrap cursor-pointer"
                     >
-                      {lang === 'vi' ? 'Thanh toán theo Tháng' : 'Monthly Billing'}
+                      {lang === 'vi' ? (
+                        <>
+                          <span className="hidden sm:inline">Thanh toán theo Tháng</span>
+                          <span className="sm:hidden">Theo Tháng</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="hidden sm:inline">Monthly Billing</span>
+                          <span className="sm:hidden">Monthly</span>
+                        </>
+                      )}
                     </button>
 
                     <button
@@ -538,10 +548,22 @@ export function PricingPage() {
                               color: 'var(--solva-muted)',
                             }
                       }
-                      className="t-tab px-4 sm:px-5 py-2 rounded-[8px] font-solva-sans text-[13px] sm:text-[14px] font-medium flex items-center gap-2 cursor-pointer"
+                      className="t-tab px-3 sm:px-5 py-2 rounded-[8px] font-solva-sans text-[12px] sm:text-[14px] font-medium flex items-center gap-1.5 sm:gap-2 whitespace-nowrap cursor-pointer"
                     >
-                      <span>{lang === 'vi' ? 'Thanh toán theo Năm' : 'Annual Billing'}</span>
-                      <span className="px-2 py-0.5 rounded-[6px] bg-emerald-600 text-white text-[11px] font-mono font-semibold leading-none">
+                      <span>
+                        {lang === 'vi' ? (
+                          <>
+                            <span className="hidden sm:inline">Thanh toán theo Năm</span>
+                            <span className="sm:hidden">Theo Năm</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="hidden sm:inline">Annual Billing</span>
+                            <span className="sm:hidden">Annual</span>
+                          </>
+                        )}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-[6px] bg-emerald-600 text-white text-[11px] font-mono font-semibold leading-none whitespace-nowrap shrink-0">
                         {lang === 'vi' ? 'Tiết kiệm 20%' : 'Save 20%'}
                       </span>
                     </button>
@@ -586,27 +608,62 @@ export function PricingPage() {
 
             {/* ============================================================
                 3 SOLVA EDITORIAL PRICING CARDS (Basic · Pro Floral · Ultra)
+                5-Row CSS Subgrid Alignment + High-Contrast Pro Body Surface
                 ============================================================ */}
             <div
-              className="w-full grid grid-cols-1 lg:grid-cols-3 gap-[16px] items-stretch"
+              className="w-full grid grid-cols-1 gap-y-[16px] lg:grid-cols-3 lg:gap-x-[16px] lg:gap-y-0 items-stretch"
             >
               {/* 1. BASIC TIER */}
-              <SolvaScrollReveal delayMs={0} yOffset={36} triggerRatio={0.99} className="h-full">
+              <SolvaScrollReveal
+                delayMs={0}
+                yOffset={36}
+                triggerRatio={0.99}
+                className="h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid"
+              >
                 <div
                   style={{
                     backgroundColor: 'var(--solva-surface)',
                     borderColor: 'var(--solva-border)',
                   }}
-                  className="relative rounded-[16px] border p-[28px] sm:p-[32px] flex flex-col justify-between gap-[24px] h-full"
+                  className="relative rounded-[16px] border p-[8px] sm:p-[10px] flex flex-col overflow-hidden h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid"
                   data-testid="plan-card-basic"
                 >
-                  <div className="space-y-[20px]">
-                    {/* Header */}
-                    <div className="flex items-start justify-between gap-2">
+                  {/* Row 1: Top Architectural Gallery Header Band */}
+                  <div className="relative min-h-[100px] sm:min-h-[104px] rounded-t-[11px] px-4 sm:px-5 py-3.5 flex flex-col justify-between bg-gradient-to-b from-[#ECE9E0]/90 via-[#F4F2EC]/55 to-transparent dark:from-[#26231C]/90 dark:via-[#1E1C17]/55 dark:to-transparent">
+                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                      <span
+                        style={{
+                          backgroundColor: 'var(--solva-bg)',
+                          borderColor: 'var(--solva-border)',
+                          color: 'var(--solva-muted)',
+                        }}
+                        className="inline-flex items-center px-2.5 py-1 rounded-[6px] border font-mono text-[11px] font-medium leading-none whitespace-nowrap shrink-0"
+                      >
+                        {lang === 'vi' ? 'MẶC ĐỊNH' : 'DEFAULT'}
+                      </span>
+                    </div>
+                    <span
+                      style={{ color: 'var(--solva-muted)' }}
+                      className="font-mono text-[11px] uppercase tracking-wider whitespace-nowrap"
+                    >
+                      {lang === 'vi' ? '01 · KHỞI ĐẦU MIỄN PHÍ' : '01 · FREE STARTER'}
+                    </span>
+                  </div>
+
+                  {/* Rows 2..5: Card Body Surface */}
+                  <div
+                    style={{
+                      backgroundColor: 'var(--solva-bg)',
+                      borderColor: 'var(--solva-border)',
+                    }}
+                    className="relative z-10 rounded-[12px] border px-[20px] sm:px-[24px] py-[22px] sm:py-[24px] flex flex-col justify-between gap-[20px] lg:gap-y-0 flex-1 lg:row-span-4 lg:grid lg:grid-rows-subgrid"
+                  >
+                    {/* Row 2: Header & Description */}
+                    <div className="space-y-[14px] lg:pb-[18px]">
                       <div className="flex items-center gap-3">
                         <div
                           style={{
-                            backgroundColor: 'var(--solva-bg)',
+                            backgroundColor: 'var(--solva-surface)',
                             borderColor: 'var(--solva-border)',
                             color: 'var(--solva-ink)',
                           }}
@@ -631,32 +688,21 @@ export function PricingPage() {
                           </p>
                         </div>
                       </div>
-                      <span
-                        style={{
-                          backgroundColor: 'var(--solva-bg)',
-                          borderColor: 'var(--solva-border)',
-                          color: 'var(--solva-muted)',
-                        }}
-                        className="px-[8px] py-[4px] rounded-[6px] border font-mono text-[11px] font-medium leading-none"
+
+                      <p
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="font-solva-sans text-[15px] leading-[22.5px]"
                       >
-                        {lang === 'vi' ? 'MẶC ĐỊNH' : 'DEFAULT'}
-                      </span>
+                        {lang === 'vi'
+                          ? 'Phù hợp để làm quen hệ thống và rà soát nhanh các bài tập, tiểu luận môn học ngắn.'
+                          : 'Ideal for exploring the platform and checking short course essays & literature drafts.'}
+                      </p>
                     </div>
 
-                    {/* Description */}
-                    <p
-                      style={{ color: 'var(--solva-muted)' }}
-                      className="font-solva-sans text-[15px] leading-[22.5px] min-h-[45px]"
-                    >
-                      {lang === 'vi'
-                        ? 'Phù hợp để làm quen hệ thống và rà soát nhanh các bài tập, tiểu luận môn học ngắn.'
-                        : 'Ideal for exploring the platform and checking short course essays & literature drafts.'}
-                    </p>
-
-                    {/* Price Display (`Sentient` 44px Light) */}
+                    {/* Row 3: Price Display (`Sentient` 44px Light) */}
                     <div
                       style={{ borderColor: 'var(--solva-border)' }}
-                      className="pt-4 border-t"
+                      className="pt-[16px] lg:pb-[18px] border-t"
                     >
                       <div className="flex items-baseline gap-1.5">
                         <span
@@ -680,10 +726,18 @@ export function PricingPage() {
                           ? 'Miễn phí trọn đời · Không cần thẻ'
                           : 'Free forever · No credit card required'}
                       </p>
+                      {lang === 'vi' && (
+                        <p
+                          style={{ color: 'var(--solva-muted)' }}
+                          className="font-mono text-[12px] mt-1"
+                        >
+                          0 ₫/tháng · Khởi tạo tức thì
+                        </p>
+                      )}
                     </div>
 
-                    {/* Features Checklist */}
-                    <div className="space-y-[10px] pt-1">
+                    {/* Row 4: Features Checklist (Constructive Basic Framing) */}
+                    <div className="space-y-[10px] pt-1 lg:pb-[20px]">
                       <p
                         style={{ color: 'var(--solva-ink)' }}
                         className="font-mono text-[11px] font-semibold uppercase tracking-wider"
@@ -719,310 +773,370 @@ export function PricingPage() {
                         ))}
                         {(lang === 'vi'
                           ? [
-                              'Không hỗ trợ xuất báo cáo PDF, DOCX, CSV',
-                              'Khóa Document Inspector, Logic Trace & Đồ thị',
-                              'Không hỗ trợ tải lên hàng loạt (Batch Upload)',
+                              'Báo cáo trực tuyến đầy đủ · Mở khóa xuất Word/PDF ở gói Pro',
+                              'Bảng tổng hợp kết luận · Mở khóa Document Inspector ở gói Pro',
+                              'Kiểm tra từng bản thảo · Mở khóa tải hàng loạt ở gói Pro',
                             ]
                           : [
-                              'No PDF, DOCX (Word), or CSV report export',
-                              'No Document Inspector, Logic Trace, or Graph',
-                              'No multi-file Batch Upload',
+                              'Web verification report included (Word/PDF export on Pro)',
+                              'Summary verdict table included (Document Inspector on Pro)',
+                              'Single-manuscript check per upload (Batch Upload on Pro)',
                             ]
-                        ).map((lim) => (
+                        ).map((item) => (
                           <li
-                            key={lim}
-                            style={{ color: 'var(--solva-subtle)' }}
+                            key={item}
+                            style={{ color: 'var(--solva-muted)' }}
                             className="flex items-start gap-[9px] font-solva-sans text-[14px] leading-[21px]"
                           >
-                            <X className="w-[16px] h-[16px] mt-[2.5px] shrink-0 opacity-70" />
-                            <span>{lim}</span>
+                            <CheckCircle2 className="w-[16px] h-[16px] mt-[2.5px] shrink-0 opacity-75" />
+                            <span>{item}</span>
                           </li>
                         ))}
                       </ul>
                     </div>
-                  </div>
 
-                  {/* Action Button */}
-                  <div
-                    style={{ borderColor: 'var(--solva-border)' }}
-                    className="pt-5 border-t"
-                  >
-                    <SolvaPlanActionButton
-                      variant="outline"
-                      disabled={adminLocked || Boolean(user && planTier === 'basic')}
-                      onClick={() => handleSelectPlan('basic')}
-                      testId="select-basic-btn"
-                    >
-                      {adminLocked
-                        ? lang === 'vi'
-                          ? 'Đã bao gồm trong quyền Quản trị'
-                          : 'Included with Admin access'
-                        : user && planTier === 'basic'
-                        ? lang === 'vi'
-                          ? 'Đang sử dụng gói Basic'
-                          : 'Current Active Plan'
-                        : lang === 'vi'
-                          ? 'Bắt đầu miễn phí'
-                          : 'Get Started Free'}
-                    </SolvaPlanActionButton>
-                  </div>
-                </div>
-              </SolvaScrollReveal>
-
-              {/* 2. PRO TIER (CENTER HIGHLIGHTED — RADIAL WATERCOLOR FLORAL BACKDROP + #19 CardHoverTilt) */}
-              <SolvaScrollReveal delayMs={95} yOffset={36} triggerRatio={0.99} className="h-full">
-                <CardHoverTilt maxTilt={3.5} className="h-full" cardClassName="h-full rounded-[16px]">
-                <div
-                  style={{
-                    backgroundColor: 'var(--solva-surface)',
-                    borderColor: 'var(--solva-ink)',
-                  }}
-                  className="relative rounded-[16px] border-2 p-[28px] sm:p-[32px] flex flex-col justify-between gap-[24px] overflow-hidden h-full shadow-[0_12px_36px_rgba(28,26,21,0.08)]"
-                  data-testid="plan-card-pro"
-                >
-                  {/* Radial-Masked Watercolor Floral Background (`/solva/pricing-floral.webp`) */}
-                  <div
-                    className="solva-pricing-floral-mask absolute inset-0 pointer-events-none select-none z-0"
-                    aria-hidden="true"
-                  >
-                    <img
-                      src="/solva/pricing-floral.webp"
-                      alt=""
-                      loading="eager"
-                      decoding="async"
-                      {...({ fetchpriority: 'low' } as Record<string, string>)}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="solva-noise-overlay z-0" aria-hidden="true" />
-
-                  <div className="relative z-10 space-y-[20px]">
-                    {/* Top Recommendation Pill */}
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span
-                        style={{
-                          backgroundColor: 'var(--solva-btn-bg)',
-                          color: 'var(--solva-btn-fg)',
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[6px] font-mono text-[11px] font-semibold tracking-wide"
-                      >
-                        <Sparkles className="w-3 h-3" />
-                        <span>
-                          {lang === 'vi'
-                            ? 'PHỔ BIẾN NHẤT · KHUYÊN DÙNG'
-                            : 'MOST POPULAR · RECOMMENDED'}
-                        </span>
-                      </span>
-                      {billingCycle === 'annual' && (
-                        <span className="px-2.5 py-1 rounded-[6px] bg-emerald-600/15 text-emerald-800 dark:text-emerald-300 border border-emerald-600/30 font-mono text-[11px] font-semibold">
-                          {lang === 'vi' ? 'Tiết kiệm $48/năm' : 'Save $48/yr'}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Header */}
-                    <div className="flex items-center gap-3">
-                      <div
-                        style={{
-                          backgroundColor: 'var(--solva-btn-bg)',
-                          color: 'var(--solva-btn-fg)',
-                        }}
-                        className="w-[40px] h-[40px] rounded-[10px] flex items-center justify-center shrink-0 shadow-2xs"
-                      >
-                        <Zap className="w-[18px] h-[18px]" />
-                      </div>
-                      <div>
-                        <h2
-                          style={{ color: 'var(--solva-ink)' }}
-                          className="font-solva-sans text-[22px] font-medium leading-tight tracking-[-0.02em]"
-                        >
-                          Pro
-                        </h2>
-                        <p
-                          style={{ color: 'var(--solva-muted)' }}
-                          className="font-solva-sans text-[13px] mt-0.5 font-medium"
-                        >
-                          {lang === 'vi'
-                            ? 'Nghiên cứu sinh, Luận văn & Giảng viên'
-                            : 'Thesis Writers, Researchers & Lecturers'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Description */}
-                    <p
-                      style={{ color: 'var(--solva-muted)' }}
-                      className="font-solva-sans text-[15px] leading-[22.5px] min-h-[45px]"
-                    >
-                      {lang === 'vi'
-                        ? 'Mở khóa toàn bộ công nghệ Neuro-Symbolic, kiểm tra khóa luận/luận văn dài và xuất báo cáo chuẩn hội đồng.'
-                        : 'Full Neuro-Symbolic pipeline for full-length theses, research manuscripts, and lecturer grading.'}
-                    </p>
-
-                    {/* Price Display (`Sentient` 44px Light + #02 Per-Digit NumberPopIn) */}
+                    {/* Row 5: Action Button */}
                     <div
                       style={{ borderColor: 'var(--solva-border)' }}
-                      className="pt-4 border-t"
+                      className="pt-[18px] border-t flex items-end"
                     >
-                      <div className="flex items-baseline gap-2">
-                        <span
-                          style={{ color: 'var(--solva-ink)' }}
-                          className="font-solva-serif font-light text-[40px] sm:text-[44px] leading-[48px] tracking-[-0.05em]"
-                          data-testid="pro-price-display"
-                        >
-                          <NumberPopIn value={`$${proPrice}`} />
-                        </span>
-                        <span
-                          style={{ color: 'var(--solva-muted)' }}
-                          className="font-solva-sans text-[14px]"
-                        >
-                          / {lang === 'vi' ? 'tháng' : 'month'}
-                        </span>
-                        {billingCycle === 'annual' && (
-                          <span
-                            style={{ color: 'var(--solva-subtle)' }}
-                            className="text-[14px] line-through font-mono"
-                          >
-                            $20
-                          </span>
-                        )}
-                      </div>
-                      <p
-                        style={{ color: 'var(--solva-muted)' }}
-                        className="font-mono text-[12px] mt-1"
+                      <SolvaPlanActionButton
+                        variant="outline"
+                        disabled={adminLocked || Boolean(user && planTier === 'basic')}
+                        onClick={() => handleSelectPlan('basic')}
+                        testId="select-basic-btn"
                       >
-                        {billingCycle === 'annual'
-                          ? lang === 'vi'
-                            ? 'Thanh toán $192 / năm (Tương đương tặng >2 tháng miễn phí)'
-                            : 'Billed $192 annually ($16/mo equivalent — Save 20%)'
-                          : lang === 'vi'
-                            ? 'Thanh toán $20 định kỳ hàng tháng (Hoặc $16/tháng khi trả năm)'
-                            : 'Billed $20 monthly (Or $16/mo when billed annually)'}
-                      </p>
-                    </div>
-
-                    {/* Features Checklist */}
-                    <div className="space-y-[10px] pt-1">
-                      <p
-                        style={{ color: 'var(--solva-ink)' }}
-                        className="font-mono text-[11px] font-semibold uppercase tracking-wider"
-                      >
-                        {lang === 'vi'
-                          ? 'Mọi tính năng Basic, cộng thêm:'
-                          : 'Everything in Basic, plus:'}
-                      </p>
-                      <ul className="space-y-[9px]">
-                        {(lang === 'vi'
-                          ? [
-                              '50 lượt kiểm tra (.PDF, .DOCX, .BIB, .RIS) mỗi tháng (Gấp 16 lần)',
-                              'Tối đa 25 MB & 100 trang / bài (Đủ cho Khóa luận & Luận văn ThS)',
-                              'Kiểm chứng tới 200 trích dẫn / bài + Batch Upload 10 files',
-                              'Đầy đủ 15+ nguồn học thuật & kỹ thuật (+DataCite, DOAJ, HAL, NCBI/bioRxiv, HF, RFC)',
-                              'Phát hiện bài báo bị rút hồi (Retraction Watch) & cứu hộ Link Rot qua Wayback Machine',
-                              'Sentence-BERT + Multilingual MiniLM ONNX INT8 đối chiếu câu bằng chứng',
-                              'Cầu nối ngữ nghĩa đa ngôn ngữ (Tiếng Việt ↔ Tiếng Anh)',
-                              'Mở khóa Document Inspector, Logic Trace & Đồ thị trích dẫn',
-                              'Xuất báo cáo chuẩn học thuật ra PDF, DOCX (Word), CSV & JSON',
-                              'Quản lý tới 3 Lớp học (Classrooms) & Ghi đè kết luận (Override)',
-                            ]
-                          : [
-                              '50 manuscript checks (.PDF, .DOCX, .BIB, .RIS) / month (16x Basic)',
-                              'Up to 25 MB & 100 pages per document (Full Master/BS Theses)',
-                              'Up to 200 citations / doc + 10-file concurrent Batch Upload',
-                              'All 15+ Scholarly & Technical APIs (+DataCite, DOAJ, HAL, NCBI/bioRxiv, HF, RFC)',
-                              'Retraction Watch Detection & Wayback Machine Link-Rot Rescue',
-                              'Sentence-BERT + Multilingual MiniLM ONNX INT8 semantic alignment',
-                              'Cross-lingual semantic bridging (Vietnamese ↔ English)',
-                              'Unlock Document Inspector, Logic Trace & Evidence Graph',
-                              'Export academic reports in PDF, DOCX (Word), CSV & JSON',
-                              'Manage up to 3 Classroom Cohorts & Verdict Overrides',
-                            ]
-                        ).map((feat) => (
-                          <li
-                            key={feat}
-                            className="flex items-start gap-[9px] font-solva-sans text-[14px] leading-[21px]"
-                          >
-                            <CheckCircle2
-                              style={{ color: 'var(--solva-ink)' }}
-                              className="w-[16px] h-[16px] mt-[2.5px] shrink-0"
-                            />
-                            <span
-                              style={{ color: 'var(--solva-ink)' }}
-                              className="font-medium"
-                            >
-                              {feat}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-
-                  {/* Action Button */}
-                  <div
-                    style={{ borderColor: 'var(--solva-border)' }}
-                    className="relative z-10 pt-5 border-t"
-                  >
-                    <SolvaPlanActionButton
-                      variant="primary"
-                      disabled={
-                        adminLocked ||
-                        loadingTier !== null ||
-                        isCurrentPro ||
-                        Boolean(user && planTier === 'ultra')
-                      }
-                      onClick={() => handleSelectPlan('pro')}
-                      testId="select-pro-btn"
-                    >
-                      {loadingTier === 'pro' ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <CreditCard className="h-4 w-4" />
-                      )}
-                      <span>
                         {adminLocked
                           ? lang === 'vi'
                             ? 'Đã bao gồm trong quyền Quản trị'
                             : 'Included with Admin access'
-                          : user && planTier === 'ultra'
+                          : user && planTier === 'basic'
                             ? lang === 'vi'
-                              ? 'Đã bao gồm trong gói Ultra'
-                              : 'Included in Ultra Plan'
-                            : isCurrentPro
-                              ? lang === 'vi'
-                                ? 'Đang sử dụng gói Pro này'
-                                : 'Current Active Pro Plan'
-                              : lang === 'vi'
-                                ? `Nâng cấp lên Pro · $${
-                                    billingCycle === 'annual' ? '192/năm' : '20/tháng'
-                                  }`
-                                : `Upgrade to Pro · $${
-                                    billingCycle === 'annual' ? '192/yr' : '20/mo'
-                                  }`}
-                      </span>
-                    </SolvaPlanActionButton>
+                              ? 'Đang sử dụng gói Basic'
+                              : 'Current Active Plan'
+                            : lang === 'vi'
+                              ? 'Bắt đầu miễn phí'
+                              : 'Get Started Free'}
+                      </SolvaPlanActionButton>
+                    </div>
                   </div>
                 </div>
+              </SolvaScrollReveal>
+
+              {/* 2. PRO TIER (CENTER HIGHLIGHTED — FRAMED FLORAL GALLERY HEADER + .solva-pro-card-surface + #19 CardHoverTilt) */}
+              <SolvaScrollReveal
+                delayMs={95}
+                yOffset={36}
+                triggerRatio={0.99}
+                className="h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid"
+              >
+                <CardHoverTilt
+                  maxTilt={3.5}
+                  className="h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid"
+                  cardClassName="h-full rounded-[16px] lg:row-span-5 lg:grid lg:grid-rows-subgrid"
+                >
+                  <div
+                    style={{
+                      backgroundColor: 'var(--solva-surface)',
+                      borderColor: 'var(--solva-ink)',
+                    }}
+                    className="relative rounded-[16px] border-2 p-[8px] sm:p-[10px] flex flex-col overflow-hidden h-full shadow-[0_12px_36px_rgba(28,26,21,0.08)] lg:row-span-5 lg:grid lg:grid-rows-subgrid"
+                    data-testid="plan-card-pro"
+                  >
+                    {/* Row 1: Top Gallery Floral Painting Banner (`/solva/pricing-floral.webp`) */}
+                    <div className="relative min-h-[100px] sm:min-h-[104px] rounded-t-[11px] overflow-hidden px-4 sm:px-5 py-3.5 flex flex-col justify-between">
+                      <div
+                        className="solva-floral-banner-mask absolute inset-0 pointer-events-none select-none z-0"
+                        aria-hidden="true"
+                      >
+                        <img
+                          src="/solva/pricing-floral.webp"
+                          alt=""
+                          loading="eager"
+                          decoding="async"
+                          {...({ fetchpriority: 'low' } as Record<string, string>)}
+                          className="w-full h-full object-cover object-center"
+                        />
+                      </div>
+                      <div className="solva-noise-overlay z-0" aria-hidden="true" />
+
+                      <div className="relative z-10 flex items-start justify-between gap-2 flex-wrap">
+                        <span
+                          style={{
+                            backgroundColor: '#1C1A15',
+                            color: '#FBFAF6',
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] border border-white/15 shadow-sm font-mono text-[11px] font-semibold leading-none tracking-wide whitespace-nowrap shrink-0"
+                        >
+                          <Sparkles className="w-3 h-3 shrink-0" />
+                          <span>
+                            {lang === 'vi' ? 'PHỔ BIẾN NHẤT' : 'MOST POPULAR'}
+                          </span>
+                        </span>
+                        {billingCycle === 'annual' && (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-[6px] bg-[#FBFAF6] text-emerald-800 border border-emerald-700/25 dark:bg-[#141310] dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm font-mono text-[11px] font-semibold leading-none whitespace-nowrap shrink-0">
+                            {lang === 'vi' ? 'Tiết kiệm $48/năm' : 'Save $48/yr'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Rows 2..5: High-Contrast Pro Card Surface (WCAG AAA in Light & Dark) */}
+                    <div className="solva-pro-card-surface relative z-10 rounded-[12px] px-[20px] sm:px-[24px] py-[22px] sm:py-[24px] flex flex-col justify-between gap-[20px] lg:gap-y-0 flex-1 lg:row-span-4 lg:grid lg:grid-rows-subgrid">
+                      {/* Row 2: Header & Description */}
+                      <div className="space-y-[14px] lg:pb-[18px]">
+                        <div className="flex items-center gap-3">
+                          <div
+                            style={{
+                              backgroundColor: 'var(--solva-btn-bg)',
+                              color: 'var(--solva-btn-fg)',
+                            }}
+                            className="w-[40px] h-[40px] rounded-[10px] flex items-center justify-center shrink-0 shadow-2xs"
+                          >
+                            <Zap className="w-[18px] h-[18px]" />
+                          </div>
+                          <div>
+                            <h2
+                              style={{ color: 'var(--solva-ink)' }}
+                              className="font-solva-sans text-[22px] font-medium leading-tight tracking-[-0.02em]"
+                            >
+                              Pro
+                            </h2>
+                            <p
+                              style={{ color: 'var(--solva-muted)' }}
+                              className="font-solva-sans text-[13px] mt-0.5 font-medium"
+                            >
+                              {lang === 'vi'
+                                ? 'Nghiên cứu sinh, Luận văn & Giảng viên'
+                                : 'Thesis Writers, Researchers & Lecturers'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <p
+                          style={{ color: 'var(--solva-muted)' }}
+                          className="font-solva-sans text-[15px] leading-[22.5px]"
+                        >
+                          {lang === 'vi'
+                            ? 'Mở khóa toàn bộ công nghệ Neuro-Symbolic, kiểm tra khóa luận/luận văn dài và xuất báo cáo chuẩn hội đồng.'
+                            : 'Full Neuro-Symbolic pipeline for full-length theses, research manuscripts, and lecturer grading.'}
+                        </p>
+                      </div>
+
+                      {/* Row 3: Price Display (`Sentient` 44px Light + #02 Per-Digit NumberPopIn + VI VND Context) */}
+                      <div
+                        style={{ borderColor: 'var(--solva-border)' }}
+                        className="pt-[16px] lg:pb-[18px] border-t"
+                      >
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span
+                            style={{ color: 'var(--solva-ink)' }}
+                            className="font-solva-serif font-light text-[40px] sm:text-[44px] leading-[48px] tracking-[-0.05em]"
+                            data-testid="pro-price-display"
+                          >
+                            <NumberPopIn value={`$${proPrice}`} />
+                          </span>
+                          <span
+                            style={{ color: 'var(--solva-muted)' }}
+                            className="font-solva-sans text-[14px]"
+                          >
+                            / {lang === 'vi' ? 'tháng' : 'month'}
+                          </span>
+                          {billingCycle === 'annual' && (
+                            <span
+                              style={{ color: 'var(--solva-subtle)' }}
+                              className="text-[14px] line-through font-mono"
+                            >
+                              $20
+                            </span>
+                          )}
+                        </div>
+                        <p
+                          style={{ color: 'var(--solva-muted)' }}
+                          className="font-mono text-[12px] mt-1"
+                        >
+                          {billingCycle === 'annual'
+                            ? lang === 'vi'
+                              ? 'Thanh toán $192 / năm (Tương đương tặng >2 tháng miễn phí)'
+                              : 'Billed $192 annually ($16/mo equivalent — Save 20%)'
+                            : lang === 'vi'
+                              ? 'Thanh toán $20 định kỳ hàng tháng (Hoặc $16/tháng khi trả năm)'
+                              : 'Billed $20 monthly (Or $16/mo when billed annually)'}
+                        </p>
+                        {lang === 'vi' && (
+                          <p
+                            data-testid="pro-vnd-equivalent"
+                            style={{ color: 'var(--solva-ink)' }}
+                            className="font-mono text-[12px] font-medium mt-1"
+                          >
+                            {billingCycle === 'annual'
+                              ? '≈ 400.000 ₫/tháng · 4.800.000 ₫/năm qua VNPay'
+                              : '≈ 500.000 ₫/tháng qua VNPay & thẻ quốc tế'}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Row 4: Features Checklist */}
+                      <div className="space-y-[10px] pt-1 lg:pb-[20px]">
+                        <p
+                          style={{ color: 'var(--solva-ink)' }}
+                          className="font-mono text-[11px] font-semibold uppercase tracking-wider"
+                        >
+                          {lang === 'vi'
+                            ? 'Mọi tính năng Basic, cộng thêm:'
+                            : 'Everything in Basic, plus:'}
+                        </p>
+                        <ul className="space-y-[9px]">
+                          {(lang === 'vi'
+                            ? [
+                                '50 lượt kiểm tra (.PDF, .DOCX, .BIB, .RIS) mỗi tháng (Gấp 16 lần)',
+                                'Tối đa 25 MB & 100 trang / bài (Đủ cho Khóa luận & Luận văn ThS)',
+                                'Kiểm chứng tới 200 trích dẫn / bài + Batch Upload 10 files',
+                                'Đầy đủ 15+ nguồn học thuật & kỹ thuật (+DataCite, DOAJ, HAL, NCBI/bioRxiv, HF, RFC)',
+                                'Phát hiện bài báo bị rút hồi (Retraction Watch) & cứu hộ Link Rot qua Wayback Machine',
+                                'Sentence-BERT + Multilingual MiniLM ONNX INT8 đối chiếu câu bằng chứng',
+                                'Cầu nối ngữ nghĩa đa ngôn ngữ (Tiếng Việt ↔ Tiếng Anh)',
+                                'Mở khóa Document Inspector, Logic Trace & Đồ thị trích dẫn',
+                                'Xuất báo cáo chuẩn học thuật ra PDF, DOCX (Word), CSV & JSON',
+                                'Quản lý tới 3 Lớp học (Classrooms) & Ghi đè kết luận (Override)',
+                              ]
+                            : [
+                                '50 manuscript checks (.PDF, .DOCX, .BIB, .RIS) / month (16x Basic)',
+                                'Up to 25 MB & 100 pages per document (Full Master/BS Theses)',
+                                'Up to 200 citations / doc + 10-file concurrent Batch Upload',
+                                'All 15+ Scholarly & Technical APIs (+DataCite, DOAJ, HAL, NCBI/bioRxiv, HF, RFC)',
+                                'Retraction Watch Detection & Wayback Machine Link-Rot Rescue',
+                                'Sentence-BERT + Multilingual MiniLM ONNX INT8 semantic alignment',
+                                'Cross-lingual semantic bridging (Vietnamese ↔ English)',
+                                'Unlock Document Inspector, Logic Trace & Evidence Graph',
+                                'Export academic reports in PDF, DOCX (Word), CSV & JSON',
+                                'Manage up to 3 Classroom Cohorts & Verdict Overrides',
+                              ]
+                          ).map((feat) => (
+                            <li
+                              key={feat}
+                              className="flex items-start gap-[9px] font-solva-sans text-[14px] leading-[21px]"
+                            >
+                              <CheckCircle2
+                                style={{ color: 'var(--solva-ink)' }}
+                                className="w-[16px] h-[16px] mt-[2.5px] shrink-0"
+                              />
+                              <span
+                                style={{ color: 'var(--solva-ink)' }}
+                                className="font-medium"
+                              >
+                                {feat}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Row 5: Action Button */}
+                      <div
+                        style={{ borderColor: 'var(--solva-border)' }}
+                        className="pt-[18px] border-t flex items-end"
+                      >
+                        <SolvaPlanActionButton
+                          variant="primary"
+                          disabled={
+                            adminLocked ||
+                            loadingTier !== null ||
+                            isCurrentPro ||
+                            Boolean(user && planTier === 'ultra')
+                          }
+                          onClick={() => handleSelectPlan('pro')}
+                          testId="select-pro-btn"
+                        >
+                          {loadingTier === 'pro' ? (
+                            <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                          ) : (
+                            <CreditCard className="h-4 w-4 shrink-0" />
+                          )}
+                          <span>
+                            {adminLocked
+                              ? lang === 'vi'
+                                ? 'Đã bao gồm trong quyền Quản trị'
+                                : 'Included with Admin access'
+                              : user && planTier === 'ultra'
+                                ? lang === 'vi'
+                                  ? 'Đã bao gồm trong gói Ultra'
+                                  : 'Included in Ultra Plan'
+                                : isCurrentPro
+                                  ? lang === 'vi'
+                                    ? 'Đang sử dụng gói Pro này'
+                                    : 'Current Active Pro Plan'
+                                  : lang === 'vi'
+                                    ? `Nâng cấp lên Pro · $${
+                                        billingCycle === 'annual' ? '192/năm' : '20/tháng'
+                                      }`
+                                    : `Upgrade to Pro · $${
+                                        billingCycle === 'annual' ? '192/yr' : '20/mo'
+                                      }`}
+                          </span>
+                        </SolvaPlanActionButton>
+                      </div>
+                    </div>
+                  </div>
                 </CardHoverTilt>
               </SolvaScrollReveal>
 
               {/* 3. ULTRA TIER */}
-              <SolvaScrollReveal delayMs={190} yOffset={36} triggerRatio={0.99} className="h-full">
+              <SolvaScrollReveal
+                delayMs={190}
+                yOffset={36}
+                triggerRatio={0.99}
+                className="h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid"
+              >
                 <div
                   style={{
                     backgroundColor: 'var(--solva-surface)',
                     borderColor: 'var(--solva-border)',
                   }}
-                  className="relative rounded-[16px] border p-[28px] sm:p-[32px] flex flex-col justify-between gap-[24px] h-full"
+                  className="relative rounded-[16px] border p-[8px] sm:p-[10px] flex flex-col overflow-hidden h-full lg:row-span-5 lg:grid lg:grid-rows-subgrid"
                   data-testid="plan-card-ultra"
                 >
-                  <div className="space-y-[20px]">
-                    {/* Header */}
-                    <div className="flex items-start justify-between gap-2">
+                  {/* Row 1: Top Architectural Gallery Header Band */}
+                  <div className="relative min-h-[100px] sm:min-h-[104px] rounded-t-[11px] px-4 sm:px-5 py-3.5 flex flex-col justify-between bg-gradient-to-b from-[#E8E3D6]/95 via-[#F4F2EC]/55 to-transparent dark:from-[#2A261E]/95 dark:via-[#1E1C17]/55 dark:to-transparent">
+                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                      <span
+                        style={{
+                          backgroundColor: 'var(--solva-bg)',
+                          borderColor: 'var(--solva-border)',
+                          color: 'var(--solva-muted)',
+                        }}
+                        className="inline-flex items-center px-2.5 py-1 rounded-[6px] border font-mono text-[11px] font-medium leading-none whitespace-nowrap shrink-0"
+                      >
+                        {lang === 'vi' ? 'QUY MÔ LỚN' : 'ENTERPRISE LAB'}
+                      </span>
+                      {billingCycle === 'annual' && (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-[6px] bg-[#FBFAF6] text-emerald-800 border border-emerald-700/25 dark:bg-[#141310] dark:text-emerald-300 dark:border-emerald-400/30 shadow-sm font-mono text-[11px] font-semibold leading-none whitespace-nowrap shrink-0">
+                          {lang === 'vi' ? 'Tiết kiệm $480/năm' : 'Save $480/yr'}
+                        </span>
+                      )}
+                    </div>
+                    <span
+                      style={{ color: 'var(--solva-muted)' }}
+                      className="font-mono text-[11px] uppercase tracking-wider whitespace-nowrap"
+                    >
+                      {lang === 'vi' ? '03 · BỘ MÔN & HỘI ĐỒNG' : '03 · FACULTY & COHORT'}
+                    </span>
+                  </div>
+
+                  {/* Rows 2..5: Card Body Surface */}
+                  <div
+                    style={{
+                      backgroundColor: 'var(--solva-bg)',
+                      borderColor: 'var(--solva-border)',
+                    }}
+                    className="relative z-10 rounded-[12px] border px-[20px] sm:px-[24px] py-[22px] sm:py-[24px] flex flex-col justify-between gap-[20px] lg:gap-y-0 flex-1 lg:row-span-4 lg:grid lg:grid-rows-subgrid"
+                  >
+                    {/* Row 2: Header & Description */}
+                    <div className="space-y-[14px] lg:pb-[18px]">
                       <div className="flex items-center gap-3">
                         <div
                           style={{
-                            backgroundColor: 'var(--solva-bg)',
+                            backgroundColor: 'var(--solva-surface)',
                             borderColor: 'var(--solva-border)',
                             color: 'var(--solva-ink)',
                           }}
@@ -1047,40 +1161,23 @@ export function PricingPage() {
                           </p>
                         </div>
                       </div>
-                      {billingCycle === 'annual' ? (
-                        <span className="px-2.5 py-1 rounded-[6px] bg-emerald-600/15 text-emerald-800 dark:text-emerald-300 border border-emerald-600/30 font-mono text-[11px] font-semibold">
-                          {lang === 'vi' ? 'Tiết kiệm $480' : 'Save $480/yr'}
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            backgroundColor: 'var(--solva-bg)',
-                            borderColor: 'var(--solva-border)',
-                            color: 'var(--solva-muted)',
-                          }}
-                          className="px-[8px] py-[4px] rounded-[6px] border font-mono text-[11px] font-medium leading-none"
-                        >
-                          {lang === 'vi' ? 'QUY MÔ LỚN' : 'ENTERPRISE LAB'}
-                        </span>
-                      )}
+
+                      <p
+                        style={{ color: 'var(--solva-muted)' }}
+                        className="font-solva-sans text-[15px] leading-[22.5px]"
+                      >
+                        {lang === 'vi'
+                          ? 'Hiệu năng tối đa không giới hạn cho nhóm nghiên cứu, bộ môn đại học và hội đồng chấm luận án Tiến sĩ.'
+                          : 'Unrestricted verification scale for university departments, research labs, and doctoral committees.'}
+                      </p>
                     </div>
 
-                    {/* Description */}
-                    <p
-                      style={{ color: 'var(--solva-muted)' }}
-                      className="font-solva-sans text-[15px] leading-[22.5px] min-h-[45px]"
-                    >
-                      {lang === 'vi'
-                        ? 'Hiệu năng tối đa không giới hạn cho nhóm nghiên cứu, bộ môn đại học và hội đồng chấm luận án Tiến sĩ.'
-                        : 'Unrestricted verification scale for university departments, research labs, and doctoral committees.'}
-                    </p>
-
-                    {/* Price Display (`Sentient` 44px Light + #02 Per-Digit NumberPopIn) */}
+                    {/* Row 3: Price Display (`Sentient` 44px Light + #02 Per-Digit NumberPopIn + VI VND Context) */}
                     <div
                       style={{ borderColor: 'var(--solva-border)' }}
-                      className="pt-4 border-t"
+                      className="pt-[16px] lg:pb-[18px] border-t"
                     >
-                      <div className="flex items-baseline gap-2">
+                      <div className="flex items-baseline gap-2 flex-wrap">
                         <span
                           style={{ color: 'var(--solva-ink)' }}
                           className="font-solva-serif font-light text-[40px] sm:text-[44px] leading-[48px] tracking-[-0.05em]"
@@ -1115,10 +1212,21 @@ export function PricingPage() {
                             ? 'Thanh toán $200 định kỳ hàng tháng (Hoặc $160/tháng khi trả năm)'
                             : 'Billed $200 monthly (Or $160/mo when billed annually)'}
                       </p>
+                      {lang === 'vi' && (
+                        <p
+                          data-testid="ultra-vnd-equivalent"
+                          style={{ color: 'var(--solva-muted)' }}
+                          className="font-mono text-[12px] mt-1"
+                        >
+                          {billingCycle === 'annual'
+                            ? '≈ 4.000.000 ₫/tháng · 48.000.000 ₫/năm qua VNPay'
+                            : '≈ 5.000.000 ₫/tháng qua VNPay & thẻ quốc tế'}
+                        </p>
+                      )}
                     </div>
 
-                    {/* Features Checklist */}
-                    <div className="space-y-[10px] pt-1">
+                    {/* Row 4: Features Checklist */}
+                    <div className="space-y-[10px] pt-1 lg:pb-[20px]">
                       <p
                         style={{ color: 'var(--solva-ink)' }}
                         className="font-mono text-[11px] font-semibold uppercase tracking-wider"
@@ -1160,46 +1268,46 @@ export function PricingPage() {
                         ))}
                       </ul>
                     </div>
-                  </div>
 
-                  {/* Action Button */}
-                  <div
-                    style={{ borderColor: 'var(--solva-border)' }}
-                    className="pt-5 border-t"
-                  >
-                    <SolvaPlanActionButton
-                      variant="outline"
-                      disabled={
-                        adminLocked ||
-                        loadingTier !== null ||
-                        isCurrentUltra
-                      }
-                      onClick={() => handleSelectPlan('ultra')}
-                      testId="select-ultra-btn"
+                    {/* Row 5: Action Button */}
+                    <div
+                      style={{ borderColor: 'var(--solva-border)' }}
+                      className="pt-[18px] border-t flex items-end"
                     >
-                      {loadingTier === 'ultra' ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <CreditCard className="h-4 w-4" />
-                      )}
-                      <span>
-                        {adminLocked
-                          ? lang === 'vi'
-                            ? 'Gói hiện tại · Ultra (Quản trị viên)'
-                            : 'Current Plan · Ultra (Admin)'
-                          : isCurrentUltra
+                      <SolvaPlanActionButton
+                        variant="outline"
+                        disabled={
+                          adminLocked ||
+                          loadingTier !== null ||
+                          isCurrentUltra
+                        }
+                        onClick={() => handleSelectPlan('ultra')}
+                        testId="select-ultra-btn"
+                      >
+                        {loadingTier === 'ultra' ? (
+                          <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                        ) : (
+                          <CreditCard className="h-4 w-4 shrink-0" />
+                        )}
+                        <span>
+                          {adminLocked
                             ? lang === 'vi'
-                              ? 'Đang sử dụng gói Ultra'
-                              : 'Current Active Ultra Plan'
-                            : lang === 'vi'
-                              ? `Nâng cấp lên Ultra · $${
-                                  billingCycle === 'annual' ? '1,920/năm' : '200/tháng'
-                                }`
-                              : `Upgrade to Ultra · $${
-                                  billingCycle === 'annual' ? '1,920/yr' : '200/mo'
-                                }`}
-                      </span>
-                    </SolvaPlanActionButton>
+                              ? 'Gói hiện tại · Ultra (Quản trị viên)'
+                              : 'Current Plan · Ultra (Admin)'
+                            : isCurrentUltra
+                              ? lang === 'vi'
+                                ? 'Đang sử dụng gói Ultra'
+                                : 'Current Active Ultra Plan'
+                              : lang === 'vi'
+                                ? `Nâng cấp lên Ultra · $${
+                                    billingCycle === 'annual' ? '1,920/năm' : '200/tháng'
+                                  }`
+                                : `Upgrade to Ultra · $${
+                                    billingCycle === 'annual' ? '1,920/yr' : '200/mo'
+                                  }`}
+                        </span>
+                      </SolvaPlanActionButton>
+                    </div>
                   </div>
                 </div>
               </SolvaScrollReveal>
