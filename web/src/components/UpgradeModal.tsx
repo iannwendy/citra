@@ -96,9 +96,9 @@ export function UpgradeModal({
         <div className="shrink-0 bg-gradient-to-r from-indigo-950 via-indigo-900 to-slate-900 px-5 sm:px-6 py-4 sm:py-5 text-white relative overflow-hidden">
           <div className="flex items-start justify-between gap-4 relative z-10">
             <div className="space-y-1.5 min-w-0">
-              <div className="inline-flex flex-wrap items-center gap-1.5 max-w-full px-2.5 py-0.5 rounded-full bg-amber-400/20 border border-amber-300/30 text-amber-200 text-[11px] font-mono font-semibold leading-snug">
-                <Lock className="h-3 w-3 shrink-0" />
-                <span className="break-words">
+              <div className="inline-flex items-start gap-1.5 max-w-full px-2.5 py-1 rounded-lg bg-amber-400/20 border border-amber-300/30 text-amber-200 text-[11px] font-mono font-semibold leading-snug">
+                <Lock className="h-3 w-3 shrink-0 mt-0.5" />
+                <span className="min-w-0 break-words">
                   {featureName
                     ? lang === 'vi'
                       ? `TÍNH NĂNG PREMIUM · ${featureName.toUpperCase()}`
@@ -148,7 +148,7 @@ export function UpgradeModal({
             </div>
             <DialogClose className="rounded-lg p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 shrink-0 cursor-pointer">
               <X className="h-4 w-4" />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{t('common.close', lang === 'vi' ? 'Đóng' : 'Close')}</span>
             </DialogClose>
           </div>
         </div>
@@ -173,11 +173,15 @@ export function UpgradeModal({
             <div
               className="inline-flex items-center p-1 rounded-xl bg-slate-200/80 dark:bg-slate-900 border border-slate-300/60 dark:border-slate-700 shrink-0"
               role="group"
-              aria-label="Billing cycle toggle"
+              aria-label={t(
+                'upgradeModal.billingCycleAriaLabel',
+                lang === 'vi' ? 'Chọn chu kỳ thanh toán' : 'Billing cycle toggle',
+              )}
             >
               <button
                 type="button"
                 data-testid="modal-cycle-monthly"
+                aria-pressed={billingCycle === 'monthly'}
                 onClick={() => setBillingCycle('monthly')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   billingCycle === 'monthly'
@@ -190,6 +194,7 @@ export function UpgradeModal({
               <button
                 type="button"
                 data-testid="modal-cycle-annual"
+                aria-pressed={billingCycle === 'annual'}
                 onClick={() => setBillingCycle('annual')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                   billingCycle === 'annual'
@@ -222,45 +227,45 @@ export function UpgradeModal({
               }`}
             >
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-indigo-600 text-white shrink-0">
-                      <Zap className="h-4 w-4" />
-                    </div>
-                    <div>
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-lg bg-indigo-600 text-white shrink-0">
+                        <Zap className="h-4 w-4" />
+                      </div>
                       <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
                         CITRA Pro
                       </h3>
-                      <p className="text-xs text-slate-600 dark:text-slate-400">
-                        {t(
-                          'upgradeModal.proAudience',
-                          lang === 'vi'
-                            ? 'Khóa luận, Nghiên cứu sinh & Giảng viên'
-                            : 'Thesis writers, Researchers & Lecturers',
-                        )}
-                      </p>
                     </div>
-                  </div>
-                  <Badge
-                    variant={highlightUltra ? 'secondary' : 'default'}
-                    className={
-                      highlightUltra
-                        ? 'text-[10px] font-mono whitespace-nowrap shrink-0'
-                        : 'bg-indigo-600 text-white text-[10px] font-mono whitespace-nowrap shrink-0'
-                    }
-                  >
-                    {isPro
-                      ? lang === 'vi'
-                        ? 'GÓI HIỆN TẠI'
-                        : 'CURRENT PLAN'
-                      : isUltra
+                    <Badge
+                      variant={highlightUltra ? 'secondary' : 'default'}
+                      className={
+                        highlightUltra
+                          ? 'text-[10px] font-mono whitespace-nowrap shrink-0'
+                          : 'bg-indigo-600 text-white text-[10px] font-mono whitespace-nowrap shrink-0'
+                      }
+                    >
+                      {isPro
                         ? lang === 'vi'
-                          ? 'ĐÃ BAO GỒM'
-                          : 'INCLUDED'
-                        : lang === 'vi'
-                          ? 'PHỔ BIẾN NHẤT'
-                          : 'MOST POPULAR'}
-                  </Badge>
+                          ? 'GÓI HIỆN TẠI'
+                          : 'CURRENT PLAN'
+                        : isUltra
+                          ? lang === 'vi'
+                            ? 'ĐÃ BAO GỒM'
+                            : 'INCLUDED'
+                          : lang === 'vi'
+                            ? 'PHỔ BIẾN NHẤT'
+                            : 'MOST POPULAR'}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    {t(
+                      'upgradeModal.proAudience',
+                      lang === 'vi'
+                        ? 'Khóa luận, Nghiên cứu sinh & Giảng viên'
+                        : 'Thesis writers, Researchers & Lecturers',
+                    )}
+                  </p>
                 </div>
 
                 <div className="pt-1">
@@ -291,9 +296,18 @@ export function UpgradeModal({
                       data-testid="modal-pro-vnd-equivalent"
                       className="text-[11px] font-mono font-medium text-slate-700 dark:text-slate-300 mt-0.5"
                     >
-                      {billingCycle === 'annual'
-                        ? '≈ 400.000 ₫/tháng · 4.800.000 ₫/năm qua VNPay'
-                        : '≈ 500.000 ₫/tháng qua VNPay & thẻ quốc tế'}
+                      {billingCycle === 'annual' ? (
+                        <>
+                          <span className="whitespace-nowrap">≈ 400.000 ₫/tháng</span> ·{' '}
+                          <span className="whitespace-nowrap">4.800.000 ₫/năm</span>{' '}
+                          <span className="whitespace-nowrap">qua VNPay</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="whitespace-nowrap">≈ 500.000 ₫/tháng</span>{' '}
+                          <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
+                        </>
+                      )}
                     </p>
                   )}
                 </div>
@@ -363,45 +377,45 @@ export function UpgradeModal({
               }`}
             >
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 rounded-lg bg-violet-600 text-white shrink-0">
-                      <Building2 className="h-4 w-4" />
-                    </div>
-                    <div>
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 rounded-lg bg-violet-600 text-white shrink-0">
+                        <Building2 className="h-4 w-4" />
+                      </div>
                       <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
                         CITRA Ultra
                       </h3>
-                      <p className="text-xs text-slate-600 dark:text-slate-400">
-                        {t(
-                          'upgradeModal.ultraAudience',
-                          lang === 'vi'
-                            ? 'Phòng Lab, Bộ môn & Hội đồng luận án'
-                            : 'Research Labs, Departments & Review Boards',
-                        )}
-                      </p>
                     </div>
-                  </div>
-                  <Badge
-                    variant={highlightUltra ? 'default' : 'secondary'}
-                    className={
-                      highlightUltra
-                        ? 'bg-violet-600 text-white text-[10px] font-mono whitespace-nowrap shrink-0'
-                        : 'text-[10px] font-mono whitespace-nowrap shrink-0'
-                    }
-                  >
-                    {isUltra
-                      ? lang === 'vi'
-                        ? 'GÓI HIỆN TẠI'
-                        : 'CURRENT PLAN'
-                      : highlightUltra
+                    <Badge
+                      variant={highlightUltra ? 'default' : 'secondary'}
+                      className={
+                        highlightUltra
+                          ? 'bg-violet-600 text-white text-[10px] font-mono whitespace-nowrap shrink-0'
+                          : 'text-[10px] font-mono whitespace-nowrap shrink-0'
+                      }
+                    >
+                      {isUltra
                         ? lang === 'vi'
-                          ? 'KHUYÊN DÙNG NÂNG CẤP'
-                          : 'RECOMMENDED UPGRADE'
-                        : lang === 'vi'
-                          ? 'PHÒNG LAB'
-                          : 'LABS & INSTITUTION'}
-                  </Badge>
+                          ? 'GÓI HIỆN TẠI'
+                          : 'CURRENT PLAN'
+                        : highlightUltra
+                          ? lang === 'vi'
+                            ? 'KHUYÊN DÙNG NÂNG CẤP'
+                            : 'RECOMMENDED UPGRADE'
+                          : lang === 'vi'
+                            ? 'PHÒNG LAB'
+                            : 'LABS & INSTITUTION'}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    {t(
+                      'upgradeModal.ultraAudience',
+                      lang === 'vi'
+                        ? 'Phòng Lab, Bộ môn & Hội đồng luận án'
+                        : 'Research Labs, Departments & Review Boards',
+                    )}
+                  </p>
                 </div>
 
                 <div className="pt-1">
@@ -432,9 +446,18 @@ export function UpgradeModal({
                       data-testid="modal-ultra-vnd-equivalent"
                       className="text-[11px] font-mono font-medium text-slate-700 dark:text-slate-300 mt-0.5"
                     >
-                      {billingCycle === 'annual'
-                        ? '≈ 4.000.000 ₫/tháng · 48.000.000 ₫/năm qua VNPay'
-                        : '≈ 5.000.000 ₫/tháng qua VNPay & thẻ quốc tế'}
+                      {billingCycle === 'annual' ? (
+                        <>
+                          <span className="whitespace-nowrap">≈ 4.000.000 ₫/tháng</span> ·{' '}
+                          <span className="whitespace-nowrap">48.000.000 ₫/năm</span>{' '}
+                          <span className="whitespace-nowrap">qua VNPay</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="whitespace-nowrap">≈ 5.000.000 ₫/tháng</span>{' '}
+                          <span className="whitespace-nowrap">qua VNPay &amp; thẻ quốc tế</span>
+                        </>
+                      )}
                     </p>
                   )}
                 </div>

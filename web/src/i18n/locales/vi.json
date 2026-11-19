@@ -346,17 +346,17 @@
     "metadataError": "Lỗi Metadata",
     "suspectedHallucination": "Nghi ngờ bịa đặt",
     "likelyHallucinated": "Khả năng cao bịa đặt",
-    "unresolved": "Chưa giải quyết",
+    "unresolved": "Chưa xác minh",
     "unverifiable": "Không thể xác minh",
     "resource": "Liên kết Web",
-    "likelyVerified": "Có thể đã xác minh",
+    "likelyVerified": "Độ khớp cao",
     "sourceMismatch": "Nguồn không khớp",
     "incompleteReference": "Thiếu quy cách trích dẫn",
     "legalStatute": "Văn bản Pháp luật",
     "verifiedDesc": "Đã đối chiếu khớp với ấn phẩm thực tế về tác giả, năm xuất bản và tiêu đề.",
     "metadataErrorDesc": "Tài liệu có thật nhưng tác giả, năm xuất bản, tiêu đề hoặc mã DOI chưa khớp với bản gốc; hãy kiểm tra và cập nhật lại.",
-    "incompleteReferenceDesc": "Mục tham khảo thiếu các trường bắt buộc (tác giả, năm xuất bản hoặc nơi công bố) chứ không phải nguồn do AI bịa đặt.",
-    "legalStatuteDesc": "Văn bản quy phạm pháp luật đã nhận diện; không tính điểm trừ trích dẫn.",
+    "incompleteReferenceDesc": "Thiếu quy cách trích dẫn — Mục tham khảo thiếu tác giả, năm xuất bản hoặc nơi công bố (không phải nguồn bịa đặt); hãy bổ sung đầy đủ các thông tin còn thiếu.",
+    "legalStatuteDesc": "Văn bản Pháp luật — Văn bản quy phạm pháp luật đã nhận diện; không cần chỉnh sửa và không bị tính điểm trừ trích dẫn.",
     "suspectedHallucinationDesc": "Không tìm thấy tài liệu này trên các thư viện học thuật; hãy kiểm tra lại bản gốc hoặc thay thế nguồn trích dẫn.",
     "unresolvedDesc": "Có thể là sách in, giáo trình nội bộ hoặc luận văn chưa có bản trực tuyến; vui lòng đối chiếu thủ công.",
     "resourceDesc": "Đây là trang web hoặc văn bản quy định chung thay vì bài báo học thuật (không bị tính điểm trừ)."
@@ -808,6 +808,7 @@
     "ultraAudience": "Phòng Lab, Bộ môn & Hội đồng luận án",
     "checkoutInitError": "Không thể khởi tạo phiên thanh toán. Vui lòng thử lại sau giây lát.",
     "secureFooter": "Thanh toán bảo mật qua Stripe & VNPay-QR/ATM · Hủy gia hạn bất cứ lúc nào",
-    "comparePlansLink": "Xem bảng so sánh chi tiết 3 gói"
+    "comparePlansLink": "Xem bảng so sánh chi tiết 3 gói",
+    "billingCycleAriaLabel": "Chọn chu kỳ thanh toán"
   }
 }

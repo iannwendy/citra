@@ -398,4 +398,180 @@ describe('Task 2.3 — Non-Tech Verdict Clarity, Mapping Case-Insensitivity & Up
     expect(viModal.textContent).toContain('5.000.000 ₫');
     expect(screen.getByTestId('modal-upgrade-ultra-btn').textContent).toContain('200');
   });
+
+  it('Round 1: eliminates VI machine-translated calques on VerdictBadge (UNRESOLVED & LIKELY_VERIFIED) and enforces triggeredRules parity + actionable tooltips across VerdictBadge, VerdictBadgeCompact, and VerdictIcon', async () => {
+    // 1. EN actionable tooltips & triggeredRules parity across all 3 exports
+    await i18n.changeLanguage('en');
+    const { unmount: unmountEn } = renderWithProviders(
+      <div>
+        <div data-testid="en-vb-inc">
+          <VerdictBadge verdict="METADATA_ERROR" triggeredRules={['R-INCOMPLETE-METADATA']} />
+        </div>
+        <div data-testid="en-vbc-inc">
+          <VerdictBadgeCompact verdict="metadata_error" triggeredRules={['R-INCOMPLETE-METADATA']} />
+        </div>
+        <div data-testid="en-vbi-inc">
+          <VerdictIcon verdict="metadata_error" triggeredRules={['R-INCOMPLETE-METADATA']} />
+        </div>
+        <div data-testid="en-vb-legal">
+          <VerdictBadge verdict="RESOURCE" triggeredRules={['R-VN-LEGAL-VERIFIED']} />
+        </div>
+        <div data-testid="en-vbc-legal">
+          <VerdictBadgeCompact verdict="resource" triggeredRules={['R-VN-LEGAL-VERIFIED']} />
+        </div>
+        <div data-testid="en-vbi-legal">
+          <VerdictIcon verdict="resource" triggeredRules={['R-VN-LEGAL-VERIFIED']} />
+        </div>
+      </div>,
+    );
+
+    const expectedEnIncompleteTitle =
+      'Incomplete Reference — Citation lacks required fields (author, publication year, or venue) rather than being fabricated; add the missing details to complete this entry.';
+    const expectedEnLegalTitle =
+      'Legal Statute — Recognized legal statute or government regulation; no action needed (excluded from academic citation penalty).';
+
+    for (const id of ['en-vb-inc', 'en-vbc-inc', 'en-vbi-inc']) {
+      const el = screen.getByTestId(id).firstElementChild as HTMLElement;
+      expect(el.getAttribute('title')).toBe(expectedEnIncompleteTitle);
+    }
+    for (const id of ['en-vb-legal', 'en-vbc-legal', 'en-vbi-legal']) {
+      const el = screen.getByTestId(id).firstElementChild as HTMLElement;
+      expect(el.getAttribute('title')).toBe(expectedEnLegalTitle);
+      expect(el.querySelector('svg.lucide-scale')).not.toBeNull();
+    }
+    unmountEn();
+
+    // 2. VI natural academic labels (zero calques) + actionable tooltips & triggeredRules parity
+    await i18n.changeLanguage('vi');
+    const { container: viContainer } = renderWithProviders(
+      <div>
+        <div data-testid="vi-vb-unres">
+          <VerdictBadge verdict="UNRESOLVED" />
+        </div>
+        <div data-testid="vi-vb-likely">
+          <VerdictBadge verdict="LIKELY_VERIFIED" />
+        </div>
+        <div data-testid="vi-vb-inc">
+          <VerdictBadge verdict="METADATA_ERROR" triggeredRules={['R-INCOMPLETE-METADATA']} />
+        </div>
+        <div data-testid="vi-vbc-inc">
+          <VerdictBadgeCompact verdict="metadata_error" triggeredRules={['R-INCOMPLETE-METADATA']} />
+        </div>
+        <div data-testid="vi-vbi-inc">
+          <VerdictIcon verdict="metadata_error" triggeredRules={['R-INCOMPLETE-METADATA']} />
+        </div>
+        <div data-testid="vi-vb-legal">
+          <VerdictBadge verdict="RESOURCE" triggeredRules={['R-VN-LEGAL-VERIFIED']} />
+        </div>
+        <div data-testid="vi-vbc-legal">
+          <VerdictBadgeCompact verdict="resource" triggeredRules={['R-VN-LEGAL-VERIFIED']} />
+        </div>
+        <div data-testid="vi-vbi-legal">
+          <VerdictIcon verdict="resource" triggeredRules={['R-VN-LEGAL-VERIFIED']} />
+        </div>
+      </div>,
+    );
+
+    expect(screen.getByTestId('vi-vb-unres').textContent).toBe('Chưa xác minh');
+    expect(screen.getByTestId('vi-vb-likely').textContent).toBe('Độ khớp cao');
+    expect(viContainer.textContent).not.toContain('Chưa giải quyết');
+    expect(viContainer.textContent).not.toContain('Có thể đã xác minh');
+
+    const expectedViIncompleteTitle =
+      'Thiếu quy cách trích dẫn — Mục tham khảo thiếu tác giả, năm xuất bản hoặc nơi công bố (không phải nguồn bịa đặt); hãy bổ sung đầy đủ các thông tin còn thiếu.';
+    const expectedViLegalTitle =
+      'Văn bản Pháp luật — Văn bản quy phạm pháp luật đã nhận diện; không cần chỉnh sửa và không bị tính điểm trừ trích dẫn.';
+
+    for (const id of ['vi-vb-inc', 'vi-vbc-inc', 'vi-vbi-inc']) {
+      const el = screen.getByTestId(id).firstElementChild as HTMLElement;
+      expect(el.getAttribute('title')).toBe(expectedViIncompleteTitle);
+    }
+    for (const id of ['vi-vb-legal', 'vi-vbc-legal', 'vi-vbi-legal']) {
+      const el = screen.getByTestId(id).firstElementChild as HTMLElement;
+      expect(el.getAttribute('title')).toBe(expectedViLegalTitle);
+      expect(el.querySelector('svg.lucide-scale')).not.toBeNull();
+    }
+  });
+
+  it('Round 1: UpgradeModal pins Lock icon with rounded-lg feature pill, wraps VND currency units in whitespace-nowrap, keeps audience subtitles full-width below card header rows, and sets aria-pressed on billing cycle buttons', async () => {
+    await i18n.changeLanguage('en');
+    const { unmount: unmountEn } = renderWithProviders(
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <UpgradeModal
+              open={true}
+              onOpenChange={vi.fn()}
+              featureName="Interactive Document Inspector & Full Export"
+            />
+          }
+        />
+      </Routes>,
+      { user: makeUser('user', 'basic') },
+    );
+
+    expect(screen.getByRole('button', { name: 'Close' })).toBeDefined();
+    expect(screen.getByRole('group', { name: 'Billing cycle toggle' })).toBeDefined();
+    expect(screen.getByTestId('modal-cycle-annual').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('modal-cycle-monthly').getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(screen.getByTestId('modal-cycle-monthly'));
+    expect(screen.getByTestId('modal-cycle-annual').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByTestId('modal-cycle-monthly').getAttribute('aria-pressed')).toBe('true');
+    unmountEn();
+
+    await i18n.changeLanguage('vi');
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <UpgradeModal
+              open={true}
+              onOpenChange={vi.fn()}
+              featureName="Trình đọc đối chiếu trang PDF & Xuất báo cáo Word"
+            />
+          }
+        />
+      </Routes>,
+      { user: makeUser('teacher', 'pro') },
+    );
+
+    const viModal = screen.getByTestId('upgrade-modal');
+    const lockSvg = viModal.querySelector('svg.lucide-lock');
+    expect(lockSvg).not.toBeNull();
+    const featurePill = lockSvg!.parentElement as HTMLElement;
+    expect(featurePill.className).toContain('items-start');
+    expect(featurePill.className).toContain('rounded-lg');
+    expect(featurePill.className).not.toContain('rounded-full');
+    expect(featurePill.className).not.toContain('flex-wrap');
+
+    // Localized close & billing group ARIA in VI
+    expect(screen.getByRole('button', { name: 'Đóng' })).toBeDefined();
+    expect(screen.getByRole('group', { name: 'Chọn chu kỳ thanh toán' })).toBeDefined();
+
+    // Non-breaking VND currency units (annual)
+    const proVndAnnual = screen.getByTestId('modal-pro-vnd-equivalent');
+    const ultraVndAnnual = screen.getByTestId('modal-ultra-vnd-equivalent');
+    expect(proVndAnnual.textContent).toBe('≈ 400.000 ₫/tháng · 4.800.000 ₫/năm qua VNPay');
+    expect(ultraVndAnnual.textContent).toBe('≈ 4.000.000 ₫/tháng · 48.000.000 ₫/năm qua VNPay');
+    expect(proVndAnnual.querySelectorAll('span.whitespace-nowrap').length).toBe(3);
+    expect(ultraVndAnnual.querySelectorAll('span.whitespace-nowrap').length).toBe(3);
+
+    // Non-breaking VND currency units (monthly)
+    fireEvent.click(screen.getByTestId('modal-cycle-monthly'));
+    expect(proVndAnnual.textContent).toBe('≈ 500.000 ₫/tháng qua VNPay & thẻ quốc tế');
+    expect(ultraVndAnnual.textContent).toBe('≈ 5.000.000 ₫/tháng qua VNPay & thẻ quốc tế');
+    expect(proVndAnnual.querySelectorAll('span.whitespace-nowrap').length).toBe(2);
+    expect(ultraVndAnnual.querySelectorAll('span.whitespace-nowrap').length).toBe(2);
+
+    // Card header geometry: audience subtitle sits full-width outside the [Icon + Title | Badge] flex-wrap top row
+    const ultraHeading = screen.getByText('CITRA Ultra');
+    const ultraTopRow = ultraHeading.closest('div.justify-between') as HTMLElement;
+    expect(ultraTopRow).not.toBeNull();
+    expect(ultraTopRow.className).toContain('flex-wrap');
+    expect(ultraTopRow.textContent).not.toContain('Phòng Lab, Bộ môn & Hội đồng luận án');
+    expect(ultraTopRow.nextElementSibling?.textContent).toBe('Phòng Lab, Bộ môn & Hội đồng luận án');
+  });
 });

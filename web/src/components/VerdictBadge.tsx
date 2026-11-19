@@ -173,22 +173,21 @@ const verdictLabelKey: Record<string, string> = {
   WEB_RESOURCE: 'essay.urlResource',
 };
 
-export function VerdictBadge({
-  verdict,
-  triggeredRules,
-  size = 'md',
-  showIcon = true,
-  className = ''
-}: VerdictBadgeProps) {
-  const { t, i18n } = useTranslation();
-  const lang: 'en' | 'vi' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+function resolveVerdictPresentation(
+  verdict: string,
+  triggeredRules: string[] | undefined,
+  lang: 'en' | 'vi',
+  t: ReturnType<typeof useTranslation>['t'],
+) {
   const isVi = lang === 'vi';
   const normalizedKey = normalizeVerdictKey(verdict);
   const isIncompleteMeta =
     normalizedKey === 'METADATA_ERROR' &&
     Boolean(triggeredRules?.includes('R-INCOMPLETE-METADATA'));
   const isLegalResource =
-    (normalizedKey === 'RESOURCE' || normalizedKey === 'URL_RESOURCE' || normalizedKey === 'WEB_RESOURCE') &&
+    (normalizedKey === 'RESOURCE' ||
+      normalizedKey === 'URL_RESOURCE' ||
+      normalizedKey === 'WEB_RESOURCE') &&
     isLegalStatuteVerdict({ label: verdict, triggered_rules: triggeredRules });
   const config = resolveVerdictConfig(verdict);
   const plainVerdict = getPlainVerdictLabel(verdict, lang);
@@ -209,17 +208,36 @@ export function VerdictBadge({
     ? t(
         'verdict.legalStatuteDesc',
         isVi
-          ? 'Văn bản quy phạm pháp luật đã nhận diện; không tính điểm trừ trích dẫn.'
-          : 'Recognized legal statute or government regulation, excluded from academic citation penalty.',
+          ? 'Văn bản Pháp luật — Văn bản quy phạm pháp luật đã nhận diện; không cần chỉnh sửa và không bị tính điểm trừ trích dẫn.'
+          : 'Legal Statute — Recognized legal statute or government regulation; no action needed (excluded from academic citation penalty).',
       )
     : isIncompleteMeta
       ? t(
           'verdict.incompleteReferenceDesc',
           isVi
-            ? 'Mục tham khảo thiếu các trường bắt buộc (tác giả, năm xuất bản hoặc nơi công bố) chứ không phải nguồn do AI bịa đặt.'
-            : 'Citation lacks required bibliographic fields (author, publication year, or academic venue) rather than being fabricated.',
+            ? 'Thiếu quy cách trích dẫn — Mục tham khảo thiếu tác giả, năm xuất bản hoặc nơi công bố (không phải nguồn bịa đặt); hãy bổ sung đầy đủ các thông tin còn thiếu.'
+            : 'Incomplete Reference — Citation lacks required fields (author, publication year, or venue) rather than being fabricated; add the missing details to complete this entry.',
         )
       : `${plainVerdict.label} — ${plainVerdict.actionHint}`;
+
+  return { config, isLegalResource, labelText, descriptionText };
+}
+
+export function VerdictBadge({
+  verdict,
+  triggeredRules,
+  size = 'md',
+  showIcon = true,
+  className = ''
+}: VerdictBadgeProps) {
+  const { t, i18n } = useTranslation();
+  const lang: 'en' | 'vi' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
+  const { config, isLegalResource, labelText, descriptionText } = resolveVerdictPresentation(
+    verdict,
+    triggeredRules,
+    lang,
+    t,
+  );
 
   return (
     <span
@@ -244,15 +262,21 @@ export function VerdictBadge({
 // Compact version for inline use (icon only)
 export function VerdictBadgeCompact({
   verdict,
+  triggeredRules,
   className = ''
 }: {
   verdict: VerdictType | string;
+  triggeredRules?: string[];
   className?: string;
 }) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const lang: 'en' | 'vi' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
-  const config = resolveVerdictConfig(verdict);
-  const plainVerdict = getPlainVerdictLabel(verdict, lang);
+  const { config, isLegalResource, descriptionText } = resolveVerdictPresentation(
+    verdict,
+    triggeredRules,
+    lang,
+    t,
+  );
 
   return (
     <span
@@ -262,10 +286,10 @@ export function VerdictBadgeCompact({
         w-6 h-6
         ${className}
       `}
-      title={`${plainVerdict.label} — ${plainVerdict.actionHint}`}
+      title={descriptionText}
     >
       <span className={config.iconColor}>
-        {config.icon}
+        {isLegalResource ? <Scale className="h-3.5 w-3.5 shrink-0" /> : config.icon}
       </span>
     </span>
   );
@@ -274,17 +298,23 @@ export function VerdictBadgeCompact({
 // Icon-only version
 export function VerdictIcon({
   verdict,
+  triggeredRules,
   size = 'md',
   className = ''
 }: {
   verdict: VerdictType | string;
+  triggeredRules?: string[];
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const lang: 'en' | 'vi' = i18n.language?.startsWith('vi') ? 'vi' : 'en';
-  const config = resolveVerdictConfig(verdict);
-  const plainVerdict = getPlainVerdictLabel(verdict, lang);
+  const { config, isLegalResource, descriptionText } = resolveVerdictPresentation(
+    verdict,
+    triggeredRules,
+    lang,
+    t,
+  );
 
   const iconSizes = {
     sm: 'h-3 w-3',
@@ -295,10 +325,10 @@ export function VerdictIcon({
   return (
     <span
       className={`inline-flex shrink-0 ${className}`}
-      title={`${plainVerdict.label}: ${plainVerdict.actionHint}`}
+      title={descriptionText}
     >
       <span className={`${config.iconColor} ${iconSizes[size]}`}>
-        {config.icon}
+        {isLegalResource ? <Scale className={`${iconSizes[size]} shrink-0`} /> : config.icon}
       </span>
     </span>
   );

@@ -355,8 +355,8 @@
     "legalStatute": "Legal Statute",
     "verifiedDesc": "Matched with a real publication; author, year, and title are consistent.",
     "metadataErrorDesc": "We found the source, but its author, year, title, or DOI differs—review and update the entry.",
-    "incompleteReferenceDesc": "Citation lacks required bibliographic fields (author, publication year, or academic venue) rather than being fabricated.",
-    "legalStatuteDesc": "Recognized legal statute or government regulation, excluded from academic citation penalty.",
+    "incompleteReferenceDesc": "Incomplete Reference — Citation lacks required fields (author, publication year, or venue) rather than being fabricated; add the missing details to complete this entry.",
+    "legalStatuteDesc": "Legal Statute — Recognized legal statute or government regulation; no action needed (excluded from academic citation penalty).",
     "suspectedHallucinationDesc": "No matching publication was found in academic libraries—verify the original paper or replace this citation.",
     "unresolvedDesc": "This may be a print book, thesis, or local document not indexed online—please verify manually.",
     "resourceDesc": "Recognized as a general web link or official regulation rather than a journal article (not penalized in your score)."
@@ -808,6 +808,7 @@
     "ultraAudience": "Research Labs, Departments & Review Boards",
     "checkoutInitError": "Could not start the checkout session. Please try again in a moment.",
     "secureFooter": "Secure checkout via Stripe & VNPay-QR/ATM · Cancel anytime with 1 click",
-    "comparePlansLink": "Compare all 3 plans in detail"
+    "comparePlansLink": "Compare all 3 plans in detail",
+    "billingCycleAriaLabel": "Billing cycle toggle"
   }
 }
