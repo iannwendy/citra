@@ -103,14 +103,14 @@ describe('Task 1.5 — Public Routes, Clean IA Anchors, 3-Role Workspaces, /term
     ).map((el) => el.textContent?.trim());
 
     expect(topLevelItemsVi).toContain('Bảng giá');
-    expect(topLevelItemsVi).toContain('Vai trò');
+    expect(topLevelItemsVi).toContain('Dành cho ai');
     expect(topLevelItemsVi).not.toContain('Gói dịch vụ');
 
     const workspacesNavLinkVi = desktopNavVi.querySelector(
       ':scope > a[href="#workspaces"]',
     );
     expect(workspacesNavLinkVi).not.toBeNull();
-    expect(workspacesNavLinkVi?.textContent?.trim()).toBe('Vai trò');
+    expect(workspacesNavLinkVi?.textContent?.trim()).toBe('Dành cho ai');
 
     // Pricing section carries canonical id="pricing-plans" AND backward-compatible #taxonomy wrapper
     const pricingPlansSection = container.querySelector('#pricing-plans');
@@ -138,7 +138,7 @@ describe('Task 1.5 — Public Routes, Clean IA Anchors, 3-Role Workspaces, /term
     ).map((el) => el.textContent?.trim());
 
     expect(topLevelItemsEn).toContain('Pricing');
-    expect(topLevelItemsEn).toContain('Workspaces');
+    expect(topLevelItemsEn).toContain('For Whom');
     expect(topLevelItemsEn).not.toContain('Taxonomy');
 
     fireEvent.click(screen.getByRole('button', { name: /toggle navigation menu/i }));

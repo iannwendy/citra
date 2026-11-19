@@ -194,9 +194,9 @@ test.describe('Landing Page — Full Vietnamese Typography & Sentient Glyph Veri
     const platformBtn = page.locator('header nav button', { hasText: 'Nền tảng' });
     await expect(platformBtn).toBeVisible();
     await platformBtn.click();
-    await expect(page.locator('header nav a', { hasText: 'Kiến trúc 2 tầng' })).toBeVisible();
-    await expect(page.locator('header nav a', { hasText: 'Trình thẩm định trích dẫn' })).toBeVisible();
-    await expect(page.locator('header nav a', { hasText: 'Thực nghiệm 120K bài báo' })).toBeVisible();
+    await expect(page.locator('header nav a', { hasText: 'Kiểm tra trích dẫn 2 bước' })).toBeVisible();
+    await expect(page.locator('header nav a', { hasText: 'Kiểm tra thử trực quan' })).toBeVisible();
+    await expect(page.locator('header nav a', { hasText: 'Độ tin cậy thực tế' })).toBeVisible();
     await platformBtn.click();
 
     // B. Interactive Citation Debugger (#interactive-demo) — cycle through all 4 demo citations in Vietnamese
@@ -205,18 +205,18 @@ test.describe('Landing Page — Full Vietnamese Typography & Sentient Glyph Veri
     await expect(debuggerSection).toBeVisible();
 
     for (const marker of ['Vaswani et al. [1]', '(Devlin et al., 2018)', '(Robertson & Walker, 2024)', 'Smith et al. (2021)']) {
-      const btn = debuggerSection.getByRole('button', { name: new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) }).first();
+      const btn = debuggerSection.getByRole('option', { name: new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) }).first();
       if (await btn.isVisible()) {
         await btn.click();
       }
     }
-    await expect(debuggerSection).toContainText(/Danh mục Tài liệu tham khảo|trích dẫn/i);
+    await expect(debuggerSection).toContainText(/Danh mục Tài liệu tham khảo|danh mục tham khảo|trích dẫn/i);
 
     // C. 120K Benchmark Section (#benchmark-120k)
     const benchmarkSection = page.locator('#benchmark-120k');
     await benchmarkSection.scrollIntoViewIfNeeded();
     await expect(benchmarkSection).toBeVisible();
-    await expect(benchmarkSection).toContainText(/120\.000|98,6%|120K/i);
+    await expect(benchmarkSection).toContainText(/120\.000|99,02%/i);
 
     // D. Role Workspaces Section (#workspaces)
     const workspacesSection = page.locator('#workspaces');
@@ -254,8 +254,8 @@ test.describe('Landing Page — Full Vietnamese Typography & Sentient Glyph Veri
     await mobileMenuBtn.click();
     const mobileNav = page.locator('header nav[aria-label="Mobile Navigation"]');
     await expect(mobileNav).toBeVisible();
-    await expect(mobileNav).toContainText('Kiến trúc 2 tầng');
-    await expect(mobileNav).toContainText('Trình thẩm định trích dẫn');
+    await expect(mobileNav).toContainText('Kiểm tra trích dẫn 2 bước');
+    await expect(mobileNav).toContainText('Kiểm tra thử trực quan');
 
     const isOverflowingMobile = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth
@@ -274,30 +274,32 @@ test.describe('Landing Page — Full Vietnamese Typography & Sentient Glyph Veri
       localStorage.setItem('i18nextLng', 'vi');
     });
 
-    // 1. Check 1280x800 desktop navbar bounds: every Vietnamese nav item & CTA must stay within 0..1280px and single-line
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/');
-    await page.evaluate(() => document.fonts.ready);
-
+    // 1. Check 1280x800 and 1024x768 desktop navbar bounds: every Vietnamese nav item & CTA must stay within viewport and single-line
     const navLabels = [
       'Nền tảng',
-      'Trình thẩm định',
-      'Quy trình',
-      'Thực nghiệm 120K',
-      'Vai trò',
+      'Cách hoạt động',
+      'Kiểm tra thử',
+      'Dành cho ai',
+      'Độ tin cậy',
       'Bảng giá',
       'Đăng nhập',
       'Trải nghiệm miễn phí',
     ];
 
-    for (const label of navLabels) {
-      const item = page.locator('header').getByText(label, { exact: true }).first();
-      await expect(item).toBeVisible();
-      const box = await item.boundingBox();
-      expect(box).not.toBeNull();
-      expect(box!.x).toBeGreaterThanOrEqual(0);
-      expect(box!.x + box!.width).toBeLessThanOrEqual(1280);
-      expect(box!.height).toBeLessThanOrEqual(48);
+    for (const desktopWidth of [1280, 1024]) {
+      await page.setViewportSize({ width: desktopWidth, height: 800 });
+      await page.goto('/');
+      await page.evaluate(() => document.fonts.ready);
+
+      for (const label of navLabels) {
+        const item = page.locator('header').getByText(label, { exact: true }).first();
+        await expect(item).toBeVisible();
+        const box = await item.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(desktopWidth);
+        expect(box!.height).toBeLessThanOrEqual(48);
+      }
     }
 
     // 2. Verify all major anchor sections exist, render Vietnamese text, and have zero horizontal overflow across viewports

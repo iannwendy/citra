@@ -350,19 +350,21 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
     await menuBtn.click();
 
     // Mobile drawer links should be visible
-    await expect(page.getByRole('link', { name: /2-layer architecture|kiến trúc 2 tầng/i }).first()).toBeVisible();
+    await expect(
+      page.getByRole('link', { name: /two-step citation check|kiểm tra trích dẫn 2 bước/i }).first()
+    ).toBeVisible();
 
     // Close mobile navigation menu
     await menuBtn.click();
 
     // Switch interactive Citation Debugger tabs on mobile (375px)
-    const rulesTab = page.getByRole('tab', { name: /2\.\s*symbolic rules/i });
+    const rulesTab = page.getByRole('tab', { name: /2\.\s*(why this result|lý do kết luận)/i });
     await rulesTab.click();
-    await assertNoHorizontalOverflow(page, '/ (Symbolic Rules tab) @ 375x812');
+    await assertNoHorizontalOverflow(page, '/ (Why This Result tab) @ 375x812');
 
-    const retrievalTab = page.getByRole('tab', { name: /3\.\s*source retrieval/i });
+    const retrievalTab = page.getByRole('tab', { name: /3\.\s*(libraries checked|thư viện đã tra cứu)/i });
     await retrievalTab.click();
-    await assertNoHorizontalOverflow(page, '/ (Source Retrieval tab) @ 375x812');
+    await assertNoHorizontalOverflow(page, '/ (Libraries Checked tab) @ 375x812');
   });
 
   test('LandingPage mobile-menu-pricing-link navigates to /pricing, mobile-compare-tier-tabs has zero clipping at 375x812, and PricingSolvaHeader stays single-line at 1024px & 1440px in EN and VI', async ({
@@ -553,12 +555,15 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
     const platformBtn = page.getByRole('button', { name: /platform|nền tảng/i });
     await expect(platformBtn).toBeVisible();
     await platformBtn.click();
-    await expect(page.getByText(/orthogonal mapping & verification|tách biệt mapping/i)).toBeVisible();
+    await expect(
+      page.getByText(/in-text links & real source verification|đối chiếu trong bài & xác minh nguồn thật/i)
+    ).toBeVisible();
 
-    // 1.5. Test 120K-Paper Benchmark section & interactive 3-tab explorer
+    // 1.5. Test 120K-Paper Benchmark section & progressive-disclosure 3-tab explorer
     await expect(page.getByTestId('hero-benchmark-120k-strip')).toBeVisible();
     const benchSection = page.getByTestId('benchmark-120k-section');
     await expect(benchSection).toBeVisible();
+    await benchSection.getByTestId('benchmark-technical-details-toggle').click();
     await expect(benchSection.getByText(/B5 · HybridMLScorer/i)).toBeVisible();
 
     const classesTab = benchSection.getByRole('tab', {
@@ -571,12 +576,14 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
       name: /platt calibration & 95% ci|hiệu chỉnh platt & bootstrap 95% ci/i,
     });
     await calibrationTab.click();
-    await expect(benchSection.getByText(/0\.0433/i).first()).toBeVisible();
+    await expect(benchSection.getByText(/0\.0395/i).first()).toBeVisible();
 
     // 2. Test Use Cases / Pipeline 4-tab switcher
-    const stage3Btn = page.getByRole('tab', { name: /neuro-symbolic rules|3\. luật neuro-symbolic/i });
+    const stage3Btn = page.getByRole('tab', {
+      name: /3\.\s*compare details|3\.\s*đối chiếu chi tiết/i,
+    });
     await stage3Btn.click();
-    await expect(page.getByText(/STAGE 03/i)).toBeVisible();
+    await expect(page.getByText(/STAGE 03|BƯỚC 03/i)).toBeVisible();
 
     // 3. Test Pricing Plans & Benefits squircle billing switch (Monthly $20 -> Yearly -20% $16)
     const billingSwitch = page.getByRole('switch', { name: /toggle billing cycle/i });
@@ -591,7 +598,7 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
 
     // 4. Test FAQ 2-column independent accordion
     const faqItem2 = page.getByRole('button', {
-      name: /how does the two-layer orthogonal output model work|mô hình 2 tầng trực giao/i,
+      name: /how does citra separate formatting slips|citra phân biệt lỗi trình bày/i,
     });
     await expect(faqItem2).toHaveAttribute('aria-expanded', 'false');
     await faqItem2.click();
@@ -617,7 +624,7 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
       { slug: 'orcid', href: 'https://orcid.org' },
       { slug: 'unpaywall', href: 'https://unpaywall.org' },
       { slug: 'datacite', href: 'https://datacite.org' },
-      { slug: 'grobid-tei', href: 'https://grobid.readthedocs.io' },
+      { slug: 'openlibrary', href: 'https://openlibrary.org' },
     ];
 
     for (const vp of [

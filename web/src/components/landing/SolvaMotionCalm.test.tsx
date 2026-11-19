@@ -419,8 +419,10 @@ describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & 
         const genTag = heroSection.querySelector('.t-gen-tag') as HTMLElement | null;
         expect(genTag).not.toBeNull();
         expect(genTag?.className ?? '').not.toContain('truncate');
-        expect(genTag?.textContent ?? '').toContain('S-BERT');
-        expect(genTag?.textContent ?? '').not.toContain('S-BER...');
+        expect(genTag?.textContent ?? '').toContain(
+          lang === 'vi' ? 'ĐỐI CHIẾU 15+ THƯ VIỆN' : 'CHECKING 15+ LIBRARIES',
+        );
+        expect(genTag?.textContent ?? '').not.toContain('...');
         expect((genTag?.textContent ?? '').length).toBeLessThanOrEqual(24);
 
         landing.unmount();
@@ -618,7 +620,7 @@ describe('Task 1.6: Zero Clipping, Truncation & Orphan-Punctuation Guards (EN & 
           step === 2
             ? lang === 'vi'
               ? '404 Không tồn tại'
-              : '404 Ghost'
+              : 'Not Found (404)'
             : lang === 'vi'
               ? '100% Khớp chuẩn'
               : '100% Match';
