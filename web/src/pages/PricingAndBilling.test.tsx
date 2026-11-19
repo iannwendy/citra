@@ -6,7 +6,9 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { AuthContext } from '@/contexts/AuthContext';
 import { api, type User } from '@/api/client';
-import '@/i18n';
+import i18n from '@/i18n';
+import { APP_VERSION } from '@/version';
+import { AuthSplitShell } from '@/components/AuthSplitShell';
 import { PricingPage } from './PricingPage';
 import { LandingPage } from './LandingPage';
 import { StripeDemoCheckoutPage } from './StripeDemoCheckoutPage';
@@ -1660,5 +1662,134 @@ describe('Premium Subscription, Pricing, Stripe Checkout & Paywall UI/UX Flows',
     expect(proBtn.textContent).toMatch(/Included in Ultra|Đã bao gồm trong gói Ultra/i);
     expect(ultraBtn.disabled).toBe(true);
     expect(ultraBtn.textContent).toMatch(/Current Active Ultra Plan|Đang sử dụng gói Ultra/i);
+  });
+
+  it('PricingPage hides evaluator test-card copy (4242, 4444, Stripe Demo) when VITE_DEMO_MODE is unset and renders encrypted Stripe & VNPay copy in EN and VI', async () => {
+    try {
+      await i18n.changeLanguage('en');
+      const { container: enContainer, unmount: unmountEn } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const enText = enContainer.textContent ?? '';
+      expect(enText).not.toContain('4242');
+      expect(enText).not.toContain('4444');
+      expect(enText.toLowerCase()).not.toContain('test card');
+      expect(enText.toLowerCase()).not.toContain('stripe demo');
+      expect(enText).toMatch(/PCI-DSS/i);
+      expect(enText).toMatch(/TLS 1\.3/i);
+      expect(enText).toMatch(/Stripe/i);
+      expect(enText).toMatch(/VNPay/i);
+      unmountEn();
+
+      await i18n.changeLanguage('vi');
+      const { container: viContainer, unmount: unmountVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const viText = viContainer.textContent ?? '';
+      expect(viText).not.toContain('4242');
+      expect(viText).not.toContain('4444');
+      expect(viText.toLowerCase()).not.toContain('thẻ kiểm thử');
+      expect(viText.toLowerCase()).not.toContain('thẻ thử nghiệm');
+      expect(viText.toLowerCase()).not.toContain('stripe demo');
+      expect(viText).toMatch(/PCI-DSS/i);
+      expect(viText).toMatch(/TLS 1\.3/i);
+      expect(viText).toMatch(/Stripe/i);
+      expect(viText).toMatch(/VNPay/i);
+      unmountVi();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('PricingPage exposes evaluator test-card autofill guidance (4242 / 4444) only when VITE_DEMO_MODE is "true"', async () => {
+    try {
+      vi.stubEnv('VITE_DEMO_MODE', 'true');
+
+      await i18n.changeLanguage('en');
+      const { container: enContainer, unmount: unmountEn } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const enText = enContainer.textContent ?? '';
+      expect(enText).toContain('4242');
+      expect(enText).toContain('4444');
+      expect(enText.toLowerCase()).toContain('test card');
+      unmountEn();
+
+      await i18n.changeLanguage('vi');
+      const { container: viContainer, unmount: unmountVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const viText = viContainer.textContent ?? '';
+      expect(viText).toContain('4242');
+      expect(viText).toContain('4444');
+      expect(viText.toLowerCase()).toContain('thẻ kiểm thử');
+      unmountVi();
+    } finally {
+      vi.unstubAllEnvs();
+      await i18n.changeLanguage('en');
+    }
+  });
+
+  it('LandingPage and PricingPage footers present unified CITRA brand identity without standalone SourceLogic, while AuthSplitShell frames SourceLogic v{APP_VERSION} as engine version with zero left-panel buttons', async () => {
+    try {
+      await i18n.changeLanguage('en');
+      const { container: landingEn, unmount: unmountLandingEn } = renderWithAuth(<LandingPage />, {
+        user: null,
+        initialEntries: ['/'],
+      });
+      const landingFooterEn = landingEn.querySelector('footer')?.textContent ?? '';
+      expect(landingFooterEn).toContain('© 2026 CITRA — Academic Citation Integrity Workspace');
+      expect(landingFooterEn).not.toContain('SourceLogic');
+      expect(landingEn.textContent ?? '').not.toContain('SourceLogic');
+      unmountLandingEn();
+
+      const { container: pricingEn, unmount: unmountPricingEn } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const pricingFooterEn = pricingEn.querySelector('footer')?.textContent ?? '';
+      expect(pricingFooterEn).toContain('© 2026 CITRA — Academic Citation Integrity Workspace');
+      expect(pricingFooterEn).not.toContain('SourceLogic');
+      expect(pricingEn.textContent ?? '').not.toContain('SourceLogic');
+      unmountPricingEn();
+
+      await i18n.changeLanguage('vi');
+      const { container: landingVi, unmount: unmountLandingVi } = renderWithAuth(<LandingPage />, {
+        user: null,
+        initialEntries: ['/'],
+      });
+      const landingFooterVi = landingVi.querySelector('footer')?.textContent ?? '';
+      expect(landingFooterVi).toContain('© 2026 CITRA — Không gian Kiểm chứng Trích dẫn Học thuật');
+      expect(landingFooterVi).not.toContain('SourceLogic');
+      unmountLandingVi();
+
+      const { container: pricingVi, unmount: unmountPricingVi } = renderWithAuth(<PricingPage />, {
+        user: null,
+        initialEntries: ['/pricing'],
+      });
+      const pricingFooterVi = pricingVi.querySelector('footer')?.textContent ?? '';
+      expect(pricingFooterVi).toContain('© 2026 CITRA — Không gian Kiểm chứng Trích dẫn Học thuật');
+      expect(pricingFooterVi).not.toContain('SourceLogic');
+      unmountPricingVi();
+
+      const { container: authContainer, unmount: unmountAuth } = renderWithAuth(
+        <AuthSplitShell>
+          <div data-testid="auth-form-slot">Form</div>
+        </AuthSplitShell>,
+        { user: null, initialEntries: ['/login'] },
+      );
+      expect(authContainer.textContent ?? '').toContain(`Engine: SourceLogic v${APP_VERSION}`);
+      expect(authContainer.textContent ?? '').toContain(`SourceLogic v${APP_VERSION}`);
+      const leftPanel = authContainer.firstElementChild?.firstElementChild as HTMLElement | null;
+      expect(leftPanel).not.toBeNull();
+      expect(leftPanel?.querySelectorAll('button').length).toBe(0);
+      unmountAuth();
+    } finally {
+      await i18n.changeLanguage('en');
+    }
   });
 });

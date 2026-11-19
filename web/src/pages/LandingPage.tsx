@@ -3914,8 +3914,8 @@ function SolvaTaxonomyPricingSection({
                 className="font-solva-sans text-[14px]"
               >
                 {lang === 'vi'
-                  ? 'Thanh toán bảo mật qua cổng Stripe · Đối chiếu trực tiếp với hơn 200 triệu ấn phẩm khoa học từ 15+ cơ sở dữ liệu quốc tế'
-                  : 'Secured by Stripe · Cross-referencing 200M+ canonical works across 15+ global scholarly indexes'}
+                  ? 'Thanh toán mã hóa chuẩn PCI-DSS qua cổng Stripe & VNPay · Đối chiếu trực tiếp với hơn 200 triệu ấn phẩm khoa học từ 15+ cơ sở dữ liệu quốc tế'
+                  : 'PCI-DSS encrypted checkout via Stripe & VNPay · Cross-referencing 200M+ canonical works across 15+ global scholarly indexes'}
               </p>
             </div>
           </SolvaScrollReveal>
@@ -4679,8 +4679,8 @@ function SolvaFooter({ lang }: { lang: Lang }) {
         >
           <p style={{ color: 'var(--solva-muted)' }}>
             {lang === 'vi'
-              ? '© 2026 CITRA · Không gian Thẩm định Liêm chính Học thuật SourceLogic. Bảo lưu mọi quyền.'
-              : '© 2026 CITRA · SourceLogic Academic Integrity Workspace. All rights reserved.'}
+              ? '© 2026 CITRA — Không gian Kiểm chứng Trích dẫn Học thuật. Bảo lưu mọi quyền.'
+              : '© 2026 CITRA — Academic Citation Integrity Workspace. All rights reserved.'}
           </p>
           <p style={{ color: 'var(--solva-muted)' }}>
             {lang === 'vi'

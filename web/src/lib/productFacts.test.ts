@@ -1,14 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   SCHOLARLY_APIS_LABEL,
   SYMBOLIC_RULES_COUNT,
   SYMBOLIC_RULES_RANGE,
   LOCAL_PAPERS_LABEL,
   CITATION_STYLES_COUNT,
+  IS_DEMO_EVALUATOR_MODE,
+  isDemoEvaluatorMode,
 } from './productFacts';
 import { RULE_DEFINITIONS } from '@/components/RuleInspector';
 import en from '@/i18n/locales/en.json';
-import vi from '@/i18n/locales/vi.json';
+import viLocale from '@/i18n/locales/vi.json';
 
 describe('productFacts canonical constants', () => {
   it('exports canonical scholarly APIs and symbolic rules constants', () => {
@@ -26,6 +28,27 @@ describe('productFacts canonical constants', () => {
 
   it('uses 15+ in localized auth.featureRetrievalDesc', () => {
     expect(en.auth.featureRetrievalDesc).toContain(SCHOLARLY_APIS_LABEL);
-    expect(vi.auth.featureRetrievalDesc).toContain(SCHOLARLY_APIS_LABEL);
+    expect(viLocale.auth.featureRetrievalDesc).toContain(SCHOLARLY_APIS_LABEL);
+  });
+
+  it('defaults IS_DEMO_EVALUATOR_MODE to false when VITE_DEMO_MODE is unset and evaluates isDemoEvaluatorMode strictly', async () => {
+    expect(IS_DEMO_EVALUATOR_MODE).toBe(false);
+    expect(isDemoEvaluatorMode(undefined)).toBe(false);
+    expect(isDemoEvaluatorMode('')).toBe(false);
+    expect(isDemoEvaluatorMode('false')).toBe(false);
+    expect(isDemoEvaluatorMode('1')).toBe(false);
+    expect(isDemoEvaluatorMode('TRUE')).toBe(false);
+    expect(isDemoEvaluatorMode('true')).toBe(true);
+
+    try {
+      vi.stubEnv('VITE_DEMO_MODE', 'true');
+      vi.resetModules();
+      const reloaded = await import('./productFacts');
+      expect(reloaded.IS_DEMO_EVALUATOR_MODE).toBe(true);
+      expect(reloaded.isDemoEvaluatorMode()).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
   });
 });

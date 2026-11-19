@@ -251,10 +251,10 @@ export function AuthSplitShell({
         </div>
 
         {/* Top Header: Official CITRA Brand Identity + 120K Empirical Badge */}
-        <div className="relative z-10 flex items-center justify-between gap-4">
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 xl:gap-4">
           <Link
             to="/"
-            className="group inline-flex items-center gap-[9px] rounded-[8px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15] dark:focus-visible:ring-[#FBFAF6]"
+            className="group inline-flex items-center gap-[9px] rounded-[8px] shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15] dark:focus-visible:ring-[#FBFAF6]"
           >
             <span className="w-[30px] h-[30px] rounded-[8px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-transform duration-200 group-hover:scale-105">
               <SourceLogicBrandMark size={19} />
@@ -268,9 +268,14 @@ export function AuthSplitShell({
                 borderColor: 'var(--solva-border)',
                 color: 'var(--solva-muted)',
               }}
-              className="ml-1 px-2 py-0.5 rounded-[5px] border font-mono text-[10px] font-medium"
+              title={
+                lang === 'vi'
+                  ? `Nhân suy diễn học thuật của CITRA (SourceLogic v${APP_VERSION})`
+                  : `CITRA verification engine (SourceLogic v${APP_VERSION})`
+              }
+              className="ml-0.5 xl:ml-1 px-1.5 xl:px-2 py-0.5 rounded-[5px] border font-mono text-[9.5px] xl:text-[10px] font-medium whitespace-nowrap"
             >
-              SourceLogic v{APP_VERSION}
+              <span className="hidden xl:inline">Engine: </span>SourceLogic v{APP_VERSION}
             </span>
           </Link>
 
@@ -279,12 +284,12 @@ export function AuthSplitShell({
               backgroundColor: 'var(--solva-bg)',
               borderColor: 'var(--solva-border)',
             }}
-            className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border shadow-2xs"
+            className="inline-flex items-center gap-1.5 xl:gap-2 px-2 xl:px-2.5 py-1 rounded-full border shadow-2xs shrink-0 whitespace-nowrap"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             <span
               style={{ color: 'var(--solva-ink)' }}
-              className="font-mono text-[10px] font-semibold tracking-wider uppercase"
+              className="font-mono text-[9.5px] xl:text-[10px] font-semibold tracking-wider uppercase"
             >
               {lang === 'vi'
                 ? '120K THỰC NGHIỆM · 99,02% CHÍNH XÁC'

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
+  IS_DEMO_EVALUATOR_MODE,
   SCHOLARLY_APIS_LABEL,
   SYMBOLIC_RULES_RANGE,
 } from '@/lib/productFacts';
@@ -335,6 +336,8 @@ export function PricingPage() {
 
   const proPrice = billingCycle === 'annual' ? 16 : 20;
   const ultraPrice = billingCycle === 'annual' ? 160 : 200;
+  const demoEvaluatorMode =
+    IS_DEMO_EVALUATOR_MODE || import.meta.env.VITE_DEMO_MODE === 'true';
   const { containerRef: billingToggleRef, pillStyle: billingPill } =
     useSlidingPill<HTMLDivElement>(billingCycle);
   const PricingMainTag = user ? 'div' : 'main';
@@ -1502,15 +1505,25 @@ export function PricingPage() {
             {/* 3 Trust & Security Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-[16px]">
               {[
-                {
-                  icon: ShieldCheck,
-                  title_vi: 'Thanh toán Stripe An toàn',
-                  title_en: 'Secure Stripe Checkout',
-                  desc_vi:
-                    'Hỗ trợ thẻ quốc tế Visa/Mastercard qua cổng Stripe Demo chuẩn bảo mật PCI-DSS. Nâng cấp tài khoản và mở khóa hạn mức tức thì.',
-                  desc_en:
-                    'Instant activation via Stripe Demo Checkout with full invoice receipts and 1-click test card support.',
-                },
+                demoEvaluatorMode
+                  ? {
+                      icon: ShieldCheck,
+                      title_vi: 'Thanh toán Stripe An toàn (Chế độ Đánh giá)',
+                      title_en: 'Secure Stripe Checkout (Evaluator Mode)',
+                      desc_vi:
+                        'Hỗ trợ thẻ quốc tế Visa/Mastercard qua cổng Stripe Demo chuẩn bảo mật PCI-DSS kèm thẻ kiểm thử 1-Click. Nâng cấp tài khoản và mở khóa hạn mức tức thì.',
+                      desc_en:
+                        'Instant activation via Stripe Demo Checkout with full invoice receipts and 1-click test card support.',
+                    }
+                  : {
+                      icon: ShieldCheck,
+                      title_vi: 'Thanh toán Stripe & VNPay Mã hóa',
+                      title_en: 'Encrypted Stripe & VNPay Checkout',
+                      desc_vi:
+                        'Giao dịch mã hóa TLS 1.3 theo chuẩn PCI-DSS qua cổng quốc tế Stripe (Visa, Mastercard, Apple Pay, Google Pay) và VNPay nội địa (VNPAY-QR, thẻ ATM/NAPAS). Kích hoạt hạn mức và xuất biên lai điện tử tức thì.',
+                      desc_en:
+                        'TLS 1.3 encrypted, PCI-DSS compliant checkout via Stripe (Visa, Mastercard, Apple Pay, Google Pay) and VNPay domestic gateway (VNPAY-QR & ATM/NAPAS cards), with instant quota activation and digital receipts.',
+                    },
                 {
                   icon: Database,
                   title_vi: 'Chuyển đổi Tháng / Năm linh hoạt',
@@ -1567,7 +1580,11 @@ export function PricingPage() {
         {/* ============================================================
             SECTION 4: PRICING & BILLING FAQ ACCORDION (`#pricing-faq`)
             ============================================================ */}
-        <PricingSolvaFAQSection lang={lang} isEmbedded={Boolean(user)} />
+        <PricingSolvaFAQSection
+          lang={lang}
+          isEmbedded={Boolean(user)}
+          demoEvaluatorMode={demoEvaluatorMode}
+        />
 
         {/* ============================================================
             SECTION 5: BOTTOM PAINTERLY CTA & FOOTER (Public Standalone View)
@@ -2028,9 +2045,11 @@ function PricingSolvaHeader({
 function PricingSolvaFAQSection({
   lang,
   isEmbedded,
+  demoEvaluatorMode,
 }: {
   lang: Lang;
   isEmbedded: boolean;
+  demoEvaluatorMode: boolean;
 }) {
   const [openIds, setOpenIds] = useState<Record<string, boolean>>({
     'pfaq-0': true,
@@ -2090,14 +2109,20 @@ function PricingSolvaFAQSection({
     },
     {
       id: 'pfaq-4',
-      q:
-        lang === 'vi'
+      q: demoEvaluatorMode
+        ? lang === 'vi'
           ? 'Cổng thanh toán Stripe Demo hỗ trợ những thẻ thử nghiệm nào?'
-          : 'How does Stripe Checkout work in this academic workspace?',
-      a:
-        lang === 'vi'
+          : 'How does Stripe Checkout work in this academic workspace?'
+        : lang === 'vi'
+          ? 'CITRA hỗ trợ những phương thức thanh toán mã hóa nào?'
+          : 'Which encrypted payment methods does CITRA support?',
+      a: demoEvaluatorMode
+        ? lang === 'vi'
           ? 'Hệ thống tích hợp cổng thanh toán Stripe bảo mật kèm chế độ điền nhanh thẻ kiểm thử 1-Click (Visa 4242 / Mastercard 4444) để hội đồng và người dùng trải nghiệm trọn vẹn luồng nâng cấp hóa đơn và mở khóa tính năng tức thì.'
-          : 'CITRA integrates Stripe Checkout with 1-click test card autofill (Visa 4242 & Mastercard 4444) so evaluators, researchers, and students can experience instant tier activation and invoice generation.',
+          : 'CITRA integrates Stripe Checkout with 1-click test card autofill (Visa 4242 & Mastercard 4444) so evaluators, researchers, and students can experience instant tier activation and invoice generation.'
+        : lang === 'vi'
+          ? 'CITRA xử lý thanh toán qua kết nối mã hóa TLS 1.3 trên hạ tầng chuẩn bảo mật PCI-DSS của Stripe (thẻ quốc tế Visa, Mastercard, Apple Pay, Google Pay) và cổng thanh toán nội địa VNPay (quét mã VNPAY-QR, thẻ ATM/NAPAS ngân hàng Việt Nam). CITRA không lưu trữ số thẻ gốc; hạn mức gói cước và biên lai điện tử được kích hoạt tức thì ngay sau khi xác thực giao dịch.'
+          : 'CITRA processes payments over TLS 1.3 through PCI-DSS compliant Stripe (Visa, Mastercard, Apple Pay, Google Pay) and VNPay (VNPAY-QR and domestic Vietnamese ATM/NAPAS cards). CITRA never stores raw card numbers, and your upgraded tier quota and digital receipt unlock immediately upon payment confirmation.',
     },
     {
       id: 'pfaq-5',
@@ -2352,7 +2377,9 @@ function PricingSolvaFooter({ lang }: { lang: Lang }) {
           className="pt-[20px] sm:pt-[32px] border-t flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 font-solva-sans text-[14px] sm:text-[16px]"
         >
           <p style={{ color: 'var(--solva-muted)' }}>
-            © 2026 CITRA · SourceLogic Academic Integrity Workspace. All rights reserved.
+            {lang === 'vi'
+              ? '© 2026 CITRA — Không gian Kiểm chứng Trích dẫn Học thuật. Bảo lưu mọi quyền.'
+              : '© 2026 CITRA — Academic Citation Integrity Workspace. All rights reserved.'}
           </p>
           <p style={{ color: 'var(--solva-muted)' }}>
             {lang === 'vi'
