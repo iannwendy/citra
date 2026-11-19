@@ -505,7 +505,7 @@ const PLAIN_VERDICT_ENTRIES: Record<string, BilingualPlainEntry> = {
     vi: {
       label: 'Sai lệch thông tin trích dẫn',
       actionHint:
-        'Tài liệu có thật nhưng tác giả, năm xuất bản, tiêu đề hoặc mã DOI chưa khớp với bản gốc.',
+        'Tài liệu có thật nhưng tác giả, năm xuất bản, tiêu đề hoặc mã DOI chưa khớp với bản gốc; hãy kiểm tra và cập nhật lại.',
     },
   },
   SOURCE_MISMATCH: {
@@ -518,7 +518,7 @@ const PLAIN_VERDICT_ENTRIES: Record<string, BilingualPlainEntry> = {
     vi: {
       label: 'Nhầm lẫn nguồn trích dẫn',
       actionHint:
-        'Đường dẫn hoặc mã DOI đang trỏ sang một tài liệu khác với tên bài được trích dẫn.',
+        'Đường dẫn hoặc mã DOI đang trỏ sang một tài liệu khác với tên bài được trích dẫn; hãy kiểm tra lại nguồn.',
     },
   },
   SUSPECTED_HALLUCINATION: {
@@ -570,7 +570,7 @@ const PLAIN_VERDICT_ENTRIES: Record<string, BilingualPlainEntry> = {
     vi: {
       label: 'Liên kết web / Tài liệu tham chiếu',
       actionHint:
-        'Đây là trang web hoặc văn bản quy định chung, không tính điểm trừ như bài báo học thuật.',
+        'Đây là trang web hoặc văn bản quy định chung thay vì bài báo học thuật (không bị tính điểm trừ).',
     },
   },
 };
@@ -589,7 +589,7 @@ const PLAIN_MAPPING_ENTRIES: Record<string, BilingualPlainEntry> = {
     en: {
       label: 'Linked to Bibliography',
       actionHint:
-        'Every in-text citation cleanly connects to its matching reference entry.',
+        'In-text citation cleanly connects to its matching bibliography entry.',
     },
     vi: {
       label: 'Đã khớp danh mục tham khảo',
@@ -607,7 +607,7 @@ const PLAIN_MAPPING_ENTRIES: Record<string, BilingualPlainEntry> = {
     vi: {
       label: 'Thiếu ở danh mục tham khảo',
       actionHint:
-        'Đã trích dẫn trong bài viết nhưng chưa liệt kê ở danh mục Tài liệu tham khảo cuối bài.',
+        'Đã trích dẫn trong bài viết nhưng chưa liệt kê ở danh mục Tài liệu tham khảo cuối bài; hãy bổ sung mục này vào cuối bài.',
     },
   },
   UNCITED_REFERENCE: {
@@ -620,7 +620,7 @@ const PLAIN_MAPPING_ENTRIES: Record<string, BilingualPlainEntry> = {
     vi: {
       label: 'Có ở danh mục nhưng chưa trích dẫn',
       actionHint:
-        'Có tên trong danh mục tham khảo cuối bài nhưng chưa được trích dẫn ở đoạn văn nào trong bài.',
+        'Có tên trong danh mục tham khảo cuối bài nhưng chưa được trích dẫn ở đoạn văn nào trong bài; hãy trích dẫn trong bài hoặc lược bỏ.',
     },
   },
   IN_TEXT_MISMATCH: {
@@ -710,14 +710,26 @@ function normalizeStatusCode(raw: string): string {
     .replace(/[\s-]+/g, '_');
 }
 
+// ES2020-compatible equivalent of Object.hasOwn (web/tsconfig.json targets ES2020)
+function hasOwnKey<T extends object>(
+  record: T,
+  key: PropertyKey,
+): key is keyof T {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
 export function getPlainVerdictLabel(
   verdict: string,
   lang?: 'en' | 'vi',
 ): PlainVerdictLabel {
   const resolved = resolveLang(lang);
   const normalized = normalizeStatusCode(verdict);
-  const canonicalKey = PLAIN_VERDICT_ALIASES[normalized] ?? normalized;
-  const entry = PLAIN_VERDICT_ENTRIES[canonicalKey];
+  const canonicalKey = hasOwnKey(PLAIN_VERDICT_ALIASES, normalized)
+    ? PLAIN_VERDICT_ALIASES[normalized]
+    : normalized;
+  const entry = hasOwnKey(PLAIN_VERDICT_ENTRIES, canonicalKey)
+    ? PLAIN_VERDICT_ENTRIES[canonicalKey]
+    : undefined;
   if (entry) {
     const copy = resolved === 'vi' ? entry.vi : entry.en;
     return {
@@ -741,8 +753,12 @@ export function getPlainMappingLabel(
 ): PlainMappingLabel {
   const resolved = resolveLang(lang);
   const normalized = normalizeStatusCode(status);
-  const canonicalKey = PLAIN_MAPPING_ALIASES[normalized] ?? normalized;
-  const entry = PLAIN_MAPPING_ENTRIES[canonicalKey];
+  const canonicalKey = hasOwnKey(PLAIN_MAPPING_ALIASES, normalized)
+    ? PLAIN_MAPPING_ALIASES[normalized]
+    : normalized;
+  const entry = hasOwnKey(PLAIN_MAPPING_ENTRIES, canonicalKey)
+    ? PLAIN_MAPPING_ENTRIES[canonicalKey]
+    : undefined;
   if (entry) {
     const copy = resolved === 'vi' ? entry.vi : entry.en;
     return {

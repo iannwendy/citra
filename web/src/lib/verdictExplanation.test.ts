@@ -300,9 +300,47 @@ describe('Task 0.1: Plain-language verdict/mapping helpers & Solva CSS tokens', 
     expect(unknownStatus.technicalCode).toBe('CUSTOM_UNMAPPED');
   });
 
-  it('defines scroll-padding-top: 88px, high-contrast .solva-pro-card-surface, .solva-floral-banner-mask, and .citra-nowrap-tail in index.css while preserving self-hosted Sentient fonts', () => {
+  it('uses accurate item-scoped and Vietnamese non-calque actionHints, falls back to active i18n.language when lang is omitted, and guards Object.prototype keys', async () => {
+    expect(getPlainVerdictLabel('RESOURCE', 'vi').actionHint).toBe(
+      'Đây là trang web hoặc văn bản quy định chung thay vì bài báo học thuật (không bị tính điểm trừ).',
+    );
+    expect(getPlainMappingLabel('MATCHED', 'en').actionHint).toBe(
+      'In-text citation cleanly connects to its matching bibliography entry.',
+    );
+
+    expect(getPlainVerdictLabel('METADATA_ERROR', 'vi').actionHint).toContain(
+      'hãy kiểm tra và cập nhật lại.',
+    );
+    expect(getPlainVerdictLabel('SOURCE_MISMATCH', 'vi').actionHint).toContain(
+      'hãy kiểm tra lại nguồn.',
+    );
+    expect(getPlainMappingLabel('MISSING_REFERENCE', 'vi').actionHint).toContain(
+      'hãy bổ sung mục này vào cuối bài.',
+    );
+    expect(getPlainMappingLabel('UNCITED_REFERENCE', 'vi').actionHint).toContain(
+      'hãy trích dẫn trong bài hoặc lược bỏ.',
+    );
+
+    await i18n.changeLanguage('vi');
+    expect(getPlainVerdictLabel('SUSPECTED_HALLUCINATION').label).toBe(
+      'Không tìm thấy nguồn gốc',
+    );
+    expect(getPlainMappingLabel('MISSING_REFERENCE').label).toBe(
+      'Thiếu ở danh mục tham khảo',
+    );
+    await i18n.changeLanguage('en');
+
+    // Object.prototype keys like 'toString' or 'constructor' must fall back cleanly
+    expect(getPlainVerdictLabel('toString', 'en').label).toBe('Needs Manual Check');
+    expect(getPlainMappingLabel('constructor', 'en').label).toBe('Needs Link Check');
+  });
+
+  it('defines scroll-padding-top: 88px, reduced-motion scroll-behavior: auto, high-contrast .solva-pro-card-surface, .solva-floral-banner-mask, and .citra-nowrap-tail in index.css while preserving self-hosted Sentient fonts', () => {
     const indexCssRaw = readFileSync(resolve(__dirname, '../index.css'), 'utf8');
     expect(indexCssRaw).toMatch(/html\s*\{[^}]*scroll-padding-top:\s*88px\s*;/s);
+    expect(indexCssRaw).toMatch(
+      /@media\s*\(\s*prefers-reduced-motion:\s*reduce\s*\)\s*\{[\s\S]*?html\s*\{\s*scroll-behavior:\s*auto\s*;\s*\}/,
+    );
 
     const lightSurfaceMatch = indexCssRaw.match(
       /(?<!\.dark\s)\.solva-pro-card-surface\s*\{([^}]*)\}/s,
