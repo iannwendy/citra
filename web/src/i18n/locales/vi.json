@@ -352,12 +352,14 @@
     "likelyVerified": "Có thể đã xác minh",
     "sourceMismatch": "Nguồn không khớp",
     "incompleteReference": "Thiếu quy cách trích dẫn",
-    "verifiedDesc": "Trích dẫn đã được xác minh thành công qua cơ sở dữ liệu học thuật. Tài liệu tham khảo tồn tại và khớp metadata.",
-    "metadataErrorDesc": "Tìm thấy ấn phẩm nhưng metadata (tác giả, tiêu đề, năm, nơi xuất bản) không khớp với bản ghi cơ sở dữ liệu.",
+    "legalStatute": "Văn bản Pháp luật",
+    "verifiedDesc": "Đã đối chiếu khớp với ấn phẩm thực tế về tác giả, năm xuất bản và tiêu đề.",
+    "metadataErrorDesc": "Tài liệu có thật nhưng tác giả, năm xuất bản, tiêu đề hoặc mã DOI chưa khớp với bản gốc; hãy kiểm tra và cập nhật lại.",
     "incompleteReferenceDesc": "Mục tham khảo thiếu các trường bắt buộc (tác giả, năm xuất bản hoặc nơi công bố) chứ không phải nguồn do AI bịa đặt.",
-    "suspectedHallucinationDesc": "Trích dẫn có dấu hiệu bịa đặt hoặc không tồn tại trong bất kỳ cơ sở dữ liệu học thuật nào.",
-    "unresolvedDesc": "Không đủ bằng chứng để kết luận tính hợp lệ của trích dẫn. Khuyến nghị kiểm tra thủ công.",
-    "resourceDesc": "Trích dẫn là liên kết URL/tài nguyên web, không xác minh qua cơ sở dữ liệu học thuật."
+    "legalStatuteDesc": "Văn bản quy phạm pháp luật đã nhận diện; không tính điểm trừ trích dẫn.",
+    "suspectedHallucinationDesc": "Không tìm thấy tài liệu này trên các thư viện học thuật; hãy kiểm tra lại bản gốc hoặc thay thế nguồn trích dẫn.",
+    "unresolvedDesc": "Có thể là sách in, giáo trình nội bộ hoặc luận văn chưa có bản trực tuyến; vui lòng đối chiếu thủ công.",
+    "resourceDesc": "Đây là trang web hoặc văn bản quy định chung thay vì bài báo học thuật (không bị tính điểm trừ)."
   },
   "essay": {
     "invalidEssayId": "Mã bài luận không hợp lệ",
@@ -792,5 +794,20 @@
     "deleteModalUsernamePlaceholder": "Nhập tên đăng nhập của bạn",
     "deleteModalConfirmBtn": "Xóa vĩnh viễn tài khoản",
     "deleteModalCancelBtn": "Giữ lại tài khoản"
+  },
+  "upgradeModal": {
+    "badgeDefault": "NÂNG CẤP TÀI KHOẢN CITRA PREMIUM",
+    "titlePro": "Mở khóa trọn bộ công cụ kiểm chứng trích dẫn học thuật",
+    "titleUltra": "Nâng cấp lên CITRA Ultra cho Phòng Lab & Bộ môn",
+    "descPro": "Gói Basic miễn phí hỗ trợ 3 tài liệu/tháng (tối đa 5MB, 15 trang). Nâng cấp để kiểm tra trọn vẹn khóa luận, đối chiếu trang PDF trực quan và xuất báo cáo chuẩn học thuật Word/PDF.",
+    "descUltra": "Bạn đang sử dụng gói CITRA Pro. Nâng cấp lên Ultra để kiểm tra tới 1.000 bản thảo/tháng (tối đa 100MB, 500 trang), tra cứu mở rộng trên Google Scholar, không giới hạn lớp học và tải trọn bộ báo cáo cả lớp (.ZIP).",
+    "annualSavingsHint": "Chọn chu kỳ thanh toán theo năm để tiết kiệm ngay 20% (tặng hơn 2 tháng sử dụng)",
+    "monthly": "Theo tháng",
+    "annual": "Theo năm",
+    "proAudience": "Khóa luận, Nghiên cứu sinh & Giảng viên",
+    "ultraAudience": "Phòng Lab, Bộ môn & Hội đồng luận án",
+    "checkoutInitError": "Không thể khởi tạo phiên thanh toán. Vui lòng thử lại sau giây lát.",
+    "secureFooter": "Thanh toán bảo mật qua Stripe & VNPay-QR/ATM · Hủy gia hạn bất cứ lúc nào",
+    "comparePlansLink": "Xem bảng so sánh chi tiết 3 gói"
   }
 }

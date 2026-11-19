@@ -633,7 +633,7 @@ const PLAIN_MAPPING_ENTRIES: Record<string, BilingualPlainEntry> = {
     vi: {
       label: 'Lệch tên tác giả hoặc năm trong bài',
       actionHint:
-        'Tên tác giả hoặc năm viết trong câu văn chưa khớp với mục tương ứng ở danh mục tham khảo.',
+        'Tên tác giả hoặc năm viết trong câu văn chưa khớp với mục tương ứng ở danh mục tham khảo; hãy chỉnh lại cho khớp.',
     },
   },
   DUPLICATE_REFERENCE: {
