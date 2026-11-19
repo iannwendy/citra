@@ -321,24 +321,24 @@ Every single task (`Task 0.1` through `Task 3.3`) MUST execute this closed-loop 
 - Consumes: `getPlainVerdictLabel` and `getPlainMappingLabel` from Task 0.1; Global Constraints 3 & 4.
 - Produces: Expandable `data-testid="debugger-technical-trace-toggle"` drawer inside `#interactive-demo` and human-first Feature Card 1 visual (tucking raw `<biblStruct>` XML, `ONNX INT8`, `Platt ECE`, and `R01–R30` boolean expressions behind explicit `"Xem bằng chứng kỹ thuật / View Technical Trace"` toggles).
 
-- [ ] **Step 1: Write failing tests in `web/src/pages/LandingNonTechClarity.test.tsx`**
+- [x] **Step 1: Write failing tests in `web/src/pages/LandingNonTechClarity.test.tsx`**
   Assert:
   1. Primary Navbar items use approachable labels (`How It Works` / `Cách hoạt động`, `Live Check` / `Kiểm tra thử`, `For Whom` / `Dành cho ai`, `Accuracy` / `Độ tin cậy`, `Pricing` / `Bảng giá`) instead of bare `Inspector`, `Pipeline`, `Taxonomy`.
   2. Hero H1 & Subtitle speak directly to submitting papers/theses with verified references in both EN & VI (retaining `/Kiểm chứng/i` in VI for `LandingVietnameseTypography.test.tsx`).
   3. In `#interactive-demo`, primary verdict and mapping badges render plain-language labels in `vi` (zero raw `SUSPECTED_HALLUCINATION`, `METADATA_ERROR`, `MISSING_REFERENCE`, or `MATCHED` strings in default collapsed state), while clicking `debugger-technical-trace-toggle` expands the full `R01–R30` rule codes and condition expressions.
   4. Feature Card 1 default surface shows a human-readable extracted citation preview rather than raw `<biblStruct>` angle-bracket XML.
   5. Vietnamese numbers use consistent dot thousand separators (`120.000`) across `LandingPage`.
-- [ ] **Step 2: Run `LandingNonTechClarity.test.tsx` to confirm failure**
+- [x] **Step 2: Run `LandingNonTechClarity.test.tsx` to confirm failure**
   Run: `cd web && npx vitest run src/pages/LandingNonTechClarity.test.tsx`
   Expected: FAIL.
-- [ ] **Step 3: Implement Human-First Copy & Progressive Disclosure in `LandingPage.tsx` and `SolvaMockupWidgets.tsx`**
+- [x] **Step 3: Implement Human-First Copy & Progressive Disclosure in `LandingPage.tsx` and `SolvaMockupWidgets.tsx`**
   Rewrite default surface copy for instant 5-second comprehension by students and lecturers while keeping every technical benchmark (`Platt ECE`, `OOD Guardrail`, `R01–R30`, `ONNX INT8`) accessible inside clean `"Xem chi tiết kỹ thuật / Technical Details"` accordions/toggles. Preserve all `LandingInteractiveMotion.test.tsx` and `LandingVietnameseTypography.test.tsx` contracts.
-- [ ] **Step 4: Run full frontend verification gate**
+- [x] **Step 4: Run full frontend verification gate**
   Run: `cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
   Expected: PASS.
-- [ ] **Step 5: Run Triad Review & Critic Loop + Browser Non-Tech Comprehension Walkthrough (EN & VI)**
+- [x] **Step 5: Run Triad Review & Critic Loop + Browser Non-Tech Comprehension Walkthrough (EN & VI)**
   Have `ux-nontech-critic` read the entire `LandingPage` top-to-bottom as a non-tech Humanities lecturer and undergraduate student; reject any surviving unexplained acronym or English leak in VI mode; loop until `APPROVED`.
-- [ ] **Step 6: Tick checkboxes & commit**
+- [x] **Step 6: Tick checkboxes & commit**
   ```bash
   git add web/src/pages/LandingPage.tsx web/src/components/landing/SolvaMockupWidgets.tsx web/src/pages/LandingNonTechClarity.test.tsx
   git commit -m "feat(landing-ux): humanize EN/VI copy for non-tech users and organize ML internals via progressive disclosure"
