@@ -4407,14 +4407,14 @@ function SolvaRoleWorkspacesShowcase({
         ? [
             'Mở lớp học bằng mã tham gia đơn giản hoặc tải lên cùng lúc tới 50 bài nộp của sinh viên.',
             'Xem danh sách ưu tiên làm nổi bật các trích dẫn nghi vấn bịa đặt hoặc lệch nội dung so với tóm tắt bài báo gốc.',
-            'Xác nhận hợp lệ một chạm (Override) cho giáo trình, sách chuyên khảo in trong nước kèm ghi chú góp ý xây dựng.',
+            'Xác nhận hợp lệ một chạm cho giáo trình, sách chuyên khảo in trong nước kèm ghi chú góp ý xây dựng.',
           ]
         : [
             'Open a class cohort with a simple join code, or upload up to 50 student submissions in a single batch.',
             'Scan a clear review queue highlighting fabricated citations and claims that diverge from the cited paper’s abstract.',
             'Approve domestic print monographs or regional textbooks in one click and attach constructive advisor feedback.',
           ],
-      ctaLabel: isVi ? 'Xem gói cho Giảng viên & Lớp học' : 'Explore Lecturer Plans',
+      ctaLabel: isVi ? 'Xem gói Giảng viên & Lớp học' : 'Explore Lecturer Plans',
       ctaTo: '/pricing',
       previewTitle: isVi ? 'Bảng Tổng hợp Lớp Khóa luận' : 'Cohort Review Dashboard',
       previewSubtitle: isVi
@@ -4529,7 +4529,7 @@ function SolvaRoleWorkspacesShowcase({
               onKeyDown={(e) => handleTabKeyDown(e, idx)}
               className={`min-h-[44px] px-3.5 py-2.5 rounded-[10px] inline-flex items-center justify-center gap-2 font-solva-sans text-[14px] font-medium transition-all cursor-pointer ${
                 isSelected
-                  ? 'bg-white dark:bg-[#26231D] text-[#1C1A15] dark:text-[#FBFAF6] shadow-xs border border-[#E7E3D9] dark:border-[#3A352B]'
+                  ? 'bg-white dark:bg-[#26231D] text-[#1C1A15] dark:text-[#FBFAF6] shadow-sm border border-[#E7E3D9] dark:border-[#3A352B]'
                   : 'text-[var(--solva-muted)] hover:text-[var(--solva-ink)] border border-transparent'
               }`}
             >
@@ -4619,7 +4619,7 @@ function SolvaRoleWorkspacesShowcase({
               backgroundColor: 'var(--solva-bg)',
               borderColor: 'var(--solva-border)',
             }}
-            className="rounded-[14px] border p-5 sm:p-6 flex flex-col gap-5 shadow-2xs"
+            className="rounded-[14px] border p-5 sm:p-6 flex flex-col gap-5 shadow-sm"
           >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-[#E7E3D9] dark:border-[#332F26]">
               <div className="space-y-0.5">
@@ -4653,10 +4653,10 @@ function SolvaRoleWorkspacesShowcase({
               {current.previewRows.map((row) => {
                 const badgeClass =
                   row.tone === 'ok'
-                    ? 'bg-emerald-500/12 text-emerald-800 dark:text-emerald-300 border-emerald-500/25'
+                    ? 'bg-emerald-500/[0.12] text-emerald-800 dark:text-emerald-300 border-emerald-500/25'
                     : row.tone === 'warn'
-                      ? 'bg-amber-500/12 text-amber-800 dark:text-amber-300 border-amber-500/25'
-                      : 'bg-sky-500/12 text-sky-800 dark:text-sky-300 border-sky-500/25';
+                      ? 'bg-amber-500/[0.12] text-amber-800 dark:text-amber-300 border-amber-500/25'
+                      : 'bg-sky-500/[0.12] text-sky-800 dark:text-sky-300 border-sky-500/25';
                 return (
                   <div
                     key={row.label}
@@ -5340,7 +5340,13 @@ function SolvaFooter({
                           href={lnk.href}
                           onClick={
                             lnk.role
-                              ? () => onSelectWorkspaceRole(lnk.role!)
+                              ? (e) => {
+                                  e.preventDefault();
+                                  if (lnk.href) {
+                                    window.history.replaceState(null, '', lnk.href);
+                                  }
+                                  onSelectWorkspaceRole(lnk.role!);
+                                }
                               : undefined
                           }
                           style={{ color: 'var(--solva-muted)' }}

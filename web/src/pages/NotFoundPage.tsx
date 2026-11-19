@@ -7,6 +7,7 @@ import {
   FileSearch,
   Sparkles,
   LogIn,
+  LayoutDashboard,
   ShieldCheck,
   Scale,
   Users,
@@ -71,12 +72,19 @@ export function NotFoundPage(): JSX.Element {
           to: '/pricing',
           icon: Sparkles,
         },
-        {
-          title: 'Đăng nhập tài khoản',
-          desc: 'Truy cập kho báo cáo trích dẫn, lớp học và lịch sử kiểm tra của bạn.',
-          to: '/login',
-          icon: LogIn,
-        },
+        isAuthenticated
+          ? {
+              title: 'Vào Bảng điều khiển',
+              desc: 'Mở kho báo cáo trích dẫn, lớp học và lịch sử kiểm tra đã lưu của bạn.',
+              to: '/dashboard',
+              icon: LayoutDashboard,
+            }
+          : {
+              title: 'Đăng nhập tài khoản',
+              desc: 'Truy cập kho báo cáo trích dẫn, lớp học và lịch sử kiểm tra của bạn.',
+              to: '/login',
+              icon: LogIn,
+            },
         {
           title: 'Không gian học thuật 3 vai trò',
           desc: 'Khám phá quy trình dành cho Sinh viên, Giảng viên và Quản trị Khoa.',
@@ -109,12 +117,19 @@ export function NotFoundPage(): JSX.Element {
           to: '/pricing',
           icon: Sparkles,
         },
-        {
-          title: 'Sign In to Workspace',
-          desc: 'Access your saved verification reports, classes, and citation history.',
-          to: '/login',
-          icon: LogIn,
-        },
+        isAuthenticated
+          ? {
+              title: 'Open Dashboard',
+              desc: 'Return to your saved verification reports, classes, and citation history.',
+              to: '/dashboard',
+              icon: LayoutDashboard,
+            }
+          : {
+              title: 'Sign In to Workspace',
+              desc: 'Access your saved verification reports, classes, and citation history.',
+              to: '/login',
+              icon: LogIn,
+            },
         {
           title: 'Academic Role Workspaces',
           desc: 'Explore workflows tailored for Students, Lecturers, and Department Admins.',
@@ -153,9 +168,9 @@ export function NotFoundPage(): JSX.Element {
         <div className="max-w-[1280px] mx-auto px-5 sm:px-6 lg:px-8 xl:px-[40px] h-[64px] lg:h-[76px] flex items-center justify-between flex-nowrap gap-3">
           <Link
             to="/"
-            className="inline-flex items-center gap-[8px] rounded-[6px] whitespace-nowrap shrink-0 focus:outline-none"
+            className="inline-flex items-center gap-[8px] rounded-[6px] whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--solva-accent)]"
           >
-            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
               <CitraBrandLogo size={18} />
             </span>
             <span

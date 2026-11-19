@@ -1374,6 +1374,7 @@
   --solva-border: #E7E3D9;
   --solva-border-subtle: rgba(28, 26, 21, 0.06);
   --solva-ink: #1C1A15;
+  --solva-accent: #1C1A15;
   --solva-muted: #56524A;
   --solva-subtle: #8C887E;
   --solva-card-elevated: #FFFFFF;
@@ -1392,6 +1393,7 @@
   --solva-border: #332F26;
   --solva-border-subtle: rgba(251, 250, 246, 0.08);
   --solva-ink: #FBFAF6;
+  --solva-accent: #FBFAF6;
   --solva-muted: #A8A296;
   --solva-subtle: #7A756B;
   --solva-card-elevated: #1A1814;

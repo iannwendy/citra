@@ -9,6 +9,7 @@ import { ToastProvider } from '@/contexts/ToastContext';
 import { CitraMotionProvider } from '@/components/ui/motion-primitives';
 import {
   createTestQueryClient,
+  makeUser,
   renderWithProviders,
   render,
   screen,
@@ -16,7 +17,9 @@ import {
   waitFor,
   within,
 } from '@/test-utils';
+import { GoogleOnboardingModal } from '@/components/GoogleOnboardingModal';
 import { LandingPage } from './LandingPage';
+import { NotFoundPage } from './NotFoundPage';
 import { PricingPage } from './PricingPage';
 import { PrivacyPolicyPage } from './PrivacyPolicyPage';
 import { RegisterPage } from './RegisterPage';
@@ -64,6 +67,7 @@ function renderRealRouter(initialPath: string, theme: 'light' | 'dark' = 'light'
 describe('Task 1.5 — Public Routes, Clean IA Anchors, 3-Role Workspaces, /terms & Editorial 404', () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
+    window.scrollTo = vi.fn() as unknown as typeof window.scrollTo;
     await i18n.changeLanguage('en');
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -382,5 +386,174 @@ describe('Task 1.5 — Public Routes, Clean IA Anchors, 3-Role Workspaces, /term
     expect(teacherTab.getAttribute('aria-selected')).toBe('true');
 
     unmount();
+  });
+
+  it('6. /terms mobile navigation drawer renders auth CTAs (unauthenticated + authenticated), closes on Escape, includes Section 05 in footer TOC, and prevents 640px contact button shrink', async () => {
+    await i18n.changeLanguage('en');
+    const { unmount } = renderWithProviders(<TermsOfServicePage />, {
+      user: null,
+      initialRoute: '/terms',
+    });
+
+    const menuToggle = screen.getByRole('button', { name: /toggle navigation menu/i });
+    fireEvent.click(menuToggle);
+
+    const mobileNav = screen.getByRole('navigation', { name: /mobile terms navigation/i });
+    const signInLink = within(mobileNav).getByRole('link', { name: /Sign in/i });
+    const createAccountLink = within(mobileNav).getByRole('link', { name: /Create Account/i });
+    expect(signInLink.getAttribute('href')).toBe('/login');
+    expect(createAccountLink.getAttribute('href')).toBe('/register');
+
+    // Escape closes mobile drawer
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('navigation', { name: /mobile terms navigation/i })).toBeNull();
+
+    // Footer TOC includes all 5 sections including #governing-law
+    const footer = document.querySelector('footer') as HTMLElement;
+    expect(footer.querySelector('a[href="#governing-law"]')).not.toBeNull();
+
+    // Section 05 contact card button has shrink-0 and MapPin wrapper uses items-start
+    const governingSection = document.getElementById('governing-law') as HTMLElement;
+    const privacyBtn = within(governingSection).getByRole('link', {
+      name: /Read Privacy Policy/i,
+    });
+    expect(privacyBtn.className).toContain('shrink-0');
+
+    unmount();
+
+    // Authenticated mobile drawer on /terms in Vietnamese renders Workspace + New Check & zero "(Override)"
+    await i18n.changeLanguage('vi');
+    const { unmount: unmountAuth } = renderWithProviders(<TermsOfServicePage />, {
+      user: makeUser('user', 'pro'),
+      initialRoute: '/terms',
+    });
+
+    const termsVi = screen.getByTestId('terms-page');
+    expect(termsVi.textContent).not.toContain('(Override)');
+
+    fireEvent.click(screen.getByRole('button', { name: /toggle navigation menu/i }));
+    const mobileNavVi = screen.getByRole('navigation', { name: /mobile terms navigation/i });
+    expect(
+      within(mobileNavVi).getByRole('link', { name: /Không gian làm việc/i }).getAttribute('href'),
+    ).toBe('/dashboard');
+    expect(
+      within(mobileNavVi).getByRole('link', { name: /Kiểm tra bài mới/i }).getAttribute('href'),
+    ).toBe('/upload');
+
+    unmountAuth();
+  });
+
+  it('7. GoogleOnboardingModal consent label includes localized /terms link alongside /privacy with underline-offset-4', async () => {
+    const unconsentedGoogleUser = makeUser('user', 'basic', {
+      username: 'scholar_onboarding',
+      auth_provider: 'google',
+      google_linked: true,
+      has_password: false,
+      can_set_username: true,
+      needs_onboarding: true,
+      privacy_consented_at: null,
+      privacy_policy_version: null,
+    });
+
+    await i18n.changeLanguage('en');
+    const { unmount } = renderWithProviders(<GoogleOnboardingModal />, {
+      user: unconsentedGoogleUser,
+      initialRoute: '/dashboard',
+    });
+
+    const modalEn = screen.getByTestId('google-onboarding-modal');
+    expect(modalEn.className).not.toContain('backdrop-blur-xs');
+    const privacyLinkEn = within(modalEn).getByRole('link', {
+      name: /Personal Data Protection Policy/i,
+    });
+    const termsLinkEn = within(modalEn).getByRole('link', { name: /Terms of Service/i });
+    expect(privacyLinkEn.getAttribute('href')).toBe('/privacy');
+    expect(termsLinkEn.getAttribute('href')).toBe('/terms');
+    expect(privacyLinkEn.className).toContain('underline-offset-4');
+    expect(termsLinkEn.className).toContain('underline-offset-4');
+
+    unmount();
+
+    await i18n.changeLanguage('vi');
+    const { unmount: unmountVi } = renderWithProviders(<GoogleOnboardingModal />, {
+      user: unconsentedGoogleUser,
+      initialRoute: '/dashboard',
+    });
+
+    const modalVi = screen.getByTestId('google-onboarding-modal');
+    const termsLinkVi = within(modalVi).getByRole('link', { name: /Điều khoản Dịch vụ/i });
+    expect(termsLinkVi.getAttribute('href')).toBe('/terms');
+    expect(termsLinkVi.className).toContain('underline-offset-4');
+
+    unmountVi();
+  });
+
+  it('8. #workspaces status badges, /terms subnav, RegisterPage, and NotFoundPage use valid Tailwind v3 utilities, natural VI copy, and auth-aware 404 cards', async () => {
+    const replaceStateSpy = vi.spyOn(window.history, 'replaceState');
+    Element.prototype.scrollIntoView = vi.fn();
+
+    await i18n.changeLanguage('vi');
+    const { container, unmount } = renderWithProviders(<LandingPage />, {
+      user: null,
+      initialRoute: '/?role=teacher#workspaces',
+    });
+
+    const showcase = screen.getByTestId('role-workspaces-showcase');
+    // Zero untranslated "(Override)" and tightened VI CTA label
+    expect(showcase.textContent).not.toContain('(Override)');
+    expect(
+      within(showcase).getByRole('link', { name: 'Xem gói Giảng viên & Lớp học' }),
+    ).toBeDefined();
+
+    // Teacher preview rows contain ok (emerald), info (sky), and warn (amber) tones using Tailwind v3 /[0.12]
+    expect(showcase.querySelector('.bg-emerald-500\\/\\[0\\.12\\]')).not.toBeNull();
+    expect(showcase.querySelector('.bg-amber-500\\/\\[0\\.12\\]')).not.toBeNull();
+    expect(showcase.querySelector('.bg-sky-500\\/\\[0\\.12\\]')).not.toBeNull();
+    expect(showcase.innerHTML).not.toMatch(/bg-(emerald|amber|sky)-500\/12\b/);
+    expect(showcase.innerHTML).not.toMatch(/\bshadow-2?xs\b/);
+
+    // Footer role link calls history.replaceState cleanly without competing native hash jump
+    const footer = container.querySelector('footer') as HTMLElement;
+    const adminRoleLink = within(footer).getByRole('link', { name: /Trung tâm Quản trị/i });
+    const clickEvt = new MouseEvent('click', { bubbles: true, cancelable: true });
+    fireEvent(adminRoleLink, clickEvt);
+    expect(clickEvt.defaultPrevented).toBe(true);
+    expect(replaceStateSpy).toHaveBeenCalledWith(null, '', '#workspaces-admin');
+
+    unmount();
+
+    // Verify /terms subnav uses backdrop-blur-md + color-mix translucent surface
+    const { unmount: uTerms } = renderWithProviders(<TermsOfServicePage />, {
+      user: null,
+      initialRoute: '/terms',
+    });
+    const subnav = screen.getByTestId('terms-section-subnav');
+    expect(subnav.className).toContain('backdrop-blur-md');
+    expect(subnav.className).not.toContain('backdrop-blur-xs');
+    expect(subnav.getAttribute('style') ?? '').toContain('color-mix');
+    uTerms();
+
+    // Verify NotFoundPage auth-aware quick destination card + brand focus-visible ring
+    await i18n.changeLanguage('en');
+    const { unmount: u404 } = renderWithProviders(<NotFoundPage />, {
+      user: makeUser('user', 'pro'),
+      initialRoute: '/missing-route',
+    });
+    const notFound = screen.getByTestId('not-found-page');
+    expect(notFound.querySelector('a[href="/login"]')).toBeNull();
+    expect(notFound.querySelectorAll('a[href="/dashboard"]').length).toBeGreaterThanOrEqual(2);
+    const brandHomeLink = notFound.querySelector('header a[href="/"]') as HTMLElement;
+    expect(brandHomeLink.className).toContain('focus-visible:ring-[var(--solva-accent)]');
+    expect(notFound.innerHTML).not.toMatch(/\bshadow-2?xs\b/);
+    u404();
+
+    // Verify RegisterPage uses underline-offset-4
+    const { container: regC, unmount: uReg } = renderWithProviders(<RegisterPage />, {
+      user: null,
+      initialRoute: '/register',
+    });
+    expect(regC.innerHTML).not.toContain('underline-offset-3');
+    expect(regC.querySelector('a[href="/terms"]')?.className).toContain('underline-offset-4');
+    uReg();
   });
 });

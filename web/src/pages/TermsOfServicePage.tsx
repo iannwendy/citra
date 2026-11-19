@@ -74,7 +74,7 @@ function getTermsSections(lang: Lang): TermsSectionItem[] {
         bullets: [
           'Mọi nhãn thẩm định (Đã xác thực, Sai lệch thông tin thư mục, Nghi vấn trích dẫn không có thật, Cần kiểm tra thủ công, Nguồn trực tuyến) chỉ phản ánh bằng chứng đối chiếu khách quan trên hơn 15 cơ sở dữ liệu khoa học quốc tế.',
           'Tác giả, giảng viên hướng dẫn và hội đồng chấm khóa luận luôn giữ toàn quyền đánh giá học thuật cuối cùng đối với từng tài liệu tham khảo.',
-          'Giảng viên và người phản biện có thể chủ động xác nhận hợp lệ (Override) cho sách chuyên khảo in trong nước, kỷ yếu nội bộ hoặc tài liệu lưu trữ chưa có mã DOI kèm ghi chú chuyên môn minh bạch.',
+          'Giảng viên và người phản biện có thể chủ động xác nhận hợp lệ cho sách chuyên khảo in trong nước, kỷ yếu nội bộ hoặc tài liệu lưu trữ chưa có mã DOI kèm ghi chú chuyên môn minh bạch.',
         ],
         calloutTitle: 'Con người giữ quyền quyết định cuối cùng',
         calloutBody:
@@ -269,6 +269,17 @@ function TermsSolvaHeader({
 }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const closeOnKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', closeOnKeyDown);
+    return () => window.removeEventListener('keydown', closeOnKeyDown);
+  }, [mobileMenuOpen]);
+
   const globalLinks: Array<{ label: string; to?: string; href?: string; active?: boolean }> =
     lang === 'vi'
       ? [
@@ -298,7 +309,7 @@ function TermsSolvaHeader({
             to="/"
             className="inline-flex items-center gap-[8px] rounded-[6px] whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1C1A15]/40 dark:focus-visible:ring-[#FBFAF6]/40"
           >
-            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
               <CitraBrandLogo size={18} />
             </span>
             <span
@@ -483,6 +494,37 @@ function TermsSolvaHeader({
               <ChevronRight className="w-4 h-4 opacity-60 shrink-0" />
             </Link>
           </div>
+
+          <div className="pt-2 flex flex-col min-[390px]:flex-row items-stretch gap-2">
+            <SolvaButton
+              to={isAuthenticated ? '/dashboard' : '/login'}
+              variant="outline"
+              fullWidth
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              {isAuthenticated
+                ? lang === 'vi'
+                  ? 'Không gian làm việc'
+                  : 'Workspace'
+                : lang === 'vi'
+                  ? 'Đăng nhập'
+                  : 'Sign in'}
+            </SolvaButton>
+            <SolvaButton
+              to={isAuthenticated ? '/upload' : '/register'}
+              variant="primary"
+              fullWidth
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              {isAuthenticated
+                ? lang === 'vi'
+                  ? 'Kiểm tra bài mới'
+                  : 'New Check'
+                : lang === 'vi'
+                  ? 'Tạo tài khoản'
+                  : 'Create Account'}
+            </SolvaButton>
+          </div>
         </nav>
       )}
     </header>
@@ -500,11 +542,11 @@ function TermsSolvaFooter({ lang }: { lang: Lang }) {
         { label: lang === 'vi' ? 'Trang chủ CITRA' : 'CITRA Home', to: '/' },
         {
           label: lang === 'vi' ? 'Thực nghiệm 120K bài báo' : '120K-Paper Benchmark',
-          href: '/#benchmark-120k',
+          to: '/#benchmark-120k',
         },
         {
           label: lang === 'vi' ? 'Trình thẩm định trích dẫn' : 'Citation Inspector',
-          href: '/#interactive-demo',
+          to: '/#interactive-demo',
         },
         { label: lang === 'vi' ? 'Bảng giá dịch vụ' : 'Pricing Plans', to: '/pricing' },
       ],
@@ -545,6 +587,10 @@ function TermsSolvaFooter({ lang }: { lang: Lang }) {
           label: lang === 'vi' ? '04. Gói cước & Thanh toán' : '04. Plans & Encrypted Billing',
           href: '#billing-quotas',
         },
+        {
+          label: lang === 'vi' ? '05. Luật điều chỉnh & Liên hệ' : '05. Governing Law & Contact',
+          href: '#governing-law',
+        },
       ],
     },
     {
@@ -573,7 +619,7 @@ function TermsSolvaFooter({ lang }: { lang: Lang }) {
         <div className="flex flex-col lg:flex-row items-start justify-between gap-[28px] sm:gap-[36px] lg:gap-[32px]">
           <div className="w-full lg:w-[360px] flex flex-col items-start gap-[16px]">
             <Link to="/" className="inline-flex items-center gap-[10px]">
-              <span className="w-[32px] h-[32px] rounded-[8px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+              <span className="w-[32px] h-[32px] rounded-[8px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
                 <CitraBrandLogo size={20} />
               </span>
               <span
@@ -739,10 +785,10 @@ export function TermsOfServicePage(): JSX.Element {
       <div
         data-testid="terms-section-subnav"
         style={{
-          backgroundColor: 'var(--solva-bg)',
+          backgroundColor: 'color-mix(in srgb, var(--solva-bg) 92%, transparent)',
           borderColor: 'var(--solva-border)',
         }}
-        className="sticky top-[64px] lg:top-[76px] z-40 mt-[64px] lg:mt-[76px] border-b backdrop-blur-xs"
+        className="sticky top-[64px] lg:top-[76px] z-40 mt-[64px] lg:mt-[76px] border-b backdrop-blur-md"
       >
         <div className="max-w-[1200px] mx-auto px-5 sm:px-6 lg:px-[40px] h-[44px] flex items-center gap-2 overflow-x-auto no-scrollbar">
           {sections.map((sec) => (
@@ -972,11 +1018,11 @@ export function TermsOfServicePage(): JSX.Element {
                             backgroundColor: 'var(--solva-bg)',
                             borderColor: 'var(--solva-border)',
                           }}
-                          className="rounded-[12px] border p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                          className="rounded-[12px] border p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
                         >
-                          <div className="space-y-1.5">
-                            <div className="flex items-center gap-2 font-solva-sans text-[14px] font-medium text-[var(--solva-ink)]">
-                              <MapPin className="w-4 h-4 shrink-0" />
+                          <div className="space-y-1.5 min-w-0">
+                            <div className="flex items-start gap-2 font-solva-sans text-[14px] font-medium text-[var(--solva-ink)]">
+                              <MapPin className="w-4 h-4 mt-0.5 shrink-0" />
                               <span>
                                 {isVi
                                   ? 'Trường Đại học Tôn Đức Thắng · 19 Nguyễn Hữu Thọ, phường Tân Hưng, TP. Hồ Chí Minh'
@@ -994,7 +1040,11 @@ export function TermsOfServicePage(): JSX.Element {
                             </div>
                           </div>
 
-                          <SolvaButton to="/privacy" variant="primary">
+                          <SolvaButton
+                            to="/privacy"
+                            variant="primary"
+                            className="shrink-0 self-start md:self-auto"
+                          >
                             {isVi ? 'Xem Chính sách Dữ liệu (/privacy)' : 'Read Privacy Policy (/privacy)'}
                           </SolvaButton>
                         </div>
