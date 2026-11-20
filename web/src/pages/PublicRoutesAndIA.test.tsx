@@ -333,9 +333,9 @@ describe('Task 1.5 — Public Routes, Clean IA Anchors, 3-Role Workspaces, /term
     const backHomeCta = within(notFound).getByRole('link', { name: /Back to Home/i });
     expect(backHomeCta.getAttribute('href')).toBe('/');
 
-    // Helpful recovery quick links (Card 1 routes directly to /#try-instant GuestInstantChecker)
-    expect(notFound.querySelector('a[href="/#try-instant"]')).not.toBeNull();
-    expect(notFound.querySelector('a[href="/#interactive-demo"]')).toBeNull();
+    // Helpful recovery quick links (Card 1 routes directly to /#interactive-demo)
+    expect(notFound.querySelector('a[href="/#interactive-demo"]')).not.toBeNull();
+    expect(notFound.querySelector('a[href="/#try-instant"]')).toBeNull();
     expect(notFound.querySelector('a[href="/pricing"]')).not.toBeNull();
     expect(notFound.querySelector('a[href="/privacy"]')).not.toBeNull();
     expect(notFound.querySelector('a[href="/terms"]')).not.toBeNull();

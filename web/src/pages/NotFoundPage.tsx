@@ -63,7 +63,7 @@ export function NotFoundPage(): JSX.Element {
         {
           title: 'Trình thẩm định trích dẫn nhanh',
           desc: 'Thử đối chiếu mẫu trích dẫn và danh mục tài liệu ngay trên trang chủ.',
-          to: '/#try-instant',
+          to: '/#interactive-demo',
           icon: FileSearch,
         },
         {
@@ -108,7 +108,7 @@ export function NotFoundPage(): JSX.Element {
         {
           title: 'Instant Citation Checker',
           desc: 'Inspect live bibliography verification and side-by-side source evidence.',
-          to: '/#try-instant',
+          to: '/#interactive-demo',
           icon: FileSearch,
         },
         {

@@ -46,7 +46,7 @@ async function waitForRouteReady(
 ): Promise<void> {
   switch (route) {
     case '/':
-      await expect(page.getByTestId('guest-instant-checker')).toBeVisible();
+      await expect(page.locator('#hero h1')).toBeVisible();
       break;
     case '/pricing':
       await expect(page.getByTestId('plan-card-pro')).toBeVisible();
@@ -407,86 +407,32 @@ test.describe('CITRA UI/UX & Non-Tech Experience Overhaul — Master E2E Verific
     );
     await expect(page.locator('#workspace-panel-teacher')).toBeVisible();
 
-    // Verify /missing-route-404 ->/#try-instant quick card & "Back to Home" recovery
+    // Verify /missing-route-404 -> /#interactive-demo quick card & "Back to Home" recovery
     await page.goto('/missing-route-404');
     const notFoundPage = page.getByTestId('not-found-page');
     await expect(notFoundPage).toBeVisible();
     await expect(notFoundPage).toContainText('/missing-route-404');
-    await expect(notFoundPage.locator('a[href="/#try-instant"]')).toBeVisible();
+    await expect(notFoundPage.locator('a[href="/#interactive-demo"]')).toBeVisible();
 
     const backHomeCta = page.getByTestId('not-found-home-cta');
     await expect(backHomeCta).toContainText(/Back to Home|Về trang chủ/i);
     await backHomeCta.click();
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByTestId('guest-instant-checker')).toBeVisible();
+    await expect(page.getByTestId('guest-instant-checker')).toHaveCount(0);
+    await expect(page.locator('#try-instant')).toHaveCount(0);
+    await expect(page.locator('#interactive-demo')).toBeVisible();
   });
 
-  test('4. Live Unauthenticated GuestInstantChecker (#try-instant): 3 Presets, Custom Input, Split-View Diff, cited_doi Highlight, Trace Toggle & /register CTA at 1440x900 & 375x812 (<= 6 public-verify calls)', async ({
-    browser,
+  test('4. Clean Editorial Landing Flow (Zero Instant-Check Box) & Interactive Citation Debugger (#interactive-demo) at 1440x900 & 375x812 in EN & VI', async ({
+    page,
   }) => {
-    test.setTimeout(120_000);
+    clearAuthState(page);
 
-    let totalPublicVerifyCalls = 0;
-
-    // Budgeted to 4 calls (EN 1440x900: all 3 presets + 1 custom) + 2 calls (VI 375x812: ai_invented + 1 custom) = 6 <= 6/min Nginx IP limit
-    const scenarios = [
-      {
-        viewport: { width: 1440, height: 900 },
-        lang: 'en' as const,
-        realIp: `203.0.113.${40 + Math.floor(Math.random() * 80)}`,
-        submittedHeader: 'Submitted in Your Draft',
-        officialHeader: 'Official Library Record',
-        presets: [
-          {
-            testId: 'guest-preset-economics',
-            expectedDoi: '10.2307/1914185',
-          },
-          {
-            testId: 'guest-preset-biomedical',
-            expectedDoi: '10.1056/NEJMoa2034577',
-          },
-          {
-            testId: 'guest-preset-ai_invented',
-            expectedDoi: '10.1093/qje/qjae994',
-            expectHallucinationDoiClass: true,
-          },
-        ],
-      },
-      {
-        viewport: { width: 375, height: 812 },
-        lang: 'vi' as const,
-        realIp: `198.51.100.${40 + Math.floor(Math.random() * 80)}`,
-        submittedHeader: 'Trích dẫn bạn đưa vào',
-        officialHeader: 'Hồ sơ gốc trên thư viện học thuật',
-        presets: [
-          {
-            testId: 'guest-preset-ai_invented',
-            expectedDoi: '10.1093/qje/qjae994',
-            expectHallucinationDoiClass: true,
-          },
-        ],
-      },
-    ];
-
-    for (const sc of scenarios) {
-      const context = await browser.newContext({
-        viewport: sc.viewport,
-        extraHTTPHeaders: {
-          'X-Real-IP': sc.realIp,
-        },
-      });
-      const page = await context.newPage();
-      clearAuthState(page);
-
-      page.on('request', (req) => {
-        if (
-          req.url().includes('/api/essays/sandbox/public-verify') &&
-          req.method() === 'POST'
-        ) {
-          totalPublicVerifyCalls += 1;
-        }
-      });
-
+    for (const sc of [
+      { viewport: { width: 1440, height: 900 }, lang: 'en' as const },
+      { viewport: { width: 375, height: 812 }, lang: 'vi' as const },
+    ]) {
+      await page.setViewportSize(sc.viewport);
       await page.addInitScript((lang: string) => {
         localStorage.setItem('language', lang);
         localStorage.setItem('i18nextLng', lang);
@@ -496,91 +442,37 @@ test.describe('CITRA UI/UX & Non-Tech Experience Overhaul — Master E2E Verific
       await page.goto('/');
       await page.evaluate(() => document.fonts.ready);
 
-      const checker = page.getByTestId('guest-instant-checker');
-      await checker.scrollIntoViewIfNeeded();
-      await expect(checker).toBeVisible();
+      // Ensure "Instant Check · No Account Required" (#try-instant) is completely absent
+      await expect(page.locator('#try-instant')).toHaveCount(0);
+      await expect(page.getByTestId('guest-instant-checker')).toHaveCount(0);
+      const bodyText = await page.locator('main').innerText();
+      expect(bodyText).not.toContain('Instant Check · No Account Required');
+      expect(bodyText).not.toContain('Kiểm tra tức thì · Không cần tài khoản');
 
-      // 1. Exercise budgeted one-click presets without authentication
-      for (const preset of sc.presets) {
-        const verifyRespPromise = page.waitForResponse(
-          (resp) =>
-            resp.url().includes('/api/essays/sandbox/public-verify') &&
-            resp.request().method() === 'POST',
-        );
-        await checker.getByTestId(preset.testId).click();
-        const verifyResp = await verifyRespPromise;
-        expect(verifyResp.status()).toBe(200);
+      // Hero secondary button points cleanly to #interactive-demo
+      await expect(
+        page.locator('#hero a[href="#interactive-demo"]'),
+      ).toBeVisible();
 
-        const resultCard = checker.getByTestId('guest-checker-result-0');
-        await expect(resultCard).toBeVisible();
-        await expect(resultCard).toContainText(sc.submittedHeader);
-        await expect(resultCard).toContainText(sc.officialHeader);
+      const demoSection = page.locator('#interactive-demo');
+      await demoSection.scrollIntoViewIfNeeded();
+      await expect(demoSection).toBeVisible();
 
-        const citedDoiChip = checker.getByTestId('guest-checker-cited-doi-0');
-        await expect(citedDoiChip).toBeVisible();
-        await expect(citedDoiChip).toContainText(preset.expectedDoi);
-        if (preset.expectHallucinationDoiClass) {
-          await expect(citedDoiChip).toHaveClass(/text-red-700|border-red-500/);
-        }
+      const options = demoSection.getByRole('option');
+      await expect(options).toHaveCount(4);
+      await options.nth(0).click();
 
-        // Default collapsed result card never leaks raw uppercase enum identifiers
-        const cardVisibleText = await resultCard.innerText();
-        for (const rawEnum of RAW_ENUM_LEAKS) {
-          expect(cardVisibleText).not.toContain(rawEnum);
-        }
-      }
-
-      // 2. Test custom reference input -> live verification
-      const customReference =
-        'Acemoglu, D., Johnson, S., & Robinson, J. A. (2001). The colonial origins of comparative development: An empirical investigation. American Economic Review, 91(5), 1369-1401. https://doi.org/10.1257/aer.91.5.1369';
-      const textarea = checker.locator('#guest-citations-textarea');
-      await textarea.fill(customReference);
-
-      const customVerifyPromise = page.waitForResponse(
-        (resp) =>
-          resp.url().includes('/api/essays/sandbox/public-verify') &&
-          resp.request().method() === 'POST',
-      );
-      await checker.getByTestId('guest-checker-submit').click();
-      const customResp = await customVerifyPromise;
-      expect(customResp.status()).toBe(200);
-
-      const customDoiChip = checker.getByTestId('guest-checker-cited-doi-0');
-      await expect(customDoiChip).toBeVisible();
-      await expect(customDoiChip).toContainText('10.1257/aer.91.5.1369');
-
-      // 3. Expand & collapse progressive-disclosure Technical Rule Trace
-      const traceToggle = checker.getByTestId('guest-checker-trace-toggle');
-      const tracePanel = checker.getByTestId('guest-checker-trace-panel');
+      const traceToggle = demoSection.getByTestId('debugger-technical-trace-toggle');
       await expect(traceToggle).toHaveAttribute('aria-expanded', 'false');
-      await expect(tracePanel).toBeHidden();
-
       await traceToggle.click();
       await expect(traceToggle).toHaveAttribute('aria-expanded', 'true');
-      await expect(tracePanel).toBeVisible();
-      await expect(tracePanel).toContainText(/\bR[-0-9A-Z_]+/);
+      await expect(demoSection.getByTestId('debugger-technical-trace-panel')).toBeVisible();
 
       await assertZeroHorizontalOverflow(
         page,
-        `/#try-instant expanded trace (${sc.lang}) @ ${sc.viewport.width}x${sc.viewport.height}`,
+        `/#interactive-demo expanded trace (${sc.lang}) @ ${sc.viewport.width}x${sc.viewport.height}`,
       );
-
-      await traceToggle.click();
-      await expect(traceToggle).toHaveAttribute('aria-expanded', 'false');
-
-      // 4. Verify full-document upload CTA points to /register and navigates cleanly
-      const fullUploadCta = checker.getByTestId('guest-checker-full-upload-cta');
-      await expect(fullUploadCta).toHaveAttribute('href', '/register');
-      await fullUploadCta.click();
-      await expect(page).toHaveURL(/\/register$/);
-
-      await context.close();
     }
-
-    expect(
-      totalPublicVerifyCalls,
-      'Total POST /api/essays/sandbox/public-verify calls must stay <= 6 for single-IP Nginx rate-limit safety',
-    ).toBeLessThanOrEqual(6);
   });
 
   test('5. Mobile Pricing UX (375x812 & 390x844) & High-Contrast .solva-pro-card-surface in Light and Dark Modes', async ({

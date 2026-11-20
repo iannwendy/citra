@@ -141,6 +141,11 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
     expect(heroEnText).not.toMatch(
       /\bOOD\b|GROBID|TEI-XML|\bTEI\b|ONNX|INT8|S-BERT|SQLite|FTS5|SUSPECTED_HALLUCINATION|METADATA_ERROR/,
     );
+    expect(heroEn.querySelector('a[href="#interactive-demo"]')).not.toBeNull();
+    expect(enContainer.querySelector('#try-instant')).toBeNull();
+    expect(enContainer.textContent ?? '').not.toContain(
+      'Instant Check · No Account Required',
+    );
     unmountEn();
 
     await i18n.changeLanguage('vi');
@@ -156,6 +161,11 @@ describe('Task 2.1 — Human-First Copywriting & Collapsible Progressive Disclos
     const heroViText = heroVi.textContent ?? '';
     expect(heroViText).not.toMatch(
       /\bOOD\b|GROBID|TEI-XML|\bTEI\b|ONNX|INT8|S-BERT|SQLite|FTS5|SUSPECTED_HALLUCINATION|METADATA_ERROR|MATCHED/,
+    );
+    expect(heroVi.querySelector('a[href="#interactive-demo"]')).not.toBeNull();
+    expect(viContainer.querySelector('#try-instant')).toBeNull();
+    expect(viContainer.textContent ?? '').not.toContain(
+      'Kiểm tra tức thì · Không cần tài khoản',
     );
     unmountVi();
   });
