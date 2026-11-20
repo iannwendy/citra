@@ -12,6 +12,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+_HTTP_429_RE = re.compile(
+    r"\b(?:http[\s/_-]*)?429\b|rate[\s_-]?limit|too many requests",
+    re.IGNORECASE,
+)
 _HTTP_5XX_RE = re.compile(
     r"\b(?:http[\s/_-]*)?5\d{2}\b|\b5xx\b|service unavailable|bad gateway|"
     r"gateway timeout|internal server error",
@@ -179,12 +183,7 @@ class CircuitBreakerRegistry:
             entry.last_failure_at = now
 
             r = raw_reason.lower()
-            is_rate_limit = (
-                "429" in r
-                or "rate limit" in r
-                or "rate-limit" in r
-                or "too many requests" in r
-            )
+            is_rate_limit = bool(_HTTP_429_RE.search(r))
             if "timeout" in r or "timed out" in r:
                 entry.timeout_count += 1
             elif is_rate_limit:

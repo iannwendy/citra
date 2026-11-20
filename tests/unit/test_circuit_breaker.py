@@ -133,6 +133,19 @@ class TestCircuitBreakerStateMachine:
 
         await close_loop_http_clients()
 
+    def test_hex_memory_address_containing_429_does_not_misclassify_http_5xx_as_rate_limit(
+        self,
+    ) -> None:
+        registry = CircuitBreakerRegistry(failure_threshold=4, recovery_timeout_seconds=45.0)
+        registry.record_infra_failure(
+            "crossref",
+            "HTTP 5xx (RetryError: RetryError[<Future at 0x7f8a4291bc00 state=finished raised HTTPStatusError>])",
+            12.0,
+        )
+        snap = registry.snapshot_all()["crossref"]
+        assert snap["http_5xx_count"] == 1
+        assert snap["http_429_count"] == 0
+
     @pytest.mark.asyncio
     async def test_clean_404_and_no_results_scholarly_misses_record_success_and_stay_closed(
         self,

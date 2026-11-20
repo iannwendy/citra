@@ -4662,9 +4662,9 @@ class RetrievalOrchestrator:
 
         if "timeout" in err_no_quotes or "timed out" in err_no_quotes:
             return raw_err
-        if any(
-            m in err_no_quotes
-            for m in ("429", "rate limit", "rate-limit", "too many requests", "backoff")
+        if re.search(
+            r"\b429\b|rate[\s_-]?limit|too many requests|backoff",
+            err_no_quotes,
         ):
             return raw_err
         if re.search(
@@ -4777,7 +4777,7 @@ class RetrievalOrchestrator:
             if limiter:
                 err_lower = (cand.error or "").lower()
                 is_429 = bool(
-                    cand.error and ("429" in cand.error or "rate limit" in err_lower)
+                    cand.error and (re.search(r"\b429\b", cand.error) or "rate limit" in err_lower)
                 )
                 if is_429:
                     if not notified_429:
