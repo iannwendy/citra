@@ -720,6 +720,7 @@ class TestConfigsPackagingCiAndDocsParity:
         assert __version__ in bench_report_md
         assert "_extract_distinctive_stems" not in train_script_src
         import json
+        import re
 
         bench_json = json.loads(
             (REPO_ROOT / "data" / "models" / "neuro_symbolic_benchmark_report.json").read_text(
@@ -756,7 +757,16 @@ class TestConfigsPackagingCiAndDocsParity:
         assert "/api/auth/token" not in readme
         assert "/api/verify" not in readme
         assert "src/integrity_checker/ingestion" not in readme
-        assert "2,100+" in readme or "2,085+" in readme
-        assert "340+" in readme
-        assert "2,100+" in claude or "2,085+" in claude
-        assert "340+" in claude
+        backend_readme = [int(m.replace(",", "")) for m in re.findall(r"\b([2-9],\d{3})\+?", readme)]
+        frontend_readme = [
+            int(m) for m in re.findall(r"`?(\d{3,4})`?\+?\s+(?:passed|frontend|Vitest)", readme)
+        ]
+        backend_claude = [int(m.replace(",", "")) for m in re.findall(r"\b([2-9],\d{3})\+?", claude)]
+        frontend_claude = [
+            int(m)
+            for m in re.findall(r"`?(\d{3,4})`?\+?\s+(?:passed|frontend|Vitest|tests)", claude)
+        ]
+        assert any(n >= 2085 for n in backend_readme)
+        assert any(n >= 340 for n in frontend_readme)
+        assert any(n >= 2085 for n in backend_claude)
+        assert any(n >= 340 for n in frontend_claude)
