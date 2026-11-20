@@ -29,7 +29,7 @@ function getNodeStyles(
   verdictLabel?: GraphNode['verdictLabel'],
 ): string {
   if (isRoot) {
-    return 'border-indigo-300/90 bg-indigo-50/70 dark:border-indigo-800 dark:bg-indigo-950/60 shadow-2xs';
+    return 'border-indigo-300/90 bg-indigo-50/70 dark:border-indigo-800 dark:bg-indigo-950/60 shadow-sm';
   }
   switch (status) {
     case 'success':
@@ -237,7 +237,7 @@ export function EvidenceGraphNode({
       {/* Node Card */}
       <div
         className={`w-full min-w-0 flex items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-all ${
-          hasChildren ? 'cursor-pointer hover:shadow-xs' : 'cursor-default'
+          hasChildren ? 'cursor-pointer hover:shadow-sm' : 'cursor-default'
         } ${getNodeStyles(node.status, isRoot, node.type, node.verdictLabel)}`}
         onClick={() => hasChildren && onExpand?.(node.id)}
       >
@@ -250,7 +250,7 @@ export function EvidenceGraphNode({
                 {node.label}
               </span>
               <span
-                className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border shrink-0 ${statusPill.className}`}
+                className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border shrink-0 ${statusPill.className}`}
               >
                 {statusPill.text}
               </span>

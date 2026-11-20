@@ -505,7 +505,7 @@ export function PendingReviewsPage() {
                 disabled={isBusy}
                 data-testid={`pending-approve-btn-${r.verdict_id}`}
                 onClick={() => void handleAdjudicate(r, 'verified', 'approve')}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-2xs transition-colors disabled:opacity-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-colors disabled:opacity-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               >
                 {isBusy ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -607,7 +607,7 @@ export function PendingReviewsPage() {
   return (
     <div className="space-y-5 pb-10">
       {/* Clean Action-First Header */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3.5 min-w-0">
           <div className="w-11 h-11 rounded-2xl bg-amber-50 dark:bg-amber-950/80 border border-amber-200/70 dark:border-amber-800/70 flex items-center justify-center shrink-0">
             <ClipboardCheck className="h-5 w-5 text-amber-600 dark:text-amber-400" />
@@ -679,7 +679,7 @@ export function PendingReviewsPage() {
         <>
           {/* Visual Triage Overview: Donut Chart + Interactive Filter Cards */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-            <Card className="lg:col-span-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex items-center gap-4">
+            <Card className="lg:col-span-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex items-center gap-4">
               <DonutChart
                 size={84}
                 thickness={11}
@@ -742,7 +742,7 @@ export function PendingReviewsPage() {
                     className={`text-left p-3.5 rounded-2xl bg-white dark:bg-slate-900 border transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
                       active
                         ? fc.activeClass
-                        : 'border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-2xs'
+                        : 'border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 mb-2">
@@ -788,7 +788,7 @@ export function PendingReviewsPage() {
                       aria-pressed={selectedClassId === null}
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
                         selectedClassId === null
-                          ? 'bg-indigo-600 text-white shadow-2xs'
+                          ? 'bg-indigo-600 text-white shadow-sm'
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                       }`}
                     >
@@ -804,7 +804,7 @@ export function PendingReviewsPage() {
                           aria-pressed={isActive}
                           className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
                             isActive
-                              ? 'bg-indigo-600 text-white shadow-2xs'
+                              ? 'bg-indigo-600 text-white shadow-sm'
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                           }`}
                         >
@@ -901,7 +901,7 @@ export function PendingReviewsPage() {
                         key={group.essayId}
                         layout
                         exit={{ opacity: 0, y: -8, transition: TRANSITION_EXIT }}
-                        className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs overflow-hidden"
+                        className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden"
                       >
                         <div className="px-4 py-3 bg-slate-50/80 dark:bg-slate-800/50 border-b border-slate-200/70 dark:border-slate-800 flex items-center justify-between gap-3">
                           <button

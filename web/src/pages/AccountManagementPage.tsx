@@ -148,7 +148,7 @@ export function AccountManagementPage() {
   return (
     <div className="space-y-5 pb-10">
       {/* Clean Header */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5 min-w-0">
           <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shrink-0">
             <Users className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
@@ -169,7 +169,7 @@ export function AccountManagementPage() {
             setEditingUser(null);
             setFormDialogOpen(true);
           }}
-          className="gap-2 rounded-xl h-9 shadow-xs shrink-0"
+          className="gap-2 rounded-xl h-9 shadow-sm shrink-0"
         >
           <UserPlus className="h-4 w-4" />
           {t('admin.createUser')}
@@ -178,7 +178,7 @@ export function AccountManagementPage() {
 
       {/* Visual Member Ecosystem Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <Card className="lg:col-span-5 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex items-center gap-4">
+        <Card className="lg:col-span-5 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex items-center gap-4">
           <DonutChart
             size={80}
             thickness={10}
@@ -244,7 +244,7 @@ export function AccountManagementPage() {
         </Card>
 
         <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {t('admin.totalUsers')}
             </span>
@@ -253,7 +253,7 @@ export function AccountManagementPage() {
             </p>
           </Card>
 
-          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
               {t('admin.active')}
             </span>
@@ -262,7 +262,7 @@ export function AccountManagementPage() {
             </p>
           </Card>
 
-          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
               {t('admin.teachers')}
             </span>
@@ -271,7 +271,7 @@ export function AccountManagementPage() {
             </p>
           </Card>
 
-          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <span className="text-xs font-medium text-violet-600 dark:text-violet-400">
               {t('admin.admins')}
             </span>

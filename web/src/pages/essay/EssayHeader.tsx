@@ -252,7 +252,7 @@ export function EssayHeader({
     numReferences !== numCitations;
 
   return (
-    <div className="relative rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 px-4 py-3.5 sm:px-5 shadow-xs">
+    <div className="relative rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 px-4 py-3.5 sm:px-5 shadow-sm">
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 w-full min-w-0">
         {/* Document Identity Cluster */}
         <div className="flex flex-col items-start gap-2.5 sm:flex-row sm:items-center sm:gap-3 min-w-0 flex-1">
@@ -340,7 +340,7 @@ export function EssayHeader({
             size="sm"
             data-testid="header-remediation-btn"
             onClick={handleRemediationClick}
-            className="h-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-[13px] font-semibold shadow-xs px-3.5 cursor-pointer"
+            className="h-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-[13px] font-semibold shadow-sm px-3.5 cursor-pointer"
           >
             <Sparkles className="h-3.5 w-3.5 text-amber-300 shrink-0" />
             <span>

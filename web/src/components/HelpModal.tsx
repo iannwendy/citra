@@ -153,7 +153,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
     >
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-slate-950/60 backdrop-blur-xs animate-fade-in"
+        className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
         onClick={onClose}
       />
 
@@ -162,7 +162,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
         {/* Full-Width Executive Header */}
         <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/90 shrink-0">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
               <img
                 src="/citra-logo.png"
                 alt="CITRA Logo"
@@ -188,11 +188,11 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
           <div className="flex items-center gap-2">
             <div className="hidden sm:flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500 mr-1">
-              <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-[11px] font-mono text-slate-600 dark:text-slate-300 shadow-2xs">
+              <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-[11px] font-mono text-slate-600 dark:text-slate-300 shadow-sm">
                 Ctrl
               </kbd>
               <span>+</span>
-              <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-[11px] font-mono text-slate-600 dark:text-slate-300 shadow-2xs">
+              <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-[11px] font-mono text-slate-600 dark:text-slate-300 shadow-sm">
                 /
               </kbd>
             </div>
@@ -221,7 +221,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                     aria-label={section.label}
                     className={`group w-full flex items-center justify-between gap-2.5 px-3 py-2.5 rounded-xl text-sm text-left whitespace-nowrap transition-all ${
                       isActive
-                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold shadow-xs ring-1 ring-slate-200/90 dark:ring-slate-700'
+                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold shadow-sm ring-1 ring-slate-200/90 dark:ring-slate-700'
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100/80 dark:hover:bg-slate-800/50'
                     }`}
                   >
@@ -229,7 +229,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                       <span
                         className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
                           isActive
-                            ? 'bg-indigo-600 text-white shadow-2xs'
+                            ? 'bg-indigo-600 text-white shadow-sm'
                             : 'bg-slate-200/70 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300'
                         }`}
                       >
@@ -304,7 +304,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                           key={step}
                           className="flex items-center gap-3.5 p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50"
                         >
-                          <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-indigo-600 dark:text-indigo-400 shrink-0 shadow-2xs">
+                          <div className="flex items-center justify-center h-7 w-7 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-indigo-600 dark:text-indigo-400 shrink-0 shadow-sm">
                             0{step}
                           </div>
                           <StepIcon className="h-4 w-4 text-slate-400 dark:text-slate-500 shrink-0" />
@@ -336,7 +336,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                     return (
                       <div
                         key={num}
-                        className="group relative flex flex-col justify-between p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/70 shadow-2xs hover:border-indigo-300 dark:hover:border-indigo-800/80 transition-all"
+                        className="group relative flex flex-col justify-between p-4 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/70 shadow-sm hover:border-indigo-300 dark:hover:border-indigo-800/80 transition-all"
                       >
                         <div>
                           <div className="flex items-center justify-between mb-3">
@@ -379,7 +379,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                     return (
                       <div
                         key={item.code}
-                        className="flex items-start gap-3.5 p-3.5 rounded-xl bg-white dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 shadow-2xs hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+                        className="flex items-start gap-3.5 p-3.5 rounded-xl bg-white dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 shadow-sm hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
                       >
                         <div
                           className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${item.iconBox}`}
@@ -475,7 +475,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/70 divide-y divide-slate-200/70 dark:divide-slate-800 overflow-hidden shadow-2xs">
+                <div className="rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/70 divide-y divide-slate-200/70 dark:divide-slate-800 overflow-hidden shadow-sm">
                   {shortcuts.map((shortcut, index) => (
                     <div
                       key={index}
@@ -492,7 +492,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                       <div className="flex items-center gap-1.5">
                         {shortcut.keys.map((key, keyIndex) => (
                           <span key={keyIndex} className="inline-flex items-center gap-1.5">
-                            <kbd className="px-2.5 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-b-2 rounded-md text-xs font-mono font-semibold text-slate-700 dark:text-slate-200 shadow-2xs">
+                            <kbd className="px-2.5 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 border-b-2 rounded-md text-xs font-mono font-semibold text-slate-700 dark:text-slate-200 shadow-sm">
                               {key}
                             </kbd>
                             {keyIndex < shortcut.keys.length - 1 && (

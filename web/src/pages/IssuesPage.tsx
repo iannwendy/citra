@@ -680,7 +680,7 @@ export function IssuesPage() {
 
       {/* 4 Summary Metric Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {lang === 'vi' ? 'Tổng vấn đề' : 'Total Issues'}
@@ -694,7 +694,7 @@ export function IssuesPage() {
           </p>
         </Card>
 
-        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-red-200/80 dark:border-red-900/70 shadow-2xs">
+        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-red-200/80 dark:border-red-900/70 shadow-sm">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-red-600 dark:text-red-400">
               Critical
@@ -708,7 +708,7 @@ export function IssuesPage() {
           </p>
         </Card>
 
-        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-amber-200/80 dark:border-amber-900/70 shadow-2xs">
+        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-amber-200/80 dark:border-amber-900/70 shadow-sm">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
               Warning
@@ -722,7 +722,7 @@ export function IssuesPage() {
           </p>
         </Card>
 
-        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               Info

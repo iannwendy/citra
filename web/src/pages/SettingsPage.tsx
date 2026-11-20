@@ -349,7 +349,7 @@ export function SettingsPage(): JSX.Element {
   return (
     <div className="citra-cq-page-wide space-y-6 w-full max-w-5xl mx-auto pb-10 transition-[max-width] duration-300">
       {/* Executive Header Card */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2.5 flex-wrap mb-2.5">
@@ -420,14 +420,14 @@ export function SettingsPage(): JSX.Element {
                     aria-pressed={isActive}
                     className={`group relative flex flex-col items-center justify-center gap-2 p-3 rounded-xl border text-center transform-gpu transition-[transform,border-color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.968] cursor-pointer select-none ${
                       isActive
-                        ? 'border-indigo-500/90 dark:border-indigo-500/80 bg-gradient-to-br from-indigo-50/90 via-indigo-50/40 to-white dark:from-indigo-950/70 dark:via-indigo-950/30 dark:to-slate-900 ring-2 ring-indigo-500/15 dark:ring-indigo-400/20 shadow-xs'
-                        : 'border-slate-200/90 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-800/60 hover:border-indigo-200 dark:hover:border-indigo-800/80 hover:shadow-xs'
+                        ? 'border-indigo-500/90 dark:border-indigo-500/80 bg-gradient-to-br from-indigo-50/90 via-indigo-50/40 to-white dark:from-indigo-950/70 dark:via-indigo-950/30 dark:to-slate-900 ring-2 ring-indigo-500/15 dark:ring-indigo-400/20 shadow-sm'
+                        : 'border-slate-200/90 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-800/60 hover:border-indigo-200 dark:hover:border-indigo-800/80 hover:shadow-sm'
                     }`}
                   >
                     <span
                       className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors duration-200 ${
                         isActive
-                          ? 'bg-indigo-600 text-white shadow-xs shadow-indigo-500/30 dark:bg-indigo-500 dark:text-white'
+                          ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30 dark:bg-indigo-500 dark:text-white'
                           : 'bg-slate-100 text-slate-600 border border-slate-200/80 group-hover:bg-indigo-50 group-hover:text-indigo-600 group-hover:border-indigo-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700/80 dark:group-hover:bg-indigo-950/70 dark:group-hover:text-indigo-300 dark:group-hover:border-indigo-800/70'
                       }`}
                     >
@@ -485,15 +485,15 @@ export function SettingsPage(): JSX.Element {
                     aria-pressed={isActive}
                     className={`group relative flex items-center justify-between gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-xl border text-left transform-gpu transition-[transform,border-color,background-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.972] cursor-pointer select-none ${
                       isActive
-                        ? 'border-indigo-500/90 dark:border-indigo-500/80 bg-gradient-to-br from-indigo-50/90 via-indigo-50/40 to-white dark:from-indigo-950/70 dark:via-indigo-950/30 dark:to-slate-900 ring-2 ring-indigo-500/15 dark:ring-indigo-400/20 shadow-xs'
-                        : 'border-slate-200/90 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-800/60 hover:border-indigo-200 dark:hover:border-indigo-800/80 hover:shadow-xs'
+                        ? 'border-indigo-500/90 dark:border-indigo-500/80 bg-gradient-to-br from-indigo-50/90 via-indigo-50/40 to-white dark:from-indigo-950/70 dark:via-indigo-950/30 dark:to-slate-900 ring-2 ring-indigo-500/15 dark:ring-indigo-400/20 shadow-sm'
+                        : 'border-slate-200/90 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-800/60 hover:border-indigo-200 dark:hover:border-indigo-800/80 hover:shadow-sm'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                       <span
                         className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0 font-mono text-[11px] font-bold tracking-wider transition-colors duration-200 ${
                           isActive
-                            ? 'bg-indigo-600 text-white shadow-xs shadow-indigo-500/30 dark:bg-indigo-500 dark:text-white'
+                            ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/30 dark:bg-indigo-500 dark:text-white'
                             : 'bg-slate-100 text-slate-600 border border-slate-200/80 group-hover:bg-indigo-50 group-hover:text-indigo-600 group-hover:border-indigo-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700/80 dark:group-hover:bg-indigo-950/70 dark:group-hover:text-indigo-300 dark:group-hover:border-indigo-800/70'
                         }`}
                       >
@@ -525,7 +525,7 @@ export function SettingsPage(): JSX.Element {
                     <span
                       className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all duration-200 ${
                         isActive
-                          ? 'bg-indigo-600 dark:bg-indigo-500 text-white shadow-2xs'
+                          ? 'bg-indigo-600 dark:bg-indigo-500 text-white shadow-sm'
                           : 'border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 group-hover:border-indigo-300 dark:group-hover:border-indigo-700'
                       }`}
                     >
@@ -1089,7 +1089,7 @@ export function SettingsPage(): JSX.Element {
       {deleteModalOpen && user && (
         <div
           data-testid="delete-account-modal"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 animate-[fadeIn_180ms_ease-out]"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-[fadeIn_180ms_ease-out]"
         >
           <div
             {...deleteDialog.dialogProps}

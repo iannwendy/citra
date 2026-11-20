@@ -9,11 +9,16 @@ import {
   useParams,
   useRouteError,
 } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { AppLayout } from './components/AppLayout';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import { PageSkeleton } from './components/PageSkeleton';
+import {
+  AuthPageSkeleton,
+  EditorialPageSkeleton,
+  PageSkeleton,
+  WorkspaceShellSkeleton,
+} from './components/PageSkeleton';
 import {
   attemptChunkReload,
   clearChunkReloadState,
@@ -26,23 +31,20 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 
 /* ============================================================
-   SourceLogic — Router Configuration
+   CITRA — Router Configuration
    Academic Source Verification Workspace
 
-   Code-split with React.lazy so the initial bundle only ships
-   the chrome (Landing, Login, Layout). Each page is fetched
-   on-demand when the user navigates to it.
+   Public entry routes (/, /login, /register) render synchronously
+   for zero-flash first paint, while secondary public pages and the
+   authenticated workspace shell (AppLayout + subpages) lazy-load
+   on demand with shell-matched skeletons.
    ============================================================ */
 
 // Public route that redirects to dashboard if already authenticated
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900" />
-      </div>
-    );
+    return <AuthPageSkeleton />;
   }
   if (user) {
     return <Navigate to="/dashboard" replace />;
@@ -58,6 +60,7 @@ function LegacyEssayRedirect() {
 
 // Secondary and authenticated pages are code-split with lazyWithRetry so that the
 // landing page initial bundle stays lean and transient chunk errors recover automatically.
+const AppLayout = lazyWithRetry(() => import('./components/AppLayout').then((m) => ({ default: m.AppLayout })));
 const ActivateAccountPage = lazyWithRetry(() => import('./pages/ActivateAccountPage').then((m) => ({ default: m.ActivateAccountPage })));
 const ForgotPasswordPage = lazyWithRetry(() => import('./pages/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage })));
 const ResetPasswordPage = lazyWithRetry(() => import('./pages/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage })));
@@ -91,6 +94,8 @@ const NotFoundPage = lazyWithRetry(() => import('./pages/NotFoundPage').then((m)
 // screen and automatically recovers from stale dynamic import chunk errors after deployments.
 export function RouteErrorBoundary() {
   const error = useRouteError();
+  const { i18n } = useTranslation();
+  const isVi = i18n.language?.startsWith('vi') ?? false;
   const chunkError = isChunkLoadError(error);
 
   useEffect(() => {
@@ -105,18 +110,22 @@ export function RouteErrorBoundary() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-[#FBFAF6] dark:bg-slate-950 px-4">
       <div className="max-w-md w-full text-center">
         <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
           <AlertTriangle className="w-8 h-8 text-red-600 dark:text-red-400" />
         </div>
         <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
-          Something went wrong
+          {isVi ? 'Đã xảy ra sự cố' : 'Something went wrong'}
         </h1>
         <p className="text-slate-600 dark:text-slate-400 mb-6 text-sm">
           {chunkError
-            ? 'A newer version of CITRA is available. Please refresh the page to load the latest workspace.'
-            : 'An unexpected error occurred. Please try refreshing the page.'}
+            ? isVi
+              ? 'Hệ thống CITRA vừa có phiên bản mới. Vui lòng tải lại trang để cập nhật giao diện mới nhất.'
+              : 'A newer version of CITRA is available. Please refresh the page to load the latest workspace.'
+            : isVi
+              ? 'Đã có lỗi ngoài ý muốn xảy ra. Vui lòng tải lại trang để tiếp tục.'
+              : 'An unexpected error occurred. Please try refreshing the page.'}
         </p>
         <div className="flex gap-3 justify-center">
           <button
@@ -125,13 +134,13 @@ export function RouteErrorBoundary() {
             className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" />
-            Refresh Page
+            {isVi ? 'Tải lại trang' : 'Refresh Page'}
           </button>
           <a
             href="/"
             className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg font-medium transition-colors"
           >
-            Go Home
+            {isVi ? 'Về trang chủ' : 'Go Home'}
           </a>
         </div>
       </div>
@@ -143,28 +152,46 @@ export function RouteErrorBoundary() {
 function HybridPricingRoute() {
   const { user, isLoading } = useAuth();
   if (isLoading) {
-    return <PageSkeleton />;
+    return <EditorialPageSkeleton />;
   }
   if (user) {
     return (
-      <AppLayout>
-        <Suspense fallback={<PageSkeleton />}>
-          <PricingPage />
-        </Suspense>
-      </AppLayout>
+      <Suspense fallback={<WorkspaceShellSkeleton />}>
+        <AppLayout>
+          <Suspense fallback={<PageSkeleton />}>
+            <PricingPage />
+          </Suspense>
+        </AppLayout>
+      </Suspense>
     );
   }
   return (
-    <Suspense fallback={<PageSkeleton />}>
+    <Suspense fallback={<EditorialPageSkeleton />}>
       <PricingPage />
     </Suspense>
   );
 }
 
-// Wrap any lazy component in a Suspense boundary using PageSkeleton as fallback
+// Wrap any workspace child component in a Suspense boundary using PageSkeleton as fallback
 function withSuspense(LazyComponent: React.ComponentType) {
   return (
     <Suspense fallback={<PageSkeleton />}>
+      <LazyComponent />
+    </Suspense>
+  );
+}
+
+function withAuthSuspense(LazyComponent: React.ComponentType) {
+  return (
+    <Suspense fallback={<AuthPageSkeleton />}>
+      <LazyComponent />
+    </Suspense>
+  );
+}
+
+function withEditorialSuspense(LazyComponent: React.ComponentType) {
+  return (
+    <Suspense fallback={<EditorialPageSkeleton />}>
       <LazyComponent />
     </Suspense>
   );
@@ -278,17 +305,17 @@ export const appRoutes: RouteObject[] = [
         path: '/forgot-password',
         element: (
           <PublicRoute>
-            {withSuspense(ForgotPasswordPage)}
+            {withAuthSuspense(ForgotPasswordPage)}
           </PublicRoute>
         ),
       },
       {
         path: '/activate-account',
-        element: withSuspense(ActivateAccountPage),
+        element: withAuthSuspense(ActivateAccountPage),
       },
       {
         path: '/reset-password',
-        element: withSuspense(ResetPasswordPage),
+        element: withAuthSuspense(ResetPasswordPage),
       },
       {
         path: '/pricing',
@@ -296,24 +323,26 @@ export const appRoutes: RouteObject[] = [
       },
       {
         path: '/privacy',
-        element: withSuspense(PrivacyPolicyPage),
+        element: withEditorialSuspense(PrivacyPolicyPage),
       },
       {
         path: '/terms',
-        element: withSuspense(TermsOfServicePage),
+        element: withEditorialSuspense(TermsOfServicePage),
       },
       {
         path: '/verify/share/:token',
-        element: withSuspense(SharedReportPage),
+        element: withEditorialSuspense(SharedReportPage),
       },
 
       // Protected routes with AppLayout (sidebar navigation)
       {
         element: (
           <ProtectedRoute>
-            <AppLayout>
-              <Outlet />
-            </AppLayout>
+            <Suspense fallback={<WorkspaceShellSkeleton />}>
+              <AppLayout>
+                <Outlet />
+              </AppLayout>
+            </Suspense>
           </ProtectedRoute>
         ),
         errorElement: <RouteErrorBoundary />,
@@ -460,7 +489,7 @@ export const appRoutes: RouteObject[] = [
       // Catch-all 404 page
       {
         path: '*',
-        element: withSuspense(NotFoundPage),
+        element: withEditorialSuspense(NotFoundPage),
       },
     ],
   },

@@ -1105,7 +1105,7 @@ export function InteractiveDecisionFlowBoard({
           className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold tracking-wide uppercase border ${
             isDarkSurface
               ? 'bg-white/[0.05] border-white/10 text-slate-300'
-              : 'bg-white/90 border-slate-200/90 text-slate-600 shadow-2xs'
+              : 'bg-white/90 border-slate-200/90 text-slate-600 shadow-sm'
           }`}
         >
           <span className={`h-2 w-2 rounded-full ${toneDotClass(activeCanvasTone)}`} />
@@ -1126,7 +1126,7 @@ export function InteractiveDecisionFlowBoard({
                 ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
                 : isDarkSurface
                   ? 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400/40 text-emerald-300'
-                  : 'bg-slate-900 hover:bg-slate-800 border-slate-900 text-white shadow-2xs'
+                  : 'bg-slate-900 hover:bg-slate-800 border-slate-900 text-white shadow-sm'
             }`}
           >
             {replaying ? (
@@ -1155,7 +1155,7 @@ export function InteractiveDecisionFlowBoard({
               className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                 cinemaSpotlight
                   ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300'
-                  : 'bg-white hover:bg-slate-50 border-slate-200/90 text-slate-700 shadow-2xs'
+                  : 'bg-white hover:bg-slate-50 border-slate-200/90 text-slate-700 shadow-sm'
               }`}
             >
               <MonitorPlay className="h-3.5 w-3.5" />
@@ -1170,7 +1170,7 @@ export function InteractiveDecisionFlowBoard({
               className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                 isDarkSurface
                   ? 'bg-white/[0.06] hover:bg-white/[0.12] border-white/10 text-slate-200'
-                  : 'bg-white hover:bg-slate-50 border-slate-200/90 text-slate-700 shadow-2xs'
+                  : 'bg-white hover:bg-slate-50 border-slate-200/90 text-slate-700 shadow-sm'
               }`}
             >
               <span>{isVi ? 'Bảng đối chiếu' : 'Field Diff'}</span>
@@ -1188,7 +1188,7 @@ export function InteractiveDecisionFlowBoard({
         className={`t-tabs relative z-10 grid grid-cols-2 xl:grid-cols-4 gap-2 p-1.5 rounded-2xl border ${
           isDarkSurface
             ? 'bg-slate-950/65 border-white/[0.08]'
-            : 'bg-white/80 backdrop-blur-xs border-slate-200/80 shadow-2xs'
+            : 'bg-white/80 backdrop-blur-sm border-slate-200/80 shadow-sm'
         }`}
       >
         {focus.kind === 'step' && stepPill.ready && (
@@ -1216,7 +1216,7 @@ export function InteractiveDecisionFlowBoard({
           const borderTone = isStepSelected
             ? isDarkSurface
               ? 'border-emerald-400/70 bg-emerald-500/[0.10]'
-              : 'border-emerald-500 bg-emerald-50/60 shadow-2xs'
+              : 'border-emerald-500 bg-emerald-50/60 shadow-sm'
             : st.tone === 'amber' && boardPhase === 'overview'
               ? isDarkSurface
                 ? 'border-amber-400/40 bg-amber-500/[0.05]'
@@ -1314,7 +1314,7 @@ export function InteractiveDecisionFlowBoard({
                     onClick={() => handleManualStepClick(idx)}
                     className={`h-5 w-5 rounded-full text-[10px] font-mono font-extrabold inline-flex items-center justify-center transition-all cursor-pointer ${
                       isCurr
-                        ? 'bg-emerald-400 text-slate-950 scale-105 shadow-xs'
+                        ? 'bg-emerald-400 text-slate-950 scale-105 shadow-sm'
                         : isDone
                           ? 'bg-emerald-500/30 text-emerald-200 hover:bg-emerald-500/45'
                           : 'bg-white/10 text-slate-400 hover:bg-white/20 hover:text-white'
@@ -1661,8 +1661,8 @@ export function InteractiveDecisionFlowBoard({
                 : 'w-[272px] text-center hover:scale-[1.02]'
           } ${
             isDarkSurface
-              ? 'bg-[#0D1820]/96 backdrop-blur-md text-white'
-              : 'bg-white/98 backdrop-blur-md text-slate-900'
+              ? 'bg-[#0D1820]/[0.96] backdrop-blur-md text-white'
+              : 'bg-white/[0.98] backdrop-blur-md text-slate-900'
           }`}
         >
           {/* Top Status Pill inside Hub */}
@@ -2103,7 +2103,7 @@ export function InteractiveDecisionFlowBoard({
           className={`relative z-10 rounded-xl border p-3.5 sm:px-4 sm:py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
             isDarkSurface
               ? 'bg-white/[0.05] border-white/[0.12]'
-              : 'bg-white border-slate-200/90 shadow-2xs'
+              : 'bg-white border-slate-200/90 shadow-sm'
           }`}
         >
           <div className="min-w-0 flex-1">
@@ -2160,7 +2160,7 @@ export function InteractiveDecisionFlowBoard({
                 href={activeStory.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors"
               >
                 <Check className="h-3.5 w-3.5" />
                 <span>{isVi ? 'Mở nguồn gốc' : 'Open Source'}</span>

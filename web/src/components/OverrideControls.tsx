@@ -250,7 +250,7 @@ export function OverrideControls({
         {verdict.is_overridden && attributionLabel && (
           <span
             data-testid="override-attribution"
-            className="font-mono text-[11px] px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-800 dark:text-amber-200"
+            className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-800 dark:text-amber-200"
           >
             {attributionLabel}
           </span>

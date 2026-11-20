@@ -520,7 +520,7 @@ export function SystemHealthPage() {
   return (
     <div className="space-y-5 pb-10">
       {/* Live System Pulse Header + 3-Stage Architecture Flow Diagram */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs space-y-5">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3.5 min-w-0">
             <div className="w-11 h-11 rounded-2xl bg-violet-50 dark:bg-violet-950/80 border border-violet-200/70 dark:border-violet-800/70 flex items-center justify-center shrink-0">
@@ -729,7 +729,7 @@ export function SystemHealthPage() {
           return (
             <Card
               key={item.label}
-              className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs"
+              className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm"
             >
               <div className="flex items-center gap-2 mb-2">
                 <div className={`p-1.5 rounded-lg ${item.box}`}>

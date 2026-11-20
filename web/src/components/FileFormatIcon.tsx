@@ -165,7 +165,7 @@ export const FileFormatIcon: React.FC<FileFormatIconProps> = ({
         data-testid="file-format-icon-bib"
         title="BibTeX Bibliography (.BIB)"
         aria-label="BibTeX Bibliography"
-        className={`${containerSizeClass} bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-700/70 text-emerald-700 dark:text-emerald-400 group-hover:bg-emerald-600 group-hover:border-emerald-600 group-hover:text-white flex items-center justify-center shrink-0 transition-all duration-200 shadow-2xs select-none ${className}`}
+        className={`${containerSizeClass} bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-700/70 text-emerald-700 dark:text-emerald-400 group-hover:bg-emerald-600 group-hover:border-emerald-600 group-hover:text-white flex items-center justify-center shrink-0 transition-all duration-200 shadow-sm select-none ${className}`}
       >
         <svg
           viewBox="0 0 32 32"
@@ -224,7 +224,7 @@ export const FileFormatIcon: React.FC<FileFormatIconProps> = ({
         data-testid="file-format-icon-ris"
         title="Research Information Systems (.RIS)"
         aria-label="RIS Bibliography"
-        className={`${containerSizeClass} bg-amber-50 dark:bg-amber-950/80 border border-amber-300 dark:border-amber-700/70 text-amber-700 dark:text-amber-400 group-hover:bg-amber-600 group-hover:border-amber-600 group-hover:text-white flex items-center justify-center shrink-0 transition-all duration-200 shadow-2xs select-none ${className}`}
+        className={`${containerSizeClass} bg-amber-50 dark:bg-amber-950/80 border border-amber-300 dark:border-amber-700/70 text-amber-700 dark:text-amber-400 group-hover:bg-amber-600 group-hover:border-amber-600 group-hover:text-white flex items-center justify-center shrink-0 transition-all duration-200 shadow-sm select-none ${className}`}
       >
         <svg
           viewBox="0 0 32 32"
@@ -283,7 +283,7 @@ export const FileFormatIcon: React.FC<FileFormatIconProps> = ({
         data-testid="file-format-icon-docx"
         title="Microsoft Word Document (.DOCX)"
         aria-label="DOCX Document"
-        className={`${containerSizeClass} bg-[#EFF6FF] dark:bg-[#172554]/85 border border-[#93C5FD] dark:border-[#1D4ED8]/70 text-[#1D4ED8] dark:text-[#60A5FA] group-hover:bg-[#2563EB] group-hover:border-[#2563EB] group-hover:text-white flex items-center justify-center shrink-0 transition-all duration-200 shadow-2xs select-none ${className}`}
+        className={`${containerSizeClass} bg-[#EFF6FF] dark:bg-[#172554]/85 border border-[#93C5FD] dark:border-[#1D4ED8]/70 text-[#1D4ED8] dark:text-[#60A5FA] group-hover:bg-[#2563EB] group-hover:border-[#2563EB] group-hover:text-white flex items-center justify-center shrink-0 transition-all duration-200 shadow-sm select-none ${className}`}
       >
         <svg
           viewBox="0 0 32 32"
@@ -359,7 +359,7 @@ export const FileFormatIcon: React.FC<FileFormatIconProps> = ({
       data-testid="file-format-icon-pdf"
       title="Portable Document Format (.PDF)"
       aria-label="PDF Document"
-      className={`${containerSizeClass} bg-[#FEF2F2] dark:bg-[#450A0A]/80 border border-[#FCA5A5] dark:border-[#B91C1C]/70 text-[#DC2626] dark:text-[#F87171] group-hover:bg-[#DC2626] group-hover:border-[#DC2626] group-hover:text-white flex items-center justify-center shrink-0 transition-all duration-200 shadow-2xs select-none ${className}`}
+      className={`${containerSizeClass} bg-[#FEF2F2] dark:bg-[#450A0A]/80 border border-[#FCA5A5] dark:border-[#B91C1C]/70 text-[#DC2626] dark:text-[#F87171] group-hover:bg-[#DC2626] group-hover:border-[#DC2626] group-hover:text-white flex items-center justify-center shrink-0 transition-all duration-200 shadow-sm select-none ${className}`}
     >
       <svg
         viewBox="0 0 32 32"

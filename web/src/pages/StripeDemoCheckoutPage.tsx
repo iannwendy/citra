@@ -113,7 +113,7 @@ function VisaLogo({ active = true }: { active?: boolean }) {
     <span
       className={`inline-flex items-center justify-center px-2 py-0.5 rounded-md border text-[10px] font-black italic tracking-tighter select-none transition-all ${
         active
-          ? 'bg-[#1A1F71] text-white border-[#1A1F71] shadow-2xs'
+          ? 'bg-[#1A1F71] text-white border-[#1A1F71] shadow-sm'
           : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 opacity-60'
       }`}
     >
@@ -127,7 +127,7 @@ function MastercardLogo({ active = true }: { active?: boolean }) {
     <span
       className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border select-none transition-all ${
         active
-          ? 'bg-slate-900 text-white border-slate-800 shadow-2xs'
+          ? 'bg-slate-900 text-white border-slate-800 shadow-sm'
           : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 opacity-60'
       }`}
       title="Mastercard"
@@ -144,7 +144,7 @@ function AmexLogo({ active = true }: { active?: boolean }) {
     <span
       className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded-md border text-[9px] font-extrabold tracking-tight select-none transition-all ${
         active
-          ? 'bg-[#006FCF] text-white border-[#006FCF] shadow-2xs'
+          ? 'bg-[#006FCF] text-white border-[#006FCF] shadow-sm'
           : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 opacity-60'
       }`}
     >
@@ -158,7 +158,7 @@ function JcbLogo({ active = true }: { active?: boolean }) {
     <span
       className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded-md border text-[9px] font-extrabold tracking-tight select-none transition-all ${
         active
-          ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
+          ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
           : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 opacity-60'
       }`}
     >
@@ -203,7 +203,7 @@ function VNPayLogo({ active = true }: { active?: boolean }) {
     <span
       className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded-md border text-[9px] font-black tracking-tight select-none transition-all ${
         active
-          ? 'bg-white dark:bg-slate-900 border-[#005BAA]/40 shadow-2xs'
+          ? 'bg-white dark:bg-slate-900 border-[#005BAA]/40 shadow-sm'
           : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 opacity-65'
       }`}
       title="VNPAY Payment Gateway"
@@ -755,7 +755,7 @@ export function StripeDemoCheckoutPage() {
                 className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors"
               >
                 <ArrowLeft className="h-4 w-4" />
-                <span className="w-[24px] h-[24px] rounded-[6px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-0.5 shrink-0">
+                <span className="w-[24px] h-[24px] rounded-[6px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-0.5 shrink-0">
                   <img
                     src="/citra-logo.png"
                     alt="CITRA Logo"
@@ -832,7 +832,7 @@ export function StripeDemoCheckoutPage() {
 
             {/* 6-Character Promo Code Box */}
             <div
-              className="p-3.5 rounded-2xl bg-white/95 dark:bg-slate-900/90 border border-[#E7E3D9] dark:border-slate-800 shadow-2xs space-y-2.5"
+              className="p-3.5 rounded-2xl bg-white/95 dark:bg-slate-900/90 border border-[#E7E3D9] dark:border-slate-800 shadow-sm space-y-2.5"
               data-testid="checkout-promo-section"
             >
               <div className="flex items-center justify-between">
@@ -1135,7 +1135,7 @@ export function StripeDemoCheckoutPage() {
                   data-testid="express-google-pay-btn"
                   disabled={submitting}
                   onClick={() => handleOpenWalletSheet('google_pay')}
-                  className="h-11 rounded-xl bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white border-2 border-slate-200 dark:border-slate-700 font-semibold text-sm flex items-center justify-center gap-2 shadow-2xs transition-all cursor-pointer active:scale-[0.99]"
+                  className="h-11 rounded-xl bg-white hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-900 dark:text-white border-2 border-slate-200 dark:border-slate-700 font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer active:scale-[0.99]"
                 >
                   <GooglePaySvg className="w-4 h-4" />
                   <span className="tracking-tight font-sans font-semibold">
@@ -1169,7 +1169,7 @@ export function StripeDemoCheckoutPage() {
                 onClick={() => setPaymentMethod('card')}
                 className={`py-2 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   paymentMethod === 'card'
-                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs'
+                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                 }`}
               >
@@ -1185,7 +1185,7 @@ export function StripeDemoCheckoutPage() {
                 onClick={() => setPaymentMethod('vnpay')}
                 className={`py-2 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   paymentMethod === 'vnpay'
-                    ? 'bg-white dark:bg-slate-900 text-[#005BAA] dark:text-sky-400 shadow-2xs ring-1 ring-[#005BAA]/25'
+                    ? 'bg-white dark:bg-slate-900 text-[#005BAA] dark:text-sky-400 shadow-sm ring-1 ring-[#005BAA]/25'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                 }`}
               >
@@ -1201,7 +1201,7 @@ export function StripeDemoCheckoutPage() {
                 onClick={() => setPaymentMethod('apple_pay')}
                 className={`py-2 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   paymentMethod === 'apple_pay'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                 }`}
               >
@@ -1217,7 +1217,7 @@ export function StripeDemoCheckoutPage() {
                 onClick={() => setPaymentMethod('google_pay')}
                 className={`py-2 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   paymentMethod === 'google_pay'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                 }`}
               >
@@ -1258,7 +1258,7 @@ export function StripeDemoCheckoutPage() {
                       onClick={() => handleAutofillTestCard('visa')}
                       className={`py-1.5 px-2.5 rounded-xl text-xs font-mono font-semibold border transition-all cursor-pointer ${
                         cardBrand === 'visa'
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
                           : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                       }`}
                     >
@@ -1270,7 +1270,7 @@ export function StripeDemoCheckoutPage() {
                       onClick={() => handleAutofillTestCard('mastercard')}
                       className={`py-1.5 px-2.5 rounded-xl text-xs font-mono font-semibold border transition-all cursor-pointer ${
                         cardBrand === 'mastercard'
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
                           : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                       }`}
                     >
@@ -1282,7 +1282,7 @@ export function StripeDemoCheckoutPage() {
                       onClick={() => handleAutofillTestCard('amex')}
                       className={`py-1.5 px-2.5 rounded-xl text-xs font-mono font-semibold border transition-all cursor-pointer ${
                         cardBrand === 'amex'
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
                           : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                       }`}
                     >
@@ -1483,7 +1483,7 @@ export function StripeDemoCheckoutPage() {
                 <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-200/80 dark:border-slate-800">
                   <div className="flex items-center gap-2.5">
                     <div
-                      className="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-sky-200/90 dark:border-sky-500/30 shadow-2xs flex items-center justify-center shrink-0"
+                      className="w-10 h-10 rounded-xl bg-white dark:bg-slate-900 border border-sky-200/90 dark:border-sky-500/30 shadow-sm flex items-center justify-center shrink-0"
                       data-testid="vnpay-panel-logo-badge"
                     >
                       <span className="font-sans font-black text-[10px] tracking-tighter leading-none select-none">
@@ -1658,7 +1658,7 @@ export function StripeDemoCheckoutPage() {
                             onClick={() => setVnpayBankCode(bank.code)}
                             className={`py-2 px-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-1 ${
                               selected
-                                ? 'border-[#005BAA] bg-[#005BAA] text-white font-bold shadow-2xs'
+                                ? 'border-[#005BAA] bg-[#005BAA] text-white font-bold shadow-sm'
                                 : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-sky-400'
                             }`}
                           >
@@ -1783,7 +1783,7 @@ export function StripeDemoCheckoutPage() {
               data-testid="checkout-sensitive-data-notice"
               className="rounded-[14px] border border-[#E7E3D9] dark:border-[#332F26] bg-[#F4F2EC]/85 dark:bg-[#1E1C17]/80 p-3.5 flex items-start gap-3 font-solva-sans text-[11.5px] leading-[18px] text-[#56524A] dark:text-[#A8A296]"
             >
-              <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] bg-white dark:bg-[#141310] border border-[#E7E3D9] dark:border-[#332F26] text-[#1C1A15] dark:text-[#FBFAF6] shadow-2xs">
+              <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] bg-white dark:bg-[#141310] border border-[#E7E3D9] dark:border-[#332F26] text-[#1C1A15] dark:text-[#FBFAF6] shadow-sm">
                 <Lock className="h-3.5 w-3.5" />
               </span>
               <div className="min-w-0">
@@ -1795,7 +1795,7 @@ export function StripeDemoCheckoutPage() {
                   to="/privacy#sensitive-data"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 font-medium text-[#1C1A15] dark:text-[#FBFAF6] underline underline-offset-3 decoration-[#1C1A15]/40 dark:decoration-[#FBFAF6]/40 hover:opacity-75 transition-opacity"
+                  className="inline-flex items-center gap-1 font-medium text-[#1C1A15] dark:text-[#FBFAF6] underline underline-offset-4 decoration-[#1C1A15]/40 dark:decoration-[#FBFAF6]/40 hover:opacity-75 transition-opacity"
                 >
                   <span>{t('privacyCompliance.policyLinkLabel')}</span>
                   <ExternalLink className="h-3 w-3" />
@@ -1842,7 +1842,7 @@ export function StripeDemoCheckoutPage() {
               {/* VNPay Gateway Header */}
               <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-2.5">
-                  <div className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-2xs font-black text-xs tracking-tight flex items-center gap-0.5">
+                  <div className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-sm font-black text-xs tracking-tight flex items-center gap-0.5">
                     <span className="text-[#ED1C24]">VN</span>
                     <span className="text-[#005BAA] dark:text-[#3898FF]">PAY</span>
                     <span className="ml-1 text-[9px] font-mono text-emerald-600 dark:text-emerald-400">
@@ -1971,7 +1971,7 @@ export function StripeDemoCheckoutPage() {
                   }}
                   className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                     vnpayModalTab === 'atm'
-                      ? 'bg-white dark:bg-slate-900 text-[#005BAA] dark:text-sky-400 shadow-2xs'
+                      ? 'bg-white dark:bg-slate-900 text-[#005BAA] dark:text-sky-400 shadow-sm'
                       : 'text-slate-600 dark:text-slate-400'
                   }`}
                 >
@@ -1991,7 +1991,7 @@ export function StripeDemoCheckoutPage() {
                   }}
                   className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                     vnpayModalTab === 'qr'
-                      ? 'bg-white dark:bg-slate-900 text-[#ED1C24] dark:text-rose-400 shadow-2xs'
+                      ? 'bg-white dark:bg-slate-900 text-[#ED1C24] dark:text-rose-400 shadow-sm'
                       : 'text-slate-600 dark:text-slate-400'
                   }`}
                 >
@@ -2199,7 +2199,7 @@ export function StripeDemoCheckoutPage() {
                       );
                     })()}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <span className="px-1.5 py-0.5 rounded bg-white border border-[#005BAA] text-[9px] font-black shadow-xs">
+                      <span className="px-1.5 py-0.5 rounded bg-white border border-[#005BAA] text-[9px] font-black shadow-sm">
                         <span className="text-[#ED1C24]">VN</span>
                         <span className="text-[#005BAA]">PAY</span>
                       </span>
@@ -2267,7 +2267,7 @@ export function StripeDemoCheckoutPage() {
         typeof document !== 'undefined' &&
         createPortal(
           <div
-            className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
+            className="fixed inset-0 z-[100] bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in"
             data-testid="wallet-payment-modal"
             onClick={(e) => {
               if (e.target === e.currentTarget && !submitting) {
@@ -2454,7 +2454,7 @@ export function StripeDemoCheckoutPage() {
         typeof document !== 'undefined' &&
         createPortal(
           <div
-            className="fixed inset-0 z-[120] bg-[#FBFAF6]/92 dark:bg-[#141310]/92 backdrop-blur-md flex items-center justify-center p-4"
+            className="fixed inset-0 z-[120] bg-[#FBFAF6]/[0.92] dark:bg-[#141310]/[0.92] backdrop-blur-md flex items-center justify-center p-4"
             data-testid="checkout-payment-celebration-overlay"
           >
             <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-[#E7E3D9] dark:border-slate-800 shadow-2xl p-7 sm:p-9 text-center space-y-6 overflow-hidden">
@@ -2602,7 +2602,7 @@ export function StripeDemoCheckoutPage() {
                   <div
                     className={`py-1 px-2 rounded-lg border flex items-center justify-center gap-1 ${
                       celebrationStage === 'welcome'
-                        ? 'bg-emerald-600 border-emerald-600 text-white font-bold shadow-xs'
+                        ? 'bg-emerald-600 border-emerald-600 text-white font-bold shadow-sm'
                         : 'bg-[#F4F2EC] dark:bg-slate-800/60 border-[#E7E3D9] dark:border-slate-800 text-slate-400'
                     }`}
                   >

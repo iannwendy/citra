@@ -457,7 +457,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
   return (
     <Card
       data-testid="live-citation-sandbox"
-      className="p-0 overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs"
+      className="p-0 overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm"
     >
       {/* Top Studio Header */}
       <div
@@ -498,7 +498,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
             onClick={() => setMode('acl_studio')}
             className={`w-full sm:w-auto justify-center text-center whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-semibold transition-all ${
               mode === 'acl_studio'
-                ? 'bg-indigo-600 text-white shadow-2xs'
+                ? 'bg-indigo-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
             }`}
           >
@@ -510,7 +510,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
             onClick={() => setMode('raw_paste')}
             className={`w-full sm:w-auto justify-center text-center whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-semibold transition-all ${
               mode === 'raw_paste'
-                ? 'bg-indigo-600 text-white shadow-2xs'
+                ? 'bg-indigo-600 text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
             }`}
           >
@@ -572,7 +572,7 @@ export function LiveCitationSandbox({ lang: langProp }: LiveCitationSandboxProps
                   data-testid="sandbox-random-acl-btn"
                   disabled={loadingSample}
                   onClick={() => void handleSampleRandomAcl()}
-                  className="w-full sm:col-span-2 lg:w-auto h-auto min-h-9 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs whitespace-normal text-center leading-snug max-w-full"
+                  className="w-full sm:col-span-2 lg:w-auto h-auto min-h-9 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm whitespace-normal text-center leading-snug max-w-full"
                 >
                   {loadingSample ? (
                     <Loader2 className="h-4 w-4 animate-spin shrink-0" />

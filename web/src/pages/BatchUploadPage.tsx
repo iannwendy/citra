@@ -384,7 +384,7 @@ export function BatchUploadPage() {
   return (
     <div className="citra-cq-page-wide w-full max-w-5xl mx-auto space-y-6 pb-10 transition-[max-width] duration-300">
       {/* Executive Header Banner */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2.5 flex-wrap">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-semibold text-indigo-700 dark:text-indigo-300">
@@ -423,7 +423,7 @@ export function BatchUploadPage() {
       {isBatchActive && (
         <div
           data-testid="batch-background-active-banner"
-          className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/85 dark:bg-indigo-950/45 px-4 py-3 space-y-2 text-xs text-indigo-900 dark:text-indigo-200 shadow-2xs"
+          className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/85 dark:bg-indigo-950/45 px-4 py-3 space-y-2 text-xs text-indigo-900 dark:text-indigo-200 shadow-sm"
         >
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
@@ -473,7 +473,7 @@ export function BatchUploadPage() {
         stats.failed === 0 && (
           <div
             data-testid="batch-background-completed-notice"
-            className="rounded-2xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/85 dark:bg-emerald-950/35 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-emerald-950 dark:text-emerald-200 shadow-2xs"
+            className="rounded-2xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/85 dark:bg-emerald-950/35 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-emerald-950 dark:text-emerald-200 shadow-sm"
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -505,7 +505,7 @@ export function BatchUploadPage() {
         stats.failed > 0 && (
           <div
             data-testid="batch-mixed-outcome-banner"
-            className="rounded-2xl border border-amber-300/90 dark:border-amber-800/80 bg-amber-50/85 dark:bg-amber-950/35 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-950 dark:text-amber-200 shadow-2xs"
+            className="rounded-2xl border border-amber-300/90 dark:border-amber-800/80 bg-amber-50/85 dark:bg-amber-950/35 px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-950 dark:text-amber-200 shadow-sm"
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
@@ -545,7 +545,7 @@ export function BatchUploadPage() {
         {queueMetrics.map((m) => (
           <Card
             key={m.idx}
-            className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs"
+            className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm"
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -660,7 +660,7 @@ export function BatchUploadPage() {
             <AvatarGroupHover className="flex items-center justify-center gap-2.5 mb-3.5">
               <FileFormatIcon format="pdf" size="md" />
               <FileFormatIcon format="docx" size="md" />
-              <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shadow-2xs">
+              <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shadow-sm">
                 <Upload className="h-7 w-7 text-indigo-600 dark:text-indigo-400" />
               </div>
               <FileFormatIcon format="bib" size="md" />
@@ -679,7 +679,7 @@ export function BatchUploadPage() {
             data-testid="batch-upload-privacy-notice"
             className="rounded-[14px] border border-amber-300/80 dark:border-amber-800/60 bg-amber-50/65 dark:bg-amber-950/25 px-4 py-3.5 flex items-start gap-3 font-solva-sans text-[12px] leading-[19px] text-amber-950 dark:text-amber-200 transition-colors"
           >
-            <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] bg-white/90 dark:bg-amber-950/70 border border-amber-300/80 dark:border-amber-800 text-amber-700 dark:text-amber-300 shadow-2xs">
+            <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] bg-white/90 dark:bg-amber-950/70 border border-amber-300/80 dark:border-amber-800 text-amber-700 dark:text-amber-300 shadow-sm">
               <ShieldCheck className="h-3.5 w-3.5" />
             </span>
             <div className="min-w-0">
@@ -689,7 +689,7 @@ export function BatchUploadPage() {
               {t('privacyCompliance.batchNoticeBody')}{' '}
               <Link
                 to="/privacy#third-parties"
-                className="inline-flex items-center gap-1 font-semibold underline underline-offset-3 hover:opacity-80 transition-opacity"
+                className="inline-flex items-center gap-1 font-semibold underline underline-offset-4 hover:opacity-80 transition-opacity"
               >
                 <span>{t('privacyCompliance.policyLinkLabel')}</span>
                 <ArrowRight className="h-3 w-3" />

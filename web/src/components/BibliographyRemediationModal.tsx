@@ -170,7 +170,7 @@ export function BibliographyRemediationModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 backdrop-blur-xs p-3 sm:p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 backdrop-blur-sm p-3 sm:p-4"
       onClick={onClose}
       data-testid="bibliography-remediation-modal"
     >
@@ -231,7 +231,7 @@ export function BibliographyRemediationModal({
                   transform: `translate3d(${stylePill.left}px, ${stylePill.top}px, 0)`,
                   transition: stylePill.animate ? undefined : 'none',
                 }}
-                className="t-tabs-pill rounded-lg !bg-indigo-600 shadow-2xs"
+                className="t-tabs-pill rounded-lg !bg-indigo-600 shadow-sm"
               />
             )}
             {STYLE_LABELS.map((st) => {
@@ -247,7 +247,7 @@ export function BibliographyRemediationModal({
                     isActive
                       ? stylePill.ready
                         ? 'text-white'
-                        : 'bg-indigo-600 text-white shadow-2xs'
+                        : 'bg-indigo-600 text-white shadow-sm'
                       : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-indigo-400'
                   }`}
                 >
@@ -269,7 +269,7 @@ export function BibliographyRemediationModal({
                     }
                     className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold border transition-colors ${
                       filterMode === 'flagged_red'
-                        ? 'bg-red-600 text-white border-red-600 shadow-2xs'
+                        ? 'bg-red-600 text-white border-red-600 shadow-sm'
                         : 'bg-red-50 dark:bg-red-950/60 border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-100'
                     }`}
                   >
@@ -326,7 +326,7 @@ export function BibliographyRemediationModal({
                   type="button"
                   data-testid="download-bibtex-btn"
                   onClick={() => handleDownloadFile(data.combined_bibtex, 'bib', 'references')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors"
                 >
                   <Download className="h-3.5 w-3.5" />
                   <span>.BIB</span>
@@ -336,7 +336,7 @@ export function BibliographyRemediationModal({
                   type="button"
                   data-testid="download-ris-btn"
                   onClick={() => handleDownloadFile(data.combined_ris, 'ris', 'references')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 hover:bg-violet-700 text-white shadow-2xs transition-colors"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 hover:bg-violet-700 text-white shadow-sm transition-colors"
                 >
                   <FileCode2 className="h-3.5 w-3.5" />
                   <span>.RIS</span>
@@ -350,7 +350,7 @@ export function BibliographyRemediationModal({
                   aria-disabled={!isDocxSource}
                   aria-busy={healedBusy}
                   title={isDocxSource ? undefined : healedDisabledHint}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {healedBusy ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -366,7 +366,7 @@ export function BibliographyRemediationModal({
                 {!isDocxSource && (
                   <span
                     data-testid="auto-healed-docx-hint"
-                    className="text-[11px] text-slate-300"
+                    className="text-[11px] text-slate-600 dark:text-slate-400"
                   >
                     {healedDisabledHint}
                   </span>
@@ -450,7 +450,7 @@ export function BibliographyRemediationModal({
                   data-testid={`remediation-entry-card-${entry.index}`}
                   data-verdict-label={entry.label}
                   data-remediation-status={entry.remediation_status || ''}
-                  className="rounded-xl p-4 shadow-2xs space-y-3 border transition-all bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800"
+                  className="rounded-xl p-4 shadow-sm space-y-3 border transition-all bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-wrap">

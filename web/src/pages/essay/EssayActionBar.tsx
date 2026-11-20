@@ -104,7 +104,7 @@ export function EssayActionBar({
       isActive
         ? pillStyle.ready
           ? 'text-slate-900 dark:text-white'
-          : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+          : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
     }`;
 
@@ -135,7 +135,7 @@ export function EssayActionBar({
             opacity: pillStyle.ready ? 1 : 0,
             transition: pillStyle.animate ? undefined : 'none',
           }}
-          className="t-tabs-pill rounded-lg bg-white dark:bg-slate-800 shadow-xs"
+          className="t-tabs-pill rounded-lg bg-white dark:bg-slate-800 shadow-sm"
         />
 
         {/* View 1: Citations (Default) */}
@@ -156,7 +156,7 @@ export function EssayActionBar({
             />
             <span className="truncate">{isVi ? 'Danh mục trích dẫn' : 'Citations'}</span>
             {typeof issueCount === 'number' && issueCount > 0 && (
-              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800 shrink-0">
+              <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800 shrink-0">
                 {issueCount}
               </span>
             )}
@@ -174,7 +174,7 @@ export function EssayActionBar({
             />
             <span className="truncate">{isVi ? 'Danh mục trích dẫn' : 'Citations'}</span>
             {typeof issueCount === 'number' && issueCount > 0 && (
-              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800 shrink-0">
+              <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800 shrink-0">
                 {issueCount}
               </span>
             )}

@@ -573,15 +573,15 @@ export function AvatarUpload({
                   isPanning ? 'opacity-90' : 'opacity-40 group-hover:opacity-75'
                 }`}
               >
-                <div className="w-full h-full grid grid-cols-3 grid-rows-3">
-                  <div className="border-r border-b border-white/60 shadow-2xs" />
-                  <div className="border-r border-b border-white/60 shadow-2xs" />
-                  <div className="border-b border-white/60 shadow-2xs" />
-                  <div className="border-r border-b border-white/60 shadow-2xs" />
-                  <div className="border-r border-b border-white/60 shadow-2xs" />
-                  <div className="border-b border-white/60 shadow-2xs" />
-                  <div className="border-r border-white/60 shadow-2xs" />
-                  <div className="border-r border-white/60 shadow-2xs" />
+                <div className="w-full h-full grid grid-cols-3 grid-rows-3 drop-shadow-[0_0_1px_rgba(0,0,0,0.4)]">
+                  <div className="border-r border-b border-white/65" />
+                  <div className="border-r border-b border-white/65" />
+                  <div className="border-b border-white/65" />
+                  <div className="border-r border-b border-white/65" />
+                  <div className="border-r border-b border-white/65" />
+                  <div className="border-b border-white/65" />
+                  <div className="border-r border-white/65" />
+                  <div className="border-r border-white/65" />
                   <div />
                 </div>
               </div>

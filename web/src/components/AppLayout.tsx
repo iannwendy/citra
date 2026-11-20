@@ -334,7 +334,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             aria-label="Go to dashboard"
             className="inline-flex items-center gap-[8px] rounded-[6px] min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
-            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+            <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
               <img
                 src="/citra-logo.png"
                 alt="CITRA Logo"
@@ -426,7 +426,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   )
                 }
                 onBlur={hideRailTooltip}
-                className="group/rail-logo relative h-10 w-10 rounded-xl bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-2xs flex items-center justify-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                className="group/rail-logo relative h-10 w-10 rounded-xl bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-sm flex items-center justify-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
               >
                 <img
                   src="/citra-logo.png"
@@ -448,7 +448,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 aria-label="Go to dashboard"
                 className="inline-flex items-center gap-[8px] rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
               >
-                <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-1 shrink-0 transition-colors">
+                <span className="w-[28px] h-[28px] rounded-[7px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-1 shrink-0 transition-colors">
                   <img
                     src="/citra-logo.png"
                     alt="CITRA Logo"
@@ -555,7 +555,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                             }
                             ${
                               active
-                                ? 'bg-indigo-50/90 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-semibold ring-1 ring-indigo-500/20 shadow-2xs'
+                                ? 'bg-indigo-50/90 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-semibold ring-1 ring-indigo-500/20 shadow-sm'
                                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-800/60'
                             }
                           `}
@@ -784,8 +784,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 data-testid="sidebar-upgrade-link"
                 className={
                   isDesktopCollapsed
-                    ? 'h-9 w-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white inline-flex items-center justify-center transition-colors shadow-2xs'
-                    : 'w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shadow-2xs'
+                    ? 'h-9 w-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white inline-flex items-center justify-center transition-colors shadow-sm'
+                    : 'w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shadow-sm'
                 }
               >
                 <Sparkles className="h-3.5 w-3.5 shrink-0" />
@@ -822,7 +822,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   : 'gap-2.5 px-2 py-1.5 hover:bg-white dark:hover:bg-slate-800/90 border border-transparent hover:border-slate-200/90 dark:hover:border-slate-700'
               } ${
                 accountMenuOpen
-                  ? 'bg-white dark:bg-slate-800 border-slate-200/90 dark:border-slate-700 shadow-2xs'
+                  ? 'bg-white dark:bg-slate-800 border-slate-200/90 dark:border-slate-700 shadow-sm'
                   : ''
               }`}
             >
@@ -843,7 +843,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span
                     data-testid="sidebar-plan-badge"
-                    className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold uppercase leading-tight ${
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase leading-tight ${
                       planTier === 'ultra'
                         ? 'bg-violet-600 text-white'
                         : planTier === 'pro'
@@ -977,7 +977,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                     theme === 'light' ? '0%' : theme === 'dark' ? '100%' : '200%'
                   }, 0, 0)`,
                 }}
-                className="pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 w-[calc((100%-4px)/3)] rounded-md bg-white dark:bg-slate-900 shadow-2xs transition-transform duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+                className="pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 w-[calc((100%-4px)/3)] rounded-md bg-white dark:bg-slate-900 shadow-sm transition-transform duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
               />
               {([
                 { key: 'light', icon: Sun, label: 'Light' },
@@ -1017,7 +1017,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 style={{
                   transform: `translate3d(${currentLang === 'vi' ? '0%' : '100%'}, 0, 0)`,
                 }}
-                className="pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 w-[calc((100%-4px)/2)] rounded-md bg-white dark:bg-slate-900 shadow-2xs transition-transform duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+                className="pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 w-[calc((100%-4px)/2)] rounded-md bg-white dark:bg-slate-900 shadow-sm transition-transform duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
               />
               {(['vi', 'en'] as const).map((lng) => {
                 const isCurr = currentLang === lng;
@@ -1137,7 +1137,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               } flex flex-col sm:flex-row items-center justify-between gap-1 text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 text-center sm:text-left transition-[max-width] duration-300`}
             >
               <p className="flex items-center justify-center sm:justify-start gap-2 font-medium">
-                <span className="w-[20px] h-[20px] rounded-[5px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-2xs flex items-center justify-center p-0.5 shrink-0 transition-colors">
+                <span className="w-[20px] h-[20px] rounded-[5px] bg-white dark:bg-[#1E1C17] border border-[#E7E3D9] dark:border-[#332F26] shadow-sm flex items-center justify-center p-0.5 shrink-0 transition-colors">
                   <img
                     src="/citra-logo.png"
                     alt="CITRA"
@@ -1296,11 +1296,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 : '';
             const terminalLabel = isCompleted
               ? currentLang === 'vi'
-                ? 'Hoàn tất -> Mở Báo cáo'
-                : 'Completed -> Open Report'
+                ? 'Hoàn tất → Mở Báo cáo'
+                : 'Completed → Open Report'
               : currentLang === 'vi'
-                ? `Thất bại${refundSuffix} -> Thử lại`
-                : `Failed${refundSuffix} -> Retry`;
+                ? `Thất bại${refundSuffix} → Thử lại`
+                : `Failed${refundSuffix} → Retry`;
 
             return (
               <div

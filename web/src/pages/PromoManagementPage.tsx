@@ -464,7 +464,7 @@ export function PromoManagementPage() {
   return (
     <div className="space-y-5 pb-10">
       {/* Clean Header */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5 min-w-0">
           <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shrink-0">
             <Tag className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
@@ -485,7 +485,7 @@ export function PromoManagementPage() {
           size="sm"
           data-testid="create-promo-btn"
           onClick={openCreateModal}
-          className="gap-2 rounded-xl h-9 shadow-xs shrink-0 cursor-pointer"
+          className="gap-2 rounded-xl h-9 shadow-sm shrink-0 cursor-pointer"
         >
           <Plus className="h-4 w-4" />
           {lang === 'vi' ? 'Tạo mã ưu đãi' : 'Create Promo Code'}
@@ -494,7 +494,7 @@ export function PromoManagementPage() {
 
       {/* Campaign Performance Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <Card className="lg:col-span-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex items-center gap-4">
+        <Card className="lg:col-span-4 p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex items-center gap-4">
           <DonutChart
             size={78}
             thickness={10}
@@ -525,7 +525,7 @@ export function PromoManagementPage() {
         </Card>
 
         <div className="lg:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               {lang === 'vi' ? 'Tổng số mã' : 'Total Codes'}
             </span>
@@ -537,7 +537,7 @@ export function PromoManagementPage() {
             </p>
           </Card>
 
-          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
               {lang === 'vi' ? 'Đang chạy' : 'Active'}
             </span>
@@ -549,7 +549,7 @@ export function PromoManagementPage() {
             </p>
           </Card>
 
-          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
               {lang === 'vi' ? 'Lượt áp dụng' : 'Redemptions'}
             </span>
@@ -561,7 +561,7 @@ export function PromoManagementPage() {
             </p>
           </Card>
 
-          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
             <span className="text-xs font-medium text-violet-600 dark:text-violet-400">
               {lang === 'vi' ? 'Tổng ưu đãi' : 'Total Saved'}
             </span>
@@ -900,7 +900,7 @@ export function PromoManagementPage() {
             onMouseDown={(e) => {
               if (e.target === e.currentTarget && !submitting) setModalOpen(false);
             }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 backdrop-blur-xs p-4 overflow-y-auto"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 backdrop-blur-sm p-4 overflow-y-auto"
           >
             <div
               {...formDialog.dialogProps}
@@ -1258,7 +1258,7 @@ export function PromoManagementPage() {
             onMouseDown={(e) => {
               if (e.target === e.currentTarget && !deleting) setDeletingPromo(null);
             }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 backdrop-blur-xs p-4"
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/65 backdrop-blur-sm p-4"
           >
             <div
               {...deleteDialog.dialogProps}

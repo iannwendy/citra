@@ -348,7 +348,7 @@ function CitationPopup({
 
   return createPortal(
     <div
-      className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-[100] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
@@ -800,7 +800,7 @@ export function DocumentInspectorWorkspace({
     <div className={embedded ? 'space-y-4' : 'space-y-6'}>
       {!embedded && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-1 rounded-full bg-emerald-500" />
@@ -817,7 +817,7 @@ export function DocumentInspectorWorkspace({
             </p>
           </Card>
 
-          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-1 rounded-full bg-amber-500" />
@@ -834,7 +834,7 @@ export function DocumentInspectorWorkspace({
             </p>
           </Card>
 
-          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-1 rounded-full bg-red-500" />
@@ -851,7 +851,7 @@ export function DocumentInspectorWorkspace({
             </p>
           </Card>
 
-          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+          <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-1 rounded-full bg-slate-400" />
@@ -871,7 +871,7 @@ export function DocumentInspectorWorkspace({
       )}
 
       {/* Main Document Context Container */}
-      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
+      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
         {/* Top Filter Bar (Clean Editorial in embedded mode, Legacy Chrome in standalone test mode) */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
           {embedded ? (
@@ -913,7 +913,7 @@ export function DocumentInspectorWorkspace({
               onClick={() => setFilterLabel('all')}
               className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
                 filterLabel === 'all'
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-2xs'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
                   : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'
               }`}
             >
@@ -926,7 +926,7 @@ export function DocumentInspectorWorkspace({
                 onClick={() => setFilterLabel(label)}
                 className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
                   filterLabel === label
-                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-2xs'
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
                     : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300'
                 }`}
               >
@@ -964,7 +964,7 @@ export function DocumentInspectorWorkspace({
                       opacity: viewModePill.ready ? 1 : 0,
                       transition: viewModePill.animate ? undefined : 'none',
                     }}
-                    className="t-tabs-pill rounded-md bg-white dark:bg-slate-900 shadow-2xs"
+                    className="t-tabs-pill rounded-md bg-white dark:bg-slate-900 shadow-sm"
                   />
                   <button
                     type="button"
@@ -975,7 +975,7 @@ export function DocumentInspectorWorkspace({
                       docViewMode === 'stream'
                         ? viewModePill.ready
                           ? 'text-indigo-600 dark:text-indigo-400'
-                          : 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs'
+                          : 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
@@ -990,7 +990,7 @@ export function DocumentInspectorWorkspace({
                       docViewMode === 'pdf'
                         ? viewModePill.ready
                           ? 'text-indigo-600 dark:text-indigo-400'
-                          : 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs'
+                          : 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
                         : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                     }`}
                   >
@@ -1198,7 +1198,7 @@ export function DocumentInspectorWorkspace({
                     }}
                     className={`w-full text-left p-3.5 rounded-xl border transition-all cursor-pointer ${
                       isSelected
-                        ? 'bg-indigo-50/90 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-700 shadow-2xs'
+                        ? 'bg-indigo-50/90 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-700 shadow-sm'
                         : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700'
                     }`}
                   >

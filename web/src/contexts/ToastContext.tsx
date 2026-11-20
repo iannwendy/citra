@@ -695,7 +695,7 @@ function ToastStatusGlyph({ type }: { type: ToastType }) {
 
   if (type === 'loading') {
     return (
-      <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#1C1A15] dark:bg-[#FBFAF6] border border-[#1C1A15]/20 dark:border-[#FBFAF6]/30 flex items-center justify-center shrink-0 shadow-xs">
+      <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#1C1A15] dark:bg-[#FBFAF6] border border-[#1C1A15]/20 dark:border-[#FBFAF6]/30 flex items-center justify-center shrink-0 shadow-sm">
         <svg
           className="w-[18px] h-[18px] text-[#FBFAF6] dark:text-[#1C1A15] animate-orbital-spin"
           viewBox="0 0 24 24"
@@ -1103,7 +1103,7 @@ function ToastItem({
                   toast.action?.onClick();
                   onRemove(toast.id);
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:text-[#1C1A15] text-xs font-mono font-semibold tracking-tight hover:opacity-90 active:scale-95 transition-[transform,opacity] duration-150 cursor-pointer shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1C1A15] text-[#FBFAF6] dark:bg-[#FBFAF6] dark:text-[#1C1A15] text-xs font-mono font-semibold tracking-tight hover:opacity-90 active:scale-95 transition-[transform,opacity] duration-150 cursor-pointer shadow-sm"
               >
                 <span>{toast.action.label}</span>
               </button>
@@ -1233,7 +1233,7 @@ export function NotificationCenterButton({
         }
         aria-label={lang === 'vi' ? 'Trung tâm thông báo' : 'Notification Center'}
         title={lang === 'vi' ? 'Trung tâm thông báo' : 'Notification Center'}
-        className={`relative inline-flex items-center justify-center rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 hover:-translate-y-[1px] active:translate-y-0 active:scale-95 transition-[transform,background-color,border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer shadow-2xs shrink-0 ${
+        className={`relative inline-flex items-center justify-center rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-white dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 hover:-translate-y-[1px] active:translate-y-0 active:scale-95 transition-[transform,background-color,border-color,box-shadow] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer shadow-sm shrink-0 ${
           compact ? 'h-9 w-9' : 'h-8 w-8'
         }`}
       >
@@ -1247,7 +1247,7 @@ export function NotificationCenterButton({
         {unreadCount > 0 ? (
           <span
             data-open="true"
-            className="t-badge t-badge-dot absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-indigo-600 dark:bg-emerald-500 text-white dark:text-slate-950 text-[10px] font-mono font-bold flex items-center justify-center shadow-xs"
+            className="t-badge t-badge-dot absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-indigo-600 dark:bg-emerald-500 text-white dark:text-slate-950 text-[10px] font-mono font-bold flex items-center justify-center shadow-sm"
           >
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
@@ -1438,7 +1438,7 @@ export function NotificationCenterButton({
                     onClick={handleMarkAllRead}
                     className={`inline-flex items-center gap-1.5 min-h-[36px] px-2.5 py-1.5 rounded-lg transition-all duration-150 touch-manipulation active:scale-95 cursor-pointer ${
                       unreadCount > 0
-                        ? 'text-[#1C1A15] dark:text-[#FBFAF6] bg-[#E7E3D9]/70 dark:bg-[#29261F] hover:bg-[#E7E3D9] dark:hover:bg-[#332F26] font-semibold shadow-2xs'
+                        ? 'text-[#1C1A15] dark:text-[#FBFAF6] bg-[#E7E3D9]/70 dark:bg-[#29261F] hover:bg-[#E7E3D9] dark:hover:bg-[#332F26] font-semibold shadow-sm'
                         : justMarkedRead
                           ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 border border-emerald-500/25 font-semibold'
                           : 'text-[#56524A] dark:text-[#A8A296] hover:text-[#1C1A15] dark:hover:text-[#FBFAF6] hover:bg-[#E7E3D9]/50 dark:hover:bg-[#29261F]/60'

@@ -228,7 +228,7 @@ export function BillingSuccessPage() {
         </div>
 
         <div className="relative z-10 space-y-2.5">
-          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 text-xs font-mono font-bold text-emerald-700 dark:text-emerald-300 shadow-2xs">
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 text-xs font-mono font-bold text-emerald-700 dark:text-emerald-300 shadow-sm">
             <Sparkles className="h-3.5 w-3.5" />
             {isVNPay
               ? lang === 'vi'

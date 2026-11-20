@@ -86,7 +86,7 @@ export function attemptChunkReload(now: number = Date.now()): boolean {
  *    no longer exists on the server due to a fresh deployment, keeping `<Suspense>`
  *    on the skeleton fallback while the browser reloads so no error screen flashes.
  */
-export function lazyWithRetry<T extends ComponentType<unknown>>(
+export function lazyWithRetry<T extends ComponentType<any>>(
   importer: () => Promise<{ default: T }>,
   retries = 1,
   retryDelayMs = 250,

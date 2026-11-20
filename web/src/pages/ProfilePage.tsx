@@ -229,7 +229,7 @@ export function ProfilePage() {
   return (
     <div className="citra-cq-page-narrow space-y-6 w-full max-w-4xl mx-auto pb-10 transition-[max-width] duration-300">
       {/* Executive Header Card */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2.5 flex-wrap mb-2.5">
@@ -262,7 +262,7 @@ export function ProfilePage() {
 
       {/* Architectural Identity Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-1">
             <p className="text-slate-500 dark:text-slate-400 text-xs">
               {t('profile.role')}
@@ -282,7 +282,7 @@ export function ProfilePage() {
           </p>
         </Card>
 
-        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-1">
             <p className="text-slate-500 dark:text-slate-400 text-xs">
               {t('profile.memberSince')}
@@ -302,7 +302,7 @@ export function ProfilePage() {
           </p>
         </Card>
 
-        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+        <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-1">
             <p className="text-slate-500 dark:text-slate-400 text-xs">
               {t('profile.lastLogin')}
@@ -732,7 +732,7 @@ export function ProfilePage() {
             </Link>
             <Link
               to="/settings"
-              className="inline-flex items-center px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-2xs transition-colors"
+              className="inline-flex items-center px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold shadow-sm transition-colors"
             >
               {t('privacyCompliance.deleteAccountBtn')}
             </Link>

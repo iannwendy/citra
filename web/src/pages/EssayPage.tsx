@@ -3197,7 +3197,7 @@ export function EssayPage() {
             <div className="flex items-center gap-2 shrink-0">
               <Link
                 to="/upload"
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-xs transition-colors"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition-colors"
               >
                 <ArrowUpRight className="h-4 w-4" />
                 {lang === 'vi'
@@ -3214,7 +3214,7 @@ export function EssayPage() {
         <div
           data-testid="revision-diff-banner"
           data-quiet-unchanged="false"
-          className="rounded-2xl border border-indigo-200/90 dark:border-indigo-800/80 bg-gradient-to-r from-emerald-50/80 via-white to-indigo-50/70 dark:from-emerald-950/30 dark:via-slate-900 dark:to-indigo-950/40 px-4 py-3 shadow-2xs overflow-hidden"
+          className="rounded-2xl border border-indigo-200/90 dark:border-indigo-800/80 bg-gradient-to-r from-emerald-50/80 via-white to-indigo-50/70 dark:from-emerald-950/30 dark:via-slate-900 dark:to-indigo-950/40 px-4 py-3 shadow-sm overflow-hidden"
         >
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 min-w-0">
             <div className="flex flex-wrap items-center gap-2.5 min-w-0 text-xs sm:text-[13px]">
@@ -3506,7 +3506,7 @@ export function EssayPage() {
       )}
 
       {/* Zone 2: Unified Summary Health & Single-Purpose View Switcher Bar */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 px-4 py-3 sm:px-5 shadow-2xs flex flex-wrap items-center justify-between gap-3.5">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 px-4 py-3 sm:px-5 shadow-sm flex flex-wrap items-center justify-between gap-3.5">
         <div
           data-testid="report-health-summary"
           className="flex flex-wrap items-center gap-3.5 min-w-0"
@@ -3662,7 +3662,7 @@ export function EssayPage() {
               }}
             />
           ) : (
-            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-xs overflow-hidden">
+            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm overflow-hidden">
               {enrichedItems.length === 0 ? (
                 <div className="p-12 text-center bg-white dark:bg-slate-950">
                   <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
@@ -3725,7 +3725,7 @@ export function EssayPage() {
                               opacity: queueFilterPill.ready ? 1 : 0,
                               transition: queueFilterPill.animate ? undefined : 'none',
                             }}
-                            className="t-tabs-pill rounded-full bg-slate-900 dark:bg-white shadow-2xs"
+                            className="t-tabs-pill rounded-full bg-slate-900 dark:bg-white shadow-sm"
                           />
                           {(
                             [
@@ -3836,7 +3836,7 @@ export function EssayPage() {
                                       : isMetadataError
                                         ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
                                         : isSelected
-                                          ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-2xs'
+                                          ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
                                           : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
                                   }`}
                                 >
@@ -4112,7 +4112,7 @@ export function EssayPage() {
                               type="button"
                               data-testid="copy-formatted-citation-btn"
                               onClick={() => void handleCopyFormattedCitation(activeItem)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-colors cursor-pointer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors cursor-pointer"
                             >
                               <Copy className="h-3.5 w-3.5" />
                               <span>

@@ -246,10 +246,10 @@ describe('v3.70.0 — Batch Lifecycle, SSE Refund/Rate-Limit, Floating Pill, Sta
       },
     );
 
-    // 1. On /dashboard, floating-verification-pill shows terminal Failed · Credit Refunded -> Retry
+    // 1. On /dashboard, floating-verification-pill shows terminal Failed · Credit Refunded → Retry
     const pill = await screen.findByTestId('floating-verification-pill');
     expect(pill.textContent).toContain('Broken_Scan.pdf');
-    expect(pill.textContent).toContain('Failed · Credit Refunded -> Retry');
+    expect(pill.textContent).toContain('Failed · Credit Refunded → Retry');
 
     // 2. Navigate to /upload via sidebar -> recent-single-check-banner shows Credit Refunded & links to /verification/processing/404
     fireEvent.click(screen.getByRole('link', { name: /new check/i }));

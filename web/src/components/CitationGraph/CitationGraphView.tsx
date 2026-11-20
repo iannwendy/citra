@@ -350,7 +350,7 @@ export function CitationGraphView({
           <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 p-3.5 sm:p-4 w-full min-w-0 overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3 pb-3 border-b border-slate-200/80 dark:border-slate-800">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shrink-0 shadow-2xs">
+                <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 shrink-0 shadow-sm">
                   <GitBranch className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                 </div>
                 <div className="min-w-0">
@@ -468,7 +468,7 @@ export function CitationGraphView({
                     opacity: cleanFilterPill.ready ? 1 : 0,
                     transition: cleanFilterPill.animate ? undefined : 'none',
                   }}
-                  className="t-tabs-pill rounded-full bg-slate-900 dark:bg-white shadow-2xs"
+                  className="t-tabs-pill rounded-full bg-slate-900 dark:bg-white shadow-sm"
                 />
                 {cleanFilterOptions.map((opt) => {
                   const isActive = cleanFilter === opt.key;
@@ -537,7 +537,7 @@ export function CitationGraphView({
                           data-testid="graph-sidebar-marker"
                           className={`font-mono text-[11px] font-bold px-1.5 py-0.5 rounded-md shrink-0 transition-colors ${
                             isSelected
-                              ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-2xs'
+                              ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
                           }`}
                         >
@@ -620,7 +620,7 @@ export function CitationGraphView({
           {/* Tactile Centered Grip Pill */}
           <div
             aria-hidden="true"
-            className={`relative z-10 h-9 w-3.5 rounded-full border flex items-center justify-center transition-all duration-150 shadow-2xs ${
+            className={`relative z-10 h-9 w-3.5 rounded-full border flex items-center justify-center transition-all duration-150 shadow-sm ${
               isResizing
                 ? 'border-indigo-500 dark:border-emerald-400 bg-indigo-50 dark:bg-emerald-950 scale-110'
                 : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 group-hover/resizer:border-indigo-400 dark:group-hover/resizer:border-emerald-400 group-hover/resizer:scale-105'

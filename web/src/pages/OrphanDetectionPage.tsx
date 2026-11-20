@@ -147,7 +147,7 @@ function OrphanCitationCard({
   const markerLabel = getCitationMarkerLabel(citation, index);
   const displayRaw = citation.citation_raw.replace(/^\s*\[\s*\d+[a-z]?\s*\]\s*/i, '');
   return (
-    <Card className="rounded-xl border-red-200/90 dark:border-red-900/70 p-4 bg-red-50/40 dark:bg-red-950/25 hover:bg-red-50/80 dark:hover:bg-red-950/45 transition-colors shadow-2xs">
+    <Card className="rounded-xl border-red-200/90 dark:border-red-900/70 p-4 bg-red-50/40 dark:bg-red-950/25 hover:bg-red-50/80 dark:hover:bg-red-950/45 transition-colors shadow-sm">
       <div className="flex items-start gap-3">
         <div className="p-2 rounded-xl bg-red-100/80 dark:bg-red-900/50 border border-red-200/60 dark:border-red-800/60 shrink-0">
           <Link2Off className="h-4 w-4 text-red-600 dark:text-red-400" />
@@ -194,7 +194,7 @@ function UncitedReferenceCard({
   const markerLabel = getCitationMarkerLabel(reference, index);
   const displayRaw = reference.raw_text.replace(/^\s*\[\s*\d+[a-z]?\s*\]\s*/i, '');
   return (
-    <Card className="rounded-xl border-amber-200/90 dark:border-amber-900/70 p-4 bg-amber-50/40 dark:bg-amber-950/25 hover:bg-amber-50/80 dark:hover:bg-amber-950/45 transition-colors shadow-2xs">
+    <Card className="rounded-xl border-amber-200/90 dark:border-amber-900/70 p-4 bg-amber-50/40 dark:bg-amber-950/25 hover:bg-amber-50/80 dark:hover:bg-amber-950/45 transition-colors shadow-sm">
       <div className="flex items-start gap-3">
         <div className="p-2 rounded-xl bg-amber-100/80 dark:bg-amber-900/50 border border-amber-200/60 dark:border-amber-800/60 shrink-0">
           <FileText className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -266,7 +266,7 @@ function SectionHeader({
   const c = colorClasses[color];
 
   return (
-    <Card className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+    <Card className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className={`p-2.5 rounded-xl border ${c.icon}`}>
           {icon}
@@ -362,7 +362,7 @@ export function OrphanConsistencyWorkspace({
       </div>
 
       {/* Consistency Container */}
-      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
+      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
         {/* Top Bar (Clean Editorial in embedded mode, Legacy Chrome in standalone test mode) */}
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
           {embedded ? (
@@ -402,7 +402,7 @@ export function OrphanConsistencyWorkspace({
                 opacity: filterPill.ready ? 1 : 0,
                 transition: filterPill.animate ? undefined : 'none',
               }}
-              className="t-tabs-pill rounded-lg bg-white dark:bg-slate-900 shadow-2xs"
+              className="t-tabs-pill rounded-lg bg-white dark:bg-slate-900 shadow-sm"
             />
             {filterTabs.map((tab) => {
               const isActive = activeTab === tab.id;
@@ -416,7 +416,7 @@ export function OrphanConsistencyWorkspace({
                     isActive
                       ? filterPill.ready
                         ? 'text-slate-900 dark:text-white'
-                        : 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                        : 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
@@ -569,7 +569,7 @@ export function OrphanConsistencyWorkspace({
                                 ? () => onSelectVerdictInCitations(v.citation_id)
                                 : undefined
                             }
-                            className={`rounded-xl border-emerald-200/80 dark:border-emerald-900/60 p-4 bg-emerald-50/30 dark:bg-emerald-950/20 transition-colors shadow-2xs ${
+                            className={`rounded-xl border-emerald-200/80 dark:border-emerald-900/60 p-4 bg-emerald-50/30 dark:bg-emerald-950/20 transition-colors shadow-sm ${
                               onSelectVerdictInCitations
                                 ? 'cursor-pointer hover:border-emerald-400'
                                 : ''
@@ -628,7 +628,7 @@ export function OrphanConsistencyWorkspace({
       </div>
 
       {!embedded && (
-        <Card className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+        <Card className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
           <h3 className="font-display text-sm font-semibold mb-4 text-slate-900 dark:text-slate-100">
             {isVi
               ? 'Tổng quan Nhất quán Trích dẫn (Layer 1)'

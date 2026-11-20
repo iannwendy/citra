@@ -608,7 +608,7 @@ export function ProcessingPage() {
   return (
     <div className="citra-cq-page-narrow w-full max-w-4xl mx-auto space-y-6 pb-10 transition-[max-width] duration-300">
       {/* Executive Header Banner */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1.5 min-w-0">
           <div className="flex items-center gap-2.5 flex-wrap">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-semibold text-indigo-700 dark:text-indigo-300">
@@ -998,9 +998,9 @@ export function ProcessingPage() {
                   data-step-status={s}
                   className={`flex items-start gap-3.5 p-3 rounded-xl border transition-[background-color,border-color,box-shadow] duration-200 ${
                     s === 'error'
-                      ? 'bg-rose-50/70 dark:bg-rose-950/35 border-rose-300 dark:border-rose-800 shadow-2xs'
+                      ? 'bg-rose-50/70 dark:bg-rose-950/35 border-rose-300 dark:border-rose-800 shadow-sm'
                       : s === 'active'
-                        ? 'bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 shadow-2xs'
+                        ? 'bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 shadow-sm'
                         : s === 'completed'
                           ? 'bg-emerald-50/30 dark:bg-emerald-950/15 border-emerald-200/70 dark:border-emerald-900/50'
                           : 'bg-slate-50/50 dark:bg-slate-950/40 border-slate-200/60 dark:border-slate-800/70'
@@ -1013,7 +1013,7 @@ export function ProcessingPage() {
                         : s === 'completed'
                           ? 'bg-emerald-100 dark:bg-emerald-900/60'
                           : s === 'active'
-                            ? 'bg-white dark:bg-slate-900 border border-indigo-200/90 dark:border-indigo-700/80 shadow-xs'
+                            ? 'bg-white dark:bg-slate-900 border border-indigo-200/90 dark:border-indigo-700/80 shadow-sm'
                             : 'bg-slate-200/70 dark:bg-slate-800'
                     }`}
                   >
@@ -1136,7 +1136,7 @@ export function ProcessingPage() {
       {(visualDone || redirecting) && !isFailed && (
         <div
           data-testid="processing-completion-banner"
-          className="p-6 rounded-2xl bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center shadow-xs"
+          className="p-6 rounded-2xl bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center shadow-sm"
         >
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-900/60 mb-3">
             <FileCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
@@ -1169,7 +1169,7 @@ function StatCard({
   highlight?: boolean;
 }) {
   return (
-    <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+    <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
       <div className="flex items-center justify-between mb-2.5">
         <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800">
           {icon}

@@ -89,7 +89,7 @@ export function SlidingFilterPills<K extends string>({
               ? 'transform 250ms cubic-bezier(0.22, 1, 0.36, 1), width 250ms cubic-bezier(0.22, 1, 0.36, 1), height 250ms cubic-bezier(0.22, 1, 0.36, 1)'
               : 'none',
           }}
-          className="t-tabs-pill pointer-events-none absolute left-0 top-0 rounded-lg bg-white dark:bg-slate-900 shadow-xs ring-1 ring-slate-900/5 dark:ring-white/10"
+          className="t-tabs-pill pointer-events-none absolute left-0 top-0 rounded-lg bg-white dark:bg-slate-900 shadow-sm ring-1 ring-slate-900/5 dark:ring-white/10"
         />
       )}
       {options.map((opt) => {
@@ -220,7 +220,7 @@ export function PipelineStageFlow({
             <div className="relative rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-800 p-4 flex flex-col justify-between gap-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-9 h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center shrink-0 shadow-2xs">
+                  <div className="w-9 h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center shrink-0 shadow-sm">
                     {stage.icon}
                   </div>
                   <div className="min-w-0">

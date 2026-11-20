@@ -135,7 +135,7 @@ export function MyClassesPage() {
   return (
     <div className="space-y-5 pb-10">
       {/* Clean Classroom Header */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3.5 min-w-0">
           <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shrink-0">
             <GraduationCap className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
@@ -167,7 +167,7 @@ export function MyClassesPage() {
         <Button
           onClick={() => setCreateOpen(true)}
           aria-label={t('teacher.createClass')}
-          className="gap-2 rounded-xl shadow-xs shrink-0"
+          className="gap-2 rounded-xl shadow-sm shrink-0"
         >
           <Plus className="h-4 w-4" />
           {t('teacher.createClass')}
@@ -184,7 +184,7 @@ export function MyClassesPage() {
       {/* Visual Metric Cards (Zero numbered corner tags) */}
       {dashboard && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-          <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+          <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
             <div className="flex items-center gap-2.5 mb-2.5">
               <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/60 dark:border-indigo-800/60">
                 <GraduationCap className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
@@ -198,7 +198,7 @@ export function MyClassesPage() {
             </p>
           </Card>
 
-          <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+          <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
             <div className="flex items-center gap-2.5 mb-2.5">
               <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-200/60 dark:border-emerald-800/60">
                 <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
@@ -212,7 +212,7 @@ export function MyClassesPage() {
             </p>
           </Card>
 
-          <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+          <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
             <div className="flex items-center gap-2.5 mb-2.5">
               <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/80 border border-amber-200/60 dark:border-amber-800/60">
                 <FileCheck className="h-4 w-4 text-amber-600 dark:text-amber-400" />
@@ -232,7 +232,7 @@ export function MyClassesPage() {
               data-testid="needs-review-kpi-link"
               className="block rounded-2xl focus:outline-none focus:ring-2 focus:ring-rose-500 group"
             >
-              <Card className="p-4 sm:p-5 h-full rounded-2xl bg-rose-50/40 dark:bg-rose-950/20 border border-rose-200/90 dark:border-rose-800/80 hover:border-rose-400 dark:hover:border-rose-600 shadow-2xs transition-colors">
+              <Card className="p-4 sm:p-5 h-full rounded-2xl bg-rose-50/40 dark:bg-rose-950/20 border border-rose-200/90 dark:border-rose-800/80 hover:border-rose-400 dark:hover:border-rose-600 shadow-sm transition-colors">
                 <div className="flex items-center justify-between gap-2 mb-2.5">
                   <div className="flex items-center gap-2">
                     <div className="p-2 rounded-xl bg-rose-100/80 dark:bg-rose-950/80 border border-rose-200/60 dark:border-rose-800/60">
@@ -250,7 +250,7 @@ export function MyClassesPage() {
               </Card>
             </Link>
           ) : (
-            <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs">
+            <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
               <div className="flex items-center gap-2.5 mb-2.5">
                 <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700">
                   <ClipboardCheck className="h-4 w-4 text-slate-500 dark:text-slate-400" />
@@ -310,7 +310,7 @@ export function MyClassesPage() {
                   <CardHoverTilt key={c.id} maxTilt={3.2} className="h-full">
                     <div
                       onClick={() => navigate(`/teacher/classes/${c.id}`)}
-                      className="h-full w-full text-left rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-800 p-4 sm:p-5 hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors flex flex-col justify-between gap-4 group cursor-pointer shadow-2xs"
+                      className="h-full w-full text-left rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/90 dark:border-slate-800 p-4 sm:p-5 hover:bg-white dark:hover:bg-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors flex flex-col justify-between gap-4 group cursor-pointer shadow-sm"
                     >
                       <div className="space-y-2">
                         <div className="flex items-start justify-between gap-2">

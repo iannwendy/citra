@@ -1005,7 +1005,7 @@ export function EvidenceGraph({ verdict, onClose }: EvidenceGraphProps) {
       </div>
 
       {/* Interactive Hierarchical DAG Tree (no min-w-fit, never overflows horizontally) */}
-      <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-3 sm:p-4 bg-white dark:bg-slate-950 w-full min-w-0 max-w-full overflow-hidden shadow-2xs">
+      <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-3 sm:p-4 bg-white dark:bg-slate-950 w-full min-w-0 max-w-full overflow-hidden shadow-sm">
         <EvidenceGraphNode
           node={graphData}
           level={0}

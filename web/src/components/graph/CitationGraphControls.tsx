@@ -122,7 +122,7 @@ export function CitationGraphControls({
                 className={cn(
                   'px-2.5 py-1 text-[11px] font-mono rounded-lg transition-all cursor-pointer',
                   viewMode === mode
-                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-2xs font-bold'
+                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm font-bold'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200',
                 )}
               >
@@ -173,7 +173,7 @@ export function CitationGraphControls({
                 className={cn(
                   'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono transition-all border cursor-pointer',
                   active
-                    ? 'border-indigo-500 bg-indigo-600 text-white font-semibold shadow-2xs'
+                    ? 'border-indigo-500 bg-indigo-600 text-white font-semibold shadow-sm'
                     : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700',
                 )}
               >
@@ -210,7 +210,7 @@ export function CitationGraphControls({
                 className={cn(
                   'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono transition-all border cursor-pointer',
                   active
-                    ? 'border-indigo-500 bg-indigo-600 text-white font-semibold shadow-2xs'
+                    ? 'border-indigo-500 bg-indigo-600 text-white font-semibold shadow-sm'
                     : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700',
                 )}
               >

@@ -119,7 +119,7 @@ export function AuditLogPage() {
   return (
     <div className="space-y-5 pb-10">
       {/* Clean Header */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex items-center gap-3.5">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm flex items-center gap-3.5">
         <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shrink-0">
           <FileText className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
         </div>
@@ -137,7 +137,7 @@ export function AuditLogPage() {
 
       {/* Visual Summary Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
             {lang === 'vi' ? 'Tổng lượt duyệt đã lưu' : 'Total Review Events'}
           </span>
@@ -149,7 +149,7 @@ export function AuditLogPage() {
           </p>
         </Card>
 
-        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between">
+        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between">
           <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
             {lang === 'vi' ? 'Giảng viên / Quản trị tham gia' : 'Active Reviewers'}
           </span>
@@ -161,7 +161,7 @@ export function AuditLogPage() {
           </p>
         </Card>
 
-        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xs flex flex-col justify-between gap-2">
+        <Card className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm flex flex-col justify-between gap-2">
           <div className="flex items-center justify-between text-xs">
             <span className="font-medium text-slate-600 dark:text-slate-300">
               {lang === 'vi'

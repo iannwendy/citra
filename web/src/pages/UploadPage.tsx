@@ -328,7 +328,7 @@ export function UploadPage() {
       {isUploadingInBackground && activeSingleCheck && (
         <div
           data-testid="uploading-in-background-banner"
-          className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/85 dark:bg-indigo-950/45 p-4 flex items-center gap-3 text-xs text-indigo-900 dark:text-indigo-200 shadow-2xs"
+          className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/85 dark:bg-indigo-950/45 p-4 flex items-center gap-3 text-xs text-indigo-900 dark:text-indigo-200 shadow-sm"
         >
           <Loader2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0" />
           <div className="min-w-0 flex-1">
@@ -343,7 +343,7 @@ export function UploadPage() {
       {forceNewUpload && isSingleCheckInFlight && activeSingleCheck?.essayId != null && (
         <div
           data-testid="active-single-check-banner"
-          className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/85 dark:bg-indigo-950/45 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-indigo-900 dark:text-indigo-200 shadow-2xs"
+          className="rounded-2xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/85 dark:bg-indigo-950/45 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-indigo-900 dark:text-indigo-200 shadow-sm"
         >
           <div className="flex items-start gap-3 min-w-0">
             <Loader2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400 animate-spin shrink-0 mt-0.5" />
@@ -395,7 +395,7 @@ export function UploadPage() {
         (activeSingleCheck.status === 'completed' || activeSingleCheck.status === 'failed') && (
           <div
             data-testid="recent-single-check-banner"
-            className={`rounded-2xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs ${
+            className={`rounded-2xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm ${
               activeSingleCheck.status === 'completed'
                 ? 'border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/85 dark:bg-emerald-950/35 text-emerald-950 dark:text-emerald-200'
                 : 'border-red-200 dark:border-red-900/70 bg-red-50/85 dark:bg-red-950/35 text-red-950 dark:text-red-200'
@@ -475,7 +475,7 @@ export function UploadPage() {
         )}
 
       {/* Executive Header Banner */}
-      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1.5">
           {!isUser && (
             <div className="flex items-center gap-2.5 flex-wrap">
@@ -536,7 +536,7 @@ export function UploadPage() {
 
       {/* Subscription Plan Quota & Limits Strip */}
       <div
-        className="rounded-2xl bg-gradient-to-r from-slate-50 via-white to-indigo-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/30 border border-slate-200/90 dark:border-slate-800 px-4 py-3.5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+        className="rounded-2xl bg-gradient-to-r from-slate-50 via-white to-indigo-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/30 border border-slate-200/90 dark:border-slate-800 px-4 py-3.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3"
         data-testid="upload-quota-banner"
       >
         <div className="flex flex-wrap items-center gap-2.5 text-xs">
@@ -734,7 +734,7 @@ export function UploadPage() {
             <CardResize>
             {file ? (
               /* File selected state */
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 max-w-xl w-full mx-auto bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800/80 shadow-xs overflow-hidden">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 max-w-xl w-full mx-auto bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl border border-emerald-200 dark:border-emerald-800/80 shadow-sm overflow-hidden">
                 <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto sm:flex-1">
                   <FileFormatIcon filename={file.name} size="lg" />
                   <div className="text-left min-w-0 flex-1">
@@ -773,7 +773,7 @@ export function UploadPage() {
                 <AvatarGroupHover className="flex items-center justify-center gap-2.5 mb-4">
                   <FileFormatIcon format="pdf" size="md" />
                   <FileFormatIcon format="docx" size="md" />
-                  <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shadow-xs">
+                  <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 flex items-center justify-center shadow-sm">
                     <Upload className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
                   </div>
                   <FileFormatIcon format="bib" size="md" />
@@ -785,7 +785,7 @@ export function UploadPage() {
                 <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mb-4">
                   PDF, DOCX, BibTeX (.bib) &amp; RIS (.ris) · APA, IEEE, MLA, Chicago, Harvard, Vancouver
                 </p>
-                <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-indigo-600 dark:text-indigo-400 shadow-2xs">
+                <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-indigo-600 dark:text-indigo-400 shadow-sm">
                   {t('upload.orBrowse')}
                 </span>
               </div>
@@ -806,7 +806,7 @@ export function UploadPage() {
             data-testid="upload-privacy-notice"
             className="mt-4 rounded-[14px] border border-[#E7E3D9] dark:border-[#332F26] bg-[#F4F2EC]/80 dark:bg-[#1E1C17]/75 px-4 py-3 flex items-start gap-3 font-solva-sans text-[12px] leading-[19px] text-[#56524A] dark:text-[#A8A296] transition-colors"
           >
-            <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] bg-white dark:bg-[#141310] border border-[#E7E3D9] dark:border-[#332F26] text-[#1C1A15] dark:text-[#FBFAF6] shadow-2xs">
+            <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] bg-white dark:bg-[#141310] border border-[#E7E3D9] dark:border-[#332F26] text-[#1C1A15] dark:text-[#FBFAF6] shadow-sm">
               <Globe className="h-3.5 w-3.5" />
             </span>
             <div className="min-w-0">
@@ -816,7 +816,7 @@ export function UploadPage() {
               {t('privacyCompliance.uploadNoticeBody')}{' '}
               <Link
                 to="/privacy#third-parties"
-                className="inline-flex items-center gap-1 font-medium text-[#1C1A15] dark:text-[#FBFAF6] underline underline-offset-3 decoration-[#1C1A15]/40 dark:decoration-[#FBFAF6]/40 hover:opacity-75 transition-opacity"
+                className="inline-flex items-center gap-1 font-medium text-[#1C1A15] dark:text-[#FBFAF6] underline underline-offset-4 decoration-[#1C1A15]/40 dark:decoration-[#FBFAF6]/40 hover:opacity-75 transition-opacity"
               >
                 <span>{t('privacyCompliance.policyLinkLabel')}</span>
                 <ArrowRight className="h-3 w-3" />

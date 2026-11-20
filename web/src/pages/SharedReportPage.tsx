@@ -77,7 +77,7 @@ function VerificationQrMatrixSvg({
       role="img"
       aria-label="CITRA Verification QR Matrix"
       data-testid="qr-verification-matrix"
-      className="rounded-lg bg-white border border-slate-200 dark:border-slate-700 shadow-xs shrink-0 select-none"
+      className="rounded-lg bg-white border border-slate-200 dark:border-slate-700 shadow-sm shrink-0 select-none"
     >
       <rect width={totalDim} height={totalDim} fill="#ffffff" />
       {grid.map((row, rIdx) =>
@@ -493,7 +493,7 @@ export function SharedReportPage() {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-8 space-y-6">
         {/* Digital Verification Receipt Card */}
-        <section className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xs">
+        <section className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
           <div className="flex flex-col lg:flex-row items-start justify-between gap-6">
             <div className="space-y-3 flex-1 min-w-0 w-full">
               <div className="flex items-center gap-2.5 flex-wrap">
@@ -658,7 +658,7 @@ export function SharedReportPage() {
 
         {/* CIS Score & 5-Component Breakdown + Verdict Distribution */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <section className="lg:col-span-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xs">
+          <section className="lg:col-span-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
             <div className="flex items-center justify-between gap-4 mb-5">
               <div>
                 <h2 className="text-base font-bold text-slate-900 dark:text-white">
@@ -703,7 +703,7 @@ export function SharedReportPage() {
             </div>
           </section>
 
-          <section className="lg:col-span-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xs flex flex-col justify-between">
+          <section className="lg:col-span-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm flex flex-col justify-between">
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white mb-1">
                 {t('sharedReport.verdictDistributionTitle')}
@@ -770,7 +770,7 @@ export function SharedReportPage() {
         </div>
 
         {/* Expandable Reference Verdicts List */}
-        <section className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-xs">
+        <section className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
           <div className="flex items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
