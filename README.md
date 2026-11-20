@@ -14,7 +14,7 @@
 [![Benchmark](https://img.shields.io/badge/Benchmark-120%2C000_Samples_%C2%B7_99.02%25_Neuro--Symbolic_%C2%B7_99.75%25_OOD_%C2%B7_0.0395_ECE-6B21A8?style=for-the-badge)](./data/models/neuro_symbolic_benchmark_report.json)
 [![PDF Corpus](https://img.shields.io/badge/PDF_Stress_Corpus-310_PDFs_%C2%B7_12_Styles_%C2%B7_100%25_Hard_Cases-0F766E?style=for-the-badge)](#3-310-pdf-multi-style--vietnamese-legal-corpus-evaluation-real-world--hard-case-stress-tests)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
-[![Pytest](https://img.shields.io/badge/Tests-2%2C100%2B_Backend_%C2%B7_340%2B_Frontend_Passed-0A0A0A?style=for-the-badge&logo=pytest&logoColor=00E676)](./tests)
+[![Pytest](https://img.shields.io/badge/Tests-2%2C197_Backend_%C2%B7_472_Frontend_%C2%B7_20_E2E_Suites-0A0A0A?style=for-the-badge&logo=pytest&logoColor=00E676)](./tests)
 
 *An editorial-grade academic citation debugger and thesis integrity verification workspace engineered for researchers, instructors, and university committees — combining structural PDF parsing, smart domain-aware retrieval across 15+ scholarly & technical databases (including DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, Hugging Face, IETF RFC, Wayback Machine, and Retraction Watch), and transparent 5-stage Neuro-Symbolic decision traces.*
 
@@ -433,12 +433,12 @@ Beyond synthetic benchmarks and individual root PDFs, CITRA's structural extract
 
 | Layer | Technologies |
 | :--- | :--- |
-| **Frontend (`web/`)** | React 18.3, TypeScript 5.8, Vite 6, Tailwind CSS 3.4, Radix UI Primitives, Lucide Icons, Sentient + Plus Jakarta Sans + JetBrains Mono |
+| **Frontend (`web/`)** | React 18.3, TypeScript 5.8, Vite 5, Tailwind CSS 3.4, Radix UI Primitives, Lucide Icons, Solva Warm Editorial (`Sentient` 134-glyph VI Serif + `Onest` Sans + `JetBrains Mono`), `<251 kB` Acyclic Code-Split Bundle |
 | **Backend API (`src/integrity_checker/api/`)** | Python 3.11+, FastAPI, Uvicorn, Pydantic v2, SQLAlchemy 2.0 (SQLite WAL + PostgreSQL ready), JWT Auth (`PyJWT`, `bcrypt`), Google OAuth2, Server-Sent Events (SSE) |
 | **Document Parsing & NLP** | GROBID 0.9.1 (TEI-XML REST Service), PyMuPDF (`fitz`) + TCVN3/VNI decoder + selective OCR, `pdfplumber`, `python-docx`, BibTeX/RIS parsers, `RapidFuzz`, `defusedxml` |
-| **Neuro-Symbolic & ML Engine** | `sentence-transformers` (`all-MiniLM-L6-v2` + `paraphrase-multilingual-MiniLM-L12-v2` ONNX INT8), `scikit-learn` & `scipy` (`HybridMLScorer` Multinomial Logistic Regression + `PlattCalibrator`), 16D Feature Engineering, `30+` Deterministic Symbolic Rules |
+| **Neuro-Symbolic & ML Engine** | `sentence-transformers` (`all-MiniLM-L6-v2` + `paraphrase-multilingual-MiniLM-L12-v2` ONNX INT8), `scikit-learn` & `scipy` (`HybridMLScorer` Multinomial Logistic Regression + `PlattCalibrator`), 16D Feature Engineering, `43+` Deterministic Symbolic Rules |
 | **Scholarly Knowledge & APIs** | SQLite FTS5 (`129,125` records / `128,105` unique papers with `82,877` full abstracts), Crossref, OpenAlex, DataCite, Global DOI RA, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, Hugging Face, IETF RFC/PyPI, Wikidata/OpenCitations, Serper/SerpApi Scholar, SSRF-safe HTML & Wayback `LinkValidator` |
-| **Testing & DevOps** | Pytest (`2,100+` backend unit & integration tests), Vitest (`340+` frontend tests), Playwright E2E, Ruff, Docker Compose & GitHub Actions CI/CD |
+| **Testing & DevOps** | Pytest (`2,197` passed / `2,203` backend unit & integration tests), Vitest (`472` passed across `62` files), Playwright E2E (`20` spec suites), Ruff, Docker Compose & GitHub Actions CI/CD |
 
 ---
 
@@ -623,19 +623,19 @@ The database automatically seeds three role-based accounts on startup (`src/inte
 
 ### Running the Automated Test Suite & 120,000-Sample Benchmark
 
-The repository includes **2,100+ backend unit & integration tests** and **340+ frontend Vitest tests** covering extraction, style detection, federated retrieval, SSRF-safe link validation, 16D feature matching, 30+ symbolic rules, Platt calibration, CIS calculation, RBAC/billing security, and UI components:
+The repository includes **2,197 passing backend unit & integration tests** (across a `2,203`-test suite), **472 frontend Vitest tests across 62 suites**, and **20 Playwright end-to-end browser suites** covering extraction, style detection, federated retrieval, SSRF-safe link validation, 16D feature matching, 43+ symbolic rules, Platt calibration, CIS calculation, RBAC/billing security, Tailwind v3.4 + `<500 kB` bundle hygiene, and responsive Light/Dark UI:
 
 ```bash
 # Lint backend, tests, and scripts (0 errors)
 .venv/bin/python -m ruff check src/ tests/ scripts/
 
-# Run the complete backend test suite (2,100+ passed)
+# Run the complete backend test suite (2,197 passed, 0 failed)
 .venv/bin/python -m pytest tests/ -q
 
 # Re-train & evaluate the 120,000-sample paper- & title-disjoint Neuro-Symbolic benchmark
 .venv/bin/python scripts/train_neuro_symbolic_model.py
 
-# Run frontend ESLint, TypeScript check, Vitest unit suite (340+ passed), & production build
+# Run frontend ESLint, TypeScript check, Vitest unit suite (472 passed / 62 files), & production build
 cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build
 ```
 

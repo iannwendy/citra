@@ -50,7 +50,7 @@
     - `export interface PipelineStageNode { id: string; stepLabel: string; title: string; metric: React.ReactNode; statusText: string; level: 'healthy' | 'degraded' | 'down'; icon: React.ReactNode }`
     - `export function PipelineStageFlow(props: { stages: PipelineStageNode[]; 'data-testid'?: string }): JSX.Element`
 
-- [ ] **Step 1: Write failing unit tests in `web/src/lib/teacherGuidance.test.ts`**
+- [x] **Step 1: Write failing unit tests in `web/src/lib/teacherGuidance.test.ts`**
 
 ```ts
 import { describe, it, expect } from 'vitest';
@@ -110,16 +110,16 @@ describe('getTeacherReviewGuidance', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd web && npx vitest run src/lib/teacherGuidance.test.ts`
 Expected: FAIL with `Cannot find module './teacherGuidance'`
 
-- [ ] **Step 3: Implement `web/src/lib/teacherGuidance.ts` and `web/src/components/ui/studio-visuals.tsx`**
+- [x] **Step 3: Implement `web/src/lib/teacherGuidance.ts` and `web/src/components/ui/studio-visuals.tsx`**
 
 Implement `getTeacherReviewGuidance` covering retracted (`is_retracted` / `R-RETRACTED-PAPER`), URL mismatch (`R-URL-CONTENT-MISMATCH`), incomplete reference (`R-INCOMPLETE-METADATA`, including `"Trích dẫn chưa đủ thông tin định danh học thuật"` in VI), suspected hallucination, metadata field discrepancies (natural Vietnamese/English field list: `tên bài`, `tác giả`, `năm xuất bản`, `nơi công bố`, `mã DOI` — never `"the title"`), and `unresolved` / `'unverified'` (`confirmNewLabel: 'metadata_error'`). Implement `StudioWindowHeader`, `SlidingFilterPills`, `ProportionalBarRow`, and `PipelineStageFlow` in `studio-visuals.tsx`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd web && npx vitest run src/lib/teacherGuidance.test.ts`
 Expected: PASS
@@ -136,7 +136,7 @@ Expected: PASS
 - Consumes: `getTeacherReviewGuidance`, `ReviewSeverityKey` from `@/lib/teacherGuidance`; `StudioWindowHeader`, `SlidingFilterPills` from `@/components/ui/studio-visuals`; `DonutChart`, `NumberPopIn`, `AccordionExpand`, `SymmetricChevron`, `SuccessCheck` from `@/components/ui/transitions`; `m`, `AnimatePresence` from `@/components/ui/motion-primitives`; `api.overrideVerdict` from `@/api/client`.
 - Produces: Redesigned `PendingReviewsPage` preserving `pending-filter-all-classes`, `pending-kpi-incomplete`, `pending-kpi-unresolved`, `pending-review-row-${id}`, `pending-marker-${id}`, `pending-retracted-${id}`, `pending-url-status-${id}`, `pending-observed-meta-${id}`, plus new `pending-approve-btn-${id}` and `pending-confirm-issue-btn-${id}`.
 
-- [ ] **Step 1: Write failing tests for `PendingReviewsPage` in `web/src/pages/TeachingAdminVisualStudio.test.tsx`**
+- [x] **Step 1: Write failing tests for `PendingReviewsPage` in `web/src/pages/TeachingAdminVisualStudio.test.tsx`**
 
 ```tsx
 it('PendingReviewsPage hides pending_reviews.queue, R-* codes, Mismatch chips, and Crossref tags, groups by submission, and adjudicates inline with double-click + error guards', async () => {
@@ -149,19 +149,19 @@ it('PendingReviewsPage hides pending_reviews.queue, R-* codes, Mismatch chips, a
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd web && npx vitest run src/pages/TeachingAdminVisualStudio.test.tsx`
 Expected: FAIL (`pending_reviews.queue` and `R-STYLE-INCONSISTENT` still present; `pending-approve-btn-*` missing)
 
-- [ ] **Step 3: Implement `PendingReviewsPage.tsx` Visual Action Studio**
+- [x] **Step 3: Implement `PendingReviewsPage.tsx` Visual Action Studio**
 
 Replace IDE header/queue chrome with:
 1. Clean page header + above-the-fold **Visual Triage Banner**: `DonutChart` (`size={84}`, `thickness={11}`) + interactive severity filter cards (`all`, `critical`, `warning`, `incomplete` [`data-testid="pending-kpi-incomplete"`], `uncertain` [`data-testid="pending-kpi-unresolved"`]) with `<NumberPopIn />`.
 2. `StudioWindowHeader` (`DANH SÁCH CẦN DUYỆT` / `REVIEW QUEUE`) containing class filter chips (`pending-filter-all-classes` + class pills) and view switcher (`Gom theo bài` / `Từng trích dẫn`).
 3. Submission-grouped collapsible cards (`AccordionExpand` open by default) where each citation card (`pending-review-row-${r.verdict_id}`) renders marker/verdict/retracted/actionable-URL pills (suppressing `unchecked`), observed web title box (`pending-observed-meta-${r.verdict_id}`), plain-language **Vấn đề + Việc nên làm** box from `getTeacherReviewGuidance`, 2-line serif citation quote, and inline action bar (`pending-approve-btn-${r.verdict_id}`, `pending-confirm-issue-btn-${r.verdict_id}`, `Xem bài ↗`) with `e.stopPropagation()`, `adjudicatingIds` in-flight guard, `SuccessCheck` flash (`180ms`), and `AnimatePresence` smooth exit.
 
-- [ ] **Step 4: Run new and existing `PendingReviewsPage` tests**
+- [x] **Step 4: Run new and existing `PendingReviewsPage` tests**
 
 Run: `cd web && npx vitest run src/pages/TeachingAdminVisualStudio.test.tsx src/pages/AdminTeacherFlows.test.tsx src/pages/ClassroomSandboxAndModalsV370.test.tsx src/__tests__/wave1_2_3_remediation.test.tsx`
 Expected: PASS
@@ -179,21 +179,21 @@ Expected: PASS
 - Consumes: `StudioWindowHeader`, `ProportionalBarRow` from `@/components/ui/studio-visuals`; `getHumanVerdictMeta` from `@/lib/teacherGuidance`; `CardHoverTilt`, `DonutChart`, `ScoreRing`, `NumberPopIn`, `TextMorph` from `@/components/ui/transitions`.
 - Produces: Redesigned `MyClassesPage` and `ClassDetailPage` preserving all class CRUD, CSV/ZIP export, join-code copy/regenerate, student add/remove, and `cohort-analytics-panel` contracts.
 
-- [ ] **Step 1: Append failing Classroom tests in `web/src/pages/TeachingAdminVisualStudio.test.tsx`**
+- [x] **Step 1: Append failing Classroom tests in `web/src/pages/TeachingAdminVisualStudio.test.tsx`**
 
 Assert `MyClassesPage` removes `teacher_classes.registry` and `FACULTY WORKSPACE IDE`, renders `<CardHoverTilt>` (`.t-tilt`) cohort cards with 1-click join-code copy (`e.stopPropagation()` does not navigate), and `ClassDetailPage` removes `CROSS-STUDENT ANOMALY ENGINE` and raw `R-*` IDs in Most Common Citation Issues while rendering `<ScoreRing>` gauges and `<DonutChart>` safely even when `total_essays === 0` (Review Focus #5).
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd web && npx vitest run src/pages/TeachingAdminVisualStudio.test.tsx`
 Expected: FAIL (`teacher_classes.registry` and `CROSS-STUDENT ANOMALY ENGINE` still present)
 
-- [ ] **Step 3: Implement `MyClassesPage.tsx` & `ClassDetailPage.tsx` redesign**
+- [x] **Step 3: Implement `MyClassesPage.tsx` & `ClassDetailPage.tsx` redesign**
 
 - In `MyClassesPage.tsx`: Clean header (preserving localized `'${n} LỚP ĐANG HOẠT ĐỘNG'` / `'${n} lớp học'` strings), 4 visual stat cards without `01–04` tags (`<NumberPopIn />` + highlighted `needs-review-kpi-link`), `StudioWindowHeader` (`DANH SÁCH LỚP HỌC` / `MY CLASSES`), 2-column `<CardHoverTilt maxTilt={3.5} />` class cards with 1-click Copy Join Code button (`<TextMorph />`), and clean enrolled classes card (`enrolled-classes-section`).
 - In `ClassDetailPage.tsx`: Clean cohort header with interactive ticket pill (`class-join-code-badge`), `<ScoreRing>` cards for `avg_cis` and `recency_5yr_ratio`, `StudioWindowHeader` (`TỔNG QUAN CHẤT LƯỢNG TRÍCH DẪN` / `CLASS CITATION HEALTH`) inside `cohort-analytics-panel` pairing `<DonutChart>` with `cohort-verdict-breakdown`, animated 4-grade bar histogram (`A / B / C / D`), `<ProportionalBarRow>` ranking of top class issues using `getRuleDisplayName` (no raw `R-*` codes), human-labeled shared flagged citation cards, and `<ScoreRing size={30} />` on completed student submissions.
 
-- [ ] **Step 4: Run Classroom test suites**
+- [x] **Step 4: Run Classroom test suites**
 
 Run: `cd web && npx vitest run src/pages/TeachingAdminVisualStudio.test.tsx src/components/ClassDialogs.test.tsx src/pages/I18nAndHygiene.test.tsx src/pages/ClassroomSandboxAndModalsV370.test.tsx src/__tests__/wave1_2_3_remediation.test.tsx`
 Expected: PASS
@@ -211,21 +211,21 @@ Expected: PASS
 - Consumes: `StudioWindowHeader`, `SlidingFilterPills` from `@/components/ui/studio-visuals`; `DonutChart`, `NumberPopIn`, `TactileToggle`, `IconSwap` from `@/components/ui/transitions`.
 - Produces: Redesigned `AccountManagementPage` (preserving `user-plan-quota-${id}`) and `PromoManagementPage` (preserving `create-promo-btn`, `promo-search-input`, `kpi-*`, `promo-row-${code}`, `promo-toggle-${code}`, `promo-delete-${code}`, and accessible modals).
 
-- [ ] **Step 1: Append failing Accounts & Promo tests in `web/src/pages/TeachingAdminVisualStudio.test.tsx`**
+- [x] **Step 1: Append failing Accounts & Promo tests in `web/src/pages/TeachingAdminVisualStudio.test.tsx`**
 
 Assert `AccountManagementPage` removes `iam_directory.users` & `IAM IDENTITY DIRECTORY`, renders role `DonutChart` + plan distribution bar + clamped `[0, 100]%` quota mini-bar without `NaN` across `undefined`, `0`-limit, over-limit (`60/50`), and admin `Unlimited` quotas (Review Focus #4); assert `PromoManagementPage` removes `billing_engine.promo_codes` & `6-CHAR ISO COUPON STANDARD` and renders `<TactileToggle>` (`role="switch"`) on `promo-toggle-${code}`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd web && npx vitest run src/pages/TeachingAdminVisualStudio.test.tsx`
 Expected: FAIL (`iam_directory.users` and `billing_engine.promo_codes` still rendered)
 
-- [ ] **Step 3: Implement `AccountManagementPage.tsx` & `PromoManagementPage.tsx` redesign**
+- [x] **Step 3: Implement `AccountManagementPage.tsx` & `PromoManagementPage.tsx` redesign**
 
 - In `AccountManagementPage.tsx`: Clean header + **Ecosystem Overview Bar** pairing a Role `<DonutChart>` (*Sinh viên*, *Giảng viên*, *Quản trị*) with `<NumberPopIn />` counters and a Plan Tier stacked bar (*Basic / Pro / Ultra*). Replace native `<Select>` filters with `<SlidingFilterPills>` for Role and Status inside `StudioWindowHeader` (`DANH BẠ TÀI KHOẢN` / `MEMBER DIRECTORY`). Enhance `user-plan-quota-${u.id}` with a clamped proportional quota bar beneath the tier + `usage` label (`Unlimited` / `12/50` / `—`) and avatar initials fallback.
 - In `PromoManagementPage.tsx`: Concise 1-line subtitle, 4 `<NumberPopIn />` KPI cards + active vs paused campaign ratio bar, `StudioWindowHeader` (`CHIẾN DỊCH MÃ GIẢM GIÁ` / `PROMO CAMPAIGNS`), `<SlidingFilterPills>` for Discount Type & Status, perforated ticket-style coupon pills with `<IconSwap>` copy check, color-adaptive redemption progress bars, and `<TactileToggle data-testid="promo-toggle-${promo.code}" />` inline switch.
 
-- [ ] **Step 4: Run Accounts & Promo test suites**
+- [x] **Step 4: Run Accounts & Promo test suites**
 
 Run: `cd web && npx vitest run src/pages/TeachingAdminVisualStudio.test.tsx src/pages/OperationalTelemetryAndLifecycle.test.tsx src/pages/PricingAndBilling.test.tsx`
 Expected: PASS
@@ -243,16 +243,16 @@ Expected: PASS
 - Consumes: `StudioWindowHeader`, `ProportionalBarRow`, `PipelineStageFlow` from `@/components/ui/studio-visuals`; `getHumanVerdictMeta` from `@/lib/teacherGuidance`; `DonutChart`, `ScoreRing`, `NumberPopIn`, `AccordionExpand`, `SymmetricChevron` from `@/components/ui/transitions`.
 - Produces: Redesigned `SystemHealthPage` (preserving `summarizeHealth` and all telemetry `data-testid`s, with low-level engine internals inside a collapsible `AccordionExpand` drawer) and `AuditLogPage` (preserving `AUDIT_PAGE_SIZE` and all audit `data-testid`s, replacing the raw table with a visual badge-transition timeline).
 
-- [ ] **Step 1: Append failing System Health & Audit Log tests in `web/src/pages/TeachingAdminVisualStudio.test.tsx`**
+- [x] **Step 1: Append failing System Health & Audit Log tests in `web/src/pages/TeachingAdminVisualStudio.test.tsx`**
 
 Assert `SystemHealthPage` removes `telemetry_verdict_distribution.json` and `telemetry_upstream_circuits.json`, renders the 3-stage `PipelineStageFlow` diagram (`data-testid="system-pipeline-flow"`), humanizes verdict labels (no raw `suspected_hallucination`), collapses advanced diagnostics (`data-open="false"` by default, toggles to `"true"` on button click), and guards 0-call providers with `'—'` (Review Focus #5); assert `AuditLogPage` removes `immutable_audit_trail.log` and `IMMUTABLE COMPLIANCE LEDGER` and renders human transition badges instead of raw `metadata_error → verified`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd web && npx vitest run src/pages/TeachingAdminVisualStudio.test.tsx`
 Expected: FAIL (`telemetry_verdict_distribution.json` and `immutable_audit_trail.log` still rendered)
 
-- [ ] **Step 3: Implement `SystemHealthPage.tsx` & `AuditLogPage.tsx` redesign**
+- [x] **Step 3: Implement `SystemHealthPage.tsx` & `AuditLogPage.tsx` redesign**
 
 - In `SystemHealthPage.tsx`:
   1. Clean status header (`health-status-pill`, `clear-cache-btn`) + **3-Stage `<PipelineStageFlow data-testid="system-pipeline-flow" />`** (`Đọc & Lưu trữ Tài liệu` ➔ `15+ Nguồn Học thuật` ➔ `Bộ nhớ Tăng tốc`).
@@ -263,7 +263,7 @@ Expected: FAIL (`telemetry_verdict_distribution.json` and `immutable_audit_trail
   1. Clean header + 3-card summary pairing `<NumberPopIn />` (`audit-total-events`, `audit-unique-actors`) with a **Visual Outcome Ratio Bar** (*Duyệt hợp lệ* vs *Giữ cảnh báo*).
   2. `StudioWindowHeader` (`LỊCH SỬ DUYỆT TRÍCH DẪN` / `REVIEW ACTIVITY LOG`) + debounced search input + **Visual Activity Timeline** rendering avatar initials, formatted timestamp, `[Old Human Verdict Pill] ➔ [New Human Verdict Pill]` diagram, reviewer note bubble, and `#verdict_id` deep-link pill (`audit-verdict-link-${e.id}`). Place compact `<span data-testid="audit-page-size">` cleanly in the pagination footer (`audit-pagination`).
 
-- [ ] **Step 4: Run System Health & Audit Log test suites**
+- [x] **Step 4: Run System Health & Audit Log test suites**
 
 Run: `cd web && npx vitest run src/pages/TeachingAdminVisualStudio.test.tsx src/pages/AdminTeacherFlows.test.tsx src/pages/BatchSseAndAdminV370.test.tsx src/pages/OperationalTelemetryAndLifecycle.test.tsx`
 Expected: PASS
@@ -279,11 +279,11 @@ Expected: PASS
 - Consumes: All deliverables from Tasks 1–5.
 - Produces: Zero-warning ESLint, TypeScript, Vitest (`340+` tests), production Vite bundle, and updated `docs/README.md` index.
 
-- [ ] **Step 1: Update `docs/README.md` Section 4 (`plans/`) with links to the new Design Spec & Implementation Plan**
+- [x] **Step 1: Update `docs/README.md` Section 4 (`plans/`) with links to the new Design Spec & Implementation Plan**
 
 Add entry under `## 4. Đặc tả Thiết kế & Kế hoạch Triển khai (plans/)` referencing `2026-11-19-teaching-admin-visual-studio-design.md` and `2026-11-19-teaching-admin-visual-studio.md`.
 
-- [ ] **Step 2: Run full frontend lint, TypeScript check, Vitest suite, and production build**
+- [x] **Step 2: Run full frontend lint, TypeScript check, Vitest suite, and production build**
 
 Run: `cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build`
 Expected: `0` ESLint errors, `0` TypeScript errors, all Vitest suites (`deadCode.test.ts` included) PASS, Vite build succeeds.

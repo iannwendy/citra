@@ -11,6 +11,7 @@ docs/
 ├── reference/               # Quy chuẩn trình bày trích dẫn học thuật (TDTU & 12 chuẩn quốc tế)
 ├── reports/                 # Báo cáo thực nghiệm 120K mẫu, kiểm toán toàn diện (Audit) & tiến độ ĐATN
 ├── plans/                   # Đặc tả thiết kế (Design Specs) & kế hoạch thực thi theo từng giai đoạn
+├── superpowers/             # Đặc tả & kế hoạch đại tu UI/UX Non-Tech theo quy trình đa tác tử (Multi-Agent Triad)
 └── screenshots/             # Ảnh chụp giao diện độ phân giải cao dùng cho README.md
 ```
 
@@ -45,6 +46,7 @@ docs/
 - [**`BAO_CAO_TIEN_DO_TUAN_25_10_01_11.md`**](./reports/BAO_CAO_TIEN_DO_TUAN_25_10_01_11.md) — Báo cáo tiến độ ĐATN giai đoạn `25/10/2026 – 01/11/2026` (`v3.5.0`).
 - [**`DANH_GIA_DO_AN_KTPM_VA_LO_TRINH_2026-11-09.md`**](./reports/DANH_GIA_DO_AN_KTPM_VA_LO_TRINH_2026-11-09.md) — Báo cáo đánh giá tổng thể hiện trạng đồ án Kỹ thuật Phần mềm (`v3.43.18`) và lộ trình hoàn thiện cho Hội đồng bảo vệ.
 - [**`BAO_CAO_TIEN_DO_01_11_15_11.md`**](./reports/BAO_CAO_TIEN_DO_01_11_15_11.md) — Báo cáo tiến độ ĐATN giai đoạn `01/11/2026 – 15/11/2026`.
+- [**`BAO_CAO_TIEN_DO_16_11_20_11.md`**](./reports/BAO_CAO_TIEN_DO_16_11_20_11.md) — Báo cáo tiến độ ĐATN giai đoạn hoàn thiện & tối ưu toàn diện `16/11/2026 – 20/11/2026` (`v3.76.0` → `v3.89.5`: 3-Wave Security Hardening, 4-Pillar 120K Zero-Shortcut Optimization, Visual Action Studio, Non-Tech UI/UX Overhaul & `<251 kB` Bundle Split).
 
 ---
 
@@ -57,8 +59,11 @@ docs/
 - [**`KE_HOACH_THIET_KE_CAI_TIEN_TOAN_DIEN_V3_61.md`**](./plans/KE_HOACH_THIET_KE_CAI_TIEN_TOAN_DIEN_V3_61.md) — Thiết kế kiến trúc & kế hoạch nâng cấp toàn diện `v3.61` (Accuracy `A1–A5` + Operations `B1–B4`).
 - [**`2026-11-14-hybrid-motion-system-design.md`**](./plans/2026-11-14-hybrid-motion-system-design.md) & [**`2026-11-14-hybrid-motion-system.md`**](./plans/2026-11-14-hybrid-motion-system.md) — Đặc tả & kế hoạch triển khai hệ thống chuyển động lai (`transitions.dev` CSS Tokens + `motion` `LazyMotion`).
 - [**`2026-11-15-citra-promo-90s-120fps-design.md`**](./plans/2026-11-15-citra-promo-90s-120fps-design.md) & [**`2026-11-15-citra-promo-90s-120fps.md`**](./plans/2026-11-15-citra-promo-90s-120fps.md) — Đặc tả & kế hoạch sản xuất phim giới thiệu sản phẩm CITRA 90s · 120fps (`marketing/citra-promo`).
+- [**`2026-11-16-full-system-remediation-plan.md`**](./plans/2026-11-16-full-system-remediation-plan.md) — Kế hoạch gia cố toàn diện 3 đợt (`Wave 1–3`: bảo mật Auth/RBAC/IDOR, chống DoS/SSRF, tách biệt cache và đồng bộ sổ điểm lớp học).
+- [**`PHAN_TICH_VA_TOI_UU_UI_UX_TRANG_REPORT.md`**](./plans/PHAN_TICH_VA_TOI_UU_UI_UX_TRANG_REPORT.md) — Kiểm toán chuyên sâu & lộ trình tối ưu hóa UI/UX trang Báo cáo Kiểm chứng (`/verification/report/:id`) cho người dùng phổ thông.
 - [**`2026-11-17-four-pillar-zero-regression-optimization.md`**](./plans/2026-11-17-four-pillar-zero-regression-optimization.md) — Đặc tả & kế hoạch tối ưu hóa 4 trụ cột Neuro-Symbolic Zero-Regression (`Pillar 1–4` + `Option 2A` Novel-Claim Grounding Gate).
 - [**`2026-11-19-teaching-admin-visual-studio-design.md`**](./plans/2026-11-19-teaching-admin-visual-studio-design.md) & [**`2026-11-19-teaching-admin-visual-studio.md`**](./plans/2026-11-19-teaching-admin-visual-studio.md) — Đặc tả & kế hoạch thiết kế lại toàn bộ 6 trang Giảng viên & Quản trị viên theo ngôn ngữ *Visual Action Studio* (duyệt trích dẫn 1 chạm, sơ đồ luồng 3 chặng, biểu đồ SVG & chuyển động 120Hz).
+- [**`superpowers/specs/2026-11-19-citra-ui-ux-overhaul-design.md`**](./superpowers/specs/2026-11-19-citra-ui-ux-overhaul-design.md) & [**`superpowers/plans/2026-11-19-citra-ui-ux-overhaul.md`**](./superpowers/plans/2026-11-19-citra-ui-ux-overhaul.md) — Đặc tả & kế hoạch đại tu toàn diện trải nghiệm Non-Tech *Solva Warm Editorial* 4 Phase / 13 Task (Progressive Disclosure, WCAG AA Sáng/Tối, `/privacy` & `/terms` PDPL 2025, chuẩn hóa token Tailwind v3.4 & tối ưu gói mã nguồn `<251 kB` đến `v3.89.5`).
 
 ---
 

@@ -10,6 +10,11 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-19-citra-ui-ux-overhaul-design.md`
 
+> **Post-Release Evolution Note (`v3.89.4` – `v3.89.5`, `2026-11-20`):**
+> - All 13 tasks (`Task 0.1` → `Task 3.3`) were completed, reviewed (`10/10` sign-off), merged (`b41f53a`, `v3.89.3`), and deployed to `https://citra.io.vn`.
+> - In `v3.89.4` (`65e98cd`), per owner UX/aesthetic direction, the frontend `<GuestInstantChecker />` (`#try-instant`) introduced in Task 3.1 was removed from `LandingPage.tsx` to preserve clean Solva editorial flow (`SolvaHeroSection` → `SolvaFilmSection`; secondary CTAs point to `#interactive-demo`), while keeping the rate-limited backend endpoint `POST /api/essays/sandbox/public-verify` (`tests/test_public_guest_sandbox.py`) intact.
+> - In `v3.89.5` (`ccaeedf`), authenticated workspace Tailwind v3.4 token hygiene (`232` fixes + static guard `web/src/__tests__/tailwindV3AndBundleHygiene.test.ts`), shell-matched skeletons, and acyclic `<251 kB` Rollup bundle splitting (`index-*.js`: `788.24 kB` → `228.42 kB`) were completed (`472` Vitest tests across `62` files, `20` Playwright E2E suites).
+
 ---
 
 ## Global Constraints

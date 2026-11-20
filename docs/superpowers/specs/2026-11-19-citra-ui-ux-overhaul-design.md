@@ -1,8 +1,12 @@
 # CITRA (`citra.io.vn`) World-Class UI/UX & Non-Tech Experience Overhaul — Design Specification
 
 **Date:** 2026-11-19  
-**Product:** CITRA (`essay-integrity-checker` v3.83.0)  
+**Product:** CITRA (`essay-integrity-checker` v3.83.0 → v3.89.5)  
 **Target Users:** Non-technical academic users (undergraduate/graduate students, lecturers across Humanities/Economics/Law/STEM, academic editors) alongside technical evaluators and university administrators.
+
+> **Post-Release Evolution Note (`v3.89.4` – `v3.89.5`, `2026-11-20`):**
+> - In `v3.89.4` (`65e98cd`), per direct owner aesthetic review, `<GuestInstantChecker />` (`#try-instant` / *"Instant Check · No Account Required"*) was removed from `LandingPage.tsx` so the Solva editorial flow transitions seamlessly from `SolvaHeroSection` into `SolvaFilmSection`, with secondary Hero & `404` CTAs routing to `#interactive-demo`. The rate-limited backend endpoint (`POST /api/essays/sandbox/public-verify`) and its `pytest` suite (`tests/test_public_guest_sandbox.py`) remain intact.
+> - In `v3.89.5` (`ccaeedf`), all `232` residual Tailwind v4 / invalid-scale tokens across `39` workspace files were normalized to Tailwind CSS v3.4, shell-matched skeletons (`WorkspaceShellSkeleton`, `AuthPageSkeleton`, `EditorialPageSkeleton`) + `.dark` shadow tokens were added, and acyclic code-splitting reduced `index-*.js` by `-71.0%` (`788.24 kB` → `228.42 kB`, all `60` JS chunks `<= 251.00 kB`).
 
 ---
 
