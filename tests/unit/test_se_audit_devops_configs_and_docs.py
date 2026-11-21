@@ -384,6 +384,18 @@ class TestOps10ToOps14ConfigsDocsAndThesisParity:
 
     def test_docs_architecture_and_reports_have_zero_machine_specific_paths(self) -> None:
         md_link_re = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+        tracked_files: set[str] | None = None
+        if (REPO_ROOT / ".git").exists():
+            git_ls = subprocess.run(
+                ["git", "ls-files"],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if git_ls.returncode == 0 and git_ls.stdout.strip():
+                tracked_files = set(git_ls.stdout.splitlines())
+
         for subdir in ("docs/architecture", "docs/reports"):
             dir_path = REPO_ROOT / subdir
             for md_file in sorted(dir_path.glob("*.md")):
@@ -407,6 +419,15 @@ class TestOps10ToOps14ConfigsDocsAndThesisParity:
                     assert resolved.exists(), (
                         f"Broken relative link in {md_file.relative_to(REPO_ROOT)}: {target}"
                     )
+                    if tracked_files is not None and resolved.is_relative_to(REPO_ROOT):
+                        rel_repo = resolved.relative_to(REPO_ROOT).as_posix()
+                        is_tracked = rel_repo in tracked_files or any(
+                            f.startswith(rel_repo + "/") for f in tracked_files
+                        )
+                        assert is_tracked, (
+                            f"Untracked/gitignored relative link in {md_file.relative_to(REPO_ROOT)} "
+                            f"(will fail in clean CI checkout): {target} -> {rel_repo}"
+                        )
 
         # OPS-12 specific doc fixes
         teacher_doc = (REPO_ROOT / "docs" / "architecture" / "TEACHER_SYSTEM.md").read_text(

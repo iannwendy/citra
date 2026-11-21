@@ -255,6 +255,38 @@ def test_sandbox_verify_respects_language_for_layer1_notes(clean_db):
         assert "Kiểm tra trực tiếp danh mục tham khảo" in vi_note
 
 
+def test_lifespan_preserves_sqlalchemy21_in_memory_sqlite_engine() -> None:
+    """SQLAlchemy 2.1 normalizes `sqlite:///:memory:` to `sqlite://` (`database=None`);
+    `_is_memory_or_static_engine` must still recognize it so `with TestClient(app):`
+    never disposes the StaticPool in-memory test database between requests."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from sqlalchemy.pool import StaticPool
+
+    from integrity_checker.api.main import _is_memory_or_static_engine
+
+    class _Sa21Url:
+        database: str | None = None
+
+        def __str__(self) -> str:
+            return "sqlite://"
+
+    sa21_url = _Sa21Url()
+    sa21_mem_engine = SimpleNamespace(pool=object(), url="sqlite://")
+    sa21_url_obj_engine = SimpleNamespace(pool=object(), url=sa21_url)
+    create_engine_mem = SimpleNamespace(
+        pool=StaticPool(lambda: None), url="sqlite:///custom"
+    )
+    file_engine = MagicMock()
+    file_engine.url = "sqlite:///tmp/app_file.db"
+
+    assert _is_memory_or_static_engine(sa21_mem_engine) is True
+    assert _is_memory_or_static_engine(sa21_url_obj_engine) is True
+    assert _is_memory_or_static_engine(create_engine_mem) is True
+    assert _is_memory_or_static_engine(file_engine) is False
+
+
 # ---------------------------------------------------------------------------
 # Fixture
 # ---------------------------------------------------------------------------

@@ -199,6 +199,20 @@ def _startup_background_maintenance(stop_event: threading.Event) -> None:
         logger.warning(f"Startup orphan job recovery failed: {exc}")
 
 
+def _is_memory_or_static_engine(eng: Any) -> bool:
+    """Return True if *eng* uses StaticPool or an in-memory SQLite URL (including SQLAlchemy 2.1 `sqlite://`)."""
+    from sqlalchemy.pool import StaticPool
+
+    if isinstance(getattr(eng, "pool", None), StaticPool):
+        return True
+    url_obj = getattr(eng, "url", None)
+    url_str = str(url_obj or "").strip()
+    if url_str in ("sqlite://", "sqlite:///", "sqlite:///:memory:") or ":memory:" in url_str:
+        return True
+    db_attr = getattr(url_obj, "database", "__non_memory__")
+    return bool(url_str.startswith("sqlite") and db_attr in (None, "", ":memory:"))
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Ensure DB is initialized on startup and background/pooled resources are disposed on shutdown."""
@@ -221,7 +235,7 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
         if maint_thread is not None and maint_thread.is_alive():
             maint_thread.join(timeout=2.0)
         eng = session_mod._engine
-        if eng is not None and ":memory:" not in str(getattr(eng, "url", "")):
+        if eng is not None and not _is_memory_or_static_engine(eng):
             eng.dispose()
 
 

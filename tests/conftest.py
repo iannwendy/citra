@@ -112,6 +112,12 @@ def _reset_runtime_singletons() -> None:
     if deps_mod is not None and hasattr(deps_mod, "reset_pipeline"):
         deps_mod.reset_pipeline()
 
+    main_mod = sys.modules.get("integrity_checker.api.main")
+    if main_mod is not None:
+        app_inst = getattr(main_mod, "_app_instance", None)
+        if app_inst is not None and hasattr(app_inst, "dependency_overrides"):
+            app_inst.dependency_overrides.clear()
+
     health_mod = sys.modules.get("integrity_checker.api.routes.health")
     if health_mod is not None and hasattr(health_mod, "_invalidate_grobid_health_cache"):
         health_mod._invalidate_grobid_health_cache()
