@@ -723,6 +723,8 @@ def test_app_startup_orphan_recovery_gating_and_worker_cli_entrypoint(
 ) -> None:
     """create_app() runs startup orphan recovery only when not test runtime and not web_only,
     and worker.main() executes cleanly with --max-iterations."""
+    from fastapi.testclient import TestClient
+
     from integrity_checker.api.main import create_app
     from integrity_checker.database import LocalDatabase
     from integrity_checker.matching.semantic import SemanticMatcher
@@ -748,17 +750,19 @@ def test_app_startup_orphan_recovery_gating_and_worker_cli_entrypoint(
         "integrity_checker.api.job_recovery.recover_orphaned_essay_jobs", _fake_recover
     )
 
-    # 1) web_only mode MUST NOT spawn orphan recovery
+    # 1) web_only mode MUST NOT spawn orphan recovery during ASGI lifespan
     monkeypatch.setenv("CITRA_WORKER_MODE", "web_only")
-    create_app()
-    assert not recovery_event.wait(timeout=0.15)
-    assert len(recovery_calls) == 0
+    with TestClient(create_app()):
+        assert not recovery_event.wait(timeout=0.15)
+        assert len(recovery_calls) == 0
 
-    # 2) inline mode (non-test runtime) MUST invoke recover_orphaned_essay_jobs(get_pipeline)
+    # 2) inline mode (non-test runtime) MUST invoke recover_orphaned_essay_jobs(get_pipeline) inside ASGI lifespan
     monkeypatch.setenv("CITRA_WORKER_MODE", "inline")
-    create_app()
-    assert recovery_event.wait(timeout=3.0)
-    assert len(recovery_calls) == 1
+    app_inline = create_app()
+    assert len(recovery_calls) == 0
+    with TestClient(app_inline):
+        assert recovery_event.wait(timeout=3.0)
+        assert len(recovery_calls) == 1
 
     # 3) worker CLI main() runs cleanly with bounded --max-iterations
     engine = create_engine(f"sqlite:///{tmp_path / 'cli_worker.db'}")

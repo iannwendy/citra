@@ -3,7 +3,7 @@
 
 \section{Tổng kết kết quả đạt được so với mục tiêu đề ra}
 
-Đồ án tốt nghiệp này đã thiết kế, hiện thực hóa và đánh giá thực nghiệm \textbf{CITRA} (\textit{Essay Integrity Checker v3.89.5}) --- một nền tảng phần mềm kết hợp nơ-ron -- ký hiệu (neuro-symbolic) có khả năng giải thích, phục vụ chấm điểm tự động tính toàn vẹn trích dẫn (Citation Integrity Scoring -- CIS), phát hiện tài liệu tham khảo ngụy tạo và chuẩn hóa danh mục tài liệu tham khảo. Bảng~\ref{tab:obj-summary} đối chiếu trực tiếp các sản phẩm phần mềm đã hoàn thiện cùng kết quả thực nghiệm đạt được với sáu mục tiêu nghiên cứu đề ra tại Mục~\ref{sec:objectives}.
+Đồ án tốt nghiệp này đã thiết kế, hiện thực hóa và đánh giá thực nghiệm \textbf{CITRA} (\textit{Essay Integrity Checker v3.90.1}) --- một nền tảng phần mềm kết hợp nơ-ron -- ký hiệu (neuro-symbolic) có khả năng giải thích, phục vụ chấm điểm tự động tính toàn vẹn trích dẫn (Citation Integrity Scoring -- CIS), phát hiện tài liệu tham khảo ngụy tạo và chuẩn hóa danh mục tài liệu tham khảo. Bảng~\ref{tab:obj-summary} đối chiếu trực tiếp các sản phẩm phần mềm đã hoàn thiện cùng kết quả thực nghiệm đạt được với sáu mục tiêu nghiên cứu đề ra tại Mục~\ref{sec:objectives}.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|C{0.14}|L{0.32}|L{0.54}|}
@@ -30,7 +30,7 @@
 \hline
 \textbf{OBJ-4} & Chấm điểm CIS minh bạch và sửa lỗi tự động & Thang chấm CIS năm thành phần (độ ổn định thứ hạng $\rho = 0.9987$) đi kèm tính năng tự động chuẩn hóa và sửa lỗi tài liệu tham khảo theo chuẩn APA, IEEE, TDTU, BibTeX, RIS và tệp \texttt{.docx}. \\
 \hline
-\textbf{OBJ-5} & Nền tảng web phân quyền bảo mật & Hệ thống FastAPI đóng gói bằng container (15 bảng ORM, 12 bản di trú lược đồ, SSE, bảo vệ RBAC/IDOR, chống SSRF bằng ghim IP) và ứng dụng đơn trang React 18.3 (gói khởi tạo $228.42\text{\,kB}$). \\
+\textbf{OBJ-5} & Nền tảng web phân quyền bảo mật & Hệ thống FastAPI đóng gói bằng container (15 bảng ORM, 13 bản di trú lược đồ (\texttt{0001}--\texttt{0013}), SSE, bảo vệ RBAC/IDOR, chống SSRF bằng ghim IP) và ứng dụng đơn trang React 18.3 (gói khởi tạo $228.42\text{\,kB}$). \\
 \hline
 \textbf{OBJ-6} & Đánh giá thực nghiệm quy mô lớn chống rò rỉ dữ liệu & Độ chính xác trong phân phối (ID) đạt $99.02\%$ ($N=18\text{K}$), ngoài phân phối (OOD) đạt $99.75\%$ ($N=2.4\text{K}$), đánh giá đầu-cuối (E2E) trên 6 lĩnh vực đạt $100\%$ ($120/120$) và chịu tải đồng thời $50/50$ phiên. \\
 \hline
@@ -42,7 +42,7 @@ Hình~\ref{fig:verdict-paths} tổng hợp cơ chế bảo vệ kiến trúc c�
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth,keepaspectratio]{picture/figures/fig6_1_verdict_paths.png}
-    \caption[Cây quyết định nơ-ron -- ký hiệu có rào chắn phân tách bác bỏ và từ chối phán quyết]{Cây quyết định nơ-ron -- ký hiệu có rào chắn bảo vệ trong CITRA (\texttt{v3.89.5}) giúp phân tách rạch ròi giữa kết luận bác bỏ có bằng chứng (\texttt{suspected\_hallucination}) và cơ chế từ chối phán quyết có truy vết nguồn gốc (\texttt{unresolved}).}
+    \caption[Cây quyết định nơ-ron -- ký hiệu có rào chắn phân tách bác bỏ và từ chối phán quyết]{Cây quyết định nơ-ron -- ký hiệu có rào chắn bảo vệ trong CITRA (\texttt{v3.90.1}) giúp phân tách rạch ròi giữa kết luận bác bỏ có bằng chứng (\texttt{suspected\_hallucination}) và cơ chế từ chối phán quyết có truy vết nguồn gốc (\texttt{unresolved}).}
     \label{fig:verdict-paths}
 \end{figure}
 
@@ -58,7 +58,7 @@ Ba bài học thực nghiệm quan trọng được rút ra từ chuỗi thí ng
 \section{Hạn chế của hệ thống}
 \label{sec:limitations}
 
-Mặc dù đạt hiệu năng thực nghiệm ấn tượng, phiên bản \texttt{3.89.5} hiện vẫn tồn tại bốn hạn chế kỹ thuật cụ thể:
+Mặc dù đạt hiệu năng thực nghiệm ấn tượng, phiên bản \texttt{3.90.1} hiện vẫn tồn tại bốn hạn chế kỹ thuật cụ thể:
 \begin{itemize}
     \item \textbf{L1 (Điểm mù đối chứng luận điểm trên toàn văn có thu phí):} Cơ chế đối sánh ngữ nghĩa hiện tại so khớp câu trích dẫn trong bài với tiêu đề và phần tóm tắt mở (abstract). Khi sinh viên trích dẫn một hình vẽ, định lý hoặc đoạn thảo luận chi tiết nằm sâu bên trong bài báo đóng phí truy cập mà phần tóm tắt không đề cập tới, \textbf{CITRA} chưa thể kiểm chứng quan hệ suy diễn ngữ nghĩa ở cấp độ toàn văn.
     \item \textbf{L2 (Độ lệch lĩnh vực trong kho dữ liệu ngoại tuyến):} Do $98.43\%$ dữ liệu trong \texttt{local\_papers.db} bắt nguồn từ ACL Anthology và kho bài báo Khoa học Máy tính trên arXiv, các môi trường triển khai cô lập hoàn toàn không có kết nối Internet sẽ bị giảm độ phủ truy xuất Tầng 0 (Tier-0) đối với các bài báo thuộc lĩnh vực y sinh, khoa học xã hội -- nhân văn và các tạp chí chuyên ngành xuất bản trong nước tại Việt Nam.

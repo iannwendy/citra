@@ -3,7 +3,7 @@
 
 \section{Thiết kế Thực nghiệm và Môi trường Kiểm định}
 
-Tuân thủ các chuẩn mực đánh giá trong Kỹ thuật Phần mềm Thực nghiệm~\cite{wohlin2012experimentation}, chương này đánh giá toàn diện hệ thống \textbf{CITRA} (\texttt{v3.89.5}) thông qua các bộ kiểm thử tự động ở mức đơn vị, tích hợp và trình duyệt, đối chiếu truy vết yêu cầu, cùng các bài đo kiểm định lượng có kiểm soát xoay quanh năm Câu hỏi Nghiên cứu (\textbf{RQ1}--\textbf{RQ5}).
+Tuân thủ các chuẩn mực đánh giá trong Kỹ thuật Phần mềm Thực nghiệm~\cite{wohlin2012experimentation}, chương này đánh giá toàn diện hệ thống \textbf{CITRA} (\texttt{v3.90.1}) thông qua các bộ kiểm thử tự động ở mức đơn vị, tích hợp và trình duyệt, đối chiếu truy vết yêu cầu, cùng các bài đo kiểm định lượng có kiểm soát xoay quanh năm Câu hỏi Nghiên cứu (\textbf{RQ1}--\textbf{RQ5}).
 
 \subsection{Các câu hỏi nghiên cứu}
 
@@ -17,11 +17,11 @@ Tuân thủ các chuẩn mực đánh giá trong Kỹ thuật Phần mềm Thự
 
 \subsection{Các bộ kiểm thử tự động và Ma trận truy vết yêu cầu}
 
-Quy trình kiểm định phần mềm bao phủ ba tầng kiểm thử tự động được tổng hợp tại Bảng~\ref{tab:test-suites}: 2,197 ca kiểm thử đơn vị và tích hợp \texttt{pytest} vượt qua ở phía backend (trên tổng số 2,203 ca, gồm 6 ca bỏ qua theo điều kiện môi trường và 0 ca thất bại), 472 ca kiểm thử \texttt{Vitest} vượt qua trên 62 bộ kiểm thử frontend, cùng 20 bộ đặc tả kiểm thử đầu-cuối trên trình duyệt bằng \texttt{Playwright} trải rộng trên khung nhìn máy tính để bàn, máy tính bảng và thiết bị di động. Bên cạnh đó, bài kiểm thử truy hồi ngoại tuyến trên 500 truy vấn phân tầng thuộc ACL Anthology đạt độ phủ (recall) $99.80\%$ ($499/500$) và độ chuẩn xác (precision) $100.0\%$ với độ trễ trung bình $87.62\text{\,ms}$. Bảng~\ref{tab:rtm} trình bày Ma trận truy vết yêu cầu (RTM) hai chiều, liên kết trực tiếp các đặc tả chức năng và phi chức năng ở Chương~\ref{chap:overview} với các gói mã nguồn hiện thực và bằng chứng kiểm định tương ứng.
+Quy trình kiểm định phần mềm bao phủ ba tầng kiểm thử tự động được tổng hợp tại Bảng~\ref{tab:test-suites}: 2,320+ ca kiểm thử đơn vị và tích hợp \texttt{pytest} vượt qua ở phía backend (gồm các ca bỏ qua có điều kiện môi trường mạng trực tiếp và 0 ca thất bại), 487+ ca kiểm thử \texttt{Vitest} vượt qua trên 63 bộ kiểm thử frontend, cùng 20 bộ đặc tả kiểm thử đầu-cuối trên trình duyệt bằng \texttt{Playwright} trải rộng trên khung nhìn máy tính để bàn, máy tính bảng và thiết bị di động. Bên cạnh đó, bài kiểm thử truy hồi ngoại tuyến trên 500 truy vấn phân tầng thuộc ACL Anthology đạt độ phủ (recall) $99.80\%$ ($499/500$) và độ chuẩn xác (precision) $100.0\%$ với độ trễ trung bình $87.62\text{\,ms}$. Bảng~\ref{tab:rtm} trình bày Ma trận truy vết yêu cầu (RTM) hai chiều, liên kết trực tiếp các đặc tả chức năng và phi chức năng ở Chương~\ref{chap:overview} với các gói mã nguồn hiện thực và bằng chứng kiểm định tương ứng.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.23}|L{0.25}|L{0.52}|}
-\caption{Các bộ kiểm thử phần mềm tự động được thực thi trên phiên bản \texttt{3.89.5}.}\label{tab:test-suites}\\
+\caption{Các bộ kiểm thử phần mềm tự động được thực thi trên phiên bản \texttt{3.90.1}.}\label{tab:test-suites}\\
 \hline
 \textbf{Tầng kiểm định} & \textbf{Kết quả thực thi} & \textbf{Phạm vi phân hệ được kiểm định} \\
 \hline
@@ -36,9 +36,9 @@ Quy trình kiểm định phần mềm bao phủ ba tầng kiểm thử tự đ�
 \endfoot
 \hline
 \endlastfoot
-Backend (\texttt{pytest}) & 2,197 đạt / 2,203 tổng (0 lỗi) & Trích xuất đa định dạng, 12 chuẩn trích dẫn, \texttt{VNLegal\allowbreak Verifier}, bộ liên kết 7 phương pháp, FTS5 + 15 API, kiểm tra URL/HTML chống SSRF, 68 luật ký hiệu, hiệu chỉnh Platt, điểm CIS, RBAC/IDOR, di trú CSDL \texttt{0001}--\texttt{0012} và phục hồi sau sự cố. \\
+Backend (\texttt{pytest}) & 2,320+ đạt (0 lỗi) & Trích xuất đa định dạng, 12 chuẩn trích dẫn, \texttt{VNLegal\allowbreak Verifier}, bộ liên kết 7 phương pháp, FTS5 + 15 API, kiểm tra URL/HTML chống SSRF, 68 luật ký hiệu, hiệu chỉnh Platt, điểm CIS, RBAC/IDOR, di trú CSDL \texttt{0001}--\texttt{0013} và phục hồi sau sự cố. \\
 \hline
-Frontend (\texttt{Vitest}) & 472 đạt (62 bộ, 0 lỗi) & Luồng xác thực Auth/OAuth, ngăn kéo hiển thị phân lớp, 6 chế độ xem báo cáo chẩn đoán, đồ thị DAG mạng trích dẫn, hộp thoại khắc phục lỗi, giám sát Lớp học/Quản trị và giới hạn gói mã $<251\text{\,kB}$. \\
+Frontend (\texttt{Vitest}) & 487+ đạt (63 bộ, 0 lỗi) & Luồng xác thực Auth/OAuth, ngăn kéo hiển thị phân lớp, 6 chế độ xem báo cáo chẩn đoán, đồ thị DAG mạng trích dẫn, hộp thoại khắc phục lỗi, giám sát Lớp học/Quản trị và giới hạn gói mã $<251\text{\,kB}$. \\
 \hline
 Trình duyệt E2E (\texttt{Play\allowbreak wright}) & 20 bộ đặc tả (132+ kịch bản) & Không tràn ngang trên 5 khung nhìn $\times$ Sáng/Tối $\times$ EN/VI, tải tệp qua SSE, kiểm tra chia đôi màn hình, giảng viên ghi đè kết quả và phục hồi lỗi 404/ngoại lệ. \\
 \hline
@@ -327,7 +327,7 @@ Tỷ lệ độ tin cậy cao ($\hat{p} \ge 0.50$) & 91.22\% & \textbf{99.89\%} 
 \endlastfoot
 Kho PDF pháp luật VN (Cơ sở trước v3.80) & 30 & 27 / 30 (90.0\%) & 164 (15 Luật) & 109 / 235 (46.4\%) \\
 \hline
-Kho PDF pháp luật VN (\textbf{CITRA v3.89.5}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Luật)} & \textbf{403 / 416 (96.9\%)} \\
+Kho PDF pháp luật VN (\textbf{CITRA v3.90.1}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Luật)} & \textbf{403 / 416 (96.9\%)} \\
 \hline
 Bộ chẩn đoán 12 chuẩn ($12 \times 5$) & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDF (100\%)} \\
 \hline
@@ -370,7 +370,7 @@ Báo cáo đồ án cài lỗi kiểm thử (42\,tr.) & APA & 6 & 91.40 & 3 & 1 
 \end{longtable}
 }
 
-Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} minh họa trực tiếp các giao diện chẩn đoán của \textbf{CITRA} (\texttt{v3.89.5}) khi chạy trên bản thảo báo cáo đồ án tốt nghiệp Kỹ thuật Phần mềm có cài lỗi kiểm thử (gồm 6 mục tài liệu tham khảo và 28 lượt trích dẫn trong bài). Hình~\ref{fig:demo-debugger} đặt cạnh nhau cảnh báo ảo giác do DOI lai ghép (bên trái) và bảng đối chiếu trực quan sai lệch năm xuất bản (\texttt{2021} so với chuẩn gốc \texttt{2019}, bên phải). Hình~\ref{fig:demo-trace-context} hiển thị vết suy diễn logic 5 bước tích hợp gióng hàng khái niệm song ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} qua mô hình ONNX INT8 (bên trái) cùng luồng ngữ cảnh trích dẫn trực tiếp trong Trình kiểm tra tài liệu (bên phải). Hình~\ref{fig:demo-consistency} minh họa giao diện Kiểm tra tính nhất quán hai chiều trong bài viết, giúp tách riêng các ký hiệu trích dẫn mồ côi trong văn bản và các tài liệu nằm trong danh mục nhưng chưa từng được trích dẫn.
+Các Hình~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} minh họa trực tiếp các giao diện chẩn đoán của \textbf{CITRA} (\texttt{v3.90.1}) khi chạy trên bản thảo báo cáo đồ án tốt nghiệp Kỹ thuật Phần mềm có cài lỗi kiểm thử (gồm 6 mục tài liệu tham khảo và 28 lượt trích dẫn trong bài). Hình~\ref{fig:demo-debugger} đặt cạnh nhau cảnh báo ảo giác do DOI lai ghép (bên trái) và bảng đối chiếu trực quan sai lệch năm xuất bản (\texttt{2021} so với chuẩn gốc \texttt{2019}, bên phải). Hình~\ref{fig:demo-trace-context} hiển thị vết suy diễn logic 5 bước tích hợp gióng hàng khái niệm song ngữ \texttt{VI}$\leftrightarrow$\texttt{EN} qua mô hình ONNX INT8 (bên trái) cùng luồng ngữ cảnh trích dẫn trực tiếp trong Trình kiểm tra tài liệu (bên phải). Hình~\ref{fig:demo-consistency} minh họa giao diện Kiểm tra tính nhất quán hai chiều trong bài viết, giúp tách riêng các ký hiệu trích dẫn mồ côi trong văn bản và các tài liệu nằm trong danh mục nhưng chưa từng được trích dẫn.
 
 \begin{figure}[H]
     \centering
@@ -521,4 +521,4 @@ Tính hợp lệ khái niệm xem xét liệu các độ đo đánh giá có ph�
 
 \section{Tóm tắt chương}
 
-Chương này đã kiểm định toàn diện hệ thống \textbf{CITRA} (\texttt{v3.89.5}) thông qua hơn 2,689 ca kiểm thử tự động, Ma trận truy vết yêu cầu đầy đủ và năm câu hỏi nghiên cứu thực nghiệm, chứng minh độ chính xác trong phân phối đạt $99.02\%$ ($\text{ECE} = 0.0395$), độ chính xác ký hiệu ngoài phân phối (OOD) đạt $99.75\%$, độ chính xác đầu-cuối trên bộ chuẩn vàng sáu lĩnh vực đạt $100.00\%$, cùng khả năng chịu tải đột biến 50 người dùng đồng thời không phát sinh lỗi. Chương~\ref{chap:conclusion} sẽ tổng kết các kết quả đạt được, những hạn chế hiện tại và hướng phát triển tiếp theo của đồ án tốt nghiệp.
+Chương này đã kiểm định toàn diện hệ thống \textbf{CITRA} (\texttt{v3.90.1}) thông qua 2,827+ kiểm tra tự động, Ma trận truy vết yêu cầu đầy đủ và năm câu hỏi nghiên cứu thực nghiệm, chứng minh độ chính xác trong phân phối đạt $99.02\%$ ($\text{ECE} = 0.0395$), độ chính xác ký hiệu ngoài phân phối (OOD) đạt $99.75\%$, độ chính xác đầu-cuối trên bộ chuẩn vàng sáu lĩnh vực đạt $100.00\%$, cùng khả năng chịu tải đột biến 50 người dùng đồng thời không phát sinh lỗi. Chương~\ref{chap:conclusion} sẽ tổng kết các kết quả đạt được, những hạn chế hiện tại và hướng phát triển tiếp theo của đồ án tốt nghiệp.

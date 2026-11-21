@@ -36,6 +36,7 @@ import { api, type BillingCycle, type PlanTier } from '@/api/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRole } from '@/hooks/useRole';
 import { getQuotaView } from '@/lib/quotaDisplay';
+import { toSafeExternalHref } from '@/lib/utils';
 import { ThemeToggle } from '@/contexts/ThemeContext';
 import {
   CardHoverTilt,
@@ -344,10 +345,16 @@ export function PricingPage() {
         plan_tier: targetTier,
         billing_cycle: billingCycle,
       });
-      if (session.checkout_url.startsWith('http')) {
-        window.location.href = session.checkout_url;
-      } else {
+      const safeCheckoutUrl = toSafeExternalHref(session.checkout_url);
+      if (safeCheckoutUrl) {
+        window.location.href = safeCheckoutUrl;
+      } else if (
+        session.checkout_url.startsWith('/') &&
+        !session.checkout_url.startsWith('//')
+      ) {
         navigate(session.checkout_url);
+      } else {
+        throw new Error('Invalid checkout redirect URL');
       }
     } catch (err) {
       setError(

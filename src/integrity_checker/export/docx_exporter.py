@@ -152,8 +152,17 @@ def _docx_xml_is_safe(docx_path: str | os.PathLike[str] | IO[bytes]) -> bool:
             xml_part_names: set[str] = set()
             for elem in ct_root.iter():
                 local_tag = elem.tag.rsplit("}", 1)[-1].lower() if isinstance(elem.tag, str) else ""
-                ctype = (elem.attrib.get("ContentType") or "").lower()
-                if "xml" not in ctype:
+                ctype_base = (elem.attrib.get("ContentType") or "").split(";", 1)[0].strip().lower()
+                is_xml_ctype = (
+                    ctype_base
+                    in (
+                        "application/xml",
+                        "text/xml",
+                        "application/vnd.openxmlformats-officedocument.vmldrawing",
+                    )
+                    or ctype_base.endswith("+xml")
+                )
+                if not is_xml_ctype:
                     continue
                 if local_tag == "default":
                     ext = (elem.attrib.get("Extension") or "").strip().lstrip(".").lower()

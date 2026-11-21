@@ -26,6 +26,7 @@ import {
 import type { Verdict } from '@/api/client';
 import { useTheme } from '@/contexts/ThemeContext';
 import { OverrideControls } from '../OverrideControls';
+import { toSafeDoiHref, toSafeExternalHref } from '../../lib/utils';
 import { DirectionalStageSlide, useSlidingPill } from '@/components/ui/transitions';
 import {
   getCitationMarkerLabel,
@@ -364,13 +365,7 @@ export function InteractiveDecisionFlowBoard({
       const bestRec = matchedRecords[0];
       if (bestRec) {
         const rawDoi = bestRec.doi?.trim();
-        externalUrl =
-          bestRec.url ||
-          (rawDoi
-            ? rawDoi.startsWith('http')
-              ? rawDoi
-              : `https://doi.org/${rawDoi.replace(/^doi:\s*/i, '')}`
-            : null);
+        externalUrl = toSafeExternalHref(bestRec.url) ?? toSafeDoiHref(rawDoi);
       }
 
       if (cluster.key === 'semantic' && hasSemanticHit) {
@@ -437,7 +432,9 @@ export function InteractiveDecisionFlowBoard({
               : 'The cited web link responds normally with valid page metadata.';
         if (!externalUrl) {
           const rawUrlMatch = verdict.citation_raw.match(/\bhttps?:\/\/[^\s<>")'\]]+/i);
-          externalUrl = verdict.archive_url || (rawUrlMatch ? rawUrlMatch[0] : null);
+          externalUrl =
+            toSafeExternalHref(verdict.archive_url) ??
+            toSafeExternalHref(rawUrlMatch?.[0]);
         }
       } else if (isMatched && bestRec) {
         if (isLegal && cluster.key === 'vnlegal') {
@@ -940,6 +937,8 @@ export function InteractiveDecisionFlowBoard({
     primaryTone,
     primaryExternalUrl,
   ]);
+
+  const safeStoryUrl = toSafeExternalHref(activeStory.url);
 
   // Quick Field Check Chips in overview/step-3 mode
   const hubFieldPills = useMemo(() => {
@@ -2155,9 +2154,9 @@ export function InteractiveDecisionFlowBoard({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {activeStory.url && /^https?:\/\//i.test(activeStory.url) && (
+            {safeStoryUrl ? (
               <a
-                href={activeStory.url}
+                href={safeStoryUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors"
@@ -2166,7 +2165,11 @@ export function InteractiveDecisionFlowBoard({
                 <span>{isVi ? 'Mở nguồn gốc' : 'Open Source'}</span>
                 <ExternalLink className="h-3 w-3" />
               </a>
-            )}
+            ) : activeStory.url ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500">
+                {activeStory.url}
+              </span>
+            ) : null}
             {onOverride && (
               <OverrideControls
                 verdict={verdict}

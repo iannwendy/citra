@@ -8,8 +8,8 @@ Engineering reference and architectural guide for AI coding assistants and contr
 
 **CITRA (`SourceLogic`)** is an explainable **Neuro-Symbolic Citation & Source Integrity Verification Platform** for academic manuscripts, theses, and research papers.
 
-- **Version:** v3.90.0 (15+ Scholarly & Technical APIs, Multilingual ONNX INT8, 120K Zero-Shortcut Benchmark, 2.4K OOD Guardrail Proof, Solva Warm Editorial Non-Tech UX Overhaul, Visual Action Studio & `<251 kB` Code-Split Bundle — 2026-11-21)
-- **Unit, Integration & E2E Tests:** `2,320 backend passed (2,330 suite) · 487 frontend Vitest passed (63 files) · 20 Playwright E2E suites, 0 failed`
+- **Version:** v3.90.1 (15+ Scholarly & Technical APIs, Multilingual ONNX INT8, 120K Zero-Shortcut Benchmark, 2.4K OOD Guardrail Proof, Solva Warm Editorial Non-Tech UX Overhaul, Visual Action Studio & `<251 kB` Code-Split Bundle — 2026-11-21)
+- **Unit, Integration & E2E Tests:** `2,325 backend passed (2,335 suite) · 488 frontend Vitest passed (63 files) · 20 Playwright E2E suites, 0 failed`
 - **Role-Based Web Workspace:** Student / Researcher (`Workspace`), Teacher (`Classroom`), Administrator (`Control`)
 - **Decision-Support Principle:** All outputs are strictly decision-support signals for academic reviewers; the system never automatically concludes academic misconduct.
 
@@ -34,11 +34,11 @@ essay-integrity-checker/
 │   ├── pipeline/             # IntegrityPipeline end-to-end async orchestrator & report cache
 │   ├── retrieval/            # Domain-routed 15+ scholarly/technical APIs + SSRF-safe HTML/Wayback LinkValidator
 │   └── worker.py             # Standalone background verification worker process
-├── web/                      # React 18 + TypeScript + Vite + Tailwind CSS v3.4 frontend (487 Vitest tests / 63 files, 20 Playwright E2E suites)
+├── web/                      # React 18 + TypeScript + Vite + Tailwind CSS v3.4 frontend (488 Vitest tests / 63 files, 20 Playwright E2E suites)
 ├── scripts/                  # Corpus ingestion, 120K Neuro-Symbolic training, NFR benchmarks & maintenance utilities
 ├── configs/                  # YAML configurations (config.yaml, config.example.yaml, config.docker.yaml)
 ├── docs/                     # Categorized docs (architecture/, reference/, reports/, plans/, superpowers/, screenshots/) — see docs/README.md
-└── tests/                    # 2,320 passing unit & integration tests (2,330-test suite)
+└── tests/                    # 2,325 passing unit & integration tests (2,335-test suite)
 ```
 
 ## Two-Layer Orthogonal Output Model
@@ -102,10 +102,10 @@ essay-integrity-checker/
 .venv/bin/python -m ruff check src/ tests/ scripts/
 .venv/bin/python -m mypy src/integrity_checker
 
-# Run full backend unit & integration test suite (2,320 passed / 2,330 suite)
+# Run full backend unit & integration test suite (2,325 passed / 2,335 suite)
 .venv/bin/python -m pytest tests/ -q
 
-# Run frontend ESLint, TypeScript check, Vitest suite (487 tests / 63 files), and production build
+# Run frontend ESLint, TypeScript check, Vitest suite (488 tests / 63 files), and production build
 cd web && npm run lint && npx tsc --noEmit && npx tsc -p tsconfig.e2e.json --noEmit && npx vitest run && npm run build
 
 # Run pipeline on a manuscript (.pdf / .docx / .bib / .ris)

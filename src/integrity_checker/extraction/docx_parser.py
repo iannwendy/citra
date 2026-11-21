@@ -8,6 +8,7 @@ and ``Page`` data structures used by ``DocumentParser``, ``SectionSegmenter``,
 
 from __future__ import annotations
 
+import posixpath
 import re
 import unicodedata
 import zipfile
@@ -33,6 +34,28 @@ _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
 _MAX_DOCX_XML_MEMBER_BYTES = 50 * 1024 * 1024
 _MAX_DOCX_ARCHIVE_ENTRIES = 5000
 _NOTES_XML_MEMBERS = frozenset({"word/footnotes.xml", "word/endnotes.xml"})
+_ALLOWED_NOTES_CONTENT_TYPES: dict[str, frozenset[str]] = {
+    "word/footnotes.xml": frozenset(
+        {
+            "",
+            "application/xml",
+            "text/xml",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml",
+        }
+    ),
+    "word/endnotes.xml": frozenset(
+        {
+            "",
+            "application/xml",
+            "text/xml",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml",
+        }
+    ),
+}
+_ALLOWED_NOTES_REL_SUFFIXES: dict[str, str] = {
+    "word/footnotes.xml": "/relationships/footnotes",
+    "word/endnotes.xml": "/relationships/endnotes",
+}
 
 # Upper bound for word/footnotes.xml / endnotes.xml (uncompressed) — real notes
 # parts are a few hundred KB; anything bigger is treated as a zip bomb.
@@ -54,6 +77,55 @@ _AUTHOR_BIO_RE = re.compile(
 )
 
 
+def _has_xml_magic_prefix(head_bytes: bytes) -> bool:
+    """Return True if raw entry header begins (after BOM/whitespace) with XML/comment/DTD/ENTITY markers."""
+    raw = head_bytes
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+    elif raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        try:
+            decoded = raw.decode("utf-16", errors="ignore").lstrip()
+            return decoded.lower().startswith(("<?xml", "<!--", "<!doctype", "<!entity"))
+        except Exception:
+            return False
+    stripped = raw.lstrip(b" \t\r\n").lower()
+    return stripped.startswith((b"<?xml", b"<!--", b"<!doctype", b"<!entity"))
+
+
+def _window_has_dtd_or_entity(window: bytes, *, is_utf16: bool = False) -> bool:
+    """Return True if a byte window contains DTD or ENTITY declarations (ASCII/UTF-8 or UTF-16)."""
+    low = window.lower()
+    if b"<!doctype" in low or b"<!entity" in low:
+        return True
+    if is_utf16 or b"<\x00!" in window or b"\x00<\x00!" in window:
+        for enc in ("utf-16-le", "utf-16-be"):
+            try:
+                dec_low = window.decode(enc, errors="ignore").lower()
+                if "<!doctype" in dec_low or "<!entity" in dec_low:
+                    return True
+            except Exception:
+                continue
+    return False
+
+
+def _resolve_opc_rel_target(rels_member_norm: str, raw_target: str) -> str:
+    """Resolve an internal OPC <Relationship Target=.../> path to normalized archive path."""
+    clean_target = raw_target.replace("\\", "/").strip()
+    if not clean_target:
+        return ""
+    if clean_target.startswith("/"):
+        resolved = posixpath.normpath(clean_target.lstrip("/"))
+    else:
+        segs = [s for s in rels_member_norm.split("/") if s]
+        if len(segs) >= 2 and segs[-2] == "_rels":
+            base_dir = "/".join(segs[:-2])
+        else:
+            base_dir = "/".join(segs[:-1])
+        joined = f"{base_dir}/{clean_target}" if base_dir else clean_target
+        resolved = posixpath.normpath(joined)
+    return resolved.lstrip("/").rstrip("/").lower()
+
+
 class DocxParser(BasePDFParser):
     """Structural parser for Microsoft Word (.docx) manuscripts."""
 
@@ -64,7 +136,8 @@ class DocxParser(BasePDFParser):
 
     @staticmethod
     def _validate_docx_archive(path: Path) -> None:
-        """Reject ZIP bombs (> 100 MB uncompressed) and core DTD/XXE payloads before python-docx opens the archive."""
+        """Reject ZIP bombs (> 100 MB uncompressed), duplicate entries, and DTD/XXE payloads before python-docx opens the archive."""
+        chunk_size = 65536
         try:
             with zipfile.ZipFile(path, "r") as zf:
                 infos = zf.infolist()
@@ -72,59 +145,257 @@ class DocxParser(BasePDFParser):
                     raise ValueError(
                         f"DOCX archive has too many entries ({len(infos)} > {_MAX_DOCX_ARCHIVE_ENTRIES})"
                     )
-                declared_total = sum(max(0, info.file_size) for info in infos)
+
+                seen_names: set[str] = set()
+                ct_info: zipfile.ZipInfo | None = None
+                for info in infos:
+                    if info.is_dir():
+                        continue
+                    norm = info.filename.replace("\\", "/").lstrip("/").rstrip("/").lower()
+                    if not norm or norm in seen_names:
+                        raise ValueError(
+                            f"Invalid or duplicate DOCX archive entry '{info.filename}'"
+                        )
+                    seen_names.add(norm)
+                    if norm == "[content_types].xml":
+                        ct_info = info
+
+                if (
+                    ct_info is None
+                    or "[content_types].xml" not in seen_names
+                    or "word/document.xml" not in seen_names
+                ):
+                    raise ValueError(
+                        "Invalid DOCX archive: missing required [Content_Types].xml or word/document.xml"
+                    )
+
+                declared_total = sum(
+                    max(0, int(info.file_size or 0))
+                    for info in infos
+                    if not info.is_dir()
+                )
                 if declared_total > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES:
                     raise ValueError(
                         f"DOCX archive uncompressed size ({declared_total} bytes) exceeds 100 MB limit"
                     )
-                streamed_total = 0
-                for info in infos:
-                    member_lower = info.filename.lower()
-                    is_xml = member_lower.endswith((".xml", ".rels"))
-                    member_limit = (
-                        _MAX_NOTES_XML_BYTES
-                        if member_lower in _NOTES_XML_MEMBERS
-                        else _MAX_DOCX_XML_MEMBER_BYTES
+
+                ct_declared = max(0, int(ct_info.file_size or 0))
+                if ct_declared > _MAX_DOCX_XML_MEMBER_BYTES:
+                    raise ValueError(
+                        f"DOCX XML member '{ct_info.filename}' ({ct_declared} bytes) exceeds {_MAX_DOCX_XML_MEMBER_BYTES // (1024 * 1024)} MB limit"
                     )
-                    if is_xml and info.file_size > member_limit:
-                        raise ValueError(
-                            f"DOCX XML member '{info.filename}' ({info.file_size} bytes) exceeds {member_limit // (1024 * 1024)} MB limit"
-                        )
-                    # Stream-verify actual uncompressed size on ALL XML/rels parts, including
-                    # word/footnotes.xml & word/endnotes.xml (defends against spoofed file_size headers)
-                    if is_xml:
-                        xml_buf = bytearray()
-                        with zf.open(info, "r") as member_fp:
-                            while True:
-                                chunk = member_fp.read(65536)
-                                if not chunk:
-                                    break
-                                xml_buf.extend(chunk)
-                                streamed_total += len(chunk)
-                                if (
-                                    len(xml_buf) > member_limit
-                                    or streamed_total > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES
-                                ):
-                                    raise ValueError(
-                                        f"DOCX XML stream for '{info.filename}' exceeds uncompressed size limit (possible ZIP bomb)"
-                                    )
-                        # Notes parts (footnotes/endnotes) are validated via safe_fromstring
-                        # inside _extract_xml_notes so unsafe DTDs in notes degrade gracefully
-                        # without aborting body/reference extraction, while oversized note
-                        # ZIP-bomb streams are still rejected above.
-                        if xml_buf and member_lower not in _NOTES_XML_MEMBERS:
-                            try:
-                                safe_fromstring(bytes(xml_buf), forbid_dtd=True)
-                            except DefusedXmlException as exc:
-                                raise ValueError(
-                                    f"Unsafe XML entity/DTD in DOCX member '{info.filename}'"
-                                ) from exc
-                    else:
-                        streamed_total += max(0, info.file_size)
-                        if streamed_total > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES:
+
+                total_uncompressed = 0
+                ct_chunks: list[bytes] = []
+                ct_bytes_len = 0
+                ct_tail = b""
+                ct_is_utf16 = False
+                with zf.open(ct_info, "r") as ct_fp:
+                    while True:
+                        chunk = ct_fp.read(chunk_size)
+                        if not chunk:
+                            break
+                        if ct_bytes_len == 0 and chunk.startswith((b"\xff\xfe", b"\xfe\xff")):
+                            ct_is_utf16 = True
+                        chunk_len = len(chunk)
+                        ct_bytes_len += chunk_len
+                        total_uncompressed += chunk_len
+                        if (
+                            ct_bytes_len > _MAX_DOCX_XML_MEMBER_BYTES
+                            or total_uncompressed > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES
+                        ):
                             raise ValueError(
-                                "DOCX archive uncompressed size exceeds 100 MB limit"
+                                f"DOCX XML stream for '{ct_info.filename}' exceeds uncompressed size limit (possible ZIP bomb)"
                             )
+                        if _window_has_dtd_or_entity(ct_tail + chunk, is_utf16=ct_is_utf16):
+                            raise ValueError(
+                                f"Unsafe XML entity/DTD in DOCX member '{ct_info.filename}'"
+                            )
+                        ct_tail = chunk[-64:]
+                        ct_chunks.append(chunk)
+
+                try:
+                    ct_root = safe_fromstring(
+                        b"".join(ct_chunks),
+                        forbid_dtd=True,
+                        forbid_entities=True,
+                        forbid_external=True,
+                    )
+                except DefusedXmlException as exc:
+                    raise ValueError(
+                        f"Unsafe XML entity/DTD in DOCX member '{ct_info.filename}'"
+                    ) from exc
+                except Exception as exc:
+                    raise ValueError(
+                        f"Malformed XML in DOCX member '{ct_info.filename}'"
+                    ) from exc
+
+                def _is_ooxml_xml_ctype(ct: str) -> bool:
+                    return (
+                        ct in (
+                            "application/xml",
+                            "text/xml",
+                            "application/vnd.openxmlformats-officedocument.vmldrawing",
+                        )
+                        or ct.endswith("+xml")
+                    )
+
+                xml_extensions: set[str] = {"xml", "rels"}
+                xml_part_names: set[str] = set()
+                default_ctypes: dict[str, str] = {}
+                override_ctypes: dict[str, str] = {}
+                for elem in ct_root.iter():
+                    local_tag = (
+                        elem.tag.rsplit("}", 1)[-1].lower()
+                        if isinstance(elem.tag, str)
+                        else ""
+                    )
+                    ctype = (elem.attrib.get("ContentType") or "").strip().lower()
+                    ctype_base = ctype.split(";", 1)[0].strip()
+                    if local_tag == "default":
+                        ext = (elem.attrib.get("Extension") or "").strip().lstrip(".").lower()
+                        if ext:
+                            if ext in default_ctypes and default_ctypes[ext] != ctype_base:
+                                default_ctypes[ext] = "__conflict__"
+                            else:
+                                default_ctypes[ext] = ctype_base
+                            if _is_ooxml_xml_ctype(ctype_base):
+                                xml_extensions.add(ext)
+                    elif local_tag == "override":
+                        pname = (
+                            (elem.attrib.get("PartName") or "")
+                            .replace("\\", "/")
+                            .lstrip("/")
+                            .rstrip("/")
+                            .lower()
+                        )
+                        if pname:
+                            if pname in override_ctypes and override_ctypes[pname] != ctype_base:
+                                override_ctypes[pname] = "__conflict__"
+                            else:
+                                override_ctypes[pname] = ctype_base
+                            if _is_ooxml_xml_ctype(ctype_base):
+                                xml_part_names.add(pname)
+
+                for info in infos:
+                    if info is ct_info or info.is_dir():
+                        continue
+                    lower_name = info.filename.replace("\\", "/").lstrip("/").rstrip("/").lower()
+                    ext = lower_name.rsplit(".", 1)[-1] if "." in lower_name else ""
+                    effective_ctype = override_ctypes.get(lower_name, default_ctypes.get(ext, ""))
+                    allowed_note_ctypes = _ALLOWED_NOTES_CONTENT_TYPES.get(info.filename)
+                    is_notes_path = lower_name in _NOTES_XML_MEMBERS
+                    is_notes_member = (
+                        allowed_note_ctypes is not None
+                        and effective_ctype in allowed_note_ctypes
+                    )
+                    is_declared_xml = (ext in xml_extensions) or (lower_name in xml_part_names)
+
+                    declared_size = max(0, int(info.file_size or 0))
+                    if is_notes_path and declared_size > _MAX_NOTES_XML_BYTES:
+                        raise ValueError(
+                            f"DOCX XML member '{info.filename}' ({declared_size} bytes) exceeds {_MAX_NOTES_XML_BYTES // (1024 * 1024)} MB limit"
+                        )
+                    if is_declared_xml and not is_notes_path and declared_size > _MAX_DOCX_XML_MEMBER_BYTES:
+                        raise ValueError(
+                            f"DOCX XML member '{info.filename}' ({declared_size} bytes) exceeds {_MAX_DOCX_XML_MEMBER_BYTES // (1024 * 1024)} MB limit"
+                        )
+
+                    xml_chunks: list[bytes] = []
+                    head_buf = bytearray()
+                    tail_buf = b""
+                    entry_is_utf16 = False
+                    should_parse_xml = is_declared_xml and not is_notes_member
+                    part_bytes = 0
+                    with zf.open(info, "r") as member_fp:
+                        while True:
+                            chunk = member_fp.read(chunk_size)
+                            if not chunk:
+                                break
+                            if part_bytes == 0 and chunk.startswith((b"\xff\xfe", b"\xfe\xff")):
+                                entry_is_utf16 = True
+                            chunk_len = len(chunk)
+                            part_bytes += chunk_len
+                            total_uncompressed += chunk_len
+                            if is_notes_path and part_bytes > _MAX_NOTES_XML_BYTES:
+                                raise ValueError(
+                                    f"DOCX XML stream for '{info.filename}' exceeds uncompressed size limit (possible ZIP bomb)"
+                                )
+                            if total_uncompressed > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES:
+                                raise ValueError(
+                                    f"DOCX stream for '{info.filename}' exceeds uncompressed size limit (possible ZIP bomb)"
+                                )
+                            if not is_notes_member:
+                                if _window_has_dtd_or_entity(tail_buf + chunk, is_utf16=entry_is_utf16):
+                                    raise ValueError(
+                                        f"Unsafe XML entity/DTD in DOCX member '{info.filename}'"
+                                    )
+                                tail_buf = chunk[-64:]
+                                if not should_parse_xml and len(head_buf) < 512:
+                                    head_buf.extend(chunk[: 512 - len(head_buf)])
+                                    if _has_xml_magic_prefix(bytes(head_buf)):
+                                        should_parse_xml = True
+                                if should_parse_xml:
+                                    if part_bytes > _MAX_DOCX_XML_MEMBER_BYTES:
+                                        raise ValueError(
+                                            f"DOCX XML stream for '{info.filename}' exceeds uncompressed size limit (possible ZIP bomb)"
+                                        )
+                                    xml_chunks.append(chunk)
+
+                    # Notes parts (footnotes/endnotes) are validated via safe_fromstring
+                    # inside _extract_xml_notes so unsafe DTDs in notes degrade gracefully
+                    # without aborting body/reference extraction, while oversized note
+                    # ZIP-bomb streams and ContentType/relationship hijacks are rejected.
+                    if should_parse_xml and xml_chunks and not is_notes_member:
+                        try:
+                            xml_root = safe_fromstring(
+                                b"".join(xml_chunks),
+                                forbid_dtd=True,
+                                forbid_entities=True,
+                                forbid_external=True,
+                            )
+                        except DefusedXmlException as exc:
+                            raise ValueError(
+                                f"Unsafe XML entity/DTD in DOCX member '{info.filename}'"
+                            ) from exc
+                        except Exception as exc:
+                            raise ValueError(
+                                f"Malformed XML in DOCX member '{info.filename}'"
+                            ) from exc
+
+                        root_local = (
+                            xml_root.tag.rsplit("}", 1)[-1].lower()
+                            if isinstance(xml_root.tag, str)
+                            else ""
+                        )
+                        if (
+                            ext == "rels"
+                            or effective_ctype
+                            == "application/vnd.openxmlformats-package.relationships+xml"
+                            or root_local == "relationships"
+                        ):
+                            for rel_el in xml_root.iter():
+                                rel_tag = (
+                                    rel_el.tag.rsplit("}", 1)[-1].lower()
+                                    if isinstance(rel_el.tag, str)
+                                    else ""
+                                )
+                                if rel_tag != "relationship":
+                                    continue
+                                if (
+                                    rel_el.attrib.get("TargetMode") or ""
+                                ).strip().lower() == "external":
+                                    continue
+                                resolved_target = _resolve_opc_rel_target(
+                                    lower_name, rel_el.attrib.get("Target") or ""
+                                )
+                                required_suffix = _ALLOWED_NOTES_REL_SUFFIXES.get(resolved_target)
+                                if required_suffix is not None:
+                                    rel_type = (rel_el.attrib.get("Type") or "").strip().lower()
+                                    if not rel_type.endswith(required_suffix):
+                                        raise ValueError(
+                                            f"Invalid relationship type '{rel_type}' targeting '{resolved_target}' in '{info.filename}'"
+                                        )
         except zipfile.BadZipFile as exc:
             raise ValueError(f"Invalid or corrupted DOCX ZIP archive: {path}") from exc
 
@@ -410,7 +681,12 @@ class DocxParser(BasePDFParser):
                 xml_bytes = bytes(xml_buf)
             # Untrusted user upload: defusedxml forbids DTD entities / external
             # references (billion-laughs, XXE) and raises instead of expanding.
-            root = safe_fromstring(xml_bytes, forbid_dtd=True)
+            root = safe_fromstring(
+                xml_bytes,
+                forbid_dtd=True,
+                forbid_entities=True,
+                forbid_external=True,
+            )
             for note_el in root.findall(f".//{_WORD_NS}{note_tag}"):
                 raw_id = note_el.attrib.get(f"{_WORD_NS}id")
                 note_type = note_el.attrib.get(f"{_WORD_NS}type", "")

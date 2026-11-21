@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { api, type BillingCycle } from '@/api/client';
 import { SCHOLARLY_APIS_LABEL } from '@/lib/productFacts';
+import { toSafeExternalHref } from '@/lib/utils';
 import { useRole } from '@/hooks/useRole';
 import {
   Dialog,
@@ -60,11 +61,18 @@ export function UpgradeModal({
         plan_tier: tier,
         billing_cycle: billingCycle,
       });
-      onOpenChange(false);
-      if (session.checkout_url.startsWith('http')) {
-        window.location.href = session.checkout_url;
-      } else {
+      const safeCheckoutUrl = toSafeExternalHref(session.checkout_url);
+      if (safeCheckoutUrl) {
+        onOpenChange(false);
+        window.location.href = safeCheckoutUrl;
+      } else if (
+        session.checkout_url.startsWith('/') &&
+        !session.checkout_url.startsWith('//')
+      ) {
+        onOpenChange(false);
         navigate(session.checkout_url);
+      } else {
+        throw new Error('Invalid checkout redirect URL');
       }
     } catch (err) {
       setError(

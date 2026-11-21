@@ -188,7 +188,7 @@ CITRA gán nhãn xác minh ở cấp độ từng mục tài liệu tham khảo 
 \section*{Phụ lục D. Sơ đồ các gói mã nguồn hệ thống}
 \label{app:modules}
 
-Kho mã nguồn hệ thống (\texttt{v3.89.5}) phân tách rõ ràng các gói nghiệp vụ hậu phương (\texttt{src/\allowbreak integrity\_checker/}) với ứng dụng khách đơn trang trên nền tảng web (\texttt{web/src/}) thông qua các mô-đun cốt lõi sau:
+Kho mã nguồn hệ thống (\texttt{v3.90.1}) phân tách rõ ràng các gói nghiệp vụ hậu phương (\texttt{src/\allowbreak integrity\_checker/}) với ứng dụng khách đơn trang trên nền tảng web (\texttt{web/src/}) thông qua các mô-đun cốt lõi sau:
 
 \begin{description}
     \item[\texttt{extraction/}] Bộ phân tích cú pháp đa định dạng cho tệp PDF (GROBID \texttt{0.9.1-crf} TEI-XML, PyMuPDF xử lý bố cục hai cột, \texttt{pdfplumber} và nhận dạng ký tự quang học tiếng Việt có chọn lọc bằng Tesseract OCR), DOCX (\texttt{python-docx}), BibTeX và RIS, kết hợp bộ lọc mục lục tự động cùng mười hai bộ trích xuất theo chuẩn trích dẫn.
@@ -201,7 +201,7 @@ Kho mã nguồn hệ thống (\texttt{v3.89.5}) phân tách rõ ràng các gói 
     \item[\texttt{evaluation/}] Bộ sinh và thực thi tập chuẩn đánh giá 120,000 mẫu phân tách độc lập theo bài báo (paper-disjoint), thang mô hình cơ sở (\texttt{B0}--\texttt{B5}), bộ kiểm thử rào chắn ngoài phân phối (OOD) 2,400 mẫu, bộ đánh giá chuẩn vàng đầu-cuối (E2E) 120 tài liệu tham khảo, cùng các kiểm định thống kê bắt cặp McNemar, Holm--Bonferroni, Clopper--Pearson và bootstrap.
     \item[\texttt{export/}] Các bộ xuất báo cáo an toàn (PDF, DOCX, CSV, JSON, BibTeX, RIS), mô-đun định dạng \texttt{bibliography\_formatter.py} và công cụ tự động sửa lỗi danh mục tài liệu tham khảo trực tiếp trên bản thảo \texttt{.docx} (\texttt{docx\_exporter.py}).
     \item[\texttt{db/}, \texttt{billing/} \& \texttt{api/}] Mười lăm mô hình SQLAlchemy ORM, mười ba bản di trú lược đồ có kiểm tra toàn vẹn mã băm SHA-256 (\texttt{0001}--\texttt{0013}), tinh chỉnh thích ứng SQLite WAL, bộ điều khiển tiếp nhận tải \texttt{PipelineAdmissionController}, cơ chế khôi phục tiến trình treo, trình xử lý thanh toán Stripe/VNPay và hệ thống định tuyến FastAPI dưới tiền tố \texttt{/api/*}.
-    \item[\texttt{web/}] Ứng dụng đơn trang (\textbf{CITRA}) xây dựng trên React 18.3 và TypeScript 5.8, được kiểm thử tự động bởi 472 ca kiểm thử đơn vị/thành phần bằng Vitest (62 bộ đặc tả) và 20 bộ kịch bản kiểm thử đầu-cuối Playwright E2E.
+    \item[\texttt{web/}] Ứng dụng đơn trang (\textbf{CITRA}) xây dựng trên React 18.3 và TypeScript 5.8, được kiểm thử tự động bởi 487+ ca kiểm thử đơn vị/thành phần bằng Vitest (63 bộ đặc tả) và 20 bộ kịch bản kiểm thử đầu-cuối Playwright E2E.
 \end{description}
 
 \section*{Phụ lục E. Nhật ký thực hiện đồ án và Phân công đóng góp}

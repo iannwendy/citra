@@ -46,6 +46,9 @@ import { HelpModal } from '@/components/HelpModal';
 import { UserFormDialog } from '@/components/UserFormDialog';
 import { GoogleOnboardingModal } from '@/components/GoogleOnboardingModal';
 import { EvidenceGraphNode } from '@/components/CitationGraph/EvidenceGraphNode';
+import { InteractiveDecisionFlowBoard } from '@/components/CitationGraph/InteractiveDecisionFlowBoard';
+import { UpgradeModal } from '@/components/UpgradeModal';
+import { PricingPage } from '@/pages/PricingPage';
 import { EssayHeader } from '@/pages/essay/EssayHeader';
 import { AppLayout } from '@/components/AppLayout';
 import { SharedReportPage } from '@/pages/SharedReportPage';
@@ -324,6 +327,181 @@ describe('Track 4 Holistic SE Remediation Suite (FE-01..FE-15, QA-10, QA-11)', (
         expect(href.toLowerCase()).not.toContain('http:javascript:');
       }
       unmountEssay();
+    });
+
+    it('CONV-04: InteractiveDecisionFlowBoard, UpgradeModal, and PricingPage reject http:javascript:, backslash phishing URLs, //evil.com, and non-DOI rawDoi strings', async () => {
+      // 1. InteractiveDecisionFlowBoard: unsafe bestRec.url + non-DOI phishing rawDoi -> zero <a> tags
+      const phishDoiVerdict = makeVerdict({
+        citation_id: 'conv04-phish-doi',
+        citation_raw: 'Smith (2024)',
+        label: 'verified',
+        matched_sources: [
+          {
+            source: 'crossref',
+            matched_fields: ['title', 'doi'],
+            checked_at: '2026-11-21T00:00:00Z',
+            title: 'Backslash & Phishing DOI',
+            url: 'https://\\\\evil.com/phish',
+            doi: 'https://evil-phishing.example/login',
+          },
+        ],
+      });
+      const { container: c1, unmount: u1 } = renderWithProviders(
+        <InteractiveDecisionFlowBoard verdict={phishDoiVerdict} />,
+      );
+      expect(screen.getByTestId('flow-story-card').textContent).toBeTruthy();
+      expect(c1.querySelectorAll('a').length).toBe(0);
+      u1();
+
+      // 2. InteractiveDecisionFlowBoard: http:javascript:alert(1) + http:///evil + archive_url backslash phish -> zero <a> tags
+      const badWebVerdict = makeVerdict({
+        citation_id: 'conv04-bad-web',
+        citation_raw: 'Web Source https://\\\\evil.com/phish and http:///evil',
+        label: 'resource',
+        triggered_rules: ['R-URL-RESOURCE'],
+        url_status: 'archived_alive',
+        archive_url: 'https://\\\\evil.com/phish',
+        matched_sources: [
+          {
+            source: 'crossref',
+            matched_fields: ['title'],
+            checked_at: '2026-11-21T00:00:00Z',
+            title: 'Bad Scheme Paper',
+            url: 'http:javascript:alert(1)',
+            doi: 'http:javascript:alert(1)',
+          },
+        ],
+      });
+      const { container: c2, unmount: u2 } = renderWithProviders(
+        <InteractiveDecisionFlowBoard verdict={badWebVerdict} />,
+      );
+      expect(c2.querySelectorAll('a').length).toBe(0);
+      u2();
+
+      // 3. InteractiveDecisionFlowBoard: unsafe bestRec.url falls back cleanly to valid bare DOI via toSafeDoiHref
+      const fallbackDoiVerdict = makeVerdict({
+        citation_id: 'conv04-safe-doi',
+        citation_raw: 'LeCun et al. (2015)',
+        label: 'verified',
+        matched_sources: [
+          {
+            source: 'crossref',
+            matched_fields: ['title', 'doi'],
+            checked_at: '2026-11-21T00:00:00Z',
+            title: 'Deep Learning',
+            url: 'https://\\\\evil.com/phish',
+            doi: '10.1038/nature14539',
+          },
+        ],
+      });
+      const { container: c3, unmount: u3 } = renderWithProviders(
+        <InteractiveDecisionFlowBoard verdict={fallbackDoiVerdict} />,
+      );
+      const safeAnchors = Array.from(c3.querySelectorAll('a'));
+      expect(safeAnchors.length).toBe(1);
+      expect(safeAnchors[0].getAttribute('href')).toBe(
+        'https://doi.org/10.1038/nature14539',
+      );
+      u3();
+
+      // 4. UpgradeModal & PricingPage: reject http:javascript:alert(1), https://\\evil.com/phish, and //evil.com
+      const origLocation = window.location;
+      const mockLocation = {
+        ...origLocation,
+        href: 'http://localhost:3000/pricing',
+      };
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        writable: true,
+        value: mockLocation,
+      });
+
+      try {
+        const maliciousUrls = [
+          'http:javascript:alert(1)',
+          'https://\\\\evil.com/phish',
+          '//evil.com',
+        ];
+
+        for (const badCheckoutUrl of maliciousUrls) {
+          vi.spyOn(api, 'createCheckoutSession').mockResolvedValueOnce({
+            session_id: 'cs_bad',
+            checkout_url: badCheckoutUrl,
+            mode: 'stripe_demo',
+            plan_tier: 'pro',
+            plan_name: 'Pro',
+            billing_cycle: 'annual',
+            amount_usd: 192,
+            transaction_id: 99,
+          });
+
+          const onOpenChange = vi.fn();
+          const { unmount: uModal } = renderWithProviders(
+            <Routes>
+              <Route
+                path="/"
+                element={<UpgradeModal open={true} onOpenChange={onOpenChange} />}
+              />
+              <Route
+                path="*"
+                element={<div data-testid="unexpected-modal-nav">Bad Nav</div>}
+              />
+            </Routes>,
+            { user: makeUser('user', 'basic'), initialRoute: '/' },
+          );
+
+          fireEvent.click(screen.getByTestId('modal-upgrade-pro-btn'));
+          await waitFor(() =>
+            expect(
+              screen.getByText(/Invalid checkout redirect URL/i),
+            ).toBeDefined(),
+          );
+          expect(mockLocation.href).toBe('http://localhost:3000/pricing');
+          expect(screen.queryByTestId('unexpected-modal-nav')).toBeNull();
+          expect(onOpenChange).not.toHaveBeenCalledWith(false);
+          uModal();
+        }
+
+        for (const badCheckoutUrl of maliciousUrls) {
+          vi.spyOn(api, 'createCheckoutSession').mockResolvedValueOnce({
+            session_id: 'cs_bad_pricing',
+            checkout_url: badCheckoutUrl,
+            mode: 'stripe_demo',
+            plan_tier: 'pro',
+            plan_name: 'Pro',
+            billing_cycle: 'annual',
+            amount_usd: 192,
+            transaction_id: 100,
+          });
+
+          const { unmount: uPricing } = renderWithProviders(
+            <Routes>
+              <Route path="/pricing" element={<PricingPage />} />
+              <Route
+                path="*"
+                element={<div data-testid="unexpected-pricing-nav">Bad Nav</div>}
+              />
+            </Routes>,
+            { user: makeUser('user', 'basic'), initialRoute: '/pricing' },
+          );
+
+          fireEvent.click(screen.getByTestId('select-pro-btn'));
+          await waitFor(() =>
+            expect(
+              screen.getByText(/Invalid checkout redirect URL/i),
+            ).toBeDefined(),
+          );
+          expect(mockLocation.href).toBe('http://localhost:3000/pricing');
+          expect(screen.queryByTestId('unexpected-pricing-nav')).toBeNull();
+          uPricing();
+        }
+      } finally {
+        Object.defineProperty(window, 'location', {
+          configurable: true,
+          writable: true,
+          value: origLocation,
+        });
+      }
     });
   });
 

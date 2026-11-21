@@ -272,7 +272,9 @@ class ProgressTracker:
         with self._lock:
             return self._retry_counts.get(essay_id, 0) < MAX_AUTO_RETRIES
 
-    def try_claim_auto_retry(self, essay_id: int) -> ProgressState | None:
+    def try_claim_auto_retry(
+        self, essay_id: int, min_prior_retries: int = 0
+    ) -> ProgressState | None:
         """Atomically claim an auto-retry slot under self._lock if retry budget remains."""
         initial_q_pos = get_pipeline_admission_controller().peek_queue_position_if_saturated()
         init_status = "queued" if initial_q_pos is not None else "processing"
@@ -282,7 +284,10 @@ class ProgressTracker:
             else "Parsing document..."
         )
         with self._lock:
-            current_retries = self._retry_counts.get(essay_id, 0)
+            current_retries = max(
+                self._retry_counts.get(essay_id, 0), max(0, int(min_prior_retries))
+            )
+            self._retry_counts[essay_id] = current_retries
             if current_retries >= MAX_AUTO_RETRIES:
                 return None
             cur_state = self._states.get(essay_id)
@@ -468,6 +473,29 @@ class ProgressTracker:
                     }
 
                 if job_status == "processing":
+                    if persisted_snap is not None and persisted_snap.get("status") == "failed":
+                        fail_err = (
+                            persisted_snap.get("error")
+                            or essay.job_error
+                            or "Analysis failed due to an internal processing error."
+                        )
+                        snap = dict(persisted_snap)
+                        snap["status"] = "failed"
+                        snap.setdefault("step", STEP_KEYS[0])
+                        snap.setdefault("step_index", 0)
+                        snap.setdefault("total_steps", len(STEP_KEYS))
+                        snap.setdefault("message", f"Failed: {fail_err}")
+                        snap.setdefault("citations_found", 0)
+                        snap.setdefault("references_found", 0)
+                        snap.setdefault("linked", 0)
+                        snap.setdefault("sources_queried", {})
+                        snap.setdefault("elapsed_seconds", 0.0)
+                        snap.setdefault("finished_at", None)
+                        snap["error"] = fail_err
+                        snap["queue_position"] = None
+                        snap["quota_charged"] = quota_charged_bool
+                        snap.setdefault("document_diagnostics", None)
+                        return snap
                     if persisted_snap is not None and persisted_snap.get("status") in (
                         "processing",
                         "queued",

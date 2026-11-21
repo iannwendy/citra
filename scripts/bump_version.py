@@ -28,16 +28,39 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-WEB_VERSION_TS = ROOT_DIR / "web" / "src" / "version.ts"
+_DEFAULT_ROOT_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = _DEFAULT_ROOT_DIR
+_DEFAULT_WEB_VERSION_TS = _DEFAULT_ROOT_DIR / "web" / "src" / "version.ts"
+WEB_VERSION_TS = _DEFAULT_WEB_VERSION_TS
 WEB_PACKAGE_JSON = ROOT_DIR / "web" / "package.json"
 WEB_PACKAGE_LOCK_JSON = ROOT_DIR / "web" / "package-lock.json"
 ROOT_PACKAGE_JSON = ROOT_DIR / "package.json"
-PYPROJECT_TOML = ROOT_DIR / "pyproject.toml"
+_DEFAULT_PYPROJECT_TOML = _DEFAULT_ROOT_DIR / "pyproject.toml"
+PYPROJECT_TOML = _DEFAULT_PYPROJECT_TOML
 PY_VERSION_FILE = ROOT_DIR / "src" / "integrity_checker" / "__version__.py"
 README_MD = ROOT_DIR / "README.md"
 CLAUDE_MD = ROOT_DIR / "CLAUDE.md"
 BENCHMARK_REPORT_MD = ROOT_DIR / "docs" / "reports" / "BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md"
+_DEFAULT_CONFIG_YAML = _DEFAULT_ROOT_DIR / "configs" / "config.yaml"
+CONFIG_YAML = _DEFAULT_CONFIG_YAML
+_DEFAULT_CONFIG_EXAMPLE_YAML = _DEFAULT_ROOT_DIR / "configs" / "config.example.yaml"
+CONFIG_EXAMPLE_YAML = _DEFAULT_CONFIG_EXAMPLE_YAML
+
+THESIS_TEX_NAMES = (
+    "chapter1_rewritten.tex",
+    "chapter2_rewritten.tex",
+    "chapter3_rewritten.tex",
+    "chapter4_rewritten.tex",
+    "chapter5_rewritten.tex",
+    "chapter6_rewritten.tex",
+    "PhuLuc.tex",
+)
+THESIS_REL_PATHS = tuple(
+    f"{thesis_dir}/{tex_name}"
+    for thesis_dir in ("FinalReport_TDTU", "FinalReport_TDTU_VN")
+    for tex_name in THESIS_TEX_NAMES
+)
+THESIS_TEX_FILES = [ROOT_DIR / rel for rel in THESIS_REL_PATHS]
 
 VERSION_FILES = [
     WEB_VERSION_TS,
@@ -49,6 +72,9 @@ VERSION_FILES = [
     README_MD,
     CLAUDE_MD,
     BENCHMARK_REPORT_MD,
+    CONFIG_YAML,
+    CONFIG_EXAMPLE_YAML,
+    *THESIS_TEX_FILES,
 ]
 
 CONVENTIONAL_HEADER_RE = re.compile(
@@ -252,6 +278,55 @@ def update_all_version_files(new_version: str, build_date: str) -> None:
             text,
         )
         BENCHMARK_REPORT_MD.write_text(text, encoding="utf-8")
+
+    # 6. configs/config.yaml & configs/config.example.yaml + FinalReport_TDTU*/*.tex
+    base_dir = _effective_root_dir()
+    cfg_paths = (
+        CONFIG_YAML if CONFIG_YAML != _DEFAULT_CONFIG_YAML else base_dir / "configs" / "config.yaml",
+        (
+            CONFIG_EXAMPLE_YAML
+            if CONFIG_EXAMPLE_YAML != _DEFAULT_CONFIG_EXAMPLE_YAML
+            else base_dir / "configs" / "config.example.yaml"
+        ),
+    )
+    for cfg_path in cfg_paths:
+        if cfg_path.exists():
+            text = cfg_path.read_text(encoding="utf-8")
+            text = re.sub(
+                r"(\(v)\d+\.\d+\.\d+(\))",
+                rf"\g<1>{new_version}\2",
+                text,
+            )
+            cfg_path.write_text(text, encoding="utf-8")
+
+    for rel_tex in THESIS_REL_PATHS:
+        tex_path = base_dir / rel_tex
+        if tex_path.exists():
+            text = tex_path.read_text(encoding="utf-8")
+            text = re.sub(
+                r"(?<!VNPay\s)(\bv)\d+\.\d+\.\d+\b",
+                rf"\g<1>{new_version}",
+                text,
+            )
+            text = re.sub(
+                r"((?:[Vv]ersion|[Pp]hiên bản)\s+\\texttt\{)\d+\.\d+\.\d+(\})",
+                rf"\g<1>{new_version}\2",
+                text,
+            )
+            tex_path.write_text(text, encoding="utf-8")
+
+
+def _effective_root_dir() -> Path:
+    if ROOT_DIR != _DEFAULT_ROOT_DIR:
+        return ROOT_DIR
+    if PYPROJECT_TOML != _DEFAULT_PYPROJECT_TOML:
+        return PYPROJECT_TOML.parent
+    if WEB_VERSION_TS != _DEFAULT_WEB_VERSION_TS and len(WEB_VERSION_TS.parents) >= 3:
+        return WEB_VERSION_TS.parents[2]
+    return ROOT_DIR
+
+
+apply_version = update_all_version_files
 
 
 def _git_output(*args: str) -> str:

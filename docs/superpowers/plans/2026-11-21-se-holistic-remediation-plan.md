@@ -311,9 +311,9 @@
   - `.venv/bin/python -m mypy src/integrity_checker` -> `0` errors
   - `.venv/bin/python -m pytest tests/ -q -W error::ResourceWarning` -> `100%` passed, `0` `ResourceWarning`s
   - `cd web && npm run lint && npx tsc --noEmit && npx tsc -p tsconfig.e2e.json --noEmit && npx vitest run && npm run build` -> `100%` passed, all chunks `< 500 kB`
-- [ ] **Step 2 (Hostile Whole-System Convergence Critic — Wave 2+ Loop):**
+- [x] **Step 2 (Hostile Whole-System Convergence Critic — Wave 2+ Loop):**
   - Dispatch a fresh `Gemini 4 Carbon (High)` Hostile Principal Systems & Security Critic (`critic-convergence`) over `git diff main...HEAD` + live codebase to hunt for any cross-track regression, missed edge case, or residual improvement opportunity.
   - If `critic-convergence` finds >= 1 actionable issue -> execute Wave 2 TDD fix + re-review + re-critique until `critic-convergence` signs off with **`CONVERGED: 0 ACTIONABLE IMPROVEMENTS REMAINING`**.
-- [ ] **Step 3 (Knowledge Graph & Metrics Sync):**
+- [x] **Step 3 (Knowledge Graph & Metrics Sync):**
   - Run `graphify update .` to refresh `graphify-out/` AST graph.
   - Sync final exact test counts across `CLAUDE.md` and `README.md`, run final verification gate, and merge cleanly.

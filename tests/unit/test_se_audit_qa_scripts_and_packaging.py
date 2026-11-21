@@ -957,6 +957,101 @@ class TestQA07BumpVersionSafety:
         assert mod.handle_post_commit() == 0
         assert wrote_files["called"] is False
 
+    def test_conv05_bump_version_syncs_configs_and_theses_and_preserves_non_citra_versions(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mod = _load_script("qa07_bump_conv05", "scripts/bump_version.py")
+
+        rel_version_files = {str(p.relative_to(mod.ROOT_DIR)) for p in mod.VERSION_FILES}
+        assert "configs/config.yaml" in rel_version_files
+        assert "configs/config.example.yaml" in rel_version_files
+        for thesis_dir in ("FinalReport_TDTU", "FinalReport_TDTU_VN"):
+            for idx in range(1, 7):
+                assert f"{thesis_dir}/chapter{idx}_rewritten.tex" in rel_version_files
+            assert f"{thesis_dir}/PhuLuc.tex" in rel_version_files
+
+        assert hasattr(mod, "apply_version") and callable(mod.apply_version)
+
+        # Populate isolated sandbox with YAML configs + EN/VN thesis files (including non-CITRA versions)
+        (tmp_path / "web" / "src").mkdir(parents=True)
+        (tmp_path / "configs").mkdir(parents=True)
+        (tmp_path / "FinalReport_TDTU").mkdir(parents=True)
+        (tmp_path / "FinalReport_TDTU_VN").mkdir(parents=True)
+
+        v_ts = tmp_path / "web" / "src" / "version.ts"
+        v_ts.write_text(
+            "export const APP_VERSION = '3.90.0';\nexport const APP_BUILD_DATE = '2026-11-21';\n",
+            encoding="utf-8",
+        )
+        cfg_main = tmp_path / "configs" / "config.yaml"
+        cfg_main.write_text(
+            "# Synchronized with config.example.yaml and Pydantic Settings (v3.90.0).\n",
+            encoding="utf-8",
+        )
+        cfg_example = tmp_path / "configs" / "config.example.yaml"
+        cfg_example.write_text(
+            "# Copy to `configs/config.yaml` to override defaults (v3.90.0).\n",
+            encoding="utf-8",
+        )
+        en_ch1 = tmp_path / "FinalReport_TDTU" / "chapter1_rewritten.tex"
+        en_ch1.write_text(
+            r"Version \texttt{3.90.0} of \textbf{CITRA} uses GROBID \texttt{0.9.1-crf}." + "\n",
+            encoding="utf-8",
+        )
+        en_ch5 = tmp_path / "FinalReport_TDTU" / "chapter5_rewritten.tex"
+        en_ch5.write_text(
+            r"VN Legal Corpus (Pre-v3.80 Baseline) vs (\textbf{CITRA v3.90.0}) in version \texttt{3.90.0}."
+            + "\n",
+            encoding="utf-8",
+        )
+        en_ch6 = tmp_path / "FinalReport_TDTU" / "chapter6_rewritten.tex"
+        en_ch6.write_text(
+            r"\textbf{CITRA} (\textit{Essay Integrity Checker v3.90.0}) (\texttt{v3.90.0})." + "\n",
+            encoding="utf-8",
+        )
+        en_phu = tmp_path / "FinalReport_TDTU" / "PhuLuc.tex"
+        en_phu.write_text(
+            "# --- Stripe & VNPay v2.1.0 Billing Gateways ---\n"
+            r"The repository (\texttt{v3.90.0}) binds 127.0.0.1." + "\n",
+            encoding="utf-8",
+        )
+        vn_ch1 = tmp_path / "FinalReport_TDTU_VN" / "chapter1_rewritten.tex"
+        vn_ch1.write_text(
+            r"Phiên bản \texttt{3.90.0} và phiên bản \texttt{v3.90.0} của CITRA." + "\n",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setattr(mod, "ROOT_DIR", tmp_path)
+        monkeypatch.setattr(mod, "WEB_VERSION_TS", v_ts)
+        monkeypatch.setattr(mod, "WEB_PACKAGE_JSON", tmp_path / "web" / "package.json")
+        monkeypatch.setattr(mod, "WEB_PACKAGE_LOCK_JSON", tmp_path / "web" / "package-lock.json")
+        monkeypatch.setattr(mod, "ROOT_PACKAGE_JSON", tmp_path / "package.json")
+        monkeypatch.setattr(mod, "PYPROJECT_TOML", tmp_path / "pyproject.toml")
+        monkeypatch.setattr(mod, "PY_VERSION_FILE", tmp_path / "version.py")
+        monkeypatch.setattr(mod, "README_MD", tmp_path / "README.md")
+        monkeypatch.setattr(mod, "CLAUDE_MD", tmp_path / "CLAUDE.md")
+        monkeypatch.setattr(mod, "BENCHMARK_REPORT_MD", tmp_path / "BENCHMARK.md")
+
+        mod.apply_version("3.90.1", "2026-11-22")
+
+        assert "(v3.90.1)" in cfg_main.read_text(encoding="utf-8")
+        assert "(v3.90.1)" in cfg_example.read_text(encoding="utf-8")
+        assert r"Version \texttt{3.90.1}" in en_ch1.read_text(encoding="utf-8")
+        assert r"0.9.1-crf" in en_ch1.read_text(encoding="utf-8")
+        en_ch5_txt = en_ch5.read_text(encoding="utf-8")
+        assert "Pre-v3.80 Baseline" in en_ch5_txt
+        assert r"\textbf{CITRA v3.90.1}" in en_ch5_txt
+        assert r"version \texttt{3.90.1}" in en_ch5_txt
+        en_ch6_txt = en_ch6.read_text(encoding="utf-8")
+        assert r"Essay Integrity Checker v3.90.1" in en_ch6_txt
+        assert r"(\texttt{v3.90.1})" in en_ch6_txt
+        en_phu_txt = en_phu.read_text(encoding="utf-8")
+        assert "VNPay v2.1.0" in en_phu_txt
+        assert r"(\texttt{v3.90.1})" in en_phu_txt
+        vn_ch1_txt = vn_ch1.read_text(encoding="utf-8")
+        assert r"Phiên bản \texttt{3.90.1}" in vn_ch1_txt
+        assert r"phiên bản \texttt{v3.90.1}" in vn_ch1_txt
+
 
 # ============================================================================
 # QA-12: Script Portability & Non-Vacuous CLI Behavior

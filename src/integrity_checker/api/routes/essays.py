@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session
 from integrity_checker.api.deps import get_current_user, get_db, get_pipeline, require_admin
 from integrity_checker.api.job_recovery import QUOTA_LEDGER_LOCK, refund_upload_quota_once
 from integrity_checker.api.progress import (
+    MAX_AUTO_RETRIES,
     compute_sqlite_fifo_queue_position,
     get_pipeline_admission_controller,
     get_tracker,
@@ -900,7 +901,12 @@ def get_essay_status(
             and "disk i/o error" in state.error.lower()
             and not is_test_runtime()
             and persisted_pdf.is_file()
-            and (resumed_state := tracker.try_claim_auto_retry(essay_id)) is not None
+            and (
+                resumed_state := tracker.try_claim_auto_retry(
+                    essay_id, min_prior_retries=int(state.retry_count or 0)
+                )
+            )
+            is not None
         ):
             background_tasks.add_task(
                 _run_pipeline_task,
@@ -914,6 +920,24 @@ def get_essay_status(
             resumed_snap["quota_charged"] = quota_charged_bool
             return resumed_snap
         latest_state = tracker.get(essay_id) or state
+        if latest_state.status == "failed" and getattr(essay, "job_status", None) == "processing":
+            fail_reason = (
+                latest_state.error
+                or essay.job_error
+                or "Analysis failed due to an internal processing error."
+            )
+            refunded = refund_upload_quota_once(db, essay_id, fail_reason)
+            refreshed_row = db.get(EssayRecord, essay_id)
+            quota_charged_bool = (
+                False
+                if refunded
+                else (
+                    True
+                    if getattr(refreshed_row, "quota_charged", False) is None
+                    else bool(getattr(refreshed_row, "quota_charged", False))
+                )
+            )
+            tracker.update(essay_id, quota_charged=quota_charged_bool)
         live_snap = dict(latest_state.to_snapshot())
         if live_snap.get("status") == "queued" and live_snap.get("queue_position") is None:
             live_snap["queue_position"] = compute_sqlite_fifo_queue_position(db, essay_id)
@@ -948,6 +972,78 @@ def get_essay_status(
         }
 
     if getattr(essay, "job_status", None) == "processing":
+        if persisted_snap is not None and persisted_snap.get("status") == "failed":
+            fail_err = str(
+                persisted_snap.get("error")
+                or essay.job_error
+                or "Analysis failed due to an internal processing error."
+            )
+            prior_retries = int(persisted_snap.get("retry_count") or 0)
+            if (
+                worker_mode == "inline"
+                and "disk i/o error" in fail_err.lower()
+                and not is_test_runtime()
+                and persisted_pdf.is_file()
+                and (
+                    resumed_state := tracker.try_claim_auto_retry(
+                        essay_id, min_prior_retries=prior_retries
+                    )
+                )
+                is not None
+            ):
+                background_tasks.add_task(
+                    _run_pipeline_task,
+                    essay.id,
+                    str(persisted_pdf),
+                    essay.user_id or current_user.id,
+                    get_pipeline(),
+                    False,
+                )
+                resumed_snap = dict(resumed_state.to_snapshot())
+                resumed_snap["quota_charged"] = quota_charged_bool
+                return resumed_snap
+
+            concurrent_state = None if worker_mode == "web_only" else tracker.get(essay_id)
+            if concurrent_state is not None and concurrent_state.status in (
+                "queued",
+                "processing",
+                "completed",
+            ):
+                live_snap = dict(concurrent_state.to_snapshot())
+                live_snap["quota_charged"] = quota_charged_bool
+                return live_snap
+
+            refunded = refund_upload_quota_once(db, essay_id, fail_err)
+            refreshed_essay = db.get(EssayRecord, essay_id)
+            final_qc = (
+                False
+                if refunded
+                else (
+                    True
+                    if getattr(refreshed_essay, "quota_charged", False) is None
+                    else bool(getattr(refreshed_essay, "quota_charged", False))
+                )
+            )
+            failed_snap: dict[str, Any] = {
+                "status": "failed",
+                "step": persisted_snap.get("step", "parsing"),
+                "step_index": int(persisted_snap.get("step_index", 0) or 0),
+                "total_steps": 8,
+                "message": f"Failed: {fail_err}",
+                "citations_found": int(persisted_snap.get("citations_found", 0) or 0),
+                "references_found": int(persisted_snap.get("references_found", 0) or 0),
+                "linked": int(persisted_snap.get("linked", 0) or 0),
+                "sources_queried": persisted_snap.get("sources_queried", {}),
+                "elapsed_seconds": float(persisted_snap.get("elapsed_seconds", 0.0) or 0.0),
+                "finished_at": persisted_snap.get("finished_at"),
+                "error": fail_err,
+                "retry_count": prior_retries,
+                "queue_position": None,
+                "quota_charged": final_qc,
+            }
+            if "document_diagnostics" in persisted_snap:
+                failed_snap["document_diagnostics"] = persisted_snap.get("document_diagnostics")
+            return failed_snap
         if persisted_snap is not None and persisted_snap.get("status") in (
             "processing",
             "queued",
@@ -1150,12 +1246,17 @@ async def stream_essay_events(
 
                     if snapshot.get("status") == "failed":
                         persisted_pdf = _get_persisted_upload_path(essay_id)
+                        snap_retry = int(snapshot.get("retry_count") or 0)
                         if (
                             _get_worker_mode() == "inline"
                             and "disk i/o error" in str(snapshot.get("error") or "").lower()
                             and not is_test_runtime()
                             and persisted_pdf.is_file()
-                            and (resumed_state := tracker.try_claim_auto_retry(essay_id))
+                            and (
+                                resumed_state := tracker.try_claim_auto_retry(
+                                    essay_id, min_prior_retries=snap_retry
+                                )
+                            )
                             is not None
                         ):
                             await sub_iter.aclose()
@@ -1181,7 +1282,6 @@ async def stream_essay_events(
                             continue
 
                         cur_state = tracker.get(essay_id)
-                        snap_retry = int(snapshot.get("retry_count") or 0)
                         if cur_state is not None and (
                             cur_state.status in ("queued", "processing", "completed")
                             or cur_state.retry_count > snap_retry
@@ -1193,6 +1293,42 @@ async def stream_essay_events(
                                 heartbeat_interval=heartbeat_interval,
                             )
                             continue
+
+                        if _get_worker_mode() == "inline" and snapshot.get("quota_charged") is True:
+                            def _ensure_failed_refund_sync(
+                                _snap_err: Any = snapshot.get("error"),
+                            ) -> bool | None:
+                                from integrity_checker.db.session import get_session
+
+                                s_ref = get_session()
+                                try:
+                                    e_row = s_ref.get(EssayRecord, essay_id)
+                                    if (
+                                        e_row is not None
+                                        and getattr(e_row, "job_status", None) == "processing"
+                                    ):
+                                        err_msg = str(
+                                            _snap_err
+                                            or e_row.job_error
+                                            or "Analysis failed due to an internal processing error."
+                                        )
+                                        refunded = refund_upload_quota_once(
+                                            s_ref, essay_id, err_msg
+                                        )
+                                        e_after = s_ref.get(EssayRecord, essay_id)
+                                        return (
+                                            False
+                                            if refunded
+                                            else bool(getattr(e_after, "quota_charged", False))
+                                        )
+                                    return None
+                                finally:
+                                    s_ref.close()
+
+                            updated_qc = await asyncio.to_thread(_ensure_failed_refund_sync)
+                            if updated_qc is not None:
+                                snapshot = dict(snapshot)
+                                snapshot["quota_charged"] = updated_qc
 
                     yield f"data: {json.dumps(snapshot, ensure_ascii=False)}\n\n"
                     last_frame_at = time.monotonic()
@@ -1236,7 +1372,13 @@ def _is_essay_genuinely_inflight(essay: EssayRecord) -> bool:
     eid = int(essay.id)
     if get_pipeline_admission_controller().is_inflight(eid):
         return True
-    return get_tracker().get(eid) is None
+    tracker = get_tracker()
+    if tracker.get(eid) is not None:
+        return False
+    persisted_snap = tracker.load_persisted_snapshot(eid, essay)
+    if persisted_snap is not None and persisted_snap.get("status") in ("failed", "completed"):
+        return False
+    return True
 
 
 @router.post("/{essay_id}/reanalyze")
@@ -1462,6 +1604,39 @@ def _serialize_essay_summary(
             cis_score = round((verified_academic / len(academic)) * 100.0, 1)
 
     raw_qc = getattr(e, "quota_charged", True)
+    effective_job_status = getattr(e, "job_status", None) or "completed"
+    effective_job_error = getattr(e, "job_error", None)
+    if effective_job_status == "processing" and getattr(e, "id", None) is not None:
+        tracker = get_tracker()
+        in_mem = None if _get_worker_mode() == "web_only" else tracker.get(int(e.id))
+        failed_err: str | None = None
+        retry_cnt = 0
+        is_snap_failed = False
+        if in_mem is not None:
+            if in_mem.status == "failed":
+                is_snap_failed = True
+                failed_err = in_mem.error
+                retry_cnt = int(in_mem.retry_count or 0)
+        else:
+            persisted_snap = tracker.load_persisted_snapshot(int(e.id), e)
+            if persisted_snap is not None and persisted_snap.get("status") == "failed":
+                is_snap_failed = True
+                failed_err = str(persisted_snap.get("error") or "") or None
+                retry_cnt = int(persisted_snap.get("retry_count") or 0)
+
+        if is_snap_failed:
+            can_still_retry = (
+                _get_worker_mode() == "inline"
+                and bool(failed_err and "disk i/o error" in failed_err.lower())
+                and not is_test_runtime()
+                and _get_persisted_upload_path(int(e.id)).is_file()
+                and retry_cnt < MAX_AUTO_RETRIES
+            )
+            if not can_still_retry:
+                effective_job_status = "failed"
+                if not effective_job_error and failed_err:
+                    effective_job_error = failed_err
+
     return {
         "id": e.id,
         "filename": e.filename,
@@ -1473,8 +1648,8 @@ def _serialize_essay_summary(
         "num_citations": num_citations,
         "num_verdicts": num_verdicts,
         "num_verified": num_verified,
-        "job_status": getattr(e, "job_status", None) or "completed",
-        "job_error": getattr(e, "job_error", None),
+        "job_status": effective_job_status,
+        "job_error": effective_job_error,
         "job_attempt_count": int(getattr(e, "job_attempt_count", 0) or 0),
         "quota_charged": True if raw_qc is None else bool(raw_qc),
     }

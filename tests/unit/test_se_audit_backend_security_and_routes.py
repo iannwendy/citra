@@ -1986,3 +1986,289 @@ def test_round2_critic_be_r1_02_dual_sse_subscribers_converge_on_auto_retry(
         tracker.clear(eid_fail2)
 
 
+# ==============================================================================
+# WAVE-2 CONVERGENCE REGRESSION TESTS (CONV-01 & CONV-03)
+# ==============================================================================
+
+
+def test_conv01_unobserved_disk_io_eviction_recovery_refund_and_summary_sync(
+    isolated_app_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, tmp_path = isolated_app_env
+    uid, headers = _create_user_and_headers("conv01_student", plan_tier="pro")
+
+    s = session_mod.get_session()
+    try:
+        repo = Repository(s)
+        user = s.get(User, uid)
+        assert user is not None
+        user.monthly_uploads_used = 3
+
+        e_evicted_retry = repo.create_essay("evicted_retry.pdf", num_pages=2)
+        e_evicted_retry.user_id = uid
+        e_evicted_retry.quota_charged = 1
+        e_evicted_retry.job_status = "processing"
+
+        e_evicted_exhausted = repo.create_essay("evicted_exhausted.pdf", num_pages=2)
+        e_evicted_exhausted.user_id = uid
+        e_evicted_exhausted.quota_charged = 1
+        e_evicted_exhausted.job_status = "processing"
+        e_evicted_exhausted.style_profile_json = json.dumps(
+            {
+                "_progress_snapshot": {
+                    "status": "failed",
+                    "step": "parsing",
+                    "step_index": 0,
+                    "total_steps": 8,
+                    "message": "Failed: Transient database disk I/O error",
+                    "error": "Transient database disk I/O error",
+                    "retry_count": 1,
+                    "quota_charged": True,
+                }
+            }
+        )
+
+        e_evicted_sse = repo.create_essay("evicted_sse_retry.pdf", num_pages=2)
+        e_evicted_sse.user_id = uid
+        e_evicted_sse.quota_charged = 1
+        e_evicted_sse.job_status = "processing"
+
+        s.commit()
+        eid_retry = int(e_evicted_retry.id)
+        eid_exhausted = int(e_evicted_exhausted.id)
+        eid_sse = int(e_evicted_sse.id)
+    finally:
+        s.close()
+
+    for eid in (eid_retry, eid_exhausted, eid_sse):
+        up = essays_mod._get_persisted_upload_path(eid)
+        up.parent.mkdir(parents=True, exist_ok=True)
+        up.write_bytes(b"%PDF-1.4 dummy")
+        assert str(tmp_path) in str(up)
+
+    monkeypatch.setattr(essays_mod, "is_test_runtime", lambda: False)
+    monkeypatch.setenv("CITRA_WORKER_MODE", "inline")
+    tracker = essays_mod.get_tracker()
+
+    # 1. Unobserved Attempt #1 fails with disk I/O error, then tracker evicts eid_retry
+    calls_a = {"count": 0}
+
+    class _RecoverOnSecondAttemptPipeline:
+        async def run_async(self, *args, **kwargs):
+            calls_a["count"] += 1
+            if calls_a["count"] == 1:
+                raise OperationalError("SELECT 1", {}, Exception("disk I/O error"))
+            rep = MagicMock()
+            rep.num_pages = 2
+            rep.extracted_citations = []
+            rep.verdicts = []
+            rep.style_profile = {"style": "APA", "confidence": 1.0}
+            rep.cis = {"score": 92.0, "components": {}, "num_citations": 0, "num_unresolved": 0}
+            rep.document_diagnostics = None
+            return rep
+
+    monkeypatch.setattr(essays_mod, "get_pipeline", lambda: _RecoverOnSecondAttemptPipeline())
+    tracker.init(eid_retry, is_retry=False)
+    asyncio.run(
+        essays_mod._run_pipeline_task(
+            essay_id=eid_retry,
+            tmp_path=str(essays_mod._get_persisted_upload_path(eid_retry)),
+            user_id=uid,
+            pipeline=_RecoverOnSecondAttemptPipeline(),
+            cleanup_file=False,
+        )
+    )
+    assert calls_a["count"] == 1
+    tracker.clear(eid_retry)
+    assert tracker.get(eid_retry) is None
+
+    # load_db_fallback_snapshot must surface the persisted "failed" snapshot (NOT synthetic "processing")
+    fallback_snap = tracker.load_db_fallback_snapshot(eid_retry)
+    assert fallback_snap is not None
+    assert fallback_snap["status"] == "failed"
+    assert fallback_snap["quota_charged"] is True
+
+    # GET /api/essays/{eid_retry}/status after eviction must claim auto-retry #1 & run Attempt #2
+    r_status_retry = client.get(f"/api/essays/{eid_retry}/status", headers=headers)
+    assert r_status_retry.status_code == 200
+    assert calls_a["count"] == 2
+    s_verify_a = session_mod.get_session()
+    try:
+        row_a = s_verify_a.get(EssayRecord, eid_retry)
+        assert row_a is not None and row_a.job_status == "completed"
+    finally:
+        s_verify_a.close()
+
+    # 2. Evicted job with retry_count >= MAX_AUTO_RETRIES:
+    #    - GET /api/essays (_serialize_essay_summary) reports "failed" instead of wedged "processing"
+    #    - try_claim_auto_retry(..., min_prior_retries=1) returns None
+    #    - GET /api/essays/{eid_exhausted}/status refunds upload quota once and transitions DB to "failed"
+    r_list = client.get("/api/essays", headers=headers)
+    assert r_list.status_code == 200
+    exhausted_summary = next(item for item in r_list.json() if item["id"] == eid_exhausted)
+    assert exhausted_summary["job_status"] == "failed"
+
+    assert tracker.try_claim_auto_retry(eid_exhausted, min_prior_retries=1) is None
+
+    r_status_exhausted = client.get(f"/api/essays/{eid_exhausted}/status", headers=headers)
+    assert r_status_exhausted.status_code == 200
+    body_exhausted = r_status_exhausted.json()
+    assert body_exhausted["status"] == "failed"
+    assert body_exhausted["quota_charged"] is False
+
+    s_verify_b = session_mod.get_session()
+    try:
+        row_b = s_verify_b.get(EssayRecord, eid_exhausted)
+        user_b = s_verify_b.get(User, uid)
+        assert row_b is not None and row_b.job_status == "failed"
+        assert bool(row_b.quota_charged) is False
+        assert user_b is not None and user_b.monthly_uploads_used == 2
+    finally:
+        s_verify_b.close()
+
+    # 3. Evicted job after unobserved Attempt #1 failure resumed via SSE /events -> retries once & refunds if Attempt #2 fails
+    calls_sse = {"count": 0}
+
+    class _AlwaysDiskIoSsePipeline:
+        async def run_async(self, *args, **kwargs):
+            calls_sse["count"] += 1
+            raise OperationalError("SELECT 1", {}, Exception("disk I/O error"))
+
+    monkeypatch.setattr(essays_mod, "get_pipeline", lambda: _AlwaysDiskIoSsePipeline())
+    tracker.init(eid_sse, is_retry=False)
+    asyncio.run(
+        essays_mod._run_pipeline_task(
+            essay_id=eid_sse,
+            tmp_path=str(essays_mod._get_persisted_upload_path(eid_sse)),
+            user_id=uid,
+            pipeline=_AlwaysDiskIoSsePipeline(),
+            cleanup_file=False,
+        )
+    )
+    assert calls_sse["count"] == 1
+    tracker.clear(eid_sse)
+
+    async def _collect_evicted_sse() -> list[dict]:
+        fake_req = MagicMock()
+
+        async def _not_disconnected() -> bool:
+            return False
+
+        fake_req.is_disconnected = _not_disconnected
+        s_sse = session_mod.get_session()
+        u_sse = s_sse.get(User, uid)
+        assert u_sse is not None
+        resp = await essays_mod.stream_essay_events(
+            essay_id=eid_sse,
+            request=fake_req,
+            current_user=u_sse,
+            db=s_sse,
+        )
+        out: list[dict] = []
+        async for raw_chunk in resp.body_iterator:
+            chunk_str = raw_chunk.decode("utf-8") if isinstance(raw_chunk, bytes) else str(raw_chunk)
+            for line in chunk_str.splitlines():
+                if line.startswith("data: "):
+                    out.append(json.loads(line[6:]))
+        return out
+
+    frames_sse = asyncio.run(_collect_evicted_sse())
+    assert calls_sse["count"] == 2
+    assert frames_sse[-1]["status"] == "failed"
+    assert frames_sse[-1]["quota_charged"] is False
+    tracker.clear(eid_retry)
+    tracker.clear(eid_exhausted)
+    tracker.clear(eid_sse)
+
+
+def test_conv03_create_app_no_eager_maintenance_thread_and_lifespan_cooperative_join(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+    import subprocess
+    import sys
+    import threading
+
+    import integrity_checker.api.main as main_mod
+
+    # 1. Calling create_app() + app.openapi() outside lifespan (with is_test_runtime=False, inline)
+    #    must spawn ZERO background maintenance calls; entering TestClient(app) runs lifespan & joins
+    #    strictly before eng.dispose()!
+    events: list[str] = []
+    started_evt = threading.Event()
+
+    def _spy_maint(stop_event: threading.Event) -> None:
+        events.append(f"maint_start:{isinstance(stop_event, threading.Event)}")
+        started_evt.set()
+        stop_event.wait(timeout=1.5)
+        events.append(f"maint_stopped:{stop_event.is_set()}")
+
+    fake_engine = MagicMock()
+    fake_engine.url = "sqlite:///tmp_conv03.db"
+    fake_engine.dispose.side_effect = lambda: events.append("eng_dispose")
+
+    with monkeypatch.context() as mp:
+        mp.setattr(main_mod, "init_db", lambda: None)
+        mp.setattr(main_mod, "is_test_runtime", lambda: False)
+        mp.setenv("CITRA_WORKER_MODE", "inline")
+        mp.setattr(main_mod, "_startup_background_maintenance", _spy_maint, raising=False)
+        mp.setattr(session_mod, "_engine", fake_engine)
+
+        app = main_mod.create_app()
+        schema = app.openapi()
+        assert "paths" in schema
+        assert events == [], f"create_app() eagerly launched maintenance outside _lifespan: {events}"
+
+        with TestClient(app):
+            assert started_evt.wait(timeout=1.5)
+        assert events == ["maint_start:True", "maint_stopped:True", "eng_dispose"]
+
+    # Cooperative stop_event already set -> _startup_background_maintenance returns immediately
+    preset_stop = threading.Event()
+    preset_stop.set()
+    with patch(
+        "integrity_checker.api.job_recovery.recover_orphaned_essay_jobs",
+        side_effect=AssertionError("Should not run when stop_event is set"),
+    ):
+        main_mod._startup_background_maintenance(preset_stop)
+
+    # 2. Subprocess check WITHOUT PYTEST_CURRENT_TEST: create_app() + app.openapi() spawns 0 maintenance threads & exits 0
+    sub_env = {k: v for k, v in os.environ.items() if k != "PYTEST_CURRENT_TEST"}
+    sub_data = tmp_path / "conv03_sub_data"
+    sub_data.mkdir(parents=True, exist_ok=True)
+    sub_env["DATA_DIR"] = str(sub_data)
+    sub_env["CACHE_DIR"] = str(sub_data / "cache")
+    sub_env["AVATARS_DIR"] = str(sub_data / "avatars")
+    sub_env["DATABASE_URL"] = f"sqlite:///{sub_data / 'conv03.db'}"
+    sub_env["JWT_SECRET"] = "conv03-subprocess-jwt-secret-key-0123456789abcdef"
+    sub_env["CITRA_WORKER_MODE"] = "inline"
+    sub_env["APP_ENV"] = "development"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import os, sys, threading; "
+                "assert 'PYTEST_CURRENT_TEST' not in os.environ; "
+                "from integrity_checker.config import is_test_runtime; "
+                "assert is_test_runtime() is False; "
+                "from integrity_checker.api.main import create_app; "
+                "app = create_app(); "
+                "schema = app.openapi(); "
+                "assert '/api/health' in schema.get('paths', {}); "
+                "names = {t.name for t in threading.enumerate()}; "
+                "assert 'citra-startup-maintenance' not in names, f'Maintenance thread leaked: {names}'; "
+                "from integrity_checker.matching.semantic import SemanticMatcher; "
+                "assert getattr(SemanticMatcher, '_instance', None) is None"
+            ),
+        ],
+        env=sub_env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, f"Subprocess failed (rc={proc.returncode}): {proc.stderr or proc.stdout}"
+
+
+

@@ -1338,3 +1338,212 @@ def test_qa08_nature_format_unit_suite() -> None:
     assert c_book is not None
     assert c_book.year == "2010"
     assert c_book.venue == "Cambridge Univ. Press"
+
+
+# =============================================================================
+# WAVE-2 CONVERGENCE: CONV-02 DocxParser._validate_docx_archive Full Parity
+# =============================================================================
+
+
+def test_conv02_docx_parser_media_stream_bomb_disguised_override_dtd_and_duplicate_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import copy as _copy
+    import warnings
+
+    import docx  # type: ignore
+
+    import integrity_checker.extraction.docx_parser as dp_mod
+
+    base_docx = tmp_path / "clean_base.docx"
+    d = docx.Document()
+    d.add_paragraph("Valid manuscript paragraph (Smith, 2020).")
+    d.save(str(base_docx))
+
+    # 1. Spoofed binary/media member (word/media/image1.png) stream bomb:
+    #    ZipInfo.file_size claims 512 bytes while actual deflate stream expands to 2.0 MiB > 1.5 MiB cap!
+    monkeypatch.setattr(dp_mod, "_MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES", 1536 * 1024)
+    monkeypatch.setattr(dp_mod, "_MAX_DOCX_XML_MEMBER_BYTES", 1536 * 1024)
+
+    media_bomb_path = tmp_path / "media_stream_bomb.docx"
+    fake_png_stream = b"\x89PNG\r\n\x1a\n" + (b"\x00" * (2 * 1024 * 1024))
+    with (
+        zipfile.ZipFile(base_docx, "r") as zin,
+        zipfile.ZipFile(media_bomb_path, "w", compression=zipfile.ZIP_DEFLATED) as zout,
+    ):
+        for item in zin.infolist():
+            zout.writestr(item, zin.read(item.filename))
+        zout.writestr("word/media/image1.png", fake_png_stream)
+
+    orig_infolist = zipfile.ZipFile.infolist
+    orig_getinfo = zipfile.ZipFile.getinfo
+    orig_open = zipfile.ZipFile.open
+
+    def _spoof_media_infolist(zf_self: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
+        out: list[zipfile.ZipInfo] = []
+        for inf in orig_infolist(zf_self):
+            if inf.filename == "word/media/image1.png":
+                cloned = _copy.copy(inf)
+                cloned.file_size = 512
+                out.append(cloned)
+            else:
+                out.append(inf)
+        return out
+
+    def _spoof_media_open(
+        zf_self: zipfile.ZipFile,
+        name_or_info: str | zipfile.ZipInfo,
+        mode: str = "r",
+        pwd: bytes | None = None,
+        *,
+        force_zip64: bool = False,
+    ) -> object:
+        fname = name_or_info.filename if isinstance(name_or_info, zipfile.ZipInfo) else name_or_info
+        real_info = orig_getinfo(zf_self, fname)
+        return orig_open(zf_self, real_info, mode=mode, pwd=pwd, force_zip64=force_zip64)  # type: ignore[arg-type]
+
+    with (
+        patch.object(zipfile.ZipFile, "infolist", _spoof_media_infolist),
+        patch.object(zipfile.ZipFile, "open", _spoof_media_open),
+    ):
+        with pytest.raises(ValueError, match=r"(?i)exceeds|zip bomb"):
+            DocxParser().parse(media_bomb_path)
+
+    # Restore caps for DTD / duplicate tests
+    monkeypatch.undo()
+
+    # 2. Disguised non-.xml OPC XML part (/word/document.bin) declared via [Content_Types].xml Override with DTD
+    disguised_docx = tmp_path / "disguised_override_dtd.docx"
+    valid_doc_xml = (
+        b'<?xml version="1.0"?>'
+        b'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        b"<w:body><w:p><w:r><w:t>Hello</w:t></w:r></w:p></w:body></w:document>"
+    )
+    override_ct_xml = (
+        b'<?xml version="1.0"?>'
+        b'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        b'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        b'<Default Extension="xml" ContentType="application/xml"/>'
+        b'<Override PartName="/word/document.bin" '
+        b'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        b"</Types>"
+    )
+    evil_dtd_bin = (
+        b'<?xml version="1.0"?>'
+        b'<!DOCTYPE document [<!ENTITY boom "expanded">]>'
+        b'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        b"<w:body><w:p><w:r><w:t>&boom;</w:t></w:r></w:p></w:body></w:document>"
+    )
+    rels_to_bin = (
+        b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        b'<Relationship Id="rId1" '
+        b'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+        b'Target="word/document.bin"/>'
+        b"</Relationships>"
+    )
+    with zipfile.ZipFile(disguised_docx, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", override_ct_xml)
+        zf.writestr("_rels/.rels", rels_to_bin)
+        zf.writestr("word/document.xml", valid_doc_xml)
+        zf.writestr("word/document.bin", evil_dtd_bin)
+
+    with pytest.raises(ValueError, match=r"(?i)unsafe|dtd|entity|invalid"):
+        DocxParser().parse(disguised_docx)
+
+    # 3. Duplicate [Content_Types].xml central-directory shadowing rejected
+    dup_ct_docx = tmp_path / "duplicate_content_types.docx"
+    clean_ct_xml = (
+        b'<?xml version="1.0"?>'
+        b'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        b'<Default Extension="xml" ContentType="application/xml"/>'
+        b"</Types>"
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        with zipfile.ZipFile(dup_ct_docx, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("[Content_Types].xml", clean_ct_xml)
+            zf.writestr("word/document.xml", valid_doc_xml)
+            zf.writestr("[Content_Types].xml", override_ct_xml)
+
+    with pytest.raises(ValueError, match=r"(?i)duplicate|invalid"):
+        DocxParser().parse(dup_ct_docx)
+
+    # 4. UTF-16LE <!DOCTYPE payload in non-notes archive entry rejected
+    utf16_docx = tmp_path / "utf16_dtd.docx"
+    utf16_payload = b"\xff\xfe" + '<?xml version="1.0"?><!DOCTYPE x [<!ENTITY a "1">]><x/>'.encode(
+        "utf-16-le"
+    )
+    with zipfile.ZipFile(utf16_docx, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", clean_ct_xml)
+        zf.writestr("word/document.xml", valid_doc_xml)
+        zf.writestr("custom/payload.dat", utf16_payload)
+
+    with pytest.raises(ValueError, match=r"(?i)unsafe|dtd|entity"):
+        DocxParser().parse(utf16_docx)
+
+    # 5. ContentType Override / Default hijack + .rels relationship hijack targeting word/footnotes.xml:
+    #    _NOTES_XML_MEMBERS exemption must NOT allow /word/footnotes.xml to masquerade as document.main+xml
+    #    (or styles+xml / non-footnotes relationship target) and smuggle DTD/ENTITY into python-docx!
+    hijack_override_docx = tmp_path / "hijack_footnotes_override.docx"
+    hijack_ct_xml = (
+        b'<?xml version="1.0"?>'
+        b'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        b'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        b'<Default Extension="xml" ContentType="application/xml"/>'
+        b'<Override PartName="/word/footnotes.xml" '
+        b'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        b"</Types>"
+    )
+    rels_to_footnotes = (
+        b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        b'<Relationship Id="rId1" '
+        b'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" '
+        b'Target="word/footnotes.xml"/>'
+        b"</Relationships>"
+    )
+    with zipfile.ZipFile(hijack_override_docx, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", hijack_ct_xml)
+        zf.writestr("_rels/.rels", rels_to_footnotes)
+        zf.writestr("word/document.xml", valid_doc_xml)
+        zf.writestr("word/footnotes.xml", evil_dtd_bin)
+
+    with pytest.raises(ValueError, match=r"(?i)unsafe|dtd|entity|relationship"):
+        DocxParser().parse(hijack_override_docx)
+
+    hijack_default_docx = tmp_path / "hijack_footnotes_default_ctype.docx"
+    hijack_default_ct_xml = (
+        b'<?xml version="1.0"?>'
+        b'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        b'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        b'<Default Extension="xml" '
+        b'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        b"</Types>"
+    )
+    with zipfile.ZipFile(hijack_default_docx, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("[Content_Types].xml", hijack_default_ct_xml)
+        zf.writestr("_rels/.rels", rels_to_footnotes)
+        zf.writestr("word/document.xml", valid_doc_xml)
+        zf.writestr("word/footnotes.xml", evil_dtd_bin)
+
+    with pytest.raises(ValueError, match=r"(?i)unsafe|dtd|entity|relationship"):
+        DocxParser().parse(hijack_default_docx)
+
+    hijack_rels_only_docx = tmp_path / "hijack_footnotes_rels_target.docx"
+    with zipfile.ZipFile(hijack_rels_only_docx, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(
+            "[Content_Types].xml",
+            b'<?xml version="1.0"?>'
+            b'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            b'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            b'<Default Extension="xml" ContentType="application/xml"/>'
+            b"</Types>",
+        )
+        zf.writestr("_rels/.rels", rels_to_footnotes)
+        zf.writestr("word/document.xml", valid_doc_xml)
+        zf.writestr("word/footnotes.xml", evil_dtd_bin)
+
+    with pytest.raises(ValueError, match=r"(?i)relationship|unsafe|invalid"):
+        DocxParser().parse(hijack_rels_only_docx)
+

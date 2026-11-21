@@ -449,3 +449,91 @@ class TestOps10ToOps14ConfigsDocsAndThesisParity:
 
         en_phu_luc = (REPO_ROOT / "FinalReport_TDTU" / "PhuLuc.tex").read_text(encoding="utf-8")
         assert r"thirteen SHA-256 checksummed schema migrations (\texttt{0001}--\texttt{0013})" in en_phu_luc
+
+    def test_conv05_configs_and_bilingual_theses_migration_status_test_count_and_semver_parity(
+        self,
+    ) -> None:
+        py_ver_match = re.search(
+            r'__version__\s*=\s*["\']([^"\']+)["\']',
+            (REPO_ROOT / "src" / "integrity_checker" / "__version__.py").read_text(
+                encoding="utf-8"
+            ),
+        )
+        assert py_ver_match is not None
+        expected_ver = py_ver_match.group(1)
+
+        for cfg_name in ("config.yaml", "config.example.yaml"):
+            cfg_txt = (REPO_ROOT / "configs" / cfg_name).read_text(encoding="utf-8")
+            assert "3.89.5" not in cfg_txt, f"{cfg_name} still contains stale 3.89.5"
+            assert f"(v{expected_ver})" in cfg_txt, (
+                f"{cfg_name} missing current SemVer header (v{expected_ver})"
+            )
+
+        tex_names = (
+            "chapter1_rewritten.tex",
+            "chapter2_rewritten.tex",
+            "chapter3_rewritten.tex",
+            "chapter4_rewritten.tex",
+            "chapter5_rewritten.tex",
+            "chapter6_rewritten.tex",
+            "PhuLuc.tex",
+        )
+        forbidden_substrings = (
+            "0012",
+            "3.89.5",
+            "Yes (7)",
+            "Có (7)",
+            "twelve numbered",
+            "twelve checksummed migrations",
+            "12 checksummed migrations",
+            "12 migrations",
+            "12 bản di trú",
+            "mười hai bản di trú",
+            "2,197",
+            "2.197",
+            "2,203",
+            "2.203",
+            "472 ",
+            "62 suites",
+            "62 bộ",
+            "2,689",
+            "2.689",
+        )
+
+        for thesis_dir in ("FinalReport_TDTU", "FinalReport_TDTU_VN"):
+            for tex_name in tex_names:
+                tex_path = REPO_ROOT / thesis_dir / tex_name
+                txt = tex_path.read_text(encoding="utf-8")
+                for bad_tok in forbidden_substrings:
+                    assert bad_tok not in txt, (
+                        f"Stale token {bad_tok!r} found in {thesis_dir}/{tex_name}"
+                    )
+                assert expected_ver in txt, (
+                    f"{thesis_dir}/{tex_name} missing synced SemVer {expected_ver}"
+                )
+
+            ch2 = (REPO_ROOT / thesis_dir / "chapter2_rewritten.tex").read_text(encoding="utf-8")
+            expected_link_cell = (
+                r"\textbf{Yes (8)}" if thesis_dir == "FinalReport_TDTU" else r"\textbf{Có (8)}"
+            )
+            assert expected_link_cell in ch2
+
+            for mig_file in (
+                "chapter1_rewritten.tex",
+                "chapter3_rewritten.tex",
+                "chapter5_rewritten.tex",
+                "chapter6_rewritten.tex",
+                "PhuLuc.tex",
+            ):
+                mig_txt = (REPO_ROOT / thesis_dir / mig_file).read_text(encoding="utf-8")
+                assert r"\texttt{0001}--\texttt{0013}" in mig_txt, (
+                    f"{thesis_dir}/{mig_file} missing \\texttt{{0001}}--\\texttt{{0013}}"
+                )
+
+            ch1 = (REPO_ROOT / thesis_dir / "chapter1_rewritten.tex").read_text(encoding="utf-8")
+            ch5 = (REPO_ROOT / thesis_dir / "chapter5_rewritten.tex").read_text(encoding="utf-8")
+            phu = (REPO_ROOT / thesis_dir / "PhuLuc.tex").read_text(encoding="utf-8")
+            assert "2,320+" in ch1 and "487+" in ch1 and "63" in ch1
+            assert "2,320+" in ch5 and "487+" in ch5 and "63" in ch5 and "2,827+" in ch5
+            assert "487+" in phu and "63" in phu
+            assert "VNPay v2.1.0" in phu

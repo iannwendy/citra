@@ -188,7 +188,7 @@ CITRA assigns verification labels at the individual reference-entry level rather
 \section*{Appendix D. Codebase Package Map}
 \label{app:modules}
 
-The repository (\texttt{v3.89.5}) separates backend domain packages (\texttt{src/\allowbreak integrity\_checker/}) from the single-page web client (\texttt{web/src/}) across the following core modules:
+The repository (\texttt{v3.90.1}) separates backend domain packages (\texttt{src/\allowbreak integrity\_checker/}) from the single-page web client (\texttt{web/src/}) across the following core modules:
 
 \begin{description}
     \item[\texttt{extraction/}] Multi-format parsers for PDF (GROBID \texttt{0.9.1-crf} TEI-XML, two-column PyMuPDF, \texttt{pdfplumber}, and selective Tesseract Vietnamese OCR), DOCX (\texttt{python-docx}), BibTeX, and RIS, alongside table-of-contents filtering and twelve citation-style extractors.
@@ -201,7 +201,7 @@ The repository (\texttt{v3.89.5}) separates backend domain packages (\texttt{src
     \item[\texttt{evaluation/}] Paper-disjoint 120,000-sample benchmark generator and runner, baseline ladder (\texttt{B0}--\texttt{B5}), 2,400-sample OOD guardrail suite, 120-reference E2E gold evaluator, and paired McNemar, Holm--Bonferroni, Clopper--Pearson, and bootstrap tests.
     \item[\texttt{export/}] Sanitized report exporters (PDF, DOCX, CSV, JSON, BibTeX, RIS), \texttt{bibliography\_formatter.py}, and automated bibliography repair for \texttt{.docx} manuscripts (\texttt{docx\_exporter.py}).
     \item[\texttt{db/}, \texttt{billing/} \& \texttt{api/}] Fifteen SQLAlchemy ORM models, thirteen SHA-256 checksummed schema migrations (\texttt{0001}--\texttt{0013}), adaptive SQLite WAL tuning, \texttt{PipelineAdmissionController}, stale-job recovery, Stripe/VNPay billing handlers, and FastAPI routes under \texttt{/api/*}.
-    \item[\texttt{web/}] React 18.3 and TypeScript 5.8 single-page application (\textbf{CITRA}) tested by 472 Vitest unit/component tests (62 suites) and 20 Playwright E2E specification suites.
+    \item[\texttt{web/}] React 18.3 and TypeScript 5.8 single-page application (\textbf{CITRA}) tested by 487+ Vitest unit/component tests (63 suites) and 20 Playwright E2E specification suites.
 \end{description}
 
 \section*{Appendix E. Project Execution Log and Author Contributions}

@@ -3,7 +3,7 @@
 
 \section{Experimental Design and Verification Setup}
 
-Following Empirical Software Engineering evaluation standards~\cite{wohlin2012experimentation}, this chapter evaluates \textbf{CITRA} (\texttt{v3.89.5}) through automated unit, integration, and browser test suites, requirements traceability verification, and controlled quantitative benchmarks structured around five Research Questions (\textbf{RQ1}--\textbf{RQ5}).
+Following Empirical Software Engineering evaluation standards~\cite{wohlin2012experimentation}, this chapter evaluates \textbf{CITRA} (\texttt{v3.90.1}) through automated unit, integration, and browser test suites, requirements traceability verification, and controlled quantitative benchmarks structured around five Research Questions (\textbf{RQ1}--\textbf{RQ5}).
 
 \subsection{Research Questions}
 
@@ -17,11 +17,11 @@ Following Empirical Software Engineering evaluation standards~\cite{wohlin2012ex
 
 \subsection{Automated Test Suites and Requirements Traceability Matrix}
 
-Software verification spans three automated test layers summarized in Table~\ref{tab:test-suites}: 2,197 passing backend \texttt{pytest} unit and integration tests (out of 2,203 total, with 6 environment-gated skips and 0 failures), 472 passing frontend \texttt{Vitest} tests across 62 suites, and 20 \texttt{Playwright} end-to-end browser specification suites across desktop, tablet, and mobile viewports. In addition, an offline retrieval test over 500 stratified ACL Anthology queries achieved $99.80\%$ recall ($499/500$) and $100.0\%$ precision at $87.62\text{\,ms}$ mean latency. Table~\ref{tab:rtm} provides the bidirectional Requirements Traceability Matrix (RTM) linking the functional and non-functional specifications from Chapter~\ref{chap:overview} to their implementing packages and verification evidence.
+Software verification spans three automated test layers summarized in Table~\ref{tab:test-suites}: 2,320+ passing backend \texttt{pytest} unit and integration tests (with environment-gated live-network skips and 0 failures), 487+ passing frontend \texttt{Vitest} tests across 63 suites, and 20 \texttt{Playwright} end-to-end browser specification suites across desktop, tablet, and mobile viewports. In addition, an offline retrieval test over 500 stratified ACL Anthology queries achieved $99.80\%$ recall ($499/500$) and $100.0\%$ precision at $87.62\text{\,ms}$ mean latency. Table~\ref{tab:rtm} provides the bidirectional Requirements Traceability Matrix (RTM) linking the functional and non-functional specifications from Chapter~\ref{chap:overview} to their implementing packages and verification evidence.
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.23}|L{0.25}|L{0.52}|}
-\caption{Automated software verification suites executed in version \texttt{3.89.5}.}\label{tab:test-suites}\\
+\caption{Automated software verification suites executed in version \texttt{3.90.1}.}\label{tab:test-suites}\\
 \hline
 \textbf{Verification Layer} & \textbf{Execution Result} & \textbf{Verified Subsystem Scope} \\
 \hline
@@ -36,9 +36,9 @@ Software verification spans three automated test layers summarized in Table~\ref
 \endfoot
 \hline
 \endlastfoot
-Backend (\texttt{pytest}) & 2,197 passed / 2,203 total (0 failed) & Multi-format extraction, 12 styles, \texttt{VNLegalVerifier}, 7-method linker, FTS5 + 15 APIs, SSRF-safe URL/HTML checks, 68 symbolic rules, Platt calibration, CIS, RBAC/IDOR, migrations \texttt{0001}--\texttt{0012}, and crash recovery. \\
+Backend (\texttt{pytest}) & 2,320+ passed (0 failed) & Multi-format extraction, 12 styles, \texttt{VNLegalVerifier}, 7-method linker, FTS5 + 15 APIs, SSRF-safe URL/HTML checks, 68 symbolic rules, Platt calibration, CIS, RBAC/IDOR, migrations \texttt{0001}--\texttt{0013}, and crash recovery. \\
 \hline
-Frontend (\texttt{Vitest}) & 472 passed (62 suites, 0 failed) & Auth/OAuth flows, progressive-disclosure drawers, 6 diagnostic report views, Citation Network DAG, Remediation modal, Classroom/Admin telemetry, and $<251\text{\,kB}$ chunk guards. \\
+Frontend (\texttt{Vitest}) & 487+ passed (63 suites, 0 failed) & Auth/OAuth flows, progressive-disclosure drawers, 6 diagnostic report views, Citation Network DAG, Remediation modal, Classroom/Admin telemetry, and $<251\text{\,kB}$ chunk guards. \\
 \hline
 Browser E2E (\texttt{Playwright}) & 20 spec suites (132+ scenarios) & Zero horizontal overflow across 5 viewports $\times$ Light/Dark $\times$ EN/VI, SSE upload, split-pane inspection, teacher override, and 404/error recovery. \\
 \hline
@@ -327,7 +327,7 @@ To evaluate end-to-end generalization beyond the synthetic perturbation benchmar
 \endlastfoot
 VN Legal Corpus (Pre-v3.80 Baseline) & 30 & 27 / 30 (90.0\%) & 164 (15 Legal) & 109 / 235 (46.4\%) \\
 \hline
-VN Legal Corpus (\textbf{CITRA v3.89.5}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Legal)} & \textbf{403 / 416 (96.9\%)} \\
+VN Legal Corpus (\textbf{CITRA v3.90.1}) & \textbf{30} & \textbf{30 / 30 (100.0\%)} & \textbf{258 (91 Legal)} & \textbf{403 / 416 (96.9\%)} \\
 \hline
 12-Style Diagnostic Suite ($12 \times 5$) & \textbf{60} & \textbf{60 / 60 (100.0\%)} & \textbf{397 / 397 (100.0\%)} & \textbf{60 / 60 PDFs (100\%)} \\
 \hline
@@ -370,7 +370,7 @@ Seeded Capstone Audit Fixture (42\,pp.) & APA & 6 & 91.40 & 3 & 1 & 1 & 1 / 0 \\
 \end{longtable}
 }
 
-Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} display the live diagnostic views in \textbf{CITRA} (\texttt{v3.89.5}) on the seeded Software Engineering capstone audit manuscript (6 bibliography entries and 28 inline mentions). Figure~\ref{fig:demo-debugger} contrasts a chimeric DOI hallucination flag (left) with a side-by-side publication-year discrepancy diff (\texttt{2021} vs.\ canonical \texttt{2019}, right). Figure~\ref{fig:demo-trace-context} shows the 5-stage logic trace with ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept alignment (left) and the inline Document Inspector context stream (right). Figure~\ref{fig:demo-consistency} illustrates the bidirectional In-Text Consistency view isolating orphan inline markers and uncited bibliography entries.
+Figures~\ref{fig:demo-debugger}--\ref{fig:demo-consistency} display the live diagnostic views in \textbf{CITRA} (\texttt{v3.90.1}) on the seeded Software Engineering capstone audit manuscript (6 bibliography entries and 28 inline mentions). Figure~\ref{fig:demo-debugger} contrasts a chimeric DOI hallucination flag (left) with a side-by-side publication-year discrepancy diff (\texttt{2021} vs.\ canonical \texttt{2019}, right). Figure~\ref{fig:demo-trace-context} shows the 5-stage logic trace with ONNX INT8 \texttt{VI}$\leftrightarrow$\texttt{EN} concept alignment (left) and the inline Document Inspector context stream (right). Figure~\ref{fig:demo-consistency} illustrates the bidirectional In-Text Consistency view isolating orphan inline markers and uncited bibliography entries.
 
 \begin{figure}[H]
     \centering
@@ -521,4 +521,4 @@ To guard against Type I errors from multiple baseline comparisons and skewed err
 
 \section{Chapter Summary}
 
-This chapter verified \textbf{CITRA} (\texttt{v3.89.5}) across 2,689+ automated tests, a full Requirements Traceability Matrix, and five empirical research questions, demonstrating $99.02\%$ in-distribution accuracy ($\text{ECE} = 0.0395$), $99.75\%$ OOD symbolic accuracy, $100.00\%$ six-domain E2E gold accuracy, and zero-error 50-user burst scalability. Chapter~\ref{chap:conclusion} summarizes achievements, current limitations, and future research directions.
+This chapter verified \textbf{CITRA} (\texttt{v3.90.1}) across 2,827+ automated checks, a full Requirements Traceability Matrix, and five empirical research questions, demonstrating $99.02\%$ in-distribution accuracy ($\text{ECE} = 0.0395$), $99.75\%$ OOD symbolic accuracy, $100.00\%$ six-domain E2E gold accuracy, and zero-error 50-user burst scalability. Chapter~\ref{chap:conclusion} summarizes achievements, current limitations, and future research directions.

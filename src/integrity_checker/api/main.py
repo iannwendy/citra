@@ -161,13 +161,65 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, _send_with_headers)
 
 
+def _startup_background_maintenance(stop_event: threading.Event) -> None:
+    """Cooperatively warm local caches & recover orphaned jobs when server lifespan starts."""
+    if stop_event.is_set():
+        return
+    try:
+        from integrity_checker.database import LocalDatabase
+
+        LocalDatabase().get_stats()
+        logger.info("Pre-warmed local_papers.db stats cache")
+    except Exception as exc:
+        logger.debug(f"Could not pre-warm local_papers.db stats: {exc}")
+
+    if stop_event.is_set():
+        return
+    try:
+        from integrity_checker.matching.semantic import SemanticMatcher
+
+        matcher = SemanticMatcher.get_instance()
+        model = matcher._get_model()
+        if model is not None and not stop_event.is_set():
+            matcher._get_intent_embeddings(model)
+            logger.info("Pre-warmed SemanticMatcher model & intent embeddings")
+    except Exception as exc:
+        logger.debug(f"Could not pre-warm SemanticMatcher model: {exc}")
+
+    if stop_event.is_set():
+        return
+    try:
+        from integrity_checker.api.deps import get_pipeline
+        from integrity_checker.api.job_recovery import recover_orphaned_essay_jobs
+
+        recovery_summary = recover_orphaned_essay_jobs(get_pipeline)
+        if any(recovery_summary.values()):
+            logger.info(f"Startup orphan job recovery summary: {recovery_summary}")
+    except Exception as exc:
+        logger.warning(f"Startup orphan job recovery failed: {exc}")
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Ensure DB is initialized on startup and pooled connections are disposed on shutdown."""
+    """Ensure DB is initialized on startup and background/pooled resources are disposed on shutdown."""
     init_db()
+    stop_event = threading.Event()
+    maint_thread: threading.Thread | None = None
+    worker_mode = os.getenv("CITRA_WORKER_MODE", "inline").strip().lower() or "inline"
+    if not is_test_runtime() and worker_mode == "inline":
+        maint_thread = threading.Thread(
+            target=_startup_background_maintenance,
+            args=(stop_event,),
+            name="citra-startup-maintenance",
+            daemon=True,
+        )
+        maint_thread.start()
     try:
         yield
     finally:
+        stop_event.set()
+        if maint_thread is not None and maint_thread.is_alive():
+            maint_thread.join(timeout=2.0)
         eng = session_mod._engine
         if eng is not None and ":memory:" not in str(getattr(eng, "url", "")):
             eng.dispose()
@@ -242,40 +294,6 @@ def create_app() -> FastAPI:
             "duplicates SBERT/ONNX memory and splits in-memory SSE progress & admission queues. "
             "Pin --workers 1 for inline mode or run CITRA_WORKER_MODE=web_only + standalone worker."
         )
-
-    if not is_test_runtime() and worker_mode == "inline":
-
-        def _startup_background_maintenance() -> None:
-            try:
-                from integrity_checker.database import LocalDatabase
-
-                LocalDatabase().get_stats()
-                logger.info("Pre-warmed local_papers.db stats cache")
-            except Exception as exc:
-                logger.debug(f"Could not pre-warm local_papers.db stats: {exc}")
-
-            try:
-                from integrity_checker.matching.semantic import SemanticMatcher
-
-                matcher = SemanticMatcher.get_instance()
-                model = matcher._get_model()
-                if model is not None:
-                    matcher._get_intent_embeddings(model)
-                    logger.info("Pre-warmed SemanticMatcher model & intent embeddings")
-            except Exception as exc:
-                logger.debug(f"Could not pre-warm SemanticMatcher model: {exc}")
-
-            try:
-                from integrity_checker.api.deps import get_pipeline
-                from integrity_checker.api.job_recovery import recover_orphaned_essay_jobs
-
-                recovery_summary = recover_orphaned_essay_jobs(get_pipeline)
-                if any(recovery_summary.values()):
-                    logger.info(f"Startup orphan job recovery summary: {recovery_summary}")
-            except Exception as exc:
-                logger.warning(f"Startup orphan job recovery failed: {exc}")
-
-        threading.Thread(target=_startup_background_maintenance, daemon=True).start()
 
     env_avatars = (os.getenv("AVATARS_DIR") or "").strip()
     avatars_dir = (

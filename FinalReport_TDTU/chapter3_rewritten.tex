@@ -311,7 +311,7 @@ The persistence layer comprises \textbf{fifteen SQLAlchemy ORM tables} in the pr
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.25}|L{0.46}|L{0.29}|}
-\caption{Persistent SQLAlchemy ORM entities in \texttt{db/models.py} (\texttt{v3.89.5}).}\label{tab:data-model}\\
+\caption{Persistent SQLAlchemy ORM entities in \texttt{db/models.py} (\texttt{v3.90.1}).}\label{tab:data-model}\\
 \hline
 \textbf{Table Name} & \textbf{Principal Columns and Responsibility} & \textbf{Relationships \& Keys} \\
 \hline
@@ -354,7 +354,7 @@ The persistence layer comprises \textbf{fifteen SQLAlchemy ORM tables} in the pr
 \hline
 \texttt{promo\_redemptions} & Applied discount amount, \texttt{promo\_code\_id}, \texttt{user\_id}, \texttt{transaction\_id} & Joins \texttt{promo\_codes}, \texttt{users}, and \texttt{billing\_transactions} \\
 \hline
-\texttt{schema\_migrations} & Revision \texttt{version} PK (\texttt{0001}--\texttt{0012}), \texttt{name}, SHA-256 \texttt{checksum}, \texttt{execution\_ms}, \texttt{applied\_at} & Startup schema integrity ledger \\
+\texttt{schema\_migrations} & Revision \texttt{version} PK (\texttt{0001}--\texttt{0013}), \texttt{name}, SHA-256 \texttt{checksum}, \texttt{execution\_ms}, \texttt{applied\_at} & Startup schema integrity ledger \\
 \hline
 \end{longtable}
 }
@@ -368,7 +368,7 @@ The persistence layer comprises \textbf{fifteen SQLAlchemy ORM tables} in the pr
 
 \subsection{Schema Migrations, SQLite WAL Tuning, and Audit Retention}
 
-Schema evolution across versions is managed deterministically by \texttt{db/migrations.py}, which tracks twelve numbered, SHA-256 checksummed migrations (\texttt{0001}--\texttt{0012}) inside \texttt{schema\_migrations} and verifies checksums at startup to detect accidental schema drift. For concurrent read/write throughput, \texttt{db/sqlite\_tuning.py} configures \texttt{PRAGMA journal\_mode=WAL}, \texttt{synchronous=NORMAL}, and \texttt{busy\_timeout=30000} on native POSIX disks while automatically detecting macOS VirtioFS or network bind mounts (where shared-memory \texttt{-shm} mmap files risk corruption) and switching safely to \texttt{DELETE} journal mode.
+Schema evolution across versions is managed deterministically by \texttt{db/migrations.py}, which tracks thirteen numbered, SHA-256 checksummed migrations (\texttt{0001}--\texttt{0013}) inside \texttt{schema\_migrations} and verifies checksums at startup to detect accidental schema drift. For concurrent read/write throughput, \texttt{db/sqlite\_tuning.py} configures \texttt{PRAGMA journal\_mode=WAL}, \texttt{synchronous=NORMAL}, and \texttt{busy\_timeout=30000} on native POSIX disks while automatically detecting macOS VirtioFS or network bind mounts (where shared-memory \texttt{-shm} mmap files risk corruption) and switching safely to \texttt{DELETE} journal mode.
 
 Regarding audit retention, \texttt{audit\_logs} exposes no HTTP update or individual delete endpoint during normal operation so that instructor overrides remain tamper-evident. When a user deletes an uploaded essay or executes self-service account deletion (\texttt{DELETE /api/users/me}), cascading cleanup removes child \texttt{citations}, \texttt{verdicts}, and associated \texttt{audit\_logs} rows within a single database transaction so referential integrity is preserved without orphaned records.
 
@@ -380,7 +380,7 @@ All backend endpoints are mounted under the \texttt{/api} prefix in \texttt{api/
 
 {\setlength{\tabcolsep}{3.5pt}
 \begin{longtable}{|L{0.31}|L{0.69}|}
-\caption{FastAPI REST and SSE endpoint groups mounted under \texttt{/api} (\texttt{v3.89.5}).}\label{tab:api-surface}\\
+\caption{FastAPI REST and SSE endpoint groups mounted under \texttt{/api} (\texttt{v3.90.1}).}\label{tab:api-surface}\\
 \hline
 \textbf{Route Prefix} & \textbf{Principal Endpoints and Operations} \\
 \hline
@@ -433,4 +433,4 @@ Defense-in-depth security controls span four boundaries:
 
 \section{Chapter Summary}
 
-This chapter specified sixteen atomic functional requirements (IEEE 29148), ten quantitative non-functional requirements (ISO/IEC 25010), UML 2.5 use case and sequence models, the 15-table SQLAlchemy schema with twelve checksummed migrations, the \texttt{/api/*} REST/SSE contract, and the security-hardened Docker deployment. Chapter~\ref{chap:architecture} details the internal software architecture and algorithms across all eight pipeline layers.
+This chapter specified sixteen atomic functional requirements (IEEE 29148), ten quantitative non-functional requirements (ISO/IEC 25010), UML 2.5 use case and sequence models, the 15-table SQLAlchemy schema with thirteen SHA-256 checksummed migrations (\texttt{0001}--\texttt{0013}), the \texttt{/api/*} REST/SSE contract, and the security-hardened Docker deployment. Chapter~\ref{chap:architecture} details the internal software architecture and algorithms across all eight pipeline layers.
