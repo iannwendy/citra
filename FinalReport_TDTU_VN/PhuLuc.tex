@@ -1,0 +1,154 @@
+\clearpage
+\chapter*{PHỤ LỤC}
+\phantomsection
+\addcontentsline{toc}{chapter}{PHỤ LỤC}
+\setcounter{lstlisting}{0}
+\renewcommand{\thelstlisting}{\arabic{lstlisting}}
+
+\section*{Phụ lục A. Cấu hình môi trường thực thi}
+\label{app:config}
+
+Đoạn mã~\ref{app:env} trình bày tệp mẫu cấu hình biến môi trường đã được lược bỏ thông tin nhạy cảm, được hệ thống nạp lúc khởi động song song với các thiết lập YAML trong \texttt{configs/config.yaml}. Các khóa bí mật và thông tin xác thực của dịch vụ bên thứ ba chỉ được truyền vào tại thời điểm triển khai thực tế và tuyệt đối không lưu trữ trong hệ thống quản lý phiên bản mã nguồn.
+
+\lstinputlisting[language=bash, captionpos=t, caption={Tệp mẫu cấu hình môi trường thực thi đã lược bỏ thông tin nhạy cảm (\texttt{.env.example}).}, label={app:env}]{../.env.example}
+
+\section*{Phụ lục B. Cấu trúc triển khai bộ chứa phát triển}
+\label{app:compose}
+
+Đoạn mã~\ref{app:compose-listing} trình bày đặc tả Docker Compose ba dịch vụ phục vụ môi trường phát triển đã được chuẩn hóa an toàn (\texttt{docker-compose.yml}), điều phối bộ phân tích cú pháp \texttt{grobid/grobid:0.9.1-crf} tinh chỉnh cho CPU, dịch vụ hậu phương FastAPI (\texttt{integrity-api}) và bộ chứa giao diện Vite (\texttt{integrity-web}) kết nối qua mạng cầu nối (bridge network) nội bộ.
+
+\begin{lstlisting}[language=yaml, captionpos=t, caption={Cấu trúc triển khai đa bộ chứa cho môi trường phát triển (\texttt{docker-compose.yml}).}, label={app:compose-listing}]
+services:
+  grobid:
+    image: grobid/grobid:0.9.1-crf
+    container_name: essay-check-grobid
+    ports:
+      - "8070:8070"
+    environment:
+      - JAVA_OPTS=-Xmx2g -XX:-UseContainerSupport
+      - JDK_JAVA_OPTIONS=-Xmx2g -XX:-UseContainerSupport
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 2G
+    networks:
+      - essay-check-net
+    volumes:
+      - grobid-cache:/opt/grobid/grobid-home/cache
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'bash -c ''exec 3<>/dev/tcp/127.0.0.1/8070 && printf "GET /api/isalive HTTP/1.0\r\n\r\n" >&3 && head -1 <&3 | grep -q 200'''
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: integrity-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./configs/config.docker.yaml:/app/configs/config.yaml:ro
+      - ./src:/app/src:ro
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      grobid:
+        condition: service_started
+    environment:
+      - GROBID_URL=http://grobid:8070
+      - DATABASE_URL=sqlite:///./data/app.db
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health',timeout=5).status==200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - essay-check-net
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  web:
+    image: node:20-alpine
+    container_name: integrity-web
+    working_dir: /app/web
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./web:/app/web
+    environment:
+      - VITE_API_BASE_URL=/api
+      - VITE_API_PROXY_TARGET=http://api:8000
+      - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - essay-check-net
+
+networks:
+  essay-check-net:
+    driver: bridge
+
+volumes:
+  grobid-cache:
+    driver: local
+\end{lstlisting}
+
+\section*{Phụ lục C. Đặc tả phân loại nhãn phán quyết}
+\label{app:guideline}
+
+CITRA gán nhãn xác minh ở cấp độ từng mục tài liệu tham khảo riêng lẻ thay vì phán xét toàn bộ bài nộp của sinh viên là do AI sinh ra hay do con người tự viết. Năm lớp phân loại loại trừ lẫn nhau được định nghĩa cụ thể như sau:
+
+\begin{description}
+    \item[\texttt{verified}] Công trình được trích dẫn tồn tại trong ít nhất một cơ sở dữ liệu học thuật uy tín (Kho dữ liệu FTS5 cục bộ, Crossref, OpenAlex, DataCite, Global DOI RA, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC hoặc ACL Anthology); tiêu đề sau chuẩn hóa khớp sát; họ của các tác giả thống nhất và không xuất hiện đồng tác giả bịa đặt; năm xuất bản chênh lệch tối đa một năm (hoặc khớp với lộ trình chuyển tiếp hợp lệ từ bản thảo arXiv sang kỷ yếu hội nghị chính thức); công trình không bị rút bỏ; đồng thời mọi mã DOI đi kèm đều phân giải về đúng công trình đó.
+    \item[\texttt{metadata\_error}] Công trình học thuật gốc có thật, nhưng một hoặc nhiều thuộc tính thư mục hoặc ngữ cảnh trích dẫn bị sai lệch: năm xuất bản lệch từ hai năm trở lên, tiêu đề bị cắt cụt hoặc biến đổi, thiếu tác giả hoặc ghép thêm đồng tác giả sai, sai lệch nơi công bố (venue), bài báo đã bị rút bỏ (\texttt{R-RETRACTED-PAPER}), luận điểm trích dẫn trong bài mâu thuẫn với nội dung gốc (\texttt{R-CONTENT-MISMATCH}), sai cơ quan ban hành văn bản quy phạm pháp luật (\texttt{R-VN-LEGAL-MISMATCH}), hoặc đường dẫn URL bị hỏng trên một bản ghi đã được xác minh hợp lệ (\texttt{domain\_exception}).
+    \item[\texttt{suspected\_hallucination}] Không tìm thấy bản ghi tương ứng trên toàn bộ các cơ sở dữ liệu đã truy vấn trong điều kiện các API trực tuyến đều phản hồi mã HTTP 200 hợp lệ, hoặc mục trích dẫn chứa tiền tố DOI chưa từng được đăng ký, ghép chéo mã DOI của một công trình khác vào tiêu đề không liên quan (\texttt{R-CHIMERIC-DOI-MISMATCH}), tên miền không tồn tại, hoặc năm xuất bản nằm ở tương lai phi thực tế.
+    \item[\texttt{unresolved}] Bằng chứng thu thập được chưa đủ cơ sở để xác nhận hay bác bỏ nguồn trích dẫn, chẳng hạn khi các API bên ngoài rơi vào tình trạng cạn kiệt hạn ngạch truy vấn HTTP 429 (\texttt{R-RATE-LIMITED-ABSTAIN} / \texttt{R-API\_EXHAUSTED}), cơ quan cấp phát DOI khu vực có ghi nhận định danh nhưng không công bố siêu dữ liệu CSL công khai (\texttt{R-DOI-RA-NO-CSL}), hoặc điểm tương đồng tiêu đề rơi vào vùng biên từ chối phán quyết $[0.40, 0.60)$ (\texttt{R-ABSTENTION-BORDER}).
+    \item[\texttt{resource}] Mục tài liệu tham chiếu đến một trang web thông tin chung không phải bài báo khoa học, kho mã nguồn mở, thẻ mô hình hoặc bộ dữ liệu trên Hugging Face, đặc tả kỹ thuật IETF RFC hoặc gói thư viện PyPI, tài liệu hướng dẫn kỹ thuật chính thức, hoặc văn bản quy phạm pháp luật Việt Nam (\texttt{Luật}, \texttt{Nghị định}, \texttt{Thông tư}, \texttt{Quyết định}).
+\end{description}
+
+\section*{Phụ lục D. Sơ đồ các gói mã nguồn hệ thống}
+\label{app:modules}
+
+Kho mã nguồn hệ thống (\texttt{v3.89.5}) phân tách rõ ràng các gói nghiệp vụ hậu phương (\texttt{src/\allowbreak integrity\_checker/}) với ứng dụng khách đơn trang trên nền tảng web (\texttt{web/src/}) thông qua các mô-đun cốt lõi sau:
+
+\begin{description}
+    \item[\texttt{extraction/}] Bộ phân tích cú pháp đa định dạng cho tệp PDF (GROBID \texttt{0.9.1-crf} TEI-XML, PyMuPDF xử lý bố cục hai cột, \texttt{pdfplumber} và nhận dạng ký tự quang học tiếng Việt có chọn lọc bằng Tesseract OCR), DOCX (\texttt{python-docx}), BibTeX và RIS, kết hợp bộ lọc mục lục tự động cùng mười hai bộ trích xuất theo chuẩn trích dẫn.
+    \item[\texttt{linking/}] Bộ liên kết hai chiều \texttt{CitationLinker} hiện thực hóa bảy phương pháp phân giải theo thứ tự ưu tiên, tách tham chiếu con tổ hợp (\texttt{[14a, 14b]}), phát hiện mục trùng lặp và gán tám trạng thái ánh xạ \texttt{MappingStatus}.
+    \item[\texttt{database/}] Chỉ mục học thuật ngoại tuyến SQLite FTS5 (\texttt{local\_papers.db}, gồm 129,125 bản ghi bao phủ 128,105 bài báo duy nhất và 82,877 bản tóm tắt đầy đủ) vận hành ở chế độ WAL với thuật toán xếp hạng Okapi BM25.
+    \item[\texttt{retrieval/}] Bộ điều phối truy xuất nhận biết miền tri thức \texttt{Retrieval\allowbreak Orchestrator}, danh sách trắng gồm 101 công trình kinh điển nền tảng, các trình khách bất đồng bộ kết nối hơn 15 cơ sở dữ liệu học thuật, sàng lọc bài báo bị rút bỏ qua Retraction Watch, cầu dao ngắt mạch (circuit breaker) riêng cho từng nhà cung cấp, gộp truy vấn trùng lặp theo cơ chế singleflight, bộ nhớ đệm SQLite bền vững cùng bộ kiểm tra \texttt{LinkValidator} + \texttt{SafeHtmlMetaVerifier} gia cố chống tấn công SSRF.
+    \item[\texttt{matching/}] Đối sánh từ vựng tốc độ cao bằng RapidFuzz, bộ so khớp tên tác giả hỗ trợ tiếng Việt \texttt{author\_matcher}, chuẩn hóa nơi công bố \texttt{VenueNormalizer}, căn chỉnh ngữ nghĩa tiêu đề và bằng chứng tóm tắt bằng Sentence-BERT (\texttt{all-MiniLM-L6-v2}), phân loại ý định và lập trường trích dẫn, cùng cầu nối ngữ nghĩa đa ngôn ngữ (\texttt{VI} $\leftrightarrow$ \texttt{EN}) sử dụng mô hình lượng tử hóa ONNX INT8.
+    \item[\texttt{logic/}] Bộ kiểm tra \texttt{NeuroSymbolicChecker}, tầng tiền sàng lọc Bậc 0 (Order 0) kết hợp 16 nhóm luật xếp theo thứ tự ưu tiên (68 mã định danh luật \texttt{R-*} riêng biệt), bộ xác minh văn bản pháp luật Việt Nam \texttt{VNLegalVerifier}, bộ chấm điểm học máy lai 16 đặc trưng \texttt{HybridMLScorer} ($C = 2.0$), bộ hiệu chỉnh xác suất trên không gian logit \texttt{PlattCalibrator} ($a = 1.807661, b = 1.115955$), bộ tính điểm \texttt{CISCalculator} và hệ thống mẫu giải thích song ngữ.
+    \item[\texttt{pipeline/} \& \texttt{models/}] Đường ống điều phối đơn bản (singleton) \texttt{Integrity\allowbreak Pipeline} kết nối xuyên suốt cả tám giai đoạn xử lý cùng hệ thống lược đồ miền Pydantic dùng chung giữa các tầng trích xuất, truy xuất, xác minh và tuần tự hóa API.
+    \item[\texttt{evaluation/}] Bộ sinh và thực thi tập chuẩn đánh giá 120,000 mẫu phân tách độc lập theo bài báo (paper-disjoint), thang mô hình cơ sở (\texttt{B0}--\texttt{B5}), bộ kiểm thử rào chắn ngoài phân phối (OOD) 2,400 mẫu, bộ đánh giá chuẩn vàng đầu-cuối (E2E) 120 tài liệu tham khảo, cùng các kiểm định thống kê bắt cặp McNemar, Holm--Bonferroni, Clopper--Pearson và bootstrap.
+    \item[\texttt{export/}] Các bộ xuất báo cáo an toàn (PDF, DOCX, CSV, JSON, BibTeX, RIS), mô-đun định dạng \texttt{bibliography\_formatter.py} và công cụ tự động sửa lỗi danh mục tài liệu tham khảo trực tiếp trên bản thảo \texttt{.docx} (\texttt{docx\_exporter.py}).
+    \item[\texttt{db/}, \texttt{billing/} \& \texttt{api/}] Mười lăm mô hình SQLAlchemy ORM, mười hai bản di trú lược đồ có kiểm tra toàn vẹn mã băm SHA-256 (\texttt{0001}--\texttt{0012}), tinh chỉnh thích ứng SQLite WAL, bộ điều khiển tiếp nhận tải \texttt{PipelineAdmissionController}, cơ chế khôi phục tiến trình treo, trình xử lý thanh toán Stripe/VNPay và hệ thống định tuyến FastAPI dưới tiền tố \texttt{/api/*}.
+    \item[\texttt{web/}] Ứng dụng đơn trang (\textbf{CITRA}) xây dựng trên React 18.3 và TypeScript 5.8, được kiểm thử tự động bởi 472 ca kiểm thử đơn vị/thành phần bằng Vitest (62 bộ đặc tả) và 20 bộ kịch bản kiểm thử đầu-cuối Playwright E2E.
+\end{description}
+
+\section*{Phụ lục E. Nhật ký thực hiện đồ án và Phân công đóng góp}
+\label{app:contributions}
+
+Đồ án tốt nghiệp được triển khai theo kế hoạch kỹ thuật kéo dài mười tuần từ tháng 9 đến tháng 11 năm 2026. Tuần 1--2 thực hiện phân tích yêu cầu, xây dựng chỉ mục kho dữ liệu học thuật cục bộ (\texttt{local\_papers.db}) và phát triển tầng trích xuất tài liệu GROBID/PyMuPDF. Tuần 3--4 hiện thực hóa bộ liên kết trích dẫn bảy phương pháp \texttt{CitationLinker} cùng bộ điều phối truy xuất liên hợp 15 nguồn dữ liệu \texttt{RetrievalOrchestrator}. Tuần 5--6 xây dựng tầng đối sánh ngữ nghĩa Sentence-BERT/ONNX, bộ suy diễn 68 luật ký hiệu, mô hình \texttt{HybridMLScorer} và bộ hiệu chỉnh xác suất Platt. Tuần 7--8 hoàn thiện dịch vụ hậu phương FastAPI hỗ trợ RBAC/SSE, hệ thống di trú lược đồ 15 bảng và không gian làm việc trên nền tảng React; tiếp đó, Tuần 9--10 hoàn tất bộ chuẩn đánh giá 120,000 mẫu, bộ kiểm thử chịu tải rào chắn OOD, kiểm thử tải đồng thời 50 người dùng và biên soạn báo cáo đồ án. Hai tác giả đóng góp đồng đều ($50\% / 50\%$) dưới sự hướng dẫn của ThS.\ Võ Thị Kim Anh:
+
+\begin{itemize}
+    \item \textbf{Nguyễn Bảo Minh (523H0054):} Phụ trách đường ống trích xuất tài liệu (\texttt{extraction\allowbreak /}), liên kết trích dẫn hai chiều (\texttt{linking/}), truy xuất liên hợp và xác minh URL/HTML an toàn chống SSRF (\texttt{retrieval/}, \texttt{database/}), điều phối bộ chứa Docker Compose, cùng biên soạn các Chương 1, 3 và 4 (Mục 4.1--4.4).
+    \item \textbf{Trần Gia Thành (523H0096):} Phụ trách đối sánh ngữ nghĩa và xuyên ngôn ngữ (\texttt{matching\allowbreak /}), bộ suy diễn luật nơ-ron -- ký hiệu, mô hình Hồi quy Logistic đa thức, hiệu chỉnh Platt và tính điểm CIS (\texttt{logic/}), các tuyến API phân quyền RBAC/lớp học/giám sát sức khỏe trên FastAPI, giao diện người dùng React \textbf{CITRA} (\texttt{web/}), thực nghiệm đánh giá (\texttt{evalua\allowbreak tion/}), cùng biên soạn các Chương 2, 4 (Mục 4.5--4.8), 5 và 6.
+\end{itemize}

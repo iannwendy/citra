@@ -1,0 +1,97 @@
+\chapter{Giới thiệu}
+\label{chap:introduction}
+
+\section{Bối cảnh và động lực nghiên cứu}
+
+Hiện nay, các mô hình ngôn ngữ lớn (LLM) được sinh viên đại học sử dụng rộng rãi để phác thảo tổng quan tài liệu, tóm tắt bài báo khoa học và định dạng danh mục tài liệu tham khảo. Dù giúp tăng tốc đáng kể quá trình viết báo cáo, các công cụ này lại kéo theo một rủi ro nghiêm trọng về độ tin cậy được gọi là \emph{ảo giác trích dẫn}~\cite{Ji2023}. Vì các mô hình tạo sinh hoạt động bằng cách dự đoán chuỗi từ có xác suất cao thay vì truy vấn trực tiếp cơ sở dữ liệu bên ngoài, chúng thường xuyên tạo ra những mục tài liệu tham khảo có cú pháp hoàn toàn hợp lệ nhưng lại không vượt qua được các bước kiểm chứng học thuật cơ bản. Nghiên cứu của Walters và Wilder~\cite{walters2023fabrication} đã chỉ ra rằng một tỷ lệ lớn trích dẫn do các LLM hội thoại sinh ra hoặc hoàn toàn không tồn tại trên thực tế, hoặc chứa định danh đối tượng số (DOI) bịa đặt, sai năm xuất bản, hay bị làm sai lệch danh sách tác giả.
+
+Việc kiểm tra thủ công danh mục tài liệu tham khảo không thể đáp ứng quy mô thực tế trong đào tạo đại học và sau đại học. Một báo cáo đồ án tốt nghiệp thông thường trích dẫn từ ba mươi đến tám mươi nguồn tài liệu trải rộng trên tạp chí khoa học, kỷ yếu hội nghị, sách chuyên khảo, tài liệu kỹ thuật trực tuyến và văn bản quy phạm pháp luật quốc gia. Để rà soát từng mục tham khảo bằng tay, giảng viên phải tra cứu trên nhiều cơ sở dữ liệu khác nhau, đối chiếu họ tên tác giả cùng năm xuất bản, kiểm tra xem mã DOI có phân giải đúng về tiêu đề được khai báo hay không, đồng thời đọc phần tóm tắt của nguồn gốc để xác nhận nội dung trích dẫn trong bài khớp với bài báo đó. Hơn nữa, lỗi trích dẫn xuất hiện dưới nhiều hình thức riêng biệt và mang ý nghĩa học thuật rất khác nhau:
+\begin{enumerate}
+    \item \textbf{Nguồn tài liệu bịa đặt hoặc chắp vá:} Bài báo được trích dẫn hoàn toàn không tồn tại trong bất kỳ cơ sở dữ liệu học thuật nào, hoặc một mã DOI có thật của bài báo nổi tiếng bị gắn ghép vào một tiêu đề tự nghĩ ra.
+    \item \textbf{Lỗi siêu dữ liệu hoặc sai lệch nhận định:} Công trình gốc có tồn tại trên thực tế, nhưng sinh viên ghi sai năm xuất bản, bỏ sót đồng tác giả, trích dẫn bài báo đã bị rút lại, hoặc đưa ra nhận định trong thân bài mâu thuẫn với phần tóm tắt của tài liệu nguồn.
+    \item \textbf{Lỗi liên kết cấu trúc:} Ký hiệu trích dẫn trong thân bài như \texttt{(Vaswani et al., 2017)} không có mục tương ứng trong danh mục tài liệu tham khảo, hoặc các mục tài liệu được liệt kê nhằm làm tăng số lượng nguồn tham khảo nhưng không hề được trích dẫn trong nội dung bài viết.
+\end{enumerate}
+
+Giải pháp xây dựng trong đồ án tốt nghiệp này được định hướng bởi hai nguyên tắc kỹ thuật cốt lõi. Thứ nhất, không một cơ sở dữ liệu thư mục đơn lẻ nào lập chỉ mục được toàn bộ kho tàng xuất bản học thuật~\cite{visser2021bibliographic}. Các bài báo hội thảo chuyên đề trong ngành khoa học máy tính thường xuất hiện trên DBLP hoặc ACL Anthology trước khi có mặt trên Crossref, các công trình y sinh tập trung tại PubMed và Europe PMC, trong khi các báo cáo học thuật tại Việt Nam thường xuyên viện dẫn văn bản pháp luật quốc gia (\textit{Luật}, \textit{Nghị định}). Do đó, quy trình kiểm chứng đáng tin cậy đòi hỏi cơ chế truy hồi liên hợp trên nhiều cơ sở dữ liệu bổ trợ lẫn nhau. Thứ hai, một công cụ tự động phục vụ đánh giá học thuật tuyệt đối không được biến sự cố mạng hoặc các kết quả đối sánh mơ hồ thành cáo buộc sai trái. Tuân theo nguyên lý phân loại có chọn lọc~\cite{chow1970optimum}, \cite{Geifman2017}, hệ thống phải chủ động từ chối phán quyết một cách tường minh khi các API bên ngoài gặp lỗi hoặc khi điểm tương đồng rơi vào vùng ranh giới bất định, qua đó nhường quyền kết luận cuối cùng cho giảng viên hướng dẫn.
+
+\section{Phát biểu bài toán và phạm vi tên đề tài}
+
+Tên đề tài đăng ký ban đầu của đồ án tốt nghiệp này là \textit{``Chấm điểm bài luận tự động và phát hiện ảo giác nguồn tài liệu bằng bộ kiểm tra logic lai Nơ-ron -- Ký hiệu''}. Trong kỹ thuật phần mềm giáo dục, việc chấm điểm toàn diện một bài luận bao hàm nhiều yếu tố chủ quan như cấu trúc lập luận, văn phong diễn đạt và độ trôi chảy ngữ pháp. Việc chấm điểm các khía cạnh chủ quan đó bằng những mô hình nơ-ron hộp đen thường thiếu tính minh bạch và dễ dẫn đến khiếu nại từ phía sinh viên. Chính vì vậy, đồ án tốt nghiệp này chủ đích giới hạn thành phần \emph{chấm điểm tự động} vào một khía cạnh khách quan, có thể kiểm chứng rõ ràng trong đánh giá học thuật: \textbf{Chấm điểm tự động thông qua Điểm toàn vẹn trích dẫn (CIS)}.
+
+Phát biểu một cách hình thức, với đầu vào là một bản thảo học thuật nộp dưới định dạng Portable Document Format (\texttt{.pdf}), Office Open XML (\texttt{.docx}), BibTeX (\texttt{.bib}) hoặc Research Information Systems (\texttt{.ris}), hệ thống phần mềm cần giải quyết bốn tác vụ gắn kết chặt chẽ:
+\begin{enumerate}
+    \item \textbf{Trích xuất đa định dạng và liên kết hai chiều:} Trích xuất các ký hiệu trích dẫn trong thân bài (kèm ngữ cảnh câu bao quanh) và các mục tài liệu tham khảo thuộc nhiều chuẩn trình bày khác nhau, sau đó tái tạo đồ thị hai phía liên kết ký hiệu trích dẫn trong bài với mục tham khảo tương ứng.
+    \item \textbf{Kiểm chứng liên hợp nguồn tài liệu và nội dung nhận định:} Truy vấn các cơ sở dữ liệu học thuật ngoại tuyến và trực tuyến, kiểm tra tính khả dụng của định danh cùng trạng thái rút bài, đối sánh ngữ nghĩa giữa nhận định trong bài với phần tóm tắt của tài liệu nguồn xuyên ngữ Anh -- Việt, đồng thời phân loại từng tài liệu tham khảo vào hệ phân loại năm nhãn rõ ràng.
+    \item \textbf{Chấm điểm có hiệu chỉnh xác suất và tự động chuẩn hóa danh mục tham khảo:} Tổng hợp bằng chứng cấu trúc và thư mục thành Điểm toàn vẹn trích dẫn (CIS) dễ diễn giải trên thang $[0, 100]$ đi kèm xác suất độ tin cậy đã hiệu chỉnh, đồng thời sinh lại các mục tài liệu tham khảo chuẩn xác từ siêu dữ liệu chính thống.
+    \item \textbf{Hậu kiểm có sự tham gia của giảng viên và lưu vết kiểm toán:} Hiển thị mọi kết luận đi kèm bản ghi đối chiếu từ cơ sở dữ liệu và các luật logic đã kích hoạt trên không gian làm việc web phân quyền theo vai trò, nơi giảng viên được cấp quyền có thể kiểm tra, ghi đè kết quả và tra cứu lịch sử kiểm toán.
+\end{enumerate}
+
+\section{Mục tiêu nghiên cứu}
+\label{sec:objectives}
+
+Để giải quyết bài toán đã đặt ra, đồ án tốt nghiệp xác định sáu mục tiêu kỹ thuật và thực nghiệm cụ thể:
+\begin{itemize}
+    \item \textbf{OBJ-1 (Trích xuất đa định dạng và liên kết hai chiều):} Xây dựng đường ống tiếp nhận tài liệu lai kết hợp GROBID \texttt{0.9.1-crf} TEI-XML, PyMuPDF hỗ trợ bố cục hai cột, \texttt{python-docx} và mười hai bộ phân tích chuẩn trích dẫn dạng mô-đun cùng bộ liên kết trích dẫn hai chiều bảy phương thức.
+    \item \textbf{OBJ-2 (Truy hồi liên hợp nhận biết miền chuyên ngành):} Thiết kế chỉ mục học thuật ngoại tuyến trên SQLite FTS5 kết hợp với bộ điều phối bất đồng bộ qua hơn mười lăm API học thuật và kỹ thuật công khai, tích hợp sàng lọc bài rút lại qua Retraction Watch và kiểm tra đường dẫn URL an toàn trước tấn công SSRF.
+    \item \textbf{OBJ-3 (Kiểm chứng lai Nơ-ron -- Ký hiệu có khả năng giải thích và hiệu chỉnh xác suất):} Kết hợp bộ mã hóa ngữ nghĩa Sentence-BERT và bộ mã hóa đa ngữ Việt -- Anh lượng tử hóa ONNX INT8 với bộ suy diễn luật ký hiệu phân cấp ưu tiên, mô hình hồi quy logistic đa lớp và hiệu chỉnh xác suất Platt trên không gian logit.
+    \item \textbf{OBJ-4 (Chấm điểm toàn vẹn dễ diễn giải và tự động sửa lỗi thư mục):} Xây dựng công thức Điểm toàn vẹn trích dẫn (CIS) gồm năm thành phần, kiểm chứng độ ổn định thứ hạng khi nhiễu loạn trọng số, đồng thời hỗ trợ tự động chuẩn hóa lại mục tài liệu tham khảo sang các định dạng chuẩn.
+    \item \textbf{OBJ-5 (Nền tảng web phân quyền theo vai trò an toàn):} Phát triển ứng dụng trang đơn đóng gói bằng container dựa trên FastAPI và React (\textbf{CITRA}), hỗ trợ quy trình làm việc của Sinh viên, Giảng viên và Quản trị viên, truyền phát tiến độ thời gian thực qua Server-Sent Events (SSE), cùng các cơ chế phòng thủ chiều sâu về phân quyền và chống tấn công SSRF.
+    \item \textbf{OBJ-6 (Đánh giá thực nghiệm quy mô lớn chống rò rỉ dữ liệu):} Đánh giá toàn diện nền tảng so với sáu mô hình cơ sở (\texttt{B0}--\texttt{B5}) trên bộ dữ liệu chuẩn 120,000 mẫu phân tách độc lập theo bài báo gốc, bộ kiểm thử khắc nghiệt ngoài phân phối (OOD) gồm 2,400 mẫu, các tập tài liệu PDF đa chuẩn thực tế và bài kiểm thử tải đồng thời 50 người dùng.
+\end{itemize}
+
+\section{Phạm vi hệ thống và ranh giới vận hành}
+
+\subsection{Các năng lực thuộc phạm vi hệ thống}
+
+Phiên bản \texttt{3.89.5} của \textbf{CITRA} hỗ trợ xử lý các bản thảo học thuật tiếng Anh và tiếng Việt ở định dạng \texttt{.pdf}, \texttt{.docx}, \texttt{.bib} và \texttt{.ris}. Hệ thống phân tích được mười một chuẩn trích dẫn quốc tế (APA, IEEE, ACM, Harvard, Vancouver, Nature, CSE, ACS, AMA, Chicago và MLA) cùng nhóm văn bản quy phạm pháp luật Việt Nam (\texttt{Luật}, \texttt{Nghị định}, \texttt{Thông tư}, \texttt{Quyết định}). Khả năng kiểm chứng nguồn bao phủ bài báo tạp chí, bài báo hội nghị, bản thảo tiền ấn phẩm (preprint), sách, kho lưu trữ truy cập mở, tiêu chuẩn và gói kỹ thuật (IETF RFC, gói thư viện Python, tài nguyên trên Hugging Face) cũng như tài nguyên web. Toàn bộ dịch vụ vận hành mượt mà trên phần cứng CPU phổ thông thông qua Docker Compose mà không đòi hỏi GPU chuyên dụng hay gói thuê bao cơ sở dữ liệu thương mại trả phí.
+
+\subsection{Các giới hạn nằm ngoài phạm vi}
+
+Thứ nhất, \textbf{CITRA} không chấm chất lượng hành văn, ngữ pháp hay tính mới của chủ đề nghiên cứu, đồng thời không thực hiện dò tìm đạo văn sao chép toàn văn trên các kho bài làm sinh viên đóng. Thứ hai, khi một bài báo thương mại nằm sau tường phí của nhà xuất bản và bị ẩn cả toàn văn lẫn phần tóm tắt, việc kiểm chứng ngữ nghĩa ở mức nhận định chỉ giới hạn trên siêu dữ liệu hiện có và các bản tóm tắt mở, tuyệt đối không tìm cách vượt qua cơ chế kiểm soát truy cập. Thứ ba, kết quả đầu ra của hệ thống đóng vai trò là bằng chứng hỗ trợ ra quyết định tự động thay vì phán quyết kỷ luật tự động; giảng viên luôn giữ toàn quyền xem xét và ghi đè bất kỳ kết luận nào của máy.
+
+\section{Đóng góp chính của đồ án}
+
+Bám sát các mục tiêu từ \textbf{OBJ-1} đến \textbf{OBJ-6}, đồ án tốt nghiệp mang lại sáu đóng góp kỹ thuật trọng tâm:
+\begin{enumerate}
+    \item \textbf{Bộ máy kiểm chứng lai Nơ-ron -- Ký hiệu:} Tích hợp biểu diễn nhúng Sentence-BERT (\texttt{all-MiniLM-L6-v2}) và bộ mã hóa đa ngữ lượng tử hóa ONNX INT8 với tầng tiền sàng lọc tài nguyên Bậc 0 (Order 0), 16 nhóm luật ký hiệu phân cấp ưu tiên (gồm 68 mã luật \texttt{R-*} riêng biệt), bộ phân loại hồi quy logistic đa lớp 16 đặc trưng ($C = 2.0$) và hiệu chỉnh xác suất Platt trên không gian logit.
+    \item \textbf{Cơ chế từ chối phán quyết có chọn lọc dựa trên nguồn gốc:} Tách biệt rạch ròi trường hợp bác bỏ có xác nhận từ cơ sở dữ liệu (\texttt{suspected\_hallucination}, đòi hỏi phản hồi HTTP 200 rỗng hợp lệ hoặc phát hiện định danh bịa đặt/chắp vá) khỏi tình trạng quá tải giới hạn mạng (\texttt{HTTP 429}), mã DOI khu vực không công bố siêu dữ liệu công khai (\texttt{R-DOI-RA-NO-CSL}) và vùng điểm tương đồng giáp ranh ($[0.40, 0.60)$), qua đó chuyển hướng an toàn các ca chưa đủ cơ sở về nhãn \texttt{unresolved}.
+    \item \textbf{Bộ trích xuất mười hai chuẩn và liên kết hai chiều bảy phương thức:} Kết hợp con trỏ TEI-XML từ GROBID \texttt{0.9.1-crf} với cơ chế dự phòng PyMuPDF hai cột, bộ lọc mục lục tài liệu, bộ kiểm chứng văn bản pháp luật Việt Nam (\texttt{VNLegalVerifier}) và bộ liên kết đồ thị hai phía nhận diện tám trạng thái ánh xạ cấu trúc.
+    \item \textbf{Kiến trúc truy hồi phân tầng ưu tiên ngoại tuyến:} Kết hợp kho dữ liệu cục bộ SQLite FTS5 gồm 129,125 bản ghi (128,105 bài báo duy nhất; 82,877 bản tóm tắt) cùng danh sách 101 công trình kinh điển với cơ chế định tuyến có giới hạn tốc độ và ngắt mạch tự động qua 15+ API trực tuyến, đi kèm bộ kiểm tra HTTP/Wayback ghim địa chỉ IP chống tấn công SSRF.
+    \item \textbf{Kiến trúc toàn trình sẵn sàng cho môi trường vận hành thực tế (\textbf{CITRA}):} Hiện thực hóa máy chủ FastAPI bất đồng bộ (15 bảng SQLAlchemy ORM, 12 bản di trú lược đồ có kiểm tra mã băm toàn vẹn, bộ điều phối tiếp nhận \texttt{PipelineAdmissionController} và cơ chế tính lại điểm CIS đảm bảo tính giao dịch) cùng giao diện web đáp ứng viết bằng React 18.3 / TypeScript 5.8, được kiểm chứng qua 2,197 ca kiểm thử backend, 472 ca kiểm thử Vitest và 20 bộ kiểm thử đầu--cuối Playwright.
+    \item \textbf{Bộ dữ liệu đánh giá chuẩn khả lập và phân tách độc lập theo bài báo:} Thiết lập bộ dữ liệu chuẩn 120,000 mẫu không trùng lặp bài báo gốc cùng bộ kiểm thử rào chắn ngoài phân phối (OOD) 2,400 mẫu với quy trình kiểm định ý nghĩa thống kê bắt cặp McNemar, hiệu chỉnh Holm--Bonferroni và lấy mẫu lại bootstrap, đạt độ chính xác trong phân phối $99.02\%$ ($\text{ECE} = 0.0395$) và độ chính xác ngoài phân phối $99.75\%$.
+\end{enumerate}
+
+\section{Cấu trúc báo cáo đồ án}
+
+Phần còn lại của báo cáo đồ án tốt nghiệp được tổ chức thành năm chương và năm phụ lục, tóm tắt trong Bảng~\ref{tab:outline}.
+
+\begin{longtable}{|L{0.24}|L{0.76}|}
+\caption{Cấu trúc báo cáo đồ án tốt nghiệp theo từng chương và phụ lục.}\label{tab:outline}\\
+\hline
+\textbf{Phần} & \textbf{Tóm tắt nội dung} \\
+\hline
+\endfirsthead
+\multicolumn{2}{l}{\itshape Bảng \thetable\ (tiếp theo trang trước)}\\
+\hline
+\textbf{Phần} & \textbf{Tóm tắt nội dung} \\
+\hline
+\endhead
+\hline
+\multicolumn{2}{r}{\itshape Xem tiếp trang sau}\\
+\endfoot
+\hline
+\endlastfoot
+Chương 1 & Bối cảnh, động lực nghiên cứu, phạm vi chấm điểm CIS, mục tiêu nghiên cứu, ranh giới hệ thống và các đóng góp chính. \\
+\hline
+Chương 2 & Tổng quan tài liệu liên quan, đối sánh với các công cụ hiện có, hệ thống cơ sở dữ liệu học thuật và nền tảng toán học của đối sánh ngữ nghĩa cùng hiệu chỉnh xác suất. \\
+\hline
+Chương 3 & Yêu cầu chức năng theo chuẩn IEEE 29148 và phi chức năng theo ISO/IEC 25010, ca sử dụng UML, luồng tuần tự, mô hình dữ liệu 15 bảng, bề mặt API và thiết kế bảo mật. \\
+\hline
+Chương 4 & Hiện thực hóa tám tầng phần mềm, các mẫu thiết kế, bộ suy diễn ký hiệu 68 luật, mô hình học máy 16 chiều kết hợp hiệu chỉnh xác suất Platt, thang chấm điểm CIS và giao diện web React. \\
+\hline
+Chương 5 & Truy vết yêu cầu, các bộ kiểm thử tự động, kết quả thực nghiệm trả lời năm câu hỏi nghiên cứu (\textbf{RQ1}--\textbf{RQ5}) và phân tích các mối đe dọa đến độ giá trị. \\
+\hline
+Chương 6 & Đối chiếu kết quả đạt được với mục tiêu đề ra, tổng hợp các nhánh ra quyết định, những hạn chế hiện tại của hệ thống và hướng phát triển tiếp theo. \\
+\hline
+Phụ lục A--E & Cấu hình môi trường và Docker đã lược bỏ thông tin nhạy cảm, bảng luật phân loại năm nhãn, sơ đồ cấu trúc gói mã nguồn cùng nhật ký thực hiện và phân công đóng góp đồ án. \\
+\end{longtable}

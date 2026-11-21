@@ -1,0 +1,364 @@
+% Simplified format for TDTU thesis
+\usepackage{polyglossia}
+\setmainlanguage{vietnamese}
+\setotherlanguage{english}
+
+\usepackage[left=3.5cm, right=2cm, top=3.5cm, bottom=3cm]{geometry}
+
+\usepackage{graphicx,float}
+\usepackage{longtable}
+\usepackage{rotating}
+\usepackage{pdflscape}
+\usepackage{amssymb,amsmath}
+\usepackage{multicol}
+\usepackage{xcolor}
+\usepackage{fontspec}
+\usepackage{listings}
+% Define custom languages BEFORE \lstset
+\lstdefinelanguage{docker}{
+  keywords={FROM, RUN, CMD, LABEL, EXPOSE, ENV, ADD, COPY, ENTRYPOINT, VOLUME, USER, WORKDIR, ARG, ONBUILD, HEALTHCHECK, MAINTAINER, LABEL},
+  sensitive=true,
+  comment=[l]{\#},
+  morestring=[b]',
+  morestring=[b]"
+}
+\lstdefinelanguage{yaml}{
+  keywords={version, services, build, image, ports, environment, depends_on, networks, volumes, healthcheck, deploy, replicas, command, container_name, restart, labels, expose},
+  sensitive=false,
+  comment=[l]{\#},
+  morestring=[b]',
+  morestring=[b]"
+}
+\lstdefinelanguage{nginx}{
+  keywords={events, http, server, location, upstream, listen, server_name, root, index, proxy_pass, proxy_set_header, worker_connections, error_log, access_log},
+  sensitive=false,
+  comment=[l]{\#},
+  morestring=[b]',
+  morestring=[b]"
+}
+\lstdefinelanguage{sql}{
+  keywords={CREATE, TABLE, DATABASE, INSERT, SELECT, UPDATE, DELETE, FROM, WHERE, PRIMARY, KEY, FOREIGN, REFERENCES, INDEX, TIMESTAMP, DEFAULT, AUTO_INCREMENT, UNIQUE, ENUM, IF, NOT, EXISTS, USE, VALUES, IGNORE, ENGINE, CHARSET, COLLATE, FULLTEXT},
+  sensitive=false,
+  comment=[l]{--},
+  morestring=[b]',
+  morestring=[b]"
+}
+\lstdefinelanguage{javascript}{
+  keywords={const, let, var, function, async, await, return, import, export, try, catch, if, else, while, for, class, new, try, catch, throw},
+  sensitive=false,
+  comment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  morestring=[b]',
+  morestring=[b]"
+}
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  columns=fullflexible,
+  xleftmargin=14pt,
+  xrightmargin=2pt,
+  numbers=left,
+  stepnumber=1,
+  frame=single,
+  breaklines=true,
+  breakatwhitespace=false,
+  postbreak=\mbox{\textcolor{gray}{$\hookrightarrow$}\space},
+  tabsize=2,
+  showstringspaces=false,
+  captionpos=b,
+  language=tex,
+  alsolanguage=docker,
+  alsolanguage=bash,
+  alsolanguage=sql,
+  alsolanguage=yaml,
+  alsolanguage=nginx,
+  alsolanguage=javascript
+}
+\usepackage{scrextend}
+\usepackage{setspace}
+\usepackage{indentfirst}
+
+% Font setup
+\setmainfont{Times New Roman}
+
+% TDTU body-text size.  The standard report class only provides 10/11/12pt
+% options, so changefontsizes is used to make the effective normal text
+% exactly 13pt (including lists, captions and other standard size commands).
+\changefontsizes{13pt}
+
+% TOC chapter formatting
+% Add "CHAPTER" prefix to chapter entries in the Table of Contents.
+% We achieve this with a clean sed post-process on thesis.toc:
+%   \contentsline {chapter}{\numberline {N}Title}{page}{...}
+% becomes:
+%   \contentsline {chapter}{\numberline {CHAPTER N}Title}{page}{...}
+% This is the most reliable approach because it touches only the .toc file.
+% The actual heading on the page is already formatted as "CHAPTER N: Title"
+% via the \def\@makechapterhead override below.
+
+% Number subsubsections as x.y.z and include them in TOC
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+\makeatletter
+\@addtoreset{subsubsection}{section}
+\makeatother
+
+% Chapter heading format
+\makeatletter
+\def\@makechapterhead#1{%
+  \vspace*{-5ex}%
+  {\parindent \z@ \raggedright \normalfont
+    \interlinepenalty\@M
+    % 16pt chapter title; the second argument is kept at 16pt so that the
+    % global 1.5 line-spacing setting does not make chapter headings oversized.
+    \fontsize{16pt}{16pt}\selectfont
+    \bfseries \color{black}
+    \MakeUppercase{Chương \thechapter: #1}\par\nobreak
+    \vskip 20\p@
+  }}
+\makeatother
+
+% Chapter* formatting (for unnumbered chapters like TOC, Abstract)
+\makeatletter
+\def\@makeschapterhead#1{%
+  \vspace*{-4ex}%
+  {\parindent \z@ \raggedright \normalfont
+    \interlinepenalty\@M
+    \fontsize{16pt}{16pt}\selectfont
+    \bfseries \centering
+    #1\par\nobreak
+    \vskip 20\p@
+  }}
+\makeatother
+
+% Section formatting
+\makeatletter
+\def\section{\@startsection{section}{1}{\z@}%
+  {3.5ex \@plus1ex \@minus.2ex}%
+  {2.3ex \@plus.2ex}%
+  {\normalfont\normalsize\bfseries}}
+\makeatother
+
+% Subsection formatting
+\makeatletter
+\def\subsection{\@startsection{subsection}{2}{\z@}%
+  {3.25ex\@plus1ex \@minus.2ex}%
+  {1.5ex\@plus.2ex}%
+  {\normalfont\normalsize\bfseries}}
+\makeatother
+
+% Subsubsection formatting - italic for 3-level headings (x.x.x)
+\makeatletter
+\def\subsubsection{\@startsection{subsubsection}{3}{\z@}%
+  {3.25ex\@plus1ex \@minus.2ex}%
+  {1.5ex\@plus.2ex}%
+  {\normalfont\normalsize\itshape}}
+\renewcommand{\thesubsubsection}{\thesection.\arabic{subsubsection}}
+\makeatother
+
+% Header / Footer
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[C]{\thepage}
+% Keep the header aligned with the text block.  With the asymmetric margins
+% (left 3.5cm, right 2cm), the text-block centre is intentionally to the
+% right of the physical A4-page centre.
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+% \chapter sets the page style to plain on its opening page.  Mirror the
+% header there so page numbers remain top-centred on every page.
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyhead[C]{\thepage}%
+  \renewcommand{\headrulewidth}{0pt}%
+  \renewcommand{\footrulewidth}{0pt}%
+}
+\setlength{\headheight}{16pt}
+
+% Keep citations and other hyperlinks in plain black text.
+\usepackage[hidelinks]{hyperref}
+
+% Line spacing and paragraph indent
+\linespread{1.5}
+\setlength{\parindent}{1.27cm} % one Word tab at the left margin
+\setlength{\parskip}{0pt}
+
+% Caption
+\usepackage[labelfont=bf]{caption}
+\renewcommand{\figurename}{Hình}
+\renewcommand{\tablename}{Bảng}
+\renewcommand{\lstlistingname}{Đoạn mã}
+\numberwithin{figure}{chapter}
+\numberwithin{table}{chapter}
+
+% Tables: allow hyphenation-like breaks inside long identifiers so that no
+% cell can run into its neighbour, and add a little vertical padding.
+\usepackage{array}
+\renewcommand{\arraystretch}{1.2}
+\setlength{\emergencystretch}{3em}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{\fill}
+\setlength{\LTpre}{10pt}
+\setlength{\LTpost}{10pt}
+\setlength{\LTcapwidth}{\textwidth}
+\captionsetup[table]{width=\textwidth,position=above,skip=6pt}
+\captionsetup[figure]{width=\textwidth,position=below,skip=8pt}
+
+% Word-like proportional column types whose fractional widths sum to 1.0 of \textwidth:
+%   L{0.30} -> left-aligned paragraph column (30% of \textwidth)
+%   C{0.15} -> centered paragraph column (15% of \textwidth)
+%   R{0.15} -> right-aligned paragraph column (15% of \textwidth)
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{\dimexpr #1\textwidth-2\tabcolsep-1.5\arrayrulewidth\relax}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{\dimexpr #1\textwidth-2\tabcolsep-1.5\arrayrulewidth\relax}}
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{\dimexpr #1\textwidth-2\tabcolsep-1.5\arrayrulewidth\relax}}
+
+% Emulate small caps cleanly in Times New Roman (which lacks a native OTF smcp table on macOS)
+\DeclareRobustCommand{\textsc}[1]{{\fontsize{10.5pt}{13pt}\selectfont\MakeUppercase{#1}}}
+
+% Break long snake_case, kebab-case, and path identifiers cleanly in both body and tables.
+\DeclareRobustCommand{\_}{\textunderscore\allowbreak}
+
+
+% TOC formatting
+\renewcommand{\contentsname}{MỤC LỤC}
+\makeatletter
+\renewcommand{\@pnumwidth}{1.55em}
+\renewcommand{\@dotsep}{1.5}
+\renewcommand{\l@chapter}[2]{%
+  \ifnum \c@tocdepth >\m@ne
+    \addpenalty{-\@highpenalty}%
+    \vskip 3pt \@plus \p@
+    \setlength\@tempdima{1.5em}%
+    \begingroup
+      \parindent \z@ \rightskip \@pnumwidth
+      \parfillskip -\@pnumwidth
+      \leavevmode \bfseries
+      \advance\leftskip\@tempdima
+      \hskip -\leftskip
+      \renewcommand{\numberline}[1]{\MakeUppercase{Chương~##1:} }%
+      \MakeUppercase{#1}\nobreak
+      \leaders\hbox{$\m@th \mkern \@dotsep mu\hbox{.}\mkern \@dotsep mu$}\hfill
+      \nobreak\kern 2pt{\bfseries \normalcolor #2}\par
+    \endgroup
+  \fi}
+\renewcommand{\l@section}[2]{%
+  \ifnum \c@tocdepth >\m@ne
+    \addpenalty{-\@highpenalty}%
+    \vskip 1pt \@plus \p@
+    \setlength\@tempdima{2.2em}%
+    \begingroup
+      \parindent \z@ \rightskip \@pnumwidth
+      \parfillskip -\@pnumwidth
+      \leavevmode
+      \advance\leftskip\@tempdima
+      \hskip -\leftskip
+      #1\nobreak
+      \leaders\hbox{$\m@th \mkern \@dotsep mu\hbox{.}\mkern \@dotsep mu$}\hfill
+      \nobreak\kern 2pt{\normalcolor #2}\par
+    \endgroup
+  \fi}
+\renewcommand{\l@subsection}[2]{%
+  \ifnum \c@tocdepth >1\relax
+    \addpenalty{-\@highpenalty}%
+    \vskip 0.5pt \@plus \p@
+    \setlength\@tempdima{3.2em}%
+    \begingroup
+      \parindent \z@ \rightskip \@pnumwidth
+      \parfillskip -\@pnumwidth
+      \leavevmode \itshape
+      \advance\leftskip 2.2em\relax
+      \advance\leftskip\@tempdima
+      \hskip -\@tempdima
+      #1\nobreak
+      \leaders\hbox{$\m@th \mkern \@dotsep mu\hbox{.}\mkern \@dotsep mu$}\hfill
+      \nobreak\kern 2pt{\normalcolor #2}\par
+    \endgroup
+  \fi}
+
+% Subsubsection TOC formatting (level 3, italic)
+\renewcommand{\l@subsubsection}[2]{%
+  \ifnum \c@tocdepth >2\relax
+    \addpenalty{-\@highpenalty}%
+    \vskip 0.5pt \@plus \p@
+    \setlength\@tempdima{4.0em}%
+    \begingroup
+      \parindent \z@ \rightskip \@pnumwidth
+      \parfillskip -\@pnumwidth
+      \leavevmode \itshape
+      \advance\leftskip 5.4em\relax
+      \advance\leftskip\@tempdima
+      \hskip -\@tempdima
+      #1\nobreak
+      \leaders\hbox{$\m@th \mkern \@dotsep mu\hbox{.}\mkern \@dotsep mu$}\hfill
+      \nobreak\kern 2pt{\normalcolor #2}\par
+    \endgroup
+  \fi}
+
+% LOF/LOT formatting: prepend "Figure"/"Table" and use denser dots
+\renewcommand{\l@figure}[2]{%
+  \ifnum \c@tocdepth >\m@ne
+    \addpenalty{-\@highpenalty}%
+    \vskip 1.5pt \@plus \p@
+    \setlength\@tempdima{2.5em}%
+    \begingroup
+      \parindent \z@ \rightskip \@pnumwidth
+      \parfillskip -\@pnumwidth
+      \leavevmode
+      \advance\leftskip\@tempdima
+      \hskip -\leftskip
+      Hình~#1\nobreak
+      \leaders\hbox{$\m@th \mkern 1.5mu\hbox{.}\mkern 1.5mu$}\hfill
+      \nobreak\kern 2pt{\normalcolor #2}\par
+    \endgroup
+  \fi}
+\renewcommand{\l@table}[2]{%
+  \ifnum \c@tocdepth >\m@ne
+    \addpenalty{-\@highpenalty}%
+    \vskip 1pt \@plus \p@
+    \setlength\@tempdima{2.5em}%
+    \begingroup
+      \parindent \z@ \rightskip \@pnumwidth
+      \parfillskip -\@pnumwidth
+      \leavevmode
+      \advance\leftskip\@tempdima
+      \hskip -\leftskip
+      Bảng~#1\nobreak
+      \leaders\hbox{$\m@th \mkern 1.5mu\hbox{.}\mkern 1.5mu$}\hfill
+      \nobreak\kern 2pt{\normalcolor #2}\par
+    \endgroup
+  \fi}
+
+% Custom abbrv environment for abbreviations
+\newenvironment{abbrv}{
+  \begin{list}{}{\setlength\itemsep{0.6em}\setlength\labelwidth{2.5cm}\setlength\leftmargin{0cm}\addtolength\leftmargin{\labelwidth}\addtolength\leftmargin{\labelsep}}
+  \item[]
+}{\end{list}}
+\makeatother
+
+% ============================================================
+% Placeholder figures
+% ------------------------------------------------------------
+% \placeholderfigure{<id>}{<caption>}
+% Renders a framed box that reserves the space of a figure and
+% prints the caption below it.  Used for figures whose artwork is
+% not yet produced, so the document still compiles and the
+% numbering of figures, tables and cross-references stays correct.
+% Replace a placeholder by the real \includegraphics block once
+% the corresponding image file exists.
+% ============================================================
+\makeatletter
+\newcommand{\placeholderfigure}[2]{%
+  \begin{figure}[H]
+    \centering
+    \fbox{%
+      \parbox[c][5.5cm][c]{0.88\textwidth}{%
+        \centering
+        \color{gray}\itshape
+        [ Figure placeholder --- artwork to be inserted ]%
+      }%
+    }%
+    \caption{#2}%
+    \label{fig:#1}%
+  \end{figure}%
+}
+\makeatother

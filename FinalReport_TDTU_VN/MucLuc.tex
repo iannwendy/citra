@@ -1,0 +1,28 @@
+\renewcommand{\contentsname}{MỤC LỤC}
+\clearpage
+\pagestyle{empty}
+\makeatletter
+\let\tdtu@plainbeforetoc\ps@plain
+\let\ps@plain\ps@empty
+\makeatother
+\tableofcontents
+\thispagestyle{empty}
+\clearpage
+
+\makeatletter
+\let\ps@plain\tdtu@plainbeforetoc
+\makeatother
+\pagenumbering{roman}
+\pagestyle{fancy}
+
+\renewcommand{\listfigurename}{DANH MỤC HÌNH VẼ}
+\addcontentsline{toc}{chapter}{\listfigurename}
+\listoffigures
+\label{listfigures}
+\clearpage
+
+\renewcommand{\listtablename}{DANH MỤC BẢNG BIỂU}
+\addcontentsline{toc}{chapter}{\listtablename}
+\listoftables
+\label{listtables}
+\clearpage

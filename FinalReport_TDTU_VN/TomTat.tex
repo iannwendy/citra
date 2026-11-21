@@ -1,0 +1,20 @@
+\clearpage
+\pagestyle{empty}
+\begin{english}
+{\centering
+\thispagestyle{empty}
+\fontsize{14pt}{14pt}\selectfont\textbf{AUTOMATED ESSAY GRADING AND SOURCE HALLUCINATION DETECTION VIA NEURO-SYMBOLIC LOGIC CHECKER}\par}
+
+\vspace{0.5\baselineskip}
+
+{\centering\fontsize{14pt}{14pt}\selectfont\textbf{ABSTRACT}\par}
+
+\vspace{0.6\baselineskip}
+\thispagestyle{empty}
+
+Generative language models accelerate academic writing, yet they frequently fabricate syntactically valid citations pointing to non-existent papers, retracted articles, or corrupted bibliographic metadata. However, existing plagiarism and AI-text detectors inspect surface prose without querying external registries, whereas pure similarity or machine-learning matchers fail on discrete provenance violations and misclassify network rate-limit errors. To address this gap, this graduation project presents \textbf{CITRA}, a neuro-symbolic verification platform that links in-text claims to bibliography entries across twelve citation styles and queries a 129,125-paper local index alongside fifteen scholarly registries. CITRA integrates bilingual semantic alignment, priority-ordered symbolic rules, multinomial logistic scoring, and Platt probability calibration with selective abstention. We evaluated CITRA on an 18,000-citation paper-disjoint test set from a 120,000-sample benchmark, a 2,400-sample out-of-distribution stress suite, and 310 multi-style academic manuscripts. Experimental results show that CITRA achieves 99.02\% accuracy and 98.88\% Macro-F1, reducing classification errors by 51.2\% over the strongest machine-learning baseline ($p < 10^{-22}$) with zero false hallucination accusations across 6,480 genuine citations. Furthermore, Platt calibration lowers expected calibration error by 83.8\% to 0.0395, while symbolic guardrails raise out-of-distribution accuracy from 49.88\% to 99.75\%. These findings demonstrate that combining symbolic provenance rules with calibrated neural matching provides reliable, auditable citation verification for undergraduate grading and editorial workflows.
+
+\vspace{0.5\baselineskip}
+\noindent\textbf{Keywords:} Citation integrity verification, source hallucination detection, neuro-symbolic AI, selective abstention, Platt probability calibration, empirical software engineering.
+\end{english}
+\clearpage
