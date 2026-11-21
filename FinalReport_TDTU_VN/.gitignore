@@ -10,8 +10,9 @@
 *.thm
 *.out
 
-# PDF files (generated)
+# PDF & Word files (generated)
 *.pdf
+*.docx
 
 # macOS
 .DS_Store

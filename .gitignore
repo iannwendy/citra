@@ -75,6 +75,8 @@ logs/
 # Spec / reference docx — không commit (tham chiếu nội bộ, có ở ../docs)
 /final*.docx
 /*.docx
+FinalReport_TDTU/**/*.docx
+FinalReport_TDTU_VN/**/*.docx
 # KHÔNG commit PDF nào — mọi PDF là dữ liệu nội bộ, chỉ nằm trên máy.
 # Không có ngoại lệ: kể cả thesis.pdf và các fixture test.
 # Fixture test cho citation scenarios được SINH TỰ ĐỘNG bằng:

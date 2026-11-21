@@ -1,0 +1,26 @@
+# LaTeX build files
+*.aux
+*.log
+*.lot
+*.lof
+*.toc
+*.fls
+*.fdb_latexmk
+*.xdv
+*.thm
+*.out
+
+# PDF & Word files (generated)
+*.pdf
+*.docx
+
+# macOS
+.DS_Store
+
+# Temporary & scratch files
+*.tmp
+*.bak
+texput.log
+tmp/
+output/
+.claude/

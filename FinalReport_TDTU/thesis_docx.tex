@@ -1,0 +1,47 @@
+% DOCX-only wrapper for Pandoc + format_docx.py
+\documentclass[13pt,a4paper]{report}
+
+\usepackage{polyglossia}
+\setmainlanguage{english}
+\setotherlanguage{vietnamese}
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+\usepackage{setspace}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{rotating}
+\usepackage{pdflscape}
+\usepackage{amssymb,amsmath}
+\usepackage{multicol}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage[hidelinks]{hyperref}
+\usepackage[labelfont=bf]{caption}
+
+\newcolumntype{L}[1]{p{#1\textwidth}}
+\newcolumntype{C}[1]{p{#1\textwidth}}
+\newcolumntype{R}[1]{p{#1\textwidth}}
+\newcommand{\rqanswer}[2]{\par\noindent\textbf{Answer to #1:} #2\par}
+
+\setstretch{1.5}
+\setlength{\parindent}{1.27cm}
+\setlength{\parskip}{0pt}
+
+\begin{document}
+	\begin{center}
+		\input{coverpage}
+	\end{center}
+	\input{LoiCamOn}
+	\input{LoiCamDoan}
+	\input{CamKet}
+	\input{TomTatVN}
+	\input{TomTat}
+	\input{MucLuc}
+	\input{DanhMucTuVietTat}
+	\input{NoiDungChinh}
+	\input{TaiLieuThamKhao}
+	\input{PhuLuc}
+\end{document}

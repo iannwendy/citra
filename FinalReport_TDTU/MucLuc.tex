@@ -1,0 +1,31 @@
+\renewcommand{\contentsname}{CONTENTS}
+\clearpage
+\pagestyle{empty}
+% \chapter* used internally by \tableofcontents switches the opening page to
+% the "plain" style.  Temporarily map that style to "empty" so all TOC pages
+% remain unnumbered; the lists below use Roman page numbers.
+\makeatletter
+\let\tdtu@plainbeforetoc\ps@plain
+\let\ps@plain\ps@empty
+\makeatother
+\tableofcontents
+\thispagestyle{empty}
+\clearpage
+
+\makeatletter
+\let\ps@plain\tdtu@plainbeforetoc
+\makeatother
+\pagenumbering{roman}
+\pagestyle{fancy}
+
+\renewcommand{\listfigurename}{LIST OF FIGURES}
+\addcontentsline{toc}{chapter}{\listfigurename}
+\listoffigures
+\label{listfigures}
+\clearpage
+
+\renewcommand{\listtablename}{LIST OF TABLES}
+\addcontentsline{toc}{chapter}{\listtablename}
+\listoftables
+\label{listtables}
+\clearpage
