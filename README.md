@@ -21,7 +21,7 @@
 <br/>
 
 [![Live Production Demo](https://img.shields.io/badge/Live%20Demo-citra.io.vn-00E676?style=for-the-badge&logo=googlechrome&logoColor=black)](https://citra.io.vn)
-[![API Documentation](https://img.shields.io/badge/Swagger%20API-citra.io.vn%2Fdocs-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://citra.io.vn/docs)
+[![API Documentation](https://img.shields.io/badge/REST%20%26%20SSE%20API-Reference-009688?style=for-the-badge&logo=fastapi&logoColor=white)](#api-reference--automated-testing)
 
 <br/>
 
@@ -61,8 +61,8 @@ Large Language Models (LLMs) frequently hallucinate plausible-sounding reference
 
 ### Design Philosophy — *Solva Warm Editorial & SourceLogic Scholarly*
 - **Warm Editorial Precision**: Engineered around the **Solva Warm Editorial** design system (`#FAF8F3` warm ivory canvas, `#252523` charcoal ink, `#35624D` botanical forest accents, *Sentient* editorial serif display, *Plus Jakarta Sans* UI, and *JetBrains Mono* telemetry) with painterly botanical frames and live count-up metrics.
-- **Two-Layer Separation of Concerns**: Strictly decouples **Layer 1: In-Text Citation Mapping** (`MATCHED`, `MISSING_REFERENCE`, `UNCITED_REFERENCE`, `IN_TEXT_MISMATCH`, `DUPLICATE_REFERENCE`, `AMBIGUOUS_MAPPING`, `STYLE_INCONSISTENT`) from **Layer 2: Reference Entry Validation** (`VERIFIED`, `METADATA_ERROR`, `RESOURCE`, `SUSPECTED_HALLUCINATION`, `UNRESOLVED`), eliminating double-counting when a reference is cited multiple times.
-- **No Black-Box Verdicts**: Every reference entry exposes a **5-Stage Neuro-Symbolic Logic Trace & Evidence DAG** (`Stage 1: Structural Parse` → `Stage 2: Multi-Source Retrieval` → `Stage 3: 16D Feature Vector` → `Stage 4: 30+ Symbolic Rules & ML Scorer` → `Stage 5: Platt-Calibrated Verdict`), side-by-side canonical vs. cited diffs, **1-Click Bibliography Auto-Remediation** (`APA`, `IEEE`, `TDTU`, `.bib`, `.ris`), and **Auto-Healed `.DOCX` manuscript export**.
+- **Two-Layer Separation of Concerns**: Strictly decouples **Layer 1: In-Text Citation Mapping** (`MATCHED`, `MISSING_REFERENCE`, `UNCITED_REFERENCE`, `IN_TEXT_MISMATCH`, `DUPLICATE_REFERENCE`, `AMBIGUOUS_MAPPING`, `STYLE_INCONSISTENT`, `UNRESOLVED`) from **Layer 2: Reference Entry Validation** (`VERIFIED`, `METADATA_ERROR`, `RESOURCE`, `SUSPECTED_HALLUCINATION`, `UNRESOLVED`), eliminating double-counting when a reference is cited multiple times.
+- **No Black-Box Verdicts**: Every reference entry exposes a **5-Stage Neuro-Symbolic Logic Trace & Evidence DAG** (`Stage 1: Structural Parse` → `Stage 2: Multi-Source Retrieval` → `Stage 3: 16D Feature Vector` → `Stage 4: 68 Symbolic Rules (16 Groups) & ML Scorer` → `Stage 5: Platt-Calibrated Verdict`), side-by-side canonical vs. cited diffs, **1-Click Bibliography Auto-Remediation** (`APA`, `IEEE`, `TDTU`, `.bib`, `.ris`), and **Auto-Healed `.DOCX` manuscript export**.
 - **Three Role-Based Portals + Live Sandbox**:
   1. **Researcher / Student Workspace (`/dashboard`, `/sandbox`, `/verification/report/:id`)**: Test citations in the **Live Citation Sandbox** (sampling real papers from `129,125` local scholarly records / `128,105` unique-title papers or generating synthetic multi-page academic PDFs), upload single or batch PDF/DOCX manuscripts, inspect citation errors in a split-pane IDE, and export auto-repaired bibliographies.
   2. **Teacher Cohort Classroom (`/teacher/classes`, `/teacher/reviews`)**: Manage thesis cohorts via join codes, detect **Cross-Student Shared AI Hallucinations**, and adjudicate flagged verdicts in the **Pending Reviews** queue with human-in-the-loop audit notes.
@@ -123,7 +123,7 @@ Automatically repair mismatched years, titles, authors, venues, and DOIs into st
 ---
 
 ### 6. 5-Stage Neuro-Symbolic Logic Trace & Split-Pane Document Context Stream (`/trace`, `/document`)
-Inspect every intermediate signal in the 5-stage pipeline (`Layer 1 GROBID TEI`, `Federated Retrieval`, `Neural Similarity & Link Check`, `30+ Symbolic Rules`, and `Platt-Calibrated Verdict`) alongside the exact manuscript paragraph context and citation intent (`methodology`, `result_comparison`, `background`).
+Inspect every intermediate signal in the 5-stage pipeline (`Layer 1 GROBID TEI`, `Federated Retrieval`, `Neural Similarity & Link Check`, `68 Symbolic Rules`, and `Platt-Calibrated Verdict`) alongside the exact manuscript paragraph context and citation intent (`methodology`, `result_comparison`, `background`).
 
 | 5-Stage Neuro-Symbolic Logic Trace (`/verification/report/:id/trace`) | Split-Pane Document Context Stream (`/verification/report/:id/document`) |
 | :---: | :---: |
@@ -172,7 +172,7 @@ Flexible academic plans (**Basic Free**, **Pro Scholar**, **Ultra Lab/Faculty**)
 | **Citation Formats** | **12 Citation Styles + Vietnamese Legal Docs** | Auto-detects **IEEE** (`[1]`, `[1]-[3]`), **APA 7th** (`(Smith et al., 2020)`), **Vancouver**, **Harvard**, **MLA 9th**, **Chicago**, **ACM**, **Nature**, **ACS**, **AMA**, **CSE**, and **Vietnamese Legal Documents** (`Luật số`, `Nghị định`, `Thông tư`, `Bản án` per TDTU standards). |
 | **Smart Retrieval** | **15+ Federated Scholarly Indexes, Retraction Watch & Active Link Validation** | Local **ACL Anthology & Scholarly SQLite FTS5** (`129,125` records / `128,105` unique papers with `82,877` full abstracts) + **Crossref**, **OpenAlex**, **DataCite** (Zenodo/Figshare/OSF), **Global DOI RA & CSL-JSON** (JaLC/CNKI/mEDRA/KISTI), **DOAJ**, **OpenAIRE Graph & HAL**, **NCBI Entrez & bioRxiv/medRxiv**, **DBLP**, **arXiv**, **OpenLibrary**, **Europe PMC**, **Hugging Face Hub**, **IETF Datatracker RFC & PyPI**, and **SerpApi Google Scholar** fallback, paired with **Retraction Watch Detection** (`is_retracted`) and active **HTTP + Wayback Machine Link Validation** (`HTTP 200 OK`, `403 Restricted/Paywall`, `Archived Alive`, `404 Dead Link`, `Fake Domain`). |
 | **Deep Neural Layer** | **Sentence-Level Evidence, Intent, Stance & Cross-Lingual Bridge** | **Sentence-BERT (`all-MiniLM-L6-v2`)** focal-sentence vs. abstract sentence-level max-pooling (`best_evidence_sentence`), **Citation Intent Classification** (`background`, `methodology`, `result_comparison`), **Claim Stance & Polarity Verification** (`supported`, `partially_supported`, `contradiction_risk`), **Vietnamese ↔ English Semantic Bridging**, **Multi-Occurrence Aggregation**, and **Implicit Body Passage Discovery** for uncited references. |
-| **Neuro-Symbolic Verification** | **16D Feature Vector + 30+ Symbolic Rules + Platt Calibration** | Combines **Sentence-BERT + Multilingual MiniLM ONNX INT8** neural evidence & title alignment (+ **Monolingual Specificity Gate**), **RapidFuzz**, **AuthorMatcher**, and **VenueNormalizer** with **30+ deterministic Symbolic Rules** (`R-RETRACTED-PAPER`, `R-WAYBACK-ARCHIVED`, `R-GLOBAL-DOI-RA-VERIFIED`, `R-HF-VERIFIED`, `R-RFC-VERIFIED`, etc.) and a **Multinomial Logistic Regression + Logit-Space Platt Scaling** scorer trained on **120,000 paper- & title-disjoint samples** (`Acc = 99.02%` / `Macro-F1 = 0.9888` Unified Neuro-Symbolic, outperforming Pure ML `B5` on **both** ID (`97.98%` Acc / `0.9802` Macro-F1, `p < 0.001`) and OOD Hard-Guardrail (`99.75%` vs. `49.88%`), `100.00%` (`120/120`) E2E Gold Acc, `ECE = 0.0395`, `Brier = 0.0125`). |
+| **Neuro-Symbolic Verification** | **16D Feature Vector + 68 Symbolic Rules + Platt Calibration** | Combines **Sentence-BERT + Multilingual MiniLM ONNX INT8** neural evidence & title alignment (+ **Monolingual Specificity Gate**), **RapidFuzz**, **AuthorMatcher**, and **VenueNormalizer** with **68 deterministic Symbolic Rules across 16 priority groups** (`R-RETRACTED-PAPER`, `R-WAYBACK-ARCHIVED`, `R-GLOBAL-DOI-RA-VERIFIED`, `R-HF-VERIFIED`, `R-RFC-VERIFIED`, etc.) and a **Multinomial Logistic Regression + Logit-Space Platt Scaling** scorer trained on **120,000 paper- & title-disjoint samples** (`Acc = 99.02%` / `Macro-F1 = 0.9888` Unified Neuro-Symbolic, outperforming Pure ML `B5` on **both** ID (`97.98%` Acc / `0.9802` Macro-F1, `p < 0.001`) and OOD Hard-Guardrail (`99.75%` vs. `49.88%`), `100.00%` (`120/120`) E2E Gold Acc, `ECE = 0.0395`, `Brier = 0.0125`). |
 | **Live Sandbox** | **Interactive ACL Sandbox & Synthetic PDF Generator** | Sample `10–20` real papers from the local `129,125`-record (`128,105` unique-paper) ACL Anthology & scholarly database (`/sandbox`), inject controlled Layer-1/Layer-2 anomalies (`Sửa sai Năm`, `Sửa sai Tác giả`, `Bịa nguồn giả`, `Uncited Ref`, `Orphan In-text`), verify instantaneously, or synthesize a complete multi-page academic PDF manuscript. |
 | **Auto-Remediation** | **1-Click Bibliography Auto-Fix & Auto-Healed `.DOCX`** | Automatically repairs mismatched publication years, titles, author lists, venues, and DOIs using canonical records, outputting standardized **APA 7th**, **IEEE**, **Harvard/TDTU**, **BibTeX (`.bib`)**, **RIS (`.ris`)**, and one-click **Auto-Healed `.DOCX` manuscripts with change logs**. |
 | **Interactive IDE** | **6 Specialized Inspection Views** | **Split-Pane Reference Debugger** (side-by-side diff), **Two-Layer Citation & Source Network Graph (DAG)**, **1-Click Auto-Remediation Studio**, **5-Stage Logic Trace**, **Diagnostic Issues Hub**, **Bipartite Consistency Matrix**, and **Document Context Stream + Inline PDF Page Preview**. |
@@ -212,7 +212,7 @@ Manuscript (PDF / DOCX)
    │      │    ├── Claim Stance & Polarity Verification (supported | partially_supported | contradiction_risk)
    │      │    └── Multi-Occurrence Aggregation & Implicit Body Passage Discovery for Uncited References
    │      ├── HybridMLScorer: 16D Feature Vector + Multinomial Logistic Regression + Platt Calibration
-   │      └── Symbolic Guardrails: 30+ Deterministic Rules (Retraction Watch Veto, Wayback Link-Rot Rescue, DOI/URL Liveness, Year/Author/Venue Veto)
+   │      └── Symbolic Guardrails: 68 Deterministic Rules across 16 Groups (Retraction Watch Veto, Wayback Link-Rot Rescue, DOI/URL Liveness, Year/Author/Venue Veto)
    │
    └─► 5. Validation Verdict & Composite CIS Calculation (CISCalculator)
           ├── Assigns ValidationLabel: VERIFIED | METADATA_ERROR | RESOURCE | SUSPECTED_HALLUCINATION | UNRESOLVED
@@ -237,7 +237,7 @@ A common architectural question during thesis evaluation is: ***"Why does CITRA 
 
 1. **Retrieval-Augmented Verification (RAV) vs. Generative RAG**:
    - CITRA **does** implement the **Retrieval** and **Dense Neural Representation** pillars of RAG (federated multi-source retrieval across 15+ scholarly & technical registries + local SQLite FTS5 over `129,125` records / `128,105` unique papers + dense `Sentence-BERT + Multilingual MiniLM ONNX INT8` sentence-level evidence extraction).
-   - However, instead of feeding retrieved records into a generative LLM (`Generation`) to produce free-text judgements, CITRA replaces the generative step with **Symbolic Formal Logic (30+ deterministic rules) + Platt-Calibrated Probabilistic Scoring**.
+   - However, instead of feeding retrieved records into a generative LLM (`Generation`) to produce free-text judgements, CITRA replaces the generative step with **Symbolic Formal Logic (68 deterministic rules across 16 priority groups) + Platt-Calibrated Probabilistic Scoring**.
 2. **Eliminating Meta-Hallucination (Zero Hallucination-on-Hallucination)**:
    - Using an LLM generator to audit LLM-generated citations introduces **meta-hallucination** (the LLM judge may hallucinate that a fabricated paper exists, or forgive a `2002` vs. `2008` publication year discrepancy because the title sounds familiar).
    - Symbolic rules (`R-NONEXISTENT-DOI`, `R-DEAD-URL`, `R-YEAR-MISMATCH`, `R-AUTHOR-MISMATCH`) guarantee **100% deterministic reproducibility** on exact bibliographic constraints.
@@ -256,6 +256,7 @@ A common architectural question during thesis evaluation is: ***"Why does CITRA 
 | `IN_TEXT_MISMATCH` | Linked entry has author/year divergence between in-text marker and bibliography. | Penalizes `in_text_bib_consistency` (`0.15`). |
 | `DUPLICATE_REFERENCE` | Duplicate bibliographic entries detected in the reference list. | Penalizes `in_text_bib_consistency` (`0.10`). |
 | `STYLE_INCONSISTENT` | In-text marker deviates from the manuscript's high-confidence dominant citation style. | Minor format penalty (`0.02`) + style consistency hint. |
+| `UNRESOLVED` | Insufficient bibliographic metadata exists to deterministically resolve mapping. | Neutral fallback (no CIS penalty). |
 
 #### Layer 2: Bibliography Reference Validation (`ValidationLabel`)
 | Verdict Label | Decision Criteria | Semantic Meaning |
@@ -436,7 +437,7 @@ Beyond synthetic benchmarks and individual root PDFs, CITRA's structural extract
 | **Frontend (`web/`)** | React 18.3, TypeScript 5.8, Vite 5, Tailwind CSS 3.4, Radix UI Primitives, Lucide Icons, Solva Warm Editorial (`Sentient` 134-glyph VI Serif + `Onest` Sans + `JetBrains Mono`), `<251 kB` Acyclic Code-Split Bundle |
 | **Backend API (`src/integrity_checker/api/`)** | Python 3.11+, FastAPI, Uvicorn, Pydantic v2, SQLAlchemy 2.0 (SQLite WAL + PostgreSQL ready), JWT Auth (`PyJWT`, `bcrypt`), Google OAuth2, Server-Sent Events (SSE) |
 | **Document Parsing & NLP** | GROBID 0.9.1 (TEI-XML REST Service), PyMuPDF (`fitz`) + TCVN3/VNI decoder + selective OCR, `pdfplumber`, `python-docx`, BibTeX/RIS parsers, `RapidFuzz`, `defusedxml` |
-| **Neuro-Symbolic & ML Engine** | `sentence-transformers` (`all-MiniLM-L6-v2` + `paraphrase-multilingual-MiniLM-L12-v2` ONNX INT8), `scikit-learn` & `scipy` (`HybridMLScorer` Multinomial Logistic Regression + `PlattCalibrator`), 16D Feature Engineering, `43+` Deterministic Symbolic Rules |
+| **Neuro-Symbolic & ML Engine** | `sentence-transformers` (`all-MiniLM-L6-v2` + `paraphrase-multilingual-MiniLM-L12-v2` ONNX INT8), `scikit-learn` & `scipy` (`HybridMLScorer` Multinomial Logistic Regression + `PlattCalibrator`), 16D Feature Engineering, `68` Deterministic Symbolic Rules (16 Groups) |
 | **Scholarly Knowledge & APIs** | SQLite FTS5 (`129,125` records / `128,105` unique papers with `82,877` full abstracts), Crossref, OpenAlex, DataCite, Global DOI RA, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, Hugging Face, IETF RFC/PyPI, Wikidata/OpenCitations, Serper/SerpApi Scholar, SSRF-safe HTML & Wayback `LinkValidator` |
 | **Testing & DevOps** | Pytest (`2,197` passed / `2,203` backend unit & integration tests), Vitest (`472` passed across `62` files), Playwright E2E (`20` spec suites), Ruff, Docker Compose & GitHub Actions CI/CD |
 
@@ -447,7 +448,7 @@ Beyond synthetic benchmarks and individual root PDFs, CITRA's structural extract
 ```text
 essay-integrity-checker/
 ├── docker-compose.yml                  # Orchestrates web (:5173), api (:8000), and grobid (:8070)
-├── docker-compose.prod.yml             # Production Nginx + TLS + worker deployment stack
+├── docker-compose.prod.yml             # Production Nginx + TLS + FastAPI + GROBID deployment stack
 ├── Dockerfile                          # Python 3.11 + FastAPI + Sentence-BERT/ONNX backend image
 ├── pyproject.toml                      # Python package metadata (v3.89.5), Ruff/Pytest config & `essay-check` CLI
 ├── CLAUDE.md                           # AI / Developer architectural quick-reference
@@ -461,8 +462,8 @@ essay-integrity-checker/
 │       ├── evaluation/                 # Metrics, Baselines (B0–B5), EvaluationReport & Chapter-5 Performance/Load Benchmarks
 │       ├── export/                     # Multi-format exporters (JSON, CSV, PDF, DOCX, Auto-Healed DOCX, Class CSV/ZIP)
 │       ├── extraction/                 # GROBID TEI-XML parser, PyMuPDF, PdfPlumber, DOCX, BibTeX/RIS & 12 style patterns
-│       ├── linking/                    # Bidirectional in-text <-> bibliography CitationLinker (7 link statuses)
-│       ├── logic/                      # NeuroSymbolicChecker, SymbolicRules (R01–R30+), VNLegalVerifier, HybridMLScorer, PlattCalibrator, CISCalculator
+│       ├── linking/                    # Bidirectional in-text <-> bibliography CitationLinker (8 link statuses)
+│       ├── logic/                      # NeuroSymbolicChecker, SymbolicRules (68 R-* rules), VNLegalVerifier, HybridMLScorer, PlattCalibrator, CISCalculator
 │       ├── matching/                   # RapidFuzz lexical, Sentence-BERT + Multilingual ONNX INT8, VI<->EN Bridge, AuthorMatcher, VenueNormalizer
 │       ├── models/                     # Domain models (Citation, SourceCandidate, SourceResult, CitationVerdict, AnalysisReport)
 │       ├── pipeline/                   # IntegrityPipeline end-to-end async orchestrator & SHA-256 report cache
@@ -499,10 +500,10 @@ essay-integrity-checker/
 The platform is deployed and running on Google Cloud Platform (GCP Compute Engine with Docker Compose, Nginx reverse proxy, and Let's Encrypt SSL):
 
 - 🌐 **Web Application**: [https://citra.io.vn](https://citra.io.vn)
-- 📚 **Swagger API Documentation**: [https://citra.io.vn/docs](https://citra.io.vn/docs)
+- 📚 **REST & SSE API Reference**: [Key REST & SSE Endpoints](#api-reference--automated-testing) *(interactive Swagger UI `/docs` is enabled in local/dev at `http://localhost:8000/docs` and disabled in `APP_ENV=production`)*
 - 🩺 **Production API Health**: [https://citra.io.vn/api/health](https://citra.io.vn/api/health)
 
-You can log in directly using the [Default Demo Credentials](#default-demo-credentials) below.
+On **`https://citra.io.vn`**, evaluators can immediately try the unauthenticated **Live Citation Sandbox**, **Sign in with Google**, or **Register** a new account. *(Note: the [Default Demo Credentials](#default-demo-credentials) below are seeded exclusively in local/development environments and disabled in production.)*
 
 ---
 
@@ -538,10 +539,11 @@ Once running:
 # Start GROBID container on port 8070
 docker compose up -d grobid
 
-# Create virtual environment and install package in editable mode
+# Create virtual environment and install package in editable mode (CPU PyTorch + ONNX Runtime)
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -e ".[dev,onnx]"
 
 # Launch FastAPI server on port 8000
 uvicorn integrity_checker.api.main:app --reload --port 8000
@@ -584,7 +586,7 @@ python scripts/build_local_db.py --stats
 
 ## Default Demo Credentials
 
-The database automatically seeds three role-based accounts on startup (`src/integrity_checker/db/session.py`) so you can immediately explore every portal:
+In local/development environments (`APP_ENV=development`), the database automatically seeds three role-based accounts on startup (`src/integrity_checker/db/session.py` — disabled in `APP_ENV=production`) so you can immediately explore every portal locally:
 
 | Role | Email | Password | Portal Access |
 | :--- | :--- | :--- | :--- |
@@ -623,7 +625,7 @@ The database automatically seeds three role-based accounts on startup (`src/inte
 
 ### Running the Automated Test Suite & 120,000-Sample Benchmark
 
-The repository includes **2,197 passing backend unit & integration tests** (across a `2,203`-test suite), **472 frontend Vitest tests across 62 suites**, and **20 Playwright end-to-end browser suites** covering extraction, style detection, federated retrieval, SSRF-safe link validation, 16D feature matching, 43+ symbolic rules, Platt calibration, CIS calculation, RBAC/billing security, Tailwind v3.4 + `<500 kB` bundle hygiene, and responsive Light/Dark UI:
+The repository includes **2,197 passing backend unit & integration tests** (across a `2,203`-test suite), **472 frontend Vitest tests across 62 suites**, and **20 Playwright end-to-end browser suites** covering extraction, style detection, federated retrieval, SSRF-safe link validation, 16D feature matching, 68 symbolic rules, Platt calibration, CIS calculation, RBAC/billing security, Tailwind v3.4 + `<500 kB` bundle hygiene, and responsive Light/Dark UI:
 
 ```bash
 # Lint backend, tests, and scripts (0 errors)

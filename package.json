@@ -1,14 +1,19 @@
 {
   "name": "essay-integrity-checker",
+  "private": true,
   "version": "3.89.5",
-  "description": "",
-  "main": "index.js",
+  "description": "CITRA — Explainable Neuro-Symbolic Citation & Source Integrity Verification Platform",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",
     "version:bump": "python3 scripts/bump_version.py",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Run 'make test' for backend pytest or 'cd web && npm test' for frontend Vitest\""
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "keywords": [
+    "citation-verification",
+    "neuro-symbolic",
+    "academic-integrity",
+    "nlp"
+  ],
+  "author": "Nguyễn Bảo Minh & Trần Gia Thành",
+  "license": "MIT"
 }

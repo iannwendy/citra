@@ -26,9 +26,9 @@ essay-integrity-checker/
 │   ├── evaluation/           # Metrics, Baselines (B0–B5), EvaluationReport & Chapter-5 Performance/Load Benchmarks
 │   ├── export/               # Multi-format report exporters (JSON, CSV, PDF, DOCX, Auto-Healed DOCX, Class CSV/ZIP)
 │   ├── extraction/           # Hybrid parsing (GROBID 0.9.1 TEI XML + PyMuPDF + TCVN3/VNI + DOCX/BibTeX/RIS + 12 styles)
-│   ├── linking/              # Bidirectional in-text <-> bibliography CitationLinker (7 link statuses)
+│   ├── linking/              # Bidirectional in-text <-> bibliography CitationLinker (8 link statuses)
 │   ├── logging.py            # Structured application logging configuration
-│   ├── logic/                # NeuroSymbolicChecker, SymbolicRules (R01–R30+), VNLegalVerifier, HybridMLScorer, PlattCalibrator, CISCalculator
+│   ├── logic/                # NeuroSymbolicChecker, SymbolicRules (68 R-* rules across 16 groups), VNLegalVerifier, HybridMLScorer, PlattCalibrator, CISCalculator
 │   ├── matching/             # RapidFuzz lexical, Sentence-BERT + Multilingual MiniLM ONNX INT8, VI<->EN Bridge, AuthorMatcher, VenueNormalizer
 │   ├── models/               # Pydantic & dataclass domain models
 │   ├── pipeline/             # IntegrityPipeline end-to-end async orchestrator & report cache
@@ -51,6 +51,7 @@ essay-integrity-checker/
 - `DUPLICATE_REFERENCE` — Duplicate entries in the reference list
 - `AMBIGUOUS_MAPPING` — Multiple candidate references match the same in-text citation
 - `STYLE_INCONSISTENT` — Citation formatting deviates from the document's dominant style
+- `UNRESOLVED` — Neutral fallback when bibliographic metadata is insufficient to resolve mapping
 
 ### Layer 2: Scholarly Source Verification (`ValidationLabel`)
 | Label | Badge Color | Meaning |
@@ -97,8 +98,9 @@ essay-integrity-checker/
 ## Common Commands
 
 ```bash
-# Lint backend, tests, and scripts (0 errors required)
+# Lint & static type check backend, tests, and scripts (0 errors required)
 .venv/bin/python -m ruff check src/ tests/ scripts/
+.venv/bin/python -m mypy src/integrity_checker
 
 # Run full backend unit & integration test suite (2,197 passed / 2,203 suite)
 .venv/bin/python -m pytest tests/ -q
