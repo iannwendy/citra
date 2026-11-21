@@ -41,6 +41,11 @@ from typing import TYPE_CHECKING
 from defusedxml.ElementTree import ParseError, fromstring, tostring
 
 from integrity_checker.config import GrobidConfig
+from integrity_checker.extraction.patterns.utils import (
+    _ALPHA_LATIN_VN,
+    _LOWER_LATIN_VN,
+    _UPPER_LATIN_VN,
+)
 
 if TYPE_CHECKING:
     import xml.etree.ElementTree as ET  # noqa: N817 - type-only alias
@@ -232,7 +237,7 @@ def call_grobid_fulltext(
     is_default_http = http_post_fn is None
     if http_post_fn is None:
         try:
-            import requests
+            import requests  # type: ignore[import-untyped]
         except ImportError:
             logger.warning("requests not installed — GROBID disabled")
             return ""
@@ -719,7 +724,7 @@ def _split_single_merged_raw_reference(text: str) -> list[str]:
 
     # Case 6: Glued APA / Harvard entries where a new Personal or Corporate Author + Year starts mid-string
     for m6 in re.finditer(
-        r"(?<![,\bIn\b\bin\b\bby\b\band\b&])\s+"
+        r"(?<![,&])\s+"
         r"(?=(?:"
         r"[A-ZÀ-Ý][a-zA-ZÀ-ÿ'\u2019-]+(?:\s+[A-ZÀ-Ý][a-zA-ZÀ-ÿ'\u2019-]+)?,\s*(?:[A-ZÀ-Ý]\.\s*)+"
         r"(?:(?:,\s*|\s+(?:&|and)\s+)[A-ZÀ-Ý][a-zA-ZÀ-ÿ'\u2019-]+,\s*(?:[A-ZÀ-Ý]\.\s*)+)*"
@@ -1020,6 +1025,40 @@ def _parse_raw_bib_segment(raw_seg: str, entry_id: str) -> GrobidBibEntry:
     )
 
 
+_CLEAN_BIB_NOTE_DISQUALIFIER_RE = re.compile(
+    r"(?:\b(?:ibid|op\.\s*cit|loc\.\s*cit)\b"
+    r"|(?:\.\s*){4,}"
+    rf"|^\s*\d+\.\s+(?:ibid\b|{_UPPER_LATIN_VN}{_LOWER_LATIN_VN}+\s+{_UPPER_LATIN_VN}{_LOWER_LATIN_VN}+,)"
+    r"|^\s*(?:See\s+(?:also\b)?|Cf\.|Original\s+italic|For\s+an?\s+analysis\b))",
+    re.IGNORECASE,
+)
+_CLEAN_BIB_HEAD_FORM_RE = re.compile(
+    r"^\s*(?:"
+    r"\[\d+\]"
+    rf"|\d+\.\s+{_UPPER_LATIN_VN}(?:{_ALPHA_LATIN_VN}|['\u2019\-]){{1,25}},\s*{_UPPER_LATIN_VN}"
+    rf"|{_UPPER_LATIN_VN}(?:{_ALPHA_LATIN_VN}|['\u2019\-]){{1,25}},\s+{_UPPER_LATIN_VN}"
+    r"|[-–—]{2,}\."
+    r")"
+)
+
+
+def _entries_look_like_clean_structured_bib(entries: list[GrobidBibEntry]) -> bool:
+    """Return True only when preceding entries clearly form a structured bibliography
+    rather than Chicago NB body footnotes, endnotes, TOC lines, or preliminary CV prose."""
+    if not entries:
+        return False
+    bib_form_count = 0
+    for e in entries:
+        raw = (e.raw_reference or "").strip()
+        if _CLEAN_BIB_NOTE_DISQUALIFIER_RE.search(raw):
+            return False
+        if len(raw) > 350 and not e.doi and "http" not in raw.lower():
+            return False
+        if _CLEAN_BIB_HEAD_FORM_RE.match(raw):
+            bib_form_count += 1
+    return (bib_form_count / len(entries)) >= 0.75
+
+
 def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
     """Trích <listBibl>/<biblStruct>. Skip entry ở <teiHeader> (chỉ là metadata).
 
@@ -1078,42 +1117,113 @@ def _extract_bibliography(root: ET.Element) -> list[GrobidBibEntry]:
                         prev.title = f"{prev.title}.{m_rest_t.group(1).strip()}"
                 continue
 
-            # 1. If GROBID started <listBibl> inside body footnotes (Chicago NB theses)
-            # and this entry ends with "Bibliography" / "References" / "Works Cited",
-            # discard all preceding footnote entries and skip this last footnote.
-            if re.search(
-                r"(?:^|[\.\s])(?:Bibliography|References|Works\s+Cited)\s*$",
+            xml_titles_low = " ".join(
+                "".join(t_el.itertext()).strip().lower()
+                for t_el in bibl.findall(f".//{_TEI}title")
+                if "".join(t_el.itertext()).strip()
+            )
+            prev_looks_like_structured_bib = _entries_look_like_clean_structured_bib(entries)
+
+            # 1. If GROBID started <listBibl> inside body footnotes, TOC, or preliminary CV lists
+            # and this entry is a standalone heading or ends with a glued section heading
+            # ("Bibliography", "References", "Works Cited", "List of references"),
+            # discard preceding non-bibliography entries and skip this heading pseudo-entry.
+            end_hdr_m = re.search(
+                r"(?:^|\.\s+|(?:\.\s*){3,}|(?:https?://\S+|10\.\d{4,9}/\S+)\s+)"
+                r"(?:List\s+of\s+(?:References|Bibliography)|Bibliography|References|Works\s+Cited)\s*$",
                 raw_ref_text,
                 re.IGNORECASE,
-            ):
-                entries.clear()
-                continue
+            )
+            if end_hdr_m:
+                prefix_before_end_hdr = raw_ref_text[: end_hdr_m.start()].strip()
+                is_pure_heading = end_hdr_m.start() == 0
+                is_list_of_hdr = bool(
+                    re.search(r"list\s+of\s+(?:references|bibliography)\s*$", end_hdr_m.group(0), re.IGNORECASE)
+                )
+                is_after_author_year = bool(
+                    re.search(
+                        r"\(\s*(?:18|19|20)\d{2}[a-z]?\s*\)$|\b(?:18|19|20)\d{2}[a-z]?$",
+                        prefix_before_end_hdr,
+                    )
+                )
+                hdr_in_xml_title = any(
+                    kw in xml_titles_low for kw in ("bibliography", "references", "works cited")
+                )
+                if is_pure_heading:
+                    if not prev_looks_like_structured_bib or is_list_of_hdr:
+                        entries.clear()
+                    continue
+                if is_list_of_hdr and not hdr_in_xml_title:
+                    entries.clear()
+                    continue
+                if (
+                    not prev_looks_like_structured_bib
+                    and not is_after_author_year
+                    and not hdr_in_xml_title
+                ):
+                    entries.clear()
+                    continue
 
             # 2. If raw_ref_text contains a footnote followed by "Bibliography [Primary Sources] <Entry>",
-            # discard all preceding footnotes and parse only the bibliography entry after the heading.
+            # discard preceding footnotes (only when prior entries are not structured bib entries)
+            # and parse only the bibliography entry after the heading — never when the matched token
+            # is actually the paper's title right after "Author (YYYY).".
             bib_hdr_m = re.search(
                 r"(?:^|\.\s+|\d+\.\s+)(?:Bibliography|References|Works\s+Cited)(?:\s+(?:Primary|Secondary)\s+Sources)?\s+(?=[\"\u201cA-Z])",
                 raw_ref_text,
             )
             if bib_hdr_m:
-                entries.clear()
-                raw_ref_text = raw_ref_text[bib_hdr_m.end():].strip()
-                for seg_idx, seg_text in enumerate(_split_merged_raw_reference(raw_ref_text)):
-                    seg_id = entry_id if seg_idx == 0 else f"{entry_id}_{seg_idx}"
-                    entries.append(_parse_raw_bib_segment(seg_text, seg_id))
-                continue
+                prefix_before_hdr = raw_ref_text[: bib_hdr_m.start()].strip()
+                after_author_year_hdr = bool(
+                    re.search(
+                        r"(?:\(\s*(?:18|19|20)\d{2}[^)]*\)|\b(?:18|19|20)\d{2}[a-z]?)$",
+                        prefix_before_hdr,
+                    )
+                )
+                matched_kw_low = re.sub(r"^[\d.\s]+", "", bib_hdr_m.group(0)).strip().lower()
+                tail_preview_low = raw_ref_text[bib_hdr_m.end() : bib_hdr_m.end() + 24].strip().lower()
+                is_part_of_xml_title = bool(
+                    xml_titles_low
+                    and tail_preview_low
+                    and f"{matched_kw_low} {tail_preview_low[:12]}".strip() in xml_titles_low
+                )
+                if not after_author_year_hdr and not is_part_of_xml_title:
+                    if not prev_looks_like_structured_bib:
+                        entries.clear()
+                    raw_ref_text = raw_ref_text[bib_hdr_m.end() :].strip()
+                    for seg_idx, seg_text in enumerate(_split_merged_raw_reference(raw_ref_text)):
+                        seg_id = entry_id if seg_idx == 0 else f"{entry_id}_{seg_idx}"
+                        entries.append(_parse_raw_bib_segment(seg_text, seg_id))
+                    continue
 
             # 3. Strip inline section subheaders (e.g. "The Baltimore Sun. ... Secondary Sources \"Antisemitic Legislation...\"")
+            # Must occur at start of raw_ref_text or right after sentence-ending ". " (never mid-title).
             sub_hdr_m = re.search(
-                r"\b(?:Primary|Secondary)\s+Sources\s+(?=[\"\u201cA-Z])",
+                r"(?:^|\.\s+)(?:Primary|Secondary)\s+Sources\s+(?=[\"\u201cA-Z])",
                 raw_ref_text,
             )
             if sub_hdr_m:
-                raw_ref_text = raw_ref_text[sub_hdr_m.end():].strip()
-                for seg_idx, seg_text in enumerate(_split_merged_raw_reference(raw_ref_text)):
-                    seg_id = entry_id if seg_idx == 0 else f"{entry_id}_{seg_idx}"
-                    entries.append(_parse_raw_bib_segment(seg_text, seg_id))
-                continue
+                prefix_sub = raw_ref_text[: sub_hdr_m.start()].strip()
+                after_author_year_sub = bool(
+                    re.search(
+                        r"(?:\(\s*(?:18|19|20)\d{2}[^)]*\)|\b(?:18|19|20)\d{2}[a-z]?)$",
+                        prefix_sub,
+                    )
+                )
+                sub_in_xml_title = (
+                    "primary sources" in xml_titles_low or "secondary sources" in xml_titles_low
+                )
+                if not after_author_year_sub and not sub_in_xml_title:
+                    tail_sub = raw_ref_text[sub_hdr_m.end() :].strip()
+                    combined_segs: list[str] = []
+                    if len(prefix_sub) >= 15:
+                        combined_segs.extend(_split_merged_raw_reference(f"{prefix_sub}."))
+                    if tail_sub:
+                        combined_segs.extend(_split_merged_raw_reference(tail_sub))
+                    for seg_idx, seg_text in enumerate(combined_segs):
+                        seg_id = entry_id if seg_idx == 0 else f"{entry_id}_{seg_idx}"
+                        entries.append(_parse_raw_bib_segment(seg_text, seg_id))
+                    continue
 
         # If GROBID glued multiple bibliography entries into a single <biblStruct>,
         # split and parse each segment separately.

@@ -5,7 +5,7 @@
 **Tổng khối lượng dữ liệu đã bóc tách từng dòng:**
 - **21 tài liệu PDF đa miền (Pass 1 — Cấu hình Production đầy đủ):** `835` trang PDF, `329` mục tài liệu tham khảo (`ref`), `674` lượt trích dẫn trong bài (`cite`).
 - **6 tài liệu PDF trọng điểm (Pass 2 — Đối chứng 100% Pure Live External APIs):** Tắt hoàn toàn `local_db` và `_KNOWN_PAPERS` để kiểm chứng độc lập khả năng phân giải DOI, tiêu đề, tác giả, năm và hội nghị/tạp chí từ các API học thuật trực tuyến.
-- **7 file Live Batch Check E2E (`BATCH_CONCURRENCY = 3`):** Chạy trực tiếp qua HTTP API container `integrity-api` gồm 5 PDF thực tế đa kịch bản + 1 PDF hỏng bảng tham chiếu chéo (`%PDF-1.4` corrupt xref) + 1 file sai định dạng header để kiểm chứng tính nguyên tử của quota, xử lý lỗi đồng thời, xuất báo cáo JSON/CSV và hành vi giao diện [`BatchUploadPage.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/BatchUploadPage.tsx).
+- **7 file Live Batch Check E2E (`BATCH_CONCURRENCY = 3`):** Chạy trực tiếp qua HTTP API container `integrity-api` gồm 5 PDF thực tế đa kịch bản + 1 PDF hỏng bảng tham chiếu chéo (`%PDF-1.4` corrupt xref) + 1 file sai định dạng header để kiểm chứng tính nguyên tử của quota, xử lý lỗi đồng thời, xuất báo cáo JSON/CSV và hành vi giao diện [`BatchUploadPage.tsx`](../../web/src/pages/BatchUploadPage.tsx).
 
 > **Nguyên tắc cam kết:** Toàn bộ quá trình kiểm định dưới đây **không chỉnh sửa bất kỳ dòng mã nguồn sản phẩm nào** (`src/`, `web/`, `tests/`, `configs/`). Mọi đề xuất khắc phục đều được thiết kế theo hướng **phẫu thuật cục bộ (surgical fix), tương thích ngược 100% (backward-compatible) và đảm bảo Zero-Regression** (tuyệt đối không làm gãy bất kỳ luồng xử lý, hợp đồng API/DB hay bộ kiểm thử hiện hữu nào).
 
@@ -55,7 +55,7 @@ Cấu hình chạy: `use_report_cache=False`, `enable_link_validation=True`, GRO
 | 20 | `data/essays/essay_03_comprehensive.pdf` | 2 | 9 | 11 | **63.99** | `verified:4, meta_err:2, halluc:3` | `8 / 0 / 1 / 0` | 6.0s |
 | 21 | `data/essays/essay_05_edge_doi_only.pdf` | 2 | 2 | 0 | **35.00** | `meta_err:2` | `2 / 0 / 0 / 0` | 0.3s |
 
-> **Nhận xét tổng quát từ bảng số liệu:** Trong toàn bộ `674` lượt trích dẫn trong bài ở cả 21 tài liệu, ba cột trạng thái `in_text_mismatch`, `ambiguous_mapping` và `style_inconsistent` đều bằng **`0` tuyệt đối** (`0/674`) — đây là dấu hiệu trực tiếp dẫn tới phát hiện **BUG-15** ở tầng [`CitationLinker`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/linking/citation_linker.py#L756-L773).
+> **Nhận xét tổng quát từ bảng số liệu:** Trong toàn bộ `674` lượt trích dẫn trong bài ở cả 21 tài liệu, ba cột trạng thái `in_text_mismatch`, `ambiguous_mapping` và `style_inconsistent` đều bằng **`0` tuyệt đối** (`0/674`) — đây là dấu hiệu trực tiếp dẫn tới phát hiện **BUG-15** ở tầng [`CitationLinker`](../../src/integrity_checker/linking/citation_linker.py#L756-L773).
 
 ---
 
@@ -76,7 +76,7 @@ Chạy lại 6 PDF trọng điểm khi buộc 100% trích dẫn đi qua các API
 
 ### 1.3. Kết quả Live Batch Check E2E (`BATCH_CONCURRENCY = 3` trên `http://localhost:8000`)
 
-Mô phỏng chính xác cơ chế hàng đợi đồng thời `BATCH_CONCURRENCY = 3` của [`BatchUploadPage.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/BatchUploadPage.tsx#L39) với 7 file trộn lẫn hợp lệ và lỗi:
+Mô phỏng chính xác cơ chế hàng đợi đồng thời `BATCH_CONCURRENCY = 3` của [`BatchUploadPage.tsx`](../../web/src/pages/BatchUploadPage.tsx#L39) với 7 file trộn lẫn hợp lệ và lỗi:
 
 | Lượt | Tên file upload | HTTP Upload | `essay_id` | Trạng thái cuối | CIS | Phát hiện từ kiểm thử thực tế |
 |---:|---|---:|---:|---|---:|---|
@@ -148,8 +148,8 @@ Mô phỏng chính xác cơ chế hàng đợi đồng thời `BATCH_CONCURRENCY
 #### BUG-01 (`CRITICAL`) — Race Condition trên thuộc tính trạng thái `self._last_archive_url` của Singleton `RetrievalOrchestrator`
 
 - **Vị trí mã nguồn:**
-  - Khởi tạo singleton toàn tiến trình: [`deps.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/deps.py#L38-L45) (`get_orchestrator()` với `@lru_cache(maxsize=1)`).
-  - Ghi đè và đọc lại biến thực thể qua điểm nhường bất đồng bộ (`await`): [`retrieval_orchestrator.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L939) và [`_validate_citation_url`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L1379-L1408), sau đó đọc lại tại các dòng [`1590`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L1590), [`1604`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L1604), [`1623`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L1623), [`1670`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L1670), [`1962`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L1962), [`2006`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L2006).
+  - Khởi tạo singleton toàn tiến trình: [`deps.py`](../../src/integrity_checker/api/deps.py#L38-L45) (`get_orchestrator()` với `@lru_cache(maxsize=1)`).
+  - Ghi đè và đọc lại biến thực thể qua điểm nhường bất đồng bộ (`await`): [`retrieval_orchestrator.py`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L939) và [`_validate_citation_url`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L1379-L1408), sau đó đọc lại tại các dòng [`1590`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L1590), [`1604`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L1604), [`1623`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L1623), [`1670`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L1670), [`1962`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L1962), [`2006`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L2006).
 - **Bằng chứng & Cơ chế gây lỗi:**
   - Pipeline kiểm tra đồng thời tới `8` trích dẫn mỗi bài (`Semaphore(8)`), và Batch Check chạy đồng thời `3` bài (`BATCH_CONCURRENCY = 3`) → tối đa **24 coroutine cùng chia sẻ duy nhất 1 instance `RetrievalOrchestrator`**.
   - Tại dòng `1389`, Coroutine A reset `self._last_archive_url = None`, gọi `await validator.validate_url(url_A)` và nhận được `self._last_archive_url = "https://web.archive.org/.../url_A"`. Ngay trước khi Coroutine A đi qua các API học thuật để tới dòng `1962` gắn `archive_url` vào `SourceResult`, Coroutine B nhảy vào dòng `1389` gán `self._last_archive_url = None` (hoặc gán snapshot của `url_B`)! Hậu quả: Coroutine A bị mất trắng link Wayback hoặc gắn nhầm link Wayback của bài báo khác.
@@ -180,13 +180,13 @@ async def _validate_citation_url_full(
 
 #### BUG-02 (`HIGH`) — Truy vấn Wayback Machine không có Semaphore/Retry gây dao động nhãn `RESOURCE` ↔ `SUSPECTED_HALLUCINATION` (`±14.65` điểm CIS trên cùng một PDF)
 
-- **Vị trí mã nguồn:** [`LinkValidator._check_wayback_snapshot`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/link_validator.py#L210-L258).
+- **Vị trí mã nguồn:** [`LinkValidator._check_wayback_snapshot`](../../src/integrity_checker/retrieval/link_validator.py#L210-L258).
 - **Bằng chứng thực nghiệm E2E:**
   - Trên tài liệu `TDTU_PDF/041_huit_khoaluantotnghiep_NHOM_09_KhoaLuanTotNghiep.pdf`, mục `[7] https://www.iworld.com.vn/quan-ly-su-kien-va-thong-tin-bao-mat-siem-la-gi/` và `[12] https://websitehcm.com/recurrent-neural-network-rnn-trong-tensorflow/` đều đã ngừng hoạt động trên web gốc nhưng **có bản lưu lịch sử thật trên Internet Archive** (`20260114114246` và `20240916024700`).
   - Ở lượt chạy **Live Batch Check (`essay_id=48`)**, Wayback kịp phản hồi → cả `[7]` và `[12]` được chấm `RESOURCE (R-WAYBACK-ARCHIVED)` → **`CIS = 77.85`**.
   - Ở lượt chạy **Pass 1 (`pass1_06`)**, 10 đường link trong bài cùng bắn song song vào `https://archive.org/wayback/available` không có giới hạn tốc độ; `_check_wayback_snapshot` chỉ thử **1 lần duy nhất** với `timeout=4.5s` và bắt `except Exception: return None` → coi như không có bản lưu, đẩy `[7]` và `[12]` sang **`SUSPECTED_HALLUCINATION (R-DEAD-URL)`** và kéo tụt điểm xuống **`CIS = 63.20`** (lệch `14.65` điểm trên cùng một file không đổi!).
 - **Đề xuất cách Fix (Zero-Regression):**
-  1. Thêm `asyncio.Semaphore(2)` và khoảng giãn tối thiểu `0.35s` riêng cho endpoint `archive.org/wayback/available` cùng bộ nhớ đệm theo phiên `_WAYBACK_CACHE: dict[str, str | None]` trong [`link_validator.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/link_validator.py#L210-L258).
+  1. Thêm `asyncio.Semaphore(2)` và khoảng giãn tối thiểu `0.35s` riêng cho endpoint `archive.org/wayback/available` cùng bộ nhớ đệm theo phiên `_WAYBACK_CACHE: dict[str, str | None]` trong [`link_validator.py`](../../src/integrity_checker/retrieval/link_validator.py#L210-L258).
   2. Retry tối đa 2 lần (backoff `0.8s → 1.6s`) khi gặp `TimeoutException`, `ConnectError` hoặc HTTP `429 / 5xx`.
   3. Phân biệt rõ 2 trạng thái: khi `archive.org` trả `200 OK` với `archived_snapshots == {}` (xác nhận **không từng được lưu trữ**) mới kết luận `dead_link`; còn khi chính `archive.org` bị timeout/429 thì trả `status = "unverified"` để hệ thống hạ về `UNRESOLVED` thay vì vu oan `SUSPECTED_HALLUCINATION` cho người nộp bài.
   - **Đảm bảo không ảnh hưởng luồng cũ:** Các URL chết thực sự không có trên Wayback (nơi `archive.org` trả `200 OK` rỗng) vẫn trả `dead_link` và bắt `R-DEAD-URL` y hệt trước đây.
@@ -196,11 +196,11 @@ async def _validate_citation_url_full(
 #### BUG-03 (`HIGH`) — Bare URL có số thứ tự `[N]` / `N.` lọt lưới `is_web_or_legal_resource` (đốt 10 API + SerpAPI), trong khi Check 1 & Check 2 của `NeuroSymbolicChecker` chạy trước Check 4 bỏ qua kiểm tra Fake/Dead URL
 
 - **Vị trí mã nguồn:**
-  - [`RetrievalOrchestrator.is_web_or_legal_resource`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L1030-L1095) (`line 1045`).
-  - [`NeuroSymbolicChecker.check`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/neuro_symbolic_checker.py#L205-L367) (Check 1 tại `lines 205-223`, Check 2 tại `lines 226-246`, Check 4 tại `lines 325-367`).
+  - [`RetrievalOrchestrator.is_web_or_legal_resource`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L1030-L1095) (`line 1045`).
+  - [`NeuroSymbolicChecker.check`](../../src/integrity_checker/logic/neuro_symbolic_checker.py#L205-L367) (Check 1 tại `lines 205-223`, Check 2 tại `lines 226-246`, Check 4 tại `lines 325-367`).
 - **Bằng chứng thực nghiệm E2E:**
   1. Trong `docker_batch_api.log` (`06:27:54`), câu trích dẫn `'[9] https://ntshanoi.com.vn/giai-phap-siem.html#:~:text=SIEM...'` (chỉ là một đường link thuần túy có đánh số `[9]` ở đầu) không khớp `raw_text.startswith(("http://", "https://"))` tại `line 1045`, dẫn đến việc hệ thống bắn truy vấn tới **toàn bộ 10 cơ sở dữ liệu học thuật kèm `serpapi` trả phí** (`failed=['crossref', 'openalex', 'doaj', 'openaire_hal', 'dblp', 'arxiv', 'openlibrary', 'europepmc', 'wikidata_opencitations', 'serpapi']`) và làm nổ cầu chì quota: `SerpApi quota circuit breaker tripped: Your account has run out of searches`!
-  2. Ngược lại, trong [`NeuroSymbolicChecker.check`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/neuro_symbolic_checker.py#L205-L246), Check 1 và Check 2 trả về ngay `ValidationLabel.RESOURCE (confidence=0.95)` **trước khi chạy Check 4 (`lines 325-367`)**:
+  2. Ngược lại, trong [`NeuroSymbolicChecker.check`](../../src/integrity_checker/logic/neuro_symbolic_checker.py#L205-L246), Check 1 và Check 2 trả về ngay `ValidationLabel.RESOURCE (confidence=0.95)` **trước khi chạy Check 4 (`lines 325-367`)**:
      - Nếu một trích dẫn khớp từ khóa tài liệu/API của Check 2 nhưng chứa tên miền giả (`https://example.com/api-docs`) hoặc link chết `HTTP 404` (`url_status == "dead_link"`), Check 2 vẫn chấm `RESOURCE (0.95)` thay vì `SUSPECTED_HALLUCINATION`!
      - Đồng thời Check 1 coi mọi chuỗi bắt đầu bằng `https://` không chứa `doi.org` là web phi học thuật, nên nếu tài liệu trích dẫn trần link bài báo `https://arxiv.org/abs/...` hoặc `https://aclanthology.org/N19-1423/`, nó bị ép thành `RESOURCE` thay vì bài báo học thuật.
 - **Đề xuất cách Fix (Zero-Regression):**
@@ -213,8 +213,8 @@ async def _validate_citation_url_full(
 #### BUG-04 (`MEDIUM-HIGH`) — Xung đột đồng thời làm vô hiệu hóa bộ điều tiết tốc độ (Rate Limiter) ở `DBLPClient` & `ArxivClient` (`HTTP 429 / RetryError`)
 
 - **Vị trí mã nguồn:**
-  - [`dblp_client.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/dblp_client.py#L45-L58) và [`_fetch_json_with_retry`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/dblp_client.py#L368-L410).
-  - [`arxiv_client.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/arxiv_client.py#L66-L78) và [`_fetch_xml_with_retry`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/arxiv_client.py#L383-L440).
+  - [`dblp_client.py`](../../src/integrity_checker/retrieval/dblp_client.py#L45-L58) và [`_fetch_json_with_retry`](../../src/integrity_checker/retrieval/dblp_client.py#L368-L410).
+  - [`arxiv_client.py`](../../src/integrity_checker/retrieval/arxiv_client.py#L66-L78) và [`_fetch_xml_with_retry`](../../src/integrity_checker/retrieval/arxiv_client.py#L383-L440).
 - **Bằng chứng thực nghiệm E2E:**
   - Xuất hiện dày đặc trong log E2E và Docker Batch log:
     - `WARNING | dblp_client:_fetch_json_with_retry:361 — DBLP retry exhausted: RetryError[... raised HTTPStatusError]` (ở `thesis.pdf`, `002_vn_legal`, `hard_03`, `batch_44`).
@@ -240,15 +240,15 @@ async def _validate_citation_url_full(
 #### BUG-05 (`MEDIUM`) — Tách URL bỏ sót ký tự đóng `]`/`>`, đứt gãy URL ngắt dòng PDF và thiếu mã HTTP fallback `HEAD → GET` trong `LinkValidator`
 
 - **Vị trí mã nguồn:**
-  - Tách URL fallback: [`retrieval_orchestrator.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L1391), [`rules.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py#L952), [`document_parser.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/document_parser.py#L1721).
-  - Fallback `HEAD → GET`: [`link_validator.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/link_validator.py#L170-L185).
+  - Tách URL fallback: [`retrieval_orchestrator.py`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L1391), [`rules.py`](../../src/integrity_checker/logic/rules.py#L952), [`document_parser.py`](../../src/integrity_checker/extraction/document_parser.py#L1721).
+  - Fallback `HEAD → GET`: [`link_validator.py`](../../src/integrity_checker/retrieval/link_validator.py#L170-L185).
 - **Bằng chứng thực nghiệm E2E:**
   - `041_huit #9`: Đường link bị PDF ngắt dòng ngay giữa chuỗi mã hóa phần trăm tiếng Việt (`...vi%E1% BA%BFt...`), khiến regex `https?://\S+` cắt cụt URL tại dấu cách đầu tiên; `main.pdf #2` (`Sculley 2015`) có `Retrieved from https:` bị đứt dòng sau dấu hai chấm.
   - `.rstrip(".,;:)\"'")` không xóa `]` và `>` khi trích dẫn viết theo mẫu IEEE `[Online]. Available: <https://...>` hoặc `[https://...]`, làm hỏng truy vấn kiểm tra link.
   - Nhiều cổng thông tin/tài liệu chặn phương thức `HEAD` bằng mã `400 Bad Request`, `401`, `406`, `500`, `501 Not Implemented` hoặc `503` (WAF/Cloudflare), nhưng `link_validator.py:170` chỉ thử lại bằng `GET` khi gặp `(403, 404, 405)`.
 - **Đề xuất cách Fix (Zero-Regression):**
   - Chuẩn hóa hàm tiện ích chung `clean_extracted_url(url)` dùng `.rstrip(".,;:)\"']>")` và khôi phục nối dòng URL khi dòng kế tiếp nối trực tiếp sau `https://`, `/`, `-`, `_`, `%[0-9A-Fa-f]{0,2}`.
-  - Mở rộng điều kiện fallback từ `HEAD` sang `GET` trong [`link_validator.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/link_validator.py#L170) thành `resp.status_code in (400, 401, 403, 404, 405, 406, 500, 501, 503)` (với `stream=True` chỉ đọc header + 4KB đầu để không tốn băng thông tải file lớn).
+  - Mở rộng điều kiện fallback từ `HEAD` sang `GET` trong [`link_validator.py`](../../src/integrity_checker/retrieval/link_validator.py#L170) thành `resp.status_code in (400, 401, 403, 404, 405, 406, 500, 501, 503)` (với `stream=True` chỉ đọc header + 4KB đầu để không tốn băng thông tải file lớn).
 
 ---
 
@@ -257,8 +257,8 @@ async def _validate_citation_url_full(
 #### BUG-06 (`CRITICAL`) — Trích dẫn ghép lai giả mạo (Chimeric Hallucinations) lọt lưới qua 2 lỗ hổng độc lập tại `_KNOWN_PAPERS` và `Rule 2b` (`_apply_core`)
 
 - **Vị trí mã nguồn:**
-  - Lỗ hổng 6a: [`NeuroSymbolicChecker.check`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/neuro_symbolic_checker.py#L456-L506).
-  - Lỗ hổng 6b: [`SymbolicRules._apply_core`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py#L1440-L1464) (`Rule 2b: Spliced / Chimeric DOI hallucination`) và [`lines 1663-1680`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py#L1663-L1680).
+  - Lỗ hổng 6a: [`NeuroSymbolicChecker.check`](../../src/integrity_checker/logic/neuro_symbolic_checker.py#L456-L506).
+  - Lỗ hổng 6b: [`SymbolicRules._apply_core`](../../src/integrity_checker/logic/rules.py#L1440-L1464) (`Rule 2b: Spliced / Chimeric DOI hallucination`) và [`lines 1663-1680`](../../src/integrity_checker/logic/rules.py#L1663-L1680).
 - **Bằng chứng thực nghiệm E2E (trên `style_corpora/APA/hard_cases/hard_03_hallucinations_and_chimera.pdf`):**
   1. **Trích dẫn `#2`:** `Vaswani, A., Shazeer, N., & Parmar, N. (2017). Hyperbolic quantum graph topology for autonomous underwater swarm navigation. Advances in Neural Information Processing Systems. https://doi.org/10.1109/CVPR.2016.90`
      - Tác giả của bài *Attention Is All You Need (2017)* + tiêu đề tàu ngầm lượng tử bịa đặt 100% + DOI đánh cắp của bài *ResNet (He et al., CVPR 2016)*.
@@ -291,7 +291,7 @@ async def _validate_citation_url_full(
 
 #### BUG-07 (`CRITICAL`) — Khối `R-CONTENT-MISMATCH` chạy trước `_rule_local_db_metadata_error` và `Rule 4a2`, gán oan lỗi gõ sai năm (`year_distance >= 2`) thành `SUSPECTED_HALLUCINATION`
 
-- **Vị trí mã nguồn:** Thứ tự thực thi trong [`SymbolicRules._apply_core`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py#L1603-L1729): khối Neural Content Alignment (`lines 1603-1680`) đặt **trước** `Rule 4a2` (`line 1683`) và `Rule 4a3` ([`_rule_local_db_metadata_error`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py#L551-L620) gọi tại `line 1720`).
+- **Vị trí mã nguồn:** Thứ tự thực thi trong [`SymbolicRules._apply_core`](../../src/integrity_checker/logic/rules.py#L1603-L1729): khối Neural Content Alignment (`lines 1603-1680`) đặt **trước** `Rule 4a2` (`line 1683`) và `Rule 4a3` ([`_rule_local_db_metadata_error`](../../src/integrity_checker/logic/rules.py#L551-L620) gọi tại `line 1720`).
 - **Bằng chứng thực nghiệm E2E (trên `style_corpora/IEEE/hard_cases/hard_02_metadata_errors_and_mismatch.pdf`):**
   - Mục `[1]`: `Vaswani, A., Shazeer, N., & Parmar, N. (2020). Attention is all you need. DOI: 10.48550/arXiv.1706.03762` (`title_sim=1.00`, `author_sim=1.00`, `doi_match=True`, chỉ sai năm `2020` thay vì `2017` → `year_dist=3`).
   - Mục `[5]`: `He, K., Zhang, X., & Ren, S. (2018). Deep residual learning for image recognition. Journal of Machine Learning Research. DOI: 10.1109/CVPR.2016.90` (`title_sim=1.00`, `author_sim=1.00`, `doi_match=True`, sai năm `2018` thay vì `2016` → `year_dist=2`).
@@ -306,11 +306,11 @@ async def _validate_citation_url_full(
 
 #### BUG-08 (`HIGH`) — `_rule_local_db_verified`, `_rule_local_db_good_match` và `Rule 1c` trả nhãn `VERIFIED` nhưng vẫn đính kèm `mismatched_fields` khác rỗng (kể cả báo sai lỗi DOI khi `local_db` khuyết trường DOI)
 
-- **Vị trí mã nguồn:** [`rules.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py#L451-L470) (`_rule_local_db_verified`), [`lines 533-547`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py#L533-L547) (`_rule_local_db_good_match`), và [`line 1375`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py#L1375) (`Rule 1c`).
+- **Vị trí mã nguồn:** [`rules.py`](../../src/integrity_checker/logic/rules.py#L451-L470) (`_rule_local_db_verified`), [`lines 533-547`](../../src/integrity_checker/logic/rules.py#L533-L547) (`_rule_local_db_good_match`), và [`line 1375`](../../src/integrity_checker/logic/rules.py#L1375) (`Rule 1c`).
 - **Bằng chứng thực nghiệm E2E:**
   - `TranThanhPhuoc_523H0002_523H0054.pdf #19` và `20-theses/11.pdf #14` (`Li, G., et al., 2020`): Trả `label = "verified"`, `rules = ["R-LOCAL_DB_VERIFIED"]`, nhưng `mismatched_fields = ["doi"]` và ghi chú *"Note: DOI in citation differs from canonical record"*, mặc dù DOI trong bài của tác giả **hoàn toàn đúng**, chỉ vì bản ghi trong bảng SQLite `local_db` để trống `best.doi = None` khiến `features.doi_exact_match == False`!
   - Ngược lại, nếu `best.doi` trong `local_db` có giá trị thật và thực sự **khác** với `citation_doi` (trích dẫn gắn nhầm DOI của bài khác), `_rule_local_db_verified` vẫn trả `VERIFIED` thay vì `METADATA_ERROR`!
-  - `thesis.pdf #17, #18` và `20-theses/14.pdf #22`: Trả `label = "verified"` kèm `mismatched_fields = ["author"]`, vi phạm hợp đồng dữ liệu tại [`rules.py:366`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py#L366) (gây hiển thị huy hiệu cảnh báo mâu thuẫn trên UI cho các mục đã xác thực xanh).
+  - `thesis.pdf #17, #18` và `20-theses/14.pdf #22`: Trả `label = "verified"` kèm `mismatched_fields = ["author"]`, vi phạm hợp đồng dữ liệu tại [`rules.py:366`](../../src/integrity_checker/logic/rules.py#L366) (gây hiển thị huy hiệu cảnh báo mâu thuẫn trên UI cho các mục đã xác thực xanh).
 - **Đề xuất cách Fix (Zero-Regression):**
   1. Trong `_rule_local_db_verified` và `_rule_local_db_good_match`: chỉ coi là xung đột DOI khi **cả hai** `citation_doi` và `best.doi` đều khác rỗng, không khớp nhau và không phải cặp tương đương `arXiv DOI ↔ publisher DOI` (`has_real_doi_conflict`). Nếu `has_real_doi_conflict == True` → `return None` để chuyển sang `_rule_local_db_metadata_error` trả `METADATA_ERROR (mismatched_fields=['doi'])`. Nếu `best.doi` rỗng → không coi là lỗi DOI.
   2. Mọi RuleOutcome mang nhãn `ValidationLabel.VERIFIED` luôn đảm bảo `mismatched_fields = []`.
@@ -319,7 +319,7 @@ async def _validate_citation_url_full(
 
 #### BUG-09 (`HIGH`) — Cờ `is_semantic_only_noise` gán oan ấn phẩm học thuật tiếng Việt thành `SUSPECTED_HALLUCINATION` và xuất thông điệp phi lý `(title_sim=0.84 < 0.4)`
 
-- **Vị trí mã nguồn:** [`rules.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py#L1853-L1860) và [`lines 1928-1983`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py#L1928-L1983).
+- **Vị trí mã nguồn:** [`rules.py`](../../src/integrity_checker/logic/rules.py#L1853-L1860) và [`lines 1928-1983`](../../src/integrity_checker/logic/rules.py#L1928-L1983).
 - **Bằng chứng thực nghiệm E2E (6 trích dẫn trên 4 tài liệu thực tế):**
   - `043_vn_uni #17` (`Nguyễn Thành Tâm, 2017`): `Extremely weak scholarly evidence across queried databases (title_sim=0.84 < 0.4, author_sim=0.00, DOI match=False).`
   - `003_vn_legal #11` (`Phùng Anh Tuấn, "Các giải pháp thực hiện quy định thuế toàn cầu", Tạp chí Tài chính, tập 1, số 802, 2023` — bài báo thật trên Tạp chí Tài chính Việt Nam): `... (title_sim=0.77 < 0.4, ...)`.
@@ -337,7 +337,7 @@ async def _validate_citation_url_full(
 #### BUG-10 (`MEDIUM-HIGH`) — Phạt oan `METADATA_ERROR (author)` cho các trích dẫn chuẩn APA 7th dùng dấu ba chấm rút gọn tác giả (`... & LastAuthor`) và tên tác giả Á Đông đảo thứ tự
 
 - **Vị trí mã nguồn:**
-  - Phát hiện rút gọn tác giả: [`FeatureExtractor._citation_has_et_al`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/matching/features.py#L359-L373) và hàm `author_match_score` trong `normalization.py` / `features.py`.
+  - Phát hiện rút gọn tác giả: [`FeatureExtractor._citation_has_et_al`](../../src/integrity_checker/matching/features.py#L359-L373) và hàm `author_match_score` trong `normalization.py` / `features.py`.
   - Chuẩn hóa văn bản GROBID: `grobid_adapter.py`.
 - **Bằng chứng thực nghiệm E2E:**
   - `essay_03_comprehensive.pdf Ref #8`: Trong PDF gốc (trang 2, dòng 93) viết đúng quy chuẩn APA 7th cho công trình từ 21 tác giả trở lên:
@@ -353,10 +353,10 @@ async def _validate_citation_url_full(
 #### BUG-11 (`MEDIUM-HIGH`) — Xung đột khóa `"PRL"` & thiếu từ điển hội nghị trong `VenueNormalizer`, đồng thời `SymbolicRules` chưa kiểm tra sai lệch `venue`
 
 - **Vị trí mã nguồn:**
-  - [`venue_normalizer.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/matching/venue_normalizer.py#L49-L60) (`VENUE_ABBREVIATIONS`).
-  - [`rules.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py#L1466-L1494) (`SymbolicRules._apply_core`).
+  - [`venue_normalizer.py`](../../src/integrity_checker/matching/venue_normalizer.py#L49-L60) (`VENUE_ABBREVIATIONS`).
+  - [`rules.py`](../../src/integrity_checker/logic/rules.py#L1466-L1494) (`SymbolicRules._apply_core`).
 - **Bằng chứng thực nghiệm E2E & Mã nguồn:**
-  1. Tại [`venue_normalizer.py:49`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/matching/venue_normalizer.py#L49) khai báo `"PRL": "Pattern Recognition Letters"`, nhưng ngay tại [`line 60`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/matching/venue_normalizer.py#L60) khai báo trùng `"PRL": "Physical Review Letters"` làm mất hoàn toàn ánh xạ ngành nhận dạng mẫu.
+  1. Tại [`venue_normalizer.py:49`](../../src/integrity_checker/matching/venue_normalizer.py#L49) khai báo `"PRL": "Pattern Recognition Letters"`, nhưng ngay tại [`line 60`](../../src/integrity_checker/matching/venue_normalizer.py#L60) khai báo trùng `"PRL": "Physical Review Letters"` làm mất hoàn toàn ánh xạ ngành nhận dạng mẫu.
   2. Thiếu hàng loạt tên viết tắt hội nghị/tạp chí trọng điểm (`ACL`, `EMNLP`, `NAACL`, `NAACL-HLT`, `EACL`, `COLING`, `ICLR`, `AAAI`, `IJCAI`, `KDD`, `SIGIR`, `WWW`, `WSDM`, `CIKM`) và viết tắt chuẩn ISO-4 (`Adv. Neural Inf. Process. Syst.`, `J. Mach. Learn. Res.`). Thực tế trên `VietDepression #7`, `"Proceedings of NAACL-HLT"` so với tên đầy đủ chỉ đạt `venue_sim = 0.087`; trên `hard_05 #1, #2` chỉ đạt `0.10`.
   3. Trên `098_uit #11`, dòng tiêu đề đầu trang PDF `"TRƯỜNG ĐẠI HỌC CÔNG NGHỆ THÔNG TIN"` bị lọt vào cuối trường `venue`, kéo `venue_sim` xuống `0.033`.
   4. Trên `hard_02 #5` (`He, K., et al. Deep residual learning for image recognition. Journal of Machine Learning Research. DOI: 10.1109/CVPR.2016.90`), bài báo CVPR bị gán sai sang tạp chí JMLR (`venue_sim = 0.0`), nhưng vì `SymbolicRules` hoàn toàn không đọc `features.venue_sim`, hệ thống chỉ báo `mismatched_fields=['year']` mà bỏ sót `'venue'`.
@@ -370,8 +370,8 @@ async def _validate_citation_url_full(
 #### BUG-12 (`MEDIUM`) — Crossref trả năm `published-online` nộp muộn thay vì năm tổ chức hội nghị (`VietDepression #1`) & thông điệp sai `"APIs failed"` trong `_KNOWN_PAPERS`
 
 - **Vị trí mã nguồn:**
-  - Trích xuất năm từ Crossref: [`CrossrefClient._message_to_candidate`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/crossref_client.py#L358-L365).
-  - Bảng `_KNOWN_PAPERS` và chuỗi giải thích Tier 0: [`retrieval_orchestrator.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L219-L223) và [`neuro_symbolic_checker.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/neuro_symbolic_checker.py#L538-L590).
+  - Trích xuất năm từ Crossref: [`CrossrefClient._message_to_candidate`](../../src/integrity_checker/retrieval/crossref_client.py#L358-L365).
+  - Bảng `_KNOWN_PAPERS` và chuỗi giải thích Tier 0: [`retrieval_orchestrator.py`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L219-L223) và [`neuro_symbolic_checker.py`](../../src/integrity_checker/logic/neuro_symbolic_checker.py#L538-L590).
 - **Bằng chứng thực nghiệm E2E:**
   1. Trên `VietDepression_Research_Article.pdf Ref [1]`: `De Choudhury, M., Gamon, M., Counts, S., & Horvitz, E. (2013). Predicting depression via social media. ICWSM, DOI: 10.1609/icwsm.v7i1.14432`. Ở Pass 2, hệ thống báo sai `METADATA_ERROR (year)` vì AAAI số hóa và nộp DOI kỷ yếu ICWSM 2013 lên Crossref vào năm `2021` (`published-online = 2021`, không có `published-print`), trong khi `crossref_client.py:360` duyệt `("published-print", "published-online", "issued", "created")` mà bỏ qua `event.start` (`2013`) hoặc năm trong `container-title` (`Seventh International AAAI Conference... 2013`).
   2. Trong `retrieval_orchestrator.py:219`, bài báo MiniCPM (*Shengding Hu et al., 2024*) bị gõ nhầm khóa họ tác giả đầu thành `("hou", "2024")` thay vì `("hu", "2024")`.
@@ -386,7 +386,7 @@ async def _validate_citation_url_full(
 
 #### BUG-13 (`HIGH`) — Bộ lọc mảng code `re.search(r"\]\s*,\s*\[", full_line_b)` xóa sổ toàn bộ trích dẫn chuẩn IEEE dạng `[3], [4]` trên dòng, và bắt nhầm chú thích hình `Rogue (1980)`
 
-- **Vị trí mã nguồn:** [`CitationExtractor._extract_from_text`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/citation_extractor.py#L559-L672) (đặc biệt dòng [`569`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/citation_extractor.py#L569)).
+- **Vị trí mã nguồn:** [`CitationExtractor._extract_from_text`](../../src/integrity_checker/extraction/citation_extractor.py#L559-L672) (đặc biệt dòng [`569`](../../src/integrity_checker/extraction/citation_extractor.py#L569)).
 - **Bằng chứng thực nghiệm E2E:**
   1. **Mất trắng trích dẫn chuẩn IEEE `[3], [4]`:** Trên `tdtu_github_reports/006_tdtu_YaminThiriWai_TDTU_ITProject_Final_repot.pdf` (trang 10), câu văn gốc viết:
      `appear frequently in a database[3], [4]. These methods rely on frequency...`
@@ -395,7 +395,7 @@ async def _validate_citation_url_full(
      Biểu thức này khớp ngay với `], [` giữa `[3], [4]` trên `full_line_b` và **`continue` bỏ qua TẤT CẢ các trích dẫn ngoặc vuông nằm trên dòng đó**! Hậu quả trực tiếp: cả `[3]` lẫn `[4]` biến mất khỏi danh sách in-text citations, làm 2 công trình kinh điển `Agrawal & Srikant (1994)` và `Han et al. (2000)` bị phạt oan thành `UNCITED_REFERENCE`!
   2. **Bắt nhầm tên tác phẩm/trò chơi trong chú thích hình & danh mục hình vẽ:** Trên `014_tdtu_MPhong03_The_Loop_Game_52100033_52100987.pdf` (trang 10 mục lục hình và trang 15 chú thích dưới ảnh): dòng `"Hình 2.1 Gameplay của Rogue (1980)"` bị bắt thành 2 trích dẫn học thuật `Rogue (1980)` → báo sai 2 lỗi `MISSING_REFERENCE`!
 - **Đề xuất cách Fix (Zero-Regression):**
-  1. Tại [`citation_extractor.py:569`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/citation_extractor.py#L569), thay `re.search(r"\]\s*,\s*\[", full_line_b)` bằng biểu thức kiểm tra đúng mảng 2 chiều lồng nhau có dấu `[` mở bao ngoài (hoặc có dấu `=` gán biến trước đó):
+  1. Tại [`citation_extractor.py:569`](../../src/integrity_checker/extraction/citation_extractor.py#L569), thay `re.search(r"\]\s*,\s*\[", full_line_b)` bằng biểu thức kiểm tra đúng mảng 2 chiều lồng nhau có dấu `[` mở bao ngoài (hoặc có dấu `=` gán biến trước đó):
      ```python
      or re.search(r"\[\s*\[[^\]]+\]\s*,\s*\[[^\]]+\]", full_line_b)
      ```
@@ -407,13 +407,13 @@ async def _validate_citation_url_full(
 #### BUG-14 (`HIGH`) — Ghi đè chéo metadata khi hợp nhất GROBID + Regex (`essay_03_comprehensive.pdf`) và lỗi regex `_ACM_FULL_NAME` nuốt đồng tác giả + tạp chí vào `title` (`041_huit Ref #6`)
 
 - **Vị trí mã nguồn:**
-  - Hợp nhất GROBID + Regex: [`DocumentParser._merge_reference_lists`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/document_parser.py#L2033-L2120) và [`lines 2219-2223`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/document_parser.py#L2219-L2223).
-  - Biểu thức chính quy ACM: [`patterns/acm.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/patterns/acm.py#L156-L199) (`_ACM_JOURNAL`, `_ACM_FULL_NAME`).
+  - Hợp nhất GROBID + Regex: [`DocumentParser._merge_reference_lists`](../../src/integrity_checker/extraction/document_parser.py#L2033-L2120) và [`lines 2219-2223`](../../src/integrity_checker/extraction/document_parser.py#L2219-L2223).
+  - Biểu thức chính quy ACM: [`patterns/acm.py`](../../src/integrity_checker/extraction/patterns/acm.py#L156-L199) (`_ACM_JOURNAL`, `_ACM_FULL_NAME`).
 - **Bằng chứng thực nghiệm E2E:**
   1. **Trên `data/essays/essay_03_comprehensive.pdf` (trang 2):** Tài liệu có 2 mục liên tiếp khác chuẩn định dạng:
      - Mục 4 (IEEE): `[4] Xiao, Y., Wang, J., & Lee, S. (2023). "Hallucination detection in large language models using semantic consistency," Journal of AI Safety, vol. 15, pp. 112-128, 2023.`
      - Mục 5 (Vancouver): `Xiao Y. Hallucination in neural networks. Neural Computing Review. 2022;45:234-256. https://doi.org/10.1234/ncr.2022.0456`
-     GROBID tách đúng 9 mục độc lập, nhưng bộ tách dòng regex (`_split_entries`) không nhận ra đầu mục Vancouver `Xiao Y.` nên dính cả hai thành 1 chuỗi ~280 ký tự. Vì `280 < 320`, cờ `donor_is_multi_chunk` tại [`document_parser.py:2033`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/document_parser.py#L2033) bằng `False`. Khi khớp với mục GROBID #5 qua DOI `10.1234/ncr.2022.0456` (`line 2220`), hàm `_enrich_grobid_ref` đã lấy `authors = ['Xiao, Y.', 'Wang, J.', 'Lee, S.']` và `numeric_index = 4` của bài năm `2023` đè thẳng vào bài năm `2022`, tạo ra mục lai sai lệch `[4] Xiao, Y., Wang, J, Lee, S (2022) Hallucination in neural networks...` và làm cả hai mục mang trùng `numeric_index = 4`!
+     GROBID tách đúng 9 mục độc lập, nhưng bộ tách dòng regex (`_split_entries`) không nhận ra đầu mục Vancouver `Xiao Y.` nên dính cả hai thành 1 chuỗi ~280 ký tự. Vì `280 < 320`, cờ `donor_is_multi_chunk` tại [`document_parser.py:2033`](../../src/integrity_checker/extraction/document_parser.py#L2033) bằng `False`. Khi khớp với mục GROBID #5 qua DOI `10.1234/ncr.2022.0456` (`line 2220`), hàm `_enrich_grobid_ref` đã lấy `authors = ['Xiao, Y.', 'Wang, J.', 'Lee, S.']` và `numeric_index = 4` của bài năm `2023` đè thẳng vào bài năm `2022`, tạo ra mục lai sai lệch `[4] Xiao, Y., Wang, J, Lee, S (2022) Hallucination in neural networks...` và làm cả hai mục mang trùng `numeric_index = 4`!
   2. **Trên `041_huit Ref [6]`:** Chuỗi gốc `[6] Akinsola, Jide E. T, Awodele, Oludele, Idowu, Sunday A, SQL Injection Attacks Predictive Analytics Using Supervised Machine Learning Techniques, International Journal of Computer Applications..., 2020` bị `_ACM_FULL_NAME` (`acm.py:192`) cắt nhóm `authors` ngay tại dấu chấm viết tắt `Jide E.`, đẩy toàn bộ `T, Awodele, Oludele, Idowu, Sunday A` và tên tạp chí/số trang/ISSN vào `title`, làm `title_sim_fuzzy` rớt từ `1.00` xuống `0.5846` → `UNRESOLVED` oan!
 - **Đề xuất cách Fix (Zero-Regression):**
   1. Trong `_enrich_grobid_ref` (`document_parser.py:2033-2120`): coi `donor_is_multi_chunk = True` (không ghi đè `authors` và `numeric_index`) bất cứ khi nào `target.year and donor.year and str(target.year)[:4] != str(donor.year)[:4]`, và không gán `target.numeric_index = donor.numeric_index` nếu `donor.numeric_index` đã thuộc về một phần tử khác trong `grobid_refs`.
@@ -424,18 +424,18 @@ async def _validate_citation_url_full(
 #### BUG-15 (`HIGH`) — `CitationLinker` Pass 3 che giấu lỗi sai năm trích dẫn trong bài (`±1` đến `±15` năm) thành `MATCHED`, và cơ chế ghi đè trường đơn `mapping_status` làm mất lỗi `MISSING_REFERENCE` trong cụm trích dẫn ghép
 
 - **Vị trí mã nguồn:**
-  - Gán nhầm trạng thái `MATCHED` khi lệch năm: [`CitationLinker._link_author_year_citation`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/linking/citation_linker.py#L756-L773).
-  - Ghi đè `cit.mapping_status` theo phần tử đầu tiên: [`IntegrityPipeline._run_linking`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/pipeline/integrity_pipeline.py#L1143-L1147) và [`report.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/report.py#L723-L728).
+  - Gán nhầm trạng thái `MATCHED` khi lệch năm: [`CitationLinker._link_author_year_citation`](../../src/integrity_checker/linking/citation_linker.py#L756-L773).
+  - Ghi đè `cit.mapping_status` theo phần tử đầu tiên: [`IntegrityPipeline._run_linking`](../../src/integrity_checker/pipeline/integrity_pipeline.py#L1143-L1147) và [`report.py`](../../src/integrity_checker/api/routes/report.py#L723-L728).
 - **Bằng chứng thực nghiệm E2E:**
   1. **Sai năm giữa thân bài và danh mục tham khảo nhưng không hề cảnh báo:**
      - Trên `20-theses/11.pdf`: trong thân bài viết `(Kaveripakam, 2024)` (6 lần ở các trang 8, 9, 15, 22, 26), trong khi danh mục tham khảo ghi `Kaveripakam, S. (2025)`.
      - Trên `20-theses/14.pdf` (trang 10): thân bài viết `Bloem et al. (2024)`, danh mục tham khảo ghi `Bloem, B. R., Okun, M. S., & Klein, C. (2021)` (lệch hẳn **3 năm**!).
-     - Tại [`citation_linker.py:756-773`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/linking/citation_linker.py#L756-L773), Pass 3 tìm thấy họ tác giả khớp với `year_diff <= 15` nhưng lại tạo `CitationLink(..., status=CitationMappingStatus.MATCHED)` thay vì `CitationMappingStatus.IN_TEXT_MISMATCH`! Đồng thời nếu trong tài liệu có 2 bài khác nhau của cùng họ tác giả (ví dụ `Nguyen 2020` và `Nguyen 2022`) mà trong bài viết nhầm `(Nguyen, 2021)`, Pass 3 cũng không phát hiện `AMBIGUOUS_MAPPING`. Đó là lý do trên toàn bộ 674 trích dẫn của 21 PDF, `in_text_mismatch = 0` và `ambiguous_mapping = 0`!
+     - Tại [`citation_linker.py:756-773`](../../src/integrity_checker/linking/citation_linker.py#L756-L773), Pass 3 tìm thấy họ tác giả khớp với `year_diff <= 15` nhưng lại tạo `CitationLink(..., status=CitationMappingStatus.MATCHED)` thay vì `CitationMappingStatus.IN_TEXT_MISMATCH`! Đồng thời nếu trong tài liệu có 2 bài khác nhau của cùng họ tác giả (ví dụ `Nguyen 2020` và `Nguyen 2022`) mà trong bài viết nhầm `(Nguyen, 2021)`, Pass 3 cũng không phát hiện `AMBIGUOUS_MAPPING`. Đó là lý do trên toàn bộ 674 trích dẫn của 21 PDF, `in_text_mismatch = 0` và `ambiguous_mapping = 0`!
   2. **Rơi lỗi `MISSING_REFERENCE` trong cụm trích dẫn ghép `(A; B)`:**
      - Trên `20-theses/11.pdf` (trang 30), cụm `(Lee et al., 2024; Mandarić et al., 2022)` sinh ra 2 `CitationLink`: `links[0]` (`Lee 2024`) là `matched`, còn `links[1]` (`Mandarić 2022` không có trong danh mục tham khảo) là `missing_reference`.
      - Tuy nhiên `integrity_pipeline.py:1145` gán cứng `cit.mapping_status = links[0].status.value` (`"matched"`), còn `report.py:724-727` khi tái lập `linking_summary` từ DB chỉ đếm `c.mapping_status` đơn lẻ thay vì duyệt danh sách `citation_link_json` → làm biến mất lỗi thiếu tài liệu tham khảo `Mandarić et al., 2022` khỏi bảng tổng hợp API!
 - **Đề xuất cách Fix (Zero-Regression):**
-  1. Trong [`citation_linker.py:756-773`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/linking/citation_linker.py#L756-L773):
+  1. Trong [`citation_linker.py:756-773`](../../src/integrity_checker/linking/citation_linker.py#L756-L773):
      - Nếu có `>= 2` mục tham khảo cùng họ tác giả có cùng khoảng cách năm tối thiểu và không phân giải duy nhất được → trả `status = CitationMappingStatus.AMBIGUOUS_MAPPING` (vẫn gắn `reference_id` của ứng viên gần nhất).
      - Nếu phân giải duy nhất 1 mục tham khảo nhưng `best_year_diff >= 1` → trả `status = CitationMappingStatus.IN_TEXT_MISMATCH` **nhưng vẫn giữ nguyên `reference_id = ref_id`**. Nhờ vẫn giữ `reference_id`, mục tham khảo đó **không bị biến thành `UNCITED_REFERENCE`**, dây nối trên UI Citations ↔ References vẫn hoạt động 100%, đồng thời tầng CIS và UI hiển thị đúng cảnh báo lệch năm trích dẫn trong bài!
   2. Khi một `Citation` có nhiều `links` (`integrity_pipeline.py:1145`), chọn trạng thái có độ ưu tiên cảnh báo cao nhất (`missing_reference > in_text_mismatch > ambiguous_mapping > matched`) cho `cit.mapping_status`, và trong `report.py:724-727` duyệt từng phần tử trong `citation_link_json` (nếu có) để đếm chính xác mọi cạnh liên kết.
@@ -445,10 +445,10 @@ async def _validate_citation_url_full(
 #### BUG-16 (`MEDIUM-HIGH`) — Bộ 4 lỗi tính điểm `CIS`, luôn trả `0` cho `style_profile.apa_count`/`numeric_count`, lệch `num_citations` giữa các API và thiếu trường trong `_serialize_verdict_for_json`
 
 - **Vị trí mã nguồn:**
-  1. Đọc sai key `ratios`: [`integrity_pipeline.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/pipeline/integrity_pipeline.py#L1484-L1486) và [`style_detector.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/style_detector.py#L85-L88).
-  2. Tính điểm CIS khống cho danh mục toàn `RESOURCE` & phạt sai style/identifier: [`cis.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/cis.py#L100-L235) và [`lines 386-396`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/cis.py#L386-L396).
-  3. Ba định nghĩa mâu thuẫn của `num_citations`: [`integrity_pipeline.py:1196`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/pipeline/integrity_pipeline.py#L1196), [`essays.py:670`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/essays.py#L670), [`essays.py:843`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/essays.py#L843), [`report.py:777`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/report.py#L777).
-  4. Thiếu trường khi xuất JSON từ pipeline: [`integrity_pipeline.py:2018-2055`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/pipeline/integrity_pipeline.py#L2018-L2055).
+  1. Đọc sai key `ratios`: [`integrity_pipeline.py`](../../src/integrity_checker/pipeline/integrity_pipeline.py#L1484-L1486) và [`style_detector.py`](../../src/integrity_checker/extraction/style_detector.py#L85-L88).
+  2. Tính điểm CIS khống cho danh mục toàn `RESOURCE` & phạt sai style/identifier: [`cis.py`](../../src/integrity_checker/logic/cis.py#L100-L235) và [`lines 386-396`](../../src/integrity_checker/logic/cis.py#L386-L396).
+  3. Ba định nghĩa mâu thuẫn của `num_citations`: [`integrity_pipeline.py:1196`](../../src/integrity_checker/pipeline/integrity_pipeline.py#L1196), [`essays.py:670`](../../src/integrity_checker/api/routes/essays.py#L670), [`essays.py:843`](../../src/integrity_checker/api/routes/essays.py#L843), [`report.py:777`](../../src/integrity_checker/api/routes/report.py#L777).
+  4. Thiếu trường khi xuất JSON từ pipeline: [`integrity_pipeline.py:2018-2055`](../../src/integrity_checker/pipeline/integrity_pipeline.py#L2018-L2055).
 - **Bằng chứng thực nghiệm E2E:**
   - **`apa_count = 0` và `numeric_count = 0` trên 21/21 PDF (100%):** `StyleDetector.detect()` chỉ ghi các tỷ lệ `body_apa`, `body_ieee`, `apa_combined`, `ieee_combined` vào `ratios`, nhưng `integrity_pipeline.py:1484-1485` lại đọc `ratios.get("apa_count", 0)` và `ratios.get("ieee_count", 0)` (khóa không tồn tại → luôn bằng `0`!).
   - **Điểm CIS khống `90.88/100` trên tài liệu liên kết 0%:** Trên `014_tdtu_MPhong03_The_Loop_Game` (`6` ref đều là link blog/wiki `RESOURCE`, `0` matched, `2` missing_reference, `6` uncited_reference):
@@ -470,7 +470,7 @@ async def _validate_citation_url_full(
 
 #### BUG-17 (`CRITICAL`) — Race Condition làm thất thoát lượt đếm hạn ngạch (`monthly_uploads_used`) khi upload đồng thời qua Batch Check (`BATCH_CONCURRENCY = 3`)
 
-- **Vị trí mã nguồn:** [`essays.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/essays.py#L368-L382) và [`lines 425-429`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/essays.py#L425-L429).
+- **Vị trí mã nguồn:** [`essays.py`](../../src/integrity_checker/api/routes/essays.py#L368-L382) và [`lines 425-429`](../../src/integrity_checker/api/routes/essays.py#L425-L429).
 - **Bằng chứng tái hiện thực tế 100% trên Docker Stack:**
   - Trong kịch bản kiểm thử Live Batch Check (`batch_e2e_summary.json`), tài khoản `teacher` bắt đầu với `monthly_uploads_used = 0`.
   - Khi gửi 6 file theo đúng cơ chế `BATCH_CONCURRENCY = 3` của frontend:
@@ -504,24 +504,24 @@ async def _validate_citation_url_full(
 
 #### BUG-18 (`HIGH`) — File PDF hỏng cấu trúc (`%PDF-1.4` corrupt xref) không bị từ chối khi upload, vẫn trừ quota và báo cáo trạng thái thành công giả (`status="completed"`, `CIS=0.0`)
 
-- **Vị trí mã nguồn:** [`essays.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/essays.py#L390-L404) và luồng xử lý nền trong [`essays.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/essays.py#L140-L240).
+- **Vị trí mã nguồn:** [`essays.py`](../../src/integrity_checker/api/routes/essays.py#L390-L404) và luồng xử lý nền trong [`essays.py`](../../src/integrity_checker/api/routes/essays.py#L140-L240).
 - **Bằng chứng tái hiện thực tế 100% trên Docker Stack (`essay_id=49`):**
   - File `batch_06_corrupt_xref.pdf` có header `%PDF-1.4` ở đầu nhưng cấu trúc bảng xref/trailer bên trong bị hỏng hoàn toàn.
-  - Tại [`essays.py:391-403`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/essays.py#L391-L403), hệ thống đã mở thử PDF bằng `fitz.open(stream=content, filetype="pdf")`, nhưng khi `fitz.open` ném ngoại lệ file hỏng, khối `except Exception: detected_pages = 0` lại **nuốt trọn lỗi và cho phép đi tiếp**!
+  - Tại [`essays.py:391-403`](../../src/integrity_checker/api/routes/essays.py#L391-L403), hệ thống đã mở thử PDF bằng `fitz.open(stream=content, filetype="pdf")`, nhưng khi `fitz.open` ném ngoại lệ file hỏng, khối `except Exception: detected_pages = 0` lại **nuốt trọn lỗi và cho phép đi tiếp**!
   - Kết quả trong `docker_batch_api.log`:
     - `Document parse failed: Failed to open file '/app/data/essays/uploads/49.pdf' as type pdf.`
     - `PdfPlumber fallback failed: No /Root object! - Is this really a PDF?`
     - `GROBID returned 500`
     - Thế nhưng hệ thống vẫn trừ 1 lượt upload của người dùng và đánh dấu bài nộp là **`status = "completed"`, `cis_score = 0.0`, `0 citations`** thay vì báo lỗi file hỏng!
 - **Đề xuất cách Fix (Zero-Regression):**
-  - Ngay tại [`essays.py:391-403`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/essays.py#L391-L403) (trước khi trừ quota và trước khi lưu file/DB): nếu `ext == ".pdf"`, khi `fitz.open(stream=content, filetype="pdf")` ném lỗi mở cấu trúc PDF hoặc `pdf_doc.page_count == 0`, trả ngay `HTTPException(status_code=400, detail="File PDF bị lỗi cấu trúc hoặc không thể đọc được (corrupted PDF).")`.
+  - Ngay tại [`essays.py:391-403`](../../src/integrity_checker/api/routes/essays.py#L391-L403) (trước khi trừ quota và trước khi lưu file/DB): nếu `ext == ".pdf"`, khi `fitz.open(stream=content, filetype="pdf")` ném lỗi mở cấu trúc PDF hoặc `pdf_doc.page_count == 0`, trả ngay `HTTPException(status_code=400, detail="File PDF bị lỗi cấu trúc hoặc không thể đọc được (corrupted PDF).")`.
   - Đồng thời trong background worker: nếu tất cả các bộ parser (`PyMuPDF`, `PdfPlumber`, `GROBID`) đều thất bại và trả về `0` trang trích xuất được, chuyển trạng thái bản ghi sang `failed` kèm thông báo lỗi rõ ràng thay vì `completed`.
 
 ---
 
 #### BUG-19 (`MEDIUM-HIGH`) — `Repository.get_verdicts()` thiếu `ORDER BY id`, làm đảo lộn thứ tự tài liệu tham khảo theo bảng chữ cái của cột `label` trên mọi báo cáo API/CSV/UI
 
-- **Vị trí mã nguồn:** [`Repository.get_verdicts`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/db/repository.py#L267-L272) và [`Repository.get_verdicts_by_essay_ids`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/db/repository.py#L274-L286).
+- **Vị trí mã nguồn:** [`Repository.get_verdicts`](../../src/integrity_checker/db/repository.py#L267-L272) và [`Repository.get_verdicts_by_essay_ids`](../../src/integrity_checker/db/repository.py#L274-L286).
 - **Bằng chứng tái hiện thực tế 100% (`batch_api_48` — `041_huit`):**
   - Trong cơ sở dữ liệu, 16 dòng `VerdictRecord` được chèn đúng thứ tự `[1]..[16]` với khóa chính tăng dần `v1045` (`[1]`) → `v1060` (`[16]`).
   - Tuy nhiên khi gọi `GET /api/essays/48/report?format=json` và xuất CSV, mảng `verdicts` trả về theo thứ tự bị xáo trộn hoàn toàn:
@@ -534,7 +534,7 @@ async def _validate_citation_url_full(
 
 #### BUG-20 (`MEDIUM-HIGH`) — Bộ 3 lỗi UX/State trên `BatchUploadPage.tsx`: Tự động chuyển trang sau 1.2s xóa mất thông báo lỗi của lô hỗn hợp, nút `Retry` bị treo khi batch đã kết thúc, và nhãn `pdfOnly` sai sự thật
 
-- **Vị trí mã nguồn:** [`web/src/pages/BatchUploadPage.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/BatchUploadPage.tsx) tại các dòng [`38`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/BatchUploadPage.tsx#L38), [`165-189`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/BatchUploadPage.tsx#L165-L189), [`397-410`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/BatchUploadPage.tsx#L397-L410), [`541`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/BatchUploadPage.tsx#L541) và [`621`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/BatchUploadPage.tsx#L621).
+- **Vị trí mã nguồn:** [`web/src/pages/BatchUploadPage.tsx`](../../web/src/pages/BatchUploadPage.tsx) tại các dòng [`38`](../../web/src/pages/BatchUploadPage.tsx#L38), [`165-189`](../../web/src/pages/BatchUploadPage.tsx#L165-L189), [`397-410`](../../web/src/pages/BatchUploadPage.tsx#L397-L410), [`541`](../../web/src/pages/BatchUploadPage.tsx#L541) và [`621`](../../web/src/pages/BatchUploadPage.tsx#L621).
 - **Bằng chứng kiểm định:**
   1. **Mất toàn bộ thông báo lỗi khi upload lô hỗn hợp (`lines 165-189`):** Trong `useEffect` theo dõi hoàn tất batch, điều kiện viết `if (stats.completed > 0)` sẽ lập tức đặt `setTimeout(..., 1200)` để chuyển hướng (`navigate`) sang trang History hoặc trang chi tiết bài báo ngay cả khi `stats.failed > 0`! Với một lô gồm 5 file thành công và 2 file thất bại, người dùng chỉ có đúng **1.2 giây** trước khi toàn bộ danh sách file lỗi và nút Retry bị hủy khỏi màn hình!
   2. **Nút `Retry` không chạy lại file lỗi (`lines 397-410`):** Hàm `retryFile(id)` chỉ cập nhật mảng `items` đưa phần tử lỗi về `status: 'pending'`, nhưng khi batch trước đó đã chạy xong (`isProcessing === false`), không có hàm nào gọi lại tiến trình xử lý hàng đợi → người dùng bấm `Retry` chỉ thấy trạng thái nhảy sang *Đang chờ* rồi đứng im mãi mãi!
@@ -552,9 +552,9 @@ async def _validate_citation_url_full(
 
 | Đợt | Danh sách Bug | File tác động chính | Rủi ro hồi quy & Cách kiểm chứng |
 |---|---|---|---|
-| **Đợt 1 — P0 (`CRITICAL` & Bảo toàn dữ liệu/Quota)** | **BUG-01**, **BUG-06**, **BUG-07**, **BUG-17**, **BUG-18**, **BUG-19** | [`retrieval_orchestrator.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py), [`neuro_symbolic_checker.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/neuro_symbolic_checker.py), [`rules.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py), [`essays.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/essays.py), [`repository.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/db/repository.py) | **Rủi ro: Rất thấp.** Chạy lại `pytest` toàn bộ `tests/` + chạy lại `hard_02`, `hard_03` và script Batch Check 7 file (`monthly_uploads_used` phải tăng đúng `5/5`, file corrupt PDF trả `400`, `verdicts` xếp đúng `[1]..[16]`). |
-| **Đợt 2 — P1 (`HIGH` — Độ chính xác Trích xuất, Liên kết & Wayback)** | **BUG-02**, **BUG-03**, **BUG-08**, **BUG-09**, **BUG-13**, **BUG-14**, **BUG-15** | [`link_validator.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/link_validator.py), [`citation_extractor.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/citation_extractor.py), [`document_parser.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/document_parser.py), [`acm.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/extraction/patterns/acm.py), [`citation_linker.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/linking/citation_linker.py), [`report.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/report.py) | **Rủi ro: Thấp** (nhờ giữ nguyên `reference_id` khi gắn `IN_TEXT_MISMATCH` và chỉ thu hẹp regex mảng 2D `[[...], [...]]`). Kiểm chứng trên `041_huit`, `006_tdtu`, `014_tdtu`, `essay_03`, `11.pdf`, `14.pdf`. |
-| **Đợt 3 — P2 (`MEDIUM` — Rate Limiter, APA Ellipsis, Venue, CIS & Batch UI)** | **BUG-04**, **BUG-05**, **BUG-10**, **BUG-11**, **BUG-12**, **BUG-16**, **BUG-20** | [`dblp_client.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/dblp_client.py), [`arxiv_client.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/arxiv_client.py), [`crossref_client.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/crossref_client.py), [`features.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/matching/features.py), [`venue_normalizer.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/matching/venue_normalizer.py), [`cis.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/cis.py), [`BatchUploadPage.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/BatchUploadPage.tsx) | **Rủi ro: Rất thấp.** Kiểm chứng không còn `DBLP/arXiv retry exhausted` dưới tải song song, `VietDepression #1` và `essay_03 #8` đạt `VERIFIED`, và UX trang Batch Upload xử lý mượt kịch bản lỗi hỗn hợp. |
+| **Đợt 1 — P0 (`CRITICAL` & Bảo toàn dữ liệu/Quota)** | **BUG-01**, **BUG-06**, **BUG-07**, **BUG-17**, **BUG-18**, **BUG-19** | [`retrieval_orchestrator.py`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py), [`neuro_symbolic_checker.py`](../../src/integrity_checker/logic/neuro_symbolic_checker.py), [`rules.py`](../../src/integrity_checker/logic/rules.py), [`essays.py`](../../src/integrity_checker/api/routes/essays.py), [`repository.py`](../../src/integrity_checker/db/repository.py) | **Rủi ro: Rất thấp.** Chạy lại `pytest` toàn bộ `tests/` + chạy lại `hard_02`, `hard_03` và script Batch Check 7 file (`monthly_uploads_used` phải tăng đúng `5/5`, file corrupt PDF trả `400`, `verdicts` xếp đúng `[1]..[16]`). |
+| **Đợt 2 — P1 (`HIGH` — Độ chính xác Trích xuất, Liên kết & Wayback)** | **BUG-02**, **BUG-03**, **BUG-08**, **BUG-09**, **BUG-13**, **BUG-14**, **BUG-15** | [`link_validator.py`](../../src/integrity_checker/retrieval/link_validator.py), [`citation_extractor.py`](../../src/integrity_checker/extraction/citation_extractor.py), [`document_parser.py`](../../src/integrity_checker/extraction/document_parser.py), [`acm.py`](../../src/integrity_checker/extraction/patterns/acm.py), [`citation_linker.py`](../../src/integrity_checker/linking/citation_linker.py), [`report.py`](../../src/integrity_checker/api/routes/report.py) | **Rủi ro: Thấp** (nhờ giữ nguyên `reference_id` khi gắn `IN_TEXT_MISMATCH` và chỉ thu hẹp regex mảng 2D `[[...], [...]]`). Kiểm chứng trên `041_huit`, `006_tdtu`, `014_tdtu`, `essay_03`, `11.pdf`, `14.pdf`. |
+| **Đợt 3 — P2 (`MEDIUM` — Rate Limiter, APA Ellipsis, Venue, CIS & Batch UI)** | **BUG-04**, **BUG-05**, **BUG-10**, **BUG-11**, **BUG-12**, **BUG-16**, **BUG-20** | [`dblp_client.py`](../../src/integrity_checker/retrieval/dblp_client.py), [`arxiv_client.py`](../../src/integrity_checker/retrieval/arxiv_client.py), [`crossref_client.py`](../../src/integrity_checker/retrieval/crossref_client.py), [`features.py`](../../src/integrity_checker/matching/features.py), [`venue_normalizer.py`](../../src/integrity_checker/matching/venue_normalizer.py), [`cis.py`](../../src/integrity_checker/logic/cis.py), [`BatchUploadPage.tsx`](../../web/src/pages/BatchUploadPage.tsx) | **Rủi ro: Rất thấp.** Kiểm chứng không còn `DBLP/arXiv retry exhausted` dưới tải song song, `VietDepression #1` và `essay_03 #8` đạt `VERIFIED`, và UX trang Batch Upload xử lý mượt kịch bản lỗi hỗn hợp. |
 
 ---
 
@@ -566,15 +566,15 @@ Toàn bộ **20 bug (`BUG-01` → `BUG-20`)** cùng **3 edge-case dữ liệu h�
 
 | Đợt triển khai | Commit | Phiên bản | Bộ test TDD mới | Kết quả kiểm thử hồi quy toàn hệ thống |
 |---|---|---|---|---|
-| **Đợt 1 — P0 (`BUG-01, 06, 07, 17, 18, 19`)** | `67951a3` | `v3.36.11` | [`test_audit_p0_fixes.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/tests/unit/test_audit_p0_fixes.py) (`7/7 passed`) | Backend `pytest`: `1,617 passed, 1 skipped, 0 failed` |
-| **Đợt 2 — P1 (`BUG-02, 03, 08, 09, 13, 14, 15`)** | `afe8fa7` | `v3.36.12` | [`test_audit_p1_fixes.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/tests/unit/test_audit_p1_fixes.py) (`7/7 passed`) | Backend `pytest`: `1,624 passed, 1 skipped, 0 failed` |
-| **Đợt 3 — P2 (`BUG-04, 05, 10, 11, 12, 16, 20`)** | `a0d16bf` | `v3.36.13` | [`test_audit_p2_fixes.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/tests/unit/test_audit_p2_fixes.py) + [`BatchUploadPage.test.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/BatchUploadPage.test.tsx) | Backend `pytest`: `1,630 passed` \| Frontend `vitest`: `210/210 passed` (`33` files) \| `npm run build`: `✓ built` |
-| **Đợt 4 — Tinh chỉnh hậu E2E Live Dissection** | `v3.36.14` | `v3.36.14` | [`test_audit_p2_fixes.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/tests/unit/test_audit_p2_fixes.py) (`7/7 passed`) | Backend `pytest`: **`1,631 passed, 1 skipped, 0 failed`** \| `ruff check`: `All checks passed!` |
+| **Đợt 1 — P0 (`BUG-01, 06, 07, 17, 18, 19`)** | `67951a3` | `v3.36.11` | [`test_audit_p0_fixes.py`](../../tests/unit/test_audit_p0_fixes.py) (`7/7 passed`) | Backend `pytest`: `1,617 passed, 1 skipped, 0 failed` |
+| **Đợt 2 — P1 (`BUG-02, 03, 08, 09, 13, 14, 15`)** | `afe8fa7` | `v3.36.12` | [`test_audit_p1_fixes.py`](../../tests/unit/test_audit_p1_fixes.py) (`7/7 passed`) | Backend `pytest`: `1,624 passed, 1 skipped, 0 failed` |
+| **Đợt 3 — P2 (`BUG-04, 05, 10, 11, 12, 16, 20`)** | `a0d16bf` | `v3.36.13` | [`test_audit_p2_fixes.py`](../../tests/unit/test_audit_p2_fixes.py) + [`BatchUploadPage.test.tsx`](../../web/src/pages/BatchUploadPage.test.tsx) | Backend `pytest`: `1,630 passed` \| Frontend `vitest`: `210/210 passed` (`33` files) \| `npm run build`: `✓ built` |
+| **Đợt 4 — Tinh chỉnh hậu E2E Live Dissection** | `v3.36.14` | `v3.36.14` | [`test_audit_p2_fixes.py`](../../tests/unit/test_audit_p2_fixes.py) (`7/7 passed`) | Backend `pytest`: **`1,631 passed, 1 skipped, 0 failed`** \| `ruff check`: `All checks passed!` |
 
 > **3 Edge-case thực tế bổ sung được phát hiện và khóa chặt khi bóc tách lại 329 `ref` / 682 `cite`:**
-> 1. **Chuẩn hóa năm số hóa muộn của kỷ yếu AAAI OJS (`10.1609/`):** Crossref & OpenAlex lưu các bài kỷ yếu `ICWSM 2013` (`10.1609/icwsm.v7...`) dưới dạng `journal-article` với ngày migrate hệ thống OJS `2021-08-03` và `event: null`. Bổ sung [`CrossrefClient.normalize_aaai_ojs_year`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/crossref_client.py#L321-L348) dùng chung cho cả Crossref và OpenAlex → cả `VietDepression #1` (Pass 2 Pure Live) và `07_a_study_of_sentiment #6` (Markovikj et al., ICWSM 2013) đều đạt **`VERIFIED`**.
-> 2. **Bảo toàn DOI song song hợp lệ từ kho lưu trữ trường đại học (`DataCite` `10.15781/T29G6Z`):** Trong `TranThanhPhuoc #19` (Pennebaker et al., 2015 — LIWC2015), bài báo có 2 DOI kho lưu trữ hợp lệ tại UT Austin (`10.15781/T29G6Z` trên DataCite và `10.15781/t25p41` trên OpenAlex). Đã cập nhật [`RetrievalOrchestrator._lookup_local_db`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L2188-L2197), [`_plan_retrieval_tiers`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L1270-L1294), [`_is_tier1_sufficient`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L1390-L1395) và [`_dedupe_candidates`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/retrieval/retrieval_orchestrator.py#L2897-L2943) để gọi `DataCite` xác thực trực tiếp `10.15781/T29G6Z` và ưu tiên giữ DOI khớp chính xác khi gộp ứng viên → `TranThanhPhuoc #19` đạt **`VERIFIED` (`R-DOI-TITLE-AUTHOR`, `CIS = 99.30`)**.
-> 3. **Khóa kẽ hở xung đột DOI ở `Rule 3` (`R-CONSENSUS-FULL`):** Bổ sung điều kiện `and not has_doi_conflict` và `mismatched.append("doi")` tại [`SymbolicRules.apply`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/logic/rules.py#L1573-L1590), giúp phát hiện chính xác lỗi sinh viên gõ thừa chữ số cuối của DOI (`10.1002/joom.10618` thay vì `10.1002/joom.1061` ở trang 34 tài liệu `20-theses/11.pdf` `#14`) thành **`METADATA_ERROR (['doi'])`**.
+> 1. **Chuẩn hóa năm số hóa muộn của kỷ yếu AAAI OJS (`10.1609/`):** Crossref & OpenAlex lưu các bài kỷ yếu `ICWSM 2013` (`10.1609/icwsm.v7...`) dưới dạng `journal-article` với ngày migrate hệ thống OJS `2021-08-03` và `event: null`. Bổ sung [`CrossrefClient.normalize_aaai_ojs_year`](../../src/integrity_checker/retrieval/crossref_client.py#L321-L348) dùng chung cho cả Crossref và OpenAlex → cả `VietDepression #1` (Pass 2 Pure Live) và `07_a_study_of_sentiment #6` (Markovikj et al., ICWSM 2013) đều đạt **`VERIFIED`**.
+> 2. **Bảo toàn DOI song song hợp lệ từ kho lưu trữ trường đại học (`DataCite` `10.15781/T29G6Z`):** Trong `TranThanhPhuoc #19` (Pennebaker et al., 2015 — LIWC2015), bài báo có 2 DOI kho lưu trữ hợp lệ tại UT Austin (`10.15781/T29G6Z` trên DataCite và `10.15781/t25p41` trên OpenAlex). Đã cập nhật [`RetrievalOrchestrator._lookup_local_db`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L2188-L2197), [`_plan_retrieval_tiers`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L1270-L1294), [`_is_tier1_sufficient`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L1390-L1395) và [`_dedupe_candidates`](../../src/integrity_checker/retrieval/retrieval_orchestrator.py#L2897-L2943) để gọi `DataCite` xác thực trực tiếp `10.15781/T29G6Z` và ưu tiên giữ DOI khớp chính xác khi gộp ứng viên → `TranThanhPhuoc #19` đạt **`VERIFIED` (`R-DOI-TITLE-AUTHOR`, `CIS = 99.30`)**.
+> 3. **Khóa kẽ hở xung đột DOI ở `Rule 3` (`R-CONSENSUS-FULL`):** Bổ sung điều kiện `and not has_doi_conflict` và `mismatched.append("doi")` tại [`SymbolicRules.apply`](../../src/integrity_checker/logic/rules.py#L1573-L1590), giúp phát hiện chính xác lỗi sinh viên gõ thừa chữ số cuối của DOI (`10.1002/joom.10618` thay vì `10.1002/joom.1061` ở trang 34 tài liệu `20-theses/11.pdf` `#14`) thành **`METADATA_ERROR (['doi'])`**.
 
 ---
 
@@ -634,7 +634,7 @@ Sau khi vá lỗi, cả **6/6 tài liệu** chạy ở chế độ **Pure Live E
 | 7 | `batch_07_invalid_header.pdf` | `400` → **`400 Bad Request`** | **`upload_rejected`** | — → **—** | Chặn tức thì sau `6.4ms` (`Invalid PDF file: missing %PDF- header`), **0 tốn quota**! |
 
 - **Kiểm chứng Atomic Quota (`BUG-17`):** Tài khoản `teacher` xuất phát từ `monthly_uploads_used = 0`, bắn đồng thời 7 file với `BATCH_CONCURRENCY = 3` (5 file hợp lệ, 2 file lỗi bị chặn `400`). Kết thúc batch, `/api/billing/subscription` ghi nhận **chính xác `monthly_uploads_used = 5` (`monthly_uploads_remaining = 995`)** — triệt tiêu hoàn toàn lỗi Lost Update trước đó (`4/6`). *(Toàn bộ bản ghi test tạm `44..48` đã được xóa qua `DELETE /api/essays/{id}` và trả `monthly_uploads_used` về `0` sạch sẽ).*
-- **Chỉ số bất thường toàn cục trên báo cáo giải phẫu [`full_dissection_audit.json`](file:///Users/iannwendy/.gemini/antigravity-cli/brain/fd4e593a-ce64-4ef9-984a-fe72bbc82e89/scratch/full_dissection_audit.json):**
+- **Chỉ số bất thường toàn cục trên báo cáo giải phẫu `full_dissection_audit.json`:**
   - `style_profile_anomalies`: **`0`** (giảm từ `21/21`).
   - `intext_year_mismatch_masked_as_matched`: **`0`** (giảm từ `12`).
   - `MISMATCHED_FIELDS_ON_VERIFIED`: **`0`** \| `DOI_DIFF_ON_VERIFIED`: **`0`** \| `LOW_VENUE_SIM_ON_VERIFIED`: **`0`**.

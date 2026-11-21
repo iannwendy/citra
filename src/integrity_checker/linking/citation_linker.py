@@ -242,24 +242,30 @@ class CitationLinker:
                 # Try match methods in priority order.  One occurrence may resolve
                 # to several references at once ("[9, 10]" cites both 9 and 10), so
                 # this returns a list.
-                links = self._try_match(
-                    cit,
-                    occ_id,
-                    bib_by_doi,
-                    bib_by_index,
-                    bib_by_composite_label,
-                    bib_by_author_year,
-                    bib_by_author_year_suffix,
-                    bib_citations,
+                links = (
+                    self._try_match(
+                        cit,
+                        occ_id,
+                        bib_by_doi,
+                        bib_by_index,
+                        bib_by_composite_label,
+                        bib_by_author_year,
+                        bib_by_author_year_suffix,
+                        bib_citations,
+                    )
+                    or []
                 )
 
             if effective_dominant:
-                links = self._apply_style_consistency_to_occurrence(
-                    cit=cit,
-                    occ_id=occ_id,
-                    links=links,
-                    bib_citations=bib_citations,
-                    effective_dominant=effective_dominant,
+                links = (
+                    self._apply_style_consistency_to_occurrence(
+                        cit=cit,
+                        occ_id=occ_id,
+                        links=links,
+                        bib_citations=bib_citations,
+                        effective_dominant=effective_dominant,
+                    )
+                    or []
                 )
 
             if links:
@@ -336,9 +342,33 @@ class CitationLinker:
                 in ("matched", "in_text_mismatch", "ambiguous_mapping", "style_inconsistent")
             ]
             if i in bib_matched and matched_links:
-                bib.mapping_status = CitationMappingStatus.MATCHED.value
-                bib.mapping_confidence = max(lnk.confidence for lnk in matched_links)
-                bib.citation_link = matched_links[0]
+                _bib_status_prio = {
+                    "matched": 4,
+                    "in_text_mismatch": 3,
+                    "ambiguous_mapping": 2,
+                    "style_inconsistent": 1,
+                }
+                best_bib_link = max(
+                    matched_links,
+                    key=lambda lnk: (
+                        _bib_status_prio.get(
+                            str(getattr(lnk.status, "value", lnk.status)),
+                            0,
+                        ),
+                        float(lnk.confidence),
+                    ),
+                )
+                best_status_str = str(
+                    getattr(best_bib_link.status, "value", best_bib_link.status)
+                )
+                same_status_links = [
+                    lnk
+                    for lnk in matched_links
+                    if str(getattr(lnk.status, "value", lnk.status)) == best_status_str
+                ]
+                bib.mapping_status = best_status_str
+                bib.mapping_confidence = max(lnk.confidence for lnk in same_status_links)
+                bib.citation_link = best_bib_link
                 bib.citation_links = list(matched_links)
             else:
                 result.unmatched_reference_ids.append(ref_id)
@@ -1283,6 +1313,27 @@ class CitationLinker:
         if not matched_bibs:
             return []
 
+        if len(matched_bibs) > 1:
+            disambiguated = self._disambiguate_candidates(
+                matched_bibs,
+                raw_text or "",
+                None,
+            )
+            if len(disambiguated) == 1:
+                matched_bibs = disambiguated
+            else:
+                return [
+                    CitationLink(
+                        occurrence_id=occ_id,
+                        reference_id=bib.reference_id
+                        or f"ref-{self._find_bib_index(bib, bib_citations):04d}",
+                        status=CitationMappingStatus.AMBIGUOUS_MAPPING,
+                        confidence=0.5,
+                        method=MappingMethod.AUTHOR_YEAR,
+                    )
+                    for bib in matched_bibs
+                ]
+
         return [
             CitationLink(
                 occurrence_id=occ_id,
@@ -1492,13 +1543,13 @@ class CitationLinker:
         suffix = (bib.year_suffix or parsed_suf or "").strip().lower()
         if not suffix and bib.raw_text:
             m_suf = re.search(
-                r"\(\s*(?:(?:18|19|20)\d{2}|n\.?\s*d\.?)-?([a-h])\s*\)",
+                r"\(\s*(?:(?:18|19|20)\d{2}|n\.?\s*d\.?)-?([a-z])\s*\)",
                 bib.raw_text,
                 re.IGNORECASE,
             )
             if not m_suf and norm_yr != "n.d.":
                 m_suf = re.search(
-                    rf"\b{re.escape(norm_yr)}([a-h])\b",
+                    rf"\b{re.escape(norm_yr)}([a-z])\b",
                     bib.raw_text,
                     re.IGNORECASE,
                 )
@@ -1889,7 +1940,7 @@ class CitationLinker:
         nd_m = re.match(r"^n\.?d\.?(?:-([a-z]))?$", yr)
         if nd_m:
             return "n.d.", nd_m.group(1)
-        if len(yr) == 5 and yr[:4].isdigit() and yr[4] in "abcdefgh":
+        if len(yr) == 5 and yr[:4].isdigit() and "a" <= yr[4] <= "z":
             return yr[:4], yr[4]
         return yr[:4] if len(yr) >= 4 and yr[:4].isdigit() else yr, None
 

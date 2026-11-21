@@ -33,9 +33,9 @@ class TestInferVenue:
         assert result == "NeurIPS"
 
     def test_known_papers_unknown_defaults(self):
-        """Unknown known_papers should default to NeurIPS."""
+        """Unknown known_papers should return None instead of overwriting with a blanket default."""
         result = _infer_venue("Some Random Unknown Paper", "known_papers")
-        assert result == "NeurIPS"
+        assert result is None
 
     def test_crossref_glove(self):
         """GloVe paper should be EMNLP."""
@@ -54,17 +54,17 @@ class TestInferVenue:
         assert result == "JMLR"
 
     def test_crossref_applicative(self):
-        """Applicative papers should be ICFP."""
+        """Unrelated non-NLP Applicative titles should not be force-mapped."""
         result = _infer_venue("Applicative 2015 on - Applicative 2015", "crossref")
-        assert result == "ICFP"
+        assert result is None
 
         result = _infer_venue("Applicative 2016 on - Applicative 2016", "crossref")
-        assert result == "ICFP"
+        assert result is None
 
     def test_crossref_miracle_yearbook(self):
-        """Miracle Yearbook papers should be AAAI."""
+        """Unrelated Miracle Yearbook entries should not be force-mapped to AAAI."""
         result = _infer_venue("2005 Miracle Yearbook", "crossref")
-        assert result == "AAAI"
+        assert result is None
 
     def test_crossref_arxiv_in_title(self):
         """Papers with arxiv in title should be arXiv."""
@@ -80,19 +80,19 @@ class TestInferVenue:
         assert result == "EMNLP"
 
     def test_crossref_fallback(self):
-        """Unknown crossref papers should default to arXiv."""
+        """Unknown crossref papers should return None (no blanket overwrite)."""
         result = _infer_venue("Some Random Crossref Paper", "crossref")
-        assert result == "arXiv"
+        assert result is None
 
     def test_openalex_default(self):
-        """OpenAlex papers should default to EMNLP."""
+        """Unknown OpenAlex papers should return None (no blanket EMNLP overwrite)."""
         result = _infer_venue("Some OpenAlex Paper", "openalex")
-        assert result == "EMNLP"
+        assert result is None
 
     def test_serpapi_default(self):
-        """SERPAPI papers should default to arXiv."""
+        """Unknown SERPAPI papers should return None (no blanket arXiv overwrite)."""
         result = _infer_venue("Some serpapi Paper", "serpapi")
-        assert result == "arXiv"
+        assert result is None
 
     def test_none_title(self):
         """None title should return None."""
@@ -113,9 +113,9 @@ class TestInferVenue:
         assert result == "CL"
 
     def test_crossref_context2vec(self):
-        """context2vec should be NAACL."""
+        """context2vec (Melamud et al., 2016) was published at CoNLL."""
         result = _infer_venue(
             "context2vec: Learning Generic Context Embedding with Bidirectional LSTM",
             "crossref"
         )
-        assert result == "NAACL"
+        assert result == "CoNLL"

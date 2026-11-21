@@ -64,13 +64,18 @@ async def test_bug04_dblp_and_arxiv_atomic_slot_reservation() -> None:
 
     dblp = DBLPClient(timeout=3.0, max_retries=1)
     # Pre-seed loop cookie so all 3 coroutines hit the regular rate-limited path simultaneously
-    loop_id = id(asyncio.get_running_loop())
+    loop = asyncio.get_running_loop()
+    loop_id = id(loop)
     if hasattr(dblp_client, "_get_dblp_cookies"):
         dblp_client._get_dblp_cookies().set("anubis", "ok")
     else:
         dblp_client._SHARED_DBLP_COOKIES.set("anubis", "ok")
-    if isinstance(getattr(dblp_client, "_LAST_DBLP_REQ_AT", None), dict):
-        dblp_client._LAST_DBLP_REQ_AT[loop_id] = 0.0
+    last_dblp = getattr(dblp_client, "_LAST_DBLP_REQ_AT", None)
+    if hasattr(last_dblp, "__setitem__"):
+        try:
+            last_dblp[loop] = 0.0
+        except TypeError:
+            last_dblp[loop_id] = 0.0
     else:
         dblp_client._LAST_DBLP_REQ_AT = 0.0
 
@@ -99,8 +104,12 @@ async def test_bug04_dblp_and_arxiv_atomic_slot_reservation() -> None:
         )
 
     arx = ArxivClient(timeout=3.0, max_retries=1)
-    if isinstance(getattr(arxiv_client, "_LAST_ARXIV_REQ_AT", None), dict):
-        arxiv_client._LAST_ARXIV_REQ_AT[loop_id] = 0.0
+    last_arxiv = getattr(arxiv_client, "_LAST_ARXIV_REQ_AT", None)
+    if hasattr(last_arxiv, "__setitem__"):
+        try:
+            last_arxiv[loop] = 0.0
+        except TypeError:
+            last_arxiv[loop_id] = 0.0
 
     with patch.object(httpx.AsyncClient, "get", new=fake_arxiv_get):
         await asyncio.gather(

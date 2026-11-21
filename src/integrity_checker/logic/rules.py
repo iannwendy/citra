@@ -20,6 +20,7 @@ chủ nhân duy nhất). Rules chỉ điều chỉnh ``label`` + ``confidence`` 
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -262,8 +263,8 @@ def has_polarity_or_catastrophic_content_conflict(features: MatchFeatures) -> bo
 
 def is_explicit_or_named_refutation_context(
     features: MatchFeatures,
-    citation_authors: list[str] | None = None,
-    candidate_authors: list[str] | None = None,
+    citation_authors: Sequence[Any] | None = None,
+    candidate_authors: Sequence[Any] | None = None,
     mapping_status: CitationMappingStatus | None = None,
 ) -> bool:
     """Return True when context is a cleanly linked explicit in-text citation, or an implicit/mismatched
@@ -964,14 +965,22 @@ def _is_fake_author_name(
         else None
     )
 
+    from integrity_checker.extraction.patterns.utils import (
+        _ALPHA_LATIN_VN,
+        _LOWER_LATIN_VN,
+        _UPPER_LATIN_VN,
+    )
+
     author_parts: list[str] = []
     if citation_authors:
         for a in citation_authors:
-            if hasattr(a, "raw") and getattr(a, "raw", ""):
-                a_str = str(a.raw).strip()
-            elif hasattr(a, "last_name") and getattr(a, "last_name", ""):
+            raw_val = getattr(a, "raw", None)
+            last_val = getattr(a, "last_name", None)
+            if isinstance(raw_val, str) and raw_val.strip():
+                a_str = raw_val.strip()
+            elif isinstance(last_val, str) and last_val.strip():
                 first_val = getattr(a, "first_name", "") or ""
-                a_str = f"{first_val} {a.last_name}".strip()
+                a_str = f"{first_val} {last_val}".strip()
             else:
                 a_str = str(a).strip()
 
@@ -981,7 +990,7 @@ def _is_fake_author_name(
             # Guard against GROBID/regex slicing the first word of a year-less bare title
             # (e.g. "[2] Artificial intelligence in healthcare" -> authors=["Artificial"],
             # "[2] Unknown input observer design" -> authors=["Unknown"]).
-            a_words = re.findall(r"[A-Za-zÀ-ỹ'\u2019\-]+", a_str)
+            a_words = re.findall(rf"(?:{_ALPHA_LATIN_VN}|['\u2019\-])+", a_str)
             if (
                 len(a_words) == 1
                 and "," not in a_str
@@ -995,14 +1004,14 @@ def _is_fake_author_name(
                     has_author_delim = bool(
                         re.match(
                             r"^(?:"
-                            r"\s*\.\s+[A-ZÀ-Ỹ]|"
-                            r"\s*,\s*[A-ZÀ-Ỹ]\.|"
-                            r"\s+[A-ZÀ-Ỹ]\.|"
+                            rf"\s*\.\s+{_UPPER_LATIN_VN}|"
+                            rf"\s*,\s*{_UPPER_LATIN_VN}\.|"
+                            rf"\s+{_UPPER_LATIN_VN}\.|"
                             r"\s+(?i:et\s+al\b|(?:và\s+)?cộng\s+sự\b)|"
-                            r"\s*(?:,\s*)?&\s+[A-ZÀ-Ỹ]|"
-                            r"\s*(?:,\s*)?and\s+[A-ZÀ-Ỹ][a-zà-ỹA-ZÀ-Ỹ'\u2019\-]*\s*,\s*[A-ZÀ-Ỹ]\.|"
-                            r"\s*(?:,\s*)?and\s+(?:[A-ZÀ-Ỹ]\.\s*)+[A-ZÀ-Ỹ]|"
-                            r"\s*;\s*[A-ZÀ-Ỹ][a-zà-ỹA-ZÀ-Ỹ'\u2019\-]*\s*,\s*[A-ZÀ-Ỹ]\."
+                            rf"\s*(?:,\s*)?&\s+{_UPPER_LATIN_VN}|"
+                            rf"\s*(?:,\s*)?and\s+{_UPPER_LATIN_VN}(?:{_ALPHA_LATIN_VN}|['\u2019\-])*\s*,\s*{_UPPER_LATIN_VN}\.|"
+                            rf"\s*(?:,\s*)?and\s+(?:{_UPPER_LATIN_VN}\.\s*)+{_UPPER_LATIN_VN}|"
+                            rf"\s*;\s*{_UPPER_LATIN_VN}(?:{_ALPHA_LATIN_VN}|['\u2019\-])*\s*,\s*{_UPPER_LATIN_VN}\."
                             r")",
                             rest,
                         )
@@ -1025,9 +1034,9 @@ def _is_fake_author_name(
         else:
             # Year-less reference: only take a clear `Author. CapitalizedTitle` prefix
             # (never scan a year-less bare title or multi-word lowercase sentence as an author).
-            m_author_sent = re.match(r"^([^.]{2,60})\.\s+[A-ZÀ-Ỹ]", raw_stripped)
+            m_author_sent = re.match(rf"^([^.]{{2,60}})\.\s+{_UPPER_LATIN_VN}", raw_stripped)
             cand_prefix = m_author_sent.group(1).strip() if m_author_sent else ""
-            if cand_prefix and re.search(r"\b[a-zà-ỹ]{3,}\s+[a-zà-ỹ]{3,}\b", cand_prefix):
+            if cand_prefix and re.search(rf"\b{_LOWER_LATIN_VN}{{3,}}\s+{_LOWER_LATIN_VN}{{3,}}\b", cand_prefix):
                 cand_prefix = ""
             prefix = cand_prefix
         if prefix:
@@ -1049,8 +1058,8 @@ def _is_fake_author_name(
     ]
 
     raw_lower = raw_stripped.lower()
-    for pattern in suspicious_author_patterns:
-        m_susp = re.search(pattern, raw_lower, re.IGNORECASE)
+    for susp_pattern in suspicious_author_patterns:
+        m_susp = re.search(susp_pattern, raw_lower, re.IGNORECASE)
         if m_susp:
             return True, m_susp.group(0).strip()
 
@@ -1427,12 +1436,14 @@ class SymbolicRules:
         # Check individual authors
         if citation_authors:
             for author in citation_authors:
-                if hasattr(author, "last_name"):
-                    parts = [author.last_name]
-                    if getattr(author, "first_name", None):
-                        parts.append(author.first_name)
-                    if getattr(author, "middle_name", None):
-                        parts.append(author.middle_name)
+                if not isinstance(author, str) and hasattr(author, "last_name"):
+                    parts = [str(getattr(author, "last_name", "") or "")]
+                    fn_attr = getattr(author, "first_name", None)
+                    mn_attr = getattr(author, "middle_name", None)
+                    if fn_attr:
+                        parts.append(str(fn_attr))
+                    if mn_attr:
+                        parts.append(str(mn_attr))
                     author_str = " ".join(p for p in parts if p)
                 else:
                     author_str = str(author)
@@ -1945,8 +1956,15 @@ class SymbolicRules:
                     mismatched_fields=[],
                     style_penalty=style_penalty,
                 )
-            if url_status == "dead_link" and not is_known_author:
-                status_detail = f"HTTP {url_status_code}" if url_status_code else "unreachable/DNS error"
+            if url_status in ("dead_link", "fake_domain") and not is_known_author:
+                if url_status == "fake_domain":
+                    status_detail = "non-existent domain (DNS NXDOMAIN)"
+                    dead_rule_id = "R-FAKE-URL"
+                else:
+                    status_detail = (
+                        f"HTTP {url_status_code}" if url_status_code else "unreachable/DNS error"
+                    )
+                    dead_rule_id = "R-DEAD-URL"
                 return RuleOutcome(
                     label=ValidationLabel.SUSPECTED_HALLUCINATION,
                     confidence=max(0.0, 0.85 - style_penalty),
@@ -1954,7 +1972,7 @@ class SymbolicRules:
                         f"Citation URL '{citation_url}' is dead ({status_detail}) and no matching "
                         f"scholarly record was found. Suspected hallucinated link/reference."
                     ),
-                    triggered_rules=["R-DEAD-URL", "R-NO-CANDIDATE"],
+                    triggered_rules=[dead_rule_id, "R-NO-CANDIDATE"],
                     mismatched_fields=["url"],
                     style_penalty=style_penalty,
                 )
@@ -2078,7 +2096,7 @@ class SymbolicRules:
                 citation_raw,
                 source.citation_raw,
                 citation_authors,
-                citation_year,
+                str(citation_year) if citation_year is not None else None,
             )
 
             primary_graph_degraded = any(
@@ -2117,7 +2135,10 @@ class SymbolicRules:
                     citation_venue=citation_venue,
                 )
                 if is_non_journal:
-                    if non_journal_kind in ("web_resource", "legal_or_standard"):
+                    if (
+                        non_journal_kind in ("web_resource", "legal_or_standard")
+                        and url_status not in ("dead_link", "fake_domain")
+                    ):
                         return RuleOutcome(
                             label=ValidationLabel.RESOURCE,
                             confidence=0.85,
@@ -2129,18 +2150,19 @@ class SymbolicRules:
                             mismatched_fields=[],
                             style_penalty=0.0,
                         )
-                    return RuleOutcome(
-                        label=ValidationLabel.UNRESOLVED,
-                        confidence=max(0.0, 0.55 - style_penalty),
-                        reasoning=(
-                            f"Non-periodical source ({non_journal_kind.replace('_', ' ')}) is not indexed "
-                            f"in academic paper databases ({', '.join(clean_empty_sources)}) — abstaining "
-                            f"from hallucination verdict."
-                        ),
-                        triggered_rules=["R-UNINDEXED-BOOK-OR-SOURCE"],
-                        mismatched_fields=[],
-                        style_penalty=style_penalty,
-                    )
+                    if non_journal_kind not in ("web_resource",):
+                        return RuleOutcome(
+                            label=ValidationLabel.UNRESOLVED,
+                            confidence=max(0.0, 0.55 - style_penalty),
+                            reasoning=(
+                                f"Non-periodical source ({non_journal_kind.replace('_', ' ')}) is not indexed "
+                                f"in academic paper databases ({', '.join(clean_empty_sources)}) — abstaining "
+                                f"from hallucination verdict."
+                            ),
+                            triggered_rules=["R-UNINDEXED-BOOK-OR-SOURCE"],
+                            mismatched_fields=[],
+                            style_penalty=style_penalty,
+                        )
                 return RuleOutcome(
                     label=ValidationLabel.SUSPECTED_HALLUCINATION,
                     confidence=max(0.0, 0.80 - style_penalty),
@@ -2204,7 +2226,7 @@ class SymbolicRules:
         sources_found = len(source.candidates) if source.candidates else 0
 
         mismatched: list[str] = []
-        triggered_rules: list[str] = []
+        triggered_rules = []
         if url_status == "archived_alive":
             triggered_rules.append("R-WAYBACK-ARCHIVED")
         # FIX v1.2: Check well-linked citations FIRST before other rules
@@ -2614,6 +2636,7 @@ class SymbolicRules:
         # is not a DOI conflict when title & author match.
         is_arxiv_vs_pub_doi = bool(
             citation_doi
+            and best is not None
             and best.doi
             and (
                 "10.48550/arxiv" in citation_doi.lower()
@@ -2624,7 +2647,7 @@ class SymbolicRules:
         )
         has_doi_conflict = bool(
             getattr(features, "has_doi_conflict", False)
-            or (citation_doi and best.doi and not doi_match and not is_arxiv_vs_pub_doi)
+            or (citation_doi and best is not None and best.doi and not doi_match and not is_arxiv_vs_pub_doi)
         )
         if (
             mapping_is_matched
@@ -3003,7 +3026,7 @@ class SymbolicRules:
             consensus >= 1
             and "openlibrary" in source.sources_succeeded
             and not citation_doi
-            and not best.doi
+            and not (best and best.doi)
             and features.title_sim_fuzzy >= 0.95
             and author_sim >= 0.90
             and 1 < year_dist <= 15
@@ -3765,7 +3788,7 @@ class SymbolicRules:
             and author_sim < 0.30
             and not doi_match
             and _has_live_source(source, verified_sources)
-            and not (is_known_author and author_sim >= 0.50)
+            and not (is_known_author and features.title_sim_fuzzy >= 0.85)
         ):
             is_non_journal, non_journal_kind = _is_non_journal_or_unindexed_source(
                 citation_raw or source.citation_raw,
@@ -3775,7 +3798,10 @@ class SymbolicRules:
                 citation_venue=citation_venue,
             )
             if is_non_journal:
-                if non_journal_kind in ("web_resource", "legal_or_standard"):
+                if (
+                    non_journal_kind in ("web_resource", "legal_or_standard")
+                    and url_status not in ("dead_link", "fake_domain")
+                ):
                     return RuleOutcome(
                         label=ValidationLabel.RESOURCE,
                         confidence=0.85,
@@ -3787,19 +3813,20 @@ class SymbolicRules:
                         mismatched_fields=[],
                         style_penalty=0.0,
                     )
-                triggered_rules.append("R-UNINDEXED-BOOK-OR-SOURCE")
-                return RuleOutcome(
-                    label=ValidationLabel.UNRESOLVED,
-                    confidence=max(0.0, 0.55 - style_penalty),
-                    reasoning=(
-                        f"Non-periodical source ({non_journal_kind.replace('_', ' ')}) is not indexed "
-                        f"in academic paper databases (best paper candidate title_sim={title_sim:.2f}) — "
-                        f"abstaining from hallucination verdict."
-                    ),
-                    triggered_rules=triggered_rules,
-                    mismatched_fields=[],
-                    style_penalty=style_penalty,
-                )
+                if non_journal_kind not in ("web_resource",):
+                    triggered_rules.append("R-UNINDEXED-BOOK-OR-SOURCE")
+                    return RuleOutcome(
+                        label=ValidationLabel.UNRESOLVED,
+                        confidence=max(0.0, 0.55 - style_penalty),
+                        reasoning=(
+                            f"Non-periodical source ({non_journal_kind.replace('_', ' ')}) is not indexed "
+                            f"in academic paper databases (best paper candidate title_sim={title_sim:.2f}) — "
+                            f"abstaining from hallucination verdict."
+                        ),
+                        triggered_rules=triggered_rules,
+                        mismatched_fields=[],
+                        style_penalty=style_penalty,
+                    )
             if registered_no_csl_ra and citation_doi and str(citation_doi).strip():
                 triggered_rules.append("R-DOI-RA-NO-CSL")
                 return RuleOutcome(

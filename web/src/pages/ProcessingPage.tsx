@@ -929,7 +929,9 @@ export function ProcessingPage() {
             </div>
             <Separator orientation="vertical" className="h-4" />
             <span className="font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
-              integrity_pipeline.py · Verification Pipeline
+              {lang === 'vi'
+                ? 'Tiến trình kiểm chứng trích dẫn trực tiếp'
+                : 'Live Verification Pipeline'}
             </span>
           </div>
 

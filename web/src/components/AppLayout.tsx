@@ -188,16 +188,25 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     };
     const onKeyDown = (ev: KeyboardEvent) => {
       if (ev.key === 'Escape') {
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        const hadFocusInside = Boolean(
+          document.activeElement &&
+            accountMenuRef.current?.contains(document.activeElement),
+        );
         setAccountMenuOpen(false);
+        if (hadFocusInside) {
+          accountTriggerRef.current?.focus({ preventScroll: true });
+        }
       }
     };
     document.addEventListener('mousedown', onPointerDown);
     document.addEventListener('click', onPointerDown);
-    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
     return () => {
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('click', onPointerDown);
-      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keydown', onKeyDown, true);
     };
   }, [accountMenuOpen]);
 
@@ -804,7 +813,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               type="button"
               data-testid="sidebar-account-trigger"
               aria-expanded={accountMenuOpen}
-              aria-haspopup="menu"
+              aria-haspopup="dialog"
               onClick={() => {
                 hideRailTooltip();
                 setAccountMenuOpen((prev) => !prev);
@@ -876,7 +885,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       {/* ChatGPT-Style Floating Bottom-Left Account Popover Menu (Warm-mounted 120Hz GPU Open & Close) */}
       <div
         ref={accountMenuRef}
-        role="menu"
+        role="dialog"
+        aria-label={currentLang === 'vi' ? 'Tùy chọn tài khoản' : 'Account options'}
         data-testid="sidebar-account-popover"
         data-open={accountMenuOpen ? 'true' : 'false'}
         data-rail={isDesktopCollapsed ? 'true' : 'false'}

@@ -381,6 +381,7 @@ class TestLayer1AdmissionQueueAndSemaphores:
             assert outcomes == [True, True, False, True]
 
         session.close()
+        engine.dispose()
 
 
 # ===========================================================================

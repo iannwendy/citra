@@ -607,6 +607,7 @@ export function PromoManagementPage() {
                 onClick={() => void loadPromos()}
                 className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                 title={lang === 'vi' ? 'Làm mới' : 'Refresh'}
+                aria-label={lang === 'vi' ? 'Làm mới danh sách mã giảm giá' : 'Refresh promo codes'}
               >
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
@@ -628,12 +629,18 @@ export function PromoManagementPage() {
                   ? 'Tìm mã ưu đãi hoặc tên chiến dịch...'
                   : 'Search promo code or campaign...'
               }
+              aria-label={
+                lang === 'vi'
+                  ? 'Tìm mã ưu đãi hoặc tên chiến dịch'
+                  : 'Search promo code or campaign'
+              }
               className="pl-10 rounded-xl"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
+                aria-label={lang === 'vi' ? 'Xóa tìm kiếm' : 'Clear search'}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 <X className="h-4 w-4" />
@@ -680,7 +687,138 @@ export function PromoManagementPage() {
             </Button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/* Mobile (< md) Stacked Campaign Cards — Zero Horizontal Scroll on 375px */}
+            <div
+              data-testid="promo-mobile-cards"
+              className="md:hidden divide-y divide-slate-100 dark:divide-slate-800"
+            >
+              {filtered.map((promo) => {
+                const effectiveActive =
+                  promo.is_active && !promo.is_expired && !promo.is_exhausted;
+                return (
+                  <div
+                    key={`mobile-${promo.id}`}
+                    className="p-4 space-y-3 bg-white dark:bg-slate-900"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50/90 dark:bg-indigo-950/80 border border-dashed border-indigo-300 dark:border-indigo-700 font-mono text-xs font-bold tracking-widest text-indigo-700 dark:text-indigo-300">
+                            <Tag className="h-3 w-3" />
+                            {promo.code}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void handleCopyCode(promo.code)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                            title={lang === 'vi' ? 'Sao chép mã' : 'Copy code'}
+                            aria-label={
+                              lang === 'vi'
+                                ? `Sao chép mã ${promo.code}`
+                                : `Copy code ${promo.code}`
+                            }
+                          >
+                            <IconSwap
+                              active={copiedCode === promo.code}
+                              iconA={<Copy className="h-3.5 w-3.5" />}
+                              iconB={<Check className="h-3.5 w-3.5 text-emerald-500" />}
+                            />
+                          </button>
+                        </div>
+                        {promo.description && (
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 break-words">
+                            {promo.description}
+                          </p>
+                        )}
+                      </div>
+                      {effectiveActive ? (
+                        <Badge variant="verified" className="px-2 py-0.5 rounded-full text-[11px] shrink-0">
+                          {lang === 'vi' ? 'Đang chạy' : 'Active'}
+                        </Badge>
+                      ) : promo.is_expired ? (
+                        <Badge variant="destructive" className="px-2 py-0.5 rounded-full text-[11px] shrink-0">
+                          {lang === 'vi' ? 'Hết hạn' : 'Expired'}
+                        </Badge>
+                      ) : promo.is_exhausted ? (
+                        <Badge variant="destructive" className="px-2 py-0.5 rounded-full text-[11px] shrink-0">
+                          {lang === 'vi' ? 'Hết lượt' : 'Depleted'}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="px-2 py-0.5 rounded-full text-[11px] shrink-0">
+                          {lang === 'vi' ? 'Tạm dừng' : 'Paused'}
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/70 dark:border-emerald-800/70 text-emerald-700 dark:text-emerald-300 font-mono font-bold">
+                        {formatDiscountBadge(promo)}
+                      </span>
+                      <span className="text-slate-600 dark:text-slate-300 font-medium">
+                        {formatScopeLabel(promo)}
+                      </span>
+                      <span className="font-mono font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
+                        {promo.used_count} / {promo.max_uses != null ? promo.max_uses : '∞'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        {promo.expires_at ? promo.expires_at.slice(0, 10) : '—'}
+                      </span>
+                      <div className="inline-flex items-center gap-2">
+                        <TactileToggle
+                          checked={promo.is_active}
+                          onChange={() => void handleToggleActive(promo)}
+                          aria-label={
+                            promo.is_active
+                              ? lang === 'vi'
+                                ? `Tạm dừng mã ${promo.code}`
+                                : `Pause promo code ${promo.code}`
+                              : lang === 'vi'
+                                ? `Kích hoạt mã ${promo.code}`
+                                : `Activate promo code ${promo.code}`
+                          }
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openEditModal(promo)}
+                          className="h-8 px-2.5 rounded-lg text-xs cursor-pointer"
+                          title={lang === 'vi' ? 'Chỉnh sửa' : 'Edit'}
+                          aria-label={
+                            lang === 'vi'
+                              ? `Chỉnh sửa mã ${promo.code}`
+                              : `Edit promo code ${promo.code}`
+                          }
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setDeletingPromo(promo)}
+                          className="h-8 px-2.5 rounded-lg text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 cursor-pointer"
+                          title={lang === 'vi' ? 'Xóa mã' : 'Delete'}
+                          aria-label={
+                            lang === 'vi'
+                              ? `Xóa mã ${promo.code}`
+                              : `Delete promo code ${promo.code}`
+                          }
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50/70 dark:bg-slate-800/50">
@@ -740,6 +878,11 @@ export function PromoManagementPage() {
                             onClick={() => void handleCopyCode(promo.code)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                             title={lang === 'vi' ? 'Sao chép mã' : 'Copy code'}
+                            aria-label={
+                              lang === 'vi'
+                                ? `Sao chép mã ${promo.code}`
+                                : `Copy code ${promo.code}`
+                            }
                           >
                             <IconSwap
                               active={copiedCode === promo.code}
@@ -866,6 +1009,11 @@ export function PromoManagementPage() {
                             onClick={() => openEditModal(promo)}
                             className="h-8 px-2.5 rounded-lg text-xs cursor-pointer"
                             title={lang === 'vi' ? 'Chỉnh sửa' : 'Edit'}
+                            aria-label={
+                              lang === 'vi'
+                                ? `Chỉnh sửa mã ${promo.code}`
+                                : `Edit promo code ${promo.code}`
+                            }
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
@@ -877,6 +1025,11 @@ export function PromoManagementPage() {
                             onClick={() => setDeletingPromo(promo)}
                             className="h-8 px-2.5 rounded-lg text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50 cursor-pointer"
                             title={lang === 'vi' ? 'Xóa mã' : 'Delete'}
+                            aria-label={
+                              lang === 'vi'
+                                ? `Xóa mã ${promo.code}`
+                                : `Delete promo code ${promo.code}`
+                            }
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
@@ -888,6 +1041,7 @@ export function PromoManagementPage() {
               </TableBody>
             </Table>
           </div>
+          </>
         )}
       </div>
 
@@ -934,6 +1088,7 @@ export function PromoManagementPage() {
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
+                  aria-label={lang === 'vi' ? 'Đóng cửa sổ' : 'Close dialog'}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                 >
                   <X className="h-4 w-4" />
@@ -949,7 +1104,10 @@ export function PromoManagementPage() {
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    <label
+                      htmlFor="promo-code-field"
+                      className="block text-xs font-semibold text-slate-700 dark:text-slate-300"
+                    >
                       {lang === 'vi' ? 'Mã giảm giá (6 ký tự) *' : 'Promo Code (6 chars) *'}
                     </label>
                     <span
@@ -962,8 +1120,9 @@ export function PromoManagementPage() {
                       {code.trim().length}/6
                     </span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <Input
+                      id="promo-code-field"
                       type="text"
                       data-testid="promo-code-input"
                       value={code}
@@ -1001,10 +1160,14 @@ export function PromoManagementPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  <label
+                    htmlFor="promo-description-field"
+                    className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                  >
                     {lang === 'vi' ? 'Mô tả chiến dịch' : 'Campaign Description'}
                   </label>
                   <Input
+                    id="promo-description-field"
                     type="text"
                     data-testid="promo-description-input"
                     value={description}
@@ -1020,10 +1183,14 @@ export function PromoManagementPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="min-w-0">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    <label
+                      htmlFor="promo-discount-type-field"
+                      className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                    >
                       {lang === 'vi' ? 'Loại giảm giá *' : 'Discount Type *'}
                     </label>
                     <Select
+                      id="promo-discount-type-field"
                       data-testid="promo-discount-type-select"
                       value={discountType}
                       onChange={(e) =>
@@ -1041,7 +1208,10 @@ export function PromoManagementPage() {
                   </div>
 
                   <div className="min-w-0">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    <label
+                      htmlFor="promo-discount-value-field"
+                      className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                    >
                       {discountType === 'percent'
                         ? lang === 'vi'
                           ? 'Mức giảm (%) *'
@@ -1051,6 +1221,7 @@ export function PromoManagementPage() {
                           : 'Discount Amount ($ USD) *'}
                     </label>
                     <Input
+                      id="promo-discount-value-field"
                       type="number"
                       step="0.01"
                       min="0.01"
@@ -1065,12 +1236,16 @@ export function PromoManagementPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="min-w-0">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    <label
+                      htmlFor="promo-max-discount-field"
+                      className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                    >
                       {lang === 'vi'
                         ? 'Giảm tối đa ($ USD, tùy chọn)'
                         : 'Max Discount Cap ($ USD, optional)'}
                     </label>
                     <Input
+                      id="promo-max-discount-field"
                       type="number"
                       step="0.01"
                       min="0"
@@ -1090,12 +1265,16 @@ export function PromoManagementPage() {
                   </div>
 
                   <div className="min-w-0">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    <label
+                      htmlFor="promo-min-order-field"
+                      className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                    >
                       {lang === 'vi'
                         ? 'Đơn tối thiểu ($ USD)'
                         : 'Minimum Order Subtotal ($ USD)'}
                     </label>
                     <Input
+                      id="promo-min-order-field"
                       type="number"
                       step="0.01"
                       min="0"
@@ -1109,10 +1288,14 @@ export function PromoManagementPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="min-w-0">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    <label
+                      htmlFor="promo-tiers-field"
+                      className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                    >
                       {lang === 'vi' ? 'Gói cước áp dụng' : 'Applicable Plan Tiers'}
                     </label>
                     <Select
+                      id="promo-tiers-field"
                       data-testid="promo-tiers-select"
                       value={applicableTiers}
                       onChange={(e) =>
@@ -1131,10 +1314,14 @@ export function PromoManagementPage() {
                   </div>
 
                   <div className="min-w-0">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    <label
+                      htmlFor="promo-cycles-field"
+                      className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                    >
                       {lang === 'vi' ? 'Chu kỳ thanh toán' : 'Applicable Billing Cycles'}
                     </label>
                     <Select
+                      id="promo-cycles-field"
                       data-testid="promo-cycles-select"
                       value={applicableCycles}
                       onChange={(e) =>
@@ -1161,10 +1348,14 @@ export function PromoManagementPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="min-w-0">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 truncate">
+                    <label
+                      htmlFor="promo-max-uses-field"
+                      className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 truncate"
+                    >
                       {lang === 'vi' ? 'Tổng lượt dùng tối đa' : 'Global Max Uses'}
                     </label>
                     <Input
+                      id="promo-max-uses-field"
                       type="number"
                       min="1"
                       data-testid="promo-max-uses-input"
@@ -1176,10 +1367,14 @@ export function PromoManagementPage() {
                   </div>
 
                   <div className="min-w-0">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 truncate">
+                    <label
+                      htmlFor="promo-max-uses-per-user-field"
+                      className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 truncate"
+                    >
                       {lang === 'vi' ? 'Lượt / Tài khoản' : 'Max Uses / User'}
                     </label>
                     <Input
+                      id="promo-max-uses-per-user-field"
                       type="number"
                       min="1"
                       data-testid="promo-max-uses-per-user-input"
@@ -1190,10 +1385,14 @@ export function PromoManagementPage() {
                   </div>
 
                   <div className="min-w-0">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 truncate">
+                    <label
+                      htmlFor="promo-expires-field"
+                      className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 truncate"
+                    >
                       {lang === 'vi' ? 'Ngày hết hạn' : 'Expiration Date'}
                     </label>
                     <Input
+                      id="promo-expires-field"
                       type="date"
                       data-testid="promo-expires-input"
                       value={expiresAt}

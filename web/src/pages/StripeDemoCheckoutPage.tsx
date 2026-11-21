@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { encodeQrMatrix } from '@/lib/qrCode';
+import { toSafeExternalHref } from '@/lib/utils';
 import {
   ArrowLeft,
   Lock,
@@ -93,7 +94,7 @@ function formatExpiryInput(raw: string): string {
   return digits;
 }
 
-/** Validate MM/YY expiration date */
+/** Validate MM/YY expiration date against current calendar month/year */
 export function isValidExpiry(expiry: string): boolean {
   const match = /^(\d{2})\/(\d{2})$/.exec(expiry.trim());
   if (!match) return false;
@@ -101,8 +102,11 @@ export function isValidExpiry(expiry: string): boolean {
   const year2 = parseInt(match[2], 10);
   if (month < 1 || month > 12) return false;
   const fullYear = 2000 + year2;
-  // Valid for current/future years (2026+)
-  if (fullYear < 2026 || fullYear > 2045) return false;
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  if (fullYear < currentYear || fullYear > currentYear + 25) return false;
+  if (fullYear === currentYear && month < currentMonth) return false;
   return true;
 }
 
@@ -616,8 +620,9 @@ export function StripeDemoCheckoutPage() {
       });
       setVnpayGatewayData(res);
       setVnpayModalTab(activeChannel === 'qr' ? 'qr' : 'atm');
-      if (res.external_redirect && res.payment_url) {
-        window.location.href = res.payment_url;
+      const safeRedirectUrl = toSafeExternalHref(res.payment_url);
+      if (res.external_redirect && safeRedirectUrl) {
+        window.location.href = safeRedirectUrl;
         return;
       }
       setVnpayModalOpen(true);
@@ -872,6 +877,7 @@ export function StripeDemoCheckoutPage() {
                     onClick={handleRemovePromoCode}
                     className="p-1.5 rounded-lg hover:bg-emerald-200/60 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:text-emerald-950 dark:hover:text-white transition-colors cursor-pointer shrink-0"
                     title={lang === 'vi' ? 'Gỡ mã giảm giá' : 'Remove promo code'}
+                    aria-label={lang === 'vi' ? 'Gỡ mã giảm giá' : 'Remove promo code'}
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -1874,6 +1880,7 @@ export function StripeDemoCheckoutPage() {
                   data-testid="vnpay-modal-close-btn"
                   disabled={submitting}
                   onClick={() => setVnpayModalOpen(false)}
+                  aria-label={lang === 'vi' ? 'Đóng cổng thanh toán VNPay' : 'Close VNPay modal'}
                   className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 cursor-pointer"
                 >
                   <X className="h-4 w-4" />
@@ -1938,15 +1945,23 @@ export function StripeDemoCheckoutPage() {
                           : 'Copied'
                         : 'Copy URL'}
                     </button>
-                    <a
-                      href={vnpayGatewayData.payment_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-sky-100 hover:bg-sky-200 dark:bg-sky-900/70 dark:hover:bg-sky-800 text-[#005BAA] dark:text-sky-200"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      sandbox.vnpayment.vn
-                    </a>
+                    {(() => {
+                      const safeGatewayUrl = toSafeExternalHref(
+                        vnpayGatewayData.payment_url,
+                      );
+                      if (!safeGatewayUrl) return null;
+                      return (
+                        <a
+                          href={safeGatewayUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-sky-100 hover:bg-sky-200 dark:bg-sky-900/70 dark:hover:bg-sky-800 text-[#005BAA] dark:text-sky-200"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          sandbox.vnpayment.vn
+                        </a>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -2310,6 +2325,7 @@ export function StripeDemoCheckoutPage() {
                   type="button"
                   data-testid="wallet-modal-close-btn"
                   onClick={() => setWalletModalMethod(null)}
+                  aria-label={lang === 'vi' ? 'Đóng ví điện tử' : 'Close wallet modal'}
                   className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 cursor-pointer"
                 >
                   <X className="h-4 w-4" />

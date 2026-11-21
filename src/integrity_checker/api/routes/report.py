@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from rapidfuzz import fuzz
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -44,6 +44,16 @@ from integrity_checker.pipeline.integrity_pipeline import _serialize_citation_li
 
 router = APIRouter()
 
+_XML_ILLEGAL_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_MAX_PDF_CITATION_CELL_CHARS = 1200
+
+
+def _sanitize_pdf_text(val: Any) -> str:
+    """Normalize Unicode, strip XML-illegal control bytes, and HTML-escape for ReportLab Paragraph."""
+    normalized = unicodedata.normalize("NFC", str(val or ""))
+    cleaned = _XML_ILLEGAL_CTRL_RE.sub("", normalized)
+    return escape(cleaned)
+
 
 @router.get("/{essay_id}/report")
 def get_report(
@@ -54,7 +64,7 @@ def get_report(
     compare_with: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> StreamingResponse:
+) -> Response:
     """Export report theo format: json | csv | pdf | docx (supports auto_heal=true)."""
     repo = Repository(db)
     essay = repo.get_essay(essay_id)
@@ -89,7 +99,7 @@ def get_report(
     ):
         if (
             state is not None
-            and essay.cis_json
+            and (essay.cis_json or sql_job_status == "completed")
             and tracker.load_persisted_snapshot(essay_id, essay_record=essay) is None
             and sql_job_status not in ("queued", "processing")
         ):
@@ -107,7 +117,10 @@ def get_report(
         format == "json"
         and essay.cis_json is None
         and not verdicts
-        and ((state is not None and state.status == "failed") or sql_job_status == "failed")
+        and (
+            (state is not None and state.status == "failed" and sql_job_status != "completed")
+            or sql_job_status == "failed"
+        )
     ):
         job_err = getattr(essay, "job_error", None)
         detail_msg = (
@@ -179,7 +192,7 @@ def export_healed_docx_endpoint(
         raise HTTPException(status_code=403, detail="Access denied")
 
     policy = get_user_plan_policy(current_user)
-    if "docx" not in policy.allowed_export_formats and current_user.role == "user":
+    if "docx" not in policy.allowed_export_formats:
         raise HTTPException(
             status_code=402,
             detail=(
@@ -744,22 +757,36 @@ def _compute_revision_diff(
     available_revisions: list[dict[str, Any]] = []
     chosen_prev = None
 
-    # Sort older/other essays by id descending; skip failed/in-flight/uncompleted essays
+    # Sort older/other essays by id descending; filter stem & id BEFORE loading verdicts
     sorted_others = sorted(other_essays, key=lambda e: int(getattr(e, "id", 0) or 0), reverse=True)
+    filtered_cands: list[tuple[Any, bool, bool]] = []
     for cand in sorted_others:
         is_explicit_target = compare_with_id is not None and cand.id == compare_with_id
         if not is_explicit_target and _is_sandbox_manuscript(getattr(cand, "filename", None)):
             continue
         if not _is_eligible_revision_essay(cand, is_explicit_target=is_explicit_target):
             continue
-        cand_verdicts = repo.get_verdicts(cand.id)
-        if not cand_verdicts and not getattr(cand, "cis_json", None):
-            continue
         cand_stem = _normalize_manuscript_stem(cand.filename)
         is_same_stem = _is_same_manuscript_family(cur_stem, cand_stem)
         if not is_same_stem and not is_explicit_target:
             continue
         if cand.id > essay.id and not is_explicit_target:
+            continue
+        filtered_cands.append((cand, is_explicit_target, is_same_stem))
+
+    batch_verdicts_fn = getattr(repo, "get_verdicts_by_essay_ids", None)
+    if not filtered_cands:
+        verdicts_by_eid = {}
+    elif callable(batch_verdicts_fn):
+        verdicts_by_eid = batch_verdicts_fn([cand.id for cand, _, _ in filtered_cands])
+    else:
+        verdicts_by_eid = {
+            cand.id: repo.get_verdicts(cand.id) for cand, _, _ in filtered_cands
+        }
+
+    for cand, is_explicit_target, is_same_stem in filtered_cands:
+        cand_verdicts = verdicts_by_eid.get(cand.id, [])
+        if not cand_verdicts and not getattr(cand, "cis_json", None):
             continue
         cand_cis = _extract_essay_cis_score(cand, cand_verdicts)
         available_revisions.append({
@@ -770,32 +797,13 @@ def _compute_revision_diff(
             "num_verdicts": len(cand_verdicts),
             "is_same_stem": is_same_stem,
         })
-        if is_explicit_target:
+        if is_explicit_target or (
+            chosen_prev is None and is_same_stem and cand.id < essay.id
+        ):
             chosen_prev = (cand, cand_verdicts, cand_cis, is_same_stem)
 
     if not available_revisions:
         return None
-
-    if chosen_prev is None:
-        # Match the most recent completed older essay belonging to the same manuscript family
-        prior_same_stem = [
-            e for e in sorted_others
-            if not _is_sandbox_manuscript(getattr(e, "filename", None))
-            and _is_eligible_revision_essay(e, is_explicit_target=False)
-            and _is_same_manuscript_family(cur_stem, _normalize_manuscript_stem(e.filename))
-            and e.id < essay.id
-        ]
-        target_cand = prior_same_stem[0] if prior_same_stem else None
-        if target_cand is not None:
-            tv = repo.get_verdicts(target_cand.id)
-            if tv or getattr(target_cand, "cis_json", None):
-                ts = _normalize_manuscript_stem(target_cand.filename)
-                chosen_prev = (
-                    target_cand,
-                    tv,
-                    _extract_essay_cis_score(target_cand, tv),
-                    _is_same_manuscript_family(cur_stem, ts),
-                )
 
     if chosen_prev is None:
         return None
@@ -990,12 +998,12 @@ def _extract_document_diagnostics(
     verdicts: list,
 ) -> dict[str, Any]:
     """Build or recover Scanned PDF Guardrail & encoding/OCR diagnostics for the report payload."""
-    diag = (
-        dict(style_profile_dict.get("document_diagnostics"))
+    raw_dd = (
+        style_profile_dict.get("document_diagnostics")
         if isinstance(style_profile_dict, dict)
-        and isinstance(style_profile_dict.get("document_diagnostics"), dict)
-        else {}
+        else None
     )
+    diag: dict[str, Any] = dict(raw_dd) if isinstance(raw_dd, dict) else {}
     if diag and "is_scanned_pdf" in diag:
         diag.setdefault("ocr_pages_recovered", [])
         diag.setdefault("legacy_encoding_detected", None)
@@ -1322,6 +1330,8 @@ def _json_response(
     if essay.style_profile_json:
         try:
             style_profile_dict = json.loads(essay.style_profile_json)
+            if isinstance(style_profile_dict, dict):
+                style_profile_dict.pop("_progress_snapshot", None)
         except (json.JSONDecodeError, TypeError):
             pass
     if essay.cis_json:
@@ -1639,7 +1649,7 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
         spaceAfter=2,
     )
     def _pdf_text(val: Any) -> str:
-        return escape(unicodedata.normalize("NFC", str(val or "")))
+        return _sanitize_pdf_text(val)
 
     table_cell_style = ParagraphStyle(
         'TableCell',
@@ -1879,6 +1889,8 @@ def _generate_pdf_bytes(essay, verdicts: list, citations: list | None = None) ->
             cit_display = f"[{comp_lbl}] {raw_cit}"
         else:
             cit_display = raw_cit
+        if len(cit_display) > _MAX_PDF_CITATION_CELL_CHARS:
+            cit_display = cit_display[: _MAX_PDF_CITATION_CELL_CHARS - 3] + "..."
 
         v_rules = _load_verdict_rules(v)
         norm_lbl = _normalize_verdict_label(v)
@@ -1986,6 +1998,8 @@ def _docx_response(filename: str, essay, verdicts: list) -> StreamingResponse:
     if getattr(essay, "style_profile_json", None):
         try:
             style_profile = json.loads(essay.style_profile_json)
+            if isinstance(style_profile, dict):
+                style_profile.pop("_progress_snapshot", None)
         except (json.JSONDecodeError, TypeError):
             pass
 

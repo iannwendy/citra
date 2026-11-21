@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Search } from 'lucide-react';
 import { api, type ClassStudent } from '@/api/client';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -66,15 +67,7 @@ export function AddStudentDialog({
     };
   }, [open, debouncedSearch, t]);
 
-  // Escape to close
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open, onClose]);
+  const { dialogProps, titleId } = useModalA11y<HTMLDivElement>(open, onClose);
 
   if (!open) return null;
 
@@ -105,18 +98,16 @@ export function AddStudentDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="add-student-title"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full max-h-[90dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl animate-scale-in"
+        {...dialogProps}
+        className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full max-h-[90dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl animate-scale-in outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
           <h2
-            id="add-student-title"
+            id={titleId}
             className="font-display text-lg font-bold text-slate-900 dark:text-white"
           >
             {t('teacher.addStudentModalTitle')}

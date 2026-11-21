@@ -22,6 +22,7 @@ import time
 import tracemalloc
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from integrity_checker.config import Settings, get_settings
 from integrity_checker.extraction.base import Document, Page
@@ -224,6 +225,7 @@ class DocumentParser:
                 )
             parser_used = "regex"  # Fallback to regex since PyMuPDF failed
 
+        assert text_doc is not None
         total_chars = sum(len((p.text or "").strip()) for p in (text_doc.pages or []))
         doc_meta = dict(text_doc.metadata or {})
         if (
@@ -322,7 +324,7 @@ class DocumentParser:
                         # Save to cache if successful
                         if grobid_out and grobid_out.is_available:
                             tei_xml = grobid_out.raw_tei_xml
-                            if tei_xml:
+                            if tei_xml and grobid_manager is not None:
                                 grobid_manager.save_to_cache(pdf_path, tei_xml)
 
                     else:
@@ -1157,7 +1159,7 @@ class DocumentParser:
 
         # Build reference profiles for footnote matching
         _STOP = {"the", "and", "for", "with", "from", "into", "that", "this", "what", "when", "where", "how", "why"}
-        ref_profiles = []
+        ref_profiles: list[dict[str, Any]] = []
         surname_counts: dict[str, int] = {}
         for idx, ref in enumerate(references):
             first_raw = ""
@@ -1888,19 +1890,19 @@ class DocumentParser:
                 parts = [pt.strip() for pt in re.split(r"[,;]", inside) if pt.strip()]
                 for pt in parts:
                     norm_key = re.sub(r"\s+", "", pt)
-                    ref = alpha_map.get(norm_key)
-                    if ref is not None:
+                    alpha_ref = alpha_map.get(norm_key)
+                    if alpha_ref is not None:
                         added.append(
                             Citation(
                                 raw_text=f"[{norm_key}]",
                                 citation_type=CitationType.IN_TEXT,
-                                style=ref.style or CitationStyle.ACM,
+                                style=alpha_ref.style or CitationStyle.ACM,
                                 page_num=p_num,
-                                authors=list(ref.authors[:1]) if ref.authors else [],
-                                year=ref.year,
-                                year_suffix=ref.year_suffix,
-                                title=ref.title,
-                                title_normalized=ref.title_normalized,
+                                authors=list(alpha_ref.authors[:1]) if alpha_ref.authors else [],
+                                year=alpha_ref.year,
+                                year_suffix=alpha_ref.year_suffix,
+                                title=alpha_ref.title,
+                                title_normalized=alpha_ref.title_normalized,
                                 matched_pattern="alpha_bracket",
                                 confidence=0.92,
                             )
@@ -2541,10 +2543,11 @@ class DocumentParser:
                         old_auth_str = ", ".join(
                             getattr(a, "raw", None) or str(a) for a in (target.authors or [])
                         )
-                        target.authors = [
+                        rebuilt_authors = [
                             getattr(a, "raw", None) or str(a) for a in donor.authors
                         ]
-                        new_auth_str = ", ".join(target.authors)
+                        target.authors = list(rebuilt_authors)
+                        new_auth_str = ", ".join(rebuilt_authors)
                         if old_auth_str and old_auth_str in (target.raw_text or ""):
                             target.raw_text = (target.raw_text or "").replace(
                                 old_auth_str, new_auth_str, 1
@@ -2672,7 +2675,7 @@ class DocumentParser:
                         getattr(a, "raw", None) or str(a) for a in target.authors
                     )
                     target.authors = list(donor_auth_clean)
-                    new_auth_str = ", ".join(target.authors)
+                    new_auth_str = ", ".join(donor_auth_clean)
                     if old_auth_str and old_auth_str in (target.raw_text or ""):
                         target.raw_text = (target.raw_text or "").replace(
                             old_auth_str, new_auth_str, 1

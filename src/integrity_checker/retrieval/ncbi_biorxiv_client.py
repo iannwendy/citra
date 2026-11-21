@@ -29,6 +29,7 @@ from integrity_checker.retrieval.base import BaseScholarClient
 from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     author_match_score,
+    detect_and_strip_retraction_title,
     is_book_review_mismatch,
     normalize_doi,
     title_similarity,
@@ -130,7 +131,10 @@ class NcbiBiorxivClient(BaseScholarClient):
         server: str = "biorxiv",
     ) -> SourceCandidate:
         doi = normalize_doi(str(item.get("doi") or ""))
-        title = self._clean_text(item.get("title"))
+        raw_title = self._clean_text(item.get("title"))
+        title, is_retracted = detect_and_strip_retraction_title(raw_title)
+        if str(item.get("category") or "").strip().lower() in {"withdrawn", "retracted"}:
+            is_retracted = True
         raw_authors = str(item.get("authors") or "")
         authors: list[str] = []
         for part in raw_authors.split(";"):
@@ -153,6 +157,8 @@ class NcbiBiorxivClient(BaseScholarClient):
             ext_ids["doi"] = doi
         if published_doi:
             ext_ids["published_doi"] = published_doi
+        if is_retracted:
+            ext_ids["is_retracted"] = "true"
 
         return SourceCandidate(
             source_name=self.name,
@@ -173,7 +179,7 @@ class NcbiBiorxivClient(BaseScholarClient):
         doi_norm: str | None = None,
     ) -> SourceCandidate | None:
         raw_title = (citation.title or "").strip()
-        if not raw_title and citation.raw_text:
+        if not raw_title and not doi_norm and citation.raw_text:
             raw_title = " ".join(title_tokens(citation.raw_text)[:12])
 
         if doi_norm:
@@ -198,7 +204,8 @@ class NcbiBiorxivClient(BaseScholarClient):
         id_list = ((search_data or {}).get("esearchresult") or {}).get("idlist") or []
         if (
             (not isinstance(id_list, list) or not id_list)
-            and self._last_status_code != 429
+            and self._last_status_code not in (429, 500, 502, 503, 504)
+            and not self._last_transport_error
             and doi_norm
             and raw_title
             and len(raw_title) >= 4
@@ -279,9 +286,10 @@ class NcbiBiorxivClient(BaseScholarClient):
         return best_cand
 
     def _ncbi_doc_to_candidate(self, doc: dict[str, Any], pmid: str) -> SourceCandidate:
-        title = self._clean_text(doc.get("title"))
-        if title:
-            title = title.rstrip(".")
+        raw_title = self._clean_text(doc.get("title"))
+        if raw_title:
+            raw_title = raw_title.rstrip(".")
+        title, is_retracted_title = detect_and_strip_retraction_title(raw_title)
 
         authors: list[str] = []
         for a in doc.get("authors") or []:
@@ -305,7 +313,7 @@ class NcbiBiorxivClient(BaseScholarClient):
         if doi:
             ext_ids["doi"] = doi
         pubtypes = [str(pt).lower() for pt in (doc.get("pubtype") or [])]
-        if any("retracted" in pt for pt in pubtypes):
+        if any("retracted" in pt for pt in pubtypes) or is_retracted_title:
             ext_ids["is_retracted"] = "true"
 
         return SourceCandidate(

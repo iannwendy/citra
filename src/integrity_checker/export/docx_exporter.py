@@ -17,6 +17,7 @@ from docx.shared import Pt, RGBColor
 
 _MAX_DOCX_PART_BYTES = 50 * 1024 * 1024
 _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
+_MAX_DOCX_ARCHIVE_ENTRIES = 2048
 _HEX_COLOR_RE = re.compile(r"^[0-9A-Fa-f]{6}$")
 _XML_ILLEGAL_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]")
 
@@ -41,36 +42,187 @@ def _sanitize_xml_value(obj: Any) -> Any:
     return obj
 
 
+def _has_xml_magic_prefix(head_bytes: bytes) -> bool:
+    """Return True if raw entry header begins (after BOM/whitespace) with XML/comment/DTD/ENTITY markers."""
+    raw = head_bytes
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+    elif raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        try:
+            decoded = raw.decode("utf-16", errors="ignore").lstrip()
+            return decoded.lower().startswith(("<?xml", "<!--", "<!doctype", "<!entity"))
+        except Exception:
+            return False
+    stripped = raw.lstrip(b" \t\r\n").lower()
+    return stripped.startswith((b"<?xml", b"<!--", b"<!doctype", b"<!entity"))
+
+
+def _window_has_dtd_or_entity(window: bytes, *, is_utf16: bool = False) -> bool:
+    """Return True if a byte window contains DTD or ENTITY declarations (ASCII/UTF-8 or UTF-16)."""
+    low = window.lower()
+    if b"<!doctype" in low or b"<!entity" in low:
+        return True
+    if is_utf16 or b"<\x00!" in window or b"\x00<\x00!" in window:
+        for enc in ("utf-16-le", "utf-16-be"):
+            try:
+                dec_low = window.decode(enc, errors="ignore").lower()
+                if "<!doctype" in dec_low or "<!entity" in dec_low:
+                    return True
+            except Exception:
+                continue
+    return False
+
+
 def _docx_xml_is_safe(docx_path: str | os.PathLike[str] | IO[bytes]) -> bool:
     """Validate every XML part of an untrusted .docx with defusedxml.
 
-    Rejects packages missing word/document.xml, declaring DTDs/entities (billion laughs, XXE),
-    malformed XML, or oversized parts/archives (zip bomb) before python-docx opens them.
+    Rejects packages missing [Content_Types].xml or word/document.xml, containing duplicate
+    archive member names (central-directory shadowing), exceeding entry-count caps, declaring
+    DTDs/entities (billion laughs, XXE — including disguised non-.xml or comment-prefixed parts),
+    malformed XML, or oversized parts/archives (zip bomb, including spoofed info.file_size headers)
+    before python-docx opens them.
     """
     import zipfile
 
+    chunk_size = 65536
     try:
         with zipfile.ZipFile(docx_path, "r") as zf:
             infos = zf.infolist()
-            lower_names = {info.filename.replace("\\", "/").lower() for info in infos}
-            if "word/document.xml" not in lower_names:
+            if len(infos) > _MAX_DOCX_ARCHIVE_ENTRIES:
                 return False
-            total_uncompressed = 0
+
+            seen_names: set[str] = set()
+            ct_info: zipfile.ZipInfo | None = None
             for info in infos:
-                total_uncompressed += max(0, int(info.file_size or 0))
-                if total_uncompressed > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES:
-                    return False
-                name = info.filename.lower()
-                if not (name.endswith(".xml") or name.endswith(".rels")):
+                if info.is_dir():
                     continue
-                if info.file_size > _MAX_DOCX_PART_BYTES:
+                norm = info.filename.replace("\\", "/").lstrip("/").rstrip("/").lower()
+                if not norm or norm in seen_names:
                     return False
-                safe_fromstring(
-                    zf.read(info),
-                    forbid_dtd=True,
-                    forbid_entities=True,
-                    forbid_external=True,
-                )
+                seen_names.add(norm)
+                if norm == "[content_types].xml":
+                    ct_info = info
+
+            if (
+                ct_info is None
+                or "word/document.xml" not in seen_names
+                or "[content_types].xml" not in seen_names
+            ):
+                return False
+
+            total_uncompressed = 0
+            declared_total = max(0, int(ct_info.file_size or 0))
+            if (
+                declared_total > _MAX_DOCX_PART_BYTES
+                or declared_total > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES
+            ):
+                return False
+
+            ct_chunks: list[bytes] = []
+            ct_bytes_len = 0
+            ct_tail = b""
+            ct_is_utf16 = False
+            with zf.open(ct_info, "r") as ct_fp:
+                while True:
+                    chunk = ct_fp.read(chunk_size)
+                    if not chunk:
+                        break
+                    if ct_bytes_len == 0 and chunk.startswith((b"\xff\xfe", b"\xfe\xff")):
+                        ct_is_utf16 = True
+                    chunk_len = len(chunk)
+                    ct_bytes_len += chunk_len
+                    total_uncompressed += chunk_len
+                    if (
+                        ct_bytes_len > _MAX_DOCX_PART_BYTES
+                        or total_uncompressed > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES
+                    ):
+                        return False
+                    if _window_has_dtd_or_entity(ct_tail + chunk, is_utf16=ct_is_utf16):
+                        return False
+                    ct_tail = chunk[-64:]
+                    ct_chunks.append(chunk)
+
+            ct_root = safe_fromstring(
+                b"".join(ct_chunks),
+                forbid_dtd=True,
+                forbid_entities=True,
+                forbid_external=True,
+            )
+            xml_extensions: set[str] = {"xml", "rels"}
+            xml_part_names: set[str] = set()
+            for elem in ct_root.iter():
+                local_tag = elem.tag.rsplit("}", 1)[-1].lower() if isinstance(elem.tag, str) else ""
+                ctype = (elem.attrib.get("ContentType") or "").lower()
+                if "xml" not in ctype:
+                    continue
+                if local_tag == "default":
+                    ext = (elem.attrib.get("Extension") or "").strip().lstrip(".").lower()
+                    if ext:
+                        xml_extensions.add(ext)
+                elif local_tag == "override":
+                    pname = (
+                        (elem.attrib.get("PartName") or "")
+                        .replace("\\", "/")
+                        .lstrip("/")
+                        .rstrip("/")
+                        .lower()
+                    )
+                    if pname:
+                        xml_part_names.add(pname)
+
+            for info in infos:
+                if info is ct_info or info.is_dir():
+                    continue
+                declared_size = max(0, int(info.file_size or 0))
+                declared_total += declared_size
+                if (
+                    declared_size > _MAX_DOCX_PART_BYTES
+                    or declared_total > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES
+                ):
+                    return False
+
+                lower_name = info.filename.replace("\\", "/").lstrip("/").rstrip("/").lower()
+                ext = lower_name.rsplit(".", 1)[-1] if "." in lower_name else ""
+                is_declared_xml = (ext in xml_extensions) or (lower_name in xml_part_names)
+
+                xml_chunks: list[bytes] = []
+                head_buf = bytearray()
+                tail_buf = b""
+                entry_is_utf16 = False
+                should_parse_xml = is_declared_xml
+                part_bytes = 0
+                with zf.open(info, "r") as entry_fp:
+                    while True:
+                        chunk = entry_fp.read(chunk_size)
+                        if not chunk:
+                            break
+                        if part_bytes == 0 and chunk.startswith((b"\xff\xfe", b"\xfe\xff")):
+                            entry_is_utf16 = True
+                        chunk_len = len(chunk)
+                        part_bytes += chunk_len
+                        total_uncompressed += chunk_len
+                        if (
+                            part_bytes > _MAX_DOCX_PART_BYTES
+                            or total_uncompressed > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES
+                        ):
+                            return False
+                        if _window_has_dtd_or_entity(tail_buf + chunk, is_utf16=entry_is_utf16):
+                            return False
+                        tail_buf = chunk[-64:]
+                        if not should_parse_xml and len(head_buf) < 512:
+                            head_buf.extend(chunk[: 512 - len(head_buf)])
+                            if _has_xml_magic_prefix(bytes(head_buf)):
+                                should_parse_xml = True
+                        if should_parse_xml:
+                            xml_chunks.append(chunk)
+
+                if should_parse_xml:
+                    safe_fromstring(
+                        b"".join(xml_chunks),
+                        forbid_dtd=True,
+                        forbid_entities=True,
+                        forbid_external=True,
+                    )
     except Exception:
         return False
     return True
@@ -380,7 +532,8 @@ def export_report_to_docx(
         # Data rows
         for v in verdicts:
             row_cells = table.add_row().cells
-            feats = v.get("features") if isinstance(v.get("features"), dict) else {}
+            raw_v_feats = v.get("features")
+            feats: dict[str, Any] = raw_v_feats if isinstance(raw_v_feats, dict) else {}
             raw_cit = str(v.get("citation_raw", "") or "")
             comp_lbl = v.get("composite_label") or feats.get("composite_label")
             if comp_lbl and f"[{comp_lbl}]" not in raw_cit:
@@ -393,7 +546,8 @@ def export_report_to_docx(
 
             url_status = v.get("url_status") or feats.get("url_status")
             archive_url = v.get("archive_url") or feats.get("archive_url")
-            html_meta = v.get("html_meta") if isinstance(v.get("html_meta"), dict) else feats.get("html_meta")
+            raw_v_html = v.get("html_meta")
+            html_meta = raw_v_html if isinstance(raw_v_html, dict) else feats.get("html_meta")
             obs_title = html_meta.get("title") if isinstance(html_meta, dict) else None
 
             parts: list[str] = []
@@ -472,7 +626,8 @@ def export_report_to_docx(
             doc.add_heading("Neuro-Symbolic Diagnostic Trace & Evidence", level=1)
             for idx, v in enumerate(detailed_items, 1):
                 p = doc.add_paragraph()
-                feats = v.get("features") if isinstance(v.get("features"), dict) else {}
+                raw_det_feats = v.get("features")
+                feats = raw_det_feats if isinstance(raw_det_feats, dict) else {}
                 raw_lbl_str = str(v.get("label", "UNRESOLVED") or "UNRESOLVED")
                 lbl_lower = "unresolved" if raw_lbl_str.lower() in ("", "unverified") else raw_lbl_str.lower()
                 lbl_str = lbl_lower.upper()
@@ -513,7 +668,8 @@ def export_report_to_docx(
 
                 url_status = v.get("url_status") or feats.get("url_status")
                 archive_url = v.get("archive_url") or feats.get("archive_url")
-                html_meta = v.get("html_meta") if isinstance(v.get("html_meta"), dict) else feats.get("html_meta")
+                raw_det_html = v.get("html_meta")
+                html_meta = raw_det_html if isinstance(raw_det_html, dict) else feats.get("html_meta")
                 if url_status:
                     p.add_run(f"URL Liveness Status: {url_status}\n")
                 if archive_url:

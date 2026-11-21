@@ -36,14 +36,14 @@ class MetricsCalculator:
         support: dict[str, int] = Counter()
 
         for t, p in zip(y_true, y_pred, strict=False):
-            if t in cm:
-                cm[t][p] = cm.get(t, {}).get(p, 0) + 1
+            cm.setdefault(t, {})
+            cm[t][p] = cm[t].get(p, 0) + 1
             support[t] += 1
 
         for label in cls.LABELS:
-            tp = cm[label][label]
-            fp = sum(cm[other][label] for other in cls.LABELS if other != label)
-            fn = sum(cm[label][other] for other in cls.LABELS if other != label)
+            tp = cm.get(label, {}).get(label, 0)
+            fp = sum(cm[other].get(label, 0) for other in cm if other != label)
+            fn = support[label] - tp
             prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
             rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
             f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0

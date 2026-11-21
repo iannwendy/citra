@@ -124,11 +124,9 @@ class OpenLibraryClient(BaseScholarClient):
         """Extract clean first-author surname preserving apostrophes (e.g. O'Dowd, L'Engle)."""
         if not citation.authors:
             return ""
-        raw = citation.authors[0]
-        if hasattr(raw, "last_name") and getattr(raw, "last_name", ""):
-            s = str(getattr(raw, "last_name", ""))
-        else:
-            s = str(raw)
+        raw_obj: object = citation.authors[0]
+        last_val = getattr(raw_obj, "last_name", None)
+        s = str(last_val) if last_val else str(raw_obj)
         s = s.replace("\u2019", "'").replace("\u2018", "'").replace("`", "'").strip()
         if "," in s:
             first_part = s.split(",", 1)[0].strip()
@@ -142,7 +140,7 @@ class OpenLibraryClient(BaseScholarClient):
             if t.strip(".,;:").lower() not in {"iii", "ii", "iv", "jr", "sr", "et", "al"}
             and len(t.strip(".,;:")) > 1
         ]
-        return tokens[-1] if tokens else author_key(raw)
+        return tokens[-1] if tokens else author_key(raw_obj)
 
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Search OpenLibrary (and Google Books fallback) for book/monograph citations."""

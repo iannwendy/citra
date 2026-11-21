@@ -4,6 +4,7 @@
 # =====================================================================
 
 app:
+  # Note: docker-compose.yml sets APP_ENV=development for local dev; docker-compose.prod.yml enforces production.
   env: production
   debug: false
   log_level: WARNING

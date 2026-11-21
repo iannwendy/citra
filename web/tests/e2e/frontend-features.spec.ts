@@ -29,8 +29,6 @@ test.describe('Help Modal', () => {
 
     // Press Escape to close
     await page.keyboard.press('Escape');
-    // Wait for modal to close
-    await page.waitForTimeout(500);
     await expect(page.locator('h3:has-text("Welcome to CITRA")')).not.toBeVisible();
   });
 

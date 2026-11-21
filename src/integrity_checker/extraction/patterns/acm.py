@@ -30,7 +30,7 @@ import re
 from integrity_checker.extraction.patterns.base import CompiledPattern, PatternType
 from integrity_checker.extraction.patterns.registry import register_format
 from integrity_checker.extraction.patterns.utils import extract_publication_year
-from integrity_checker.matching.author_parser import parse_authors
+from integrity_checker.matching.author_parser import Author, parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
 # =============================================================================
@@ -1093,7 +1093,9 @@ class ACMFormat:
         if not yr:
             return None
 
-        parsed_authors = [a for item in author_items for a in parse_authors(item)]
+        parsed_authors: list[Author | str] = [
+            a for item in author_items for a in parse_authors(item)
+        ]
         if not parsed_authors:
             return None
 
@@ -1150,16 +1152,9 @@ class ACMFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation if citation.title or citation.year else None
 
-    def _parse_authors(self, authors_str: str) -> list[str]:
-        """Parse author string into list of authors.
-
-        Args:
-            authors_str: Author string
-
-        Returns:
-            List of author strings (via parse_authors)
-        """
-        return parse_authors(authors_str)
+    def _parse_authors(self, authors_str: str) -> list[Author | str]:
+        """Parse author string into list of authors."""
+        return list(parse_authors(authors_str))
 
     def _parse_venue(self, citation: Citation, venue_text: str) -> None:
         """Parse venue information from remaining text."""

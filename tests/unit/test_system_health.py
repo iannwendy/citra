@@ -31,21 +31,21 @@ from integrity_checker.db.models import (
 
 
 def get_admin_token() -> str:
-    client = TestClient(app)
-    resp = client.post(
-        "/api/auth/login", json={"username": "admin", "password": "admin123"},
-    )
-    assert resp.status_code == 200, f"Admin login failed: {resp.text}"
-    return resp.json()["token"]
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/auth/login", json={"username": "admin", "password": "admin123"},
+        )
+        assert resp.status_code == 200, f"Admin login failed: {resp.text}"
+        return resp.json()["token"]
 
 
 def get_user_token() -> str:
-    client = TestClient(app)
-    resp = client.post(
-        "/api/auth/login", json={"username": "user", "password": "user123"},
-    )
-    assert resp.status_code == 200, f"User login failed: {resp.text}"
-    return resp.json()["token"]
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/auth/login", json={"username": "user", "password": "user123"},
+        )
+        assert resp.status_code == 200, f"User login failed: {resp.text}"
+        return resp.json()["token"]
 
 
 def auth_header(token: str) -> dict:
@@ -60,19 +60,20 @@ def _make_user(username: str, role: str = "user", email: str | None = None) -> i
     from integrity_checker.db.session import get_session
 
     session = get_session()
-    repo = Repository(session)
-    user = repo.create_user(
-        username=username,
-        password_hash=bcrypt.hashpw(b"testpass123", bcrypt.gensalt()).decode(),
-        role=role,
-        email=email,
-        full_name=username.title(),
-        is_active=True,
-    )
-    session.commit()
-    uid = user.id
-    session.close()
-    return uid
+    try:
+        repo = Repository(session)
+        user = repo.create_user(
+            username=username,
+            password_hash=bcrypt.hashpw(b"testpass123", bcrypt.gensalt()).decode(),
+            role=role,
+            email=email,
+            full_name=username.title(),
+            is_active=True,
+        )
+        session.commit()
+        return user.id
+    finally:
+        session.close()
 
 
 def _create_essay_with_verdict(
@@ -118,14 +119,19 @@ def _create_essay_with_verdict(
 def test_system_health_requires_admin(clean_db):
     """Non-admin token → 403."""
     token = get_user_token()
-    client = TestClient(app)
-    resp = client.get("/api/system/health", headers=auth_header(token))
+    with TestClient(app) as client:
+        resp = client.get("/api/system/health", headers=auth_header(token))
     assert resp.status_code == 403, f"expected 403, got {resp.status_code}: {resp.text}"
     assert "Admin" in resp.json()["detail"]
 
 
-def test_system_health_returns_aggregates(clean_db):
+def test_system_health_returns_aggregates(monkeypatch, clean_db):
     """Admin token with seeded data → response has all aggregates."""
+    from integrity_checker.api.routes import health as health_mod
+    from tests.conftest import make_stopped_grobid_manager_stub
+
+    monkeypatch.setattr(health_mod, "get_grobid_manager", make_stopped_grobid_manager_stub)
+
     # Seed: 1 extra student + 2 essays (one verified, one metadata_error)
     student_id = _make_user("sh_student", role="user")
     _create_essay_with_verdict(student_id, filename="essay_one.pdf", label="verified")
@@ -133,8 +139,8 @@ def test_system_health_returns_aggregates(clean_db):
 
     # Capture baseline counts BEFORE admin token login (which would create admin user)
     token = get_admin_token()
-    client = TestClient(app)
-    resp = client.get("/api/system/health", headers=auth_header(token))
+    with TestClient(app) as client:
+        resp = client.get("/api/system/health", headers=auth_header(token))
 
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -193,60 +199,60 @@ def test_public_health_grobid_message_matches_container_state(monkeypatch, clean
     monkeypatch.setattr(health_mod, "get_grobid_manager", lambda: fake_manager)
 
     # Case 1: Container is NOT running -> container_running=False, message must NOT say "container running"
-    client = TestClient(app)
-    resp = client.get("/api/health")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["grobid"]["container_running"] is False
-    assert "container running" not in body["grobid"]["message"].lower()
-    assert "not running" in body["grobid"]["message"].lower()
+    with TestClient(app) as client:
+        resp = client.get("/api/health")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["grobid"]["container_running"] is False
+        assert "container running" not in body["grobid"]["message"].lower()
+        assert "not running" in body["grobid"]["message"].lower()
 
-    # Case 2: Container IS running, yet HTTP health check failed -> hung container
-    state["running"] = True
-    resp_hung = client.get("/api/health")
-    assert resp_hung.status_code == 200
-    body_hung = resp_hung.json()
-    assert body_hung["grobid"]["container_running"] is True
-    assert body_hung["grobid"]["message"] == "GROBID container running but API not responding"
+        # Case 2: Container IS running, yet HTTP health check failed -> hung container
+        health_mod._invalidate_grobid_health_cache()
+        state["running"] = True
+        resp_hung = client.get("/api/health")
+        assert resp_hung.status_code == 200
+        body_hung = resp_hung.json()
+        assert body_hung["grobid"]["container_running"] is True
+        assert body_hung["grobid"]["message"] == "GROBID container running but API not responding"
 
-    # And /api/system/health marks grobid service degraded when container is hung
-    token = get_admin_token()
-    sys_resp = client.get("/api/system/health", headers=auth_header(token))
-    assert sys_resp.status_code == 200
-    assert sys_resp.json()["services"].get("grobid") == "degraded"
+        # And /api/system/health marks grobid service degraded when container is hung
+        token = get_admin_token()
+        sys_resp = client.get("/api/system/health", headers=auth_header(token))
+        assert sys_resp.status_code == 200
+        assert sys_resp.json()["services"].get("grobid") == "degraded"
 
 
 def test_sandbox_verify_respects_language_for_layer1_notes(clean_db):
     """Regression (BUG-10): /api/essays/sandbox/verify returns English Layer 1 notes when lang='en'."""
     token = get_user_token()
-    client = TestClient(app)
+    with TestClient(app) as client:
+        en_resp = client.post(
+            "/api/essays/sandbox/verify",
+            headers=auth_header(token),
+            json={
+                "style": "apa",
+                "lang": "en",
+                "references_text": "Vaswani, A., Shazeer, N. (2017). Attention Is All You Need. NeurIPS.",
+            },
+        )
+        assert en_resp.status_code == 200, en_resp.text
+        en_note = en_resp.json()["results"][0]["mapping_note"]
+        assert "Kiểm tra trực tiếp" not in en_note
+        assert "Direct bibliography verification" in en_note
 
-    en_resp = client.post(
-        "/api/essays/sandbox/verify",
-        headers=auth_header(token),
-        json={
-            "style": "apa",
-            "lang": "en",
-            "references_text": "Vaswani, A., Shazeer, N. (2017). Attention Is All You Need. NeurIPS.",
-        },
-    )
-    assert en_resp.status_code == 200, en_resp.text
-    en_note = en_resp.json()["results"][0]["mapping_note"]
-    assert "Kiểm tra trực tiếp" not in en_note
-    assert "Direct bibliography verification" in en_note
-
-    vi_resp = client.post(
-        "/api/essays/sandbox/verify",
-        headers=auth_header(token),
-        json={
-            "style": "apa",
-            "lang": "vi",
-            "references_text": "Vaswani, A., Shazeer, N. (2017). Attention Is All You Need. NeurIPS.",
-        },
-    )
-    assert vi_resp.status_code == 200, vi_resp.text
-    vi_note = vi_resp.json()["results"][0]["mapping_note"]
-    assert "Kiểm tra trực tiếp danh mục tham khảo" in vi_note
+        vi_resp = client.post(
+            "/api/essays/sandbox/verify",
+            headers=auth_header(token),
+            json={
+                "style": "apa",
+                "lang": "vi",
+                "references_text": "Vaswani, A., Shazeer, N. (2017). Attention Is All You Need. NeurIPS.",
+            },
+        )
+        assert vi_resp.status_code == 200, vi_resp.text
+        vi_note = vi_resp.json()["results"][0]["mapping_note"]
+        assert "Kiểm tra trực tiếp danh mục tham khảo" in vi_note
 
 
 # ---------------------------------------------------------------------------
@@ -259,24 +265,22 @@ def clean_db():
     """Wipe tables touched by these tests (Users + Essays + Verdicts)."""
     from integrity_checker.db.session import get_session
 
-    session = get_session()
-    session.query(VerdictRecord).delete()
-    session.query(CitationRecord).delete()
-    session.query(EssayRecord).delete()
-    session.query(ClassMembership).delete()
-    session.query(ClassModel).delete()
-    session.query(SessionModel).delete()
-    session.query(User).delete()
-    session.commit()
-    session.close()
-    yield
-    session = get_session()
-    session.query(VerdictRecord).delete()
-    session.query(CitationRecord).delete()
-    session.query(EssayRecord).delete()
-    session.query(ClassMembership).delete()
-    session.query(ClassModel).delete()
-    session.query(SessionModel).delete()
-    session.query(User).delete()
-    session.commit()
-    session.close()
+    def _wipe() -> None:
+        session = get_session()
+        try:
+            session.query(VerdictRecord).delete()
+            session.query(CitationRecord).delete()
+            session.query(EssayRecord).delete()
+            session.query(ClassMembership).delete()
+            session.query(ClassModel).delete()
+            session.query(SessionModel).delete()
+            session.query(User).delete()
+            session.commit()
+        finally:
+            session.close()
+
+    _wipe()
+    try:
+        yield
+    finally:
+        _wipe()

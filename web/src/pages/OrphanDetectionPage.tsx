@@ -1,7 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { type AnalysisReport, type Verdict, type Citation } from '@/api/client';
+import {
+  type AnalysisReport,
+  type Verdict,
+  type Citation,
+  type CitationMappingStatus,
+} from '@/api/client';
 import { VerdictBadge } from '@/components/VerdictBadge';
 import { getCitationMarkerLabel, isUrlResource } from '@/lib/verdictExplanation';
 import { MappingStatusBadge } from '@/components/MappingStatusBadge';
@@ -33,7 +38,7 @@ interface OrphanCitation {
   citation_id: string;
   citation_raw: string;
   label: string;
-  mapping_status: string;
+  mapping_status: CitationMappingStatus;
   triggered_rules?: string[];
   numeric_index?: number | null;
   sub_index?: string | null;
@@ -174,7 +179,7 @@ function OrphanCitationCard({
               triggeredRules={citation.triggered_rules}
               size="sm"
             />
-            <MappingStatusBadge status={citation.mapping_status as any} size="sm" />
+            <MappingStatusBadge status={citation.mapping_status} size="sm" />
           </div>
         </div>
       </div>
@@ -590,7 +595,7 @@ export function OrphanConsistencyWorkspace({
                                     size="sm"
                                   />
                                   <MappingStatusBadge
-                                    status={v.mapping_status as any}
+                                    status={v.mapping_status}
                                     size="sm"
                                   />
                                 </div>
@@ -686,6 +691,10 @@ export function OrphanConsistencyWorkspace({
   );
 }
 
+/**
+ * @internal Retained for standalone `OrphanDetectionPage` unit test coverage;
+ * production route `/verification/report/:id/consistency` renders `EssayPage` + `OrphanConsistencyWorkspace`.
+ */
 export function OrphanDetectionPage() {
   const { id } = useParams<{ id: string }>();
   const { i18n } = useTranslation();

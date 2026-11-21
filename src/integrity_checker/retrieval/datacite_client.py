@@ -37,6 +37,7 @@ from integrity_checker.models.source import SourceCandidate
 from integrity_checker.retrieval.base import BaseScholarClient
 from integrity_checker.retrieval.normalization import (
     author_match_score,
+    detect_and_strip_retraction_title,
     is_book_review_mismatch,
     normalize_doi,
     title_similarity,
@@ -108,19 +109,31 @@ class DataCiteClient(BaseScholarClient):
 
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Lookup by exact DOI first, then fallback to query search."""
-        self._last_status_code = None
+        self._reset_http_telemetry()
 
         if citation.doi:
             doi_norm = normalize_doi(citation.doi)
-            if doi_norm:
-                result = await self._lookup_by_doi(doi_norm, citation=citation)
-                if result and result.found:
-                    return result
-                if self._last_status_code == 429:
+            if not doi_norm or any(seg in {".", ".."} for seg in doi_norm.split("/")):
+                if not (citation.title and citation.title.strip()):
                     return SourceCandidate(
                         source_name=self.name,
                         found=False,
-                        error=f"DataCite: rate limited (429) for DOI '{doi_norm}'",
+                        error="DataCite: invalid DOI format",
+                    )
+            else:
+                result = await self._lookup_by_doi(doi_norm, citation=citation)
+                if result and result.found:
+                    return result
+                if (
+                    self._last_status_code == 429
+                    or (self._last_status_code is not None and self._last_status_code >= 500)
+                    or self._last_transport_error
+                    or not (citation.title and citation.title.strip())
+                ):
+                    return self._build_miss_or_error_candidate(
+                        "DataCite",
+                        doi_norm,
+                        clean_miss_error=f"DataCite: no results for DOI '{doi_norm}'",
                     )
 
         return await self._lookup_by_search(citation)
@@ -174,16 +187,10 @@ class DataCiteClient(BaseScholarClient):
         }
         payload = await self._fetch_json_with_retry("/dois", params=params)
         if not payload:
-            if self._last_status_code == 429:
-                return SourceCandidate(
-                    source_name=self.name,
-                    found=False,
-                    error=f"DataCite: rate limited (429) for '{query[:60]}'",
-                )
-            return SourceCandidate(
-                source_name=self.name,
-                found=False,
-                error=f"DataCite: no response for '{query[:60]}'",
+            return self._build_miss_or_error_candidate(
+                "DataCite",
+                query[:60],
+                clean_miss_error=f"DataCite: no response for '{query[:60]}'",
             )
 
         items = payload.get("data")
@@ -215,7 +222,7 @@ class DataCiteClient(BaseScholarClient):
         self,
         items: list[dict[str, Any]],
         query_title: str,
-        query_authors: list[str] | None = None,
+        query_authors: list[Any] | None = None,
         query_year: str | None = None,
     ) -> tuple[SourceCandidate | None, float]:
         best_cand: SourceCandidate | None = None
@@ -265,12 +272,13 @@ class DataCiteClient(BaseScholarClient):
         doi = normalize_doi(str(raw_doi)) if raw_doi else None
 
         # Title
-        title: str | None = None
+        raw_title: str | None = None
         titles = attrs.get("titles") or []
         if isinstance(titles, list) and titles:
             first_title = titles[0]
             if isinstance(first_title, dict):
-                title = self._clean_text(first_title.get("title"))
+                raw_title = self._clean_text(first_title.get("title"))
+        title, is_retracted = detect_and_strip_retraction_title(raw_title)
 
         # Creators / Authors
         authors: list[str] = []
@@ -333,6 +341,19 @@ class DataCiteClient(BaseScholarClient):
             ext_ids["doi_ra"] = "DataCite"
         if resource_type:
             ext_ids["resource_type"] = str(resource_type)
+        related_ids = attrs.get("relatedIdentifiers")
+        if isinstance(related_ids, list):
+            for rel in related_ids:
+                if not isinstance(rel, dict):
+                    continue
+                rel_type = str(rel.get("relationType") or "").strip().lower()
+                if rel_type in {"isretractedby", "retractedby"}:
+                    is_retracted = True
+                    rel_id = normalize_doi(str(rel.get("relatedIdentifier") or ""))
+                    if rel_id and "retraction_doi" not in ext_ids:
+                        ext_ids["retraction_doi"] = rel_id
+        if is_retracted:
+            ext_ids["is_retracted"] = "true"
 
         return SourceCandidate(
             source_name=self.name,

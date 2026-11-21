@@ -494,9 +494,6 @@ class CorpusCollector:
 
 def fetch_openalex_candidates(api_key: str | None, style: str, seen_urls: set[str]) -> list[tuple[str, str, str]]:
     """Return list of (pdf_url, style, title) from OpenAlex for a given citation style."""
-    session = requests.Session()
-    session.headers.update({"User-Agent": "EssayIntegrityChecker/1.0 (mailto:iannwendii@gmail.com)"})
-
     # Style-targeted OpenAlex query configurations: list of (search, filter_extra)
     style_queries: dict[str, list[tuple[str, str]]] = {
         "Nature": [
@@ -552,50 +549,52 @@ def fetch_openalex_candidates(api_key: str | None, style: str, seen_urls: set[st
     }
 
     candidates: list[tuple[str, str, str]] = []
-    for search_q, extra_filter in style_queries.get(style, []):
-        for page in (1, 2):
-            base_filter = "is_oa:true,has_doi:true"
-            if extra_filter:
-                base_filter = f"{base_filter},{extra_filter}"
-            params: dict[str, str | int] = {
-                "filter": base_filter,
-                "per-page": 100,
-                "page": page,
-            }
-            if search_q:
-                params["search"] = search_q
-            if api_key:
-                params["api_key"] = api_key
+    with requests.Session() as session:
+        session.headers.update({"User-Agent": "EssayIntegrityChecker/1.0 (mailto:iannwendii@gmail.com)"})
+        for search_q, extra_filter in style_queries.get(style, []):
+            for page in (1, 2):
+                base_filter = "is_oa:true,has_doi:true"
+                if extra_filter:
+                    base_filter = f"{base_filter},{extra_filter}"
+                params: dict[str, str | int] = {
+                    "filter": base_filter,
+                    "per-page": 100,
+                    "page": page,
+                }
+                if search_q:
+                    params["search"] = search_q
+                if api_key:
+                    params["api_key"] = api_key
 
-            try:
-                r = session.get("https://api.openalex.org/works", params=params, timeout=12)
-                if r.status_code != 200:
-                    break
-                results = r.json().get("results", [])
-                if not results:
-                    break
-                for w in results:
-                    title = (w.get("title") or "paper").strip()
-                    # Check all OA locations for direct non-blocked PDF URLs
-                    locs = w.get("locations") or []
-                    best_loc = w.get("best_oa_location")
-                    if best_loc:
-                        locs = [best_loc] + locs
-                    for loc in locs:
-                        u = (loc or {}).get("pdf_url")
-                        if not u or u in seen_urls:
-                            continue
-                        if any(b in u.lower() for b in BLOCKED_DOMAINS):
-                            continue
-                        seen_urls.add(u)
-                        candidates.append((u, style, title))
+                try:
+                    r = session.get("https://api.openalex.org/works", params=params, timeout=12)
+                    if r.status_code != 200:
                         break
-            except Exception:
-                break
+                    results = r.json().get("results", [])
+                    if not results:
+                        break
+                    for w in results:
+                        title = (w.get("title") or "paper").strip()
+                        # Check all OA locations for direct non-blocked PDF URLs
+                        locs = w.get("locations") or []
+                        best_loc = w.get("best_oa_location")
+                        if best_loc:
+                            locs = [best_loc] + locs
+                        for loc in locs:
+                            u = (loc or {}).get("pdf_url")
+                            if not u or u in seen_urls:
+                                continue
+                            if any(b in u.lower() for b in BLOCKED_DOMAINS):
+                                continue
+                            seen_urls.add(u)
+                            candidates.append((u, style, title))
+                            break
+                except Exception:
+                    break
+                if len(candidates) >= 90:
+                    break
             if len(candidates) >= 90:
                 break
-        if len(candidates) >= 90:
-            break
     return candidates
 
 
@@ -714,12 +713,6 @@ def fetch_github_pdf_candidates(token: str | None, style: str, seen_urls: set[st
     """Search GitHub code/repositories for PDF essays/papers/theses matching specific styles."""
     if not token:
         return []
-    session = requests.Session()
-    session.headers.update({
-        "Accept": "application/vnd.github+json",
-        "Authorization": f"Bearer {token}",
-        "User-Agent": "EssayIntegrityChecker-StyleCorpus/1.0",
-    })
     gh_queries: dict[str, list[str]] = {
         "MLA": ["mla essay pdf", "works cited essay pdf", "english literature paper pdf"],
         "Chicago": ["chicago style history paper pdf", "history thesis bibliography pdf"],
@@ -729,32 +722,41 @@ def fetch_github_pdf_candidates(token: str | None, style: str, seen_urls: set[st
         "ACS": ["chemistry lab report references pdf", "organic chemistry thesis pdf"],
     }
     candidates: list[tuple[str, str, str]] = []
-    for q in gh_queries.get(style, []):
-        try:
-            r = session.get(
-                "https://api.github.com/search/code",
-                params={"q": f"{q} extension:pdf", "per_page": 25},
-                timeout=10,
-            )
-            if r.status_code != 200:
-                continue
-            for item in r.json().get("items", []):
-                repo = (item.get("repository") or {}).get("full_name", "")
-                path = item.get("path", "")
-                html_url = item.get("html_url", "")
-                if not repo or not path or not path.lower().endswith(".pdf"):
+    with requests.Session() as session:
+        session.headers.update({
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "EssayIntegrityChecker-StyleCorpus/1.0",
+        })
+        for q in gh_queries.get(style, []):
+            try:
+                r = session.get(
+                    "https://api.github.com/search/code",
+                    params={"q": f"{q} extension:pdf", "per_page": 25},
+                    timeout=10,
+                )
+                if r.status_code != 200:
                     continue
-                # Extract branch from html_url: https://github.com/owner/repo/blob/BRANCH/path
-                m = re.search(r"/blob/([^/]+)/", html_url)
-                branch = m.group(1) if m else "main"
-                encoded_path = "/".join(quote(part, safe="") for part in path.split("/"))
-                raw_url = f"https://raw.githubusercontent.com/{repo}/{quote(branch, safe='')}/{encoded_path}"
-                if raw_url not in seen_urls:
-                    seen_urls.add(raw_url)
-                    candidates.append((raw_url, style, Path(path).stem))
-        except Exception:
-            continue
+                for item in r.json().get("items", []):
+                    repo = (item.get("repository") or {}).get("full_name", "")
+                    path = item.get("path", "")
+                    html_url = item.get("html_url", "")
+                    if not repo or not path or not path.lower().endswith(".pdf"):
+                        continue
+                    # Extract branch from html_url: https://github.com/owner/repo/blob/BRANCH/path
+                    m = re.search(r"/blob/([^/]+)/", html_url)
+                    branch = m.group(1) if m else "main"
+                    encoded_path = "/".join(quote(part, safe="") for part in path.split("/"))
+                    raw_url = f"https://raw.githubusercontent.com/{repo}/{quote(branch, safe='')}/{encoded_path}"
+                    if raw_url not in seen_urls:
+                        seen_urls.add(raw_url)
+                        candidates.append((raw_url, style, Path(path).stem))
+            except Exception:
+                continue
     return candidates
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def parse_args() -> argparse.Namespace:
@@ -762,7 +764,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--output",
         "-o",
-        default="/Users/iannwendy/Desktop/DATN/essay-integrity-checker/style_corpora",
+        default=str(REPO_ROOT / "style_corpora"),
         help="Target style_corpora directory",
     )
     p.add_argument("--per-style", "-n", type=int, default=20, help="Number of real PDFs per style")
@@ -774,7 +776,7 @@ def main() -> int:
     load_dotenv()
     args = parse_args()
     out_dir = Path(args.output).resolve()
-    workspace_root = Path("/Users/iannwendy/Desktop/DATN/essay-integrity-checker")
+    workspace_root = REPO_ROOT
 
     openalex_key = os.environ.get("OPENALEX_API_KEY")
     gh_token = get_github_token()
@@ -839,47 +841,47 @@ def main() -> int:
     if collector.needs_more():
         missing = collector.missing_styles()
         print(f"\n=== Final Fallback Pass for remaining styles: {missing} ===")
-        session = requests.Session()
-        session.headers.update({"User-Agent": "EssayIntegrityChecker/1.0 (mailto:iannwendii@gmail.com)"})
         fallback_queries = [
             "literature humanities history philosophy sociology psychology ecology chemistry medicine",
             "review analysis empirical study university journal",
             "education linguistics economics management computer science biology",
         ]
-        for style in list(missing):
-            for fq in fallback_queries:
-                if not collector.needs_more(style):
-                    break
-                for page in range(1, 5):
+        with requests.Session() as session:
+            session.headers.update({"User-Agent": "EssayIntegrityChecker/1.0 (mailto:iannwendii@gmail.com)"})
+            for style in list(missing):
+                for fq in fallback_queries:
                     if not collector.needs_more(style):
                         break
-                    params: dict[str, str | int] = {
-                        "search": f"{style} {fq}" if style in ("MLA", "Chicago", "Harvard", "APA", "IEEE", "Vancouver") else fq,
-                        "filter": "is_oa:true,type:article",
-                        "per-page": 100,
-                        "page": page,
-                    }
-                    if openalex_key:
-                        params["api_key"] = openalex_key
-                    try:
-                        r = session.get("https://api.openalex.org/works", params=params, timeout=12)
-                        if r.status_code != 200:
+                    for page in range(1, 5):
+                        if not collector.needs_more(style):
                             break
-                        cands: list[tuple[str, str, str]] = []
-                        for w in r.json().get("results", []):
-                            t = (w.get("title") or "paper").strip()
-                            for loc in w.get("locations") or []:
-                                u = (loc or {}).get("pdf_url")
-                                if u and u not in collector.seen_urls and not any(b in u.lower() for b in BLOCKED_DOMAINS):
-                                    collector.seen_urls.add(u)
-                                    cands.append((u, style, t))
-                                    break
-                        with ThreadPoolExecutor(max_workers=args.workers) as pool:
-                            for _f in as_completed([pool.submit(download_and_ingest, c) for c in cands]):
-                                if not collector.needs_more(style):
-                                    break
-                    except Exception:
-                        break
+                        params: dict[str, str | int] = {
+                            "search": f"{style} {fq}" if style in ("MLA", "Chicago", "Harvard", "APA", "IEEE", "Vancouver") else fq,
+                            "filter": "is_oa:true,type:article",
+                            "per-page": 100,
+                            "page": page,
+                        }
+                        if openalex_key:
+                            params["api_key"] = openalex_key
+                        try:
+                            r = session.get("https://api.openalex.org/works", params=params, timeout=12)
+                            if r.status_code != 200:
+                                break
+                            cands: list[tuple[str, str, str]] = []
+                            for w in r.json().get("results", []):
+                                t = (w.get("title") or "paper").strip()
+                                for loc in w.get("locations") or []:
+                                    u = (loc or {}).get("pdf_url")
+                                    if u and u not in collector.seen_urls and not any(b in u.lower() for b in BLOCKED_DOMAINS):
+                                        collector.seen_urls.add(u)
+                                        cands.append((u, style, t))
+                                        break
+                            with ThreadPoolExecutor(max_workers=args.workers) as pool:
+                                for _f in as_completed([pool.submit(download_and_ingest, c) for c in cands]):
+                                    if not collector.needs_more(style):
+                                        break
+                        except Exception:
+                            break
 
     print("\n" + "=" * 72)
     print("Collection Summary:")

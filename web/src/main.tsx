@@ -10,13 +10,14 @@ import { CitraMotionProvider } from './components/ui/motion-primitives';
 import { VerificationProgressProvider } from './contexts/VerificationProgressContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { queryClient } from '@/lib/queryClient';
-import './i18n';
+import i18n from './i18n';
 import './index.css';
 
 // Error Fallback Component
 function GlobalErrorFallback(): JSX.Element {
+  const isVi = Boolean(i18n.language?.startsWith('vi'));
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-[#FBFAF6] dark:bg-[#141310] px-4">
       <div className="max-w-md w-full text-center">
         <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
           <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -24,16 +25,18 @@ function GlobalErrorFallback(): JSX.Element {
           </svg>
         </div>
         <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
-          Something went wrong
+          {isVi ? 'Đã xảy ra sự cố' : 'Something went wrong'}
         </h1>
         <p className="text-slate-600 dark:text-slate-400 mb-6">
-          An unexpected error occurred. Please try refreshing the page.
+          {isVi
+            ? 'Đã có lỗi ngoài ý muốn xảy ra. Vui lòng tải lại trang để tiếp tục.'
+            : 'An unexpected error occurred. Please try refreshing the page.'}
         </p>
         <button
           onClick={() => window.location.reload()}
           className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
         >
-          Refresh Page
+          {isVi ? 'Tải lại trang' : 'Refresh Page'}
         </button>
       </div>
     </div>

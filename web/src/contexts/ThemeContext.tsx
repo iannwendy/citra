@@ -36,6 +36,20 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 // ============================================================
 
 const STORAGE_KEY = 'theme';
+const SOLVA_THEME_COLOR_LIGHT = '#FBFAF6';
+const SOLVA_THEME_COLOR_DARK = '#141310';
+
+function syncThemeColorMeta(resolved: ResolvedTheme): void {
+  if (typeof document === 'undefined') return;
+  const color = resolved === 'dark' ? SOLVA_THEME_COLOR_DARK : SOLVA_THEME_COLOR_LIGHT;
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]:not([media])');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    document.head.appendChild(meta);
+  }
+  meta.content = color;
+}
 
 // ============================================================
 // Provider Component
@@ -76,6 +90,7 @@ export function ThemeProvider({
     const applyTheme = (resolved: ResolvedTheme): void => {
       root.classList.remove('light', 'dark');
       root.classList.add(resolved);
+      syncThemeColorMeta(resolved);
       setResolvedTheme(resolved);
     };
 
@@ -135,6 +150,7 @@ export function ThemeProvider({
 
         root.classList.remove('light', 'dark');
         root.classList.add(resolved);
+        syncThemeColorMeta(resolved);
         setResolvedTheme(resolved);
       }
       setThemeState(newTheme);

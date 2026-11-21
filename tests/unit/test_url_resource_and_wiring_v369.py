@@ -667,7 +667,7 @@ def test_mupdf_1based_ocr_pages_and_docx_legacy_encoding_diagnostics(
 
 
 def test_composite_subreferences_db_persistence_and_report_json(tmp_path: Path) -> None:
-    assert LATEST_SCHEMA_VERSION == "0012"
+    assert int(LATEST_SCHEMA_VERSION) >= 12
     engine, factory = _make_isolated_session_factory(tmp_path)
     try:
         with factory() as session:

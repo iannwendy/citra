@@ -43,8 +43,13 @@ from integrity_checker.extraction.patterns.apa import (
     parse_vn_legal_reference,
 )
 from integrity_checker.extraction.patterns.base import CitationFormat
-from integrity_checker.extraction.patterns.utils import extract_publication_year
-from integrity_checker.matching.author_parser import parse_authors
+from integrity_checker.extraction.patterns.utils import (
+    _ALPHA_LATIN_VN,
+    _LOWER_LATIN_VN,
+    _UPPER_LATIN_VN,
+    extract_publication_year,
+)
+from integrity_checker.matching.author_parser import Author, parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
 logger = logging.getLogger(__name__)
@@ -162,18 +167,24 @@ _LEADING_SUBHEADER_RE = re.compile(
     re.IGNORECASE,
 )
 
-_UPPER_VN_R = r"[A-ZÀ-ÝĂÂĐÊÔƠƯĨŨẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼẾỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴỶỸ]"
+_UPPER_VN_R = _UPPER_LATIN_VN
+_INITIALS_SEQ_R = (
+    rf"(?>(?:{_UPPER_VN_R}(?:\.\s*(?:[-–]\s*)?(?={_UPPER_VN_R})|\s*[-–]\s*(?={_UPPER_VN_R})|\s+(?={_UPPER_VN_R}(?:\.|\b))))*{_UPPER_VN_R}\.?)"
+)
+_ANY_INITIALS_SEQ_R = (
+    rf"(?>(?:{_ALPHA_LATIN_VN}\.\s*(?:[-–]\s*)?(?={_ALPHA_LATIN_VN}\.))*{_ALPHA_LATIN_VN}\.)"
+)
 _PERSONAL_AUTHOR_HEAD_R = (
     rf"(?:\*\s*)?(?:(?:van|de|der|den|von|le|la|du|di|da|al|el)\s+)*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+"
-    rf"(?:,\s*(?:{_UPPER_VN_R}\.?\s*[-–]?\s*)+|[.,]\s*(?:[A-Za-zÀ-ỹ]\.\s*[-–]?\s*)+|\s+(?:{_UPPER_VN_R}\.\s*)+|\s+{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?=\s*,\s*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+,\s*{_UPPER_VN_R}\.)|,\s+{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?:\s+{_UPPER_VN_R}\.)?(?:,\s+(?:and\s+|&\s*)?{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?:\s+{_UPPER_VN_R}\.)?(?:\s+[a-zA-ZÀ-ỹ'\u2019\-]+)?)+)"
-    rf"(?:[;,]\s*(?:(?:\.\s*\.\s*\.|…)\s*)?(?:&\s*|và\s*|and\s*)?(?:(?:van|de|der|den|von|le|la|du|di|da|al|el)\s+)*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?:,\s*|\s+)(?:{_UPPER_VN_R}\.?\s*[-–]?\s*)+)*"
-    rf"(?:\s*(?:(?:\.\s*\.\s*\.|…)\s*(?:&|và|and)?|&|(?<=\s)(?:và|and))\s*(?:(?:van|de|der|den|von|le|la|du|di|da|al|el)\s+)*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?:,\s*|\s+)(?:{_UPPER_VN_R}\.?\s*[-–]?\s*)+)*"
+    rf"(?:,\s*{_INITIALS_SEQ_R}|[.,]\s*{_ANY_INITIALS_SEQ_R}|\s+(?>(?:{_UPPER_VN_R}\.\s*(?:[-–]\s*)?(?={_UPPER_VN_R}\.|\b))*{_UPPER_VN_R}\.)|\s+{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?=\s*,\s*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+,\s*{_UPPER_VN_R}\.)|,\s+{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?:\s+{_UPPER_VN_R}\.)?(?:,\s+(?:and\s+|&\s*)?{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?:\s+{_UPPER_VN_R}\.)?(?:\s+[a-zA-ZÀ-ỹ'\u2019\-]+)?)+)"
+    rf"(?>[;,]\s*(?:(?:\.\s*\.\s*\.|…)\s*)?(?:&\s*|và\s*|and\s*)?(?:(?:van|de|der|den|von|le|la|du|di|da|al|el)\s+)*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?:,\s*|\s+){_INITIALS_SEQ_R}){{0,30}}"
+    rf"(?>(?:\s*(?:(?:\.\s*\.\s*\.|…)\s*(?:&|và|and)?|&|(?<=\s)(?:và|and))\s*(?:(?:van|de|der|den|von|le|la|du|di|da|al|el)\s+)*{_UPPER_VN_R}[a-zA-ZÀ-ỹ'\u2019\-]+(?:,\s*|\s+){_INITIALS_SEQ_R})){{0,5}}"
     r"(?:\s*,?\s*(?:et\s+al\.?|và\s+cộng\s+sự|và\s+cs\.?|và\s+ctv\.?))?"
     r"(?:(?:,\s*|\s+)\((?:Eds?\.?|Ed\.?|eds?\.?|chủ\s+biên)\)\.?)?\s*[.,]*\s*\(\s*(?:(?:18|19|20)\d{2}[a-z]?(?:,\s*[A-Za-z]+\.?(?:\s+\d{1,2})?)?|n\.?\s*d\.?)\s*\)"
 )
 _VN_FULLNAME_AUTHOR_HEAD_R = (
-    rf"(?:(?<![\-–\d])\d{{1,3}}[^\S\n]*[\.\)][^\S\n]+)?{_UPPER_VN_R}[a-zà-ỹ]+(?:\s+{_UPPER_VN_R}[a-zà-ỹ]+){{1,4}}"
-    rf"(?:(?:\s*,\s*|\s+(?:&|và|and)\s+){_UPPER_VN_R}[a-zà-ỹ]+(?:\s+{_UPPER_VN_R}[a-zà-ỹ]+){{1,4}})*"
+    rf"(?:(?<![\-–\d])\d{{1,3}}[^\S\n]*[\.\)][^\S\n]+)?{_UPPER_VN_R}{_LOWER_LATIN_VN}+(?:\s+{_UPPER_VN_R}{_LOWER_LATIN_VN}+){{1,4}}"
+    rf"(?:(?:\s*,\s*|\s+(?:&|và|and)\s+){_UPPER_VN_R}{_LOWER_LATIN_VN}+(?:\s+{_UPPER_VN_R}{_LOWER_LATIN_VN}+){{1,4}})*"
     r"(?:\s*,?\s*(?:et\s+al\.?|và\s+cộng\s+sự|và\s+cs\.?|và\s+ctv\.?))?"
     r"(?:\s*\(chủ\s+biên\))?\s*,?\s*\(\s*(?:\d{1,2}\s*[/-]\s*\d{1,2}\s*[/-]\s*)?(?:18|19|20)\d{2}[a-z]?\s*\)[.,:]"
 )
@@ -2276,7 +2287,7 @@ class ReferenceListParser:
                 order_index=order_index,
                 numeric_index=numeric_index,
                 matched_pattern="vn_traditional_entry",
-                authors=parse_authors(raw_auth) if raw_auth else [],
+                authors=list(parse_authors(raw_auth)) if raw_auth else [],
                 title=title,
                 title_normalized=_normalize_title(title),
                 year=year,
@@ -2317,7 +2328,7 @@ class ReferenceListParser:
                     order_index=order_index,
                     numeric_index=numeric_index,
                     matched_pattern="vn_traditional_entry",
-                    authors=parse_authors(raw_auth) if raw_auth else [],
+                    authors=list(parse_authors(raw_auth)) if raw_auth else [],
                     title=title.rstrip(".,;"),
                     title_normalized=_normalize_title(title),
                     year=year,
@@ -2352,7 +2363,7 @@ class ReferenceListParser:
                     order_index=order_index,
                     numeric_index=numeric_index,
                     matched_pattern="vn_traditional_entry",
-                    authors=parse_authors(raw_auth) if raw_auth else [],
+                    authors=list(parse_authors(raw_auth)) if raw_auth else [],
                     title=title,
                     title_normalized=_normalize_title(title),
                     year=year,
@@ -2364,7 +2375,7 @@ class ReferenceListParser:
         if allow_fallback and numeric_index is not None and len(cleaned) >= 20:
             raw_auth = ""
             title = cleaned.rstrip(".,;")
-            authors_list: list[str] = []
+            authors_list: list[Author | str] = []
             if "," in cleaned:
                 first_seg, rest_seg = cleaned.split(",", 1)
                 first_seg_s = first_seg.strip()
@@ -2383,7 +2394,7 @@ class ReferenceListParser:
                         re.IGNORECASE,
                     )
                 ):
-                    authors_list = parse_authors(first_seg_s)
+                    authors_list = list(parse_authors(first_seg_s))
                     title = rest_seg.strip().rstrip(".,;")
             return Citation(
                 raw_text=entry.strip(),
@@ -2486,7 +2497,7 @@ class ReferenceListParser:
             title_normalized=_normalize_title(title),
             year=year_m.group(0)[1:-1].rstrip("abcdefghijklmnopqrstuvwxyz"),
             year_suffix=(suffix if (suffix := year_m.group(0)[-2:-1]).isalpha() else None),
-            authors=parse_authors(raw_authors),
+            authors=list(parse_authors(raw_authors)),
             venue=(rest.strip(" .,") or None),
             doi=doi_m.group(0).rstrip(".,") if doi_m else None,
             confidence=0.75,
@@ -2527,7 +2538,7 @@ class ReferenceListParser:
         citation.title_normalized = _normalize_title(title)
         citation.venue = m.group("venue").strip().rstrip(".")
         authors_raw = re.sub(r"^\[\s*\d+\s*\]\s*", "", m.group("authors")).strip()
-        citation.authors = parse_authors(authors_raw)
+        citation.authors = list(parse_authors(authors_raw))
         # DOI
         doi_m = _DOI_RE.search(entry)
         if doi_m:
@@ -2591,7 +2602,7 @@ class ReferenceListParser:
         citation.title = title_raw
         citation.title_normalized = _normalize_title(title_raw)
         citation.venue = venue_year
-        citation.authors = parse_authors(authors_part)
+        citation.authors = list(parse_authors(authors_part))
 
         doi_m = _DOI_RE.search(entry)
         if doi_m:
@@ -2670,7 +2681,7 @@ class ReferenceListParser:
                 numeric_index=numeric_index,
                 title=b_title,
                 title_normalized=_normalize_title(b_title),
-                authors=parse_authors(b_auth) or [b_auth],
+                authors=list(parse_authors(b_auth)) or [b_auth],
                 year=b_yr,
                 url=url,
                 confidence=0.8,
@@ -2805,7 +2816,7 @@ class ReferenceListParser:
             title_normalized=_normalize_title(title_raw) if title_raw else None,
             year=year,
             year_suffix=year_suffix,
-            authors=authors if authors else [],
+            authors=list(authors) if authors else [],
             venue=venue if venue and len(venue) > 2 else None,
             doi=doi,
             url=url,
@@ -2852,7 +2863,7 @@ class ReferenceListParser:
         citation.title = title
         citation.title_normalized = _normalize_title(title)
         citation.venue = m.group("venue").strip()
-        citation.authors = parse_authors(m.group("authors"))
+        citation.authors = list(parse_authors(m.group("authors")))
         doi_m = _DOI_RE.search(entry)
         if doi_m:
             citation.doi = doi_m.group(0).rstrip(".")
@@ -2880,7 +2891,7 @@ class ReferenceListParser:
             citation.title_normalized = _normalize_title(title)
             venue = (m.group("venue") or "").strip()
             citation.venue = venue if venue else None
-            citation.authors = parse_authors(m.group("authors"))
+            citation.authors = list(parse_authors(m.group("authors")))
             doi_m = _DOI_RE.search(entry)
             if doi_m:
                 citation.doi = doi_m.group(0).rstrip(".")

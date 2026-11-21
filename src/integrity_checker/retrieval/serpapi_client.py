@@ -19,6 +19,7 @@ import random
 import re
 import threading
 import time
+from collections import OrderedDict
 from contextvars import ContextVar
 from typing import Any
 
@@ -53,21 +54,23 @@ _SERPER_QUOTA_KEYWORDS = (
     "not enough credits",
     "out of credits",
     "insufficient credits",
-    "credits",
-    "quota",
-    "exceeded",
+    "credits exceeded",
+    "credit balance",
+    "quota exceeded",
+    "account quota",
+    "monthly quota",
     "unauthorized",
     "invalid api key",
-    "forbidden",
-    "upgrade",
+    "upgrade your plan",
 )
 
 _SERPAPI_QUOTA_KEYWORDS = (
     "run out of searches",
-    "quota",
     "searches per month",
-    "exceeded",
-    "forbidden",
+    "quota exceeded",
+    "account has run out",
+    "out of searches",
+    "invalid api key",
 )
 
 _DOMAIN_ONLY_TOKEN_RE = re.compile(r"^[a-z0-9.-]+\.[a-z]{2,6}$", re.IGNORECASE)
@@ -95,13 +98,14 @@ class SerpApiClient(BaseScholarClient):
     SERPER_SCHOLAR_URL = "https://google.serper.dev/scholar"
     name = "serpapi"
     MAX_NEGATIVE_CACHE_SIZE = 2048
+    NEGATIVE_CACHE_TTL_SECONDS: float = 1800.0
     QUOTA_COOLDOWN_SECONDS: float = 900.0
     _state_lock = threading.Lock()
     _quota_exhausted: bool = False
     _serper_quota_exhausted: bool = False
     _quota_exhausted_until: float = 0.0
     _serper_quota_exhausted_until: float = 0.0
-    _negative_query_cache: set[tuple[str, str]] = set()
+    _negative_query_cache: OrderedDict[tuple[str, str], float] = OrderedDict()
 
     def __init__(
         self,
@@ -214,20 +218,29 @@ class SerpApiClient(BaseScholarClient):
 
     @classmethod
     def _has_negative_cache(cls, cache_key: tuple[str, str]) -> bool:
+        now = time.monotonic()
         with SerpApiClient._state_lock:
-            return cache_key in SerpApiClient._negative_query_cache
+            expires_at = SerpApiClient._negative_query_cache.get(cache_key)
+            if expires_at is None:
+                return False
+            if now >= expires_at:
+                SerpApiClient._negative_query_cache.pop(cache_key, None)
+                return False
+            return True
 
     @classmethod
     def _record_negative_cache(cls, cache_key: tuple[str, str]) -> None:
+        now = time.monotonic()
+        expires_at = now + cls.NEGATIVE_CACHE_TTL_SECONDS
         with SerpApiClient._state_lock:
-            if len(SerpApiClient._negative_query_cache) >= cls.MAX_NEGATIVE_CACHE_SIZE:
-                # Evict an arbitrary half when full to bound memory in long-lived workers
-                for _ in range(cls.MAX_NEGATIVE_CACHE_SIZE // 2):
-                    try:
-                        SerpApiClient._negative_query_cache.pop()
-                    except KeyError:
-                        break
-            SerpApiClient._negative_query_cache.add(cache_key)
+            SerpApiClient._negative_query_cache.pop(cache_key, None)
+            while SerpApiClient._negative_query_cache:
+                oldest_key, oldest_exp = next(iter(SerpApiClient._negative_query_cache.items()))
+                if now >= oldest_exp or len(SerpApiClient._negative_query_cache) >= cls.MAX_NEGATIVE_CACHE_SIZE:
+                    SerpApiClient._negative_query_cache.pop(oldest_key, None)
+                else:
+                    break
+            SerpApiClient._negative_query_cache[cache_key] = expires_at
 
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Lookup paper trên Google Scholar qua Serper.dev (ưu tiên 1) -> SerpApi (dự phòng 2)."""
@@ -505,10 +518,13 @@ class SerpApiClient(BaseScholarClient):
                         err_body = (resp.text or "").strip()[:200]
                     err_summary = err_body or f"HTTP {status}"
 
-                    # Permanent client/quota/auth errors -> trip circuit breaker & do NOT retry
+                    # Permanent client/quota/auth errors -> only trip quota breaker on auth/billing codes
                     if status in (400, 401, 402, 403):
-                        if status in (401, 402, 403) or any(
-                            kw in err_summary.lower() for kw in _SERPER_QUOTA_KEYWORDS
+                        if status in (401, 402, 403) and (
+                            status in (401, 402)
+                            or any(kw in err_summary.lower() for kw in _SERPER_QUOTA_KEYWORDS)
+                            or "forbidden" in err_summary.lower()
+                            or status == 403
                         ):
                             self._trip_serper_quota()
                             logger.warning(
@@ -697,16 +713,9 @@ class SerpApiClient(BaseScholarClient):
             if year_int:
                 candidates = self._filter_by_year(candidates, year_int)
 
-            if title_query:
-                return candidates[0] if candidates else None
-
-            best = None
-            best_sim = 0.0
-            for r in candidates:
-                sim = title_similarity(query, r.get("title"))
-                if sim > best_sim:
-                    best, best_sim = r, sim
-            return best
+            if not candidates:
+                return None
+            return self._select_best_scholar_item(candidates, target_title=query)
 
         except Exception as e:  # noqa: BLE001
             self._last_api_error = str(e)

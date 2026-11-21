@@ -310,9 +310,10 @@ def parse_vn_legal_reference(text: str) -> Citation | None:
         inner_cit = parse_vn_legal_reference(doc_rest)
         if inner_cit is not None:
             year = agency_yr_m.group(1) if agency_yr_m else inner_cit.year
-            authors: list[Author] = [_make_corp_author(agency_name)]
+            authors: list[Author | str] = [_make_corp_author(agency_name)]
             for a in inner_cit.authors or []:
-                if a.last_name != agency_name.lower():
+                a_last = getattr(a, "last_name", str(a)).lower()
+                if a_last != agency_name.lower():
                     authors.append(a)
             url_m = re.search(r"(https?://[^\s,;)\]]+)", cleaned, re.IGNORECASE)
             return Citation(
@@ -390,21 +391,24 @@ def parse_vn_legal_reference(text: str) -> Citation | None:
                 else (code_y.group(1) if code_y else (any_years[0] if any_years else None))
             )
 
-            authors = [_make_corp_author(law_name), _make_corp_author("Quốc hội")]
+            law_authors: list[Author | str] = [
+                _make_corp_author(law_name),
+                _make_corp_author("Quốc hội"),
+            ]
             code_full_m = re.search(
                 r"((?:Bộ\s+luật|Luật|Pháp\s+lệnh|Sắc\s+lệnh)\s+số\s+[\d/A-ZĐa-z\-–]+)",
                 cleaned,
                 re.IGNORECASE,
             )
             if code_full_m:
-                authors.append(_make_corp_author(code_full_m.group(1)))
+                law_authors.append(_make_corp_author(code_full_m.group(1)))
             colon_law_m = re.search(
                 r":\s*((?:Bộ\s+luật|Luật|Pháp\s+lệnh)\s+[^().\n]+?)(?=\s*,\s*ban\s+hành|\s+ban\s+hành|\s*,\s*ngày\s+\d|\s+ngày\s+\d|\s+năm\s+(?:19|20)\d{2}|[.\n]|$)",
                 cleaned,
                 re.IGNORECASE,
             )
             if colon_law_m:
-                authors.append(_make_corp_author(colon_law_m.group(1).strip()))
+                law_authors.append(_make_corp_author(colon_law_m.group(1).strip()))
 
             url_m = re.search(r"(https?://[^\s,;)\]]+)", cleaned, re.IGNORECASE)
             return Citation(
@@ -417,7 +421,7 @@ def parse_vn_legal_reference(text: str) -> Citation | None:
                 title_normalized=title_norm,
                 year=year,
                 venue="Quốc hội",
-                authors=authors,
+                authors=law_authors,
                 url=url_m.group(1).rstrip(".,;") if url_m else None,
                 confidence=0.95,
             )
@@ -468,19 +472,19 @@ def parse_vn_legal_reference(text: str) -> Citation | None:
             else (code_y.group(1) if code_y else (any_y.group(1) if any_y else None))
         )
 
-        authors = []
+        sublaw_authors: list[Author | str] = []
         if mapped_suffix_agency:
-            authors.append(_make_corp_author(mapped_suffix_agency))
+            sublaw_authors.append(_make_corp_author(mapped_suffix_agency))
         if agency and agency.lower() != (mapped_suffix_agency or "").lower():
-            authors.append(_make_corp_author(agency))
+            sublaw_authors.append(_make_corp_author(agency))
             if "thành phố hồ chí minh" in agency.lower():
                 tp_alias = re.sub(r"Thành\s+phố\s+Hồ\s+Chí\s+Minh", "TP. Hồ Chí Minh", agency, flags=re.IGNORECASE)
-                authors.append(_make_corp_author(tp_alias))
+                sublaw_authors.append(_make_corp_author(tp_alias))
             elif "tp. hồ chí minh" in agency.lower() or "tp hồ chí minh" in agency.lower():
                 tp_alias = re.sub(r"TP\.?\s*Hồ\s+Chí\s+Minh", "Thành phố Hồ Chí Minh", agency, flags=re.IGNORECASE)
-                authors.append(_make_corp_author(tp_alias))
-        authors.append(_make_corp_author(f"{doc_type} số {doc_code}"))
-        authors.append(_make_corp_author(f"{doc_type} {doc_code}"))
+                sublaw_authors.append(_make_corp_author(tp_alias))
+        sublaw_authors.append(_make_corp_author(f"{doc_type} số {doc_code}"))
+        sublaw_authors.append(_make_corp_author(f"{doc_type} {doc_code}"))
 
         url_m = re.search(r"(https?://[^\s,;)\]]+)", cleaned, re.IGNORECASE)
         return Citation(
@@ -493,7 +497,7 @@ def parse_vn_legal_reference(text: str) -> Citation | None:
             title_normalized=title_norm,
             year=year,
             venue=agency or doc_type,
-            authors=authors,
+            authors=sublaw_authors,
             url=url_m.group(1).rstrip(".,;") if url_m else None,
             confidence=0.95,
         )
@@ -1100,16 +1104,9 @@ class APAFormat:
         # Only return if we have meaningful data (title OR year with some other field)
         return citation if citation.title or citation.year else None
 
-    def _parse_authors(self, authors_str: str) -> list[str]:
-        """Parse author string into list of authors.
-
-        Args:
-            authors_str: Author string like "Smith, J., & Jones, A."
-
-        Returns:
-            List of author strings (via parse_authors)
-        """
-        return parse_authors(authors_str)
+    def _parse_authors(self, authors_str: str) -> list[Author | str]:
+        """Parse author string into list of authors."""
+        return list(parse_authors(authors_str))
 
     def _parse_venue(self, citation: Citation, venue_text: str) -> None:
         """Parse venue information from remaining text.

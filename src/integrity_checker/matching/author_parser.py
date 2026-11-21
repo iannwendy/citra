@@ -157,18 +157,6 @@ def _is_corporate_author(raw: str) -> bool:
     return bool(_CORPORATE_AUTHOR_RE.search(cleaned))
 
 
-def _strip_particles_from_first_name(tokens: list[str]) -> tuple[list[str], list[str]]:
-    """Tách last_name vs first_name parts dựa trên particle.
-
-    Trả về (last_name_tokens, first_name_tokens).
-    Cho APA-style "van der Berg, J.": tokens = ['van', 'der', 'Berg', ',', 'J.']
-        → split tại dấu phẩy → last_words = ['van', 'der', 'Berg'], first = ['J.']
-        → particle ở đầu last_words ('van') → KHÔNG strip
-        → result: last = ['van', 'der', 'Berg'], first = ['J.']
-    """
-    return tokens  # placeholder
-
-
 def _canonicalize_last_name(last_tokens: list[str]) -> str:
     """Chuẩn hoá last name: lowercase, join với space.
 
@@ -703,9 +691,10 @@ def _split_after_separator_commas(text: str) -> list[str]:
         # A comma followed by a plain word ("LeCun, Yann", "Bowman, Angeli")
         # separates authors. A comma followed by initials ("LeCun, Y.") or by
         # nothing / a conjunction ("Y., Bengio") belongs to the previous name.
-        if not re.match(r"\s*[^\s,&.]+", text[m.end():]):
+        m_following = re.match(r"\s*([^\s,&.]+)", text[m.end() :])
+        if not m_following:
             continue
-        following = re.match(r"\s*([^\s,&.]+)", text[m.end():]).group(1)
+        following = m_following.group(1)
         if _is_initial_token(following):
             continue
         parts.append(text[start : m.start()])

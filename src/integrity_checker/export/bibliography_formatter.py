@@ -487,6 +487,29 @@ def format_ieee(
     return " ".join(ieee_parts)
 
 
+def _sanitize_bibtex_value(val: str, *, escape_percent: bool = True) -> str:
+    """Escape unescaped '%' (when escape_percent=True) and strip/balance unmatched '{' / '}'."""
+    if not val:
+        return ""
+    escaped = re.sub(r"(?<!\\)%", r"\%", val) if escape_percent else val
+    # Keep balanced {...} pairs intact while stripping unmatched '{' or '}'
+    chars = list(escaped)
+    open_indices: list[int] = []
+    drop_indices: set[int] = set()
+    for idx, ch in enumerate(chars):
+        if ch == "{" and (idx == 0 or chars[idx - 1] != "\\"):
+            open_indices.append(idx)
+        elif ch == "}" and (idx == 0 or chars[idx - 1] != "\\"):
+            if open_indices:
+                open_indices.pop()
+            else:
+                drop_indices.add(idx)
+    drop_indices.update(open_indices)
+    if not drop_indices:
+        return escaped
+    return "".join(ch for idx, ch in enumerate(chars) if idx not in drop_indices)
+
+
 def format_canonical_entry(
     meta: dict[str, Any],
     index: int,
@@ -551,17 +574,17 @@ def format_canonical_entry(
         bib_authors = "Anonymous"
     bib_lines = [
         f"@article{{{bib_key},",
-        f"  author = {{{bib_authors}}},",
-        f"  title = {{{title}}},",
+        f"  author = {{{_sanitize_bibtex_value(bib_authors)}}},",
+        f"  title = {{{_sanitize_bibtex_value(title)}}},",
     ]
     if venue:
-        bib_lines.append(f"  journal = {{{venue}}},")
+        bib_lines.append(f"  journal = {{{_sanitize_bibtex_value(venue)}}},")
     if year and year != "n.d.":
-        bib_lines.append(f"  year = {{{year}}},")
+        bib_lines.append(f"  year = {{{_sanitize_bibtex_value(year)}}},")
     if doi:
-        bib_lines.append(f"  doi = {{{doi}}},")
+        bib_lines.append(f"  doi = {{{_sanitize_bibtex_value(doi, escape_percent=False)}}},")
     if url:
-        bib_lines.append(f"  url = {{{url}}},")
+        bib_lines.append(f"  url = {{{_sanitize_bibtex_value(url, escape_percent=False)}}},")
     bib_lines.append("}")
     bibtex_str = "\n".join(bib_lines)
 
@@ -731,9 +754,11 @@ def remediate_verdicts(
 
         features_dict: dict[str, Any] = {}
         if isinstance(v, dict):
-            features_dict = v.get("features") if isinstance(v.get("features"), dict) else {}
+            raw_v_feat = v.get("features")
+            features_dict = raw_v_feat if isinstance(raw_v_feat, dict) else {}
             matched_sources = v.get("matched_sources") or features_dict.get("matched_sources") or []
-            html_meta = v.get("html_meta") if isinstance(v.get("html_meta"), dict) else features_dict.get("html_meta")
+            raw_v_html = v.get("html_meta")
+            html_meta = raw_v_html if isinstance(raw_v_html, dict) else features_dict.get("html_meta")
         else:
             raw_feat = getattr(v, "features", None)
             if raw_feat is None:

@@ -88,6 +88,7 @@ def get_current_user(
         if prev_used is None or (now_utc - prev_used).total_seconds() >= 60.0:
             api_key_row.last_used_at = now_utc
             db.commit()
+            db.refresh(user)
         return user
 
     if not raw_auth:
@@ -127,6 +128,7 @@ def get_current_user(
 
     if expires_at < now:
         repo.delete_session(token)
+        db.commit()
         raise HTTPException(status_code=401, detail="Token expired")
 
     user = db.get(User, user_id)

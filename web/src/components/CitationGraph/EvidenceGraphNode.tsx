@@ -10,6 +10,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { toSafeExternalHref } from '@/lib/utils';
 import type { GraphNode } from './types';
 import { SourceIcon } from './SourceIcon';
 import { VERDICT_CONFIG } from './verdictConfig';
@@ -199,6 +200,7 @@ export function EvidenceGraphNode({
     'url' in node.matchedSource
       ? (node.matchedSource as { url?: string }).url
       : undefined;
+  const safeMatchedUrl = toSafeExternalHref(matchedUrl);
   const statusPill = getStatusPillStyles(node, isVi);
   const isRoot = level === 0;
 
@@ -236,14 +238,32 @@ export function EvidenceGraphNode({
 
       {/* Node Card */}
       <div
-        className={`w-full min-w-0 flex items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-all ${
-          hasChildren ? 'cursor-pointer hover:shadow-sm' : 'cursor-default'
+        className={`relative w-full min-w-0 flex items-start gap-2.5 rounded-xl border px-3 py-2.5 transition-all ${
+          hasChildren ? 'group hover:shadow-sm' : 'cursor-default'
         } ${getNodeStyles(node.status, isRoot, node.type, node.verdictLabel)}`}
-        onClick={() => hasChildren && onExpand?.(node.id)}
       >
-        <div className="pt-0.5 shrink-0">{getNodeIcon(node)}</div>
+        {hasChildren && (
+          <button
+            type="button"
+            tabIndex={0}
+            aria-expanded={isExpanded}
+            aria-label={node.label}
+            onClick={() => onExpand?.(node.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onExpand?.(node.id);
+              }
+            }}
+            className="absolute inset-0 z-0 w-full h-full rounded-xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          />
+        )}
 
-        <div className="flex-1 min-w-0">
+        <div className="pointer-events-none relative z-[1] pt-0.5 shrink-0">
+          {getNodeIcon(node)}
+        </div>
+
+        <div className="pointer-events-none relative z-[1] flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 flex-wrap min-w-0">
               <span className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 break-words leading-snug">
@@ -262,12 +282,12 @@ export function EvidenceGraphNode({
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
-              {matchedUrl && /^https?:\/\//i.test(matchedUrl) && (
+              {safeMatchedUrl && (
                 <a
-                  href={matchedUrl}
+                  href={safeMatchedUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700 text-[10px] font-mono text-indigo-600 dark:text-indigo-400 hover:underline shrink-0"
+                  className="pointer-events-auto relative z-10 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-700 text-[10px] font-mono text-indigo-600 dark:text-indigo-400 hover:underline shrink-0"
                   onClick={(e) => e.stopPropagation()}
                   title={isVi ? 'Mở bản ghi nguồn gốc' : 'Open canonical source record'}
                 >
@@ -277,7 +297,7 @@ export function EvidenceGraphNode({
               )}
 
               {hasChildren && (
-                <span className="text-slate-500 dark:text-slate-400 shrink-0 p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/5">
+                <span className="text-slate-500 dark:text-slate-400 shrink-0 p-0.5 rounded group-hover:bg-black/5 dark:group-hover:bg-white/5">
                   {isExpanded ? (
                     <ChevronDownIcon className="h-4 w-4" />
                   ) : (

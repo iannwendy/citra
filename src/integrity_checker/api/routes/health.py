@@ -5,12 +5,17 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
+from typing import Any
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
+from pydantic import Field
+from sqlalchemy import text
 
 from integrity_checker.api.deps import require_admin
 from integrity_checker.config import get_settings, is_test_runtime
 from integrity_checker.db.models import User
+from integrity_checker.db.session import get_engine
 from integrity_checker.extraction import GROBID_STATUS, get_grobid_manager
 from integrity_checker.logging import get_logger
 from integrity_checker.models.api_schemas import GrobidHealthStatus, HealthResponse
@@ -111,15 +116,42 @@ async def _get_grobid_health_async() -> GrobidHealthStatus:
     return await asyncio.to_thread(_get_grobid_health)
 
 
-@router.get("/health", response_model=HealthResponse)
-async def health() -> HealthResponse:
+class HealthCheckResponse(HealthResponse):
+    """Extended health response including SQLite/DB readiness probe."""
+
+    database: dict[str, Any] = Field(default_factory=lambda: {"ok": True})
+
+
+def _probe_database_health_sync() -> dict[str, Any]:
+    """Execute a lightweight SELECT 1 probe against the active SQLAlchemy engine."""
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"ok": True}
+    except Exception as exc:
+        logger.error("Database health check failed: %s", exc)
+        return {"ok": False, "error": "Database unavailable"}
+
+
+@router.get("/health", response_model=HealthCheckResponse)
+async def health() -> Any:
     settings = get_settings()
-    return HealthResponse(
-        status="ok",
+    grobid_status, db_status = await asyncio.gather(
+        _get_grobid_health_async(),
+        asyncio.to_thread(_probe_database_health_sync),
+    )
+    overall_ok = bool(db_status.get("ok"))
+    payload = HealthCheckResponse(
+        status="ok" if overall_ok else "degraded",
         version=settings.app.version,
         disclaimer=settings.disclaimer.short,
-        grobid=await _get_grobid_health_async(),
+        grobid=grobid_status,
+        database=db_status,
     )
+    if not overall_ok:
+        return JSONResponse(status_code=503, content=payload.model_dump())
+    return payload
 
 
 @router.get("/health/grobid")
@@ -154,6 +186,7 @@ def grobid_stop(admin: User = Depends(require_admin)) -> dict:
     try:
         manager = get_grobid_manager()
         success = manager.stop()
+        _invalidate_grobid_health_cache()
         return {
             "success": success,
             "status": "stopped" if success else "error",

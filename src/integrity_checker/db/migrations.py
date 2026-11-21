@@ -14,6 +14,7 @@ from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
@@ -135,8 +136,8 @@ def _drop_columns_safe(
     safe_table = validate_sql_identifier(table_name)
     for col in columns:
         validate_sql_identifier(col)
-    for idx_name in extra_indexes:
-        _drop_index_if_exists(conn, idx_name)
+    for extra_idx_name in extra_indexes:
+        _drop_index_if_exists(conn, extra_idx_name)
 
     inspector = inspect(conn)
     if safe_table not in set(inspector.get_table_names()):
@@ -831,22 +832,27 @@ def _downgrade_0012(conn: Connection, op: Operations) -> None:
     if not _table_exists(conn, "classes"):
         return
 
-    _drop_index_if_exists(conn, "uq_classes_teacher_name")
     inspector = inspect(conn)
     uqs = inspector.get_unique_constraints("classes")
-    scoped_names = [
-        uq["name"]
+    scoped_names: list[str] = [
+        name
         for uq in uqs
-        if uq.get("name")
+        if (name := uq.get("name"))
         and (
-            uq["name"] == "uq_classes_teacher_name"
+            name == "uq_classes_teacher_name"
             or list(uq.get("column_names") or ()) == ["teacher_id", "name"]
         )
     ]
-    if scoped_names:
-        with op.batch_alter_table("classes") as batch_op:
-            for uq_name in scoped_names:
-                batch_op.drop_constraint(uq_name, type_="unique")
+    if conn.dialect.name == "sqlite":
+        _drop_index_if_exists(conn, "uq_classes_teacher_name")
+        if scoped_names:
+            with op.batch_alter_table("classes") as batch_op:
+                for uq_name in scoped_names:
+                    batch_op.drop_constraint(uq_name, type_="unique")
+    else:
+        for uq_name in scoped_names:
+            op.drop_constraint(uq_name, "classes", type_="unique")
+        _drop_index_if_exists(conn, "uq_classes_teacher_name")
 
     dup_row = conn.execute(
         text("SELECT name FROM classes GROUP BY name HAVING COUNT(*) > 1 LIMIT 1")
@@ -854,6 +860,79 @@ def _downgrade_0012(conn: Connection, op: Operations) -> None:
     if dup_row is None:
         conn.exec_driver_sql(
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_classes_name ON classes(name)"
+        )
+
+
+def _upgrade_0013(conn: Connection, op: Operations) -> None:
+    """Widen PostgreSQL sessions.token to VARCHAR(512), add LOWER() user indexes, and drop duplicate indexes."""
+    if _table_exists(conn, "sessions") and conn.dialect.name != "sqlite":
+        op.alter_column(
+            "sessions",
+            "token",
+            existing_type=sa.String(255),
+            type_=sa.String(512),
+            existing_nullable=False,
+        )
+
+    if _table_exists(conn, "users"):
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_users_lower_username ON users (LOWER(username))"
+        )
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_users_lower_email ON users (LOWER(email))"
+        )
+
+    # Drop redundant physical single-column indexes where UNIQUE or ix_* already exists
+    _drop_index_if_exists(conn, "idx_cache_key")
+    inspector = inspect(conn)
+    existing_tables = set(inspector.get_table_names())
+    for tbl_name, dup_idx, canonical_idx in (
+        ("users", "idx_users_email", "ix_users_email"),
+        ("users", "idx_users_google_id", "ix_users_google_id"),
+        ("classes", "idx_classes_join_code", "ix_classes_join_code"),
+        (
+            "billing_transactions",
+            "idx_billing_transactions_vnp_txn_ref",
+            "ix_billing_transactions_vnp_txn_ref",
+        ),
+    ):
+        if tbl_name in existing_tables:
+            if conn.dialect.name == "sqlite":
+                tbl_idx_names = {
+                    str(row[0])
+                    for row in conn.execute(
+                        text(
+                            "SELECT name FROM sqlite_master "
+                            "WHERE type = 'index' AND tbl_name = :tbl AND name IS NOT NULL"
+                        ),
+                        {"tbl": tbl_name},
+                    ).fetchall()
+                }
+            else:
+                tbl_idx_names = {
+                    name
+                    for i in inspector.get_indexes(tbl_name)
+                    if (name := i.get("name")) is not None
+                }
+            if canonical_idx in tbl_idx_names and dup_idx in tbl_idx_names:
+                _drop_index_if_exists(conn, dup_idx)
+
+
+def _downgrade_0013(conn: Connection, op: Operations) -> None:
+    _drop_index_if_exists(conn, "idx_users_lower_username")
+    _drop_index_if_exists(conn, "idx_users_lower_email")
+    if _table_exists(conn, "citation_cache"):
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_cache_key ON citation_cache(cache_key)"
+        )
+    if _table_exists(conn, "sessions") and conn.dialect.name != "sqlite":
+        conn.exec_driver_sql("DELETE FROM sessions WHERE LENGTH(token) > 255")
+        op.alter_column(
+            "sessions",
+            "token",
+            existing_type=sa.String(512),
+            type_=sa.String(255),
+            existing_nullable=False,
         )
 
 
@@ -941,6 +1020,13 @@ MIGRATIONS: tuple[MigrationStep, ...] = (
         description="Scope classes name uniqueness per teacher via uq_classes_teacher_name",
         upgrade=_upgrade_0012,
         downgrade=_downgrade_0012,
+    ),
+    MigrationStep(
+        version="0013",
+        name="v3_90_sessions_token_and_functional_user_indexes",
+        description="Widen sessions.token to VARCHAR(512), add LOWER() user indexes, and drop duplicate indexes",
+        upgrade=_upgrade_0013,
+        downgrade=_downgrade_0013,
     ),
 )
 
@@ -1148,7 +1234,8 @@ def run_migrations(engine: Engine, target_version: str | None = None) -> list[st
         try:
             with conn.begin():
                 _ensure_core_tables_exist(conn)
-                SchemaMigrationRecord.__table__.create(bind=conn, checkfirst=True)
+                mig_table = cast(sa.Table, SchemaMigrationRecord.__table__)
+                mig_table.create(bind=conn, checkfirst=True)
 
                 rows = _read_ledger_rows(conn)
                 _verify_ledger_rows(rows)
@@ -1168,7 +1255,7 @@ def run_migrations(engine: Engine, target_version: str | None = None) -> list[st
                     elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 3)
 
                     conn.execute(
-                        sa.insert(SchemaMigrationRecord.__table__).values(
+                        sa.insert(mig_table).values(
                             version=step.version,
                             name=step.name,
                             checksum=step.checksum,

@@ -35,6 +35,7 @@ import { Select } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { UpgradeModal } from '@/components/UpgradeModal';
+import { useToast } from '@/contexts/ToastContext';
 import { isUnlimitedValue } from '@/lib/quotaDisplay';
 import {
   NumberPopIn,
@@ -126,6 +127,7 @@ function getStatusText(
 
 export function BatchUploadPage() {
   const { t, i18n } = useTranslation();
+  const toast = useToast();
   const { isTeacher, isAdmin, planTier, quota, canBatchUpload } = useRole();
   const {
     batchFiles: files,
@@ -293,19 +295,32 @@ export function BatchUploadPage() {
       e.stopPropagation();
       setDragActive(false);
 
-      const droppedFiles = Array.from(e.dataTransfer.files).filter((file) => {
-        const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      const rawFiles = Array.from(e.dataTransfer.files);
+      const droppedFiles = rawFiles.filter((file) => {
+        const dotIdx = file.name.lastIndexOf('.');
+        const ext = dotIdx >= 0 ? file.name.substring(dotIdx).toLowerCase() : '';
         return ACCEPTED_EXTENSIONS.includes(ext);
       });
+      if (droppedFiles.length < rawFiles.length) {
+        toast.error(t('upload.onlyPdfSupported'));
+      }
 
       addFiles(droppedFiles);
     },
-    [addFiles],
+    [addFiles, t, toast],
   );
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const selectedFiles = Array.from(e.target.files);
+      const rawFiles = Array.from(e.target.files);
+      const selectedFiles = rawFiles.filter((file) => {
+        const dotIdx = file.name.lastIndexOf('.');
+        const ext = dotIdx >= 0 ? file.name.substring(dotIdx).toLowerCase() : '';
+        return ACCEPTED_EXTENSIONS.includes(ext);
+      });
+      if (selectedFiles.length < rawFiles.length) {
+        toast.error(t('upload.onlyPdfSupported'));
+      }
       addFiles(selectedFiles);
       e.target.value = '';
     }
@@ -576,8 +591,8 @@ export function BatchUploadPage() {
             </div>
             <Separator orientation="vertical" className="h-4" />
             <span className="font-mono text-xs text-slate-700 dark:text-slate-300 font-semibold">
-              batch_ingest_queue.py · {files.length}{' '}
-              {t('batchUpload.files').toLowerCase()}
+              {lang === 'vi' ? 'Hàng đợi kiểm tra hàng loạt' : 'Batch Verification Queue'} ·{' '}
+              {files.length} {t('batchUpload.files').toLowerCase()}
             </span>
           </div>
 
@@ -809,11 +824,13 @@ export function BatchUploadPage() {
                     <div className="flex items-center gap-1 shrink-0">
                       {fileItem.status === 'completed' && fileItem.essayId && (
                         <button
+                          type="button"
                           onClick={() =>
                             navigate(`/verification/report/${fileItem.essayId}`)
                           }
                           className="p-2 rounded-lg text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors"
                           title={t('dashboard.viewReport')}
+                          aria-label={`${t('dashboard.viewReport')} ${fileItem.fileName}`}
                         >
                           <ExternalLink className="h-4 w-4" />
                         </button>
@@ -821,19 +838,23 @@ export function BatchUploadPage() {
                       {fileItem.status === 'failed' &&
                         Boolean(fileItem.file || fileItem.essayId != null) && (
                           <button
+                            type="button"
                             onClick={() => retryFile(fileItem.id)}
                             disabled={queueState.isProcessing}
                             className="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
                             title={t('common.retry')}
+                            aria-label={`${t('common.retry')} ${fileItem.fileName}`}
                           >
                             <RefreshCw className="h-4 w-4 text-slate-500 dark:text-slate-400" />
                           </button>
                         )}
                       {!queueState.isProcessing && (
                         <button
+                          type="button"
                           onClick={() => removeFile(fileItem.id)}
                           className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                           title={t('common.delete')}
+                          aria-label={`${t('common.delete')} ${fileItem.fileName}`}
                         >
                           <Trash2 className="h-4 w-4 text-slate-400 hover:text-red-500" />
                         </button>

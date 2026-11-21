@@ -13,6 +13,11 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from integrity_checker.extraction.patterns.utils import (
+    _ALPHA_LATIN_VN,
+    _LOWER_LATIN_VN,
+    _UPPER_LATIN_VN,
+)
 from integrity_checker.models.citation import CitationType
 
 _KNOWN_FAKE_DOMAINS: frozenset[str] = frozenset(
@@ -72,8 +77,8 @@ _REF_MARKER_PREFIX_RE = re.compile(
     r"^\s*(?:\[\s*\d+[a-z]?\s*\]|\(\s*\d+[a-z]?\s*\)|\d+[a-z]?[.)])\s*"
 )
 _BARE_INTEXT_RE = re.compile(
-    r"^\s*(?:"
-    r"\(\s*[A-ZÀ-Ỹ][^()]{1,70},\s*(?:18|19|20)\d{2}[a-z]?(?:\s*,\s*pp?\.\s*\d+(?:[-–]\d+)?)?\s*\)|"
+    rf"^\s*(?:"
+    rf"\(\s*{_UPPER_LATIN_VN}[^()]{{1,70}},\s*(?:18|19|20)\d{{2}}[a-z]?(?:\s*,\s*pp?\.\s*\d+(?:[-–]\d+)?)?\s*\)|"
     r"\[\s*\d+[a-z]?(?:\s*[-–,]\s*\d+[a-z]?)*\s*\]"
     r")\s*$"
 )
@@ -202,9 +207,9 @@ _INSTITUTIONAL_AUTHOR_RE = re.compile(
     r"Centers?\s+for\s+Disease\s+Control|Association|Organization|Organisation|Institute|"
     r"Institution|Society|Council|Commission|Committee|Administration|Agency|Foundation|"
     r"Federation|University|College|Academy|Consortium|Board|Corporation|Advisors)\b|"
-    r"\b(?:Bộ\s+[A-ZÀ-Ỹa-zà-ỹ]+|Tổng\s+cục\s+[A-ZÀ-Ỹa-zà-ỹ]+|Ủy\s+ban\s+[A-ZÀ-Ỹa-zà-ỹ]+|"
-    r"Chính\s+phủ|Quốc\s+hội|Ngân\s+hàng\s+Nhà\s+nước|Viện\s+[A-ZÀ-Ỹa-zà-ỹ]+|"
-    r"Trường\s+Đại\s+học|Đại\s+học\s+[A-ZÀ-Ỹa-zà-ỹ]+|Tổ\s+chức\s+Y\s+tế\s+Thế\s+giới)\b"
+    rf"\b(?:Bộ\s+{_ALPHA_LATIN_VN}+|Tổng\s+cục\s+{_ALPHA_LATIN_VN}+|Ủy\s+ban\s+{_ALPHA_LATIN_VN}+|"
+    rf"Chính\s+phủ|Quốc\s+hội|Ngân\s+hàng\s+Nhà\s+nước|Viện\s+{_ALPHA_LATIN_VN}+|"
+    rf"Trường\s+Đại\s+học|Đại\s+học\s+{_ALPHA_LATIN_VN}+|Tổ\s+chức\s+Y\s+tế\s+Thế\s+giới)\b"
     r")"
 )
 
@@ -340,19 +345,19 @@ def _is_real_author_entry(author_item: Any, raw_after_marker: str) -> bool:
         # `, Initial.`, `& Author`, `and Author (Year)` / `and J. Author`, `; Author, I.`) BEFORE
         # rejecting tokens in `_SPURIOUS_SINGLE_WORD_AUTHOR_TOKENS` so real surnames ("An", "On",
         # "In", "Tài", "Chương", "Hướng", "Phát", etc.) are preserved when used as authors.
-        # NOTE: Do NOT use global `re.IGNORECASE` so `[A-ZÀ-Ỹ]` stays strictly uppercase.
+        # NOTE: Do NOT use global `re.IGNORECASE` so `_UPPER_LATIN_VN` stays strictly uppercase.
         author_cue_re = re.compile(
             rf"\b(?i:{re.escape(word_tokens[0])})"
             r"(?:"
-            r"\s*,\s*[A-ZÀ-Ỹ]\.|"
-            r"\s+[A-ZÀ-Ỹ]\.|"
+            rf"\s*,\s*{_UPPER_LATIN_VN}\.|"
+            rf"\s+{_UPPER_LATIN_VN}\.|"
             r"\s*\(\s*(?:18|19|20)\d{2}\b|"
             r"\s*,\s*(?:18|19|20)\d{2}\b|"
             r"\s+(?i:et\s+al\b|(?:và\s+)?cộng\s+sự\b)|"
-            r"\s*(?:,\s*)?&\s+[A-ZÀ-Ỹ]|"
-            r"\s*(?:,\s*)?and\s+[A-ZÀ-Ỹ][a-zà-ỹA-ZÀ-Ỹ'\u2019\-]*\s*(?:,\s*[A-ZÀ-Ỹ]\.|\(\s*(?:18|19|20)\d{2}\b)|"
-            r"\s*(?:,\s*)?and\s+(?:[A-ZÀ-Ỹ]\.\s*)+[A-ZÀ-Ỹ]|"
-            r"\s*;\s*[A-ZÀ-Ỹ][a-zà-ỹA-ZÀ-Ỹ'\u2019\-]*\s*,\s*[A-ZÀ-Ỹ]\."
+            rf"\s*(?:,\s*)?&\s+{_UPPER_LATIN_VN}|"
+            rf"\s*(?:,\s*)?and\s+{_UPPER_LATIN_VN}(?:{_ALPHA_LATIN_VN}|['\u2019\-])*\s*(?:,\s*{_UPPER_LATIN_VN}\.|\(\s*(?:18|19|20)\d{{2}}\b)|"
+            rf"\s*(?:,\s*)?and\s+(?:{_UPPER_LATIN_VN}\.\s*)+{_UPPER_LATIN_VN}|"
+            rf"\s*;\s*{_UPPER_LATIN_VN}(?:{_ALPHA_LATIN_VN}|['\u2019\-])*\s*,\s*{_UPPER_LATIN_VN}\."
             r")"
         )
         has_author_punctuation_or_cue = bool(
@@ -368,14 +373,14 @@ def _is_real_author_entry(author_item: Any, raw_after_marker: str) -> bool:
         # word of `citation_raw` (after `[N]`/`N.`) and is immediately followed by lowercase prose
         # words rather than `. Title`, `, Initial.`, `(Year)`, or `et al.`, it is a title token.
         if raw_after_marker:
-            m_first = re.match(r"^([A-Za-zÀ-ỹ'\u2019\-]+)(.*)$", raw_after_marker)
+            m_first = re.match(rf"^((?:{_ALPHA_LATIN_VN}|['\u2019\-])+)(.*)$", raw_after_marker)
             if m_first and m_first.group(1).lower() == token_lower:
                 rest = m_first.group(2)
                 has_prefix_delim = bool(
-                    re.match(r"^\s*(?:\.\s+[A-ZÀ-Ỹ]|,\s*[A-ZÀ-Ỹ]|;)", rest)
+                    re.match(rf"^\s*(?:\.\s+{_UPPER_LATIN_VN}|,\s*{_UPPER_LATIN_VN}|;)", rest)
                 )
-                if not has_prefix_delim and re.match(r"^\s*,?\s+[a-zà-ỹ]", rest):
-                    first_rest_word = re.findall(r"^\s*,?\s+([a-zà-ỹ]+)", rest)
+                if not has_prefix_delim and re.match(rf"^\s*,?\s+{_LOWER_LATIN_VN}", rest):
+                    first_rest_word = re.findall(rf"^\s*,?\s+({_LOWER_LATIN_VN}+)", rest)
                     if not first_rest_word or first_rest_word[0] not in _NAME_PARTICLES:
                         return False
 

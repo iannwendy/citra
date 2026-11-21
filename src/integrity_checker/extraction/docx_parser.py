@@ -17,6 +17,10 @@ from defusedxml import DefusedXmlException
 from defusedxml.ElementTree import fromstring as safe_fromstring
 
 from integrity_checker.extraction.base import BasePDFParser, Document, Page
+from integrity_checker.extraction.patterns.utils import (
+    _ALPHA_LATIN_VN,
+    _UPPER_LATIN_VN,
+)
 from integrity_checker.extraction.vn_encoding import VietnameseLegacyTranscoder
 from integrity_checker.logging import get_logger
 
@@ -43,7 +47,7 @@ _BIB_HEADING_RE = re.compile(
 
 # IEEE / Journal trailing author biography detector after bibliography entries
 _AUTHOR_BIO_RE = re.compile(
-    r"^[A-ZÀ-Ỹ][A-ZÀ-Ỹa-zà-ỹ\s.\-]{2,45}\s+"
+    rf"^{_UPPER_LATIN_VN}(?:{_ALPHA_LATIN_VN}|[\s.\-]){{2,45}}\s+"
     r"(?:is\s+currently\s+(?:an?\s+)?(?:undergraduate|graduate|phd|master|professor|lecturer|researcher|student)|"
     r"received\s+the\s+(?:B\.?S\.?|M\.?S\.?|Ph\.?D\.?|B\.?E\.?|B\.?Tech)|"
     r"was\s+born\s+in\s+)",
@@ -77,12 +81,18 @@ class DocxParser(BasePDFParser):
                 for info in infos:
                     member_lower = info.filename.lower()
                     is_xml = member_lower.endswith((".xml", ".rels"))
-                    if is_xml and info.file_size > _MAX_DOCX_XML_MEMBER_BYTES:
+                    member_limit = (
+                        _MAX_NOTES_XML_BYTES
+                        if member_lower in _NOTES_XML_MEMBERS
+                        else _MAX_DOCX_XML_MEMBER_BYTES
+                    )
+                    if is_xml and info.file_size > member_limit:
                         raise ValueError(
-                            f"DOCX XML member '{info.filename}' ({info.file_size} bytes) exceeds 50 MB limit"
+                            f"DOCX XML member '{info.filename}' ({info.file_size} bytes) exceeds {member_limit // (1024 * 1024)} MB limit"
                         )
-                    # Stream-verify actual uncompressed size on XML/rels parts (defends against spoofed file_size headers)
-                    if is_xml and member_lower not in _NOTES_XML_MEMBERS:
+                    # Stream-verify actual uncompressed size on ALL XML/rels parts, including
+                    # word/footnotes.xml & word/endnotes.xml (defends against spoofed file_size headers)
+                    if is_xml:
                         xml_buf = bytearray()
                         with zf.open(info, "r") as member_fp:
                             while True:
@@ -92,13 +102,17 @@ class DocxParser(BasePDFParser):
                                 xml_buf.extend(chunk)
                                 streamed_total += len(chunk)
                                 if (
-                                    len(xml_buf) > _MAX_DOCX_XML_MEMBER_BYTES
+                                    len(xml_buf) > member_limit
                                     or streamed_total > _MAX_DOCX_TOTAL_UNCOMPRESSED_BYTES
                                 ):
                                     raise ValueError(
-                                        "DOCX archive uncompressed stream exceeds 100 MB limit (possible ZIP bomb)"
+                                        f"DOCX XML stream for '{info.filename}' exceeds uncompressed size limit (possible ZIP bomb)"
                                     )
-                        if xml_buf:
+                        # Notes parts (footnotes/endnotes) are validated via safe_fromstring
+                        # inside _extract_xml_notes so unsafe DTDs in notes degrade gracefully
+                        # without aborting body/reference extraction, while oversized note
+                        # ZIP-bomb streams are still rejected above.
+                        if xml_buf and member_lower not in _NOTES_XML_MEMBERS:
                             try:
                                 safe_fromstring(bytes(xml_buf), forbid_dtd=True)
                             except DefusedXmlException as exc:
@@ -373,12 +387,27 @@ class DocxParser(BasePDFParser):
             with zipfile.ZipFile(docx_path, "r") as zf:
                 if member_name not in zf.namelist():
                     return notes
-                if zf.getinfo(member_name).file_size > _MAX_NOTES_XML_BYTES:
+                info = zf.getinfo(member_name)
+                if info.file_size > _MAX_NOTES_XML_BYTES:
                     logger.warning(
                         "Skipping oversized {} in {} (possible zip bomb)", member_name, docx_path
                     )
                     return notes
-                xml_bytes = zf.read(member_name)
+                xml_buf = bytearray()
+                with zf.open(info, "r") as member_fp:
+                    while True:
+                        chunk = member_fp.read(65536)
+                        if not chunk:
+                            break
+                        xml_buf.extend(chunk)
+                        if len(xml_buf) > _MAX_NOTES_XML_BYTES:
+                            logger.warning(
+                                "Skipping oversized streamed {} in {} (possible zip bomb)",
+                                member_name,
+                                docx_path,
+                            )
+                            return notes
+                xml_bytes = bytes(xml_buf)
             # Untrusted user upload: defusedxml forbids DTD entities / external
             # references (billion-laughs, XXE) and raises instead of expanding.
             root = safe_fromstring(xml_bytes, forbid_dtd=True)

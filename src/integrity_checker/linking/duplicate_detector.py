@@ -244,7 +244,7 @@ class DuplicateDetector:
     def _similarity(self, a: Citation, b: Citation) -> float:
         """Tính similarity giữa 2 citations (0.0–1.0)."""
         score = 0.0
-        total = 0
+        total = 0.0
 
         # Year match (weight: 0.2)
         if a.year and b.year and a.year == b.year:
@@ -274,26 +274,40 @@ class DuplicateDetector:
     def _first_author_last_name(self, cit: Citation) -> str | None:
         """Trả first author last name.
 
-        Citation.authors là list[str] (raw strings như "Smith, J." hoặc "Smith J.").
+        Citation.authors là list[Author | str] (raw strings như "Smith, J.", "John Smith", hoặc "Smith J.").
         """
+        from integrity_checker.extraction.patterns.utils import (
+            _ALPHA_LATIN_VN,
+            _UPPER_LATIN_VN,
+        )
+        from integrity_checker.matching.author_parser import parse_authors
+
         if cit.authors and len(cit.authors) > 0:
             raw = cit.authors[0]
             if isinstance(raw, str):
                 # "Smith, J." → "Smith"
                 # "Smith J." → "Smith"
-                # "J. Smith" → "Smith"
+                # "J. Smith" / "John Smith" → "Smith"
                 if "," in raw:
                     return raw.split(",")[0].strip()
+                parsed = parse_authors(raw)
+                if parsed and parsed[0].last_name:
+                    return parsed[0].last_name
                 tokens = [t.strip() for t in raw.split() if t.strip()]
                 if not tokens:
                     return None
                 if len(tokens) > 1 and len(tokens[0].rstrip(".")) == 1:
                     return tokens[-1]
+                if len(tokens) > 1 and len(tokens[-1].rstrip(".")) > 1:
+                    return tokens[-1]
                 return tokens[0]
             # Fallback: object format (Author dataclass)
             return getattr(raw, "last_name", None) or ""
-        # Fallback: extract from raw_text
-        m = re.match(r"^([A-Z][a-zÀ-ÿ'-]+)", (cit.raw_text or "").split(",")[0])
+        # Fallback: extract from raw_text (supporting full Latin + Vietnamese diacritics)
+        m = re.match(
+            rf"^({_UPPER_LATIN_VN}(?:{_ALPHA_LATIN_VN}|['\u2019-])+)",
+            (cit.raw_text or "").split(",")[0].strip(),
+        )
         if m:
             return m.group(1).strip()
         return None

@@ -5,6 +5,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from integrity_checker.matching.author_parser import Author
 
 
 class CitationType(str, Enum):
@@ -72,7 +76,7 @@ class Citation:
     citation_type: CitationType = CitationType.UNKNOWN
     style: CitationStyle = CitationStyle.UNKNOWN
 
-    authors: list[str] = field(default_factory=list)
+    authors: list[Author | str] = field(default_factory=list)
     year: str | None = None
     title: str | None = None
     venue: str | None = None
@@ -148,7 +152,7 @@ class Citation:
             parts.append(self.title)
         if self.authors:
             first_author = self.authors[0]
-            if hasattr(first_author, "last_name") and getattr(first_author, "last_name", ""):
+            if not isinstance(first_author, str) and getattr(first_author, "last_name", None):
                 parts.append(str(first_author.last_name).strip())
             else:
                 first = str(first_author).strip()
@@ -176,8 +180,10 @@ class Citation:
                           Title thường nằm sau year và trước venue (.,;:).
         """
         c = cls(raw_text=raw.strip())
-        c.doi = _DOI_RE.search(raw).group(0) if _DOI_RE.search(raw) else None
-        c.url = _URL_RE.search(raw).group(0) if _URL_RE.search(raw) else None
+        doi_m = _DOI_RE.search(raw)
+        url_m = _URL_RE.search(raw)
+        c.doi = doi_m.group(0) if doi_m else None
+        c.url = url_m.group(0) if url_m else None
         c.year = parse_year_safe(raw)
 
         # NEW v1.5: Extract title from formatted citations

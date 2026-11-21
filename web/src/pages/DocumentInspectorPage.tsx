@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { api, type AnalysisReport, type Verdict, type Citation } from '@/api/client';
+import {
+  api,
+  type AnalysisReport,
+  type Verdict,
+  type Citation,
+  type CitationMappingStatus,
+} from '@/api/client';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { VerdictBadge } from '@/components/VerdictBadge';
 import { MappingStatusBadge } from '@/components/MappingStatusBadge';
 import {
@@ -58,7 +65,7 @@ interface InlineCitation {
   subIndex?: string;
   markerLabel: string;
   label: string;
-  mapping_status: string;
+  mapping_status: CitationMappingStatus;
   page: number;
   line: string;
   context?: string;
@@ -345,6 +352,7 @@ function CitationPopup({
 }) {
   const { t } = useTranslation();
   const status = getInlineStatusBadge(citation.label, t);
+  const { dialogProps, titleId } = useModalA11y<HTMLDivElement>(true, onClose);
 
   return createPortal(
     <div
@@ -352,7 +360,8 @@ function CitationPopup({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg max-h-[90dvh] flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        {...dialogProps}
+        className="w-full max-w-lg max-h-[90dvh] flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 bg-slate-50/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800">
@@ -373,6 +382,7 @@ function CitationPopup({
             </span>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             aria-label={t('inspector.closeModalAria')}
@@ -386,7 +396,7 @@ function CitationPopup({
             <div className="flex items-center gap-2.5">
               {status.icon}
               <div>
-                <h3 className={`text-sm font-semibold ${status.text}`}>
+                <h3 id={titleId} className={`text-sm font-semibold ${status.text}`}>
                   {t('inspector.citationDetail')}
                 </h3>
                 <p className={`text-xs font-mono ${status.text} opacity-85`}>{status.label}</p>
@@ -426,7 +436,7 @@ function CitationPopup({
                 {t('inspector.mapping')}
               </label>
               <div className="mt-1.5">
-                <MappingStatusBadge status={citation.mapping_status as any} size="sm" />
+                <MappingStatusBadge status={citation.mapping_status} size="sm" />
               </div>
             </div>
             {(() => {
@@ -1232,7 +1242,7 @@ export function DocumentInspectorWorkspace({
                             {status.label}
                           </span>
                           <MappingStatusBadge
-                            status={citation.mapping_status as any}
+                            status={citation.mapping_status}
                             size="sm"
                           />
                           {citation.isCrossLingual && (
@@ -1284,6 +1294,10 @@ export function DocumentInspectorWorkspace({
   );
 }
 
+/**
+ * @internal Retained for standalone `DocumentInspectorPage` unit test coverage;
+ * production route `/verification/report/:id/document` renders `EssayPage` + `DocumentInspectorWorkspace`.
+ */
 export function DocumentInspectorPage() {
   const { id } = useParams<{ id: string }>();
   const { t, i18n } = useTranslation();

@@ -31,7 +31,8 @@ import re
 
 from integrity_checker.extraction.patterns.base import CompiledPattern, PatternType
 from integrity_checker.extraction.patterns.registry import register_format
-from integrity_checker.matching.author_parser import parse_authors
+from integrity_checker.extraction.patterns.utils import _ALPHA_LATIN_VN, _UPPER_LATIN_VN
+from integrity_checker.matching.author_parser import Author, parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
 # =============================================================================
@@ -184,6 +185,13 @@ _NATURE_NUMBER_MARKER = CompiledPattern.create(
     pattern=r'^\s*(?:\[\d+\]|\d+\.|\^?\d+)\s*',
     pattern_type=PatternType.UTILITY,
     description="Nature number marker: [N] | N. | ^N",
+)
+
+# Atomic initial-author segment matcher for fallback comma-separated Nature entries
+# (prevents O(2^N) backtracking on repeated initials like "A. B. " * 25).
+_NATURE_INIT_AUTHOR_RE = re.compile(
+    rf"^(?:and\s+|&\s*)?(?>(?:{_UPPER_LATIN_VN}(?:\.\s*(?:[-–]\s*)?|[-–]\s*(?={_UPPER_LATIN_VN}\.?)|\s+)){{1,6}})"
+    rf"{_UPPER_LATIN_VN}(?:{_ALPHA_LATIN_VN}|['\u2019\-])+(?:\s+(?:{_ALPHA_LATIN_VN}|['\u2019\-])+){{0,3}}$"
 )
 
 
@@ -712,12 +720,9 @@ class NatureFormat:
                 if len(dot_parts) >= 3:
                     citation.venue = ". ".join(dot_parts[2:]).rstrip('.,')
         if not citation.title and len(parts) >= 2:
-            init_author_re = re.compile(
-                r'^(?:and\s+|&\s*)?(?:[A-ZÀ-Ý]\.?\s*[-–]?\s*)+[A-ZÀ-Ýa-zà-ÿ\'\u2019\-]+(?:\s+[A-ZÀ-Ýa-zà-ÿ\'\u2019\-]+){0,3}$'
-            )
             author_end_idx = 0
             for idx_p, p in enumerate(parts):
-                if init_author_re.match(p) or re.match(r'^(?:and\s+)?et\s+al\.?$', p, re.I):
+                if _NATURE_INIT_AUTHOR_RE.match(p) or re.match(r'^(?:and\s+)?et\s+al\.?$', p, re.I):
                     author_end_idx = idx_p + 1
                 else:
                     break
@@ -734,16 +739,19 @@ class NatureFormat:
                     if idx_p + 1 < len(parts):
                         citation.venue = ", ".join(parts[idx_p + 1 :]).strip().rstrip('.,')
                     break
+        if not citation.title and len(parts) >= 2:
+            for idx_fb, part in enumerate(parts[1:], start=1):
+                if len(part) > 10 and not re.match(r'^(?:vol\.|no\.|pp?\.|\d+$)', part, re.I):
+                    citation.title = part
+                    citation.title_normalized = self._normalize_title(part)
+                    citation.authors = self._parse_authors(", ".join(parts[:idx_fb]))
+                    if idx_fb + 1 < len(parts) and not citation.venue:
+                        citation.venue = ", ".join(parts[idx_fb + 1 :]).strip().rstrip('.,')
+                    break
         if pub_raw and not citation.venue:
             citation.venue = pub_raw
         if citation.numeric_index is not None and citation.authors and citation.title:
             citation.matched_pattern = "nature_comma_separated"
-            if not citation.title and len(parts) >= 2:
-                for part in parts[1:]:
-                    if len(part) > 10:
-                        citation.title = part
-                        citation.title_normalized = self._normalize_title(part)
-                        break
 
         # Extract DOI & URL
         doi_m = re.search(r'10\.\d{4,9}/[^\s\]\)\,;]+', text)
@@ -756,16 +764,16 @@ class NatureFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation if citation.title or citation.year else None
 
-    def _parse_authors(self, authors_str: str) -> list[str]:
+    def _parse_authors(self, authors_str: str) -> list[Author | str]:
         """Parse author string into list of authors.
 
         Args:
             authors_str: Author string
 
         Returns:
-            List of author strings (via parse_authors)
+            List of Author objects (via parse_authors)
         """
-        return parse_authors(authors_str)
+        return list(parse_authors(authors_str))
 
     def _normalize_title(self, title: str) -> str:
         """Normalize title for comparison: lowercase, remove punctuation."""

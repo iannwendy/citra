@@ -19,21 +19,28 @@ export function useEssayReport(
   const sseFallbackRef = useRef<number | null>(null);
   const terminalErrorRef = useRef<{ essayId: number; message: string } | null>(null);
 
+  useEffect(() => {
+    sseFallbackRef.current = null;
+    terminalErrorRef.current = null;
+    setSseFallbackForId(null);
+  }, [essayId]);
+
   const sseConnected = essayId === null || sseFallbackForId !== essayId;
 
   const query = useQuery({
     queryKey: ['essay-report', essayId],
     queryFn: async ({ signal }): Promise<AnalysisReport | null> => {
       if (essayId === null) return null;
+      // Consume terminal SSE error once so React Query transitions to `isError`,
+      // while allowing subsequent explicit `refetch()` / `reanalyze` retries to hit `api.getEssay`.
       if (terminalErrorRef.current?.essayId === essayId) {
-        throw new Error(terminalErrorRef.current.message);
+        const message = terminalErrorRef.current.message;
+        terminalErrorRef.current = null;
+        throw new Error(message);
       }
       // Try direct report first
       const report = await api.getEssay(essayId, { signal });
       if (report) {
-        if (terminalErrorRef.current?.essayId === essayId) {
-          terminalErrorRef.current = null;
-        }
         return report;
       }
       // While SSE is active/pending, avoid redundant getEssayStatus HTTP polls
@@ -84,15 +91,14 @@ export function useEssayReport(
         (snap) => {
           if (cancelled) return;
           if (snap.status === 'completed') {
-            if (terminalErrorRef.current?.essayId === essayId) {
-              terminalErrorRef.current = null;
-            }
+            terminalErrorRef.current = null;
             void refetchReport();
           } else if (snap.status === 'failed') {
             terminalErrorRef.current = {
               essayId,
               message: snap.error ?? 'Essay processing failed',
             };
+            sseFallbackRef.current = null;
             void refetchReport();
           }
         },
@@ -110,6 +116,7 @@ export function useEssayReport(
             essayId,
             message: status.error ?? 'Essay processing failed',
           };
+          sseFallbackRef.current = null;
           void refetchReport();
           return;
         }

@@ -295,11 +295,12 @@ class ExplanationGenerator:
 
         # Add page/section if available
         if verdict.citation_link:
-            link = verdict.citation_link
-            if link.page > 0:
-                parts.append(f"trang={link.page}")
-            if link.section:
-                parts.append(f"section={link.section}")
+            link_page = int(getattr(verdict.citation_link, "page", 0) or 0)
+            link_section = getattr(verdict.citation_link, "section", "") or ""
+            if link_page > 0:
+                parts.append(f"trang={link_page}")
+            if link_section:
+                parts.append(f"section={link_section}")
 
         return " ".join(parts) + "."
 
@@ -381,7 +382,9 @@ class ExplanationGenerator:
             mapping_color = MAPPING_COLORS.get(mapping_status, "#6b7280")
 
         # Evidence dict
-        evidence = {}
+        from typing import Any
+
+        evidence: dict[str, Any] = {}
         if verdict.features:
             f = verdict.features
             evidence = {

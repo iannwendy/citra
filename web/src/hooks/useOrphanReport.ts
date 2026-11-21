@@ -3,10 +3,20 @@ import { useQuery } from '@tanstack/react-query';
 import { api, type AnalysisReport } from '@/api/client';
 import { streamEssayEvents } from './useEssayStream';
 
+/**
+ * @internal Retained for standalone `OrphanDetectionPage` unit test coverage;
+ * routed `/verification/report/:id/consistency` uses `EssayPage` + `OrphanConsistencyWorkspace`.
+ */
 export function useOrphanReport(essayId: number | null) {
   const [sseFallbackForId, setSseFallbackForId] = useState<number | null>(null);
   const sseFallbackRef = useRef<number | null>(null);
   const terminalErrorRef = useRef<{ essayId: number; message: string } | null>(null);
+
+  useEffect(() => {
+    sseFallbackRef.current = null;
+    terminalErrorRef.current = null;
+    setSseFallbackForId(null);
+  }, [essayId]);
 
   const sseConnected = essayId === null || sseFallbackForId !== essayId;
 
@@ -15,13 +25,12 @@ export function useOrphanReport(essayId: number | null) {
     queryFn: async ({ signal }) => {
       if (essayId === null) throw new Error('essayId required');
       if (terminalErrorRef.current?.essayId === essayId) {
-        throw new Error(terminalErrorRef.current.message);
+        const message = terminalErrorRef.current.message;
+        terminalErrorRef.current = null;
+        throw new Error(message);
       }
       const report = await api.getEssay(essayId, { signal });
       if (report !== null) {
-        if (terminalErrorRef.current?.essayId === essayId) {
-          terminalErrorRef.current = null;
-        }
         return report;
       }
       if (sseFallbackRef.current !== essayId) {
@@ -67,15 +76,14 @@ export function useOrphanReport(essayId: number | null) {
         (snap) => {
           if (cancelled) return;
           if (snap.status === 'completed') {
-            if (terminalErrorRef.current?.essayId === essayId) {
-              terminalErrorRef.current = null;
-            }
+            terminalErrorRef.current = null;
             void refetchReport();
           } else if (snap.status === 'failed') {
             terminalErrorRef.current = {
               essayId,
               message: snap.error || 'Essay processing failed',
             };
+            sseFallbackRef.current = null;
             void refetchReport();
           }
         },
@@ -93,6 +101,7 @@ export function useOrphanReport(essayId: number | null) {
             essayId,
             message: status.error || 'Essay processing failed',
           };
+          sseFallbackRef.current = null;
           void refetchReport();
           return;
         }

@@ -112,12 +112,14 @@ describe('BatchUploadPage', () => {
 
   it('advertises PDF & DOCX support in both languages', async () => {
     const { unmount } = renderWithProviders(<BatchUploadPage />, { user: makeUser('teacher') });
+    await waitFor(() => expect(api.listMyClasses).toHaveBeenCalledTimes(1));
     expect(screen.getAllByText(/PDF & DOCX/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/\.bib, \.ris/i).length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toMatch(/PDF Only/i);
     unmount();
     await i18n.changeLanguage('vi');
     renderWithProviders(<BatchUploadPage />, { user: makeUser('teacher') });
+    await waitFor(() => expect(api.listMyClasses).toHaveBeenCalledTimes(2));
     expect(screen.getAllByText(/PDF & DOCX/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/\.bib, \.ris/i).length).toBeGreaterThan(0);
     expect(document.body.textContent).toContain('3 LUỒNG XỬ LÝ SONG SONG');

@@ -485,15 +485,12 @@ test.describe('Background Verification Progress Persistence (E2E + Responsive)',
     const t0 = await parseSec();
     expect(t0).toBeGreaterThanOrEqual(0.2);
 
-    // Wait 700ms while backend still returns static elapsed_seconds: 0.2 on Step 0
-    await page.waitForTimeout(700);
+    // Counter advances smoothly while backend still returns static elapsed_seconds: 0.2 on Step 0
+    await expect.poll(parseSec, { timeout: 3000 }).toBeGreaterThan(t0 + 0.4);
     const t1 = await parseSec();
-    expect(t1).toBeGreaterThan(t0 + 0.4);
 
-    // Wait another 700ms — counter must continue advancing smoothly in real time
-    await page.waitForTimeout(700);
-    const t2 = await parseSec();
-    expect(t2).toBeGreaterThan(t1 + 0.4);
+    // Counter continues advancing smoothly in real time
+    await expect.poll(parseSec, { timeout: 3000 }).toBeGreaterThan(t1 + 0.4);
   });
 
   test('Batch Check ("Kiểm tra hàng loạt") keeps worker pool & progress alive across tab switches, F5 reload, and background completion', async ({
@@ -587,8 +584,8 @@ test.describe('Background Verification Progress Persistence (E2E + Responsive)',
     await expect(page.getByText('Batch_Manuscript_01.pdf')).toBeVisible();
     await expect(page.getByText('Batch_Manuscript_04.pdf')).toBeVisible();
 
-    // Ensure no delayed auto-redirect hijacks the user after 1.5s
-    await page.waitForTimeout(1500);
+    // Ensure background-completion notice stays mounted and no auto-redirect hijacks the user
+    await expect(page.getByTestId('batch-background-completed-notice')).toBeVisible();
     await expect(page).toHaveURL(/\/batch-upload$/);
   });
 

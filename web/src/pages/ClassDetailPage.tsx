@@ -28,6 +28,7 @@ import {
 } from '@/api/client';
 import { getRuleDisplayName } from '@/lib/verdictExplanation';
 import { getHumanVerdictMeta } from '@/lib/teacherGuidance';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { useToast } from '@/contexts/ToastContext';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { AddStudentDialog } from '@/components/AddStudentDialog';
@@ -81,6 +82,11 @@ export function ClassDetailPage() {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [exportingZip, setExportingZip] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const editClassDialog = useModalA11y<HTMLDivElement>(
+    editOpen,
+    () => setEditOpen(false),
+    { disableEscape: savingEdit },
+  );
 
   const load = useCallback(async () => {
     if (!cid || Number.isNaN(cid)) {
@@ -168,22 +174,7 @@ export function ClassDetailPage() {
 
   const handleExport = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const resp = await fetch(api.exportClassCSV(cid), {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!resp.ok) {
-        throw new Error(`API ${resp.status}: ${await resp.text()}`);
-      }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `class_${cid}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      await api.downloadClassCsvFile(cid);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t('teacher.exportCsvFailed'));
     }
@@ -315,6 +306,7 @@ export function ClassDetailPage() {
                     type="button"
                     onClick={() => void handleCopyJoinCode()}
                     title={lang === 'vi' ? 'Sao chép mã lớp' : 'Copy join code'}
+                    aria-label={lang === 'vi' ? 'Sao chép mã lớp' : 'Copy join code'}
                     className="p-0.5 rounded hover:bg-emerald-200/60 dark:hover:bg-emerald-900/60 transition-colors cursor-pointer"
                   >
                     {copiedCode ? (
@@ -328,6 +320,9 @@ export function ClassDetailPage() {
                     onClick={() => void handleRegenerateCode()}
                     disabled={regeneratingCode}
                     title={
+                      lang === 'vi' ? 'Đổi mã tham gia lớp mới' : 'Regenerate join code'
+                    }
+                    aria-label={
                       lang === 'vi' ? 'Đổi mã tham gia lớp mới' : 'Regenerate join code'
                     }
                     className="p-0.5 rounded hover:bg-emerald-200/60 dark:hover:bg-emerald-900/60 transition-colors cursor-pointer disabled:opacity-50"
@@ -1061,17 +1056,15 @@ export function ClassDetailPage() {
       {editOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="edit-class-modal-title"
           onClick={() => setEditOpen(false)}
         >
           <div
-            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full p-5 shadow-2xl space-y-4"
+            {...editClassDialog.dialogProps}
+            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full p-5 shadow-2xl space-y-4 outline-none"
             onClick={(e) => e.stopPropagation()}
           >
             <h2
-              id="edit-class-modal-title"
+              id={editClassDialog.titleId}
               className="font-display text-lg font-bold text-slate-900 dark:text-white"
             >
               {lang === 'vi' ? 'Chỉnh sửa lớp học' : 'Edit Class'}

@@ -10,6 +10,7 @@ alignment giữa đoạn văn được trích dẫn và paper nguồn.
 
 from __future__ import annotations
 
+import copy
 import re
 import threading
 from typing import TYPE_CHECKING
@@ -665,7 +666,7 @@ class NeuroSymbolicChecker:
                     authors=(
                         [legal_res.canonical_authority]
                         if legal_res.canonical_authority
-                        else (citation.authors or [])
+                        else [str(a) for a in (citation.authors or [])]
                     ),
                     year=canon_year,
                     venue=legal_res.canonical_authority or "Hệ thống Pháp luật Việt Nam (VBQPPL)",
@@ -673,6 +674,7 @@ class NeuroSymbolicChecker:
                     confidence=0.95,
                     cached=True,
                 )
+                source = copy.deepcopy(source)
                 source.candidates.insert(0, legal_cand)
                 if "vn_legal_registry" not in source.sources_queried:
                     source.sources_queried.insert(0, "vn_legal_registry")
@@ -688,7 +690,7 @@ class NeuroSymbolicChecker:
                     authors=(
                         [legal_res.canonical_authority]
                         if legal_res.canonical_authority
-                        else list(citation.authors or [])
+                        else [str(a) for a in (citation.authors or [])]
                     ),
                     year=str(citation.year) if citation.year else None,
                     venue=citation.venue or "Văn bản quy phạm pháp luật Việt Nam",
@@ -696,6 +698,7 @@ class NeuroSymbolicChecker:
                     confidence=0.85,
                     cached=True,
                 )
+                source = copy.deepcopy(source)
                 source.candidates.insert(0, generic_legal_cand)
                 if "vn_legal_registry" not in source.sources_queried:
                     source.sources_queried.insert(0, "vn_legal_registry")
@@ -740,9 +743,7 @@ class NeuroSymbolicChecker:
             legal_rules = list(legal_res.triggered_rules)
             legal_reasoning = legal_res.reasoning
             if self.enable_content_alignment and not is_fabricated_legal:
-                if precomputed_features is not None and getattr(
-                    precomputed_features, "context_source", ""
-                ):
+                if precomputed_features is not None and precomputed_features.context_source:
                     legal_features.context_source = precomputed_features.context_source
                 legal_ctx = effective_context or (
                     getattr(precomputed_features, "best_cited_sentence", None)
@@ -796,8 +797,6 @@ class NeuroSymbolicChecker:
             )
 
         # --- Check 4: Unified RetrievalOrchestrator web/documentation resource check ---
-        has_fake_url_early, _ = _is_fake_url(citation.url)
-        is_dead_url_early = getattr(source, "url_status", None) == "dead_link"
         has_specialist_candidate = any(
             getattr(c, "found", False)
             and getattr(c, "source_name", "") in {"huggingface", "tech_standard"}
@@ -870,6 +869,8 @@ class NeuroSymbolicChecker:
             is_known
             and paper_info
             and not has_fake_url
+            and not has_fake_url_early
+            and url_stat_early != "fake_domain"
             and not has_fabricated_doi
             and not _is_titleless_ref_entry
         ):

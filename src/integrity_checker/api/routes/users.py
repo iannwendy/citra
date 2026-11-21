@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session as SqlSession
 
 from integrity_checker.api.deps import get_current_user, get_db, require_admin
 from integrity_checker.api.routes.auth import (
+    _USERNAME_FORMAT_ERROR_DETAIL,
     CURRENT_PRIVACY_POLICY_VERSION,
     _create_token,
     _dispatch_email_task,
@@ -23,6 +24,8 @@ from integrity_checker.api.routes.auth import (
     _hash_password,
     _is_reserved_username,
     _is_valid_username_format,
+    _optional_background_tasks,
+    _resend_activation_rate_limiter,
     _verify_password,
 )
 from integrity_checker.api.services.avatar_service import get_avatar_service
@@ -174,8 +177,8 @@ def _to_response(user: User) -> UserResponse:
         current_period_end=sub["current_period_end"],
         quota=sub["quota"],
         privacy_consented_at=(
-            user.privacy_consented_at.isoformat()
-            if getattr(user, "privacy_consented_at", None)
+            consented_dt.isoformat()
+            if isinstance((consented_dt := getattr(user, "privacy_consented_at", None)), datetime)
             else None
         ),
         privacy_policy_version=getattr(user, "privacy_policy_version", None),
@@ -199,17 +202,21 @@ def list_users(
 @router.post("", response_model=UserResponse)
 def create_user(
     request: UserCreate,
-    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
+    background_tasks: BackgroundTasks | None = Depends(_optional_background_tasks),
     admin: User = Depends(require_admin),
     db=Depends(get_db),
 ):
     """Create new user (admin only)."""
     repo = Repository(db)
+    clean_username = request.username.strip()
+    if not _is_valid_username_format(clean_username):
+        raise HTTPException(status_code=400, detail=_USERNAME_FORMAT_ERROR_DETAIL)
+    clean_email = str(request.email).strip().lower() if request.email else None
 
-    if repo.get_user_by_username(request.username):
+    if repo.get_user_by_username(clean_username):
         raise HTTPException(status_code=400, detail="Username already exists")
 
-    if request.email and repo.get_user_by_email(request.email):
+    if clean_email and repo.get_user_by_email(clean_email):
         raise HTTPException(status_code=400, detail="Email already exists")
 
     if request.role not in VALID_USER_ROLES:
@@ -225,10 +232,10 @@ def create_user(
 
     password_hash = _hash_password(request.password)
     user = repo.create_user(
-        username=request.username,
+        username=clean_username,
         password_hash=password_hash,
         role=request.role,
-        email=request.email,
+        email=clean_email,
         full_name=request.full_name,
         is_active=request.is_active,
         institution=request.institution,
@@ -236,7 +243,7 @@ def create_user(
         plan_tier=request.plan_tier,
     )
     raw_activation_token: str | None = None
-    if request.email and not request.is_active:
+    if clean_email and not request.is_active:
         settings = get_settings()
         expires_at = datetime.now(UTC) + timedelta(
             hours=settings.auth.activation_expire_hours
@@ -245,11 +252,11 @@ def create_user(
             user.id, "activation", expires_at
         )
     repo.commit()
-    if request.email and raw_activation_token is not None:
+    if clean_email and raw_activation_token is not None:
         _dispatch_email_task(
             background_tasks,
             get_email_service().send_activation_email,
-            to_email=str(request.email),
+            to_email=clean_email,
             username=user.username,
             full_name=user.full_name,
             raw_token=raw_activation_token,
@@ -275,17 +282,23 @@ def update_user(
 
     update_data: dict = {}
 
-    if request.username is not None and request.username != existing.username:
-        dup = repo.get_user_by_username(request.username)
-        if dup and dup.id != user_id:
-            raise HTTPException(status_code=400, detail="Username already exists")
-        update_data["username"] = request.username
+    if request.username is not None:
+        clean_username = request.username.strip()
+        if not _is_valid_username_format(clean_username):
+            raise HTTPException(status_code=400, detail=_USERNAME_FORMAT_ERROR_DETAIL)
+        if clean_username != existing.username:
+            dup = repo.get_user_by_username(clean_username)
+            if dup and dup.id != user_id:
+                raise HTTPException(status_code=400, detail="Username already exists")
+            update_data["username"] = clean_username
 
-    if request.email is not None and request.email != existing.email:
-        dup = repo.get_user_by_email(request.email)
-        if dup and dup.id != user_id:
-            raise HTTPException(status_code=400, detail="Email already exists")
-        update_data["email"] = request.email
+    if request.email is not None:
+        clean_email = str(request.email).strip().lower()
+        if clean_email != (existing.email or "").strip().lower():
+            dup = repo.get_user_by_email(clean_email)
+            if dup and dup.id != user_id:
+                raise HTTPException(status_code=400, detail="Email already exists")
+            update_data["email"] = clean_email
 
     if request.full_name is not None:
         update_data["full_name"] = request.full_name
@@ -450,7 +463,7 @@ def get_me(
 @router.patch("/me", response_model=UserResponse)
 def update_me(
     request: UserSelfUpdate,
-    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
+    background_tasks: BackgroundTasks | None = Depends(_optional_background_tasks),
     authorization: str | None = Header(None),
     current_user: User = Depends(get_current_user),
     db=Depends(get_db),
@@ -466,10 +479,7 @@ def update_me(
     if request.username is not None:
         new_username = request.username.strip()
         if not _is_valid_username_format(new_username):
-            raise HTTPException(
-                status_code=400,
-                detail="Username must be 3-50 characters, start and end with a letter or number, and contain only letters, numbers, dots, underscores, or hyphens.",
-            )
+            raise HTTPException(status_code=400, detail=_USERNAME_FORMAT_ERROR_DETAIL)
         if new_username != current_user.username:
             if not can_set_username:
                 raise HTTPException(
@@ -511,6 +521,20 @@ def update_me(
                     status_code=400,
                     detail="Email address is linked to Google Sign-In and cannot be changed.",
                 )
+            _resend_activation_rate_limiter.hit(f"email_change:{current_user.id}")
+            if not is_test_runtime():
+                latest_tok = repo.get_latest_auth_token_for_user(
+                    current_user.id, "activation"
+                )
+                if (
+                    latest_tok
+                    and (datetime.now(UTC) - _ensure_utc(latest_tok.created_at)).total_seconds()
+                    < 60
+                ):
+                    raise HTTPException(
+                        status_code=429,
+                        detail="Please wait 60 seconds before changing your email address again.",
+                    )
             dup = repo.get_user_by_email(normalized_email)
             if dup and dup.id != current_user.id:
                 raise HTTPException(status_code=400, detail="Email already exists")
@@ -673,7 +697,7 @@ def change_my_password(
 @router.post("/me/password-setup-email", response_model=MessageResponse)
 def send_my_password_setup_email(
     request: PasswordSetupEmailRequest | None = None,
-    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
+    background_tasks: BackgroundTasks | None = Depends(_optional_background_tasks),
     current_user: User = Depends(get_current_user),
     db=Depends(get_db),
 ):
@@ -777,6 +801,11 @@ def create_my_api_key(
         raise HTTPException(status_code=400, detail="API key name cannot be empty")
 
     repo = Repository(db)
+    if len(repo.list_api_keys(current_user.id)) >= 25:
+        raise HTTPException(
+            status_code=400,
+            detail="Maximum of 25 active API keys per account reached. Please revoke an unused key first.",
+        )
     raw_key, key_row = repo.create_api_key(current_user.id, cleaned_name)
     repo.commit()
 

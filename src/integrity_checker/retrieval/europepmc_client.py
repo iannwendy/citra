@@ -32,6 +32,7 @@ from integrity_checker.retrieval.base import BaseScholarClient
 from integrity_checker.retrieval.normalization import (
     author_key,
     author_match_score,
+    detect_and_strip_retraction_title,
     normalize_doi,
     title_similarity,
     title_tokens,
@@ -72,8 +73,6 @@ class EuropePMCClient(BaseScholarClient):
         self.max_retries = max_retries or min(settings.retrieval.retry.max_attempts, 3)
         self._backoff = settings.retrieval.retry.backoff
         self._reset_http_telemetry()
-        with EuropePMCClient._backoff_lock:
-            EuropePMCClient._backoff_until = 0.0
         self._headers = {
             "User-Agent": (
                 f"EssayIntegrityChecker/0.2 (mailto:{self.contact_email})"
@@ -83,9 +82,15 @@ class EuropePMCClient(BaseScholarClient):
             "Accept": "application/json",
         }
 
+    @classmethod
+    def reset_backoff(cls) -> None:
+        """Reset shared EuropePMC backoff window (invoked on circuit breaker reset)."""
+        with cls._backoff_lock:
+            cls._backoff_until = 0.0
+
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Lookup by exact DOI first; fallback to TITLE search."""
-        self._last_status_code = None
+        self._reset_http_telemetry()
 
         # 1. DOI exact lookup
         if citation.doi:
@@ -94,11 +99,16 @@ class EuropePMCClient(BaseScholarClient):
                 by_doi = await self._lookup_by_doi(doi_norm, citation=citation)
                 if by_doi and by_doi.found:
                     return by_doi
-                if self._last_status_code == 429:
-                    return SourceCandidate(
-                        source_name=self.name,
-                        found=False,
-                        error=f"EuropePMC: rate limited (429) for DOI '{doi_norm}'",
+                if (
+                    self._last_status_code == 429
+                    or (self._last_status_code is not None and self._last_status_code >= 500)
+                    or self._last_transport_error
+                    or not (citation.title and citation.title.strip())
+                ):
+                    return self._build_miss_or_error_candidate(
+                        "EuropePMC",
+                        doi_norm,
+                        clean_miss_error=f"EuropePMC: no results for DOI '{doi_norm}'",
                     )
 
         # 2. Title search
@@ -157,7 +167,11 @@ class EuropePMCClient(BaseScholarClient):
         results = self._extract_results(data)
 
         # Fallback to unquoted TITLE query if strict phrase returned nothing
-        if not results and self._last_status_code not in (429, 500, 502, 503, 504):
+        if (
+            not results
+            and self._last_status_code not in (429, 500, 502, 503, 504)
+            and not self._last_transport_error
+        ):
             words = [
                 w
                 for w in re.sub(r"[^\w\s]", " ", clean_title).split()
@@ -180,22 +194,10 @@ class EuropePMCClient(BaseScholarClient):
                 results = self._extract_results(data)
 
         if not results:
-            if self._last_status_code == 429:
-                return SourceCandidate(
-                    source_name=self.name,
-                    found=False,
-                    error=f"EuropePMC: rate limited (429) for '{clean_title[:50]}'",
-                )
-            if self._last_status_code and self._last_status_code >= 500:
-                return SourceCandidate(
-                    source_name=self.name,
-                    found=False,
-                    error=f"EuropePMC: service unavailable ({self._last_status_code}) for '{clean_title[:50]}'",
-                )
-            return SourceCandidate(
-                source_name=self.name,
-                found=False,
-                error=f"EuropePMC: no results for '{clean_title[:60]}'",
+            return self._build_miss_or_error_candidate(
+                "EuropePMC",
+                clean_title[:60],
+                clean_miss_error=f"EuropePMC: no results for '{clean_title[:60]}'",
             )
 
         cit_year = str(citation.year)[:4] if citation.year else None
@@ -265,7 +267,8 @@ class EuropePMCClient(BaseScholarClient):
 
     @classmethod
     def _item_to_candidate(cls, item: dict[str, Any]) -> SourceCandidate:
-        title = cls._clean_text(item.get("title")) or None
+        cleaned_title = cls._clean_text(item.get("title")) or None
+        title, is_retracted_title = detect_and_strip_retraction_title(cleaned_title)
         doi_raw = item.get("doi")
         doi = normalize_doi(str(doi_raw)) if doi_raw else None
 
@@ -333,12 +336,11 @@ class EuropePMCClient(BaseScholarClient):
                 for cc in cc_list["commentCorrection"]
             )
 
-        raw_title_str = str(item.get("title") or "")
         if (
             "retracted publication" in pub_types
             or has_retraction_in
             or str(item.get("isRetracted") or "").strip().lower() in {"y", "yes", "true", "1"}
-            or bool(re.match(r"^\s*(?:\[\s*retracted\s*\]|retracted\s*:)", raw_title_str, re.IGNORECASE))
+            or is_retracted_title
         ):
             ext_ids["is_retracted"] = "true"
 
@@ -370,7 +372,7 @@ class EuropePMCClient(BaseScholarClient):
         with EuropePMCClient._backoff_lock:
             in_backoff = time.monotonic() < EuropePMCClient._backoff_until
         if in_backoff:
-            self._last_status_code = 503
+            self._record_transport_error(RuntimeError("EuropePMC local backoff active"))
             return None
 
         seen_429 = 0
@@ -397,10 +399,6 @@ class EuropePMCClient(BaseScholarClient):
                     retry_after = self._record_http_response(resp)
                     if resp.status_code == 404:
                         return None
-                    if resp.status_code == 503:
-                        with EuropePMCClient._backoff_lock:
-                            EuropePMCClient._backoff_until = time.monotonic() + 30.0
-                        return None
                     if resp.status_code == 429:
                         seen_429 += 1
                         if seen_429 >= 2 or (retry_after is not None and retry_after > 3.0):
@@ -418,6 +416,9 @@ class EuropePMCClient(BaseScholarClient):
                     return resp.json()
         except RetryError as exc:
             self._record_transport_error(exc)
+            if self._last_status_code == 503:
+                with EuropePMCClient._backoff_lock:
+                    EuropePMCClient._backoff_until = time.monotonic() + 15.0
             logger.warning(f"EuropePMC retry exhausted: {exc}")
             return None
         except Exception as exc:  # noqa: BLE001

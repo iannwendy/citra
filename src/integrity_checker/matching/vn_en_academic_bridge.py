@@ -25,6 +25,16 @@ VN_DIACRITIC_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Uniquely Vietnamese letters/tones (absent in French/German/Spanish/English physics/math loanwords)
+_VN_UNIQUE_CHAR_RE = re.compile(
+    r"[ăắằẳẵặấầẩẫậđẻẽẹếềểễệỉĩịỏõọốồổỗộơớờởỡợủũụưứừửữựỳỷỹỵ\u01a2\u01a3]",
+    re.IGNORECASE,
+)
+_VN_FUNCTION_WORD_RE = re.compile(
+    r"\b(?:của|và|các|những|trong|cho|với|theo|tại|từ|về|là|có|không|được|này|khi|như|trên|dưới|giữa|nhằm|đối)\b",
+    re.IGNORECASE,
+)
+
 # Tone placement normalization map (old style -> standard modern style at syllable boundary)
 _VN_TONE_NORM_REGEXES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\b([bchklmstvđg]*)oà\b", re.IGNORECASE), r"\1òa"),
@@ -416,7 +426,10 @@ def is_vietnamese_text(text: str, min_diacritics: int = 2) -> bool:
     """Kiểm tra xem chuỗi văn bản có phải tiếng Việt (chứa đủ ký tự có dấu tiếng Việt) hay không."""
     if not text:
         return False
-    return len(VN_DIACRITIC_RE.findall(text)) >= min_diacritics
+    norm = unicodedata.normalize("NFC", text)
+    if len(VN_DIACRITIC_RE.findall(norm)) < min_diacritics:
+        return False
+    return bool(_VN_UNIQUE_CHAR_RE.search(norm) or _VN_FUNCTION_WORD_RE.search(norm))
 
 
 def detect_cross_lingual_direction(
@@ -479,14 +492,13 @@ def bridge_vn_to_en(
     if not cited_context:
         return False, "", []
 
-    vn_chars = len(VN_DIACRITIC_RE.findall(cited_context))
-    if vn_chars < 2:
+    cited_context = unicodedata.normalize("NFC", cited_context)
+    if not is_vietnamese_text(cited_context, min_diacritics=2):
         return False, "", []
 
-    src_text = f"{source_title or ''} {source_abstract or ''}"
-    src_vn_chars = len(VN_DIACRITIC_RE.findall(src_text))
+    src_text = unicodedata.normalize("NFC", f"{source_title or ''} {source_abstract or ''}")
     # Cross-lingual when context is Vietnamese and source is predominantly English
-    if src_vn_chars > 5:
+    if is_vietnamese_text(src_text, min_diacritics=6):
         return False, "", []
 
     norm_ctx = normalize_vn_spelling(cited_context).lower()

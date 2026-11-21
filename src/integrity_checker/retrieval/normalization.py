@@ -15,7 +15,10 @@ from difflib import SequenceMatcher
 
 from integrity_checker.models.citation import Citation
 
-_DOI_PREFIX_RE = re.compile(r"^(?:https?://)?(?:dx\.)?doi\.org/", re.IGNORECASE)
+_DOI_PREFIX_RE = re.compile(
+    r"^(?:doi\s*:\s*)?(?:(?:https?://)?(?:www\.)?(?:dx\.)?doi\.org/)?(?:doi\s*:\s*)?",
+    re.IGNORECASE,
+)
 _ARXIV_PREFIX_RE = re.compile(
     r"^(?:https?://)?(?:www\.)?arxiv\.org/(?:abs|pdf)/|^arxiv:",
     re.IGNORECASE,
@@ -30,6 +33,50 @@ _DASH_TRANSLATION = str.maketrans({
     "\u2014": "-",
     "\u2212": "-",
 })
+_RETRACTED_PREFIX_RE = re.compile(
+    r"^\s*(?:"
+    r"\[\s*(?:retracted(?:\s+(?:article|paper|publication))?|withdrawn(?:\s+(?:article|paper))?)\s*\]"
+    r"|\(\s*(?:retracted(?:\s+(?:article|paper|publication))?|withdrawn(?:\s+(?:article|paper))?)\s*\)"
+    r"|(?:retracted(?:\s+(?:article|paper|publication))?|withdrawn(?:\s+(?:article|paper))?)\s*[:\-–—]"
+    r")\s*",
+    re.IGNORECASE,
+)
+_RETRACTED_SUFFIX_RE = re.compile(
+    r"\s*(?:"
+    r"\[\s*(?:retracted(?:\s+(?:article|paper|publication))?|withdrawn(?:\s+(?:article|paper))?)\s*\]"
+    r"|\(\s*(?:retracted(?:\s+(?:article|paper|publication))?|withdrawn(?:\s+(?:article|paper))?)\s*\)"
+    r")\s*\.?\s*$",
+    re.IGNORECASE,
+)
+
+
+def detect_and_strip_retraction_title(title: str | None) -> tuple[str | None, bool]:
+    """Detect leading/trailing publisher retraction/withdrawal title markers and strip them."""
+    if not title or not isinstance(title, str):
+        return title, False
+    cleaned = title.strip()
+    if not cleaned:
+        return None, False
+    is_retracted = False
+    while True:
+        m_pre = _RETRACTED_PREFIX_RE.match(cleaned)
+        if m_pre:
+            is_retracted = True
+            rest = cleaned[m_pre.end() :].strip(" :-\u2013\u2014\t")
+            if rest:
+                cleaned = rest
+                continue
+            break
+        m_suf = _RETRACTED_SUFFIX_RE.search(cleaned)
+        if m_suf:
+            is_retracted = True
+            rest = cleaned[: m_suf.start()].strip()
+            if rest:
+                cleaned = rest
+                continue
+            break
+        break
+    return (cleaned or title.strip()), is_retracted
 
 
 def normalize_doi(value: str | None) -> str | None:
@@ -38,7 +85,14 @@ def normalize_doi(value: str | None) -> str | None:
         return None
     value = unicodedata.normalize("NFKC", str(value)).strip()
     value = _DOI_PREFIX_RE.sub("", value)
-    value = value.rstrip(" \t\r\n.,;:)]}>")
+    value = value.rstrip(" \t\r\n.,;:")
+    while value and (
+        (value.endswith(")") and value.count(")") > value.count("("))
+        or (value.endswith("]") and value.count("]") > value.count("["))
+        or (value.endswith("}") and value.count("}") > value.count("{"))
+        or (value.endswith(">") and value.count(">") > value.count("<"))
+    ):
+        value = value[:-1].rstrip(" \t\r\n.,;:")
     return value.casefold() or None
 
 
@@ -116,13 +170,12 @@ def author_keys(authors: Iterable[object] | object | None) -> set[str]:
     """Normalize an author list; accept a single string for compatibility."""
     if authors is None:
         return set()
-    if isinstance(authors, str):
+    if isinstance(authors, (str, bytes)):
         values: list[object] = [authors]
+    elif isinstance(authors, Iterable):
+        values = list(authors)
     else:
-        try:
-            values = list(authors)  # type: ignore[arg-type]
-        except TypeError:
-            values = [authors]
+        values = [authors]
     return {key for key in (author_key(value) for value in values) if key}
 
 
@@ -149,8 +202,19 @@ def author_match_score(
             author_match_score as _full_author_score,
         )
 
-        q_list = [query_authors] if isinstance(query_authors, str) else list(query_authors)  # type: ignore[arg-type]
-        c_list = [candidate_authors] if isinstance(candidate_authors, str) else list(candidate_authors)  # type: ignore[arg-type]
+        q_raw = (
+            [query_authors]
+            if isinstance(query_authors, (str, bytes)) or not isinstance(query_authors, Iterable)
+            else list(query_authors)
+        )
+        c_raw = (
+            [candidate_authors]
+            if isinstance(candidate_authors, (str, bytes))
+            or not isinstance(candidate_authors, Iterable)
+            else list(candidate_authors)
+        )
+        q_list = [str(x) for x in q_raw if x is not None]
+        c_list = [str(x) for x in c_raw if x is not None]
         return _full_author_score(q_list, c_list)
     except Exception:  # noqa: BLE001
         return 0.0

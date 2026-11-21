@@ -307,6 +307,7 @@ def validate_url_syntax_and_literal_ip(url: str) -> tuple[bool, str, str, int]:
         return False, f"Disallowed local hostname '{hostname}'", hostname, effective_port
 
     if ":" in hostname:
+        ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address
         try:
             ip_obj = ipaddress.IPv6Address(hostname)
         except ValueError:
@@ -333,6 +334,13 @@ def validate_url_syntax_and_literal_ip(url: str) -> tuple[bool, str, str, int]:
     try:
         ip_obj = ipaddress.ip_address(hostname)
     except ValueError:
+        if "." not in hostname:
+            return (
+                False,
+                f"Disallowed single-label/dotless hostname '{hostname}'",
+                hostname,
+                effective_port,
+            )
         return True, "needs_dns", hostname, effective_port
 
     ip_ok, ip_reason = _is_strictly_public_ip_obj(ip_obj)
@@ -1425,6 +1433,27 @@ class SafeHtmlMetaVerifier:
         "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
     }
 
+    @staticmethod
+    def _validate_injected_client(client: httpx.AsyncClient) -> None:
+        transport = getattr(client, "_transport", None)
+        if isinstance(transport, httpx.AsyncHTTPTransport):
+            pool = getattr(transport, "_pool", None)
+            backend = getattr(pool, "_network_backend", None)
+            if not isinstance(backend, SSRFSafeAsyncNetworkBackend):
+                raise SSRFBlockedError(
+                    "SafeHtmlMetaVerifier requires an SSRFSafeAsyncNetworkBackend-pinned transport "
+                    "on injected httpx.AsyncClient instances"
+                )
+        mounts = getattr(client, "_mounts", None) or {}
+        for mounted in mounts.values():
+            if isinstance(mounted, httpx.AsyncHTTPTransport):
+                pool = getattr(mounted, "_pool", None)
+                backend = getattr(pool, "_network_backend", None)
+                if not isinstance(backend, SSRFSafeAsyncNetworkBackend):
+                    raise SSRFBlockedError(
+                        "SafeHtmlMetaVerifier rejects unpinned mounted AsyncHTTPTransport"
+                    )
+
     def __init__(
         self,
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
@@ -1434,6 +1463,8 @@ class SafeHtmlMetaVerifier:
         client: httpx.AsyncClient | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
+        if client is not None:
+            self._validate_injected_client(client)
         self.timeout = timeout
         self.max_redirects = max_redirects
         self.max_bytes = max_bytes

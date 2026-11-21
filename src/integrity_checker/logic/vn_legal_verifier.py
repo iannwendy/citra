@@ -277,7 +277,37 @@ _STATUTE_REGISTRY: list[dict] = [
 _DOC_CODE_RE = re.compile(
     r"\b(?P<num>\d{1,4})/(?P<code_year>(?:19|20)\d{2})/(?P<suffix>[A-ZĐa-zđ0-9\-]+)\b"
 )
-_ALL_YEARS_RE = re.compile(r"\b((?:19|20)\d{2})\b")
+_ALL_YEARS_RE = re.compile(r"\b((?:18|19|20)\d{2})\b")
+_DOMESTIC_VN_LEGAL_MARKER_RE = re.compile(
+    r"\b(?:Việt\s+Nam|của\s+(?:Quốc\s+hội|Chính\s+phủ|Thủ\s+tướng)|"
+    r"\d{1,4}/(?:19|20)\d{2}/(?:QH\d*|NĐ-CP|TT-[A-ZĐ0-9\-]+|TTLT-[A-ZĐ0-9\-]+|QĐ-TTg|NQ-QH\d*|NQ-UBTVQH\d*|L-CTN|PL-UBTVQH\d*))\b",
+    re.IGNORECASE,
+)
+_FOREIGN_MULTIWORD_OR_CODE_RE = re.compile(
+    r"\b(?:Nhật\s+Bản|Trung\s+Quốc|Hoa\s+Kỳ|Hàn\s+Quốc|Thái\s+Lan|Tây\s+Ban\s+Nha|"
+    r"Thụy\s+Sĩ|Liên\s+minh\s+[Cc]hâu\s+Âu|La\s+Mã|Vương\s+quốc\s+Anh|Cộng\s+hòa\s+Pháp|"
+    r"Cộng\s+hòa\s+Liên\s+bang\s+Đức|Liên\s+bang\s+Nga|Napol[eé]on|BGB|UCC|"
+    r"Code\s+civil|Civil\s+Code|Common\s+Law)\b",
+    re.IGNORECASE,
+)
+# Single-syllable country names MUST be capitalized (case-sensitive!) and stand in syntactic
+# country-modifier position, never matching lowercase Vietnamese syllables ("Tư pháp", "Đạo đức", "Ý kiến", "Thẩm mỹ").
+_FOREIGN_COUNTRY_MODIFIER_CS_RE = re.compile(
+    r"(?:"
+    r"\b(?:[Cc]ủa\s+)?(?:[Nn]ước|[Nn]hà\s+nước|[Vv]ương\s+quốc|[Cc]ộng\s+hòa|[Ll]iên\s+bang)\s+(?:Pháp|Đức|Mỹ|Anh|Nga|Ý|Nhật)"
+    r"|\b(?:[Hh]iến\s+pháp|[Bb]ộ\s+luật\s+(?:[Dd]ân\s+sự|[Hh]ình\s+sự|[Ll]ao\s+động|[Tt]hương\s+mại|[Tt]ố\s+tụng(?:\s+dân\s+sự|\s+hình\s+sự)?|[Hh]àng\s+hải)|[Ll]uật\s+(?:[\wÀ-ỹ]+\s+){1,4}?của)\s+(?:Pháp|Đức|Mỹ|Anh|Nga|Ý|Nhật)"
+    r")"
+    r"(?!\s+(?:luật|lệnh|điển|quyền|chế|trị|lý|nhân|y\b|thuật|quan|học|ngữ|kiến|thức|định|nghĩa|sự|vụ|gia|dân|công))\b"
+)
+
+
+def _is_foreign_legal_citation(text: str) -> bool:
+    """Return True if ``text`` cites a foreign / comparative-law statute rather than Vietnamese law."""
+    if _DOMESTIC_VN_LEGAL_MARKER_RE.search(text):
+        return False
+    if _FOREIGN_MULTIWORD_OR_CODE_RE.search(text):
+        return True
+    return bool(_FOREIGN_COUNTRY_MODIFIER_CS_RE.search(text))
 
 
 def verify_vn_legal_citation(
@@ -286,7 +316,10 @@ def verify_vn_legal_citation(
     extracted_venue: str | None = None,
 ) -> VNLegalVerificationResult:
     """Verify a Vietnamese legal reference against statutory registry & structural rules."""
-    text = (raw_text or "").strip()
+    import datetime
+    import unicodedata
+
+    text = unicodedata.normalize("NFC", (raw_text or "").strip())
     years_in_text = _ALL_YEARS_RE.findall(text)
     primary_year = (extracted_year or (years_in_text[-1] if years_in_text else "")).strip()
 
@@ -297,6 +330,47 @@ def verify_vn_legal_citation(
 
     mismatches: list[str] = []
     reasons: list[str] = []
+
+    # 0. Validate explicit calendar dates up front (catches non-leap 29/02/2023 on all paths)
+    full_date_m = re.search(
+        r"ngày\s+(?P<d>\d{1,2})[/-](?P<m>\d{1,2})[/-](?P<y>(?:18|19|20)\d{2})",
+        text,
+        re.IGNORECASE,
+    )
+    has_invalid_calendar_date = False
+    if full_date_m:
+        day_i = int(full_date_m.group("d"))
+        mon_i = int(full_date_m.group("m"))
+        yr_i = int(full_date_m.group("y"))
+        try:
+            datetime.date(yr_i, mon_i, day_i)
+        except ValueError:
+            has_invalid_calendar_date = True
+            mismatches.append("year")
+            reasons.append(f"Ngày ban hành không tồn tại trong lịch ({full_date_m.group(0)})")
+
+    # Comparative-law exemption: foreign codes (e.g. "Bộ luật Dân sự Pháp 1804", "BGB", "UCC")
+    # must be recognized BEFORE matching Vietnam's _STATUTE_REGISTRY so they are neither falsely
+    # verified as Vietnamese Quốc hội statutes nor flagged for year mismatch against VN enactments.
+    if _is_foreign_legal_citation(text):
+        if has_invalid_calendar_date:
+            return VNLegalVerificationResult(
+                is_valid=False,
+                is_verified_statute=False,
+                mismatched_fields=["year"],
+                triggered_rules=["R-LEGAL-DOCUMENT", "R-VN-LEGAL-FABRICATED"],
+                reasoning=reasons[-1],
+            )
+        return VNLegalVerificationResult(
+            is_valid=True,
+            is_verified_statute=False,
+            mismatched_fields=[],
+            triggered_rules=["R-LEGAL-DOCUMENT"],
+            reasoning=(
+                "Ghi nhận trích dẫn văn bản pháp luật nước ngoài / luật so sánh "
+                "(nằm ngoài danh mục văn bản quy phạm pháp luật Việt Nam)."
+            ),
+        )
 
     # 1. Check code_year vs cited date/year consistency
     if code_year and primary_year and code_year != primary_year and len(set(years_in_text)) > 1:
@@ -376,6 +450,9 @@ def verify_vn_legal_citation(
             )
 
         if mismatches:
+            statute_err_rules = ["R-LEGAL-DOCUMENT", "R-VN-LEGAL-MISMATCH"]
+            if has_invalid_calendar_date:
+                statute_err_rules.append("R-VN-LEGAL-FABRICATED")
             return VNLegalVerificationResult(
                 is_valid=False,
                 is_verified_statute=False,
@@ -383,12 +460,16 @@ def verify_vn_legal_citation(
                 canonical_code=expected_code,
                 canonical_authority=canonical_authority,
                 mismatched_fields=list(dict.fromkeys(mismatches)),
-                triggered_rules=["R-LEGAL-DOCUMENT", "R-VN-LEGAL-MISMATCH"],
+                triggered_rules=statute_err_rules,
                 reasoning="Phát hiện sai lệch thông tin văn bản quy phạm pháp luật Việt Nam: " + "; ".join(reasons),
             )
 
         is_superseded = bool(matched_year and matched_year in superseded_map and not (cited_years & entry["active_years"]))
-        superseded_by = superseded_map.get(matched_year) if is_superseded else None
+        superseded_by = (
+            superseded_map.get(matched_year)
+            if (is_superseded and matched_year is not None)
+            else None
+        )
         rules = ["R-LEGAL-DOCUMENT", "R-VN-LEGAL-VERIFIED"]
         if is_superseded:
             rules.append("R-VN-LEGAL-SUPERSEDED")
@@ -423,7 +504,8 @@ def verify_vn_legal_citation(
     # Check for fabricated / hallucinated legal codes, non-existent Bộ luật, or impossible dates
     is_fabricated_legal = False
 
-    # 4a. Vietnam only has 6 official Codes (Bộ luật), all registered above. Any other "Bộ luật" is fabricated.
+    # 4a. Vietnam only has 6 official Codes (Bộ luật), all registered above. Any other domestic "Bộ luật" is fabricated
+    # (foreign comparative-law codes were already exempted above via _is_foreign_legal_citation).
     if re.search(r"\bbộ\s+luật\b", text_lower):
         is_fabricated_legal = True
         mismatches.append("title")
@@ -431,21 +513,9 @@ def verify_vn_legal_citation(
             "Văn bản có dấu hiệu bịa đặt: Pháp luật Việt Nam chỉ có 6 Bộ luật chính thức (Dân sự, Hình sự, Lao động, Tố tụng dân sự, Tố tụng hình sự, Hàng hải)"
         )
 
-    # 4b. Check impossible calendar dates (e.g. 30/02, 31/11, 31/04)
-    full_date_m = re.search(
-        r"ngày\s+(?P<d>\d{1,2})[/-](?P<m>\d{1,2})[/-](?P<y>(?:19|20)\d{2})",
-        text,
-        re.IGNORECASE,
-    )
-    if full_date_m:
-        day_i = int(full_date_m.group("d"))
-        mon_i = int(full_date_m.group("m"))
-        if mon_i < 1 or mon_i > 12 or day_i < 1 or day_i > 31 or (mon_i == 2 and day_i > 29) or (mon_i in {4, 6, 9, 11} and day_i > 30):
-            is_fabricated_legal = True
-            mismatches.append("year")
-            reasons.append(
-                f"Ngày ban hành không tồn tại trong lịch ({full_date_m.group(0)})"
-            )
+    # 4b. Propagate Step-0 impossible calendar dates (mismatches/reasons already recorded in Step 0)
+    if has_invalid_calendar_date:
+        is_fabricated_legal = True
 
     # 4c. Check impossible document code numbers (e.g. 888/2023/QH15, 777/2022/QH15, 555/2024/NĐ-CP)
     if code_match:

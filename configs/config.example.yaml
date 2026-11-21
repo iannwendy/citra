@@ -1,6 +1,6 @@
 # =====================================================================
 # config.example.yaml — runtime configuration
-# Copy to `configs/config.yaml` to override defaults (v3.76.0).
+# Copy to `configs/config.yaml` to override defaults (v3.89.5).
 # =====================================================================
 
 app:
@@ -49,7 +49,7 @@ style_detection:
   output:
     classes: ["APA-like", "IEEE-like", "MIXED", "UNKNOWN"]
 
-# --- Bidirectional citation linking (7 statuses) ---
+# --- Bidirectional citation linking (8 statuses: 7 link/issue states + UNRESOLVED neutral) ---
 linking:
   exclude_sections: ["references", "bibliography", "tài liệu tham khảo", "appendix", "phụ lục"]
 

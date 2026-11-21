@@ -202,6 +202,7 @@ class PipelineStepProfiler:
 
         def _wrapped_doc_parse(*args: Any, **kwargs: Any) -> Any:
             nonlocal captured_doc_telemetry
+            assert orig_doc_parse is not None
             res = orig_doc_parse(*args, **kwargs)
             doc_obj = getattr(res, "document", None)
             meta = getattr(doc_obj, "metadata", None) if doc_obj is not None else None
@@ -240,9 +241,10 @@ class PipelineStepProfiler:
         if orig_doc_parse is not None:
             pipeline.document_parser.parse = _wrapped_doc_parse  # type: ignore[method-assign]
         try:
+            numeric_essay_id = int(essay_id) if str(essay_id).isdigit() else 0
             report = await pipeline.run_async(
                 str(file_path),
-                essay_id=essay_id,
+                essay_id=numeric_essay_id,
                 progress_callback=_progress_cb,
             )
             t_run_end = time.perf_counter()
@@ -616,7 +618,7 @@ class ControlledDeterministicOrchestrator:
                 found=True,
                 title=paper.title,
                 authors=list(paper.authors or []),
-                year=paper.year,
+                year=str(paper.year) if paper.year is not None else None,
                 venue=paper.venue,
                 doi=paper.doi,
                 abstract=paper.abstract
@@ -626,8 +628,10 @@ class ControlledDeterministicOrchestrator:
             )
         else:
             fallback_title = citation.title or "Attention Is All You Need"
-            fallback_authors = list(citation.authors or ["Vaswani, A.", "Shazeer, N."])
-            fallback_year = int(citation.year) if str(citation.year or "").isdigit() else 2017
+            fallback_authors = [
+                str(a) for a in (citation.authors or ["Vaswani, A.", "Shazeer, N."])
+            ]
+            fallback_year = str(citation.year) if str(citation.year or "").isdigit() else "2017"
             candidate = SourceCandidate(
                 source_name=sources_succeeded[-1],
                 found=True,
@@ -737,7 +741,7 @@ def run_document_scale_benchmark(
             dp.config.extraction.grobid.enabled = False
         pipeline = IntegrityPipeline(
             document_parser=dp,
-            orchestrator=orch,
+            orchestrator=orch,  # type: ignore[arg-type]
             use_report_cache=False,
         )
         if not use_real_sbert and hasattr(pipeline, "checker"):
@@ -1016,7 +1020,7 @@ async def _run_single_deadline_burst_async(
                                 title=_CANONICAL_SYNTHETIC_PAPERS[
                                     (c_i - 1) % len(_CANONICAL_SYNTHETIC_PAPERS)
                                 ][0],
-                                year=2017,
+                                year="2017",
                             )
                             for c_i in range(1, citations_per_submission + 1)
                         ]

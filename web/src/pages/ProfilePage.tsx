@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { AvatarUpload } from '@/components/AvatarUpload';
 import { api, type Class } from '@/api/client';
+import { validatePasswordClient } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -152,15 +153,12 @@ export function ProfilePage() {
     setPasswordError('');
     setPasswordSuccess('');
 
-    if (newPassword.length < 6 || !newPassword.trim()) {
-      setPasswordError(t('profile.passwordMinLengthError'));
-      return;
-    }
-    if (new TextEncoder().encode(newPassword).length > 72) {
+    const pwCheck = validatePasswordClient(newPassword, lang);
+    if (!pwCheck.valid) {
       setPasswordError(
-        lang === 'vi'
-          ? 'Mật khẩu không được vượt quá 72 byte UTF-8.'
-          : 'Password must not exceed 72 UTF-8 bytes.',
+        pwCheck.reason === 'too_short'
+          ? t('profile.passwordMinLengthError')
+          : pwCheck.error || t('profile.passwordMinLengthError'),
       );
       return;
     }
@@ -362,7 +360,9 @@ export function ProfilePage() {
             <div className="flex-1 space-y-4 min-w-0">
               <div>
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <Label className="input-label">{t('profile.username')}</Label>
+                  <Label htmlFor="profile-username-field" className="input-label">
+                    {t('profile.username')}
+                  </Label>
                   {canSetUsername && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200/70 dark:border-indigo-800/70 text-[11px] font-mono font-medium text-indigo-700 dark:text-indigo-300">
                       <Sparkles className="h-3 w-3" />
@@ -379,6 +379,7 @@ export function ProfilePage() {
                         @
                       </span>
                       <Input
+                        id="profile-username-field"
                         type="text"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
@@ -397,6 +398,7 @@ export function ProfilePage() {
                 ) : (
                   <>
                     <Input
+                      id="profile-username-field"
                       type="text"
                       value={authUser?.username ?? ''}
                       readOnly
@@ -412,8 +414,11 @@ export function ProfilePage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <Label className="input-label">{t('profile.fullName')}</Label>
+                  <Label htmlFor="profile-fullname-field" className="input-label">
+                    {t('profile.fullName')}
+                  </Label>
                   <Input
+                    id="profile-fullname-field"
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
@@ -424,8 +429,11 @@ export function ProfilePage() {
                 </div>
 
                 <div>
-                  <Label className="input-label">{t('profile.email')}</Label>
+                  <Label htmlFor="profile-email-field" className="input-label">
+                    {t('profile.email')}
+                  </Label>
                   <Input
+                    id="profile-email-field"
                     type="email"
                     data-testid="profile-email-input"
                     value={email}
@@ -556,8 +564,11 @@ export function ProfilePage() {
               </div>
             ) : (
               <div>
-                <Label className="input-label">{t('profile.currentPassword')}</Label>
+                <Label htmlFor="profile-current-password" className="input-label">
+                  {t('profile.currentPassword')}
+                </Label>
                 <Input
+                  id="profile-current-password"
                   type="password"
                   autoComplete="current-password"
                   value={currentPassword}
@@ -571,8 +582,11 @@ export function ProfilePage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Label className="input-label">{t('profile.newPassword')}</Label>
+                <Label htmlFor="profile-new-password" className="input-label">
+                  {t('profile.newPassword')}
+                </Label>
                 <Input
+                  id="profile-new-password"
                   type="password"
                   autoComplete="new-password"
                   value={newPassword}
@@ -586,13 +600,17 @@ export function ProfilePage() {
               </div>
 
               <div>
-                <Label className="input-label">{t('profile.confirmNewPassword')}</Label>
+                <Label htmlFor="profile-confirm-password" className="input-label">
+                  {t('profile.confirmNewPassword')}
+                </Label>
                 <Input
+                  id="profile-confirm-password"
                   type="password"
                   autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
+                  maxLength={128}
                   className="mt-1.5 rounded-xl"
                   placeholder={t('profile.confirmNewPasswordPlaceholder')}
                 />

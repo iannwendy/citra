@@ -26,7 +26,7 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -69,6 +69,8 @@ from integrity_checker.retrieval.openaire_hal_client import OpenAIREHalClient
 from integrity_checker.retrieval.openalex_client import OpenAlexClient
 from integrity_checker.retrieval.openlibrary_client import OpenLibraryClient
 from integrity_checker.retrieval.persistent_cache import (
+    _TRANSIENT_FAILURE_MARKERS,
+    _TRANSIENT_STATUS_RE,
     CLEAN_MISS_TTL_SECONDS,
     POSITIVE_MATCH_TTL_SECONDS,
     PersistentVerificationCache,
@@ -92,6 +94,9 @@ if TYPE_CHECKING:
     from integrity_checker.retrieval.cache import DiskCache
 
 logger = get_logger(__name__)
+
+_ORIG_ORCH_ASYNC_GET = httpx.AsyncClient.get
+_ORIG_ORCH_ASYNC_STREAM = httpx.AsyncClient.stream
 
 _ALLOW_SERPAPI_OVERRIDE: contextvars.ContextVar[bool | None] = contextvars.ContextVar(
     "_allow_serpapi_override", default=None
@@ -1190,7 +1195,7 @@ class RetrievalOrchestrator:
         cache: DiskCache | None = None,
         local_db: LocalDatabase | None = None,
         use_local_db: bool | None = None,
-        link_validator: object | None = None,
+        link_validator: Any | None = None,
         enable_link_validation: bool | None = None,
         circuit_breakers: CircuitBreakerRegistry | None = None,
         persistent_cache: PersistentVerificationCache | None = None,
@@ -1467,9 +1472,10 @@ class RetrievalOrchestrator:
         if citation.matched_pattern == "vn_legal_document":
             return True
         try:
-            from integrity_checker.extraction.patterns import is_vn_legal_reference
+            from integrity_checker.extraction import patterns as _patterns_mod
 
-            if is_vn_legal_reference(raw_text):
+            vn_legal_fn = getattr(_patterns_mod, "is_vn_legal_reference", None)
+            if callable(vn_legal_fn) and bool(vn_legal_fn(raw_text)):
                 return True
         except Exception:  # noqa: BLE001
             pass
@@ -1959,13 +1965,32 @@ class RetrievalOrchestrator:
 
         best_ref = found_cands[0]
         ref_title = citation.title or best_ref.title or ""
+        ref_authors = list(citation.authors or best_ref.authors or [])
+        ref_year_str = str(citation.year or best_ref.year or "")[:4]
+        ref_year_int = int(ref_year_str) if len(ref_year_str) == 4 and ref_year_str.isdigit() else None
         ref_doi = normalize_doi(citation.doi or best_ref.doi) if (citation.doi or best_ref.doi) else None
+
+        def _dois_compatible(d1: str | None, d2: str | None) -> bool:
+            if not d1 or not d2:
+                return True
+            n1 = normalize_doi(d1)
+            n2 = normalize_doi(d2)
+            if not n1 or not n2:
+                return True
+            if n1 == n2:
+                return True
+            # Allow arXiv preprint DOI <-> published venue DOI only when title & authors also match
+            return n1.startswith("10.48550/arxiv") != n2.startswith("10.48550/arxiv")
 
         def _matches_target(alt: SourceCandidate) -> bool:
             if not alt or not alt.found or not (alt.abstract and alt.abstract.strip()):
                 return False
-            if ref_doi and alt.doi and normalize_doi(alt.doi) == ref_doi:
-                return True
+            alt_doi_norm = normalize_doi(alt.doi) if alt.doi else None
+            if ref_doi and alt_doi_norm:
+                if alt_doi_norm == ref_doi:
+                    return True
+                if not _dois_compatible(ref_doi, alt_doi_norm):
+                    return False
             if ref_title and alt.title:
                 sim = max(
                     title_similarity(ref_title, alt.title),
@@ -1974,7 +1999,20 @@ class RetrievalOrchestrator:
                         OpenLibraryClient.strip_edition_suffix(alt.title),
                     ),
                 )
-                return sim >= 0.82
+                if sim < 0.82:
+                    return False
+                if ref_authors:
+                    if not alt.authors or author_match_score(ref_authors, alt.authors) < 0.50:
+                        return False
+                if (
+                    ref_year_int is not None
+                    and alt.year
+                    and len(str(alt.year)) >= 4
+                    and str(alt.year)[:4].isdigit()
+                    and abs(int(str(alt.year)[:4]) - ref_year_int) > 2
+                ):
+                    return False
+                return True
             return False
 
         # Build enrichment client pool (abstract-bearing sources not yet queried)
@@ -2003,52 +2041,55 @@ class RetrievalOrchestrator:
                 "huggingface",
                 "openlibrary",
             ):
-                c = enabled_clients.get(name)
-                if c is None or c.name in already_queried:
+                cand_client = enabled_clients.get(name)
+                if cand_client is None or cand_client.name in already_queried:
                     continue
-                if c.name == "openlibrary" and not signals.get("is_book"):
+                if cand_client.name == "openlibrary" and not signals.get("is_book"):
                     continue
-                if c.name == "arxiv" and signals.get("is_book"):
+                if cand_client.name == "arxiv" and signals.get("is_book"):
                     continue
-                if c.name in ("europepmc", "ncbi_biorxiv") and not (
+                if cand_client.name in ("europepmc", "ncbi_biorxiv") and not (
                     signals.get("is_biomed") or citation.doi or ref_doi
                 ):
                     continue
-                if c.name == "huggingface" and not (
+                if cand_client.name == "huggingface" and not (
                     signals.get("is_huggingface") or signals.get("is_arxiv") or signals.get("is_cs_ai")
                 ):
                     continue
-                pool.append(c)
+                pool.append(cand_client)
 
         try:
             if pool:
                 batch_res = await self._execute_client_batch(pool[:3], citation)
                 for res in batch_res:
                     if isinstance(res, SourceCandidate) and _matches_target(res):
-                        abs_text = res.abstract.strip()  # type: ignore[union-attr]
+                        abs_text = (res.abstract or "").strip()
                         for fc in found_cands:
                             if not fc.abstract:
                                 fc.abstract = abs_text
                         return abs_text
 
             # Fallback: if OpenAlex was queried by DOI and the publisher DOI record had no abstract,
-            # try OpenAlex title search to pick up an arXiv/repository mirror with an abstract.
+            # try OpenAlex title search (via rate-limited/circuit-guarded lookup) to pick up a mirror.
             if (
                 isinstance(self.openalex, OpenAlexClient)
                 and ref_doi
                 and ref_title
                 and (citation.doi or not citation.title)
             ):
+                oa_authors: list[Any] = (
+                    list(citation.authors) if citation.authors else list(best_ref.authors)
+                )
                 title_only_cit = Citation(
                     raw_text=citation.raw_text,
                     title=ref_title,
-                    authors=citation.authors or best_ref.authors,
+                    authors=oa_authors,
                     year=citation.year or best_ref.year,
                     doi=None,
                 )
-                oa_search_cand = await self.openalex._lookup_by_search(title_only_cit)
+                oa_search_cand = await self._lookup_with_ratelimit(self.openalex, title_only_cit)
                 if isinstance(oa_search_cand, SourceCandidate) and _matches_target(oa_search_cand):
-                    abs_text = oa_search_cand.abstract.strip()  # type: ignore[union-attr]
+                    abs_text = (oa_search_cand.abstract or "").strip()
                     for fc in found_cands:
                         if not fc.abstract:
                             fc.abstract = abs_text
@@ -2056,19 +2097,47 @@ class RetrievalOrchestrator:
 
             # Fallback for ACL Anthology DOIs (10.18653/v1/<id>): fetch abstract directly from aclanthology.org
             if ref_doi and ref_doi.lower().startswith("10.18653/v1/"):
+                from urllib.parse import quote as _url_quote
+
                 acl_id = ref_doi[len("10.18653/v1/") :].strip("/")
-                if re.match(r"^[a-z]\d{2}-\d{3,4}$", acl_id):
+                if re.fullmatch(r"[a-z]\d{2}-\d{3,4}", acl_id):
                     acl_id = acl_id.upper()
-                if acl_id:
+                is_valid_acl_id = (
+                    bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.\-]{1,63}", acl_id))
+                    and ".." not in acl_id
+                    and not acl_id.lower().endswith(".pdf")
+                )
+                if is_valid_acl_id:
+                    acl_url = f"https://aclanthology.org/{_url_quote(acl_id, safe='')}/"
                     client = get_shared_http_client(follow_redirects=True)
-                    resp = await client.get(
-                        f"https://aclanthology.org/{acl_id}/",
-                        timeout=4.0,
-                    )
-                    if resp.status_code == 200:
+                    acl_html = ""
+                    max_acl_bytes = 262_144
+                    if (
+                        httpx.AsyncClient.get is not _ORIG_ORCH_ASYNC_GET
+                        and httpx.AsyncClient.stream is _ORIG_ORCH_ASYNC_STREAM
+                    ):
+                        resp = await client.get(acl_url, timeout=4.0)
+                        if resp.status_code == 200:
+                            acl_html = resp.content[:max_acl_bytes].decode(
+                                "utf-8", errors="replace"
+                            )
+                    else:
+                        async with client.stream("GET", acl_url, timeout=4.0) as resp:
+                            if resp.status_code == 200:
+                                chunks: list[bytes] = []
+                                total_b = 0
+                                async for chunk in resp.aiter_bytes():
+                                    take = chunk[: max(0, max_acl_bytes - total_b)]
+                                    if take:
+                                        chunks.append(take)
+                                        total_b += len(take)
+                                    if total_b >= max_acl_bytes:
+                                        break
+                                acl_html = b"".join(chunks).decode("utf-8", errors="replace")
+                    if acl_html:
                         m = re.search(
                             r'<div class="card-body acl-abstract">.*?<span>(.*?)</span>',
-                            resp.text[:262_144],
+                            acl_html,
                             re.S | re.I,
                         )
                         if m:
@@ -2181,6 +2250,7 @@ class RetrievalOrchestrator:
 
             reset_task_http_status(source_name)
             started_at = time.perf_counter()
+            req_started_mono = time.monotonic()
             cb_token = set_rate_limit_callback(_on_http_429) if limiter else None
             try:
                 batch_map = await batch_coro_fn()
@@ -2235,8 +2305,8 @@ class RetrievalOrchestrator:
                             limiter.report_rate_limited(float(retry_after_val))
                         else:
                             limiter.report_rate_limited()
-                elif not notified_429 or recovered_ok:
-                    limiter.report_success()
+                elif (not notified_429 and final_status is not None and 200 <= final_status < 500) or recovered_ok:
+                    limiter.report_success(started_at=req_started_mono)
 
             infra_reason: str | None = None
             if final_status == 429:
@@ -3355,14 +3425,14 @@ class RetrievalOrchestrator:
                 local_candidate = local_result.best_candidate()
                 if local_candidate and not (local_candidate.abstract and local_candidate.abstract.strip()):
                     enriched_abs = await self._enrich_missing_abstract(citation, local_result.candidates)
-                    if enriched_abs and local_candidate.paper_id:
+                    if enriched_abs:
                         try:
-                            with self._local_db._get_conn() as conn:
-                                conn.execute(
-                                    "UPDATE papers SET abstract = ? WHERE id = ?",
-                                    (enriched_abs, local_candidate.paper_id),
-                                )
-                                conn.commit()
+                            self._local_db.update_paper_abstract(
+                                paper_id=local_candidate.paper_id,
+                                doi=local_candidate.doi or citation.doi,
+                                title=local_candidate.title or citation.title,
+                                abstract=enriched_abs,
+                            )
                         except Exception as exc:  # noqa: BLE001
                             logger.debug(f"Failed to persist enriched abstract to local_db: {exc}")
                 self._local_db.log_query(
@@ -3691,11 +3761,11 @@ class RetrievalOrchestrator:
             clean_miss_count = sum(
                 1
                 for err in failed.values()
-                if any(marker in (err or "").lower() for marker in clean_markers)
+                if any(marker in _strip_quoted_query(err) for marker in clean_markers)
             )
             has_hard_api_failure = any(
                 any(
-                    err_marker in (err or "").lower()
+                    err_marker in _strip_quoted_query(err)
                     for err_marker in (
                         "429",
                         "rate limit",
@@ -3716,11 +3786,11 @@ class RetrievalOrchestrator:
                 "crossref" in sources_queried
                 and "openalex" in sources_queried
                 and any(
-                    marker in (failed.get("crossref") or "").lower()
+                    marker in _strip_quoted_query(failed.get("crossref"))
                     for marker in clean_markers
                 )
                 and any(
-                    marker in (failed.get("openalex") or "").lower()
+                    marker in _strip_quoted_query(failed.get("openalex"))
                     for marker in clean_markers
                 )
             )
@@ -3811,10 +3881,51 @@ class RetrievalOrchestrator:
             url_status_code = 404
 
         if not any_found and len(failed) >= min_failures_for_unresolved:
-            # Distinguish hard API/network failures from clean HTTP 200 "no results" responses
-            has_clean_search_response = any(
-                _is_clean_miss_error(_strip_quoted_query(err))
-                for err in failed.values()
+            # Distinguish hard API/network failures from genuine HTTP 200 "no results" responses
+            clean_miss_sources = [
+                src
+                for src, err in failed.items()
+                if _is_clean_miss_error(_strip_quoted_query(err))
+            ]
+            transient_failed_sources = {
+                src
+                for src, err in failed.items()
+                if (
+                    _TRANSIENT_STATUS_RE.search(_strip_quoted_query(err))
+                    or any(m in _strip_quoted_query(err) for m in _TRANSIENT_FAILURE_MARKERS)
+                )
+            }
+            both_wide_graphs_transient = (
+                "crossref" in transient_failed_sources
+                and "openalex" in transient_failed_sources
+            )
+            any_wide_graph_transient = bool(
+                {"crossref", "openalex"} & transient_failed_sources
+            )
+            is_api_exhausted = (
+                False
+                if (
+                    nonexistent_registry_confirmed
+                    or not transient_failed_sources
+                    or any(
+                        not c.found
+                        and (getattr(c, "external_ids", None) or {}).get("doi_ra_status")
+                        == "registered_no_csl"
+                        for c in deduped
+                    )
+                )
+                else (
+                    len(clean_miss_sources) == 0
+                    or (
+                        both_wide_graphs_transient
+                        and "serpapi" not in clean_miss_sources
+                    )
+                    or (
+                        any_wide_graph_transient
+                        and len(clean_miss_sources) < 2
+                        and len(transient_failed_sources) > len(clean_miss_sources)
+                    )
+                )
             )
             sentinel_candidates = [
                 c
@@ -3841,9 +3952,7 @@ class RetrievalOrchestrator:
                 sources_queried=sources_queried,
                 sources_succeeded=[],
                 sources_failed=failed,
-                api_exhausted=(
-                    False if sentinel_candidates else (not has_clean_search_response)
-                ),
+                api_exhausted=is_api_exhausted,
                 url_status=url_status,
                 url_status_code=url_status_code,
                 archive_url=archive_url,
@@ -4003,6 +4112,7 @@ class RetrievalOrchestrator:
                     sources_queried=["local_db"],
                     sources_succeeded=["local_db"],
                     sources_failed={},
+                    is_retracted=cand.is_retracted,
                 )
 
         # Try arXiv ID (extracted from URL or DOI)
@@ -4034,6 +4144,7 @@ class RetrievalOrchestrator:
                     sources_queried=["local_db"],
                     sources_succeeded=["local_db"],
                     sources_failed={},
+                    is_retracted=cand.is_retracted,
                 )
 
         # Try FTS5 search by title (fuzzy fallback)
@@ -4136,6 +4247,7 @@ class RetrievalOrchestrator:
                         sources_queried=["local_db"],
                         sources_succeeded=["local_db"],
                         sources_failed={},
+                        is_retracted=cand.is_retracted,
                     )
             except Exception as e:
                 logger.debug(f"Local DB FTS search failed: {e}")
@@ -4740,6 +4852,7 @@ class RetrievalOrchestrator:
 
             reset_task_http_status(client.name)
             started_at = time.perf_counter()
+            req_started_mono = time.monotonic()
             cb_token = set_rate_limit_callback(_on_http_429) if limiter else None
             try:
                 cand = await client.lookup(citation)
@@ -4774,10 +4887,21 @@ class RetrievalOrchestrator:
             latency_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
             http_status, _http_ra, http_transport_err = get_task_http_status(client.name)
 
+            infra_reason = self._classify_lookup_infra_failure(
+                cand,
+                http_status=http_status,
+                http_transport_err=http_transport_err,
+                notified_429=notified_429,
+            )
             if limiter:
-                err_lower = (cand.error or "").lower()
+                err_stripped = _strip_quoted_query(cand.error)
                 is_429 = bool(
-                    cand.error and (re.search(r"\b429\b", cand.error) or "rate limit" in err_lower)
+                    notified_429
+                    or http_status == 429
+                    or (
+                        err_stripped
+                        and (re.search(r"\b429\b", err_stripped) or "rate limit" in err_stripped)
+                    )
                 )
                 if is_429:
                     if not notified_429:
@@ -4786,15 +4910,9 @@ class RetrievalOrchestrator:
                             limiter.report_rate_limited(float(retry_after_val))
                         else:
                             limiter.report_rate_limited()
-                elif not notified_429:
-                    limiter.report_success()
+                elif infra_reason is None:
+                    limiter.report_success(started_at=req_started_mono)
 
-            infra_reason = self._classify_lookup_infra_failure(
-                cand,
-                http_status=http_status,
-                http_transport_err=http_transport_err,
-                notified_429=notified_429,
-            )
             if infra_reason is not None:
                 self._circuit_breakers.record_infra_failure(
                     client.name,
@@ -4901,7 +5019,7 @@ class RetrievalOrchestrator:
         """
         from integrity_checker.database import Paper
 
-        if not succeeded or not candidates:
+        if self._local_db is None or not succeeded or not candidates:
             return
 
         for cand in candidates:
@@ -5127,9 +5245,14 @@ class RetrievalOrchestrator:
 
             if c.source_name:
                 existing_snap = corr_map.get(c.source_name)
-                prev_conf = (
-                    float(existing_snap.get("confidence", 0.0) or 0.0)
+                raw_prev_conf = (
+                    existing_snap.get("confidence", 0.0)
                     if isinstance(existing_snap, dict)
+                    else None
+                )
+                prev_conf = (
+                    float(raw_prev_conf)
+                    if isinstance(raw_prev_conf, (int, float, str)) and str(raw_prev_conf) != ""
                     else -1.0
                 )
                 if existing_snap is None or float(c.confidence or 0.0) >= prev_conf:
@@ -5314,7 +5437,7 @@ class RetrievalOrchestrator:
             elif (
                 self._serpapi_limiter_mode == "serper"
                 and SerpApiClient._is_serper_quota_exhausted()
-                and getattr(self.serpapi, "api_key", "")
+                and bool(self.serpapi and self.serpapi.api_key)
             ):
                 # Dynamically step down rate limit if Serper exhausted credits mid-run and fell back to SerpApi
                 self._serpapi_limiter = RateLimiter(
@@ -5324,7 +5447,7 @@ class RetrievalOrchestrator:
             elif (
                 self._serpapi_limiter_mode == "serpapi"
                 and not SerpApiClient._is_serper_quota_exhausted()
-                and getattr(self.serpapi, "serper_api_key", "")
+                and bool(self.serpapi and self.serpapi.serper_api_key)
             ):
                 # Restore Serper rate limit once bounded quota cooldown expires
                 self._serpapi_limiter = RateLimiter(
@@ -5350,6 +5473,7 @@ class RetrievalOrchestrator:
             )
             reset_task_http_status("serpapi")
             started_at = time.perf_counter()
+            req_started_mono = time.monotonic()
             try:
                 cand = await self.serpapi.lookup(citation)
             except httpx.HTTPStatusError as exc:
@@ -5392,8 +5516,20 @@ class RetrievalOrchestrator:
             http_status, _http_ra, http_transport_err = get_task_http_status("serpapi")
             is_429 = False
             if isinstance(cand, SourceCandidate):
-                err_l = (cand.error or "").lower()
-                is_429 = bool(cand.error and ("429" in cand.error or "rate limit" in err_l))
+                err_stripped = _strip_quoted_query(cand.error)
+                is_429 = bool(
+                    http_status == 429
+                    or (
+                        err_stripped
+                        and (re.search(r"\b429\b", err_stripped) or "rate limit" in err_stripped)
+                    )
+                )
+                infra_reason = self._classify_lookup_infra_failure(
+                    cand,
+                    http_status=http_status,
+                    http_transport_err=http_transport_err,
+                    notified_429=is_429,
+                )
                 if self._serpapi_limiter:
                     if is_429:
                         retry_after_val = getattr(self.serpapi, "_last_retry_after", None)
@@ -5401,14 +5537,8 @@ class RetrievalOrchestrator:
                             self._serpapi_limiter.report_rate_limited(float(retry_after_val))
                         else:
                             self._serpapi_limiter.report_rate_limited()
-                    else:
-                        self._serpapi_limiter.report_success()
-                infra_reason = self._classify_lookup_infra_failure(
-                    cand,
-                    http_status=http_status,
-                    http_transport_err=http_transport_err,
-                    notified_429=is_429,
-                )
+                    elif infra_reason is None:
+                        self._serpapi_limiter.report_success(started_at=req_started_mono)
                 if infra_reason is not None:
                     self._circuit_breakers.record_infra_failure(
                         "serpapi",

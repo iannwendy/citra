@@ -20,6 +20,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -232,6 +233,26 @@ def _extract_cis_score_from_json(cis_json: str | None) -> float | None:
 # ---------------------------------------------------------------------------
 
 
+def _backfill_missing_join_codes(classes: list[Class], repo: Repository) -> None:
+    """Backfill legacy missing join_codes in a single commit and batch-reload all classes."""
+    if not classes:
+        return
+    all_ids = [c.id for c in classes]
+    missing = [c for c in classes if not c.join_code]
+    if not missing:
+        return
+    for cls in missing:
+        cls.join_code = repo._generate_join_code()
+    repo.commit()
+    fresh_by_id = {
+        c.id: c
+        for c in repo.session.scalars(select(Class).where(Class.id.in_(all_ids))).all()
+    }
+    classes[:] = [
+        fresh_by_id.get(cid, cls) for cid, cls in zip(all_ids, classes, strict=False)
+    ]
+
+
 def _class_to_response(
     cls: Class,
     repo: Repository,
@@ -244,13 +265,13 @@ def _class_to_response(
         student_count = repo.count_students_in_class(cls.id)
     # If caller already computed essay_count (to avoid duplicate query), reuse it.
     if essay_count is None:
-        essay_count = len(repo.get_class_essays(cls.id))
+        essay_count = repo.count_essays_by_class_ids([cls.id]).get(cls.id, 0)
     if teacher_username is None:
         teacher = repo.get_user_by_id(cls.teacher_id)
         teacher_username = teacher.username if teacher else "unknown"
     if not cls.join_code:
         cls.join_code = repo._generate_join_code()
-        repo.commit()
+        repo.session.flush()
     return ClassResponse(
         id=cls.id,
         name=cls.name,
@@ -294,19 +315,23 @@ def list_my_classes(
 ):
     """Teacher: list classes mình phụ trách. Admin: list all."""
     repo = Repository(db)
-    if teacher.role == "admin":
+    teacher_role = teacher.role
+    teacher_id = teacher.id
+    if teacher_role == "admin":
         classes = repo.list_all_classes()
     else:
-        classes = repo.list_classes_for_teacher(teacher.id)
-    # Batch-fetch student counts and teacher usernames to eliminate N+1 queries
+        classes = repo.list_classes_for_teacher(teacher_id)
+    _backfill_missing_join_codes(classes, repo)
+    # Batch-fetch essay counts, student counts, and teacher usernames to eliminate N+1 queries
     class_ids = [c.id for c in classes]
+    essay_counts = repo.count_essays_by_class_ids(class_ids)
     student_counts = repo.count_students_by_class_ids(class_ids)
     teachers_by_id = repo.get_users_by_ids({c.teacher_id for c in classes})
     return [
         _class_to_response(
             c,
             repo,
-            essay_count=len(repo.get_class_essays(c.id)),
+            essay_count=essay_counts.get(c.id, 0),
             student_count=student_counts.get(c.id, 0),
             teacher_username=(
                 teachers_by_id[c.teacher_id].username
@@ -460,20 +485,24 @@ def list_enrolled_classes(
 ):
     """List classes that the current student is enrolled in (or taught classes for teacher/admin)."""
     repo = Repository(db)
-    if current_user.role == "admin":
+    user_role = current_user.role
+    user_id = current_user.id
+    if user_role == "admin":
         classes = repo.list_all_classes()
-    elif current_user.role == "teacher":
-        classes = repo.list_classes_for_teacher(current_user.id)
+    elif user_role == "teacher":
+        classes = repo.list_classes_for_teacher(user_id)
     else:
-        classes = repo.list_classes_for_student(current_user.id)
+        classes = repo.list_classes_for_student(user_id)
+    _backfill_missing_join_codes(classes, repo)
     class_ids = [c.id for c in classes]
+    essay_counts = repo.count_essays_by_class_ids(class_ids)
     student_counts = repo.count_students_by_class_ids(class_ids)
     teachers_by_id = repo.get_users_by_ids({c.teacher_id for c in classes})
     return [
         _class_to_response(
             c,
             repo,
-            essay_count=len(repo.get_class_essays(c.id)),
+            essay_count=essay_counts.get(c.id, 0),
             student_count=student_counts.get(c.id, 0),
             teacher_username=(
                 teachers_by_id[c.teacher_id].username
@@ -636,21 +665,22 @@ def teacher_dashboard(
     """Aggregated stats cho 1 teacher (admin sees their own subset, no
     global admin dashboard — that's Phase 4)."""
     repo = Repository(db)
-    if teacher.role == "admin":
+    teacher_role = teacher.role
+    teacher_id = teacher.id
+    if teacher_role == "admin":
         classes = repo.list_all_classes()
     else:
-        classes = repo.list_classes_for_teacher(teacher.id)
-    # Compute essay lists, student counts, and teachers ONCE in batch
+        classes = repo.list_classes_for_teacher(teacher_id)
+    _backfill_missing_join_codes(classes, repo)
+    # Compute essay IDs, student counts, and teachers ONCE in batch without loading JSON blobs
     class_ids = [c.id for c in classes]
-    essays_per_class: dict[int, list] = {
-        c.id: repo.get_class_essays(c.id) for c in classes
-    }
+    essay_ids_per_class = repo._get_essay_ids_by_class_ids(class_ids)
     student_counts = repo.count_students_by_class_ids(class_ids)
     teachers_by_id = repo.get_users_by_ids({c.teacher_id for c in classes})
     total_students = sum(student_counts.get(c.id, 0) for c in classes)
-    total_essays = sum(len(essays_per_class[c.id]) for c in classes)
+    total_essays = sum(len(essay_ids_per_class.get(c.id, set())) for c in classes)
     all_class_essay_ids = {
-        e.id for c in classes for e in essays_per_class[c.id]
+        eid for c in classes for eid in essay_ids_per_class.get(c.id, set())
     }
     pending_reviews = repo.count_pending_reviews_by_essay_ids(all_class_essay_ids)
     return TeacherDashboardResponse(
@@ -662,7 +692,7 @@ def teacher_dashboard(
             _class_to_response(
                 c,
                 repo,
-                essay_count=len(essays_per_class[c.id]),
+                essay_count=len(essay_ids_per_class.get(c.id, set())),
                 student_count=student_counts.get(c.id, 0),
                 teacher_username=(
                     teachers_by_id[c.teacher_id].username
@@ -1064,9 +1094,10 @@ def export_class_zip(
                 )
 
         cis_obj = None
-        if getattr(essay, "cis_json", None):
+        raw_cis_json = getattr(essay, "cis_json", None)
+        if isinstance(raw_cis_json, str) and raw_cis_json:
             try:
-                cis_obj = json.loads(essay.cis_json)
+                cis_obj = json.loads(raw_cis_json)
             except (json.JSONDecodeError, TypeError):
                 cis_obj = None
 

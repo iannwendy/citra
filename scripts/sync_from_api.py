@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""Sync new papers from API queries into local database.
-
-This script can be run periodically to add papers that were queried
-via external APIs but not yet in the local database.
+"""Inspect, export, or maintain synced API papers in the local paper database.
 
 Usage:
-    python scripts/sync_from_api.py [--db-path ./data/local_papers.db]
+    python scripts/sync_from_api.py --stats [--db-path ./data/local_papers.db]
+    python scripts/sync_from_api.py --export-bibtex ./papers.bib [--export-limit 1000]
 
 Or use as a module:
     from scripts.sync_from_api import sync_paper_to_db
@@ -15,6 +13,7 @@ Or use as a module:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -54,12 +53,16 @@ def sync_paper_to_db(
         if existing:
             return False
 
+    raw_year = str(source_candidate.year or "").strip()
+    year_match = re.search(r"\d{4}", raw_year)
+    parsed_year = int(year_match.group(0)) if year_match else None
+
     paper = Paper(
         doi=source_candidate.doi,
         arxiv_id=arxiv_id,
         title=source_candidate.title or "",
         authors=source_candidate.authors or [],
-        year=int(source_candidate.year) if source_candidate.year else None,
+        year=parsed_year,
         venue=source_candidate.venue,
         abstract=getattr(source_candidate, "abstract", None),
         categories=[],
@@ -71,23 +74,43 @@ def sync_paper_to_db(
     return paper_id is not None
 
 
-def sync_from_query_log(db: LocalDatabase, source: str = "api") -> int:
-    """Sync papers from recent query logs that weren't found."""
-    _ = (db, source)
-    print("Syncing from query log is not yet implemented.")
-    print("This requires API access.")
-    return 0
+def _alpha_suffix(index: int) -> str:
+    """Convert 1-based collision index into bijective base-26 suffix (1->a, 26->z, 27->aa)."""
+    chars: list[str] = []
+    n = index
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        chars.append(chr(ord("a") + rem))
+    return "".join(reversed(chars))
+
+
+def _disambiguate_key(base_key: str, seen_counts: dict[str, int], used_keys: set[str]) -> str:
+    """Return a unique BibTeX citation key by appending a..z, aa..zz suffixes on collisions."""
+    count = seen_counts.get(base_key, 0)
+    while True:
+        candidate = base_key if count == 0 else f"{base_key}{_alpha_suffix(count)}"
+        count += 1
+        if candidate not in used_keys:
+            seen_counts[base_key] = count
+            used_keys.add(candidate)
+            return candidate
 
 
 def export_to_bibtex(db: LocalDatabase, output_path: Path, limit: int = 1000) -> int:
-    """Export papers from database to BibTeX format."""
+    """Export papers from database to BibTeX format with unique citation keys."""
     papers = db.get_all_papers(limit=limit)
 
-    lines = []
+    lines: list[str] = []
+    seen_keys: dict[str, int] = {}
+    used_keys: set[str] = set()
     for paper in papers:
-        first_author = paper.authors[0].split()[-1] if paper.authors else "Unknown"
+        author_tokens = (
+            paper.authors[0].split() if paper.authors and paper.authors[0].strip() else []
+        )
+        raw_surname = author_tokens[-1] if author_tokens else "Unknown"
+        clean_surname = re.sub(r"[^A-Za-z0-9]", "", raw_surname) or "Unknown"
         year = paper.year or "nd"
-        key = f"{first_author}{year}"
+        key = _disambiguate_key(f"{clean_surname}{year}", seen_keys, used_keys)
 
         lines.append(f"@article{{{key},")
         lines.append(f"  title = {{{paper.title}}},")
@@ -119,34 +142,35 @@ def export_to_bibtex(db: LocalDatabase, output_path: Path, limit: int = 1000) ->
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Sync papers from API to local database")
+    parser = argparse.ArgumentParser(description="Inspect or export synced local database papers")
     parser.add_argument(
         "--db-path",
         type=Path,
         default=Path("./data/local_papers.db"),
         help="Path to local database",
     )
-    parser.add_argument(
+    action_group = parser.add_mutually_exclusive_group(required=True)
+    action_group.add_argument(
         "--stats",
         action="store_true",
         help="Show database statistics",
     )
-    parser.add_argument(
+    action_group.add_argument(
         "--export-bibtex",
         type=Path,
         metavar="OUTPUT",
         help="Export to BibTeX file",
+    )
+    action_group.add_argument(
+        "--delete-all",
+        action="store_true",
+        help="Delete all papers (for testing)",
     )
     parser.add_argument(
         "--export-limit",
         type=int,
         default=1000,
         help="Maximum papers to export",
-    )
-    parser.add_argument(
-        "--delete-all",
-        action="store_true",
-        help="Delete all papers (for testing)",
     )
 
     args = parser.parse_args()
@@ -161,11 +185,9 @@ def main() -> None:
         print("\nPapers by source:")
         for src_name, count in stats["source_counts"].items():
             print(f"    {src_name}: {count}")
-
-    if args.export_bibtex:
+    elif args.export_bibtex:
         export_to_bibtex(db, args.export_bibtex, args.export_limit)
-
-    if args.delete_all:
+    elif args.delete_all:
         count = db.delete_all()
         print(f"Deleted {count} papers")
 

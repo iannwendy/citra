@@ -16,7 +16,9 @@
     />
     <meta name="author" content="CITRA — SourceLogic Academic Integrity Platform" />
     <meta name="robots" content="index, follow" />
-    <meta name="theme-color" content="#4f46e5" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FBFAF6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141310" />
+    <meta name="theme-color" content="#FBFAF6" />
     <link rel="canonical" href="https://citra.io.vn/" />
 
     <!-- Icons, Manifest, Font Preconnect & LCP Preload -->
@@ -41,6 +43,8 @@
         var t = localStorage.getItem('theme');
         if (t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
           document.documentElement.classList.add('dark');
+          var tm = document.querySelector('meta[name="theme-color"]:not([media])');
+          if (tm) tm.setAttribute('content', '#141310');
         }
       } catch (e) {}
     </script>

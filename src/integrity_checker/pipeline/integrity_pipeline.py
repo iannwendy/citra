@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import copy
 import hashlib
 import inspect
 import json
@@ -40,6 +41,7 @@ from integrity_checker.extraction import (
     ReferenceListParser,
 )
 from integrity_checker.extraction.base import BasePDFParser, Page, chain_parsers
+from integrity_checker.extraction.patterns.utils import _ALPHA_LATIN_VN
 from integrity_checker.linking.citation_linker import CitationLinker
 from integrity_checker.linking.statuses import (
     CitationLink,
@@ -174,9 +176,9 @@ def _is_verifiable(citation: Citation) -> bool:
 
 
 # Regex for normalizing "et al." citation formats for link lookup
-# Matches: "(Vaswani et al., 2017)", "(Vaswani et al. (2017))", "Vaswani et al. (2017)"
+# Matches: "(Vaswani et al., 2017)", "(Vaswani et al. (2017))", "(Nguyễn et al., 2021)"
 _ET_AL_NORM_RE = re.compile(
-    r"\(?([A-Za-zÀ-ÿ'.\s-]+?)(?:\s+et\s+al\.?)?[,\s]+\(?\s*((?:19|20)\d{2})",
+    rf"\(?((?:{_ALPHA_LATIN_VN}|['.\s-])+?)(?:\s+et\s+al\.?)?[,\s]+\(?\s*((?:19|20)\d{{2}})",
     re.IGNORECASE,
 )
 
@@ -224,7 +226,7 @@ class AnalysisReport:
                     "confidence": v.confidence,
                     # Lớp 2: integrity mapping (7 trạng thái v1.2 §3.2.2)
                     "mapping_status": (
-                        v.mapping_status.value
+                        getattr(v.mapping_status, "value", str(v.mapping_status))
                         if v.mapping_status is not None
                         else None
                     ),
@@ -270,14 +272,20 @@ class AnalysisReport:
                         "html_meta": getattr(v.features, "html_meta", None) if v.features else None,
                         "html_meta_title_sim": getattr(v.features, "html_meta_title_sim", None) if v.features else None,
                         "has_scholarly_candidate": bool(getattr(v.features, "has_scholarly_candidate", True)) if v.features else True,
+                        "api_exhausted": bool(getattr(v.features, "api_exhausted", False)) if v.features else False,
+                        "doi_ra_status": getattr(v.features, "doi_ra_status", "") if v.features else "",
                         "numeric_index": getattr(v.citation, "numeric_index", None) if v.citation else None,
                         "sub_index": getattr(v.citation, "sub_index", None) if v.citation else None,
                         "composite_label": getattr(v.citation, "composite_label", None) if v.citation else None,
                         "url_status": getattr(v.matched_source, "url_status", None) if v.matched_source else None,
                         "url_status_code": getattr(v.matched_source, "url_status_code", None) if v.matched_source else None,
-                        "archive_url": getattr(v.matched_source, "archive_url", None) if v.matched_source else None,
+                        "archive_url": (
+                            getattr(v, "archive_url", None)
+                            or (getattr(v.matched_source, "archive_url", None) if v.matched_source else None)
+                        ),
                         "is_retracted": bool(
-                            getattr(v.matched_source, "is_retracted", False)
+                            getattr(v, "is_retracted", False)
+                            or (getattr(v.matched_source, "is_retracted", False) if v.matched_source else False)
                             or ("R-RETRACTED-PAPER" in (v.triggered_rules or []))
                         ),
                         "checked_url": getattr(v.citation, "url", None) if v.citation else None,
@@ -290,12 +298,25 @@ class AnalysisReport:
                     "composite_label": getattr(v.citation, "composite_label", None) if v.citation else None,
                     "url_status": getattr(v.matched_source, "url_status", None) if v.matched_source else None,
                     "url_status_code": getattr(v.matched_source, "url_status_code", None) if v.matched_source else None,
-                    "archive_url": getattr(v.matched_source, "archive_url", None) if v.matched_source else None,
+                    "archive_url": (
+                        getattr(v, "archive_url", None)
+                        or (getattr(v.matched_source, "archive_url", None) if v.matched_source else None)
+                    ),
                     "is_retracted": bool(
-                        getattr(v.matched_source, "is_retracted", False)
+                        getattr(v, "is_retracted", False)
+                        or (getattr(v.matched_source, "is_retracted", False) if v.matched_source else False)
                         or ("R-RETRACTED-PAPER" in (v.triggered_rules or []))
                     ),
+                    "style_penalty": float(getattr(v, "style_penalty", 0.0) or 0.0),
                     "domain_exception": getattr(v, "domain_exception", False),
+                    "is_overridden": bool(getattr(v, "is_overridden", False)),
+                    "overridden_label": (
+                        v.overridden_label.value
+                        if getattr(v, "overridden_label", None) is not None and v.overridden_label is not None
+                        else None
+                    ),
+                    "overridden_by": getattr(v, "overridden_by", None),
+                    "override_note": getattr(v, "override_note", None),
                     # NEW v1.3: Provenance tracking
                     "provenance": {
                         "sources_succeeded": v.sources_succeeded,
@@ -348,6 +369,14 @@ class AnalysisReport:
             archive_url = raw_verdict.get("archive_url") or feature_data.get("archive_url")
             is_retracted = bool(raw_verdict.get("is_retracted") or feature_data.get("is_retracted", False))
 
+            raw_overridden_label = raw_verdict.get("overridden_label")
+            overridden_label: ValidationLabel | None = None
+            if raw_overridden_label:
+                try:
+                    overridden_label = ValidationLabel(raw_overridden_label)
+                except ValueError:
+                    overridden_label = None
+
             verdict = CitationVerdict(
                 citation=citation,
                 label=ValidationLabel(raw_verdict.get("label", "unresolved")),
@@ -364,8 +393,14 @@ class AnalysisReport:
                 reasoning=raw_verdict.get("reasoning", ""),
                 triggered_rules=list(raw_verdict.get("triggered_rules", [])),
                 mismatched_fields=list(raw_verdict.get("mismatched_fields", [])),
+                style_penalty=float(raw_verdict.get("style_penalty", 0.0) or 0.0),
                 domain_exception=bool(raw_verdict.get("domain_exception", False)),
+                archive_url=archive_url,
+                is_retracted=is_retracted,
                 is_overridden=bool(raw_verdict.get("is_overridden", False)),
+                overridden_label=overridden_label,
+                overridden_by=raw_verdict.get("overridden_by"),
+                override_note=raw_verdict.get("override_note"),
                 sources_succeeded=list(
                     (raw_verdict.get("provenance") or {}).get("sources_succeeded", [])
                 ),
@@ -442,7 +477,7 @@ def _resolution_key(
     Unlinked occurrences fall back to the regular ``citation_key``.
     """
     if citation.citation_type != CitationType.REFERENCE_LIST:
-        link = link_by_raw_text.get(citation.reference_id)
+        link = link_by_raw_text.get(citation.reference_id) if citation.reference_id else None
         if link is None:
             raw = " ".join(citation.raw_text.split())
             link = link_by_raw_text.get(raw.lower())
@@ -657,13 +692,14 @@ class IntegrityPipeline:
             # explicitly opt into DocumentParser's graceful empty-report mode.
             raise FileNotFoundError(pdf_path)
 
-        cache_key = self._report_cache_key(
+        cache_key = await asyncio.to_thread(
+            self._report_cache_key,
             pdf_path,
             max_citations=max_citations,
             allow_serpapi=allow_serpapi,
         )
         if cache_key and self._use_report_cache and not bypass_report_cache:
-            cached_report = self._load_report_cache(cache_key)
+            cached_report = await asyncio.to_thread(self._load_report_cache, cache_key)
             if cached_report is not None:
                 cached_report.essay_id = essay_id
                 cached_report.filename = Path(pdf_path).name
@@ -710,8 +746,8 @@ class IntegrityPipeline:
             num_pages = doc.num_pages
             raw_doc_meta = getattr(doc, "metadata", None)
             doc_metadata = dict(raw_doc_meta) if isinstance(raw_doc_meta, dict) else {}
-            in_text_citations = self.extractor.extract_from_document(doc)
-            ref_citations = self.ref_parser.parse_reference_section(doc)
+            in_text_citations = await asyncio.to_thread(self.extractor.extract_from_document, doc)
+            ref_citations = await asyncio.to_thread(self.ref_parser.parse_reference_section, doc)
             document_pages = doc.pages  # Store for context extraction
             logger.info(
                 f"Legacy parse: {doc.num_pages} pages via {doc.parser_used}, "
@@ -739,19 +775,22 @@ class IntegrityPipeline:
         ]
         style_profile = self._detect_style(academic_in_text, academic_references)
         style_profile_dict = self._serialize_style_profile(style_profile)
-        total_extractable_chars = int(
-            doc_metadata.get("total_extractable_chars")
-            if doc_metadata.get("total_extractable_chars") is not None
+        raw_total_chars = doc_metadata.get("total_extractable_chars")
+        total_extractable_chars = (
+            int(raw_total_chars)
+            if raw_total_chars is not None
             else sum(len((p.text or "").strip()) for p in (document_pages or []))
         )
-        scanned_pages_count = int(
-            doc_metadata.get("scanned_pages_count")
-            if doc_metadata.get("scanned_pages_count") is not None
+        raw_scanned_pages = doc_metadata.get("scanned_pages_count")
+        scanned_pages_count = (
+            int(raw_scanned_pages)
+            if raw_scanned_pages is not None
             else sum(1 for p in (document_pages or []) if len((p.text or "").strip()) < 40)
         )
-        avg_chars_per_page = float(
-            doc_metadata.get("avg_chars_per_page")
-            if doc_metadata.get("avg_chars_per_page") is not None
+        raw_avg_chars = doc_metadata.get("avg_chars_per_page")
+        avg_chars_per_page = (
+            float(raw_avg_chars)
+            if raw_avg_chars is not None
             else round(total_extractable_chars / max(1, len(document_pages or [])), 1)
         )
         is_scanned_pdf = bool(
@@ -1033,9 +1072,18 @@ class IntegrityPipeline:
         # Duplicate or same-key bibliography entries (same DOI/arXiv/title key)
         # collapse into one retrieval above; every bibliography entry still needs
         # its own verdict so report.verdicts never drops a reference entry.
-        verdict_pairs: list[tuple[Citation, SourceResult]] = list(
-            zip(unique_list, unique_sources, strict=True)
-        )
+        # Clone SourceResult per bibliography slot so Step 6 candidate selection / consensus fusion
+        # never mutates shared state across duplicate or chimeric bibliography entries.
+        def _clone_source_for_slot(src: SourceResult) -> SourceResult:
+            cloned = copy.deepcopy(src)
+            if hasattr(cloned, "_selected_best"):
+                delattr(cloned, "_selected_best")
+            return cloned
+
+        verdict_pairs: list[tuple[Citation, SourceResult]] = [
+            (cit_u, _clone_source_for_slot(src_u))
+            for cit_u, src_u in zip(unique_list, unique_sources, strict=True)
+        ]
         duplicate_ref_ids = set(getattr(linking_result, "duplicate_reference_ids", None) or [])
         if ref_citations:
             source_by_key = dict(zip(verifiable_keys, unique_sources, strict=True))
@@ -1047,8 +1095,10 @@ class IntegrityPipeline:
                     continue
                 shared_source = source_by_key.get(citation_key(ref))
                 if shared_source is None:
-                    shared_source = await _bounded_retrieve(ref)
-                verdict_pairs.append((ref, shared_source))
+                    entry_source = await _bounded_retrieve(ref)
+                else:
+                    entry_source = _clone_source_for_slot(shared_source)
+                verdict_pairs.append((ref, entry_source))
                 in_verdicts.add(id(ref))
 
         # Surface per-data-source outcomes to the UI. Sources_queried is built
@@ -1132,10 +1182,10 @@ class IntegrityPipeline:
                     citation_links_verdict = list(ref_links)
                 elif (
                     not in_text_citations
-                    and source.best_candidate()
-                    and source.best_candidate().doi
+                    and (best_cand_ref := source.best_candidate()) is not None
+                    and best_cand_ref.doi
                     and citation.doi
-                    and source.best_candidate().doi.lower() == citation.doi.lower()
+                    and best_cand_ref.doi.lower() == citation.doi.lower()
                 ):
                     mapping_status = CitationMappingStatus.MATCHED
                     mapping_confidence = 0.95
@@ -1160,8 +1210,8 @@ class IntegrityPipeline:
                 citation.citation_links = list(citation_links_verdict)
             else:
                 citation_links_verdict = []
-                # Normalize the raw_text to handle newlines/whitespace variations
-                normalized_text = citation.raw_text.replace("\n", " ").replace("  ", " ")
+                # Normalize the raw_text to handle newlines and multi-space variations
+                normalized_text = " ".join(citation.raw_text.split())
                 # Try lookup with normalized text
                 normalized_key = IntegrityPipeline._normalize_identifier(normalized_text)
                 link = link_by_raw_text.get(normalized_key)
@@ -1195,7 +1245,12 @@ class IntegrityPipeline:
                     if norm:
                         link = link_by_raw_text.get(norm)
                 if link is not None:
-                    mapping_status = link.status
+                    raw_lnk_status = link.status
+                    mapping_status = (
+                        raw_lnk_status
+                        if isinstance(raw_lnk_status, CitationMappingStatus)
+                        else CitationMappingStatus(str(getattr(raw_lnk_status, "value", raw_lnk_status)))
+                    )
                     mapping_confidence = link.confidence
                     citation_link = link
                     # v1.9 — every edge of this occurrence ("[9, 10]" → 2).
@@ -1232,7 +1287,7 @@ class IntegrityPipeline:
                     if citation.reference_id
                     else []
                 )
-                citation._occurrence_contexts = [  # type: ignore[attr-defined]
+                occ_contexts = [
                     {
                         "page": occ.page_num,
                         "context": occ.context,
@@ -1241,15 +1296,19 @@ class IntegrityPipeline:
                     for occ in all_occs
                     if occ.context
                 ]
+                citation._occurrence_contexts = occ_contexts  # type: ignore[attr-defined]
                 citation._context_source = (  # type: ignore[attr-defined]
                     "multi_occurrence"
-                    if len(citation._occurrence_contexts) > 1
+                    if len(occ_contexts) > 1
                     else "in_text_citation"
                 )
             else:
                 if citation.citation_type == CitationType.REFERENCE_LIST and body_pages_for_discovery:
-                    discovered = self._discover_implicit_body_context_for_reference(
-                        citation, source, body_pages_for_discovery
+                    discovered = await asyncio.to_thread(
+                        self._discover_implicit_body_context_for_reference,
+                        citation,
+                        source,
+                        body_pages_for_discovery,
                     )
                     if isinstance(discovered, tuple) and len(discovered) == 3:
                         disc_page, disc_ctx, _disc_score = discovered
@@ -1405,7 +1464,7 @@ class IntegrityPipeline:
             verdicts.append(verdict)
             logger.debug(
                 f"  [{verdict.label.value}] conf={verdict.confidence:.2f} "
-                f"mapping={verdict.mapping_status.value if verdict.mapping_status else 'NONE'} "
+                f"mapping={getattr(verdict.mapping_status, 'value', str(verdict.mapping_status)) if verdict.mapping_status else 'NONE'} "
                 f"raw={citation.raw_text[:80]}"
             )
 
@@ -1418,15 +1477,15 @@ class IntegrityPipeline:
             # 1. occurrence_id (most reliable for numeric [1])
             # 2. normalized identifier
             # 3. raw text lowercased
-            links = links_by_key_multi.get(cit.reference_id)  # occurrence_id
+            links = links_by_key_multi.get(cit.reference_id) if cit.reference_id else None  # occurrence_id
             if not links:
                 # Try normalized raw text
                 normalized = IntegrityPipeline._normalize_identifier(
-                    cit.raw_text.replace("\n", " ").replace("  ", " ")
+                    " ".join(cit.raw_text.split())
                 )
                 links = links_by_key_multi.get(normalized)
             if not links:
-                links = links_by_key_multi.get(cit.raw_text.lower().strip())
+                links = links_by_key_multi.get(" ".join(cit.raw_text.split()).lower())
             if links:
                 status_priority = {
                     "missing_reference": 5,
@@ -1509,14 +1568,14 @@ class IntegrityPipeline:
             linking_summary=linking_summary,
             style_profile=style_profile_dict,
             disclaimer=get_settings().disclaimer.long,
-            generated_at=datetime.now().isoformat() + "Z",  # fixed: utcnow deprecated
+            generated_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         )
         logger.info(
             f"Pipeline done: {report.num_citations} citations, CIS={cis.score:.1f}/100"
         )
         if cache_key and self._use_report_cache:
             try:
-                self._save_report_cache(cache_key, report)
+                await asyncio.to_thread(self._save_report_cache, cache_key, report)
             except Exception as cache_err:  # noqa: BLE001
                 # Cache is best-effort — a serialization bug here must never
                 # break the pipeline. Log and move on.
@@ -1877,20 +1936,20 @@ class IntegrityPipeline:
 
             # Find matching reference via link lookup by occurrence_id
             # (in-text citations have occurrence_id as their reference_id)
-            link = link_lookup.get(citation.reference_id)
+            link = link_lookup.get(citation.reference_id) if citation.reference_id else None
 
             if link and link.reference_id:
-                ref = ref_by_id.get(link.reference_id)
-                if ref:
+                matched_bib_ref = ref_by_id.get(link.reference_id)
+                if matched_bib_ref:
                     # Copy metadata from reference if citation lacks it
-                    if not citation.title and ref.title:
-                        citation.title = ref.title
-                    if not citation.authors and ref.authors:
-                        citation.authors = ref.authors
-                    if not citation.year and ref.year:
-                        citation.year = ref.year
-                    if not citation.doi and ref.doi:
-                        citation.doi = ref.doi
+                    if not citation.title and matched_bib_ref.title:
+                        citation.title = matched_bib_ref.title
+                    if not citation.authors and matched_bib_ref.authors:
+                        citation.authors = matched_bib_ref.authors
+                    if not citation.year and matched_bib_ref.year:
+                        citation.year = matched_bib_ref.year
+                    if not citation.doi and matched_bib_ref.doi:
+                        citation.doi = matched_bib_ref.doi
 
     @staticmethod
     def _extract_occurrence_contexts(
@@ -2098,7 +2157,7 @@ class IntegrityPipeline:
             raw = evidence.get("raw", "") or evidence.get("raw_text", "")
             if raw:
                 # Normalize newlines and extra spaces first (for consistent matching)
-                raw_normalized = raw.replace("\n", " ").replace("  ", " ").strip()
+                raw_normalized = " ".join(raw.split())
                 # Normalize: both DOI and URL form map to same key
                 normalized = IntegrityPipeline._normalize_identifier(raw_normalized)
                 lookup[normalized] = link
@@ -2146,7 +2205,7 @@ class IntegrityPipeline:
             evidence = link.evidence or {}
             raw = evidence.get("raw", "") or evidence.get("raw_text", "")
             if raw:
-                raw_normalized = raw.replace("\n", " ").replace("  ", " ").strip()
+                raw_normalized = " ".join(raw.split())
                 _add(IntegrityPipeline._normalize_identifier(raw_normalized), link)
                 _add(raw_normalized.lower(), link)
         return lookup
@@ -2330,37 +2389,38 @@ def _deserialize_citation(data: dict[str, Any]) -> Citation:
 
 def _match_features_from_dict(data: dict[str, Any]) -> MatchFeatures:
     """Build ``MatchFeatures`` while tolerating older cache schemas."""
+    raw_yd = data.get("year_distance")
     return MatchFeatures(
         title_sim_fuzzy=float(data.get("title_sim_fuzzy") or 0.0),
         title_sim_semantic=float(data.get("title_sim_semantic") or 0.0),
         author_jaccard=float(data.get("author_jaccard") or 0.0),
-        year_distance=int(data.get("year_distance") if data.get("year_distance") is not None else 999),
+        year_distance=int(raw_yd) if raw_yd is not None else 999,
         doi_exact_match=bool(data.get("doi_exact_match") or False),
         source_consensus=int(data.get("source_consensus") or 0),
         venue_sim=float(data.get("venue_sim") or 0.0),
         content_alignment_score=float(data.get("content_alignment_score") or 0.0),
-        content_alignment_confidence=data.get("content_alignment_confidence") or "",
+        content_alignment_confidence=str(data.get("content_alignment_confidence") or ""),
         content_is_aligned=bool(data.get("content_is_aligned") or False),
         title_context_sim=float(data.get("title_context_sim") or 0.0),
         abstract_context_sim=(
             float(data["abstract_context_sim"])
             if data.get("abstract_context_sim") is not None
-            else None
+            else 0.0
         ),
-        best_evidence_sentence=data.get("best_evidence_sentence"),
+        best_evidence_sentence=str(data.get("best_evidence_sentence") or ""),
         best_evidence_score=(
             float(data["best_evidence_score"])
             if data.get("best_evidence_score") is not None
-            else None
+            else 0.0
         ),
-        best_cited_sentence=data.get("best_cited_sentence"),
-        citation_intent=data.get("citation_intent") or "",
-        stance_label=data.get("stance_label") or "",
+        best_cited_sentence=str(data.get("best_cited_sentence") or ""),
+        citation_intent=str(data.get("citation_intent") or ""),
+        stance_label=str(data.get("stance_label") or ""),
         cross_lingual_detected=bool(data.get("cross_lingual_detected") or False),
         bridged_concepts=list(data.get("bridged_concepts") or []),
         cross_lingual_title_detected=bool(data.get("cross_lingual_title_detected") or False),
         cross_lingual_title_sim=float(data.get("cross_lingual_title_sim") or 0.0),
-        context_source=data.get("context_source") or "",
+        context_source=str(data.get("context_source") or ""),
         occurrence_alignments=list(data.get("occurrence_alignments") or []),
         html_meta_title_sim=(
             float(data["html_meta_title_sim"])
@@ -2369,6 +2429,8 @@ def _match_features_from_dict(data: dict[str, Any]) -> MatchFeatures:
         ),
         html_meta=dict(data["html_meta"]) if isinstance(data.get("html_meta"), dict) else None,
         has_scholarly_candidate=bool(data.get("has_scholarly_candidate", True)),
+        api_exhausted=bool(data.get("api_exhausted") or False),
+        doi_ra_status=str(data.get("doi_ra_status") or ""),
     )
 
 
@@ -2380,9 +2442,10 @@ def _deserialize_citation_link(data: Any) -> CitationLink | None:
         status = CitationMappingStatus(data.get("status", CitationMappingStatus.UNRESOLVED.value))
     except ValueError:
         status = CitationMappingStatus.UNRESOLVED
-    try:
-        from integrity_checker.models.validation import MappingMethod
+    from integrity_checker.models.validation import MappingMethod
 
+    method: str | MappingMethod
+    try:
         method = MappingMethod(data.get("method", MappingMethod.NO_KEYS.value))
     except ValueError:
         method = "no_keys"

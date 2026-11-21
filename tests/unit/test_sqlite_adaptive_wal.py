@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import sys
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +40,7 @@ def test_linux_ext4_mount_enables_wal_in_auto(tmp_path: Path):
     db_file = tmp_path / "wal_probe.db"
     mode = resolve_sqlite_journal_mode(db_file, env_override="AUTO", mounts_content=fake_mounts)
     assert mode == "WAL"
-    with sqlite3.connect(str(db_file)) as conn:
+    with closing(sqlite3.connect(str(db_file))) as conn:
         effective = apply_sqlite_connection_pragmas(conn, mode, mmap_bytes=67108864)
         assert effective.upper() == "WAL"
         assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 30000
@@ -132,7 +133,7 @@ def test_apply_pragmas_falls_back_to_delete_on_operational_error(tmp_path: Path)
             return self._inner.execute(sql, *args, **kwargs)
 
     db_file = tmp_path / "fallback.db"
-    with sqlite3.connect(str(db_file)) as raw_conn:
+    with closing(sqlite3.connect(str(db_file))) as raw_conn:
         wrapped = _WalRejectingConn(raw_conn)
         effective = apply_sqlite_connection_pragmas(wrapped, "WAL", mmap_bytes=67108864)
         assert effective == "DELETE"
@@ -192,15 +193,21 @@ def test_local_database_uses_adaptive_wal_and_mmap(
     monkeypatch.delenv("SQLITE_JOURNAL_MODE", raising=False)
     wal_papers_db = tmp_path / "local_papers_wal.db"
     db_wal = LocalDatabase(wal_papers_db)
-    with db_wal._get_conn() as conn:
-        assert conn.execute("PRAGMA journal_mode").fetchone()[0].upper() == "WAL"
-        assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 30000
-        assert conn.execute("PRAGMA synchronous").fetchone()[0] == 1
-        assert conn.execute("PRAGMA wal_autocheckpoint").fetchone()[0] == 1000
-        assert conn.execute("PRAGMA mmap_size").fetchone()[0] == 67108864
+    try:
+        with db_wal._get_conn() as conn:
+            assert conn.execute("PRAGMA journal_mode").fetchone()[0].upper() == "WAL"
+            assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 30000
+            assert conn.execute("PRAGMA synchronous").fetchone()[0] == 1
+            assert conn.execute("PRAGMA wal_autocheckpoint").fetchone()[0] == 1000
+            assert conn.execute("PRAGMA mmap_size").fetchone()[0] == 67108864
+    finally:
+        db_wal.close()
 
     monkeypatch.setenv("SQLITE_JOURNAL_MODE", "DELETE")
     del_papers_db = tmp_path / "local_papers_delete.db"
     db_del = LocalDatabase(del_papers_db)
-    with db_del._get_conn() as conn:
-        assert conn.execute("PRAGMA journal_mode").fetchone()[0].upper() == "DELETE"
+    try:
+        with db_del._get_conn() as conn:
+            assert conn.execute("PRAGMA journal_mode").fetchone()[0].upper() == "DELETE"
+    finally:
+        db_del.close()

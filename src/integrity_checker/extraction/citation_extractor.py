@@ -5,15 +5,10 @@ from __future__ import annotations
 import re
 import warnings
 from collections.abc import Iterable
+from typing import Any
 
 from integrity_checker.extraction.base import Document
 from integrity_checker.extraction.patterns.base import CompiledPattern
-
-# Suppress deprecation warning for legacy import (regex_patterns.py is deprecated)
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    from integrity_checker.extraction.regex_patterns import CitationPattern
-
 from integrity_checker.extraction.text_preprocessor import TextPreprocessor
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
@@ -260,7 +255,7 @@ class CitationExtractor:
 
     def __init__(
         self,
-        patterns: Iterable[CitationPattern | CompiledPattern] | None = None,
+        patterns: Iterable[CompiledPattern | Any] | None = None,
         include_utility: bool = False,
         preserve_occurrences: bool = False,
     ) -> None:
@@ -271,16 +266,15 @@ class CitationExtractor:
                 get_in_text_patterns,
                 get_utility_patterns,
             )
-            self.patterns = get_in_text_patterns()
+            self.patterns: list[Any] = list(get_in_text_patterns())
             if include_utility:
-                self.patterns = self.patterns + get_utility_patterns()
+                self.patterns = self.patterns + list(get_utility_patterns())
         else:
             # Check if using old CITATION_PATTERNS (for backward compatibility)
             patterns_list = list(patterns)
             if patterns_list and hasattr(patterns_list[0], 'style'):
-                # Check if it's the old CITATION_PATTERNS format
                 for p in patterns_list:
-                    if isinstance(p, CitationPattern):
+                    if not isinstance(p, CompiledPattern) and type(p).__name__ == "CitationPattern":
                         warnings.warn(
                             "Passing CITATION_PATTERNS directly is deprecated. "
                             "Use CitationExtractor() without patterns to use the new registry, "
@@ -554,14 +548,8 @@ class CitationExtractor:
                 raw_start = m.start()
 
                 # Extract citation_type and style from pattern
-                # Handle both CitationPattern (old) and CompiledPattern (new)
-                if isinstance(pattern_def, CitationPattern):
-                    citation_type = pattern_def.type
-                    style = pattern_def.style
-                else:
-                    # CompiledPattern provides type and style properties
-                    citation_type = pattern_def.type
-                    style = pattern_def.style
+                citation_type = pattern_def.type
+                style = pattern_def.style
 
                 span_key = (m.start(), m.end())
                 if span_key in seen_spans or any(

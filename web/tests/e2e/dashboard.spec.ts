@@ -19,9 +19,6 @@ test.describe('Dashboard', () => {
     // Check page title
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 
-    // Wait for stats to load (they're calculated from essays + reports)
-    await page.waitForTimeout(1000);
-
     // Check stats cards are present with correct labels
     await expect(page.getByText('Total Documents')).toBeVisible();
     await expect(page.getByText('Total Citations')).toBeVisible();
@@ -30,9 +27,6 @@ test.describe('Dashboard', () => {
   });
 
   test('should show stats with correct values from mock data', async ({ page }) => {
-    // Wait for data to load and stats to be calculated
-    await page.waitForTimeout(1500);
-
     // Check that total documents shows the mock count (3 essays)
     const totalDocsCard = page.locator('.card').filter({ hasText: 'Total Documents' });
     await expect(totalDocsCard).toBeVisible();
@@ -53,9 +47,7 @@ test.describe('Dashboard', () => {
   });
 
   test('should display document table with columns', async ({ page }) => {
-    // Wait for table to load
-    await page.waitForSelector('table', { timeout: 5000 }).catch(() => {});
-    await page.waitForTimeout(500);
+    await expect(page.locator('table')).toBeVisible();
 
     // Check table headers exist
     const tableHeaders = page.locator('thead th');
@@ -69,9 +61,7 @@ test.describe('Dashboard', () => {
   });
 
   test('should display document details correctly', async ({ page }) => {
-    // Wait for data to load
-    await page.waitForSelector('table', { timeout: 5000 }).catch(() => {});
-    await page.waitForTimeout(500);
+    await expect(page.locator('table')).toBeVisible();
 
     // Check first essay details are visible
     const firstEssay = mockEssays[0];
@@ -80,17 +70,12 @@ test.describe('Dashboard', () => {
   });
 
   test('should filter documents by search', async ({ page }) => {
-    // Wait for table to load first
-    await page.waitForSelector('table', { timeout: 5000 }).catch(() => {});
-    await page.waitForTimeout(500);
+    await expect(page.locator('table')).toBeVisible();
 
     // Type in search box
     const searchBox = page.getByPlaceholder(/search documents/i);
     await expect(searchBox).toBeVisible();
     await searchBox.fill('BERT');
-
-    // Wait for filter to apply
-    await page.waitForTimeout(500);
 
     // Should show only BERT document
     await expect(page.getByText('BERT_Pre-training.pdf')).toBeVisible();
@@ -98,16 +83,11 @@ test.describe('Dashboard', () => {
   });
 
   test('should show empty state for non-matching search', async ({ page }) => {
-    // Wait for table to load first
-    await page.waitForSelector('table', { timeout: 5000 }).catch(() => {});
-    await page.waitForTimeout(500);
+    await expect(page.locator('table')).toBeVisible();
 
     // Type non-matching search
     const searchBox = page.getByPlaceholder(/search documents/i);
     await searchBox.fill('nonexistent_document_xyz');
-
-    // Wait for filter to apply
-    await page.waitForTimeout(500);
 
     // Should show empty state
     await expect(page.getByText(/no documents found/i)).toBeVisible();
@@ -132,9 +112,7 @@ test.describe('Dashboard', () => {
   });
 
   test('should show concise View action in table instead of View Report', async ({ page }) => {
-    // Wait for table to load
-    await page.waitForSelector('table', { timeout: 5000 }).catch(() => {});
-    await page.waitForTimeout(500);
+    await expect(page.locator('table')).toBeVisible();
 
     const firstAction = page.getByTestId('dashboard-primary-action-1');
     await expect(firstAction).toBeVisible();

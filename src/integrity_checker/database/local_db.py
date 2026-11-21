@@ -10,6 +10,7 @@ The database uses SQLite with FTS5 for full-text search.
 
 from __future__ import annotations
 
+import atexit
 import copy
 import hashlib
 import json
@@ -17,6 +18,7 @@ import os
 import sqlite3
 import threading
 import time
+import weakref
 from collections import OrderedDict
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -56,7 +58,85 @@ _QUERY_CACHE: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
 _QUERY_CACHE_MAX_SIZE = 2048
 _MUTATION_VERSION = 0
 _QUERY_LOG_VERSION = 0
+_QUERY_LOG_PRUNE_COUNTER = 0
+_QUERY_LOG_MAX_ROWS = 10_000
+_QUERY_LOG_PRUNE_INTERVAL = 250
 _LAST_LOCAL_PAPERS_TUNING_REPORT: Any | None = None
+
+
+class _ConnPoolBox:
+    """Weak-referenceable holder for pooled thread-local SQLite connections."""
+
+    __slots__ = ("__weakref__", "conns", "lock")
+
+    def __init__(self) -> None:
+        self.conns: set[sqlite3.Connection] = set()
+        self.lock = threading.Lock()
+
+
+def _evict_and_close_single_conn(
+    box: _ConnPoolBox, conn: sqlite3.Connection
+) -> None:
+    with box.lock:
+        box.conns.discard(conn)
+    try:
+        conn.close()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+class _ThreadLocalConnSlot:
+    """Thread-local wrapper whose GC on worker-thread exit evicts & closes its connection."""
+
+    __slots__ = ("__weakref__", "_finalizer", "conn", "opened_ino")
+
+    def __init__(
+        self,
+        box: _ConnPoolBox,
+        conn: sqlite3.Connection,
+        opened_ino: int,
+    ) -> None:
+        self.conn = conn
+        self.opened_ino = opened_ino
+        self._finalizer = weakref.finalize(
+            self, _evict_and_close_single_conn, box, conn
+        )
+
+    def detach_and_close(self) -> None:
+        self._finalizer()
+
+
+_REGISTERED_POOLS_LOCK = threading.Lock()
+_REGISTERED_POOLS: list[weakref.ReferenceType[_ConnPoolBox]] = []
+
+
+def _close_conn_box(box: _ConnPoolBox) -> None:
+    with box.lock:
+        to_close = list(box.conns)
+        box.conns.clear()
+    for conn in to_close:
+        try:
+            conn.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def _atexit_close_all_local_db_pools() -> None:
+    with _REGISTERED_POOLS_LOCK:
+        refs = list(_REGISTERED_POOLS)
+        _REGISTERED_POOLS.clear()
+    for ref in refs:
+        box = ref()
+        if box is not None:
+            _close_conn_box(box)
+
+
+atexit.register(_atexit_close_all_local_db_pools)
+
+
+def _escape_sql_like(value: str) -> str:
+    """Escape SQLite LIKE wildcards ('\\', '%', '_') for `LIKE ? ESCAPE '\\'`."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 @dataclass(frozen=True)
@@ -107,6 +187,7 @@ def clear_local_query_cache() -> None:
     with _DB_CACHE_LOCK:
         _QUERY_CACHE.clear()
         _STATS_CACHE.clear()
+        _PAPERS_COUNTS_CACHE.clear()
 
 
 def _apply_and_capture_local_pragmas(
@@ -115,6 +196,7 @@ def _apply_and_capture_local_pragmas(
     journal_mode: str,
     *,
     mmap_bytes: int = 67108864,
+    fstype: str | None = None,
 ) -> str:
     global _LAST_LOCAL_PAPERS_TUNING_REPORT
     adaptive_fn = getattr(_sqlite_tuning, "apply_adaptive_sqlite_pragmas", None)
@@ -125,12 +207,12 @@ def _apply_and_capture_local_pragmas(
         return str(eff or journal_mode).upper()
 
     raw_req = (os.getenv("SQLITE_JOURNAL_MODE", "AUTO") or "AUTO").strip().upper() or "AUTO"
-    fstype = detect_sqlite_filesystem_type(db_path)
+    resolved_fstype = fstype or detect_sqlite_filesystem_type(db_path)
     effective = apply_sqlite_connection_pragmas(conn, journal_mode, mmap_bytes=mmap_bytes)
     eff_upper = str(effective or journal_mode).strip().upper()
     _LAST_LOCAL_PAPERS_TUNING_REPORT = _LocalSqliteTuningReport(
         db_path=str(db_path),
-        filesystem_type=fstype,
+        filesystem_type=resolved_fstype,
         requested_journal_mode=raw_req,
         journal_mode=eff_upper,
         effective_journal_mode=eff_upper,
@@ -201,9 +283,20 @@ class LocalDatabase:
             db_path: Path to SQLite database file. Defaults to ./data/local_papers.db
         """
         self.db_path = Path(db_path) if db_path else DEFAULT_DB_PATH
+        self._fstype = detect_sqlite_filesystem_type(self.db_path)
         self._journal_mode = resolve_sqlite_journal_mode(self.db_path)
         self._query_cache = _QUERY_CACHE
+        self._thread_local = threading.local()
+        self._conn_box = _ConnPoolBox()
+        with _REGISTERED_POOLS_LOCK:
+            _REGISTERED_POOLS.append(weakref.ref(self._conn_box))
+        self._finalizer = weakref.finalize(self, _close_conn_box, self._conn_box)
         self._init_db()
+
+    def close(self) -> None:
+        """Deterministically close all pooled thread-local SQLite connections."""
+        self._thread_local.__dict__.clear()
+        _close_conn_box(self._conn_box)
 
     def _init_db(self) -> None:
         """Initialize database schema if not exists (cached per file inode and journal mode)."""
@@ -225,14 +318,6 @@ class LocalDatabase:
         with self._get_conn() as conn:
             for stmt in INIT_STATEMENTS:
                 conn.executescript(stmt)
-            # ``PRAGMA journal_mode`` returns a row, so it must be executed via
-            # ``apply_sqlite_connection_pragmas`` rather than inside ``executescript``.
-            _apply_and_capture_local_pragmas(
-                conn,
-                self.db_path,
-                self._journal_mode,
-                mmap_bytes=67108864,
-            )
             conn.commit()
 
         try:
@@ -243,78 +328,215 @@ class LocalDatabase:
         except OSError:
             pass
 
-    @contextmanager
-    def _get_conn(self) -> Generator[sqlite3.Connection, None, None]:
-        """Get database connection with row factory, adaptive WAL/mmap, and FTS5 cache."""
-        conn = sqlite3.connect(str(self.db_path), timeout=30.0)
+    def _open_configured_connection(self) -> sqlite3.Connection:
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(
+            str(self.db_path),
+            timeout=30.0,
+            check_same_thread=False,
+        )
         conn.row_factory = sqlite3.Row
         _apply_and_capture_local_pragmas(
             conn,
             self.db_path,
             self._journal_mode,
             mmap_bytes=67108864,
+            fstype=self._fstype,
         )
         conn.execute("PRAGMA cache_size=-16000")
         conn.execute("PRAGMA temp_store=MEMORY")
+        return conn
+
+    @contextmanager
+    def _get_conn(self) -> Generator[sqlite3.Connection, None, None]:
+        """Yield a pooled per-thread SQLite connection (or closed-on-exit fallback if nested)."""
+        if getattr(self._thread_local, "in_use", False):
+            ephemeral = self._open_configured_connection()
+            try:
+                yield ephemeral
+            except BaseException:
+                if ephemeral.in_transaction:
+                    ephemeral.rollback()
+                raise
+            finally:
+                ephemeral.close()
+            return
+
+        cur_ino = 0
+        try:
+            if self.db_path.exists():
+                cur_ino = self.db_path.stat().st_ino
+        except OSError:
+            cur_ino = 0
+
+        cached_slot: _ThreadLocalConnSlot | None = getattr(
+            self._thread_local, "slot", None
+        )
+        conn: sqlite3.Connection | None = None
+        if cached_slot is not None:
+            cand_conn = cached_slot.conn
+            opened_ino = cached_slot.opened_ino
+            with self._conn_box.lock:
+                still_tracked = cand_conn in self._conn_box.conns
+            if still_tracked and (cur_ino == 0 or opened_ino == 0 or cur_ino == opened_ino):
+                conn = cand_conn
+            else:
+                cached_slot.detach_and_close()
+                self._thread_local.slot = None
+
+        if conn is None:
+            conn = self._open_configured_connection()
+            try:
+                opened_ino = self.db_path.stat().st_ino if self.db_path.exists() else 0
+            except OSError:
+                opened_ino = 0
+            with self._conn_box.lock:
+                self._conn_box.conns.add(conn)
+            self._thread_local.slot = _ThreadLocalConnSlot(
+                self._conn_box, conn, opened_ino
+            )
+
+        self._thread_local.in_use = True
         try:
             yield conn
+        except BaseException:
+            if conn.in_transaction:
+                conn.rollback()
+            raise
         finally:
-            conn.close()
+            self._thread_local.in_use = False
 
     # ==================== Basic CRUD ====================
 
-    def add_paper(self, paper: Paper) -> int | None:
-        """Add or update a paper in the database.
-
-        Args:
-            paper: Paper object to add
-
-        Returns:
-            Canonical paper row ID if successful, None if failed.
-
-        Note:
-            ``ON CONFLICT(doi) DO UPDATE`` keeps the *existing* row id in
-            SQLite, so ``cursor.lastrowid`` is not reliable for conflict
-            updates.  We resolve the row id explicitly so that provenance
-            (``query_log.paper_id``, ``candidate.paper_id``) always points at
-            the row that actually holds the metadata.
-        """
+    def _upsert_paper_on_conn(
+        self,
+        conn: sqlite3.Connection,
+        paper: Paper,
+        *,
+        now_iso: str,
+    ) -> int | None:
         paper.doi = normalize_doi(paper.doi)
         paper.arxiv_id = normalize_arxiv_id(paper.arxiv_id)
 
-        # SQLite UNIQUE permits multiple NULL values.  API results without a
-        # DOI would therefore be inserted repeatedly on every run.  Reuse an
-        # existing metadata record before attempting the insert.
-        if not paper.doi:
-            existing = self._find_existing_metadata_paper(paper)
-            if existing is not None:
-                if paper.abstract and paper.abstract.strip() and not (existing.abstract and existing.abstract.strip()):
-                    with self._get_conn() as conn:
-                        conn.execute(
-                            "UPDATE papers SET abstract = ? WHERE id = ?",
-                            (paper.abstract.strip(), existing.id),
-                        )
-                        conn.commit()
-                    _bump_mutation_version()
-                return existing.id
+        # 1. Case-insensitive DOI lookup first (handles pre-existing mixed-case DOIs cleanly)
+        if paper.doi:
+            existing_doi_row = conn.execute(
+                "SELECT * FROM papers WHERE doi = ? COLLATE NOCASE ORDER BY id ASC LIMIT 1",
+                (paper.doi,),
+            ).fetchone()
+            if existing_doi_row is not None:
+                ex = Paper.from_dict(dict(existing_doi_row))
+                ex_id = int(existing_doi_row["id"])
+                merged_arxiv = ex.arxiv_id
+                if paper.arxiv_id and not merged_arxiv:
+                    ax_conflict = conn.execute(
+                        "SELECT id FROM papers WHERE arxiv_id = ? COLLATE NOCASE AND id <> ? LIMIT 1",
+                        (paper.arxiv_id, ex_id),
+                    ).fetchone()
+                    if ax_conflict is None:
+                        merged_arxiv = paper.arxiv_id
+                merged_title = (
+                    paper.title
+                    if (paper.title and paper.title.strip())
+                    else ex.title
+                )
+                merged_authors = paper.authors if paper.authors else ex.authors
+                merged_year = paper.year if paper.year is not None else ex.year
+                merged_venue = (
+                    paper.venue
+                    if (paper.venue and paper.venue.strip())
+                    else ex.venue
+                )
+                merged_abstract = (
+                    paper.abstract
+                    if (paper.abstract and paper.abstract.strip())
+                    else ex.abstract
+                )
+                merged_categories = paper.categories if paper.categories else ex.categories
+                merged_ext = dict(ex.external_ids or {})
+                if paper.external_ids:
+                    merged_ext.update(paper.external_ids)
+                if (
+                    paper.source in ("local_db", "known_papers")
+                    and ex.source not in ("local_db", "known_papers")
+                ) or (ex.source == "acl" and paper.source != "acl"):
+                    merged_source = ex.source
+                else:
+                    merged_source = paper.source
+                conn.execute(
+                    """
+                    UPDATE papers
+                    SET doi = ?, arxiv_id = ?, title = ?, authors = ?, year = ?,
+                        venue = ?, abstract = ?, categories = ?, external_ids = ?, source = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        paper.doi,
+                        merged_arxiv,
+                        merged_title,
+                        json.dumps(merged_authors or []),
+                        merged_year,
+                        merged_venue,
+                        merged_abstract,
+                        json.dumps(merged_categories or []),
+                        json.dumps(merged_ext),
+                        merged_source,
+                        ex_id,
+                    ),
+                )
+                return ex_id
 
-        # Guard against UNIQUE(arxiv_id) IntegrityError when a paper with the
-        # same arxiv_id already exists under a different (or NULL) DOI.
+        # 2. Case-insensitive arXiv ID lookup (guards UNIQUE(arxiv_id) across distinct/NULL DOIs)
         if paper.arxiv_id:
-            existing_arxiv = self.find_by_arxiv_id(paper.arxiv_id)
-            if existing_arxiv is not None:
-                if not paper.doi or normalize_doi(existing_arxiv.doi) != paper.doi:
-                    if paper.abstract and paper.abstract.strip() and not (existing_arxiv.abstract and existing_arxiv.abstract.strip()):
-                        with self._get_conn() as conn:
-                            conn.execute(
-                                "UPDATE papers SET abstract = ? WHERE id = ?",
-                                (paper.abstract.strip(), existing_arxiv.id),
-                            )
-                            conn.commit()
-                        _bump_mutation_version()
-                    return existing_arxiv.id
+            existing_ax_row = conn.execute(
+                "SELECT * FROM papers WHERE arxiv_id = ? COLLATE NOCASE ORDER BY id ASC LIMIT 1",
+                (paper.arxiv_id,),
+            ).fetchone()
+            if existing_ax_row is not None:
+                ex_ax = Paper.from_dict(dict(existing_ax_row))
+                ex_ax_id = int(existing_ax_row["id"])
+                updates: list[str] = []
+                params: list[Any] = []
+                if (
+                    paper.abstract
+                    and paper.abstract.strip()
+                    and not (ex_ax.abstract and ex_ax.abstract.strip())
+                ):
+                    updates.append("abstract = ?")
+                    params.append(paper.abstract.strip())
+                if paper.doi and not ex_ax.doi:
+                    doi_conflict = conn.execute(
+                        "SELECT id FROM papers WHERE doi = ? COLLATE NOCASE AND id <> ? LIMIT 1",
+                        (paper.doi, ex_ax_id),
+                    ).fetchone()
+                    if doi_conflict is None:
+                        updates.append("doi = ?")
+                        params.append(paper.doi)
+                if updates:
+                    params.append(ex_ax_id)
+                    conn.execute(
+                        f"UPDATE papers SET {', '.join(updates)} WHERE id = ?",
+                        tuple(params),
+                    )
+                return ex_ax_id
 
-        with self._get_conn() as conn:
+        # 3. No-DOI metadata deduplication on the same connection
+        if not paper.doi:
+            existing_meta = self._find_existing_metadata_paper(paper, conn=conn)
+            if existing_meta is not None and existing_meta.id is not None:
+                if (
+                    paper.abstract
+                    and paper.abstract.strip()
+                    and not (existing_meta.abstract and existing_meta.abstract.strip())
+                ):
+                    conn.execute(
+                        "UPDATE papers SET abstract = ? WHERE id = ?",
+                        (paper.abstract.strip(), existing_meta.id),
+                    )
+                return int(existing_meta.id)
+
+        # 4. Insert with ON CONFLICT(doi) fallback + IntegrityError safety net
+        try:
             cursor = conn.execute(
                 """
                 INSERT INTO papers (doi, arxiv_id, title, authors, year, venue,
@@ -356,33 +578,107 @@ class LocalDatabase:
                     json.dumps(paper.categories),
                     json.dumps(paper.external_ids),
                     paper.source,
-                    datetime.now().isoformat(),
+                    now_iso,
                 ),
             )
-            conn.commit()
-            _bump_mutation_version()
-
-            # Resolve the actual row id for query provenance.  A conflict
-            # update keeps the original row id, so re-read it rather than
-            # trusting ``cursor.lastrowid``.
+        except sqlite3.IntegrityError:
             if paper.doi:
-                row = conn.execute(
-                    "SELECT id FROM papers WHERE doi = ? COLLATE NOCASE",
+                r = conn.execute(
+                    "SELECT id FROM papers WHERE doi = ? COLLATE NOCASE LIMIT 1",
                     (paper.doi,),
                 ).fetchone()
-                return int(row["id"]) if row else None
+                if r:
+                    return int(r["id"])
             if paper.arxiv_id:
-                row = conn.execute(
-                    "SELECT id FROM papers WHERE arxiv_id = ? COLLATE NOCASE",
+                r = conn.execute(
+                    "SELECT id FROM papers WHERE arxiv_id = ? COLLATE NOCASE LIMIT 1",
                     (paper.arxiv_id,),
                 ).fetchone()
-                if row:
-                    return int(row["id"])
-            if cursor.lastrowid:
-                return cursor.lastrowid
+                if r:
+                    return int(r["id"])
             return None
 
-    def _find_existing_metadata_paper(self, paper: Paper) -> Paper | None:
+        if paper.doi:
+            row = conn.execute(
+                "SELECT id FROM papers WHERE doi = ? COLLATE NOCASE",
+                (paper.doi,),
+            ).fetchone()
+            return int(row["id"]) if row else None
+        if paper.arxiv_id:
+            row = conn.execute(
+                "SELECT id FROM papers WHERE arxiv_id = ? COLLATE NOCASE",
+                (paper.arxiv_id,),
+            ).fetchone()
+            if row:
+                return int(row["id"])
+        if cursor.lastrowid:
+            return int(cursor.lastrowid)
+        return None
+
+    def add_paper(self, paper: Paper) -> int | None:
+        """Add or update a paper in the database."""
+        now_iso = datetime.now().isoformat()
+        with self._get_conn() as conn:
+            row_id = self._upsert_paper_on_conn(conn, paper, now_iso=now_iso)
+            conn.commit()
+        _bump_mutation_version()
+        return row_id
+
+    def update_paper_abstract(
+        self,
+        *,
+        paper_id: int | None = None,
+        doi: str | None = None,
+        title: str | None = None,
+        abstract: str,
+    ) -> bool:
+        """Persist an enriched abstract onto an empty-abstract row and invalidate `_QUERY_CACHE`."""
+        clean_abs = (abstract or "").strip()
+        if not clean_abs:
+            return False
+
+        norm_d = normalize_doi(doi) if doi else None
+        clean_title = (title or "").strip()
+        if paper_id is None and not norm_d and not clean_title:
+            return False
+
+        updated = False
+        with self._get_conn() as conn:
+            if paper_id is not None:
+                cur = conn.execute(
+                    "UPDATE papers SET abstract = ? "
+                    "WHERE id = ? AND (abstract IS NULL OR TRIM(abstract) = '')",
+                    (clean_abs, int(paper_id)),
+                )
+                updated = bool(cur.rowcount and cur.rowcount > 0)
+            if not updated and norm_d:
+                cur = conn.execute(
+                    "UPDATE papers SET abstract = ? "
+                    "WHERE doi = ? COLLATE NOCASE AND (abstract IS NULL OR TRIM(abstract) = '')",
+                    (clean_abs, norm_d),
+                )
+                updated = bool(cur.rowcount and cur.rowcount > 0)
+            if not updated and clean_title:
+                cur = conn.execute(
+                    "UPDATE papers SET abstract = ? "
+                    "WHERE lower(TRIM(title)) = lower(TRIM(?)) "
+                    "AND (abstract IS NULL OR TRIM(abstract) = '')",
+                    (clean_abs, clean_title),
+                )
+                updated = bool(cur.rowcount and cur.rowcount > 0)
+            if updated:
+                conn.commit()
+
+        if updated:
+            _bump_mutation_version()
+        return updated
+
+    def _find_existing_metadata_paper(
+        self,
+        paper: Paper,
+        *,
+        conn: sqlite3.Connection | None = None,
+    ) -> Paper | None:
         """Find an existing no-DOI record using normalized metadata."""
         if not paper.title:
             return None
@@ -391,6 +687,7 @@ class LocalDatabase:
             authors=paper.authors,
             year=paper.year,
             limit=20,
+            _conn=conn,
         )
         for candidate in candidates:
             if title_similarity(paper.title, candidate.title) < 0.90:
@@ -418,9 +715,15 @@ class LocalDatabase:
     def _cache_key(self, method: str, *args: Any) -> tuple[Any, ...]:
         try:
             st = self.db_path.stat()
-            file_sig = (st.st_ino, st.st_mtime_ns, st.st_size)
+            wal_path = Path(f"{self.db_path}-wal")
+            try:
+                wst = wal_path.stat()
+                wal_sig = (wst.st_mtime_ns, wst.st_size)
+            except OSError:
+                wal_sig = (0, 0)
+            file_sig = (st.st_ino, st.st_mtime_ns, st.st_size, *wal_sig)
         except OSError:
-            file_sig = (0, 0, 0)
+            file_sig = (0, 0, 0, 0, 0)
         return (str(self.db_path), file_sig, _MUTATION_VERSION, method, *args)
 
     def _cache_get(self, key: tuple[Any, ...]) -> tuple[bool, Any]:
@@ -534,16 +837,17 @@ class LocalDatabase:
             fts_query = " AND ".join(f'"{token}"' for token in tokens)
 
             if year and author:
+                escaped_author = _escape_sql_like(author)
                 query = """
                     SELECT p.*, bm25(papers_fts) as rank
                     FROM papers_fts
                     JOIN papers p ON papers_fts.rowid = p.id
-                    WHERE papers_fts MATCH ? AND p.year = ? AND p.authors LIKE ?
+                    WHERE papers_fts MATCH ? AND p.year = ? AND p.authors LIKE ? ESCAPE '\\'
                     ORDER BY rank
                     LIMIT ?
                 """
                 rows = conn.execute(
-                    query, (fts_query, year, f"%{author}%", limit)
+                    query, (fts_query, year, f"%{escaped_author}%", limit)
                 ).fetchall()
             elif year:
                 query = """
@@ -556,15 +860,18 @@ class LocalDatabase:
                 """
                 rows = conn.execute(query, (fts_query, year, limit)).fetchall()
             elif author:
+                escaped_author = _escape_sql_like(author)
                 query = """
                     SELECT p.*, bm25(papers_fts) as rank
                     FROM papers_fts
                     JOIN papers p ON papers_fts.rowid = p.id
-                    WHERE papers_fts MATCH ? AND p.authors LIKE ?
+                    WHERE papers_fts MATCH ? AND p.authors LIKE ? ESCAPE '\\'
                     ORDER BY rank
                     LIMIT ?
                 """
-                rows = conn.execute(query, (fts_query, f"%{author}%", limit)).fetchall()
+                rows = conn.execute(
+                    query, (fts_query, f"%{escaped_author}%", limit)
+                ).fetchall()
             else:
                 query = """
                     SELECT p.*, bm25(papers_fts) as rank
@@ -584,34 +891,21 @@ class LocalDatabase:
         self,
         title: str | None = None,
         authors: list[str] | str | None = None,
-        year: int | None = None,
+        year: int | str | None = None,
         limit: int = 10,
+        *,
+        _conn: sqlite3.Connection | None = None,
     ) -> list[Paper]:
-        """Fuzzy search for papers by title/authors/year.
-
-        This method is used when exact lookup fails and we need
-        to find potential matches.
-
-        Args:
-            title: Title to search
-            authors: List of authors
-            year: Publication year
-            limit: Maximum results
-
-        Returns:
-            List of matching papers
-        """
+        """Fuzzy search for papers by title/authors/year."""
         query_authors = author_keys(authors)
         query_year = year_key(year)
         query_tokens = title_tokens(title)
 
-        # FTS narrows the 80k+ ACL rows efficiently.  If an old database was
-        # created before FTS was populated, fall back to a broad title query.
-        rows: list[sqlite3.Row] = []
-        with self._get_conn() as conn:
+        def _query_rows(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+            found_rows: list[sqlite3.Row] = []
             if query_tokens:
                 fts_query = " AND ".join(f'title:"{token}"' for token in query_tokens)
-                rows = conn.execute(
+                found_rows = conn.execute(
                     """
                     SELECT p.*
                     FROM papers_fts
@@ -623,10 +917,10 @@ class LocalDatabase:
                     (fts_query, max(limit * 20, 50)),
                 ).fetchall()
 
-            if not rows and len(query_tokens) >= 3:
+            if not found_rows and len(query_tokens) >= 3:
                 # Fallback if first token lost a hyphen (e.g. "Scikitlearn" vs "Scikit-learn")
                 sub_fts = " AND ".join(f'title:"{token}"' for token in query_tokens[1:])
-                rows = conn.execute(
+                found_rows = conn.execute(
                     """
                     SELECT p.*
                     FROM papers_fts
@@ -638,12 +932,20 @@ class LocalDatabase:
                     (sub_fts, max(limit * 20, 50)),
                 ).fetchall()
 
-            if not rows and title:
+            if not found_rows and title:
                 first_token = query_tokens[0] if query_tokens else str(title)
-                rows = conn.execute(
-                    "SELECT * FROM papers WHERE lower(title) LIKE ? LIMIT ?",
-                    (f"%{first_token.casefold()}%", max(limit * 20, 50)),
+                escaped_tok = _escape_sql_like(first_token.casefold())
+                found_rows = conn.execute(
+                    "SELECT * FROM papers WHERE lower(title) LIKE ? ESCAPE '\\' LIMIT ?",
+                    (f"%{escaped_tok}%", max(limit * 20, 50)),
                 ).fetchall()
+            return found_rows
+
+        if _conn is not None:
+            rows = _query_rows(_conn)
+        else:
+            with self._get_conn() as conn:
+                rows = _query_rows(conn)
 
         papers = [Paper.from_dict(dict(row)) for row in rows]
         scored: list[tuple[float, Paper]] = []
@@ -692,9 +994,13 @@ class LocalDatabase:
         Returns:
             Log entry ID
         """
-        # Create hash of query params for deduplication
+        global _QUERY_LOG_PRUNE_COUNTER
         param_str = json.dumps(query_params, sort_keys=True)
         query_hash = hashlib.md5(param_str.encode()).hexdigest()
+
+        with _DB_CACHE_LOCK:
+            _QUERY_LOG_PRUNE_COUNTER += 1
+            should_prune = (_QUERY_LOG_PRUNE_COUNTER % _QUERY_LOG_PRUNE_INTERVAL) == 0
 
         with self._get_conn() as conn:
             cursor = conn.execute(
@@ -710,9 +1016,20 @@ class LocalDatabase:
                     datetime.now().isoformat(),
                 ),
             )
+            last_id = int(cursor.lastrowid or 0)
+            if should_prune:
+                conn.execute(
+                    """
+                    DELETE FROM query_log
+                    WHERE id <= (
+                        SELECT COALESCE(MAX(id), 0) - ? FROM query_log
+                    )
+                    """,
+                    (_QUERY_LOG_MAX_ROWS,),
+                )
             conn.commit()
             _bump_query_log_version()
-            return cursor.lastrowid or 0
+            return last_id
 
     def get_stats(self) -> dict[str, Any]:
         """Get database statistics with Read-Through RAM Cache + Event Invalidation.
@@ -852,91 +1169,7 @@ class LocalDatabase:
         now_iso = datetime.now().isoformat()
         with self._get_conn() as conn:
             for paper in papers:
-                paper.doi = normalize_doi(paper.doi)
-                paper.arxiv_id = normalize_arxiv_id(paper.arxiv_id)
-
-                if not paper.doi:
-                    existing = self._find_existing_metadata_paper(paper)
-                    if existing is not None:
-                        if (
-                            paper.abstract
-                            and paper.abstract.strip()
-                            and not (existing.abstract and existing.abstract.strip())
-                        ):
-                            conn.execute(
-                                "UPDATE papers SET abstract = ? WHERE id = ?",
-                                (paper.abstract.strip(), existing.id),
-                            )
-                        added += 1
-                        continue
-
-                if paper.arxiv_id:
-                    row = conn.execute(
-                        "SELECT * FROM papers WHERE arxiv_id = ? COLLATE NOCASE",
-                        (paper.arxiv_id,),
-                    ).fetchone()
-                    if row is not None:
-                        existing_arxiv = Paper.from_dict(dict(row))
-                        if not paper.doi or normalize_doi(existing_arxiv.doi) != paper.doi:
-                            if (
-                                paper.abstract
-                                and paper.abstract.strip()
-                                and not (
-                                    existing_arxiv.abstract
-                                    and existing_arxiv.abstract.strip()
-                                )
-                            ):
-                                conn.execute(
-                                    "UPDATE papers SET abstract = ? WHERE id = ?",
-                                    (paper.abstract.strip(), existing_arxiv.id),
-                                )
-                            added += 1
-                            continue
-
-                conn.execute(
-                    """
-                    INSERT INTO papers (doi, arxiv_id, title, authors, year, venue,
-                                       abstract, categories, external_ids, source, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(doi) DO UPDATE SET
-                        title = CASE
-                            WHEN excluded.title IS NULL OR TRIM(excluded.title) = ''
-                                THEN papers.title ELSE excluded.title END,
-                        authors = CASE
-                            WHEN excluded.authors IN ('[]', '') OR excluded.authors IS NULL
-                                THEN papers.authors ELSE excluded.authors END,
-                        year = COALESCE(excluded.year, papers.year),
-                        venue = COALESCE(NULLIF(excluded.venue, ''), papers.venue),
-                        abstract = COALESCE(NULLIF(excluded.abstract, ''), papers.abstract),
-                        categories = CASE
-                            WHEN excluded.categories IN ('[]', '') OR excluded.categories IS NULL
-                                THEN papers.categories ELSE excluded.categories END,
-                        external_ids = CASE
-                            WHEN excluded.external_ids IN ('{}', '') OR excluded.external_ids IS NULL
-                                THEN papers.external_ids ELSE excluded.external_ids END,
-                        source = CASE
-                            WHEN excluded.source IN ('local_db', 'known_papers')
-                                 AND papers.source NOT IN ('local_db', 'known_papers')
-                                THEN papers.source
-                            WHEN papers.source = 'acl' AND excluded.source <> 'acl'
-                                THEN papers.source
-                            ELSE excluded.source END,
-                        created_at = papers.created_at
-                    """,
-                    (
-                        paper.doi,
-                        paper.arxiv_id,
-                        paper.title,
-                        json.dumps(paper.authors),
-                        paper.year,
-                        paper.venue,
-                        paper.abstract,
-                        json.dumps(paper.categories),
-                        json.dumps(paper.external_ids),
-                        paper.source,
-                        now_iso,
-                    ),
-                )
+                self._upsert_paper_on_conn(conn, paper, now_iso=now_iso)
                 added += 1
             conn.commit()
         _bump_mutation_version()

@@ -2,18 +2,24 @@
 # .dockerignore — tránh copy unnecessary files vào Docker image
 # =====================================================================
 
-# Git
+# Git & CI/Tooling metadata
 .git
 .gitignore
+.gitmodules
+.github/
+.githooks/
+.agents/
+.superpowers/
+.playwright-mcp/
 
-# Python
-__pycache__
-*.py[cod]
-*$py.class
-*.so
+# Python (recursive across nested src/ & scripts/ packages)
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+**/*.so
 .Python
-*.egg
-*.egg-info/
+**/*.egg
+**/*.egg-info/
 dist/
 build/
 .eggs/
@@ -29,26 +35,36 @@ ENV/
 *.swp
 *.swo
 
-# Testing
+# Testing & Static Analysis Caches
+tests/
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 .coverage
 htmlcov/
 .tox/
 .nox/
 
-# Documentation
+# Documentation, Knowledge Graph & Thesis LaTeX Sources
 *.md
-!requirements*.txt
-!README.md
+!/requirements*.txt
+!/README.md
 docs/
+graphify-out/
+FinalReport_TDTU/
+FinalReport_TDTU_VN/
 
 # Frontend & Marketing (build riêng)
 node_modules/
 web/
 marketing/
 
-# Local data & corpora (được mount từ host hoặc chỉ dùng thực nghiệm local)
-data/
+# Local data & corpora (exclude data/* EXCEPT trained 120K/Platt Neuro-Symbolic weights)
+!/data/
+data/*
+!/data/models/
+data/models/*
+!/data/models/neuro_symbolic_weights.json
 reports/
 test-results/
 evaluation/
@@ -65,17 +81,17 @@ TDTU-MidtermReport/
 *.docx
 
 # Logs
-*.log
-*.log.*
+**/*.log
+**/*.log.*
 
 # OS
-.DS_Store
-Thumbs.db
+**/.DS_Store
+**/Thumbs.db
 
 # Confidential
 .env
 .env.*
-!.env.example
+!/.env.example
 .mcp.json
 *.pem
 *.key

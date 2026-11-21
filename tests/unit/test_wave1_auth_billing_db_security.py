@@ -742,7 +742,7 @@ def test_migration_0012_scopes_class_uniqueness_per_teacher_and_postgres_int_coe
 ) -> None:
     """Migration 0012 replaces global classes.name uniqueness with uq_classes_teacher_name,
     and integer flag columns coerce bool -> int with pool_pre_ping=True for PostgreSQL."""
-    assert LATEST_SCHEMA_VERSION == "0012"
+    assert LATEST_SCHEMA_VERSION == "0013"
 
     # Simulate an existing pre-0012 SQLite DB where classes had inline UNIQUE (name)
     legacy_db = tmp_path / "pre_0012.db"

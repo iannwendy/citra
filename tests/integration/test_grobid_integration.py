@@ -29,19 +29,6 @@ GROBID_URL = os.environ.get("GROBID_URL", "http://localhost:8070")
 GROBID_TEST_MODE = os.environ.get("GROBID_TEST_MODE", "mock").lower()
 ESSAYS_DIR = Path("data/essays")
 
-
-def _is_grobid_available() -> bool:
-    """Check if GROBID Docker is running and healthy."""
-    try:
-        response = requests.get(f"{GROBID_URL}/api/isalive", timeout=5)
-        return response.status_code == 200
-    except Exception:
-        return False
-
-
-# Auto-detect GROBID availability: skip only if GROBID is not available AND mode is not forced
-_SKIP_REAL_TESTS = GROBID_TEST_MODE != "real" and not _is_grobid_available()
-
 # Auto-detect production environment: use Docker internal network
 _PRODUCTION_GROBID_URL = "http://grobid:8070"  # Docker internal network
 _LOCAL_GROBID_URL = "http://localhost:8070"    # Local development
@@ -521,24 +508,23 @@ class TestPipelineWithMockGrobid:
 # =============================================================================
 
 
-@pytest.mark.skipif(
-    _SKIP_REAL_TESTS,
-    reason="GROBID Docker not available. Start with: docker-compose up grobid"
-)
+@pytest.mark.integration
 class TestRealGrobidDocker:
     """Test with real GROBID Docker - requires container running."""
 
     @pytest.fixture(scope="class", autouse=True)
     def check_grobid_running(self):
-        """Skip if GROBID Docker not running."""
-        import requests
-
+        """Skip if GROBID Docker not running (checked lazily at execution time, never collection time)."""
         grobid_url = _get_grobid_url()
         try:
-            response = requests.get(f"{grobid_url}/api/isalive", timeout=5)
+            response = requests.get(f"{grobid_url}/api/isalive", timeout=1.5)
             if response.status_code != 200:
+                if GROBID_TEST_MODE == "real":
+                    pytest.fail(f"GROBID Docker unhealthy (HTTP {response.status_code}) in real mode")
                 pytest.skip("GROBID Docker not healthy")
-        except Exception:
+        except Exception as exc:
+            if GROBID_TEST_MODE == "real":
+                pytest.fail(f"GROBID Docker not accessible in real mode: {exc}")
             pytest.skip("GROBID Docker not accessible")
 
     def test_real_grobid_health(self, check_grobid_running):
@@ -587,7 +573,7 @@ class TestRealGrobidDocker:
         from integrity_checker.config import Settings
         from integrity_checker.extraction.document_parser import DocumentParser
         from integrity_checker.models.source import SourceCandidate, SourceResult
-        from integrity_checker.pipeline.integrity_pipeline import IntegrityPipeline
+        from integrity_checker.pipeline.integrity_pipeline import AnalysisReport, IntegrityPipeline
 
         grobid_url = _get_grobid_url()
 
@@ -618,7 +604,7 @@ class TestRealGrobidDocker:
 
         report = pipeline.run(str(sample_essay_path), essay_id=1)
 
-        assert isinstance(report, type(report))
+        assert isinstance(report, AnalysisReport)
         assert report.filename == sample_essay_path.name
         assert report.num_pages >= 0
         assert report.cis is not None

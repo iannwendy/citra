@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { api } from '@/api/client';
+import { validatePasswordClient } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -118,20 +119,9 @@ export function GoogleOnboardingModal() {
     }
 
     if (newPassword) {
-      if (newPassword.length < 6 || !newPassword.trim()) {
-        setError(
-          lang === 'vi'
-            ? 'Mật khẩu phải có ít nhất 6 ký tự và không chỉ gồm khoảng trắng.'
-            : 'Password must be at least 6 characters and not whitespace-only.'
-        );
-        return;
-      }
-      if (new TextEncoder().encode(newPassword).length > 72) {
-        setError(
-          lang === 'vi'
-            ? 'Mật khẩu không được vượt quá 72 byte UTF-8.'
-            : 'Password must not exceed 72 UTF-8 bytes.'
-        );
+      const pwCheck = validatePasswordClient(newPassword, lang);
+      if (!pwCheck.valid) {
+        setError(pwCheck.error || 'Invalid password');
         return;
       }
       if (newPassword !== confirmPassword) {
@@ -237,7 +227,7 @@ export function GoogleOnboardingModal() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label className="input-label">
+              <Label htmlFor="onboarding-username" className="input-label">
                 {lang === 'vi'
                   ? 'Tên đăng nhập (@username) — Đặt 1 lần duy nhất'
                   : 'Username (@handle) — One-time customization'}
@@ -247,6 +237,7 @@ export function GoogleOnboardingModal() {
                   @
                 </span>
                 <Input
+                  id="onboarding-username"
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -293,7 +284,11 @@ export function GoogleOnboardingModal() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
+                  <Label htmlFor="onboarding-new-password" className="sr-only">
+                    {lang === 'vi' ? 'Mật khẩu mới' : 'New password'}
+                  </Label>
                   <Input
+                    id="onboarding-new-password"
                     type="password"
                     autoComplete="new-password"
                     value={newPassword}
@@ -309,11 +304,16 @@ export function GoogleOnboardingModal() {
                   />
                 </div>
                 <div>
+                  <Label htmlFor="onboarding-confirm-password" className="sr-only">
+                    {lang === 'vi' ? 'Xác nhận mật khẩu mới' : 'Confirm new password'}
+                  </Label>
                   <Input
+                    id="onboarding-confirm-password"
                     type="password"
                     autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
+                    maxLength={128}
                     className="rounded-xl text-sm"
                     placeholder={
                       lang === 'vi'

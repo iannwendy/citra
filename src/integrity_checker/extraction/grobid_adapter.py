@@ -301,7 +301,7 @@ def _grobid_bib_to_citation(bib: GrobidBibEntry, order_index: int) -> Citation:
         citation_type=CitationType.REFERENCE_LIST,
         # GROBID bibliography is typically APA-like
         style=CitationStyle.APA,
-        authors=authors_raw,
+        authors=list(authors_raw),
         year=year,
         title=title,
         venue=venue,

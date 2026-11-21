@@ -269,8 +269,16 @@ def _serialize_promo(promo: PromoCode) -> dict[str, Any]:
         "effective_status": effective_status,
         "expires_at": expires_at.isoformat() if expires_at else None,
         "created_by": promo.created_by,
-        "created_at": _ensure_utc(promo.created_at).isoformat() if promo.created_at else None,
-        "updated_at": _ensure_utc(promo.updated_at).isoformat() if promo.updated_at else None,
+        "created_at": (
+            created_dt.isoformat()
+            if (created_dt := _ensure_utc(promo.created_at)) is not None
+            else None
+        ),
+        "updated_at": (
+            updated_dt.isoformat()
+            if (updated_dt := _ensure_utc(promo.updated_at)) is not None
+            else None
+        ),
     }
 
 
@@ -372,8 +380,8 @@ def _serialize_transaction(tx: BillingTransaction) -> dict[str, Any]:
     discount = float(tx.discount_usd or 0.0)
     vnpay = VNPayService()
     amount_vnd = (
-        int(tx.amount_vnd)
-        if getattr(tx, "amount_vnd", None) is not None
+        int(raw_tx_vnd)
+        if (raw_tx_vnd := getattr(tx, "amount_vnd", None)) is not None
         else vnpay.usd_to_vnd(float(tx.amount_usd))
     )
     return {
@@ -607,47 +615,84 @@ def create_checkout_session(
 
     stripe_secret = os.getenv("STRIPE_SECRET_KEY", "").strip()
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+    is_prod = _is_production_runtime()
+    allow_demo_in_prod = os.getenv("ALLOW_DEMO_CHECKOUT_IN_PROD", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
-    # Attempt Real Stripe Live / Test Mode if sk_live_ or sk_test_ key is provided and not force_demo
-    if stripe_secret.startswith(("sk_live_", "sk_test_")) and not request.force_demo and amount_usd > 0:
-        stripe_mode = "stripe_live" if stripe_secret.startswith("sk_live_") else "stripe_test"
+    if is_prod and not allow_demo_in_prod and request.force_demo and amount_usd > 0:
+        raise HTTPException(
+            status_code=403,
+            detail="Demo checkout mode is disabled in production.",
+        )
+
+    if (
+        is_prod
+        and not allow_demo_in_prod
+        and stripe_secret
+        and not stripe_secret.startswith(_STRIPE_ALL_KEY_PREFIXES)
+        and amount_usd > 0
+    ):
+        logger.error("Misconfigured Stripe API key prefix in production runtime")
+        raise HTTPException(
+            status_code=503,
+            detail="Payment gateway is not configured on the server.",
+        )
+
+    # Create real Stripe Live / Test Checkout Session via direct REST API (zero external SDK needed)
+    if (
+        stripe_secret.startswith(_STRIPE_ALL_KEY_PREFIXES)
+        and not request.force_demo
+        and amount_usd > 0
+    ):
+        import httpx
+
+        stripe_mode = (
+            "stripe_live"
+            if stripe_secret.startswith(_STRIPE_LIVE_KEY_PREFIXES)
+            else "stripe_test"
+        )
+        interval = "year" if cycle == "annual" else "month"
+        unit_amount_cents = int(round(amount_usd * 100))
+        form_data = {
+            "payment_method_types[0]": "card",
+            "mode": "subscription",
+            "customer_email": current_user.email or f"{current_user.username}@citra.edu.vn",
+            "line_items[0][price_data][currency]": "usd",
+            "line_items[0][price_data][product_data][name]": f"CITRA {policy.name} Plan ({cycle.capitalize()})",
+            "line_items[0][price_data][product_data][description]": policy.tagline_en,
+            "line_items[0][price_data][unit_amount]": str(unit_amount_cents),
+            "line_items[0][price_data][recurring][interval]": interval,
+            "line_items[0][quantity]": "1",
+            "metadata[user_id]": str(current_user.id),
+            "metadata[plan_tier]": tier,
+            "metadata[billing_cycle]": cycle,
+            "metadata[promo_code]": applied_promo_code or "",
+            "success_url": f"{frontend_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
+            "cancel_url": f"{frontend_url}/pricing?canceled=1",
+        }
         try:
-            import stripe  # type: ignore
-
-            stripe.api_key = stripe_secret
-            interval = "year" if cycle == "annual" else "month"
-            unit_amount_cents = int(round(amount_usd * 100))
-
-            stripe_session = stripe.checkout.Session.create(
-                payment_method_types=["card"],
-                mode="subscription",
-                customer_email=current_user.email or f"{current_user.username}@citra.edu.vn",
-                line_items=[
-                    {
-                        "price_data": {
-                            "currency": "usd",
-                            "product_data": {
-                                "name": f"CITRA {policy.name} Plan ({cycle.capitalize()})",
-                                "description": policy.tagline_en,
-                            },
-                            "unit_amount": unit_amount_cents,
-                            "recurring": {"interval": interval},
-                        },
-                        "quantity": 1,
-                    }
-                ],
-                metadata={
-                    "user_id": str(current_user.id),
-                    "plan_tier": tier,
-                    "billing_cycle": cycle,
-                    "promo_code": applied_promo_code or "",
-                },
-                success_url=f"{frontend_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
-                cancel_url=f"{frontend_url}/pricing?canceled=1",
+            stripe_resp = httpx.post(
+                "https://api.stripe.com/v1/checkout/sessions",
+                headers={"Authorization": f"Bearer {stripe_secret}"},
+                data=form_data,
+                timeout=15.0,
             )
+            if stripe_resp.status_code != 200:
+                raise RuntimeError(
+                    f"Stripe HTTP {stripe_resp.status_code}: {stripe_resp.text[:200]}"
+                )
+            stripe_payload = stripe_resp.json()
+            stripe_session_id = str(stripe_payload.get("id") or "").strip()
+            stripe_checkout_url = str(stripe_payload.get("url") or "").strip()
+            if not stripe_session_id or not stripe_checkout_url:
+                raise RuntimeError("Stripe response missing session id or url")
+
             tx = repo.create_billing_transaction(
                 user_id=current_user.id,
-                stripe_session_id=stripe_session.id,
+                stripe_session_id=stripe_session_id,
                 plan_tier=tier,
                 billing_cycle=cycle,
                 subtotal_usd=subtotal_usd,
@@ -659,8 +704,8 @@ def create_checkout_session(
             )
             repo.commit()
             return {
-                "session_id": stripe_session.id,
-                "checkout_url": stripe_session.url,
+                "session_id": stripe_session_id,
+                "checkout_url": stripe_checkout_url,
                 "mode": stripe_mode,
                 "plan_tier": tier,
                 "plan_name": policy.name,
@@ -672,7 +717,13 @@ def create_checkout_session(
                 "transaction_id": tx.id,
             }
         except Exception as exc:
-            logger.warning(f"Stripe SDK fallback to built-in demo checkout: {exc}")
+            logger.error(f"Stripe Checkout Session creation failed: {exc}")
+            if is_prod and not allow_demo_in_prod:
+                raise HTTPException(
+                    status_code=502,
+                    detail="Payment gateway is temporarily unavailable.",
+                ) from exc
+            logger.warning("Falling back to built-in demo checkout in non-production runtime")
 
     # Full 100% promotional fee waiver ($0.00): safe in production without Stripe or demo mode
     if applied_promo_code and amount_usd <= 0.0:
@@ -780,6 +831,11 @@ def apply_or_remove_session_promo(
         raise HTTPException(status_code=403, detail="Access denied")
     if tx.status == "succeeded":
         raise HTTPException(status_code=400, detail="Checkout session has already been paid.")
+    if (tx.payment_mode or "").strip().lower() in _STRIPE_HOSTED_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail="Promo codes cannot be modified after a Stripe checkout session is created.",
+        )
 
     policy = get_plan_policy(tx.plan_tier)
     subtotal_usd = float(
@@ -955,7 +1011,7 @@ def _activate_paid_transaction(
         target_user.plan_tier = tx.plan_tier
         target_user.billing_cycle = tx.billing_cycle
         target_user.subscription_status = "active"
-        target_user.cancel_at_period_end = 0
+        target_user.cancel_at_period_end = False
         target_user.current_period_start = now
         target_user.current_period_end = now + timedelta(days=period_days)
         if not target_user.stripe_customer_id:
@@ -973,25 +1029,43 @@ def _activate_paid_transaction(
         db.refresh(tx)
 
 
+_STRIPE_LIVE_KEY_PREFIXES = ("sk_live_", "rk_live_")
+_STRIPE_TEST_KEY_PREFIXES = ("sk_test_", "rk_test_")
+_STRIPE_ALL_KEY_PREFIXES = _STRIPE_LIVE_KEY_PREFIXES + _STRIPE_TEST_KEY_PREFIXES
+_STRIPE_HOSTED_MODES = ("stripe_live", "stripe_test")
+
+
 def _is_production_runtime() -> bool:
     """Return True when APP_ENV / settings.app.env is production and not in test runtime."""
-    settings = get_settings()
-    env_val = (os.getenv("APP_ENV") or settings.app.env or "").strip().lower()
-    return env_val in ("production", "prod", "live") and not is_test_runtime()
+    from integrity_checker.config import is_production_env
+
+    return is_production_env() and not is_test_runtime()
 
 
 def _enforce_vnpay_secret_for_env() -> None:
     """Reject missing/default/weak VNPay hash secrets unconditionally in production."""
+    from integrity_checker.config import is_production_env
+
     settings = get_settings()
     env_val = (os.getenv("APP_ENV") or settings.app.env or "").strip().lower()
-    if env_val in ("production", "prod", "live"):
+    if is_production_env(env_val):
         try:
             validate_vnpay_production_secret(env_val)
         except ValueError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
+            logger.error(f"VNPay production secret validation failed: {exc}")
+            raise HTTPException(
+                status_code=503,
+                detail="Payment gateway is not configured on the server.",
+            ) from exc
 
 
-def _verify_stripe_session_paid(session_id: str, stripe_secret: str) -> dict[str, Any]:
+def _verify_stripe_session_paid(
+    session_id: str,
+    stripe_secret: str,
+    *,
+    expected_amount_usd: float | None = None,
+    expected_currency: str = "usd",
+) -> dict[str, Any]:
     """Verify a Stripe Checkout Session via Stripe HTTP API and require payment_status == 'paid'."""
     import httpx
 
@@ -1002,9 +1076,10 @@ def _verify_stripe_session_paid(session_id: str, stripe_secret: str) -> dict[str
             timeout=10.0,
         )
     except Exception as exc:
+        logger.error(f"Failed to verify checkout session with Stripe: {exc}")
         raise HTTPException(
             status_code=502,
-            detail=f"Failed to verify checkout session with Stripe: {exc}",
+            detail="Payment gateway is temporarily unavailable.",
         ) from exc
 
     if resp.status_code != 200:
@@ -1018,6 +1093,19 @@ def _verify_stripe_session_paid(session_id: str, stripe_secret: str) -> dict[str
             status_code=402,
             detail=f"Stripe checkout session is not paid (payment_status={data.get('payment_status')}).",
         )
+    if expected_amount_usd is not None:
+        expected_cents = int(round(float(expected_amount_usd) * 100))
+        raw_amount_total = data.get("amount_total")
+        try:
+            actual_cents = int(raw_amount_total) if raw_amount_total is not None else -1
+        except (TypeError, ValueError):
+            actual_cents = -1
+        actual_currency = str(data.get("currency") or "").strip().lower()
+        if actual_cents != expected_cents or actual_currency != expected_currency.lower():
+            raise HTTPException(
+                status_code=400,
+                detail="Stripe checkout session amount or currency mismatch.",
+            )
     return data
 
 
@@ -1039,14 +1127,25 @@ def verify_checkout_session(
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Verify whether a genuine 100% promo waiver reduces the payable amount to $0.00
-    is_promo_waiver = False
-    candidate_promo = (
+    tx_mode = (tx.payment_mode or "").strip().lower()
+    is_stripe_hosted = tx_mode in _STRIPE_HOSTED_MODES
+    req_promo_norm = (
         request.promo_code.strip().upper()
         if request.promo_code and request.promo_code.strip()
-        else tx.promo_code
+        else None
     )
-    if candidate_promo:
+    tx_promo_norm = (tx.promo_code or "").strip().upper() or None
+
+    if is_stripe_hosted and req_promo_norm is not None and req_promo_norm != tx_promo_norm:
+        raise HTTPException(
+            status_code=400,
+            detail="Promo codes cannot be modified after a Stripe checkout session is created.",
+        )
+
+    # Verify whether a genuine 100% promo waiver reduces the payable amount to $0.00
+    is_promo_waiver = False
+    candidate_promo = tx_promo_norm if is_stripe_hosted else (req_promo_norm or tx_promo_norm)
+    if candidate_promo and not is_stripe_hosted:
         policy = get_plan_policy(tx.plan_tier)
         subtotal_check = float(
             tx.subtotal_usd
@@ -1069,6 +1168,17 @@ def verify_checkout_session(
         if verified_final_usd <= 0.0:
             is_promo_waiver = True
 
+    if (
+        not is_stripe_hosted
+        and req_promo_norm is not None
+        and req_promo_norm != tx_promo_norm
+        and not is_promo_waiver
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Promo code must be applied to the checkout session before verification.",
+        )
+
     is_prod = _is_production_runtime()
     allow_demo_in_prod = os.getenv("ALLOW_DEMO_CHECKOUT_IN_PROD", "").strip().lower() in (
         "1",
@@ -1077,7 +1187,7 @@ def verify_checkout_session(
     )
     is_demo_session = not is_promo_waiver and (
         request.session_id.startswith(("cs_test_demo_", "cs_demo_"))
-        or (tx.payment_mode or "").lower() in ("demo", "stripe_demo")
+        or tx_mode in ("demo", "stripe_demo")
     )
     if is_prod and is_demo_session and not allow_demo_in_prod:
         raise HTTPException(
@@ -1087,12 +1197,17 @@ def verify_checkout_session(
 
     stripe_secret = os.getenv("STRIPE_SECRET_KEY", "").strip()
     if not is_promo_waiver:
-        if stripe_secret.startswith(("sk_live_", "sk_test_")) and not is_demo_session:
-            _verify_stripe_session_paid(request.session_id, stripe_secret)
+        if stripe_secret.startswith(_STRIPE_ALL_KEY_PREFIXES) and not is_demo_session:
+            _verify_stripe_session_paid(
+                request.session_id,
+                stripe_secret,
+                expected_amount_usd=float(tx.amount_usd),
+                expected_currency=str(tx.currency or "usd"),
+            )
         elif is_prod and not is_demo_session:
             raise HTTPException(
                 status_code=503,
-                detail="STRIPE_SECRET_KEY is not configured in production.",
+                detail="Payment gateway is not configured on the server.",
             )
 
     _activate_paid_transaction(
@@ -1114,7 +1229,9 @@ def verify_checkout_session(
         ),
         billing_country=request.billing_country,
         billing_zip=request.billing_zip,
-        promo_code_override=request.promo_code,
+        promo_code_override=(
+            None if is_stripe_hosted else (req_promo_norm if is_promo_waiver else None)
+        ),
     )
     db.refresh(tx)
     db.refresh(target_user)
@@ -1148,6 +1265,11 @@ def create_vnpay_payment_url(
         raise HTTPException(status_code=403, detail="Access denied")
     if tx.status == "succeeded":
         raise HTTPException(status_code=400, detail="Checkout session has already been paid.")
+    if (tx.payment_mode or "").strip().lower() in _STRIPE_HOSTED_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot create a VNPay payment URL for a Stripe-hosted checkout session.",
+        )
 
     bank_code = (payload.bank_code or "NCB").strip().upper()
     if bank_code not in VNPAY_VALID_BANK_CODES:
@@ -1169,9 +1291,11 @@ def create_vnpay_payment_url(
     amount_usd = float(tx.amount_usd)
     amount_vnd = vnpay.usd_to_vnd(amount_usd)
 
-    # Generate or reuse unique vnp_TxnRef bound to this transaction
-    if not tx.vnp_txn_ref:
+    # Generate or mint a fresh vnp_TxnRef when retrying a previously failed/canceled attempt
+    if not tx.vnp_txn_ref or tx.status in ("failed", "canceled"):
         tx.vnp_txn_ref = f"CITRA{tx.id}VNP{secrets.token_hex(4).upper()}"
+        tx.status = "pending"
+        tx.vnp_response_code = None
     tx.amount_vnd = amount_vnd
     tx.vnp_bank_code = bank_code
     repo.commit()
@@ -1229,6 +1353,13 @@ def authorize_vnpay_sandbox_payment(
         raise HTTPException(status_code=404, detail="Checkout session not found")
     if tx.user_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Access denied")
+    if tx.status == "succeeded":
+        raise HTTPException(status_code=400, detail="Checkout session has already been paid.")
+    if (tx.payment_mode or "").strip().lower() in _STRIPE_HOSTED_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail="VNPay sandbox simulator cannot be used on a Stripe-hosted checkout session.",
+        )
 
     target_user = repo.get_user_by_id(tx.user_id)
     if not target_user:
@@ -1299,8 +1430,9 @@ def authorize_vnpay_sandbox_payment(
     vnpay = VNPayService()
     policy = get_plan_policy(tx.plan_tier)
     amount_vnd = vnpay.usd_to_vnd(float(tx.amount_usd))
-    if not tx.vnp_txn_ref:
+    if not tx.vnp_txn_ref or tx.status in ("failed", "canceled"):
         tx.vnp_txn_ref = f"CITRA{tx.id}VNP{secrets.token_hex(4).upper()}"
+        tx.status = "pending"
     tx.amount_vnd = amount_vnd
     tx.vnp_bank_code = bank_code
     tx.vnp_card_type = card_type
@@ -1407,17 +1539,24 @@ def _process_vnpay_return_verification(
 
     repo = Repository(db)
     tx = repo.get_billing_transaction_by_vnp_txn_ref(verify_result.txn_ref)
-    if not tx and session_id_hint:
-        tx = repo.get_billing_transaction_by_session(session_id_hint)
     if not tx:
         raise HTTPException(status_code=404, detail="Transaction for vnp_TxnRef not found")
+    if (
+        session_id_hint
+        and session_id_hint.strip()
+        and tx.stripe_session_id != session_id_hint.strip()
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Checkout session_id does not match vnp_TxnRef transaction.",
+        )
 
     if current_user and tx.user_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Access denied")
 
     expected_vnd = (
-        int(tx.amount_vnd)
-        if getattr(tx, "amount_vnd", None) is not None
+        int(raw_ret_vnd)
+        if (raw_ret_vnd := getattr(tx, "amount_vnd", None)) is not None
         else vnpay.usd_to_vnd(float(tx.amount_usd))
     )
     if verify_result.raw_vnp_amount != int(expected_vnd * 100):
@@ -1564,14 +1703,16 @@ def vnpay_ipn_webhook(
             return dict(IpnOrderNotFound)
 
         expected_vnd = (
-            int(tx.amount_vnd)
-            if getattr(tx, "amount_vnd", None) is not None
+            int(raw_ipn_vnd)
+            if (raw_ipn_vnd := getattr(tx, "amount_vnd", None)) is not None
             else vnpay.usd_to_vnd(float(tx.amount_usd))
         )
         if verify_result.raw_vnp_amount != int(expected_vnd * 100):
             return dict(IpnInvalidAmount)
 
-        if tx.status in ("succeeded", "failed", "canceled"):
+        if tx.status == "succeeded" or (
+            not verify_result.is_success and tx.status in ("failed", "canceled")
+        ):
             return dict(IpnOrderAlreadyConfirmed)
 
         if verify_result.is_success:
@@ -1636,12 +1777,12 @@ def cancel_subscription(
         current_user.plan_tier = "basic"
         current_user.billing_cycle = None
         current_user.subscription_status = "canceled"
-        current_user.cancel_at_period_end = 0
+        current_user.cancel_at_period_end = False
         current_user.current_period_end = None
         current_user.stripe_subscription_id = None
         msg = "Subscription canceled immediately. Your account is now on the Basic plan."
     else:
-        current_user.cancel_at_period_end = 1
+        current_user.cancel_at_period_end = True
         msg = "Subscription auto-renewal canceled. You will retain paid benefits until the end of your billing period."
 
     repo.commit()
@@ -1667,7 +1808,7 @@ def reactivate_subscription(
             detail="No active paid subscription to reactivate.",
         )
 
-    current_user.cancel_at_period_end = 0
+    current_user.cancel_at_period_end = False
     current_user.subscription_status = "active"
     repo.commit()
     db.refresh(current_user)

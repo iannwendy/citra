@@ -149,6 +149,16 @@ class ArxivClient(BaseScholarClient):
     def _last_timed_out(self, value: bool) -> None:
         _ARXIV_TIMED_OUT.set(bool(value))
 
+    @classmethod
+    def reset_circuit_state(cls) -> None:
+        """Reset per-loop arXiv circuit state and request pacing timestamps."""
+        global _LAST_ARXIV_GLOBAL_AT
+        with _ARXIV_GLOBAL_SLOT_LOCK:
+            _ARXIV_CONSECUTIVE_TIMEOUTS.clear()
+            _ARXIV_CIRCUIT_OPEN_UNTIL.clear()
+            _LAST_ARXIV_REQ_AT.clear()
+            _LAST_ARXIV_GLOBAL_AT = 0.0
+
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Lookup by exact arXiv ID first; fallback to title/author search."""
         self._reset_http_telemetry()
@@ -160,11 +170,27 @@ class ArxivClient(BaseScholarClient):
             by_id = await self._lookup_by_id(arxiv_id, citation=citation)
             if by_id and by_id.found:
                 return by_id
-            if self._last_status_code == 429:
-                return SourceCandidate(
-                    source_name=self.name,
-                    found=False,
-                    error=f"arXiv: rate limited (429) for ID '{arxiv_id}'",
+            if (
+                self._last_status_code == 429
+                or (self._last_status_code is not None and self._last_status_code >= 500)
+                or self._last_transport_error
+                or self._last_timed_out
+                or not (citation.title and citation.title.strip())
+            ):
+                if (
+                    self._last_timed_out
+                    and self._last_status_code is None
+                    and not self._last_transport_error
+                ):
+                    return SourceCandidate(
+                        source_name=self.name,
+                        found=False,
+                        error=f"arXiv: timeout/unavailable for ID '{arxiv_id}'",
+                    )
+                return self._build_miss_or_error_candidate(
+                    "arXiv",
+                    arxiv_id,
+                    clean_miss_error=f"arXiv: no results for ID '{arxiv_id}'",
                 )
 
         # 2. Title + Author search
@@ -494,6 +520,7 @@ class ArxivClient(BaseScholarClient):
             open_until = _ARXIV_CIRCUIT_OPEN_UNTIL.get(loop, 0.0)
         if open_until > now:
             self._last_timed_out = True
+            self._record_transport_error(RuntimeError("arXiv local circuit open"))
             logger.debug("arXiv circuit breaker open — skipping request")
             return None
 

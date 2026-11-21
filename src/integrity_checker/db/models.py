@@ -15,6 +15,7 @@ from sqlalchemy import (
     Text,
     TypeDecorator,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
@@ -122,6 +123,11 @@ class User(Base):
         return (1 if value else 0) if isinstance(value, bool) else int(value)
 
 
+# Case-insensitive lookup indexes for auth & registration queries
+Index("idx_users_lower_username", func.lower(User.username))
+Index("idx_users_lower_email", func.lower(User.email))
+
+
 class Session(Base):
     """Session model for JWT token storage."""
 
@@ -129,7 +135,7 @@ class Session(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    token: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
@@ -198,8 +204,7 @@ class CitationCache(Base):
     hit_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
-# Indexes for CitationCache
-Index("idx_cache_key", CitationCache.cache_key)
+# Indexes for CitationCache (cache_key already has a UNIQUE index)
 Index("idx_source", CitationCache.source)
 
 

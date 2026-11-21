@@ -1,5 +1,8 @@
 # SourceLogic — Academic Source Verification, Refined.
 
+> [!NOTE]
+> **Historical Design Specification:** This early product concept (`Slate + Indigo` palette, `Source Serif 4` / `Inter` typography, and `R01–R12` baseline rules) has been superseded in `v3.89.5` by the **Solva Warm Editorial** design system (`#FAF8F3` warm ivory canvas, `#252523` charcoal ink, `#35624D` botanical forest accents, `Sentient` + `Plus Jakarta Sans` + `JetBrains Mono`), `8` `CitationMappingStatus` states, and `68` `R-*` symbolic rules across `16` priority groups. Refer to [`../../README.md`](../../README.md) and [`../../CLAUDE.md`](../../CLAUDE.md) for current production specifications.
+
 > **Brand Identity · Design System · Academic Verification UX/UI · Neuro-Symbolic Architecture**  
 > **Concept:** SourceLogic Scholarly — Explainable Precision Minimal  
 > **Tagline:** Verify every citation. Trace every source.  

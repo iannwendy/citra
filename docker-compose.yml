@@ -3,11 +3,11 @@
 # Full Docker setup: API + Frontend + GROBID
 #
 # Usage:
-#   docker-compose up --build        # Start all services
-#   docker-compose up --build -d     # Start in background
-#   docker-compose logs -f api       # Watch API logs
-#   docker-compose exec api pytest   # Run tests in container
-#   docker-compose down              # Stop all services
+#   docker compose up --build        # Start all services
+#   docker compose up --build -d     # Start in background
+#   docker compose logs -f api       # Watch API logs
+#   docker compose exec api pytest   # Run tests in container
+#   docker compose down              # Stop all services
 # =====================================================================
 
 services:
@@ -56,7 +56,7 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
-      - ./configs/config.docker.yaml:/app/configs/config.yaml:ro  # Override with Docker config
+      - ./configs/config.docker.yaml:/app/configs/config.yaml:ro  # Override paths/GROBID URL with Docker config
       - ./tests:/app/tests:ro  # Read-only tests
       # Hot-reload: mount source code live (no rebuild needed)
       - ./src:/app/src:ro
@@ -69,9 +69,12 @@ services:
       grobid:
         condition: service_started
     environment:
+      - APP_ENV=${APP_ENV:-development}
+      - APP_DEBUG=${APP_DEBUG:-true}
+      - APP_LOG_LEVEL=${APP_LOG_LEVEL:-INFO}
       - GROBID_URL=http://grobid:8070  # Docker internal network
       - DATABASE_URL=sqlite:///./data/app.db
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-429053368516-7uia3j5uavajvbkhd7hq6lih9a65n22u.apps.googleusercontent.com}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
     healthcheck:
       # Health lives under /api (the app is mounted there), not at the root.
@@ -107,7 +110,7 @@ services:
       # Use proxy (/api) - Vite forwards directly over Docker bridge network to api:8000
       - VITE_API_BASE_URL=/api
       - VITE_API_PROXY_TARGET=http://api:8000
-      - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-429053368516-7uia3j5uavajvbkhd7hq6lih9a65n22u.apps.googleusercontent.com}
+      - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: >

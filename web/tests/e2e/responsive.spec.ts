@@ -330,7 +330,7 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
       for (const route of publicRoutes) {
         await page.goto(route);
         await page.waitForLoadState('domcontentloaded');
-        await page.waitForTimeout(300);
+        await expect(page.locator('#root')).not.toBeEmpty();
         await assertNoHorizontalOverflow(page, `${route} @ ${vp.name}`);
       }
     });
@@ -406,7 +406,6 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
 
         const compareMatrix = page.locator('#compare-matrix');
         await compareMatrix.scrollIntoViewIfNeeded();
-        await page.waitForTimeout(150);
 
         const tierTabs = page.getByTestId('mobile-compare-tier-tabs');
         await expect(tierTabs).toBeVisible();
@@ -466,16 +465,15 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
             window.scrollBy(0, rect.top + 120);
           }
         });
-        await page.waitForTimeout(100);
-        const stickyClearance = await page.evaluate(() => {
-          const header = document.querySelector('header') as HTMLElement;
-          const tablist = document.querySelector('[data-testid="mobile-compare-tier-tabs"]') as HTMLElement;
-          return {
-            headerBottom: header.getBoundingClientRect().bottom,
-            tablistTop: tablist.getBoundingClientRect().top,
-          };
-        });
-        expect(stickyClearance.tablistTop).toBeGreaterThanOrEqual(stickyClearance.headerBottom);
+        await expect
+          .poll(async () =>
+            page.evaluate(() => {
+              const header = document.querySelector('header') as HTMLElement;
+              const tablist = document.querySelector('[data-testid="mobile-compare-tier-tabs"]') as HTMLElement;
+              return tablist.getBoundingClientRect().top >= header.getBoundingClientRect().bottom;
+            }),
+          )
+          .toBe(true);
       }
     }
 
@@ -639,7 +637,6 @@ test.describe('Responsive Layout — Public & Auth Pages', () => {
 
       const ticker = page.getByTestId('hero-scholarly-ticker');
       await ticker.scrollIntoViewIfNeeded();
-      await page.waitForTimeout(250);
       await expect(ticker).toBeVisible();
 
       for (let i = 0; i < expectedTickerLinks.length; i++) {
@@ -703,7 +700,7 @@ test.describe('Responsive Layout — Authenticated Workspaces (Student, Teacher,
       for (const route of routes) {
         await page.goto(route);
         await page.waitForLoadState('domcontentloaded');
-        await page.waitForTimeout(400);
+        await expect(page.locator('main')).toBeVisible();
         await assertNoHorizontalOverflow(page, `${route} @ ${vp.name}`);
       }
     });
@@ -721,7 +718,6 @@ test.describe('Responsive Layout — Authenticated Workspaces (Student, Teacher,
       await page.setViewportSize(vp);
       await page.goto('/dashboard');
       await page.waitForLoadState('domcontentloaded');
-      await page.waitForTimeout(500);
 
       const openNavBtn = page.getByRole('button', { name: /open navigation menu/i });
       await expect(openNavBtn).toBeVisible();
@@ -849,8 +845,9 @@ test.describe('Responsive Layout — Authenticated Workspaces (Student, Teacher,
     // 2. CreateClassDialog on /teacher/classes
     await page.goto('/teacher/classes');
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(500);
-    await page.getByRole('button', { name: /tạo lớp|create class/i }).click();
+    const createClassBtn = page.getByRole('button', { name: /tạo lớp|create class/i });
+    await expect(createClassBtn).toBeVisible();
+    await createClassBtn.click();
     const classDialog = page.getByRole('dialog');
     await expect(classDialog).toBeVisible();
     const classDialogBox = await classDialog.boundingBox();
@@ -937,7 +934,7 @@ test.describe('Responsive Layout — Authenticated Workspaces (Student, Teacher,
       for (const route of ['/dashboard', '/history', '/verification/report/1']) {
         await page.goto(route);
         await page.waitForLoadState('domcontentloaded');
-        await page.waitForTimeout(400);
+        await expect(page.locator('main')).toBeVisible();
         await assertNoHorizontalOverflow(page, `${route} (long filename) @ ${vp.name}`);
 
         if (route === '/dashboard') {
@@ -1137,7 +1134,6 @@ test.describe('Responsive Layout — Authenticated Workspaces (Student, Teacher,
 
       const modal = page.getByTestId('upgrade-modal');
       await expect(modal).toBeVisible();
-      await page.waitForTimeout(300);
 
       const initialLayout = await page.evaluate(() => {
         const dialog = document.querySelector('[data-testid="upgrade-modal"]') as HTMLElement;
@@ -1172,7 +1168,7 @@ test.describe('Responsive Layout — Authenticated Workspaces (Student, Teacher,
         dialogRect.top + dialogRect.height * 0.65
       );
       await page.mouse.wheel(0, 1400);
-      await page.waitForTimeout(250);
+      await expect(modal.getByTestId('modal-upgrade-pro-btn')).toBeInViewport();
 
       const afterScroll = await page.evaluate(() => {
         const dialog = document.querySelector('[data-testid="upgrade-modal"]') as HTMLElement;

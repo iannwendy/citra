@@ -507,7 +507,7 @@ def test_bug15_linker_pass3_year_mismatch_ambiguous_and_compound_missing_priorit
     assert res1.links[0].status == CitationMappingStatus.IN_TEXT_MISMATCH
     assert body1[0].mapping_status == CitationMappingStatus.IN_TEXT_MISMATCH.value
     assert res1.unmatched_reference_ids == []
-    assert refs1[0].mapping_status == CitationMappingStatus.MATCHED.value
+    assert refs1[0].mapping_status == CitationMappingStatus.IN_TEXT_MISMATCH.value
 
     # 2. Ambiguous tie: (Nguyen, 2021) against Nguyen (2020) and Nguyen (2022)
     body2 = [

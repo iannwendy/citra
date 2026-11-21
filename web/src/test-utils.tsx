@@ -113,19 +113,7 @@ interface WrapperOptions {
 
 function makeWrapper(options: WrapperOptions = {}) {
   const {
-    user = {
-      id: 1,
-      username: 'admin',
-      role: 'admin',
-      email: 'admin@test.local',
-      full_name: 'Test Admin',
-      is_active: true,
-      avatar_url: null,
-      last_login_at: null,
-      created_at: '2026-01-01T00:00:00Z',
-      institution: null,
-      can_override_verdicts: true,
-    },
+    user = makeUser('admin'),
     initialRoute = '/',
     queryClient = createTestQueryClient(),
     authOverrides,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type {
@@ -10,6 +10,7 @@ import type {
 import { cn } from '@/lib/utils';
 import { RefreshCw } from 'lucide-react';
 import { useRole } from '@/hooks/useRole';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { useToast } from '@/contexts/ToastContext';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -50,6 +51,7 @@ function OverrideForm({
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const { dialogProps, titleId } = useModalA11y<HTMLFormElement>(true, onClose);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -72,14 +74,12 @@ function OverrideForm({
       onClick={onClose}
     >
       <form
+        {...dialogProps}
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
-        className="bg-background rounded-2xl border shadow-2xl w-full max-w-md max-h-[90dvh] overflow-y-auto mx-4 p-4 sm:p-6 space-y-4"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="override-title"
+        className="bg-background rounded-2xl border shadow-2xl w-full max-w-md max-h-[90dvh] overflow-y-auto mx-4 p-4 sm:p-6 space-y-4 outline-none"
       >
-        <h3 id="override-title" className="text-base font-bold flex items-center gap-2">
+        <h3 id={titleId} className="text-base font-bold flex items-center gap-2">
           <RefreshCw className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
           {t('override.title')}
         </h3>
@@ -130,10 +130,11 @@ function OverrideForm({
 
         {/* Reason */}
         <div>
-          <Label className="text-sm font-medium block mb-1">
+          <Label htmlFor="override-reason" className="text-sm font-medium block mb-1">
             {t('override.reason')} <span className="text-muted-foreground font-normal">{t('override.optional')}</span>
           </Label>
           <Textarea
+            id="override-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder={t('override.reasonPlaceholder')}
@@ -175,20 +176,6 @@ export function OverrideControls({
   const { t, i18n } = useTranslation();
   const { has } = useRole();
   const [open, setOpen] = useState(false);
-
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        setOpen(false);
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open]);
 
   if (!has('override_verdict')) return null;
 

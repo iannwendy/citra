@@ -138,7 +138,7 @@ class CircuitBreakerRegistry:
                 entry.probe_in_flight = True
                 entry.probe_started_at = now
                 return True, 0.0
-            return False, max(0.0, entry.open_until - now)
+            return False, max(0.0, self._recovery_timeout_seconds - (now - entry.probe_started_at))
 
     def release_probe(self, source_name: str) -> None:
         """Clear `probe_in_flight` if a `HALF_OPEN` probe task is cancelled or skipped."""
@@ -277,11 +277,37 @@ class CircuitBreakerRegistry:
         entry.last_status_code = None
         entry.last_failure_at = None
 
+    @staticmethod
+    def _reset_private_client_breakers(source: str | None = None) -> None:
+        target = (source or "").strip().lower() or None
+        if target in (None, "europepmc"):
+            try:
+                from integrity_checker.retrieval.europepmc_client import EuropePMCClient
+
+                EuropePMCClient.reset_backoff()
+            except Exception:  # noqa: BLE001
+                pass
+        if target in (None, "dblp"):
+            try:
+                from integrity_checker.retrieval.dblp_client import DBLPClient
+
+                DBLPClient.reset_circuit_state()
+            except Exception:  # noqa: BLE001
+                pass
+        if target in (None, "arxiv"):
+            try:
+                from integrity_checker.retrieval.arxiv_client import ArxivClient
+
+                ArxivClient.reset_circuit_state()
+            except Exception:  # noqa: BLE001
+                pass
+
     def reset(self, source: str | None = None) -> list[str]:
         """Reset either a single named provider's breaker or all tracked breakers back to CLOSED."""
         with self._lock:
             if source is not None:
                 target = str(source).strip()
+                self._reset_private_client_breakers(target)
                 if not target or target not in self._circuits:
                     return []
                 self._reset_circuit_entry(self._circuits[target])
@@ -291,7 +317,8 @@ class CircuitBreakerRegistry:
             for name in sorted(self._circuits.keys()):
                 self._reset_circuit_entry(self._circuits[name])
                 reset_names.append(name)
-            return reset_names
+        self._reset_private_client_breakers(None)
+        return reset_names
 
 
 _REGISTRY_LOCK = threading.Lock()
@@ -313,6 +340,8 @@ def reset_circuit_breaker_registry() -> None:
     with _REGISTRY_LOCK:
         if _GLOBAL_REGISTRY is not None:
             _GLOBAL_REGISTRY.reset()
+        else:
+            CircuitBreakerRegistry._reset_private_client_breakers(None)
         _GLOBAL_REGISTRY = None
 
 

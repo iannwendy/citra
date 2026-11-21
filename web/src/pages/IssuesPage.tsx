@@ -556,7 +556,13 @@ function SeveritySection({
               {lang === 'vi' ? config.labelVi : config.labelEn}
             </span>
             <span className="ml-2 text-xs font-mono text-slate-500 dark:text-slate-400">
-              ({verdicts.length} {verdicts.length === 1 ? 'issue' : 'issues'})
+              ({verdicts.length}{' '}
+              {lang === 'vi'
+                ? 'vấn đề'
+                : verdicts.length === 1
+                  ? 'issue'
+                  : 'issues'}
+              )
             </span>
           </div>
         </div>
@@ -631,14 +637,16 @@ export function IssuesPage() {
     return (
       <Alert variant="destructive" className="card p-6 rounded-2xl">
         <AlertCircle className="h-5 w-5" />
-        <AlertTitle className="font-medium">Error loading issues</AlertTitle>
+        <AlertTitle className="font-medium">
+          {lang === 'vi' ? 'Không thể tải danh mục vấn đề' : 'Error loading issues'}
+        </AlertTitle>
         <AlertDescription>
           <p className="text-sm mt-1">{error}</p>
           <Link
             to="/history"
             className="text-indigo-600 dark:text-indigo-400 hover:underline mt-2 inline-block"
           >
-            ← Back to Reports
+            {lang === 'vi' ? '← Quay lại danh sách báo cáo' : '← Back to Reports'}
           </Link>
         </AlertDescription>
       </Alert>
@@ -650,7 +658,7 @@ export function IssuesPage() {
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-8 w-8 text-indigo-600 dark:text-indigo-400 animate-spin" />
         <span className="ml-3 text-slate-600 dark:text-slate-300 font-mono text-sm">
-          Loading issues...
+          {lang === 'vi' ? 'Đang tải danh mục vấn đề...' : 'Loading issues...'}
         </span>
       </div>
     );
@@ -674,7 +682,12 @@ export function IssuesPage() {
         <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
           {lang === 'vi' ? 'Tổng vấn đề phát hiện:' : 'Total Flagged Issues:'}{' '}
           <strong className="text-amber-600 dark:text-amber-400">{totalIssues}</strong> /{' '}
-          {report.verdicts.length} citations
+          {report.verdicts.length}{' '}
+          {lang === 'vi'
+            ? 'trích dẫn'
+            : report.verdicts.length === 1
+              ? 'citation'
+              : 'citations'}
         </div>
       </div>
 
@@ -697,7 +710,7 @@ export function IssuesPage() {
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-red-200/80 dark:border-red-900/70 shadow-sm">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-red-600 dark:text-red-400">
-              Critical
+              {lang === 'vi' ? 'Nghiêm trọng' : 'Critical'}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300">
               02
@@ -711,7 +724,7 @@ export function IssuesPage() {
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-amber-200/80 dark:border-amber-900/70 shadow-sm">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-              Warning
+              {lang === 'vi' ? 'Cảnh báo' : 'Warning'}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
               03
@@ -725,7 +738,7 @@ export function IssuesPage() {
         <Card className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              Info
+              {lang === 'vi' ? 'Thông tin' : 'Info'}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
               04
@@ -753,21 +766,34 @@ export function IssuesPage() {
                 ? lang === 'vi'
                   ? 'Danh mục Vấn đề'
                   : 'Issues List'
-                : `anomaly_inspector.py · ${lang === 'vi' ? 'Danh mục Vấn đề' : 'Diagnostic Issues'}`}
+                : lang === 'vi'
+                  ? 'Danh mục Vấn đề Chẩn đoán'
+                  : 'Diagnostic Issues'}
             </span>
           </div>
 
           {/* Filter tabs inside Chrome Bar */}
           <div
             role="group"
-            aria-label="Filter issues by severity"
+            aria-label={
+              lang === 'vi'
+                ? 'Lọc vấn đề theo mức độ nghiêm trọng'
+                : 'Filter issues by severity'
+            }
             className="flex gap-1.5 flex-wrap"
           >
             {(['all', 'critical', 'warning', 'info'] as const).map((f) => {
               const isActive = filter === f;
+              const filterLabels: Record<typeof f, { en: string; vi: string }> = {
+                all: { en: 'All', vi: 'Tất cả' },
+                critical: { en: 'Critical', vi: 'Nghiêm trọng' },
+                warning: { en: 'Warning', vi: 'Cảnh báo' },
+                info: { en: 'Info', vi: 'Thông tin' },
+              };
               return (
                 <button
                   key={f}
+                  type="button"
                   onClick={() => setFilter(f)}
                   aria-pressed={isActive}
                   className={`px-3 py-1 rounded-lg text-xs font-mono font-semibold transition-all border ${
@@ -776,7 +802,7 @@ export function IssuesPage() {
                       : 'bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-slate-300'
                   }`}
                 >
-                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                  {filterLabels[f][lang]}
                   {f !== 'all' && (
                     <span className="ml-1.5 opacity-80">
                       ({issuesBySeverity[f as keyof typeof issuesBySeverity].length})

@@ -166,11 +166,12 @@ class SectionSegmenter:
 
         # Bước 2: tạo sections từ boundaries
         sections: list[DocumentSection] = []
+        biblio_start = int(boundaries.get("biblio_start") or 0)
 
         # BODY từ đầu đến bibliography
-        if boundaries["biblio_start"] > 1:
+        if biblio_start > 1:
             sections.append(self._build_section(
-                SectionType.BODY, 1, boundaries["biblio_start"] - 1, doc
+                SectionType.BODY, 1, biblio_start - 1, doc
             ))
 
         # BIBLIOGRAPHY — chỉ tạo nếu thực sự tìm thấy header
@@ -182,13 +183,13 @@ class SectionSegmenter:
             if app_page and app_page.text:
                 app_lines = app_page.text.splitlines()
                 start_slice = 0
-                if app_start == boundaries["biblio_start"]:
+                if app_start == biblio_start:
                     b_idx = self._find_bibliography_header_line_idx(app_page)
                     if b_idx is not None:
                         start_slice = b_idx + 1
                 pre_app_lines = app_lines[start_slice:app_line_idx]
                 pre_app_text = "\n".join(pre_app_lines).strip()
-                if app_start == boundaries["biblio_start"] or (
+                if app_start == biblio_start or (
                     len(pre_app_text) >= 40
                     and (
                         sum(1 for ln in pre_app_lines if ln.strip()) >= 3
@@ -197,16 +198,16 @@ class SectionSegmenter:
                 ):
                     mid_page_appendix = True
 
-        if boundaries["biblio_start"] > 0:
+        if biblio_start > 0:
             biblio_end = (
                 (app_start if mid_page_appendix else app_start - 1)
                 if app_start
                 else doc.num_pages
             )
-            if boundaries["biblio_start"] <= biblio_end:
+            if biblio_start <= biblio_end:
                 sections.append(self._build_section(
                     SectionType.BIBLIOGRAPHY,
-                    boundaries["biblio_start"],
+                    biblio_start,
                     biblio_end,
                     doc,
                     appendix_page=app_start if mid_page_appendix else None,

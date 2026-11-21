@@ -15,6 +15,8 @@ services:
   grobid:
     image: grobid/grobid:0.9.1-crf
     container_name: essay-check-grobid
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "127.0.0.1:8070:8070"
     environment:
@@ -49,6 +51,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: integrity-api
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -65,11 +69,12 @@ services:
       - APP_ENV=production
       - APP_DEBUG=false
       - APP_LOG_LEVEL=${APP_LOG_LEVEL:-WARNING}
+      - CITRA_WORKER_MODE=${CITRA_WORKER_MODE:-inline}
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set to a strong secret in production}
       - GROBID_URL=http://grobid:8070
       - DATABASE_URL=${DATABASE_URL:-sqlite:///./data/app.db}
       - FRONTEND_URL=${FRONTEND_URL:-https://citra.io.vn}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-429053368516-7uia3j5uavajvbkhd7hq6lih9a65n22u.apps.googleusercontent.com}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health',timeout=5).status==200 else 1)"]
@@ -85,13 +90,17 @@ services:
           memory: 2560M
         reservations:
           memory: 1G
+    # Inline worker mode holds process-local ProgressTracker SSE state & ~1 GB SBERT/ONNX models
+    # in memory, so `--workers 1` is strictly pinned. `--forwarded-allow-ips="127.0.0.1"` prevents
+    # Uvicorn from overwriting Docker bridge `request.client.host` with spoofed X-Forwarded-For,
+    # allowing `_extract_client_ip()` to read Nginx's trusted `X-Real-IP: $remote_addr`.
     command: >
       uvicorn integrity_checker.api.main:app
       --host 0.0.0.0
       --port 8000
-      --workers ${UVICORN_WORKERS:-1}
+      --workers 1
       --proxy-headers
-      --forwarded-allow-ips="*"
+      --forwarded-allow-ips="127.0.0.1"
 
   # ---------------------------------------------------------------------------
   # Web — Nginx Static SPA + /api Reverse Proxy
@@ -103,8 +112,10 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: /api
-        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-429053368516-7uia3j5uavajvbkhd7hq6lih9a65n22u.apps.googleusercontent.com}
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     container_name: integrity-web
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "${WEB_PORT:-80}:80"
       - "443:443"
@@ -114,7 +125,7 @@ services:
       - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       api:
-        condition: service_healthy
+        condition: service_started
     restart: unless-stopped
     networks:
       - essay-check-net

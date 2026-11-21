@@ -235,7 +235,7 @@ python -m pytest tests/ -v -k format_name
 
 ```bash
 # Check format is registered
-python -c "from src.integrity_checker.extraction.patterns import get_all_formats; print([f.name for f in get_all_formats()])"
+python -c "from integrity_checker.extraction.patterns import get_all_formats; print([f.name for f in get_all_formats()])"
 
 # Test pattern extraction
 python -c "
@@ -298,18 +298,18 @@ TITLE_ITALIC = r"<i>([^<]+)</i>"
 
 | Format | File | Status |
 |--------|------|--------|
-| APA | apa.py | Complete |
-| IEEE | ieee.py | Complete |
-| Vancouver | vancouver.py | Complete |
-| Numeric | numeric.py | Complete |
-| Chicago | chicago.py | Placeholder / chưa đăng ký mặc định |
-| MLA | mla.py | Implemented, chưa đăng ký mặc định |
-| Harvard | harvard.py | Implemented |
-| ACM | acm.py | Implemented |
-| Nature | nature.py | Implemented |
-| CSE | cse.py | Implemented |
-| ACS | acs.py | Implemented, chưa đăng ký mặc định |
-| AMA | ama.py | Implemented, chưa đăng ký mặc định |
+| APA | apa.py | Implemented & auto-registered |
+| IEEE | ieee.py | Implemented & auto-registered |
+| Vancouver | vancouver.py | Implemented & auto-registered |
+| Numeric | numeric.py | Implemented & auto-registered |
+| Chicago | chicago.py | Implemented & auto-registered |
+| MLA | mla.py | Implemented & auto-registered |
+| Harvard | harvard.py | Implemented & auto-registered |
+| ACM | acm.py | Implemented & auto-registered |
+| Nature | nature.py | Implemented & auto-registered |
+| CSE | cse.py | Implemented & auto-registered |
+| ACS | acs.py | Implemented & auto-registered |
+| AMA | ama.py | Implemented & auto-registered |
 
 ## References
 

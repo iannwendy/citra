@@ -120,8 +120,13 @@ class FeatureCalculator:
             t_prefix = (citation.title or "").strip().lower()[:15]
             is_title_first = bool(t_prefix and len(t_prefix) >= 6 and raw_no_idx.lower().startswith(t_prefix))
             if not is_title_first:
+                from integrity_checker.extraction.patterns.utils import (
+                    _ALPHA_LATIN_VN,
+                    _UPPER_LATIN_VN,
+                )
+
                 match = re.search(
-                    r"^[\(\s]*([A-ZÀ-ÖØ-ÞĐ][a-zà-ÿđ'-]+)",
+                    rf"^[\(\s]*({_UPPER_LATIN_VN}(?:{_ALPHA_LATIN_VN}|['\u2019-])+)",
                     raw,
                 )
                 if match:

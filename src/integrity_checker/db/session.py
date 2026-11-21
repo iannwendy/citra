@@ -134,6 +134,8 @@ def get_engine() -> Engine:
         url = "sqlite:///:memory:"
 
     if _engine is None or _engine_url != url:
+        if _engine is not None:
+            _engine.dispose()
         if url.startswith("postgres://"):
             url = "postgresql://" + url.removeprefix("postgres://")
         is_sqlite = url.startswith("sqlite")
@@ -266,7 +268,7 @@ def _seed_default_users(engine: Engine) -> None:
             if username in existing_by_username:
                 existing_user = existing_by_username[username]
                 if can_override and not existing_user.can_override_verdicts:
-                    existing_user.can_override_verdicts = can_override
+                    existing_user.can_override_verdicts = bool(can_override)
                     added = True
                 if not getattr(existing_user, "plan_tier", None):
                     existing_user.plan_tier = default_tier
@@ -280,8 +282,8 @@ def _seed_default_users(engine: Engine) -> None:
                     role=role,
                     email=email if email not in existing_emails else None,
                     full_name=full_name,
-                    is_active=1,
-                    can_override_verdicts=can_override,
+                    is_active=True,
+                    can_override_verdicts=bool(can_override),
                     plan_tier=default_tier,
                 )
             )
@@ -291,8 +293,10 @@ def _seed_default_users(engine: Engine) -> None:
 
 
 def _seed_default_promo_codes(engine: Engine) -> None:
-    """Seed starter 6-character promo codes on first initialization (non-test runtime)."""
-    if is_test_runtime():
+    """Seed starter 6-character promo codes on first initialization (non-test, non-prod runtime)."""
+    from integrity_checker.config import is_production_env
+
+    if is_test_runtime() or is_production_env():
         return
 
     starter_promos = [

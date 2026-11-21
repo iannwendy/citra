@@ -9,7 +9,7 @@ import secrets
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session as OrmSession
 
 from integrity_checker.billing.plans import default_plan_for_role
@@ -103,10 +103,14 @@ class Repository:
             status = getattr(link, "status", None)
             method = getattr(link, "method", None)
             status_value = (
-                status.value if hasattr(status, "value") else (status or None)
+                status.value
+                if status is not None and hasattr(status, "value")
+                else (status or None)
             )
             method_value = (
-                method.value if hasattr(method, "value") else (method or None)
+                method.value
+                if method is not None and hasattr(method, "value")
+                else (method or None)
             )
             return {
                 "occurrence_id": getattr(link, "occurrence_id", ""),
@@ -276,21 +280,21 @@ class Repository:
                             ),
                             "citation_link": (
                                 {
-                                    "occurrence_id": v.citation_link.occurrence_id,
-                                    "reference_id": v.citation_link.reference_id,
+                                    "occurrence_id": c_link.occurrence_id,
+                                    "reference_id": c_link.reference_id,
                                     "status": getattr(
-                                        v.citation_link.status,
+                                        c_link.status,
                                         "value",
-                                        v.citation_link.status,
+                                        c_link.status,
                                     ),
-                                    "confidence": v.citation_link.confidence,
+                                    "confidence": c_link.confidence,
                                     "method": getattr(
-                                        v.citation_link.method,
+                                        c_link.method,
                                         "value",
-                                        v.citation_link.method,
+                                        c_link.method,
                                     ),
                                 }
-                                if getattr(v, "citation_link", None) is not None
+                                if (c_link := getattr(v, "citation_link", None)) is not None
                                 else None
                             ),
                         },
@@ -300,8 +304,8 @@ class Repository:
                     mapping_status=v.mapping_status.value if hasattr(v.mapping_status, "value") else (v.mapping_status or "matched"),
                     mapping_confidence=v.mapping_confidence,
                     style_penalty=getattr(v, "style_penalty", None),
-                    domain_exception=1 if getattr(v, "domain_exception", False) else 0,
-                    is_overridden=1 if v.is_overridden else 0,
+                    domain_exception=bool(getattr(v, "domain_exception", False)),
+                    is_overridden=bool(v.is_overridden),
                     # NEW v1.16 — surrounding PDF text of the citation, carried
                     # over from the Citation object the verdict was built from.
                     context=getattr(v.citation, "context", None),
@@ -352,7 +356,7 @@ class Repository:
         if essay_id is not None and verdict.essay_id != essay_id:
             return None
         verdict.label = new_label
-        verdict.is_overridden = 1 if is_overridden else 0
+        verdict.is_overridden = bool(is_overridden)
         if override_note is not None:
             verdict.override_note = override_note
         if new_mapping_status is not None:
@@ -461,9 +465,10 @@ class Repository:
                 in_text_statuses: list[str] = []
                 for c in in_text_citations:
                     parsed_edges: list[str] = []
-                    if getattr(c, "citation_link_json", None):
+                    raw_cl_json = getattr(c, "citation_link_json", None)
+                    if isinstance(raw_cl_json, str) and raw_cl_json:
                         try:
-                            raw_links = json.loads(c.citation_link_json)
+                            raw_links = json.loads(raw_cl_json)
                             if isinstance(raw_links, dict):
                                 raw_links = [raw_links]
                             if isinstance(raw_links, list):
@@ -1157,7 +1162,10 @@ class Repository:
             self.session.flush()
 
     def delete_user(self, user_id: int) -> bool:
-        from integrity_checker.api.progress import get_tracker
+        from integrity_checker.api.progress import (
+            get_pipeline_admission_controller,
+            get_tracker,
+        )
         from integrity_checker.api.routes import essays as essays_routes
         from integrity_checker.api.services.avatar_service import get_avatar_service
 
@@ -1198,7 +1206,9 @@ class Repository:
             ).delete(synchronize_session=False)
 
             tracker = get_tracker()
+            admission_ctrl = get_pipeline_admission_controller()
             for eid in essay_ids:
+                admission_ctrl.cancel(eid)
                 tracker.clear(eid)
                 for ext in essays_routes.ALLOWED_UPLOAD_EXTENSIONS:
                     persisted = essays_routes.UPLOADS_DIR / f"{eid}{ext}"
@@ -1235,6 +1245,10 @@ class Repository:
     # -- Sessions --
 
     def create_session(self, user_id: int, token: str, expires_at: datetime) -> Session:
+        now = datetime.now(UTC)
+        self.session.execute(
+            delete(Session).where(Session.user_id == user_id, Session.expires_at < now)
+        )
         session = Session(user_id=user_id, token=token, expires_at=expires_at)
         self.session.add(session)
         self.session.flush()
@@ -1274,8 +1288,14 @@ class Repository:
         token_type: str,
         expires_at: datetime,
     ) -> tuple[str, AuthToken]:
-        """Issue a new one-time token and invalidate prior unused tokens of the same type."""
+        """Issue a new one-time token, prune expired rows, and invalidate prior unused tokens."""
         now = datetime.now(UTC)
+        self.session.execute(
+            delete(AuthToken).where(
+                AuthToken.user_id == user_id,
+                AuthToken.expires_at < now,
+            )
+        )
         prior_unused = (
             self.session.query(AuthToken)
             .filter(
@@ -1962,7 +1982,8 @@ class Repository:
 
         safe_limit = max(1, min(50, int(limit or 20)))
         cleaned_q = (q or "").strip()
-        if len(cleaned_q) < 2:
+        non_wildcard_q = re.sub(r"[%_\s\\]+", "", cleaned_q)
+        if len(non_wildcard_q) < 2:
             return list(
                 self.session.query(User)
                 .join(ClassMembership, ClassMembership.student_id == User.id)
@@ -1976,15 +1997,16 @@ class Repository:
                 .limit(safe_limit)
                 .all()
             )
-        pattern = f"%{cleaned_q}%"
+        escaped_q = re.sub(r"([\\%_])", r"\\\1", cleaned_q)
+        pattern = f"%{escaped_q}%"
         return list(
             self.session.query(User)
             .filter(
                 User.role == "user",
                 or_(
-                    User.username.ilike(pattern),
-                    User.email.ilike(pattern),
-                    User.full_name.ilike(pattern),
+                    User.username.ilike(pattern, escape="\\"),
+                    User.email.ilike(pattern, escape="\\"),
+                    User.full_name.ilike(pattern, escape="\\"),
                 ),
             )
             .order_by(User.username.asc())
@@ -2025,15 +2047,70 @@ class Repository:
         ids = [eid for eid in essay_ids if eid is not None]
         if not ids:
             return 0
-        return (
-            self.session.query(VerdictRecord)
-            .filter(
-                VerdictRecord.essay_id.in_(ids),
-                VerdictRecord.is_overridden == 0,
-                VerdictRecord.label.in_(self._PENDING_REVIEW_LABELS),
+        return int(
+            self.session.scalar(
+                select(func.count(VerdictRecord.id)).where(
+                    VerdictRecord.essay_id.in_(ids),
+                    VerdictRecord.is_overridden == 0,
+                    VerdictRecord.label.in_(self._PENDING_REVIEW_LABELS),
+                )
             )
-            .count()
+            or 0
         )
+
+    def _get_essay_ids_by_class_ids(
+        self, class_ids: list[int] | set[int]
+    ) -> dict[int, set[int]]:
+        """Batch resolve essay IDs per class without loading JSON blobs."""
+        from sqlalchemy import and_, or_
+
+        ids = [int(cid) for cid in class_ids if cid is not None]
+        if not ids:
+            return {}
+        out: dict[int, set[int]] = {cid: set() for cid in ids}
+
+        students_by_class: dict[int, set[int]] = {cid: set() for cid in ids}
+        all_students: set[int] = set()
+        for cid, sid in self.session.execute(
+            select(ClassMembership.class_id, ClassMembership.student_id).where(
+                ClassMembership.class_id.in_(ids)
+            )
+        ).all():
+            if cid is not None and sid is not None:
+                students_by_class.setdefault(int(cid), set()).add(int(sid))
+                all_students.add(int(sid))
+
+        conditions: list[Any] = [EssayRecord.class_id.in_(ids)]
+        if all_students:
+            conditions.append(
+                and_(
+                    EssayRecord.class_id.is_(None),
+                    EssayRecord.user_id.in_(all_students),
+                )
+            )
+
+        for eid, ecid, euid in self.session.execute(
+            select(EssayRecord.id, EssayRecord.class_id, EssayRecord.user_id).where(
+                or_(*conditions)
+            )
+        ).all():
+            if eid is None:
+                continue
+            if ecid is not None and int(ecid) in out:
+                out[int(ecid)].add(int(eid))
+            elif ecid is None and euid is not None:
+                uid_int = int(euid)
+                for cid, stu_set in students_by_class.items():
+                    if uid_int in stu_set:
+                        out[cid].add(int(eid))
+        return out
+
+    def count_essays_by_class_ids(
+        self, class_ids: list[int] | set[int]
+    ) -> dict[int, int]:
+        """Batch count essays per class without loading large JSON columns."""
+        essay_ids_map = self._get_essay_ids_by_class_ids(class_ids)
+        return {cid: len(eids) for cid, eids in essay_ids_map.items()}
 
     def get_class_essays(self, class_id: int) -> list[EssayRecord]:
         """Essays gán trực tiếp vào class_id hoặc của students trong class (khi chưa gán class_id)."""
@@ -2072,7 +2149,8 @@ class Repository:
         classes = self.list_classes_for_teacher(teacher_id)
         if not classes:
             return 0
-        essay_ids = {e.id for c in classes for e in self.get_class_essays(c.id)}
+        essay_ids_map = self._get_essay_ids_by_class_ids([c.id for c in classes])
+        essay_ids = {eid for eids in essay_ids_map.values() for eid in eids}
         if not essay_ids:
             return 0
         return (
@@ -2090,7 +2168,8 @@ class Repository:
         classes = self.list_all_classes()
         if not classes:
             return 0
-        essay_ids = {e.id for c in classes for e in self.get_class_essays(c.id)}
+        essay_ids_map = self._get_essay_ids_by_class_ids([c.id for c in classes])
+        essay_ids = {eid for eids in essay_ids_map.values() for eid in eids}
         if not essay_ids:
             return 0
         return (

@@ -15,11 +15,11 @@ import json
 import os
 import time
 from collections import deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, field
 from threading import Lock
-from typing import Any
+from typing import Any, cast
 
 # Step keys must match the 8 steps surfaced by the ProcessingPage stepper.
 STEP_KEYS: list[str] = [
@@ -173,6 +173,15 @@ class ProgressTracker:
         for eid in expired:
             self._states.pop(eid, None)
             self._retry_counts.pop(eid, None)
+        overflow = len(self._states) - MAX_TRACKED_STATES
+        if overflow > 0:
+            terminal_eids = sorted(
+                (eid for eid, st in self._states.items() if st.finished_at is not None),
+                key=lambda eid: float(self._states[eid].finished_at or 0.0),
+            )
+            for eid in terminal_eids[:overflow]:
+                self._states.pop(eid, None)
+                self._retry_counts.pop(eid, None)
 
     def _persist_snapshot(self, essay_id: int, snapshot: dict[str, Any]) -> None:
         """Best-effort persistence of progress snapshot to EssayRecord for multi-worker fallback."""
@@ -263,6 +272,43 @@ class ProgressTracker:
         with self._lock:
             return self._retry_counts.get(essay_id, 0) < MAX_AUTO_RETRIES
 
+    def try_claim_auto_retry(self, essay_id: int) -> ProgressState | None:
+        """Atomically claim an auto-retry slot under self._lock if retry budget remains."""
+        initial_q_pos = get_pipeline_admission_controller().peek_queue_position_if_saturated()
+        init_status = "queued" if initial_q_pos is not None else "processing"
+        init_msg = (
+            f"Queued for analysis (position #{initial_q_pos})..."
+            if initial_q_pos is not None
+            else "Parsing document..."
+        )
+        with self._lock:
+            current_retries = self._retry_counts.get(essay_id, 0)
+            if current_retries >= MAX_AUTO_RETRIES:
+                return None
+            cur_state = self._states.get(essay_id)
+            if cur_state is not None and cur_state.status in ("queued", "processing", "completed"):
+                return None
+            now = time.time()
+            self._prune_unlocked(now)
+            new_retry_count = current_retries + 1
+            self._retry_counts[essay_id] = new_retry_count
+            state = ProgressState(
+                status=init_status,
+                step=STEP_KEYS[0],
+                step_index=0,
+                total_steps=len(STEP_KEYS),
+                message=init_msg,
+                started_at=now,
+                retry_count=new_retry_count,
+                queue_position=initial_q_pos,
+            )
+            self._states[essay_id] = state
+            snapshot = state.to_snapshot()
+            subs = list(self._subscribers.get(essay_id, ()))
+        self._notify_subscribers(subs, snapshot)
+        self._persist_snapshot(essay_id, snapshot)
+        return state
+
     def get(self, essay_id: int) -> ProgressState | None:
         with self._lock:
             return self._states.get(essay_id)
@@ -282,6 +328,8 @@ class ProgressTracker:
             for key, value in fields.items():
                 if hasattr(state, key):
                     setattr(state, key, value)
+            if "finished_at" in fields and len(self._states) > MAX_TRACKED_STATES:
+                self._prune_unlocked(time.time())
             notify_snapshot = state.to_snapshot()
             subs = list(self._subscribers.get(essay_id, ()))
             if (
@@ -348,12 +396,14 @@ class ProgressTracker:
     ) -> dict[str, Any] | None:
         """Reconstruct progress snapshot from SQLite for multi-worker / restart resilience."""
         try:
+            from sqlalchemy.orm import Session
+
             from integrity_checker.db.models import EssayRecord
             from integrity_checker.db.repository import Repository
             from integrity_checker.db.session import get_session
 
             owns_session = db is None
-            session = get_session() if owns_session else db
+            session: Session = get_session() if owns_session else cast(Session, db)
             try:
                 essay = session.get(EssayRecord, essay_id)
                 if essay is None:
@@ -524,7 +574,7 @@ class ProgressTracker:
         essay_id: int,
         poll_interval: float = 1.0,
         heartbeat_interval: float = 15.0,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         """Yield live progress snapshots for ``essay_id`` until terminal status or disconnect."""
         _ = heartbeat_interval  # Kept in signature for SSE route configuration compatibility
         loop = asyncio.get_running_loop()

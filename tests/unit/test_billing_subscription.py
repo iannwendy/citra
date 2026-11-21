@@ -989,7 +989,12 @@ def test_production_rejects_demo_sessions_and_verifies_stripe_api(monkeypatch: p
 
     mock_paid = MagicMock()
     mock_paid.status_code = 200
-    mock_paid.json.return_value = {"id": "cs_live_real_session_12345", "payment_status": "paid"}
+    mock_paid.json.return_value = {
+        "id": "cs_live_real_session_12345",
+        "payment_status": "paid",
+        "amount_total": 20000,
+        "currency": "usd",
+    }
 
     with patch("httpx.get", return_value=mock_paid) as mock_get_paid:
         resp_paid = client.post(

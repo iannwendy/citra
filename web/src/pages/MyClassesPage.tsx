@@ -16,6 +16,7 @@ import {
   KeyRound,
 } from 'lucide-react';
 import { api, type Class, type TeacherDashboard } from '@/api/client';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { useToast } from '@/contexts/ToastContext';
 import { CreateClassDialog } from '@/components/CreateClassDialog';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
@@ -48,6 +49,10 @@ export function MyClassesPage() {
   const [copiedClassId, setCopiedClassId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const leaveClassDialog = useModalA11y<HTMLDivElement>(
+    pendingLeaveClass !== null,
+    () => setPendingLeaveClass(null),
+  );
 
   const load = useCallback(async () => {
     const enrolledPromise =
@@ -328,6 +333,11 @@ export function MyClassesPage() {
                               type="button"
                               data-testid={`delete-class-card-btn-${c.id}`}
                               title={lang === 'vi' ? 'Xóa lớp học' : 'Delete class'}
+                              aria-label={
+                                lang === 'vi'
+                                  ? `Xóa lớp học ${c.name}`
+                                  : `Delete class ${c.name}`
+                              }
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setPendingDeleteClass(c);
@@ -463,15 +473,17 @@ export function MyClassesPage() {
       {pendingLeaveClass && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-          role="dialog"
-          aria-modal="true"
           onClick={() => setPendingLeaveClass(null)}
         >
           <div
-            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full p-5 shadow-2xl space-y-4"
+            {...leaveClassDialog.dialogProps}
+            className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full p-5 shadow-2xl space-y-4 outline-none"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white">
+            <h3
+              id={leaveClassDialog.titleId}
+              className="font-display text-lg font-bold text-slate-900 dark:text-white"
+            >
               {lang === 'vi' ? 'Xác nhận rời lớp học' : 'Leave Class?'}
             </h3>
             <p className="text-sm text-slate-600 dark:text-slate-300">

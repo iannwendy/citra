@@ -898,7 +898,7 @@ class ACSFormat:
             citation_type=CitationType.REFERENCE_LIST,
             style=CitationStyle.ACS,
             matched_pattern=pattern_name,
-            authors=authors,
+            authors=list(authors),
             venue=venue_raw,
         )
 
@@ -1357,19 +1357,9 @@ class ACSFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation if citation.title or citation.year else None
 
-    def _parse_authors(self, authors_str: str) -> list[str]:
-        """Parse author string into list of authors.
-
-        Handles semicolon separators common in ACS.
-
-        Args:
-            authors_str: Author string
-
-        Returns:
-            List of author strings
-        """
-        # ACS uses semicolons between authors ("Smith, J.; Jones, A.; Brown, B.")
-        return parse_authors(authors_str, format_name="ACS")
+    def _parse_authors(self, authors_str: str) -> list[Author | str]:
+        """Parse author string into list of authors (handles semicolon separators in ACS)."""
+        return list(parse_authors(authors_str, format_name="ACS"))
 
     def _normalize_title(self, title: str) -> str:
         """Normalize title for comparison: lowercase, remove punctuation."""

@@ -273,7 +273,7 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
       '/terms',
     ]) {
       await page.goto(publicRoute);
-      await page.waitForTimeout(250);
+      await expect(page.locator('#root')).not.toBeEmpty();
       const overflow = await page.evaluate(() => {
         return {
           scrollWidth: document.documentElement.scrollWidth,
@@ -314,7 +314,7 @@ test.describe('transitions.dev + transitions-polish + transitions-ui-generation 
     ]) {
       await page.goto(authRoute);
       await waitForAuth(page);
-      await page.waitForTimeout(250);
+      await expect(page.locator('main')).toBeVisible();
 
       const overflow = await page.evaluate(() => {
         return {

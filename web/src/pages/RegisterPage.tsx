@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '@/api/client';
+import { validatePasswordClient } from '@/lib/utils';
 import {
   AuthSplitShell,
   PasswordStrengthIndicator,
@@ -186,15 +187,14 @@ export function RegisterPage() {
       return;
     }
 
-    if (password.length < 6 || !password.trim()) {
+    const pwCheck = validatePasswordClient(password, lang);
+    if (!pwCheck.valid) {
       setInvalidField('password');
-      setError(t('auth.registerPasswordTooShort'));
-      return;
-    }
-
-    if (password.length > 64 || new TextEncoder().encode(password).length > 72) {
-      setInvalidField('password');
-      setError(t('auth.registerPasswordTooLong'));
+      setError(
+        pwCheck.reason === 'too_short'
+          ? t('auth.registerPasswordTooShort')
+          : t('auth.registerPasswordTooLong'),
+      );
       return;
     }
 
@@ -677,6 +677,8 @@ export function RegisterPage() {
                         id="password"
                         type={showPassword ? 'text' : 'password'}
                         value={password}
+                        minLength={6}
+                        maxLength={128}
                         aria-invalid={passwordInvalid}
                         aria-describedby={
                           passwordInvalid ? 'register-form-error' : undefined
@@ -739,6 +741,8 @@ export function RegisterPage() {
                         id="confirm_password"
                         type={showPassword ? 'text' : 'password'}
                         value={confirmPassword}
+                        minLength={6}
+                        maxLength={128}
                         aria-invalid={confirmPasswordInvalid}
                         aria-describedby={
                           confirmPasswordInvalid

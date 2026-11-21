@@ -20,6 +20,7 @@ import { RULE_DEFINITIONS } from '@/components/RuleInspector';
 import { useEssayReport, useOverrideVerdict } from '@/hooks/useEssayReport';
 import { useToast } from '@/contexts/ToastContext';
 import { copyTextToClipboard } from '@/lib/clipboard';
+import { toSafeDoiHref, toSafeExternalHref } from '@/lib/utils';
 import {
   extractObservedWebMeta,
   getCitationMarkerLabel,
@@ -2676,7 +2677,7 @@ export function EssayPage() {
         remediationOpen ||
         Boolean(
           document.querySelector(
-            '[role="dialog"], [data-testid="bibliography-remediation-modal"], [data-testid="upgrade-modal"]',
+            '[role="dialog"]:not([aria-hidden="true"]), [data-testid="bibliography-remediation-modal"], [data-testid="upgrade-modal"]',
           ),
         )
       ) {
@@ -3036,20 +3037,15 @@ export function EssayPage() {
         : '') ||
       item.verdict.matched_sources?.[0]?.doi ||
       '';
-    if (rawDoi) {
-      return rawDoi.startsWith('http')
-        ? rawDoi
-        : `https://doi.org/${rawDoi.replace(/^doi:\s*/i, '')}`;
+    const safeDoi = toSafeDoiHref(rawDoi);
+    if (safeDoi) {
+      return safeDoi;
     }
-    const candidateUrl =
-      (item.retrievedMeta?.url && /^https?:\/\//i.test(item.retrievedMeta.url)
-        ? item.retrievedMeta.url
-        : '') ||
-      item.verdict.matched_sources?.[0]?.url ||
-      (item.citedMeta.url && /^https?:\/\//i.test(item.citedMeta.url)
-        ? item.citedMeta.url
-        : '');
-    return /^https?:\/\//i.test(candidateUrl) ? candidateUrl : null;
+    return (
+      toSafeExternalHref(item.retrievedMeta?.url) ??
+      toSafeExternalHref(item.verdict.matched_sources?.[0]?.url) ??
+      toSafeExternalHref(item.citedMeta.url)
+    );
   };
 
   const handleCopyFormattedCitation = async (item: EnrichedCitationItem) => {
@@ -4249,21 +4245,25 @@ export function EssayPage() {
                                     <span className="sm:hidden lg:block xl:hidden block text-[10px] uppercase text-slate-400 mb-0.5">
                                       {lang === 'vi' ? 'Trích dẫn trong bài' : 'Cited in Manuscript'}
                                     </span>
-                                    {key === 'url' &&
-                                    activeItem.citedMeta.url !== '—' &&
-                                    /^https?:\/\//i.test(activeItem.citedMeta.url) ? (
-                                      <a
-                                        href={activeItem.citedMeta.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 font-mono text-indigo-600 dark:text-indigo-400 hover:underline break-all"
-                                      >
-                                        <span>{activeItem.citedMeta.url}</span>
-                                        <ExternalLink className="h-3 w-3 shrink-0" />
-                                      </a>
-                                    ) : (
-                                      <SoftTextSwap text={activeItem.citedMeta[key]} />
-                                    )}
+                                    {(() => {
+                                      const safeCitedUrl =
+                                        key === 'url' && activeItem.citedMeta.url !== '—'
+                                          ? toSafeExternalHref(activeItem.citedMeta.url)
+                                          : null;
+                                      return safeCitedUrl ? (
+                                        <a
+                                          href={safeCitedUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 font-mono text-indigo-600 dark:text-indigo-400 hover:underline break-all"
+                                        >
+                                          <span>{activeItem.citedMeta.url}</span>
+                                          <ExternalLink className="h-3 w-3 shrink-0" />
+                                        </a>
+                                      ) : (
+                                        <SoftTextSwap text={activeItem.citedMeta[key]} />
+                                      );
+                                    })()}
                                   </td>
                                   <td className="py-0.5 sm:py-2.5 lg:py-0.5 xl:py-2.5 px-0 sm:px-3 lg:px-0 xl:px-3 text-slate-700 dark:text-slate-300 align-top break-words [overflow-wrap:anywhere] sm:table-cell lg:block xl:table-cell">
                                     <span className="sm:hidden lg:block xl:hidden block text-[10px] uppercase text-slate-400 mb-0.5">
@@ -4272,54 +4272,66 @@ export function EssayPage() {
                                         : 'Canonical Retrieved'}
                                     </span>
                                     {activeItem.retrievedMeta ? (
-                                      key === 'doi' &&
-                                      activeItem.retrievedMeta.doi !== '—' ? (
-                                        <a
-                                          href={
-                                            activeItem.retrievedMeta.doi.startsWith('http')
-                                              ? activeItem.retrievedMeta.doi
-                                              : `https://doi.org/${activeItem.retrievedMeta.doi}`
-                                          }
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1 font-mono text-indigo-600 dark:text-indigo-400 hover:underline break-all"
-                                        >
-                                          <span>{activeItem.retrievedMeta.doi}</span>
-                                          <ExternalLink className="h-3 w-3 shrink-0" />
-                                        </a>
-                                      ) : key === 'url' &&
-                                        activeItem.retrievedMeta.url !== '—' &&
-                                        /^https?:\/\//i.test(activeItem.retrievedMeta.url) ? (
-                                        <div className="space-y-1">
-                                          <a
-                                            href={activeItem.retrievedMeta.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1 font-mono text-indigo-600 dark:text-indigo-400 hover:underline break-all"
-                                          >
-                                            <span>{activeItem.retrievedMeta.url}</span>
-                                            <ExternalLink className="h-3 w-3 shrink-0" />
-                                          </a>
-                                          {(activeItem.verdict.triggered_rules ?? []).includes(
-                                            'R-URL-CONTENT-MISMATCH',
-                                          ) && (
-                                            <span className="block text-[11px] font-sans text-amber-700 dark:text-amber-400 font-medium">
-                                              {lang === 'vi'
-                                                ? 'HTTP 200 hoạt động nhưng trỏ tới tiêu đề trang web khác'
-                                                : 'HTTP 200 resolved to a different page title'}
+                                      (() => {
+                                        const safeRetrievedDoi =
+                                          key === 'doi' && activeItem.retrievedMeta.doi !== '—'
+                                            ? toSafeDoiHref(activeItem.retrievedMeta.doi)
+                                            : null;
+                                        const safeRetrievedUrl =
+                                          key === 'url' && activeItem.retrievedMeta.url !== '—'
+                                            ? toSafeExternalHref(activeItem.retrievedMeta.url)
+                                            : null;
+                                        if (safeRetrievedDoi) {
+                                          return (
+                                            <a
+                                              href={safeRetrievedDoi}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center gap-1 font-mono text-indigo-600 dark:text-indigo-400 hover:underline break-all"
+                                            >
+                                              <span>{activeItem.retrievedMeta.doi}</span>
+                                              <ExternalLink className="h-3 w-3 shrink-0" />
+                                            </a>
+                                          );
+                                        }
+                                        if (safeRetrievedUrl) {
+                                          return (
+                                            <div className="space-y-1">
+                                              <a
+                                                href={safeRetrievedUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1 font-mono text-indigo-600 dark:text-indigo-400 hover:underline break-all"
+                                              >
+                                                <span>{activeItem.retrievedMeta.url}</span>
+                                                <ExternalLink className="h-3 w-3 shrink-0" />
+                                              </a>
+                                              {(activeItem.verdict.triggered_rules ?? []).includes(
+                                                'R-URL-CONTENT-MISMATCH',
+                                              ) && (
+                                                <span className="block text-[11px] font-sans text-amber-700 dark:text-amber-400 font-medium">
+                                                  {lang === 'vi'
+                                                    ? 'HTTP 200 hoạt động nhưng trỏ tới tiêu đề trang web khác'
+                                                    : 'HTTP 200 resolved to a different page title'}
+                                                </span>
+                                              )}
+                                            </div>
+                                          );
+                                        }
+                                        if (
+                                          activeItem.retrievedMeta[key] ===
+                                            'Trang web không khai báo thẻ này' ||
+                                          activeItem.retrievedMeta[key] ===
+                                            'Not declared in page metadata'
+                                        ) {
+                                          return (
+                                            <span className="text-slate-500 dark:text-slate-400 italic">
+                                              <SoftTextSwap text={activeItem.retrievedMeta[key]} />
                                             </span>
-                                          )}
-                                        </div>
-                                      ) : activeItem.retrievedMeta[key] ===
-                                          'Trang web không khai báo thẻ này' ||
-                                        activeItem.retrievedMeta[key] ===
-                                          'Not declared in page metadata' ? (
-                                        <span className="text-slate-500 dark:text-slate-400 italic">
-                                          <SoftTextSwap text={activeItem.retrievedMeta[key]} />
-                                        </span>
-                                      ) : (
-                                        <SoftTextSwap text={activeItem.retrievedMeta[key]} />
-                                      )
+                                          );
+                                        }
+                                        return <SoftTextSwap text={activeItem.retrievedMeta[key]} />;
+                                      })()
                                     ) : key === 'url' && activeItem.linkBadge ? (
                                       <span
                                         className={
@@ -4590,16 +4602,9 @@ export function EssayPage() {
                                               {subtitleText}
                                             </p>
                                             {(() => {
-                                              const rawUrl =
-                                                src.url ||
-                                                (src.doi?.startsWith('http')
-                                                  ? src.doi
-                                                  : src.doi
-                                                    ? `https://doi.org/${encodeURIComponent(src.doi)}`
-                                                    : '');
-                                              const safeUrl = /^https?:\/\//i.test(rawUrl)
-                                                ? rawUrl
-                                                : null;
+                                              const safeUrl =
+                                                toSafeExternalHref(src.url) ??
+                                                toSafeDoiHref(src.doi);
                                               if (!safeUrl) return null;
                                               return (
                                                 <a

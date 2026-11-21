@@ -327,8 +327,8 @@ class BaselineRunner:
             )
 
         label_val = getattr(item, "label", None)
-        if hasattr(label_val, "value"):
-            label_val = label_val.value
+        if label_val is not None and hasattr(label_val, "value"):
+            label_val = getattr(label_val, "value", label_val)
 
         citation_obj = getattr(item, "citation", None)
         cited_doi = getattr(item, "cited_doi", None) or getattr(citation_obj, "doi", None)
@@ -338,13 +338,11 @@ class BaselineRunner:
             or getattr(feat_obj, "api_exhausted", False)
             or getattr(matched_source_raw, "api_exhausted", False)
         )
+        has_retracted_fn = getattr(matched_source_raw, "has_retracted_candidate", None)
         is_retracted_obj = bool(
             getattr(item, "is_retracted", False)
             or getattr(matched_source_raw, "is_retracted", False)
-            or (
-                hasattr(matched_source_raw, "has_retracted_candidate")
-                and matched_source_raw.has_retracted_candidate()
-            )
+            or (callable(has_retracted_fn) and has_retracted_fn())
         )
         doi_ra_status = getattr(feat_obj, "doi_ra_status", None) or None
         if not doi_ra_status and matched_source_raw is not None and hasattr(matched_source_raw, "candidates"):
@@ -354,12 +352,9 @@ class BaselineRunner:
                 doi_ra_status = "registered_no_csl"
 
         synthesized_raw_rec: dict[str, Any] | None = None
-        if citation_obj is not None and hasattr(matched_source_raw, "candidates"):
-            best_c = (
-                matched_source_raw.best_candidate()
-                if hasattr(matched_source_raw, "best_candidate")
-                else None
-            )
+        if citation_obj is not None and matched_source_raw is not None and hasattr(matched_source_raw, "candidates"):
+            best_c_fn = getattr(matched_source_raw, "best_candidate", None)
+            best_c = best_c_fn() if callable(best_c_fn) else None
             synthesized_raw_rec = {
                 "title_sim_fuzzy": float(getattr(feat_obj, "title_sim_fuzzy", 0.0) or 0.0),
                 "title_sim_semantic": float(getattr(feat_obj, "title_sim_semantic", 0.0) or 0.0),

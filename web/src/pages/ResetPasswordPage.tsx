@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { api } from '@/api/client';
+import { validatePasswordClient } from '@/lib/utils';
 import {
   AuthSplitShell,
   PasswordStrengthIndicator,
@@ -104,12 +105,9 @@ export function ResetPasswordPage() {
     e.preventDefault();
     setError('');
 
-    if (newPassword.length < 6) {
-      setError(
-        lang === 'vi'
-          ? 'Mật khẩu mới phải có tối thiểu 6 ký tự.'
-          : 'New password must be at least 6 characters.',
-      );
+    const pwCheck = validatePasswordClient(newPassword, lang);
+    if (!pwCheck.valid) {
+      setError(pwCheck.error || 'Invalid password');
       return;
     }
 
@@ -273,6 +271,8 @@ export function ResetPasswordPage() {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     required
+                    minLength={6}
+                    maxLength={128}
                     autoComplete="new-password"
                     className="h-11 pl-10 pr-11 bg-slate-50/60 dark:bg-slate-950/60"
                     placeholder={t('auth.newPasswordPlaceholder')}
@@ -311,6 +311,8 @@ export function ResetPasswordPage() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
+                    minLength={6}
+                    maxLength={128}
                     autoComplete="new-password"
                     className="h-11 pl-10 bg-slate-50/60 dark:bg-slate-950/60"
                     placeholder={t('auth.confirmNewPasswordPlaceholder')}

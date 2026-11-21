@@ -201,6 +201,7 @@ export function EssayHeader({
       <button
         key={fmt}
         type="button"
+        role="menuitem"
         onClick={() => handleDownload(fmt)}
         disabled={loading}
         data-testid={`export-${fmt}-btn`}
@@ -404,6 +405,7 @@ export function EssayHeader({
               >
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={handleDownloadHealedDocx}
                   disabled={!isDocxSource || busy === 'healed'}
                   aria-disabled={!isDocxSource}
@@ -447,6 +449,7 @@ export function EssayHeader({
 
               <button
                 type="button"
+                role="menuitem"
                 onClick={() => void handleShareReceipt()}
                 disabled={busy === 'share'}
                 aria-busy={busy === 'share'}

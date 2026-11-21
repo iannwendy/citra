@@ -510,6 +510,31 @@ class TechStandardClient(BaseScholarClient):
             return int(raw_num)
         return None
 
+    @staticmethod
+    def _is_safe_slug_segment(seg: str) -> bool:
+        return (
+            bool(seg)
+            and seg not in {".", ".."}
+            and bool(re.fullmatch(r"[A-Za-z0-9_.-]+", seg))
+        )
+
+    @staticmethod
+    def _resolve_verified_year(
+        cited_year: str | None,
+        valid_years: set[str],
+        fallback_year: str | None = None,
+    ) -> str | None:
+        """Select an actual upstream release/activity year; never echo unverified student years."""
+        if not valid_years:
+            return fallback_year
+        cit_yr = str(cited_year)[:4] if cited_year else ""
+        if cit_yr in valid_years:
+            return cit_yr
+        if cit_yr.isdigit():
+            cit_int = int(cit_yr)
+            return min(valid_years, key=lambda y: (abs(int(y) - cit_int), -int(y)))
+        return fallback_year or max(valid_years)
+
     @classmethod
     def extract_pypi_package(cls, citation: Citation) -> str | None:
         """Extract PyPI package name if citation references pypi.org."""
@@ -520,7 +545,8 @@ class TechStandardClient(BaseScholarClient):
         )
         m = _PYPI_URL_PATTERN.search(combined)
         if m:
-            return m.group("pkg").strip().rstrip(".,;:)\"'/")
+            pkg = m.group("pkg").strip().rstrip(".,;:)\"'/")
+            return pkg if cls._is_safe_slug_segment(pkg) else None
         return None
 
     @classmethod
@@ -533,7 +559,15 @@ class TechStandardClient(BaseScholarClient):
         )
         m = _NPM_URL_PATTERN.search(combined)
         if m:
-            return m.group("pkg").strip().rstrip(".,;:)\"'/")
+            pkg = m.group("pkg").strip().rstrip(".,;:)\"'/")
+            if pkg.startswith("@"):
+                if "/" not in pkg:
+                    return None
+                scope, sub = pkg.split("/", 1)
+                if cls._is_safe_slug_segment(scope[1:]) and cls._is_safe_slug_segment(sub):
+                    return pkg
+                return None
+            return pkg if cls._is_safe_slug_segment(pkg) else None
         return None
 
     @classmethod
@@ -550,8 +584,8 @@ class TechStandardClient(BaseScholarClient):
             if repo.lower().endswith(".git"):
                 repo = repo[:-4]
             if (
-                owner
-                and repo
+                cls._is_safe_slug_segment(owner)
+                and cls._is_safe_slug_segment(repo)
                 and owner.lower() not in _GITHUB_RESERVED_OWNERS
                 and repo.lower() not in ("issues", "pulls", "discussions", "wiki", "releases", "actions")
             ):
@@ -1065,13 +1099,10 @@ class TechStandardClient(BaseScholarClient):
                             if len(ut) >= 4 and ut[:4].isdigit():
                                 release_years.add(ut[:4])
 
-        year: str | None = max(release_years) if release_years else None
-        if citation and citation.year:
-            cit_yr = str(citation.year)[:4]
-            if cit_yr in release_years or (
-                release_years and cit_yr.isdigit() and min(release_years) <= cit_yr <= max(release_years)
-            ):
-                year = cit_yr
+        year = self._resolve_verified_year(
+            citation.year if citation else None,
+            release_years,
+        )
 
         pkg_url = str(info.get("package_url") or info.get("project_url") or f"https://pypi.org/project/{name}/")
         return SourceCandidate(
@@ -1093,9 +1124,39 @@ class TechStandardClient(BaseScholarClient):
         pkg_name: str,
         citation: Citation | None = None,
     ) -> SourceCandidate | None:
-        """Lookup NPM package metadata via `https://registry.npmjs.org/{pkg}`."""
-        url = f"{self.NPM_BASE}/{quote(pkg_name, safe='@/')}"
-        data = await self._fetch_json(url)
+        """Lookup NPM package metadata via `/{pkg}/latest` (or bounded packument when year cited)."""
+        if pkg_name.startswith("@"):
+            if "/" not in pkg_name:
+                return None
+            scope, sub = pkg_name.split("/", 1)
+            if not (self._is_safe_slug_segment(scope[1:]) and self._is_safe_slug_segment(sub)):
+                return None
+            encoded_pkg = f"@{quote(scope[1:], safe='')}/{quote(sub, safe='')}"
+        else:
+            if not self._is_safe_slug_segment(pkg_name):
+                return None
+            encoded_pkg = quote(pkg_name, safe="")
+
+        has_cited_year = bool(
+            citation
+            and citation.year
+            and re.search(r"\b(?:19|20)\d{2}\b", str(citation.year))
+        )
+        data: dict[str, Any] | None = None
+        if not has_cited_year:
+            data = await self._fetch_json(f"{self.NPM_BASE}/{encoded_pkg}/latest")
+            if not isinstance(data, dict) or not (data.get("name") or data.get("_id")):
+                if self._last_status_code not in (429, 500, 502, 503, 504):
+                    data = await self._fetch_json(
+                        f"{self.NPM_BASE}/{encoded_pkg}",
+                        max_bytes=2_097_152,
+                    )
+        else:
+            data = await self._fetch_json(
+                f"{self.NPM_BASE}/{encoded_pkg}",
+                max_bytes=2_097_152,
+            )
+
         if not isinstance(data, dict) or not (data.get("name") or data.get("_id")):
             if self._last_status_code == 404:
                 return SourceCandidate(
@@ -1139,16 +1200,10 @@ class TechStandardClient(BaseScholarClient):
                 if len(ts_str) >= 4 and ts_str[:4].isdigit():
                     release_years.add(ts_str[:4])
 
-        year: str | None = max(release_years) if release_years else None
-        if citation and citation.year:
-            cit_yr = str(citation.year)[:4]
-            if cit_yr.isdigit() and release_years:
-                min_yr = min(release_years)
-                max_yr = max(release_years)
-                if min_yr <= cit_yr <= max_yr:
-                    year = cit_yr
-                elif int(cit_yr) < int(min_yr):
-                    year = min_yr
+        year = self._resolve_verified_year(
+            citation.year if citation else None,
+            release_years,
+        )
 
         homepage = str(data.get("homepage") or f"https://www.npmjs.com/package/{name}")
         return SourceCandidate(
@@ -1171,13 +1226,20 @@ class TechStandardClient(BaseScholarClient):
         citation: Citation | None = None,
     ) -> SourceCandidate | None:
         """Verify GitHub repository via GitHub REST API + optional `CITATION.cff` enrichment."""
+        if "/" not in repo_slug:
+            return None
+        owner_seg, repo_seg = repo_slug.split("/", 1)
+        if not (self._is_safe_slug_segment(owner_seg) and self._is_safe_slug_segment(repo_seg)):
+            return None
+        encoded_slug = f"{quote(owner_seg, safe='')}/{quote(repo_seg, safe='')}"
+
         headers = dict(self._headers)
         headers["Accept"] = "application/vnd.github+json, application/json"
         gh_token = os.getenv("GITHUB_TOKEN", "").strip()
         if gh_token:
             headers["Authorization"] = f"Bearer {gh_token}"
 
-        api_url = f"{self.GITHUB_API_BASE}/{repo_slug}"
+        api_url = f"{self.GITHUB_API_BASE}/{encoded_slug}"
         data = await self._fetch_json(api_url, extra_headers=headers)
         status_code = self._last_status_code
 
@@ -1242,17 +1304,14 @@ class TechStandardClient(BaseScholarClient):
         if cff_meta and cff_meta.get("year"):
             active_years.add(str(cff_meta["year"])[:4])
 
-        created_yr = str(data.get("created_at") or "")[:4]
-        year: str | None = (cff_meta.get("year") if cff_meta else None) or (max(active_years) if active_years else None)
-        if citation and citation.year:
-            cit_yr = str(citation.year)[:4]
-            if cit_yr.isdigit() and active_years:
-                min_yr = min(active_years)
-                max_yr = max(active_years)
-                if int(min_yr) - 1 <= int(cit_yr) <= int(max_yr) + 1:
-                    year = cit_yr
-                elif created_yr.isdigit():
-                    year = created_yr
+        default_gh_year = (cff_meta.get("year") if cff_meta else None) or (
+            max(active_years) if active_years else None
+        )
+        year = self._resolve_verified_year(
+            citation.year if citation else None,
+            active_years,
+            fallback_year=default_gh_year,
+        )
 
         doi = normalize_doi(cff_meta.get("doi")) if (cff_meta and cff_meta.get("doi")) else None
         ext_ids: dict[str, str] = {"github_repo": full_name}
@@ -1279,7 +1338,12 @@ class TechStandardClient(BaseScholarClient):
     async def _fetch_github_citation_cff(self, repo_slug: str) -> dict[str, Any] | None:
         """Fetch and parse `CITATION.cff` from `raw.githubusercontent.com/{owner}/{repo}/HEAD/CITATION.cff`
         with a strict 64 KB size cap before YAML parsing."""
-        cff_url = f"{self.GITHUB_RAW_BASE}/{repo_slug}/HEAD/CITATION.cff"
+        if "/" not in repo_slug:
+            return None
+        owner_seg, repo_seg = repo_slug.split("/", 1)
+        if not (self._is_safe_slug_segment(owner_seg) and self._is_safe_slug_segment(repo_seg)):
+            return None
+        cff_url = f"{self.GITHUB_RAW_BASE}/{quote(owner_seg, safe='')}/{quote(repo_seg, safe='')}/HEAD/CITATION.cff"
         req_headers = {"User-Agent": self._headers["User-Agent"]}
         req_timeout = min(self.timeout, 3.5)
         try:
@@ -1397,10 +1461,30 @@ class TechStandardClient(BaseScholarClient):
         self,
         url: str,
         extra_headers: dict[str, str] | None = None,
+        *,
+        max_bytes: int | None = None,
     ) -> dict[str, Any] | None:
         req_headers = extra_headers or self._headers
         try:
             client = get_shared_http_client(follow_redirects=True)
+            if max_bytes is not None and httpx.AsyncClient.get is _ORIG_ASYNC_GET:
+                async with client.stream("GET", url, headers=req_headers, timeout=self.timeout) as resp:
+                    self._record_http_response(resp)
+                    if resp.status_code != 200:
+                        return None
+                    cl_hdr = (resp.headers.get("content-length") or "").strip()
+                    if cl_hdr.isdigit() and int(cl_hdr) > max_bytes:
+                        return None
+                    chunks: list[bytes] = []
+                    total = 0
+                    async for chunk in resp.aiter_bytes():
+                        total += len(chunk)
+                        if total > max_bytes:
+                            return None
+                        chunks.append(chunk)
+                    parsed_stream = json.loads(b"".join(chunks).decode("utf-8", errors="replace"))
+                    return parsed_stream if isinstance(parsed_stream, dict) else None
+
             resp = await client.get(
                 url,
                 headers=req_headers,
@@ -1409,7 +1493,10 @@ class TechStandardClient(BaseScholarClient):
             self._record_http_response(resp)
             if resp.status_code != 200:
                 return None
-            return resp.json()
+            if max_bytes is not None and len(resp.content) > max_bytes:
+                return None
+            parsed = resp.json()
+            return parsed if isinstance(parsed, dict) else None
         except Exception as exc:  # noqa: BLE001
             self._record_transport_error(exc)
             logger.debug(f"TechStandard request failed for {url}: {exc}")

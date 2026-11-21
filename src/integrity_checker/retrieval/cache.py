@@ -7,6 +7,7 @@ and tests that inject a cache object continue to work while migrating.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import uuid
@@ -30,8 +31,9 @@ class DiskCache:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _key_to_path(self, key: str) -> Path:
-        safe = "".join(char if char.isalnum() else "_" for char in key)[:120]
-        return self.cache_dir / f"{safe}.json"
+        safe = "".join(char if char.isalnum() else "_" for char in key)[:100]
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+        return self.cache_dir / f"{safe}_{digest}.json"
 
     def get(self, key: str) -> dict[str, Any] | None:
         if not self.enabled:

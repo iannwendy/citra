@@ -378,12 +378,8 @@ test.describe('Upload Page', () => {
 test.describe('Essay Page - CIS Score Card', () => {
   test('should display CIS score card with score value', async ({ page }) => {
     setupMocks(page);
-    await page.goto('/login');
-    await page.waitForTimeout(500);
     await page.goto('/verification/report/1');
 
-    // Wait for content to load
-    await page.waitForTimeout(2000);
     await expect(page.getByText(/citation integrity score/i)).toBeVisible();
     // Score should be visible (78.5)
     await expect(page.getByText(/78/i).first()).toBeVisible();
@@ -391,11 +387,8 @@ test.describe('Essay Page - CIS Score Card', () => {
 
   test('should show CIS components', async ({ page }) => {
     setupMocks(page);
-    await page.goto('/login');
-    await page.waitForTimeout(500);
     await page.goto('/verification/report/1');
 
-    await page.waitForTimeout(2000);
     // The CIS card shows three component percentages. The page may use the card heading
     // "Citation Integrity Score" and render percentage bars below. Match a percentage
     // anywhere inside the card region (use .first() to avoid strict-mode).
@@ -404,11 +397,8 @@ test.describe('Essay Page - CIS Score Card', () => {
 
   test('should show total citations count', async ({ page }) => {
     setupMocks(page);
-    await page.goto('/login');
-    await page.waitForTimeout(500);
     await page.goto('/verification/report/1');
 
-    await page.waitForTimeout(2000);
     // The stat card shows "N citations" — the same count also appears in a footer
     // ("Showing N of N citations"). Use .first() to disambiguate.
     await expect(page.getByText(/\d+ citations/).first()).toBeVisible();
@@ -422,22 +412,15 @@ test.describe('Essay Page - CIS Score Card', () => {
 test.describe('Essay Page - Citation Graph View', () => {
   test('should display citations in graph view', async ({ page }) => {
     setupMocks(page);
-    await page.goto('/login');
-    await page.waitForTimeout(500);
     await page.goto('/verification/report/1');
 
-    await page.waitForTimeout(2000);
     // Citations should be visible
     await expect(page.getByText(/lecun/i)).toBeVisible();
   });
 
   test('should toggle between report tabs (Overview/Citations)', async ({ page }) => {
     setupMocks(page);
-    await page.goto('/login');
-    await page.waitForTimeout(500);
     await page.goto('/verification/report/1');
-
-    await page.waitForTimeout(2000);
 
     const verifiedFilterBtn = page.getByRole('button', { name: /verified/i }).first();
     await expect(verifiedFilterBtn).toBeVisible();
@@ -457,11 +440,7 @@ test.describe('Essay Page - Citation Graph View', () => {
 test.describe('Citation Detail Drawer', () => {
   test('should open on citation click', async ({ page }) => {
     setupMocks(page);
-    await page.goto('/login');
-    await page.waitForTimeout(500);
     await page.goto('/verification/report/1');
-
-    await page.waitForTimeout(2000);
 
     const citation = page.getByText(/lecun/i).first();
     await expect(citation).toBeVisible();
@@ -472,11 +451,7 @@ test.describe('Citation Detail Drawer', () => {
 
   test('should close on Escape key', async ({ page }) => {
     setupMocks(page);
-    await page.goto('/login');
-    await page.waitForTimeout(500);
     await page.goto('/verification/report/1');
-
-    await page.waitForTimeout(2000);
 
     const citation = page.getByText(/lecun/i).first();
     await expect(citation).toBeVisible();
@@ -538,16 +513,10 @@ test.describe('Error Handling', () => {
       localStorage.setItem('token', 'test-token');
     });
 
-    await page.goto('/login');
-    await page.waitForTimeout(500);
     await page.goto('/verification/report/1');
 
-    // Should show some error state
-    await page.waitForTimeout(2000);
-    // Either shows error message or loading continues
-    const content = await page.content();
-    // Either shows error message or back link
-    expect(content.toLowerCase()).toMatch(/lỗi|error|quay lại|back|internal/i);
+    // Should show error message or back link
+    await expect(page.locator('body')).toContainText(/lỗi|error|quay lại|back|internal/i);
   });
 });
 
@@ -570,19 +539,13 @@ test.describe('Navigation', () => {
 
   test('should allow logout', async ({ page }) => {
     setupMocks(page);
-    await page.goto('/login');
-    await page.waitForTimeout(500);
     await page.goto('/dashboard');
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('sidebar-account-trigger')).toBeVisible();
+    await page.getByTestId('sidebar-account-trigger').click();
 
-    // Find and click logout button (it has title="Logout")
-    const logoutBtn = page.getByTitle('Logout');
-
-    if (await logoutBtn.isVisible()) {
-      await logoutBtn.click();
-      await page.waitForTimeout(500);
-      // Should redirect to login
-      await expect(page).toHaveURL(/\/login/);
-    }
+    const logoutBtn = page.getByRole('button', { name: /sign out|log ?out|đăng xuất/i }).first();
+    await expect(logoutBtn).toBeVisible();
+    await logoutBtn.click();
+    await expect(page).toHaveURL(/\/login/);
   });
 });

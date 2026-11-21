@@ -755,8 +755,7 @@ export function VerificationProgressProvider({
         void queryClient.invalidateQueries({ queryKey: ['essays'] });
 
         if (singleGenRef.current === myGen) {
-          const initSummary = (response as { summary?: { status?: string; queue_position?: number } })
-            .summary;
+          const initSummary = response.summary;
           const isQueued = initSummary?.status === 'queued';
           setActiveSingleCheck({
             essayId: response.essay_id,
@@ -1070,11 +1069,7 @@ export function VerificationProgressProvider({
           error: undefined,
         });
         try {
-          const reanalyzeRes = (await api.reanalyzeEssay(fileItem.essayId)) as {
-            status?: string;
-            essay_id?: number;
-            queue_position?: number | null;
-          };
+          const reanalyzeRes = await api.reanalyzeEssay(fileItem.essayId);
           void refreshUser();
           if (batchGenRef.current !== myGen) return;
 

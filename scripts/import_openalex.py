@@ -254,45 +254,60 @@ def main() -> None:
         print("WARNING: No API key set. Using polite free tier.")
 
     conn = sqlite3.connect(str(db_path))
-    for stmt in INIT_STATEMENTS:
-        conn.executescript(stmt)
-    conn.commit()
+    try:
+        for stmt in INIT_STATEMENTS:
+            conn.executescript(stmt)
+        conn.commit()
 
-    total_imported = 0
-    cursor: str | None = "*"
+        total_imported = 0
+        consecutive_errors = 0
+        max_consecutive_errors = 5
+        cursor: str | None = "*"
 
-    print(f"Importing papers: query='{args.query}', field={args.field}, limit={args.limit}")
+        print(f"Importing papers: query='{args.query}', field={args.field}, limit={args.limit}")
 
-    while total_imported < args.limit and cursor:
-        batch_size = min(args.batch_size, args.limit - total_imported)
-        try:
-            print(f"Fetching batch: cursor={cursor[:16]}..., size={batch_size}...")
-            works, next_cursor = search_papers_cursor(
-                args.query,
-                None if args.field == "all" else args.field,
-                batch_size,
-                cursor=cursor,
-            )
-            if not works:
-                print("No more results")
-                break
-
-            for work in works:
-                if total_imported >= args.limit:
+        while total_imported < args.limit and cursor:
+            batch_size = min(args.batch_size, args.limit - total_imported)
+            try:
+                print(f"Fetching batch: cursor={cursor[:16]}..., size={batch_size}...")
+                works, next_cursor = search_papers_cursor(
+                    args.query,
+                    None if args.field == "all" else args.field,
+                    batch_size,
+                    cursor=cursor,
+                )
+                consecutive_errors = 0
+                if not works:
+                    print("No more results")
                     break
-                paper = paper_to_dict(work)
-                if paper["doi"] and insert_paper(conn, paper) is not None:
-                    total_imported += 1
 
-            conn.commit()
-            print(f"Imported: {total_imported}/{args.limit}")
-            cursor = next_cursor
-            time.sleep(0.12)
-        except requests.exceptions.RequestException as exc:
-            print(f"Error: {exc}")
-            time.sleep(5)
+                for work in works:
+                    if total_imported >= args.limit:
+                        break
+                    paper = paper_to_dict(work)
+                    if paper["doi"] and insert_paper(conn, paper) is not None:
+                        total_imported += 1
 
-    conn.close()
+                conn.commit()
+                print(f"Imported: {total_imported}/{args.limit}")
+                cursor = next_cursor
+                time.sleep(0.12)
+            except requests.exceptions.RequestException as exc:
+                consecutive_errors += 1
+                print(
+                    f"Error ({consecutive_errors}/{max_consecutive_errors}): {exc}",
+                    file=sys.stderr,
+                )
+                if consecutive_errors >= max_consecutive_errors:
+                    print(
+                        "Aborting OpenAlex import after repeated network/API errors.",
+                        file=sys.stderr,
+                    )
+                    raise SystemExit(1) from exc
+                time.sleep(5)
+    finally:
+        conn.close()
+
     print(f"Done! Total imported: {total_imported}")
 
 

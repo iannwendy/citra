@@ -113,47 +113,51 @@ def _make_db(tmp_path: Path):
 def test_backfill_recomputes_confidence_with_parser_helper(tmp_path, monkeypatch):
     module = _load_backfill_module()
     engine = _make_db(tmp_path)
+    try:
+        import integrity_checker.db.session as session_mod
 
-    import integrity_checker.db.session as session_mod
-
-    monkeypatch.setattr(
-        module,
-        "get_session",
-        lambda: session_mod.Session(engine),
-    )
-    monkeypatch.setattr(sys, "argv", ["backfill", "--apply"])
-    assert module.main() == 0
-
-    with engine.begin() as conn:
-        rows = dict(
-            conn.execute(text("SELECT id, confidence FROM citations")).all()
+        monkeypatch.setattr(
+            module,
+            "get_session",
+            lambda: session_mod.Session(engine),
         )
+        monkeypatch.setattr(sys, "argv", ["backfill", "--apply"])
+        assert module.main() == 0
 
-    expected_full = _estimate_reference_confidence(
-        Citation(
-            raw_text="",
-            title="A Real Paper",
-            authors=["Jane Doe"],
-            year="2020",
-            doi="10.1/x",
+        with engine.begin() as conn:
+            rows = dict(
+                conn.execute(text("SELECT id, confidence FROM citations")).all()
+            )
+
+        expected_full = _estimate_reference_confidence(
+            Citation(
+                raw_text="",
+                title="A Real Paper",
+                authors=["Jane Doe"],
+                year="2020",
+                doi="10.1/x",
+            )
         )
-    )
-    assert rows[1] == pytest.approx(expected_full)
-    # An inline short-form row has no resolvable reference, so it stays 0.0.
-    assert rows[2] == pytest.approx(0.0)
+        assert rows[1] == pytest.approx(expected_full)
+        # An inline short-form row has no resolvable reference, so it stays 0.0.
+        assert rows[2] == pytest.approx(0.0)
+    finally:
+        engine.dispose()
 
 
 def test_backfill_dry_run_does_not_write(tmp_path, monkeypatch):
     module = _load_backfill_module()
     engine = _make_db(tmp_path)
+    try:
+        import integrity_checker.db.session as session_mod
 
-    import integrity_checker.db.session as session_mod
+        monkeypatch.setattr(module, "get_session", lambda: session_mod.Session(engine))
+        monkeypatch.setattr(sys, "argv", ["backfill"])
+        assert module.main() == 0
 
-    monkeypatch.setattr(module, "get_session", lambda: session_mod.Session(engine))
-    monkeypatch.setattr(sys, "argv", ["backfill"])
-    assert module.main() == 0
-
-    with engine.begin() as conn:
-        rows = dict(conn.execute(text("SELECT id, confidence FROM citations")).all())
-    assert rows[1] == pytest.approx(0.0)
-    assert rows[2] == pytest.approx(0.0)
+        with engine.begin() as conn:
+            rows = dict(conn.execute(text("SELECT id, confidence FROM citations")).all())
+        assert rows[1] == pytest.approx(0.0)
+        assert rows[2] == pytest.approx(0.0)
+    finally:
+        engine.dispose()

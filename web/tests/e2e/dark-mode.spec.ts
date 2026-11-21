@@ -72,55 +72,43 @@ test.describe('Dark Mode', () => {
     await page.goto('/dashboard');
 
     const themeToggle = page.locator('button[title^="Theme:"]').first();
+    await expect(themeToggle).toBeVisible();
 
-    // Click until dark mode is active (click 2 times from light)
-    for (let i = 0; i < 2; i++) {
-      const currentTitle = await themeToggle.getAttribute('title') || '';
+    // Click until dark mode is active
+    for (let i = 0; i < 3; i++) {
+      const currentTitle = (await themeToggle.getAttribute('title')) || '';
       if (currentTitle.includes('Dark')) break;
       await themeToggle.click();
-      await page.waitForTimeout(200);
     }
 
-    // Check if html has dark class
-    const currentTitle = await themeToggle.getAttribute('title') || '';
-    if (currentTitle.includes('Dark')) {
-      const hasDarkClass = await page.evaluate(() =>
-        document.documentElement.classList.contains('dark')
-      );
-      expect(hasDarkClass).toBe(true);
-    }
+    await expect(themeToggle).toHaveAttribute('title', /Dark/);
+    await expect(page.locator('html')).toHaveClass(/dark/);
   });
 
   test('should respect system preference when set to system', async ({ page }) => {
     await page.goto('/dashboard');
 
     const themeToggle = page.locator('button[title^="Theme:"]').first();
+    await expect(themeToggle).toBeVisible();
 
     // Click to set system theme (click until we reach system)
     for (let i = 0; i < 3; i++) {
-      const title = await themeToggle.getAttribute('title') || '';
+      const title = (await themeToggle.getAttribute('title')) || '';
       if (title.includes('System')) break;
       await themeToggle.click();
-      await page.waitForTimeout(200);
     }
 
-    // System theme should be set
-    const title = await themeToggle.getAttribute('title') || '';
-    expect(title).toContain('System');
+    await expect(themeToggle).toHaveAttribute('title', /System/);
 
     // Theme should match system preference
     const prefersDark = await page.evaluate(() =>
       window.matchMedia('(prefers-color-scheme: dark)').matches
     );
 
-    // After setting system, the dark class should reflect system preference
-    await page.waitForTimeout(500);
-    const hasDarkClass = await page.evaluate(() =>
-      document.documentElement.classList.contains('dark')
-    );
-    // If system prefers dark, html should have dark class
     if (prefersDark) {
-      expect(hasDarkClass).toBe(true);
+      await expect(page.locator('html')).toHaveClass(/dark/);
+    } else {
+      await expect(page.locator('html')).not.toHaveClass(/dark/);
     }
   });
 
@@ -128,56 +116,41 @@ test.describe('Dark Mode', () => {
     await page.goto('/dashboard');
 
     const themeToggle = page.locator('button[title^="Theme:"]').first();
+    await expect(themeToggle).toBeVisible();
 
-    // Set to dark mode (click 2 times from light)
-    for (let i = 0; i < 2; i++) {
-      const title = await themeToggle.getAttribute('title') || '';
+    // Set to dark mode
+    for (let i = 0; i < 3; i++) {
+      const title = (await themeToggle.getAttribute('title')) || '';
       if (title.includes('Dark')) break;
       await themeToggle.click();
-      await page.waitForTimeout(200);
     }
 
-    // Verify dark mode is active
-    const currentTitle = await themeToggle.getAttribute('title') || '';
-    if (currentTitle.includes('Dark')) {
-      const hasDarkClass = await page.evaluate(() =>
-        document.documentElement.classList.contains('dark')
-      );
-      expect(hasDarkClass).toBe(true);
+    await expect(themeToggle).toHaveAttribute('title', /Dark/);
+    await expect(page.locator('html')).toHaveClass(/dark/);
 
-      // Reload page
-      await page.reload();
-      await page.waitForURL(/\/(dashboard|login)/);
-      await waitForAuth(page);
+    // Reload page
+    await page.reload();
+    await page.waitForURL(/\/(dashboard|login)/);
+    await waitForAuth(page);
 
-      // Dark mode should persist
-      const hasDarkClassAfterReload = await page.evaluate(() =>
-        document.documentElement.classList.contains('dark')
-      );
-      expect(hasDarkClassAfterReload).toBe(true);
-    }
+    // Dark mode should persist
+    await expect(page.locator('html')).toHaveClass(/dark/);
   });
 
   test('should toggle theme toggle icon based on current theme', async ({ page }) => {
     await page.goto('/dashboard');
 
-    // Light mode - should show sun icon
-    // Dark mode - should show moon icon
-    // System mode - should show monitor icon
-
     const themeToggle = page.locator('button[title^="Theme:"]').first();
+    await expect(themeToggle.locator('svg').first()).toBeVisible();
 
-    // Get initial icon SVG
-    const initialIcon = await themeToggle.locator('svg').first().innerHTML().catch(() => '');
+    const initialIcon = await themeToggle.locator('svg').first().innerHTML();
 
     // Toggle
     await themeToggle.click();
-    await page.waitForTimeout(200);
 
-    // Icon should change - verify they exist
-    const newIcon = await themeToggle.locator('svg').first().innerHTML().catch(() => '');
-    expect(initialIcon.length).toBeGreaterThan(0);
-    expect(newIcon.length).toBeGreaterThan(0);
+    await expect
+      .poll(async () => themeToggle.locator('svg').first().innerHTML())
+      .not.toBe(initialIcon);
   });
 });
 
@@ -224,26 +197,19 @@ test.describe('Dark Mode UI Components', () => {
     const themeToggle = page.locator('button[title^="Theme:"]').first();
 
     // Verify dark mode
-    let hasDarkClass = await page.evaluate(() =>
+    const hasDarkClass = await page.evaluate(() =>
       document.documentElement.classList.contains('dark')
     );
     expect(hasDarkClass).toBe(true);
 
     // Click to switch to light (click until we get light)
     for (let i = 0; i < 3; i++) {
-      const title = await themeToggle.getAttribute('title') || '';
+      const title = (await themeToggle.getAttribute('title')) || '';
       if (title.includes('Light')) break;
       await themeToggle.click();
-      await page.waitForTimeout(200);
     }
 
-    // Check theme
-    const currentTheme = await themeToggle.getAttribute('title') || '';
-    if (currentTheme.includes('Light')) {
-      hasDarkClass = await page.evaluate(() =>
-        document.documentElement.classList.contains('dark')
-      );
-      expect(hasDarkClass).toBe(false);
-    }
+    await expect(themeToggle).toHaveAttribute('title', /Light/);
+    await expect(page.locator('html')).not.toHaveClass(/dark/);
   });
 });

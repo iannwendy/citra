@@ -21,7 +21,7 @@ import httpx
 
 _POOL_LOCK = threading.Lock()
 _LOOP_CLIENTS: weakref.WeakKeyDictionary[
-    asyncio.AbstractEventLoop, dict[bool, httpx.AsyncClient]
+    asyncio.AbstractEventLoop, dict[str, httpx.AsyncClient]
 ] = weakref.WeakKeyDictionary()
 
 _DEFAULT_LIMITS = httpx.Limits(
@@ -54,19 +54,44 @@ def get_shared_http_client(*, follow_redirects: bool = True) -> httpx.AsyncClien
     event loop, and 100% compatible with `patch.object(httpx.AsyncClient, "get" / "post")`.
     """
     loop = asyncio.get_running_loop()
+    slot_key = "follow" if follow_redirects else "nofollow"
     with _POOL_LOCK:
         per_loop = _LOOP_CLIENTS.get(loop)
         if per_loop is None:
             per_loop = {}
             _LOOP_CLIENTS[loop] = per_loop
-        client = per_loop.get(follow_redirects)
+        client = per_loop.get(slot_key)
         if client is None or client.is_closed:
             client = httpx.AsyncClient(
                 limits=_DEFAULT_LIMITS,
                 follow_redirects=follow_redirects,
+                trust_env=False,
                 timeout=httpx.Timeout(15.0, connect=5.0),
             )
-            per_loop[follow_redirects] = client
+            per_loop[slot_key] = client
+        return client
+
+
+def get_shared_ssrf_http_client() -> httpx.AsyncClient:
+    """Return a DNS-pinned, non-redirecting Keep-Alive client bound to the running loop."""
+    from integrity_checker.retrieval.html_meta_verifier import build_ssrf_safe_transport
+
+    loop = asyncio.get_running_loop()
+    with _POOL_LOCK:
+        per_loop = _LOOP_CLIENTS.get(loop)
+        if per_loop is None:
+            per_loop = {}
+            _LOOP_CLIENTS[loop] = per_loop
+        client = per_loop.get("ssrf_nofollow")
+        if client is None or client.is_closed:
+            client = httpx.AsyncClient(
+                limits=_DEFAULT_LIMITS,
+                transport=build_ssrf_safe_transport(),
+                follow_redirects=False,
+                trust_env=False,
+                timeout=httpx.Timeout(15.0, connect=5.0),
+            )
+            per_loop["ssrf_nofollow"] = client
         return client
 
 

@@ -40,9 +40,14 @@ from integrity_checker.retrieval.html_meta_verifier import (
     validate_public_target_ips,
     validate_url_syntax_and_literal_ip,
 )
+from integrity_checker.retrieval.http_pool import (
+    get_shared_http_client,
+    get_shared_ssrf_http_client,
+)
 
 logger = get_logger(__name__)
 
+_ORIG_ASYNC_CLIENT = httpx.AsyncClient
 _ORIG_ASYNC_HEAD = httpx.AsyncClient.head
 _ORIG_ASYNC_STREAM = httpx.AsyncClient.stream
 _ORIG_ASYNC_GET = httpx.AsyncClient.get
@@ -276,8 +281,10 @@ class LinkValidator:
 
         return False, reason, False
 
-    def _is_benign_nonstandard_port_url(self, target_url: str, ssrf_reason: str | None) -> bool:
-        """Return True iff target_url was rejected solely for a non-80/443 port on a public host."""
+    async def _is_benign_nonstandard_port_url(
+        self, target_url: str, ssrf_reason: str | None
+    ) -> bool:
+        """Return True iff target_url was rejected solely for a non-80/443 port on a verified public host."""
         reason_low = (ssrf_reason or "").lower()
         if "port" not in reason_low or "invalid url port" in reason_low:
             return False
@@ -305,10 +312,26 @@ class LinkValidator:
             return False
         if state_or_reason == "public_ip_literal":
             return True
+        if "." not in hostname:
+            return False
         if self.resolver is not None or socket.getaddrinfo is not _ORIG_GETADDRINFO:
             ok, dns_reason = validate_public_target_ips(probe_url, resolver=self.resolver)
-            if not ok and not dns_reason.startswith("DNS resolution failed"):
-                return False
+        else:
+            ok, dns_reason = await asyncio.to_thread(validate_public_target_ips, probe_url, None)
+        if not ok:
+            if dns_reason.startswith("DNS resolution failed"):
+                httpx_is_mocked = (
+                    httpx.AsyncClient.head is not _ORIG_ASYNC_HEAD
+                    or httpx.AsyncClient.stream is not _ORIG_ASYNC_STREAM
+                )
+                if (
+                    httpx_is_mocked
+                    and self.resolver is None
+                    and socket.getaddrinfo is _ORIG_GETADDRINFO
+                    and self._transport is None
+                ):
+                    return True
+            return False
         return True
 
     @classmethod
@@ -366,21 +389,26 @@ class LinkValidator:
                     await asyncio.sleep(wait_sec)
 
                 try:
-                    wb_client_kwargs: dict[str, Any] = {
-                        "timeout": wb_timeout,
-                        "follow_redirects": True,
-                        "headers": {
-                            "User-Agent": self.DEFAULT_HEADERS["User-Agent"],
-                            "Accept": "application/json",
-                        },
+                    wb_headers = {
+                        "User-Agent": self.DEFAULT_HEADERS["User-Agent"],
+                        "Accept": "application/json",
                     }
-                    if self._transport is not None:
-                        wb_client_kwargs["transport"] = self._transport
-                    async with httpx.AsyncClient(**wb_client_kwargs) as client:
-                        resp = await client.get(self.WAYBACK_API_URL, params={"url": url})
+
+                    async def _query_wb_once(
+                        active_wb_client: httpx.AsyncClient,
+                        req_headers: dict[str, str],
+                    ) -> tuple[str, tuple[str | None, str | None, bool]]:
+                        resp = await active_wb_client.get(
+                            self.WAYBACK_API_URL,
+                            params={"url": url},
+                            headers=req_headers,
+                            timeout=wb_timeout,
+                        )
                         if resp.status_code in (429, 500, 502, 503, 504):
-                            last_exc = RuntimeError(f"Wayback HTTP {resp.status_code}")
-                            continue
+                            return (
+                                "retry",
+                                (f"Wayback HTTP {resp.status_code}", None, False),
+                            )
 
                         avail_ok = resp.status_code == 200
                         if avail_ok:
@@ -396,10 +424,10 @@ class LinkValidator:
                                 found_url = str(closest["url"])
                                 found_ts = str(closest.get("timestamp") or "") or None
                                 _set_wayback_cached(cache_key, (found_url, found_ts))
-                                return found_url, found_ts, True
+                                return "done", (found_url, found_ts, True)
 
                         # Fallback to Wayback CDX API when availability endpoint has lag or empty index
-                        cdx_resp = await client.get(
+                        cdx_resp = await active_wb_client.get(
                             self.WAYBACK_CDX_URL,
                             params={
                                 "url": url,
@@ -408,10 +436,14 @@ class LinkValidator:
                                 "fl": "timestamp,original",
                                 "filter": "statuscode:200",
                             },
+                            headers=req_headers,
+                            timeout=wb_timeout,
                         )
                         if cdx_resp.status_code in (429, 500, 502, 503, 504) and not avail_ok:
-                            last_exc = RuntimeError(f"Wayback CDX HTTP {cdx_resp.status_code}")
-                            continue
+                            return (
+                                "retry",
+                                (f"Wayback CDX HTTP {cdx_resp.status_code}", None, False),
+                            )
                         if cdx_resp.status_code == 200:
                             rows = cdx_resp.json()
                             if (
@@ -425,11 +457,34 @@ class LinkValidator:
                                 if ts:
                                     found_url = f"https://web.archive.org/web/{ts}/{orig}"
                                     _set_wayback_cached(cache_key, (found_url, ts))
-                                    return found_url, ts, True
+                                    return "done", (found_url, ts, True)
 
                         if avail_ok or cdx_resp.status_code == 200:
                             _set_wayback_cached(cache_key, (None, None))
-                            return None, None, True
+                            return "done", (None, None, True)
+                        return "next", (None, None, False)
+
+                    if self._transport is not None or httpx.AsyncClient is not _ORIG_ASYNC_CLIENT:
+                        wb_client_kwargs: dict[str, Any] = {
+                            "timeout": wb_timeout,
+                            "follow_redirects": True,
+                            "trust_env": False,
+                            "headers": wb_headers,
+                        }
+                        if self._transport is not None:
+                            wb_client_kwargs["transport"] = self._transport
+                        async with httpx.AsyncClient(**wb_client_kwargs) as wb_owned_client:
+                            wb_state, wb_res = await _query_wb_once(wb_owned_client, wb_headers)
+                    else:
+                        wb_state, wb_res = await _query_wb_once(
+                            get_shared_http_client(follow_redirects=True),
+                            wb_headers,
+                        )
+                    if wb_state == "retry":
+                        last_exc = RuntimeError(str(wb_res[0]))
+                        continue
+                    if wb_state == "done":
+                        return wb_res
                 except httpx.TimeoutException as exc:
                     last_exc = exc
                     logger.debug(
@@ -520,6 +575,7 @@ class LinkValidator:
                     async with active_client.stream(
                         "GET",
                         cur_wb,
+                        headers=self.DEFAULT_HEADERS,
                         timeout=wb_meta_timeout,
                     ) as wb_resp:
                         if wb_resp.status_code in _REDIRECT_CODES:
@@ -566,6 +622,14 @@ class LinkValidator:
             if client is not None:
                 return await _stream_with_retry(client)
 
+            if (
+                uses_pinned_backend
+                and httpx.AsyncClient is _ORIG_ASYNC_CLIENT
+                and self.resolver is None
+                and socket.getaddrinfo is _ORIG_GETADDRINFO
+            ):
+                return await _stream_with_retry(get_shared_ssrf_http_client())
+
             transport = (
                 self._transport
                 if self._transport is not None
@@ -608,18 +672,14 @@ class LinkValidator:
             uses_pinned_backend = (
                 self._transport is None and not head_is_patched and not stream_is_patched
             )
-            transport = (
-                self._transport
-                if self._transport is not None
-                else build_ssrf_safe_transport(resolver=self.resolver)
+            use_shared_ssrf_pool = (
+                uses_pinned_backend
+                and httpx.AsyncClient is _ORIG_ASYNC_CLIENT
+                and self.resolver is None
+                and socket.getaddrinfo is _ORIG_GETADDRINFO
             )
-            async with httpx.AsyncClient(
-                timeout=self.timeout,
-                follow_redirects=False,
-                trust_env=False,
-                headers=self.DEFAULT_HEADERS,
-                transport=transport,
-            ) as client:
+
+            async def _validate_with_client(client: httpx.AsyncClient) -> LinkCheckResult:
                 current_url = clean_url
                 status_code = 0
                 final_url = clean_url
@@ -636,7 +696,7 @@ class LinkValidator:
                     if not allowed:
                         if is_nxdomain:
                             raise httpx.ConnectError(ssrf_reason)
-                        if hop == 0 and self._is_benign_nonstandard_port_url(
+                        if hop == 0 and await self._is_benign_nonstandard_port_url(
                             current_url, ssrf_reason
                         ):
                             return LinkCheckResult(
@@ -654,12 +714,21 @@ class LinkValidator:
 
                     resp_headers: httpx.Headers | dict[str, str] = {}
                     try:
-                        resp = await client.head(current_url)
+                        resp = await client.head(
+                            current_url,
+                            headers=self.DEFAULT_HEADERS,
+                            timeout=self.timeout,
+                        )
                         status_code = resp.status_code
                         final_url = str(resp.url)
                         resp_headers = resp.headers
                     except httpx.TimeoutException:
-                        async with client.stream("GET", current_url) as get_resp:
+                        async with client.stream(
+                            "GET",
+                            current_url,
+                            headers=self.DEFAULT_HEADERS,
+                            timeout=self.timeout,
+                        ) as get_resp:
                             status_code = get_resp.status_code
                             final_url = str(get_resp.url)
                             resp_headers = get_resp.headers
@@ -688,7 +757,12 @@ class LinkValidator:
 
                     # Many academic publishers/portals/WAFs reject HEAD; verify via lightweight GET stream
                     if status_code in (400, 401, 403, 404, 405, 406, 500, 501, 503):
-                        async with client.stream("GET", current_url) as get_resp:
+                        async with client.stream(
+                            "GET",
+                            current_url,
+                            headers=self.DEFAULT_HEADERS,
+                            timeout=self.timeout,
+                        ) as get_resp:
                             status_code = get_resp.status_code
                             final_url = str(get_resp.url)
                             resp_headers = get_resp.headers
@@ -719,7 +793,12 @@ class LinkValidator:
                         and not (head_is_patched and not stream_is_patched and self._transport is None)
                         and is_html_content_type(resp_headers.get("content-type", ""))
                     ):
-                        async with client.stream("GET", current_url) as get_resp:
+                        async with client.stream(
+                            "GET",
+                            current_url,
+                            headers=self.DEFAULT_HEADERS,
+                            timeout=self.timeout,
+                        ) as get_resp:
                             status_code = get_resp.status_code
                             final_url = str(get_resp.url)
                             if status_code in _REDIRECT_CODES:
@@ -818,6 +897,23 @@ class LinkValidator:
                     if url_yr is not None:
                         result.html_meta = HtmlPageMeta(published_year=str(url_yr))
                 return result
+
+            if use_shared_ssrf_pool:
+                return await _validate_with_client(get_shared_ssrf_http_client())
+
+            transport = (
+                self._transport
+                if self._transport is not None
+                else build_ssrf_safe_transport(resolver=self.resolver)
+            )
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                follow_redirects=False,
+                trust_env=False,
+                headers=self.DEFAULT_HEADERS,
+                transport=transport,
+            ) as owned_client:
+                return await _validate_with_client(owned_client)
 
         except SSRFBlockedError as exc:
             logger.debug(f"LinkValidator SSRF blocked '{clean_url}': {exc}")

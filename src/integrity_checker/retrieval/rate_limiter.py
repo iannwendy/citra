@@ -41,6 +41,7 @@ class RateLimiter:
 
         # Backoff & AIMD state
         self._backoff_until: float = 0.0
+        self._last_rate_limited_at: float = 0.0
         self._consecutive_failures: int = 0
         self._base_backoff: float = 2.0  # seconds (2s -> 4s -> 8s -> 16s -> 32s -> 60s)
         self._max_backoff: float = 60.0  # 1 minute max
@@ -73,6 +74,7 @@ class RateLimiter:
         """Record an HTTP 429 event, apply Retry-After / exponential backoff, and halve rate."""
         with self._lock:
             now = time.monotonic()
+            self._last_rate_limited_at = now
             self._consecutive_failures += 1
 
             # Multiplicative Decrease (AIMD): slow down effective rate by 2x to prevent re-triggering 429
@@ -96,9 +98,18 @@ class RateLimiter:
 
             self._backoff_until = max(self._backoff_until, target_until)
 
-    def report_success(self) -> None:
-        """Record a clean non-429 response — clear backoff and smoothly ramp rate back up."""
+    def report_success(self, *, started_at: float | None = None) -> None:
+        """Record a clean non-429 response — ignore stale pre-429 in-flight completions."""
         with self._lock:
+            now = time.monotonic()
+            if started_at is not None and (
+                now < self._backoff_until
+                or (
+                    self._last_rate_limited_at > 0.0
+                    and float(started_at) <= self._last_rate_limited_at
+                )
+            ):
+                return
             self._consecutive_failures = 0
             self._backoff_until = 0.0
             # Additive / smooth recovery back toward base rate

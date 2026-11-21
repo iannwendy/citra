@@ -56,7 +56,33 @@ export async function streamEssayEvents(
       signal,
     });
 
-    if (!resp.ok || !resp.body || typeof resp.body.getReader !== 'function') {
+    if (!resp.ok) {
+      if (resp.status === 401) {
+        try {
+          localStorage.removeItem('token');
+        } catch {
+          // Ignore storage errors
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('citra:unauthorized'));
+        }
+      } else if (resp.status === 403) {
+        const errText = await resp.text().catch(() => '');
+        if (/account is deactivated|ACCOUNT_DEACTIVATED/i.test(errText)) {
+          try {
+            localStorage.removeItem('token');
+          } catch {
+            // Ignore storage errors
+          }
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('citra:unauthorized'));
+          }
+        }
+      }
+      return false;
+    }
+
+    if (!resp.body || typeof resp.body.getReader !== 'function') {
       return false;
     }
 

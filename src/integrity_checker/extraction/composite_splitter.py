@@ -270,7 +270,7 @@ def _fallback_sub_citation(
         raw_text=display_raw,
         citation_type=CitationType.REFERENCE_LIST,
         style=parent.style,
-        authors=authors,
+        authors=list(authors),
         year=year_m.group(0) if year_m else None,
         title=seg_text[:120].rstrip(".;,"),
         doi=doi,

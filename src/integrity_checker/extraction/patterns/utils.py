@@ -16,6 +16,18 @@ import re
 
 from integrity_checker.extraction.patterns.base import CompiledPattern, PatternType
 
+# Canonical uppercase-only and full alphabetic character classes for Latin + Vietnamese
+# (avoids `[A-ZÀ-Ỹ]`, whose Unicode range U+00C0..U+1EF8 accidentally includes lowercase
+# Latin-1/Vietnamese letters as well as `×`/`÷`/Greek/Cyrillic, and avoids `[A-Za-zÀ-ÿ]`,
+# which drops 60+ Vietnamese diacritics in U+0102..U+1EF9).
+_UPPER_LATIN_VN = (
+    r"[A-ZÀ-ÖØ-ÞĂÂĐÊÔƠƯĨŨẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼẾỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴỶỸ]"
+)
+_LOWER_LATIN_VN = (
+    r"[a-zà-öø-ÿăâđêôơưĩũạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]"
+)
+_ALPHA_LATIN_VN = r"[A-Za-zÀ-ÖØ-öø-ÿĀ-žƠơƯưẠ-ỹ]"
+
 # =============================================================================
 # DOI Pattern
 # =============================================================================
@@ -327,6 +339,9 @@ UTILITY_PATTERNS: list[CompiledPattern] = [
 __all__ = [
     "CompiledPattern",
     "PatternType",
+    "_UPPER_LATIN_VN",
+    "_LOWER_LATIN_VN",
+    "_ALPHA_LATIN_VN",
     "DOI_PATTERN",
     "URL_PATTERN",
     "YEAR_PATTERN",

@@ -395,7 +395,7 @@ class CISCalculator:
             logger.debug("CIS: no verdicts, returning 1.0")
             return 1.0
 
-        status_counts: dict[str, int] = {}
+        verdict_status_counts: dict[str, int] = {}
         for v in verdicts:
             if v.mapping_status is None:
                 continue
@@ -404,12 +404,12 @@ class CISCalculator:
                 if hasattr(v.mapping_status, "value")
                 else str(v.mapping_status)
             )
-            status_counts[status] = status_counts.get(status, 0) + 1
+            verdict_status_counts[status] = verdict_status_counts.get(status, 0) + 1
 
-        logger.debug(f"CIS from verdicts: status_counts={status_counts}")
+        logger.debug(f"CIS from verdicts: status_counts={verdict_status_counts}")
 
         penalty = 0.0
-        for status, count in status_counts.items():
+        for status, count in verdict_status_counts.items():
             p = penalty_table.get(status, 0.0)
             logger.debug(f"  {status}: count={count}, penalty={p:.2f}, total_contrib={p * count:.2f}")
             penalty += p * count

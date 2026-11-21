@@ -34,6 +34,18 @@ def is_test_runtime() -> bool:
     )
 
 
+def is_production_env(env_override: str | None = None) -> bool:
+    """Return True when effective APP_ENV or settings.app.env is production/prod/live."""
+    import os
+
+    raw = (
+        env_override
+        if env_override is not None
+        else (os.getenv("APP_ENV") or get_settings().app.env or "")
+    )
+    return raw.strip().lower() in ("production", "prod", "live")
+
+
 def is_main_app_db_url(url: str) -> bool:
     """Return True if a SQLite URL resolves to the main project data/app.db."""
     if not url.startswith("sqlite:///") or url == "sqlite:///:memory:":
@@ -158,10 +170,10 @@ class EmailConfig(BaseModel):
 
 
 class PathsConfig(BaseModel):
-    data_dir: Path = Path("./data")
-    essays_dir: Path = Path("./data/essays")
-    cache_dir: Path = Path("./data/cache")
-    grobid_output_dir: Path = Path("./data/cache/grobid")   # MỚI v1.2
+    data_dir: Path = PROJECT_ROOT / "data"
+    essays_dir: Path = PROJECT_ROOT / "data" / "essays"
+    cache_dir: Path = PROJECT_ROOT / "data" / "cache"
+    grobid_output_dir: Path = PROJECT_ROOT / "data" / "cache" / "grobid"  # MỚI v1.2
 
     @field_validator("*", mode="before")
     @classmethod
@@ -605,20 +617,26 @@ class Settings(BaseSettings):
         env_cache_dir = (os.getenv("CACHE_DIR") or "").strip()
         env_essays_dir = (os.getenv("ESSAYS_DIR") or "").strip()
         env_grobid_dir = (os.getenv("GROBID_OUTPUT_DIR") or "").strip()
+        default_essays_dirs = (Path("./data/essays"), PROJECT_ROOT / "data" / "essays")
+        default_cache_dirs = (Path("./data/cache"), PROJECT_ROOT / "data" / "cache")
+        default_grobid_dirs = (
+            Path("./data/cache/grobid"),
+            PROJECT_ROOT / "data" / "cache" / "grobid",
+        )
         if env_data_dir:
             new_data_dir = Path(env_data_dir)
-            if not env_essays_dir and self.paths.essays_dir == Path("./data/essays"):
+            if not env_essays_dir and self.paths.essays_dir in default_essays_dirs:
                 self.paths.essays_dir = new_data_dir / "essays"
-            if not env_cache_dir and self.paths.cache_dir == Path("./data/cache"):
+            if not env_cache_dir and self.paths.cache_dir in default_cache_dirs:
                 self.paths.cache_dir = new_cache_dir_default = new_data_dir / "cache"
-                if not env_grobid_dir and self.paths.grobid_output_dir == Path("./data/cache/grobid"):
+                if not env_grobid_dir and self.paths.grobid_output_dir in default_grobid_dirs:
                     self.paths.grobid_output_dir = new_cache_dir_default / "grobid"
             self.paths.data_dir = new_data_dir
         if env_essays_dir:
             self.paths.essays_dir = Path(env_essays_dir)
         if env_cache_dir:
             new_cache_dir = Path(env_cache_dir)
-            if not env_grobid_dir and self.paths.grobid_output_dir == Path("./data/cache/grobid"):
+            if not env_grobid_dir and self.paths.grobid_output_dir in default_grobid_dirs:
                 self.paths.grobid_output_dir = new_cache_dir / "grobid"
             self.paths.cache_dir = new_cache_dir
         if env_grobid_dir:

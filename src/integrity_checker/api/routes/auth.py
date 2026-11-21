@@ -18,6 +18,7 @@ import httpx
 import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session as SqlSession
 
 from integrity_checker.api.deps import get_current_user, get_db
@@ -26,7 +27,7 @@ from integrity_checker.billing.plans import (
     ensure_user_quota_current,
     get_user_subscription_summary,
 )
-from integrity_checker.config import get_settings, is_test_runtime
+from integrity_checker.config import get_settings, is_production_env, is_test_runtime
 from integrity_checker.db.models import ApiKey, AuthToken, User
 from integrity_checker.db.repository import Repository
 
@@ -35,6 +36,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9._-]+$")
+_USERNAME_FORMAT_ERROR_DETAIL = (
+    "Username must be 3-50 characters, start and end with a letter or number, "
+    "and contain only letters, numbers, dots, underscores, or hyphens."
+)
 
 _RESERVED_USERNAMES = frozenset(
     {
@@ -197,6 +202,7 @@ class _SlidingWindowRateLimiter:
             self._attempts.clear()
         if "_login_rate_limiter" in globals() and self is _login_rate_limiter:
             for sibling in (
+                globals().get("_login_ip_rate_limiter"),
                 globals().get("_register_rate_limiter"),
                 globals().get("_resend_activation_rate_limiter"),
                 globals().get("_forgot_password_rate_limiter"),
@@ -206,9 +212,14 @@ class _SlidingWindowRateLimiter:
 
 
 _login_rate_limiter = _SlidingWindowRateLimiter(max_attempts=10, window_seconds=60.0)
+_login_ip_rate_limiter = _SlidingWindowRateLimiter(max_attempts=30, window_seconds=60.0)
 _register_rate_limiter = _SlidingWindowRateLimiter(max_attempts=5, window_seconds=60.0)
 _resend_activation_rate_limiter = _SlidingWindowRateLimiter(max_attempts=5, window_seconds=60.0)
 _forgot_password_rate_limiter = _SlidingWindowRateLimiter(max_attempts=5, window_seconds=60.0)
+
+_DUMMY_BCRYPT_HASH: bytes = bcrypt.hashpw(
+    b"citra-dummy-timing-equalizer-password", bcrypt.gensalt()
+)
 
 
 def _normalize_valid_ip(raw_ip: str | None) -> str | None:
@@ -282,7 +293,7 @@ def _is_demo_enabled() -> bool:
     demo_enabled = os.getenv("DEMO_USERS_ENABLED", "").strip().lower()
 
     # Never allow demo users in production
-    if app_env in ("production", "prod", "live"):
+    if is_production_env(app_env):
         return False
 
     # Disabled explicitly
@@ -335,8 +346,8 @@ CURRENT_PRIVACY_POLICY_VERSION = "1.0"
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(min_length=1, max_length=255)
+    password: str = Field(min_length=1, max_length=256)
 
 
 class GoogleLoginRequest(BaseModel):
@@ -451,11 +462,18 @@ def _hash_password(password: str) -> str:
 
 
 def _verify_password(password: str, hashed: str) -> bool:
-    if not hashed:
+    pw_bytes = password.encode("utf-8")
+    if (
+        not hashed
+        or len(pw_bytes) > 72
+        or not hashed.startswith(("$2a$", "$2b$", "$2y$"))
+    ):
+        bcrypt.checkpw(pw_bytes[:72], _DUMMY_BCRYPT_HASH)
         return False
     try:
-        return bcrypt.checkpw(password.encode(), hashed.encode())
+        return bcrypt.checkpw(pw_bytes, hashed.encode("utf-8"))
     except (ValueError, TypeError):
+        bcrypt.checkpw(pw_bytes[:72], _DUMMY_BCRYPT_HASH)
         return False
 
 
@@ -477,6 +495,14 @@ def _safe_send_email(fn, *args, **kwargs) -> None:
         )
 
 
+def _optional_http_request(request: Request) -> Request:
+    return request
+
+
+def _optional_background_tasks(background_tasks: BackgroundTasks) -> BackgroundTasks:
+    return background_tasks
+
+
 def _dispatch_email_task(
     background_tasks: BackgroundTasks | None,
     fn,
@@ -484,7 +510,7 @@ def _dispatch_email_task(
     **kwargs,
 ) -> bool:
     """Schedule email sending via FastAPI BackgroundTasks when available, or run safely inline."""
-    if background_tasks is not None:
+    if isinstance(background_tasks, BackgroundTasks):
         background_tasks.add_task(_safe_send_email, fn, *args, **kwargs)
         return True
     try:
@@ -532,8 +558,8 @@ def _to_response_dict(user: User) -> dict:
         "current_period_end": sub["current_period_end"],
         "quota": sub["quota"],
         "privacy_consented_at": (
-            user.privacy_consented_at.isoformat()
-            if getattr(user, "privacy_consented_at", None)
+            consented_dt.isoformat()
+            if isinstance((consented_dt := getattr(user, "privacy_consented_at", None)), datetime)
             else None
         ),
         "privacy_policy_version": getattr(user, "privacy_policy_version", None),
@@ -560,7 +586,7 @@ def _create_token(user: User) -> tuple[str, datetime]:
 @router.post("/login", response_model=LoginResponse)
 def login(
     request: LoginRequest,
-    http_request: Request = None,  # type: ignore[assignment]
+    http_request: Request | None = Depends(_optional_http_request),
     db=Depends(get_db),
 ):
     """Login with username/email and password.
@@ -575,6 +601,7 @@ def login(
     identifier = request.username.strip()
     client_ip = _extract_client_ip(http_request)
     rate_key = f"{client_ip}:{identifier.lower()}"
+    _login_ip_rate_limiter.check(client_ip)
     _login_rate_limiter.check(rate_key)
 
     # Check DB first by username, then by email if identifier contains '@'
@@ -585,6 +612,7 @@ def login(
     if db_user:
         user = db_user
         if not _verify_password(request.password, user.password_hash):
+            _login_ip_rate_limiter.record_failure(client_ip)
             _login_rate_limiter.record_failure(rate_key)
             raise HTTPException(status_code=401, detail="Invalid username or password")
         if not user.is_active:
@@ -598,13 +626,17 @@ def login(
                 detail="ACCOUNT_DEACTIVATED: Your account has been deactivated by an administrator.",
             )
     else:
+        # Equalize response timing against bcrypt checkpw to prevent username enumeration
+        bcrypt.checkpw(request.password.encode("utf-8")[:72], _DUMMY_BCRYPT_HASH)
         # No DB user — check hardcoded credentials (for demo/admin accounts)
         hardcoded_users = _get_hardcoded_users()
         if identifier not in hardcoded_users:
+            _login_ip_rate_limiter.record_failure(client_ip)
             _login_rate_limiter.record_failure(rate_key)
             raise HTTPException(status_code=401, detail="Invalid username or password")
         expected_password, role = hardcoded_users[identifier]
         if request.password != expected_password:
+            _login_ip_rate_limiter.record_failure(client_ip)
             _login_rate_limiter.record_failure(rate_key)
             raise HTTPException(status_code=401, detail="Invalid username or password")
         # Create DB entry on first login for hardcoded users
@@ -641,6 +673,9 @@ _DISABLED_GOOGLE_SENTINELS = frozenset({"disabled", "false", "none", "off", "0"}
 def _get_google_client_config() -> tuple[str, str]:
     """Return (google_client_id, google_client_secret) from env, settings, or .env."""
     settings = get_settings()
+    app_env = (os.getenv("APP_ENV") or settings.app.env or "").strip().lower()
+    is_prod_env = app_env in ("production", "prod", "live")
+
     if "GOOGLE_CLIENT_ID" in os.environ:
         client_id = os.environ["GOOGLE_CLIENT_ID"].strip()
     else:
@@ -648,13 +683,18 @@ def _get_google_client_config() -> tuple[str, str]:
 
     if client_id.lower() in _DISABLED_GOOGLE_SENTINELS:
         return "", ""
+    if client_id.startswith("your-google-client-id"):
+        client_id = ""
 
     if "GOOGLE_CLIENT_SECRET" in os.environ:
         client_secret = os.environ["GOOGLE_CLIENT_SECRET"].strip()
     else:
         client_secret = (settings.auth.google_client_secret or "").strip()
+    if client_secret.startswith("your-google-client-secret"):
+        client_secret = ""
 
-    if not client_id and not is_test_runtime():
+    explicit_env_cid = "GOOGLE_CLIENT_ID" in os.environ
+    if not client_id and not is_test_runtime() and not is_prod_env and not explicit_env_cid:
         try:
             from dotenv import dotenv_values
 
@@ -675,8 +715,11 @@ def _get_google_client_config() -> tuple[str, str]:
                         break
         except Exception:
             pass
-        if not client_id or client_id.startswith("your-google-client-id"):
-            client_id = _DEFAULT_GOOGLE_CLIENT_ID
+
+    if not client_id or client_id.startswith("your-google-client-id"):
+        if is_prod_env or is_test_runtime():
+            return "", ""
+        client_id = _DEFAULT_GOOGLE_CLIENT_ID
 
     return client_id, client_secret
 
@@ -845,8 +888,8 @@ def get_google_auth_config():
 @router.post("/google", response_model=LoginResponse)
 def google_login(
     request: GoogleLoginRequest,
-    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
-    http_request: Request = None,  # type: ignore[assignment]
+    background_tasks: BackgroundTasks | None = Depends(_optional_background_tasks),
+    http_request: Request | None = Depends(_optional_http_request),
     db=Depends(get_db),
 ):
     """Sign in or register with a Google account (ID token, access token, or auth code)."""
@@ -908,9 +951,45 @@ def google_login(
                 detail="ACCOUNT_DEACTIVATED: Your account has been deactivated by an administrator.",
             )
 
+        was_unverified = not bool(getattr(user, "email_verified", True))
+        current_provider = getattr(user, "auth_provider", None) or "local"
+        if was_unverified and current_provider == "local" and not existing_gid:
+            from integrity_checker.db.models import Class, ClassMembership, EssayRecord
+
+            has_existing_data = (
+                db.scalars(
+                    select(EssayRecord.id).where(EssayRecord.user_id == user.id).limit(1)
+                ).first()
+                is not None
+                or db.scalars(
+                    select(ClassMembership.id)
+                    .where(ClassMembership.student_id == user.id)
+                    .limit(1)
+                ).first()
+                is not None
+                or db.scalars(
+                    select(Class.id).where(Class.teacher_id == user.id).limit(1)
+                ).first()
+                is not None
+            )
+            if has_existing_data:
+                # Detach unverified pre-squatted email from populated local account
+                db.execute(
+                    delete(AuthToken).where(
+                        AuthToken.user_id == user.id,
+                        AuthToken.token_type == "activation",
+                    )
+                )
+                user.email = None
+                user.email_verified = True
+                db.flush()
+                user = None
+
+    if user:
         # Prevent OAuth Pre-Hijacking: if local email was never verified, wipe local password
         # and revoke any prior sessions, API keys, and pending auth tokens on that row.
         was_unverified = not bool(getattr(user, "email_verified", True))
+        existing_gid = getattr(user, "google_id", None)
         updates: dict = {}
         if existing_gid != google_id:
             updates["google_id"] = google_id
@@ -925,12 +1004,8 @@ def google_login(
             if full_name:
                 updates["full_name"] = full_name[:120]
             repo.delete_user_sessions(user.id)
-            db.query(ApiKey).filter(ApiKey.user_id == user.id).delete(
-                synchronize_session=False
-            )
-            db.query(AuthToken).filter(
-                AuthToken.user_id == user.id,
-            ).delete(synchronize_session=False)
+            db.execute(delete(ApiKey).where(ApiKey.user_id == user.id))
+            db.execute(delete(AuthToken).where(AuthToken.user_id == user.id))
         else:
             if "google" not in current_provider:
                 updates["auth_provider"] = (
@@ -1021,8 +1096,8 @@ def google_login(
 @router.post("/register", response_model=RegisterResponse)
 def register(
     request: RegisterRequest,
-    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
-    http_request: Request = None,  # type: ignore[assignment]
+    background_tasks: BackgroundTasks | None = Depends(_optional_background_tasks),
+    http_request: Request | None = Depends(_optional_http_request),
     db=Depends(get_db),
 ):
     """Self-register a new account (creates inactive user and sends HTML activation email)."""
@@ -1039,7 +1114,7 @@ def register(
     if not _is_valid_username_format(username):
         raise HTTPException(
             status_code=400,
-            detail="Username must be 3-50 characters, start and end with a letter or number, and contain only letters, numbers, dots, underscores, or hyphens.",
+            detail=_USERNAME_FORMAT_ERROR_DETAIL,
         )
 
     email = request.email.strip().lower()
@@ -1155,8 +1230,8 @@ def activate_account_get(token: str = Query(..., min_length=1), db=Depends(get_d
 @router.post("/resend-activation", response_model=MessageResponse)
 def resend_activation(
     request: ResendActivationRequest,
-    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
-    http_request: Request = None,  # type: ignore[assignment]
+    background_tasks: BackgroundTasks | None = Depends(_optional_background_tasks),
+    http_request: Request | None = Depends(_optional_http_request),
     db=Depends(get_db),
 ):
     """Resend the account activation email by email or username without enumerating accounts."""
@@ -1212,8 +1287,8 @@ def resend_activation(
 @router.post("/forgot-password", response_model=MessageResponse)
 def forgot_password(
     request: ForgotPasswordRequest,
-    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
-    http_request: Request = None,  # type: ignore[assignment]
+    background_tasks: BackgroundTasks | None = Depends(_optional_background_tasks),
+    http_request: Request | None = Depends(_optional_http_request),
     db=Depends(get_db),
 ):
     """Issue a one-time password reset token and send the HTML reset email."""
@@ -1299,7 +1374,7 @@ def verify_reset_token(token: str = Query(..., min_length=1), db=Depends(get_db)
 @router.post("/reset-password", response_model=MessageResponse)
 def reset_password(
     request: ResetPasswordRequest,
-    background_tasks: BackgroundTasks = None,  # type: ignore[assignment]
+    background_tasks: BackgroundTasks | None = Depends(_optional_background_tasks),
     db=Depends(get_db),
 ):
     """Reset a user's password using a valid password_reset token and revoke old sessions."""

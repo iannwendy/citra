@@ -12,6 +12,7 @@ import os
 import random
 import re
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from tenacity import (
@@ -30,11 +31,13 @@ from integrity_checker.retrieval.base import BaseScholarClient
 from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     author_match_score,
+    detect_and_strip_retraction_title,
     is_book_review_mismatch,
     normalize_arxiv_id,
     normalize_doi,
     title_similarity,
     title_tokens,
+    year_key,
 )
 
 logger = get_logger(__name__)
@@ -95,20 +98,33 @@ class OpenAlexClient(BaseScholarClient):
         OpenAlex DOI URL convention: https://api.openalex.org/works/doi:{doi}
         Falls back to /works?search={title} nếu không có DOI.
         """
-        self._last_status_code = None
+        self._reset_http_telemetry()
 
         # 1. DOI exact lookup
         if citation.doi:
             doi_norm = self._normalize_doi(citation.doi)
-            result = await self._lookup_by_doi(doi_norm, citation=citation)
-            if result and result.found:
-                return result
-            if self._last_status_code == 429:
-                return SourceCandidate(
-                    source_name=self.name,
-                    found=False,
-                    error=f"OpenAlex: rate limited (429) for DOI '{doi_norm}'",
-                )
+            if not doi_norm or any(seg in {".", ".."} for seg in doi_norm.split("/")):
+                if not (citation.title and citation.title.strip()):
+                    return SourceCandidate(
+                        source_name=self.name,
+                        found=False,
+                        error="OpenAlex: invalid DOI format",
+                    )
+            else:
+                result = await self._lookup_by_doi(doi_norm, citation=citation)
+                if result and result.found:
+                    return result
+                if (
+                    self._last_status_code == 429
+                    or (self._last_status_code is not None and self._last_status_code >= 500)
+                    or self._last_transport_error
+                    or not (citation.title and citation.title.strip())
+                ):
+                    return self._build_miss_or_error_candidate(
+                        "OpenAlex",
+                        doi_norm,
+                        clean_miss_error=f"OpenAlex: no results for DOI '{doi_norm}'",
+                    )
 
         # 2. Title-based search
         return await self._lookup_by_search(citation)
@@ -119,7 +135,9 @@ class OpenAlexClient(BaseScholarClient):
         citation: Citation | None = None,
     ) -> SourceCandidate | None:
         """GET /works/doi:{doi}."""
-        path = f"/works/doi:{doi}"
+        if not doi or any(seg in {".", ".."} for seg in doi.split("/")):
+            return None
+        path = f"/works/doi:{quote(doi, safe='/')}"
         data = await self._fetch_json_with_retry(path)
         if not data:
             return None
@@ -383,23 +401,18 @@ class OpenAlexClient(BaseScholarClient):
 
         # Thêm filter nếu có year
         filters: list[str] = []
-        if citation.year:
-            filters.append(f"publication_year:{citation.year}")
+        yr_int = year_key(citation.year)
+        if yr_int is not None:
+            filters.append(f"publication_year:{yr_int}")
         if filters:
             params["filter"] = ",".join(filters)
 
         data = await self._fetch_json_with_retry("/works", params=params)
         if not data:
-            if self._last_status_code == 429:
-                return SourceCandidate(
-                    source_name=self.name,
-                    found=False,
-                    error=f"OpenAlex: rate limited (429) for '{title[:60]}'",
-                )
-            return SourceCandidate(
-                source_name=self.name,
-                found=False,
-                error=f"OpenAlex: no response for '{title[:60]}'",
+            return self._build_miss_or_error_candidate(
+                "OpenAlex",
+                title[:60],
+                clean_miss_error=f"OpenAlex: no response for '{title[:60]}'",
             )
 
         results = data.get("results") or []
@@ -547,13 +560,8 @@ class OpenAlexClient(BaseScholarClient):
 
     @staticmethod
     def _normalize_doi(doi: str) -> str:
-        """Normalize DOI: lowercase, strip 'doi:' prefix, strip trailing period."""
-        d = doi.strip().lower()
-        if d.startswith("doi:"):
-            d = d[4:].strip()
-        if d.startswith("https://doi.org/"):
-            d = d[16:].strip()
-        return d.rstrip(".")
+        """Normalize DOI: lowercase, strip DOI URL/prefix, strip trailing punctuation."""
+        return normalize_doi(doi) or ""
 
     @staticmethod
     def _is_boilerplate_citation_abstract(text: str | None) -> bool:
@@ -594,23 +602,13 @@ class OpenAlexClient(BaseScholarClient):
         """Convert OpenAlex /works response → SourceCandidate."""
         # DOI — strip https://doi.org/ prefix
         doi_raw = work.get("doi") or ""
-        doi = doi_raw.replace("https://doi.org/", "").lower() if doi_raw else None
+        doi = normalize_doi(str(doi_raw)) if doi_raw else None
 
         # Title (OpenAlex dùng 'display_name' hoặc 'title')
-        title = work.get("title") or work.get("display_name")
-        is_retracted_title = False
-        if isinstance(title, str) and re.match(
-            r"^\s*(?:\[?RETRACTED(?:\s+ARTICLE)?\]?|WITHDRAWN)\s*[:\-–—]\s*",
-            title,
-            re.IGNORECASE,
-        ):
-            is_retracted_title = True
-            title = re.sub(
-                r"^\s*(?:\[?RETRACTED(?:\s+ARTICLE)?\]?|WITHDRAWN)\s*[:\-–—]\s*",
-                "",
-                title,
-                flags=re.IGNORECASE,
-            ).strip()
+        raw_title = work.get("title") or work.get("display_name")
+        title, is_retracted_title = detect_and_strip_retraction_title(
+            str(raw_title) if raw_title else None
+        )
 
         # Authors — từ 'authorships'
         authors: list[str] = []

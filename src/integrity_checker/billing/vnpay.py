@@ -342,7 +342,7 @@ def validate_vnpay_production_secret(
     hash_secret: str | None = None,
 ) -> None:
     """Raise ValueError in production when VNPAY_HASH_SECRET is missing, default, or weak."""
-    effective_env = (app_env or os.getenv("APP_ENV", "")).strip().lower()
+    effective_env = (app_env or os.getenv("APP_ENV") or "").strip().lower()
     is_prod = effective_env in ("production", "prod", "live")
     raw_secret = (
         hash_secret.strip()
@@ -605,6 +605,9 @@ class VNPayService:
         try:
             validate_vnpay_production_secret(hash_secret=self._explicit_hash_secret)
         except ValueError as exc:
+            from integrity_checker.logging import logger
+
+            logger.error(f"VNPay production secret validation failed: {exc}")
             return VNPayVerifyResult(
                 is_verified=False,
                 is_success=False,
@@ -620,7 +623,7 @@ class VNPayService:
                 pay_date=pay_date,
                 order_info=order_info,
                 tmn_code=tmn_code,
-                message_en=str(exc),
+                message_en="Payment gateway is not configured on the server.",
                 message_vi="Khoá bí mật VNPay trên môi trường Production chưa được cấu hình an toàn.",
             )
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { api, type Class, type ClassCreate } from '@/api/client';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import { UpgradeModal } from '@/components/UpgradeModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,15 +44,9 @@ export function CreateClassDialog({
     }
   }, [open]);
 
-  // Escape to close
-  useEffect(() => {
-    if (!open || upgradeOpen) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open, upgradeOpen, onClose]);
+  const { dialogProps, titleId } = useModalA11y<HTMLDivElement>(open, onClose, {
+    disableEscape: upgradeOpen,
+  });
 
   if (!open) return null;
 
@@ -85,18 +80,16 @@ export function CreateClassDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-class-title"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full max-h-[90dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl animate-scale-in"
+        {...dialogProps}
+        className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 max-w-md w-full max-h-[90dvh] overflow-y-auto p-4 sm:p-6 shadow-2xl animate-scale-in outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-5">
           <h2
-            id="create-class-title"
+            id={titleId}
             className="font-display text-lg font-bold text-slate-900 dark:text-white"
           >
             {t('teacher.createClassModalTitle')}

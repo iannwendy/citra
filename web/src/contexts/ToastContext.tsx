@@ -124,6 +124,10 @@ function readStoredHistory(): Toast[] {
 function writeStoredHistory(items: Toast[]): void {
   if (typeof window === 'undefined') return;
   try {
+    if (items.length === 0) {
+      sessionStorage.removeItem(STORAGE_KEY_HISTORY);
+      return;
+    }
     sessionStorage.setItem(
       STORAGE_KEY_HISTORY,
       JSON.stringify(items.slice(0, MAX_HISTORY_ITEMS))
@@ -192,6 +196,33 @@ export function ToastProvider({
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
+  // Purge active floating toasts & persisted notification history on logout, account switch, or 401/403 expiry
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleSessionCleared = () => {
+      timersRef.current.forEach((rec) => {
+        if (rec.timeoutId) clearTimeout(rec.timeoutId);
+      });
+      timersRef.current.clear();
+      exitTimersRef.current.forEach((tid) => clearTimeout(tid));
+      exitTimersRef.current.clear();
+      setIsPaused(false);
+      setToasts([]);
+      setHistory([]);
+      try {
+        sessionStorage.removeItem(STORAGE_KEY_HISTORY);
+      } catch {
+        // Ignore storage errors
+      }
+    };
+    window.addEventListener('citra:session-cleared', handleSessionCleared);
+    window.addEventListener('citra:unauthorized', handleSessionCleared);
+    return () => {
+      window.removeEventListener('citra:session-cleared', handleSessionCleared);
+      window.removeEventListener('citra:unauthorized', handleSessionCleared);
+    };
+  }, []);
+
   // Cleanup all timers on unmount
   useEffect(() => {
     const timers = timersRef.current;
@@ -217,7 +248,13 @@ export function ToastProvider({
     if (exitTimer) clearTimeout(exitTimer);
     exitTimersRef.current.delete(id);
 
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+    setToasts((prev) => {
+      const next = prev.filter((t) => t.id !== id);
+      if (next.length === 0) {
+        setIsPaused(false);
+      }
+      return next;
+    });
   }, []);
 
   // Trigger 120fps exit animation and remove
@@ -419,6 +456,7 @@ export function ToastProvider({
       if (rec.timeoutId) clearTimeout(rec.timeoutId);
     });
     timersRef.current.clear();
+    setIsPaused(false);
 
     setToasts((prev) => prev.map((t) => ({ ...t, isExiting: true })));
     const tid = setTimeout(() => {

@@ -6,10 +6,9 @@ import asyncio
 import json
 import threading
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -25,8 +24,10 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 MAX_ORPHAN_RECOVERY_ATTEMPTS = 2
+MAX_RECOVERY_DRAIN_CONCURRENCY = 2
 _REFUND_LOCK = threading.Lock()
 QUOTA_LEDGER_LOCK = _REFUND_LOCK
+_BACKGROUND_RECOVERY_TASKS: set[asyncio.Task[None]] = set()
 
 
 def resolve_persisted_upload_path(
@@ -97,7 +98,7 @@ def refresh_job_heartbeat(
             sess.commit()
         else:
             sess.flush()
-        return (res.rowcount or 0) == 1
+        return int(getattr(res, "rowcount", 0) or 0) == 1
     except Exception as exc:
         if owns_session:
             sess.rollback()
@@ -134,7 +135,7 @@ def refund_upload_quota_once(session: Session, essay_id: int, reason: str) -> bo
                 ),
                 {"essay_id": int(essay_id), "reason": safe_reason},
             )
-            if (cas_res.rowcount or 0) == 1:
+            if int(getattr(cas_res, "rowcount", 0) or 0) == 1:
                 uid_row = session.execute(
                     text("SELECT user_id FROM essays WHERE id = :essay_id"),
                     {"essay_id": int(essay_id)},
@@ -273,7 +274,7 @@ def recover_orphaned_essay_jobs(
             )
             session.commit()
             session.expire_all()
-            if (resched_res.rowcount or 0) != 1:
+            if int(getattr(resched_res, "rowcount", 0) or 0) != 1:
                 continue
 
             get_tracker().init(eid, is_retry=True)
@@ -328,29 +329,50 @@ def recover_orphaned_essay_jobs(
         session.close()
 
     if to_run and run_rescheduled:
-        pipeline = pipeline_factory()
 
-        async def _drain() -> None:
-            await asyncio.gather(
-                *(
-                    essays_routes._run_pipeline_task(
-                        eid, path_str, uid, pipeline, cleanup_file=False
-                    )
-                    for eid, path_str, uid in to_run
+        async def _run_single_recovered(
+            eid: int,
+            path_str: str,
+            uid: int,
+            pipeline: Any,
+            sem: asyncio.Semaphore,
+        ) -> None:
+            async with sem:
+                await essays_routes._run_pipeline_task(
+                    eid, path_str, uid, pipeline, cleanup_file=False
                 )
-            )
+
+        async def _drain(*, close_http_pool: bool = False) -> None:
+            sem = asyncio.Semaphore(MAX_RECOVERY_DRAIN_CONCURRENCY)
+            try:
+                pipeline = await asyncio.to_thread(pipeline_factory)
+                results = await asyncio.gather(
+                    *(
+                        _run_single_recovered(eid, path_str, uid, pipeline, sem)
+                        for eid, path_str, uid in to_run
+                    ),
+                    return_exceptions=True,
+                )
+                for res_item in results:
+                    if isinstance(res_item, BaseException):
+                        logger.error(f"Recovered essay job drain task failed: {res_item}")
+            finally:
+                if close_http_pool:
+                    from integrity_checker.retrieval.http_pool import close_loop_http_clients
+
+                    await close_loop_http_clients()
 
         try:
-            asyncio.get_running_loop()
-            has_running_loop = True
+            running_loop: asyncio.AbstractEventLoop | None = asyncio.get_running_loop()
         except RuntimeError:
-            has_running_loop = False
+            running_loop = None
 
-        if has_running_loop:
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                pool.submit(lambda: asyncio.run(_drain())).result()
+        if running_loop is not None:
+            bg_task = running_loop.create_task(_drain(close_http_pool=False))
+            _BACKGROUND_RECOVERY_TASKS.add(bg_task)
+            bg_task.add_done_callback(_BACKGROUND_RECOVERY_TASKS.discard)
         else:
-            asyncio.run(_drain())
+            asyncio.run(_drain(close_http_pool=True))
 
     return {
         "rescheduled": rescheduled_count,

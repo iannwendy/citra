@@ -247,6 +247,9 @@ export function AuditLogPage() {
               <button
                 type="button"
                 onClick={() => setUserFilter('')}
+                aria-label={
+                  lang === 'vi' ? 'Xóa bộ lọc người dùng' : 'Clear username filter'
+                }
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 <X className="h-4 w-4" />

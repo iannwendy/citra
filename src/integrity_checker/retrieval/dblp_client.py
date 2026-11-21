@@ -14,7 +14,9 @@ import os
 import re
 import threading
 import time
+import weakref
 from typing import Any
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 from tenacity import (
@@ -43,36 +45,56 @@ logger = get_logger(__name__)
 MIN_TITLE_SIMILARITY = 0.55
 _DBLP_DISAMBIG_RE = re.compile(r"\s+\d{4}$")
 _CORR_VOL_RE = re.compile(r"abs/(\d{4}\.\d{4,5})", re.IGNORECASE)
-_SHARED_DBLP_COOKIES = httpx.Cookies()
-_DBLP_LOOP_COOKIES: dict[int, httpx.Cookies] = {}
-_DBLP_LOOP_LOCKS: dict[int, tuple[asyncio.Semaphore, asyncio.Lock, asyncio.Lock]] = {}
+class _DblpCookieStore(dict[str, str]):
+    """Per-event-loop isolated cookie dict supporting httpx.Cookies.set(k, v) ergonomics."""
+
+    def set(self, name: str, value: str, **_kwargs: Any) -> None:
+        self[str(name)] = str(value)
+
+
+_SHARED_DBLP_COOKIES: _DblpCookieStore = _DblpCookieStore()
+_DBLP_LOOP_COOKIES: weakref.WeakKeyDictionary[
+    asyncio.AbstractEventLoop, _DblpCookieStore
+] = weakref.WeakKeyDictionary()
+_DBLP_LOOP_LOCKS: weakref.WeakKeyDictionary[
+    asyncio.AbstractEventLoop, tuple[asyncio.Semaphore, asyncio.Lock, asyncio.Lock]
+] = weakref.WeakKeyDictionary()
 _DBLP_GLOBAL_SLOT_LOCK = threading.Lock()
-_LAST_DBLP_REQ_AT: dict[int, float] = {}
+_LAST_DBLP_REQ_AT: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, float] = (
+    weakref.WeakKeyDictionary()
+)
+_LAST_DBLP_GLOBAL_AT: float = 0.0
 _DBLP_MIN_INTERVAL = 0.65
-_DBLP_CONSECUTIVE_FAILURES: dict[int, int] = {}
-_DBLP_CIRCUIT_OPEN_UNTIL: dict[int, float] = {}
+_DBLP_CONSECUTIVE_FAILURES: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, int] = (
+    weakref.WeakKeyDictionary()
+)
+_DBLP_CIRCUIT_OPEN_UNTIL: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, float] = (
+    weakref.WeakKeyDictionary()
+)
 _DBLP_CIRCUIT_COOLDOWN_SEC = 45.0
+_ALLOWED_DBLP_HOSTS = frozenset({"dblp.uni-trier.de", "dblp.org"})
 
 
-def _get_dblp_cookies() -> httpx.Cookies:
-    loop_id = id(asyncio.get_running_loop())
-    cookies = _DBLP_LOOP_COOKIES.get(loop_id)
-    if cookies is None:
-        cookies = httpx.Cookies()
-        if len(_SHARED_DBLP_COOKIES) > 0:
+def _get_dblp_cookies() -> _DblpCookieStore:
+    loop = asyncio.get_running_loop()
+    with _DBLP_GLOBAL_SLOT_LOCK:
+        cookies = _DBLP_LOOP_COOKIES.get(loop)
+        if cookies is None:
+            cookies = _DblpCookieStore(_SHARED_DBLP_COOKIES)
+            _DBLP_LOOP_COOKIES[loop] = cookies
+        elif not cookies and _SHARED_DBLP_COOKIES:
             cookies.update(_SHARED_DBLP_COOKIES)
-        _DBLP_LOOP_COOKIES[loop_id] = cookies
-    elif len(cookies) == 0 and len(_SHARED_DBLP_COOKIES) > 0:
-        cookies.update(_SHARED_DBLP_COOKIES)
-    return cookies
+        return cookies
 
 
 def _get_dblp_sync_primitives() -> tuple[asyncio.Semaphore, asyncio.Lock, asyncio.Lock]:
     loop = asyncio.get_running_loop()
-    loop_id = id(loop)
-    if loop_id not in _DBLP_LOOP_LOCKS:
-        _DBLP_LOOP_LOCKS[loop_id] = (asyncio.Semaphore(2), asyncio.Lock(), asyncio.Lock())
-    return _DBLP_LOOP_LOCKS[loop_id]
+    with _DBLP_GLOBAL_SLOT_LOCK:
+        prims = _DBLP_LOOP_LOCKS.get(loop)
+        if prims is None:
+            prims = (asyncio.Semaphore(2), asyncio.Lock(), asyncio.Lock())
+            _DBLP_LOOP_LOCKS[loop] = prims
+        return prims
 
 
 class DBLPClient(BaseScholarClient):
@@ -103,9 +125,19 @@ class DBLPClient(BaseScholarClient):
             "Accept": "application/json",
         }
 
+    @classmethod
+    def reset_circuit_state(cls) -> None:
+        """Reset per-loop DBLP circuit state and request pacing timestamps."""
+        global _LAST_DBLP_GLOBAL_AT
+        with _DBLP_GLOBAL_SLOT_LOCK:
+            _DBLP_CONSECUTIVE_FAILURES.clear()
+            _DBLP_CIRCUIT_OPEN_UNTIL.clear()
+            _LAST_DBLP_REQ_AT.clear()
+            _LAST_DBLP_GLOBAL_AT = 0.0
+
     async def lookup(self, citation: Citation) -> SourceCandidate:
         """Search DBLP by title (and optional author/year)."""
-        self._last_status_code = None
+        self._reset_http_telemetry()
 
         query = self._build_query(citation)
         if not query:
@@ -117,16 +149,10 @@ class DBLPClient(BaseScholarClient):
 
         data = await self._fetch_json_with_retry({"q": query, "h": 10, "format": "json"})
         if not data:
-            if self._last_status_code == 429:
-                return SourceCandidate(
-                    source_name=self.name,
-                    found=False,
-                    error=f"DBLP: rate limited (429) for '{query[:60]}'",
-                )
-            return SourceCandidate(
-                source_name=self.name,
-                found=False,
-                error=f"DBLP: no response for '{query[:60]}'",
+            return self._build_miss_or_error_candidate(
+                "DBLP",
+                query[:60],
+                clean_miss_error=f"DBLP: no response for '{query[:60]}'",
             )
 
         hits = self._extract_hits(data)
@@ -333,12 +359,12 @@ class DBLPClient(BaseScholarClient):
     async def _fetch_json_with_retry(self, params: dict[str, Any]) -> dict[str, Any] | None:
         import random
 
-        loop_id = id(asyncio.get_running_loop())
+        loop = asyncio.get_running_loop()
         now = time.monotonic()
         with _DBLP_GLOBAL_SLOT_LOCK:
-            open_until = _DBLP_CIRCUIT_OPEN_UNTIL.get(loop_id, 0.0)
+            open_until = _DBLP_CIRCUIT_OPEN_UNTIL.get(loop, 0.0)
         if now < open_until:
-            self._last_status_code = 503
+            self._record_transport_error(RuntimeError("DBLP local circuit open"))
             return None
 
         sem, challenge_lock, _ = _get_dblp_sync_primitives()
@@ -367,7 +393,7 @@ class DBLPClient(BaseScholarClient):
                         retry_after = self._record_http_response(resp)
                         if resp.status_code == 404:
                             with _DBLP_GLOBAL_SLOT_LOCK:
-                                _DBLP_CONSECUTIVE_FAILURES[loop_id] = 0
+                                _DBLP_CONSECUTIVE_FAILURES[loop] = 0
                             return None
                         if resp.status_code == 429:
                             seen_429 += 1
@@ -384,15 +410,15 @@ class DBLPClient(BaseScholarClient):
                         if resp.status_code != 200:
                             return None
                         with _DBLP_GLOBAL_SLOT_LOCK:
-                            _DBLP_CONSECUTIVE_FAILURES[loop_id] = 0
+                            _DBLP_CONSECUTIVE_FAILURES[loop] = 0
                         return resp.json()
         except RetryError as exc:
             self._record_transport_error(exc)
             with _DBLP_GLOBAL_SLOT_LOCK:
-                fails = _DBLP_CONSECUTIVE_FAILURES.get(loop_id, 0) + 1
-                _DBLP_CONSECUTIVE_FAILURES[loop_id] = fails
+                fails = _DBLP_CONSECUTIVE_FAILURES.get(loop, 0) + 1
+                _DBLP_CONSECUTIVE_FAILURES[loop] = fails
                 if fails >= 2:
-                    _DBLP_CIRCUIT_OPEN_UNTIL[loop_id] = time.monotonic() + _DBLP_CIRCUIT_COOLDOWN_SEC
+                    _DBLP_CIRCUIT_OPEN_UNTIL[loop] = time.monotonic() + _DBLP_CIRCUIT_COOLDOWN_SEC
             logger.warning(f"DBLP retry exhausted: {exc}")
             return None
         except Exception as exc:  # noqa: BLE001
@@ -401,66 +427,151 @@ class DBLPClient(BaseScholarClient):
             return None
         return None
 
+    @staticmethod
+    def _is_valid_dblp_challenge_url(url: str) -> bool:
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            return False
+        if (parsed.scheme or "").lower() != "https":
+            return False
+        if parsed.username is not None or parsed.password is not None or "@" in (parsed.netloc or ""):
+            return False
+        try:
+            port = parsed.port
+        except ValueError:
+            return False
+        if port not in (None, 443):
+            return False
+        return (parsed.hostname or "").lower() in _ALLOWED_DBLP_HOSTS
+
+    @staticmethod
+    def _capture_response_cookies(
+        resp: httpx.Response,
+        client: httpx.AsyncClient,
+        loop_cookies: dict[str, str],
+    ) -> None:
+        from http.cookies import SimpleCookie
+
+        headers = getattr(resp, "headers", None)
+        if headers is None:
+            return
+        get_list_fn = getattr(headers, "get_list", None)
+        if callable(get_list_fn):
+            raw_set_cookies = list(get_list_fn("set-cookie"))
+        else:
+            single = headers.get("set-cookie") or headers.get("Set-Cookie")
+            raw_set_cookies = [single] if single else []
+        if not raw_set_cookies:
+            return
+
+        extracted: dict[str, str] = {}
+        for header_val in raw_set_cookies:
+            if not header_val:
+                continue
+            jar = SimpleCookie()
+            try:
+                jar.load(str(header_val))
+                for k, morsel in jar.items():
+                    if k and morsel.value is not None:
+                        extracted[str(k)] = str(morsel.value)
+            except Exception:  # noqa: BLE001
+                continue
+        if not extracted:
+            return
+        with _DBLP_GLOBAL_SLOT_LOCK:
+            loop_cookies.update(extracted)
+            _SHARED_DBLP_COOKIES.update(extracted)
+        # Ensure shared httpx.AsyncClient cookie jar stays unmutated across tenants/loops
+        if len(client.cookies) > 0:
+            for k in extracted:
+                client.cookies.delete(k)
+
+    def _build_dblp_headers(self, loop_cookies: dict[str, str]) -> dict[str, str]:
+        with _DBLP_GLOBAL_SLOT_LOCK:
+            cookie_header = (
+                "; ".join(f"{k}={v}" for k, v in loop_cookies.items())
+                if loop_cookies
+                else ""
+            )
+        headers = dict(self._headers)
+        if cookie_header:
+            headers["Cookie"] = cookie_header
+        return headers
+
     async def _execute_dblp_get(self, params: dict[str, Any]) -> httpx.Response:
+        global _LAST_DBLP_GLOBAL_AT, _LAST_DBLP_REQ_AT
         from integrity_checker.retrieval.http_pool import get_shared_http_client
 
-        loop_id = id(asyncio.get_running_loop())
+        loop = asyncio.get_running_loop()
         loop_cookies = _get_dblp_cookies()
         with _DBLP_GLOBAL_SLOT_LOCK:
             now = time.monotonic()
-            if isinstance(_LAST_DBLP_REQ_AT, dict):
-                if loop_id in _LAST_DBLP_REQ_AT and _LAST_DBLP_REQ_AT[loop_id] == 0.0:
-                    _LAST_DBLP_REQ_AT.clear()
+            req_map: Any = _LAST_DBLP_REQ_AT
+            if not isinstance(req_map, weakref.WeakKeyDictionary):
+                scalar_at = float(req_map) if isinstance(req_map, (int, float)) else 0.0
+                _LAST_DBLP_REQ_AT = weakref.WeakKeyDictionary()
+                if scalar_at <= 0.0:
+                    _LAST_DBLP_GLOBAL_AT = 0.0
                     last_at = 0.0
                 else:
-                    last_at = max(_LAST_DBLP_REQ_AT.values(), default=0.0)
-                scheduled = max(now, last_at + _DBLP_MIN_INTERVAL) if last_at > 0 else now
-                _LAST_DBLP_REQ_AT[loop_id] = scheduled
+                    _LAST_DBLP_GLOBAL_AT = scalar_at
+                    last_at = scalar_at
+            elif loop in _LAST_DBLP_REQ_AT and _LAST_DBLP_REQ_AT[loop] == 0.0:
+                _LAST_DBLP_REQ_AT.clear()
+                _LAST_DBLP_GLOBAL_AT = 0.0
+                last_at = 0.0
             else:
-                last_at = float(_LAST_DBLP_REQ_AT or 0.0)
-                scheduled = max(now, last_at + _DBLP_MIN_INTERVAL) if last_at > 0 else now
+                last_at = (
+                    max(_LAST_DBLP_GLOBAL_AT, *_LAST_DBLP_REQ_AT.values())
+                    if _LAST_DBLP_REQ_AT
+                    else _LAST_DBLP_GLOBAL_AT
+                )
+            scheduled = max(now, last_at + _DBLP_MIN_INTERVAL) if last_at > 0 else now
+            _LAST_DBLP_GLOBAL_AT = scheduled
+            _LAST_DBLP_REQ_AT[loop] = scheduled
             wait_sec = scheduled - now
         if wait_sec > 0:
             await asyncio.sleep(wait_sec)
+
+        req_headers = self._build_dblp_headers(loop_cookies)
         client = get_shared_http_client(follow_redirects=True)
-        if len(loop_cookies) > 0:
-            client.cookies.update(loop_cookies)
         resp = await client.get(
             self.BASE_URL,
             params=params,
-            headers=self._headers,
+            headers=req_headers,
             timeout=self.timeout,
         )
+        self._capture_response_cookies(resp, client, loop_cookies)
+
         refresh = resp.headers.get("refresh") if hasattr(resp, "headers") else None
         if resp.status_code == 202 and refresh and "url=" in refresh:
             try:
                 wait_str, next_part = refresh.split(";", 1)
-                wait_sec_c = min(float(wait_str.strip()), 3.0)
-                next_path = next_part.split("url=", 1)[1].strip()
+                wait_sec_c = min(max(0.0, float(wait_str.strip())), 3.0)
+                next_path = next_part.split("url=", 1)[1].strip().strip("'\"")
+                challenge_url = urljoin(f"{self.BASE_ORIGIN}/", next_path)
+                if not self._is_valid_dblp_challenge_url(challenge_url):
+                    logger.warning(
+                        f"DBLP blocked off-origin Refresh challenge URL: {challenge_url!r}"
+                    )
+                    return resp
                 await asyncio.sleep(wait_sec_c + 0.5)
-                challenge_url = (
-                    f"{self.BASE_ORIGIN}{next_path}"
-                    if next_path.startswith("/")
-                    else next_path
-                )
                 resp = await client.get(
-                    challenge_url, headers=self._headers, timeout=self.timeout
+                    challenge_url,
+                    headers=self._build_dblp_headers(loop_cookies),
+                    timeout=self.timeout,
                 )
+                self._capture_response_cookies(resp, client, loop_cookies)
                 if resp.status_code == 202:
                     await asyncio.sleep(0.6)
                     resp = await client.get(
                         self.BASE_URL,
                         params=params,
-                        headers=self._headers,
+                        headers=self._build_dblp_headers(loop_cookies),
                         timeout=self.timeout,
                     )
-                loop_cookies.update(client.cookies)
-                with _DBLP_GLOBAL_SLOT_LOCK:
-                    _SHARED_DBLP_COOKIES.update(client.cookies)
+                    self._capture_response_cookies(resp, client, loop_cookies)
             except Exception as chal_exc:  # noqa: BLE001
                 logger.debug(f"DBLP challenge follow failed: {chal_exc}")
-        else:
-            loop_cookies.update(client.cookies)
-            with _DBLP_GLOBAL_SLOT_LOCK:
-                _SHARED_DBLP_COOKIES.update(client.cookies)
         return resp

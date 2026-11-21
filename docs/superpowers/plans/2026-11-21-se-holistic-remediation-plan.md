@@ -79,7 +79,7 @@
 
 *(NOTE: Do NOT delete or break `src/integrity_checker/extraction/regex_patterns.py` — `test_lint_clean.py` pins its compatibility surface; do NOT break `_VN_DIACRITIC_RE` or `_VN_EN_ACADEMIC_BRIDGE` re-exports in `matching/semantic.py`.)*
 
-- [ ] **Step 1 (RED):** Write failing unit & regression tests in `tests/unit/test_se_audit_core_extraction_logic.py` covering:
+- [x] **Step 1 (RED):** Write failing unit & regression tests in `tests/unit/test_se_audit_core_extraction_logic.py` covering:
   - `CORE-01`: `_INLINE_ENTRY_START_RE.match("Smith, J. K., " * 25 + "!")` and `NatureFormat().parse_reference_entry("1. " + "A. B. " * 25 + "Title!")` complete in `< 100 ms` + `NatureFormat` fallback title extraction works.
   - `CORE-02`: `DocxParser.parse()` rejects/caps a `.docx` with spoofed `info.file_size = 1024` over an oversized compressed `word/footnotes.xml` stream without OOM.
   - `CORE-03` & `CORE-12`: `parse_tei()` preserves preceding bibliography entries when `b1` is `"Smith, J. (2021). References Supporting Climate Action. Nature."` or `"Analyzing Primary Sources Through Digital Archives"`, and `_split_single_merged_raw_reference()` splits glued references after `"London."`, `"Oxford."`, `"Wiley."`, `"Ltd."`.
@@ -88,10 +88,10 @@
   - `CORE-08`: `MetricsCalculator.compute()` accounts for false negatives/positives across non-4-class predictions (`resource`, `missing_reference`, `style_inconsistent`) instead of reporting `100%` Macro-F1 at `10%` accuracy.
   - `CORE-09`..`CORE-15`: Uppercase/alpha Latin+Vietnamese regex fixes (`"đồng"` is NOT uppercase surname; `"Nguyễn"` preserved in `_ET_AL_NORM_RE`), NFD Vietnamese normalization + French physics non-Vietnamese guard + foreign code (`"Bộ luật Dân sự Pháp 1804"`) exemption & `29/02/2023` calendar check in `vn_legal_verifier.py`, `2020i..z` suffix support + MLA multi-book `AMBIGUOUS_MAPPING` + `bib.mapping_status` priority + `"John Smith"` vs `"Smith, J."` `DuplicateDetector` match, UTC `"Z"` timestamp + `" ".join(raw.split())` + full `AnalysisReport.from_dict` / `_match_features_from_dict` rehydration, `rules.py:3768` & `_intent_emb_cache` cleanup, single-pass regex in `Citation.from_raw`.
   - `QA-08`: Direct unit tests for all 8 remaining citation style modules (`ACMFormat`, `ACSFormat`, `AMAFormat`, `ChicagoFormat`, `CSEFormat`, `HarvardFormat`, `MLAFormat`, `NatureFormat`).
-- [ ] **Step 2 (Verify RED):** Run `.venv/bin/python -m pytest tests/unit/test_se_audit_core_extraction_logic.py -v` and confirm failures.
-- [ ] **Step 3 (GREEN + Mypy Clean):** Implement all fixes across Track 1 files and resolve mypy type errors in Track 1 files (`models/citation.py`, `patterns/*.py`, `reference_parser.py`, `vn_encoding.py`, `section_segmenter.py`, `author_parser.py`, `duplicate_detector.py`, `vn_legal_verifier.py`, `evaluation/performance_benchmark.py`).
-- [ ] **Step 4 (Verify GREEN, Benchmark Parity & Lint):** Run `.venv/bin/python -m ruff check` + `.venv/bin/python -m mypy --python-version 3.14 --no-implicit-optional --check-untyped-defs` on Track 1 files + `.venv/bin/python -m pytest tests/unit/test_se_audit_core_extraction_logic.py tests/unit/test_lint_clean.py tests/unit/test_wave1_linking_and_logic_hardening.py tests/unit/test_four_pillar_bottleneck_optimization.py tests/unit/test_wave3_eval_scripts_and_configs.py -W default -q`.
-- [ ] **Step 5 (Triad Review & Critic):** Pass `@reviewer-core` and `@critic-core` with `0` open issues.
+- [x] **Step 2 (Verify RED):** Run `.venv/bin/python -m pytest tests/unit/test_se_audit_core_extraction_logic.py -v` and confirm failures.
+- [x] **Step 3 (GREEN + Mypy Clean):** Implement all fixes across Track 1 files and resolve mypy type errors in Track 1 files (`models/citation.py`, `patterns/*.py`, `reference_parser.py`, `vn_encoding.py`, `section_segmenter.py`, `author_parser.py`, `duplicate_detector.py`, `vn_legal_verifier.py`, `evaluation/performance_benchmark.py`).
+- [x] **Step 4 (Verify GREEN, Benchmark Parity & Lint):** Run `.venv/bin/python -m ruff check` + `.venv/bin/python -m mypy --python-version 3.14 --no-implicit-optional --check-untyped-defs` on Track 1 files + `.venv/bin/python -m pytest tests/unit/test_se_audit_core_extraction_logic.py tests/unit/test_lint_clean.py tests/unit/test_wave1_linking_and_logic_hardening.py tests/unit/test_four_pillar_bottleneck_optimization.py tests/unit/test_wave3_eval_scripts_and_configs.py -W default -q`.
+- [x] **Step 5 (Triad Review & Critic):** Pass `@reviewer-core` and `@critic-core` with `0` open issues.
 
 ---
 
@@ -124,7 +124,7 @@
 - Modify: `src/integrity_checker/api/job_recovery.py`
 - Create Test: `tests/unit/test_se_audit_retrieval_and_worker.py`
 
-- [ ] **Step 1 (RED):** Write failing regression tests in `tests/unit/test_se_audit_retrieval_and_worker.py` covering:
+- [x] **Step 1 (RED):** Write failing regression tests in `tests/unit/test_se_audit_retrieval_and_worker.py` covering:
   - `RET-01`: `DoiRaClient._fetch_csl_json` blocks `302` redirects to private/loopback IPs (`127.0.0.1`, `169.254.169.254`) via manual hop validation + `SSRFSafeAsyncNetworkBackend` and caps streamed CSL body at `262,144` bytes; `DBLPClient._execute_dblp_get` rejects off-origin `Refresh:` URLs; `http_pool.py` sets `trust_env=False`.
   - `RET-02`: Bare-DOI / bare-arXiv `503` or timeout preserves `5xx`/timeout telemetry instead of `"no title for search"`, sets `SourceResult.api_exhausted = True`, and is NOT cached for 24h (`CLEAN_MISS_TTL_SECONDS`) in `PersistentVerificationCache`.
   - `RET-03` & `RET-09`: `worker.py:run_worker_loop` periodically runs `recover_orphaned_essay_jobs` inside `while True:`, wraps sync DB operations in `asyncio.to_thread`, and closes loop HTTP clients on exit; `job_recovery.py` bounds `_drain()` concurrency without freezing a running event loop; `PersistentVerificationCache` guards `hits`/`misses` with a lock and throttles `last_hit_at` writes.
@@ -133,10 +133,10 @@
   - `RET-06`: `HuggingFaceClient` never echoes unverified student `citation.title` verbatim; `TechStandardClient` only uses actual release years (never echoing non-release years).
   - `RET-07` & `RET-12`: `LocalDatabase.add_paper` handles mixed-case existing DOIs (`10.48550/arXiv...` vs `10.48550/arxiv...`) without `UNIQUE(arxiv_id)` `IntegrityError`; `add_papers_bulk` avoids nested-connection self-locks; `LocalDatabase.update_paper_abstract()` bumps mutation version and includes `-wal` `st_mtime_ns` in `_cache_key`; `_enrich_missing_abstract` enforces non-conflicting DOIs + author overlap and respects rate limiters.
   - `RET-08`, `RET-10`, `RET-11`, `RET-13`, `RET-14`, `RET-15`: `RateLimiter.report_success()` does not erase active `429` backoff, and titles containing `"429"` do not trip rate limiters; `is_retracted` preserved on `local_db` hits + `DataCite`/`DoiRa`/`bioRxiv`/`Crossref` retraction markers; `CircuitBreaker` `HALF_OPEN` reports positive remaining cooldown & private client breakers align with `reset()`; `Serper` HTTP 400 does not trip global quota + `SerpApi` uses `_select_best_scholar_item` & TTL negative cache + `npm` queries `/latest` when year is absent; `LinkValidator` checks DNS on non-standard ports & closes clients cleanly (`0` `ResourceWarning`s); `local_db` escapes `%`/`_` in `LIKE` & `DiskCache` appends SHA-256 digest.
-- [ ] **Step 2 (Verify RED):** Run `.venv/bin/python -m pytest tests/unit/test_se_audit_retrieval_and_worker.py -v` and confirm failures.
-- [ ] **Step 3 (GREEN + Mypy Clean):** Implement all Track 2 fixes cleanly and resolve mypy errors across Track 2 files.
-- [ ] **Step 4 (Verify GREEN & Lint):** Run `.venv/bin/python -m ruff check` + `.venv/bin/python -m mypy --python-version 3.14 --no-implicit-optional --check-untyped-defs` on Track 2 files + `.venv/bin/python -m pytest tests/unit/test_se_audit_retrieval_and_worker.py tests/unit/test_wave1_core_retrieval_hardening.py tests/unit/test_retrieval_orchestrator.py tests/unit/test_retrieval_clients.py tests/unit/test_nine_free_apis.py -W default -q`.
-- [ ] **Step 5 (Triad Review & Critic):** Pass `@reviewer-core` and `@critic-core` with `0` open issues.
+- [x] **Step 2 (Verify RED):** Run `.venv/bin/python -m pytest tests/unit/test_se_audit_retrieval_and_worker.py -v` and confirm failures.
+- [x] **Step 3 (GREEN + Mypy Clean):** Implement all Track 2 fixes cleanly and resolve mypy errors across Track 2 files.
+- [x] **Step 4 (Verify GREEN & Lint):** Run `.venv/bin/python -m ruff check` + `.venv/bin/python -m mypy --python-version 3.14 --no-implicit-optional --check-untyped-defs` on Track 2 files + `.venv/bin/python -m pytest tests/unit/test_se_audit_retrieval_and_worker.py tests/unit/test_wave1_core_retrieval_hardening.py tests/unit/test_retrieval_orchestrator.py tests/unit/test_retrieval_clients.py tests/unit/test_nine_free_apis.py -W default -q`.
+- [x] **Step 5 (Triad Review & Critic):** Pass `@reviewer-retrieval` and `@critic-retrieval` with `0` open issues.
 
 ---
 
@@ -170,7 +170,7 @@
 - Modify: `tests/unit/test_db_migrations.py` (`LATEST_SCHEMA_VERSION == "0013"`)
 - Create Test: `tests/unit/test_se_audit_backend_security_and_routes.py`
 
-- [ ] **Step 1 (RED):** Write failing regression tests in `tests/unit/test_se_audit_backend_security_and_routes.py` covering:
+- [x] **Step 1 (RED):** Write failing regression tests in `tests/unit/test_se_audit_backend_security_and_routes.py` covering:
   - `API-01` & `QA-02`: Stripe direct `httpx` checkout creation (`sk_test_*` / `sk_live_*`), closed-fail `502` when `sk_live_*` fails in `production` (and `403`/`400` if `force_demo=True` in `production` when `sk_live_*` is set, while preserving pending transaction creation for VNPay when `STRIPE_SECRET_KEY` is unset!), `_verify_stripe_session_paid` verifying `amount_total` & `currency`, blocking `/checkout-session/{id}/promo` on `stripe_live`/`stripe_test` sessions, VNPay retry minting fresh `vnp_txn_ref` & resetting `status="pending"`, paid VNPay IPN upgrading previously `canceled`/`failed` retried orders, and skipping `_seed_default_promo_codes` (`VIP100`) in `production`.
   - `API-02`: `LoginRequest` rejecting `>255`/`>256` char payloads (`422`), `_verify_password` returning `False` cleanly on `>72` UTF-8 bytes, per-IP `_login_ip_rate_limiter` blocking 35-username horizontal password spraying & defeating 4,096-key FIFO eviction, and dummy `bcrypt.checkpw` running on unknown usernames.
   - `API-03`: `_get_google_client_config()` returning `("", "")` (`503 GOOGLE_NOT_CONFIGURED`) in `production` when `GOOGLE_CLIENT_ID` is unset or placeholder.
@@ -178,10 +178,10 @@
   - `API-05`: Rate-limiting + cooldown on `PATCH /api/users/me` email changes, and `google_login` detaching unverified squatted `email` instead of merging into a local account that already owns essays/memberships.
   - `API-06`, `API-07`, `API-08`, `API-09`, `API-10`: `_docx_xml_is_safe()` stream-counting actual decompressed bytes across all ZIP entries (defeating spoofed `info.file_size` headers); `/sandbox/generate-pdf` rate-limited + input-capped + page/byte-capped + offloaded via `asyncio.to_thread`; `/sandbox/verify`, `/sandbox/public-verify`, `upload_essay`, `reanalyze_essay` offloading sync CPU/DB work; `_generate_pdf_bytes` clamping oversized `cit_display` & stripping XML-illegal control chars (zero ReportLab `LayoutError` on 5,000-char citation!); bounded `_sandbox_verify_rate_buckets` (keyed by `user.id`) & `ProgressTracker` `MAX_TRACKED_STATES` eviction; in-process disk-I/O single retry directly inside `_run_pipeline_task` without stranding SSE clients or burning upload quota.
   - `API-11`..`API-18` & `OPS-06`/`OPS-09`/`QA-08`: Batched class essay counts & pre-filtered `_compute_revision_diff` + `LOWER()` user indexes; `%%`/`__` wildcard escape in `search_students_for_teacher()`; committed expired-session delete + `db.refresh(user)` + expired `Session`/`AuthToken` pruning; sanitized `502`/`503` billing messages + stripped `_progress_snapshot` in exported/shared `style_profile`; `delete_user` cancelling admission waiters + admin username validation + `<= 25` API key cap + aligned `export-healed-docx` gate; FastAPI `lifespan` engine disposal, `Permissions-Policy` & `Cross-Origin-Resource-Policy` headers, `X-Request-ID` response/log header, `/api/health` SQLite `SELECT 1` probe, `logging.py` `enqueue=True` & `colorize=not is_prod`, BibTeX `{`/`}`/`%` sanitization, and route tests for all previously untested endpoints (`/auth/logout`, `/billing/subscription`, `/billing/promo/validate`, `/essays/sandbox/acl-sample`, `/health/grobid*`, `/export-healed-docx`, `/regenerate-code`).
-- [ ] **Step 2 (Verify RED):** Run `.venv/bin/python -m pytest tests/unit/test_se_audit_backend_security_and_routes.py -v` and confirm failures.
-- [ ] **Step 3 (GREEN + Mypy Clean):** Implement all Track 3 fixes cleanly (replacing `= None # type: ignore` with proper `| None = None` types and resolving all mypy errors in Track 3 files).
-- [ ] **Step 4 (Verify GREEN & Lint):** Run `.venv/bin/python -m ruff check` + `.venv/bin/python -m mypy --python-version 3.14 --no-implicit-optional --check-untyped-defs` on Track 3 files + `.venv/bin/python -m pytest tests/unit/test_se_audit_backend_security_and_routes.py tests/unit/test_db_migrations.py tests/unit/test_wave1_auth_billing_db_security.py tests/unit/test_wave1_rbac_classroom_export_fixes.py tests/test_public_guest_sandbox.py -W default -q`.
-- [ ] **Step 5 (Triad Review & Critic):** Pass `@reviewer-backend` and `@critic-backend` with `0` open issues.
+- [x] **Step 2 (Verify RED):** Run `.venv/bin/python -m pytest tests/unit/test_se_audit_backend_security_and_routes.py -v` and confirm failures.
+- [x] **Step 3 (GREEN + Mypy Clean):** Implement all Track 3 fixes cleanly (replacing `= None # type: ignore` with proper `| None = None` types and resolving all mypy errors in Track 3 files).
+- [x] **Step 4 (Verify GREEN & Lint):** Run `.venv/bin/python -m ruff check` + `.venv/bin/python -m mypy --python-version 3.14 --no-implicit-optional --check-untyped-defs` on Track 3 files + `.venv/bin/python -m pytest tests/unit/test_se_audit_backend_security_and_routes.py tests/unit/test_db_migrations.py tests/unit/test_wave1_auth_billing_db_security.py tests/unit/test_wave1_rbac_classroom_export_fixes.py tests/test_public_guest_sandbox.py -W default -q`.
+- [x] **Step 5 (Triad Review & Critic):** Pass `@reviewer-backend` and `@critic-backend` with `0` open issues.
 
 ---
 
@@ -208,17 +208,17 @@
 - Create: `web/tsconfig.e2e.json`
 - Create Test: `web/src/__tests__/seHolisticAuditRemediation.test.tsx`
 
-- [ ] **Step 1 (RED):** Write failing Vitest tests in `web/src/__tests__/seHolisticAuditRemediation.test.tsx` covering:
+- [x] **Step 1 (RED):** Write failing Vitest tests in `web/src/__tests__/seHolisticAuditRemediation.test.tsx` covering:
   - `FE-01`: `toSafeExternalHref` & `toSafeDoiHref` blocking `javascript:`, `data:`, `vbscript:` schemes across `SharedReportPage`, `PendingReviewsPage`, `EssayPage`, `StripeDemoCheckoutPage`.
   - `FE-02` & `FE-05`: `ToastProvider` wiping floating toasts & `sessionStorage['citra_notification_history_v1']` on `logout()`, account switch, `citra:unauthorized`, and `403 Account is deactivated`; `ClassDetailPage` using `api.downloadClassCsvFile`.
   - `FE-03`: `syncRobotsMeta` allowing indexation on `/`, `/pricing`, `/privacy`, `/terms` and matching `web/public/sitemap.xml`.
   - `FE-04`: `useEssayReport` clearing `terminalErrorRef` on explicit `refetch()` / `essayId` change, and `useDeleteEssay` purging `['essay-report', id]` / `['orphan-report', id]` & invalidating `['dashboard-stats']`.
   - `FE-06`, `FE-07`, `FE-08`: All 7 custom modals trapping focus & closing on `Escape` via `useModalA11y`; `HistoryPage` Delete button not nested inside `<a>`; `EvidenceGraphNode` keyboard `Enter`/`Space` + `aria-expanded`; `aria-label` on all 17 icon-only buttons & `htmlFor`/`id` form wiring.
   - `FE-09`..`FE-14` & `QA-11`: `validatePasswordClient` enforcing `6..128` chars + non-whitespace + `<= 72` UTF-8 bytes; dynamic month-aware `isValidExpiry`; Vietnamese localization on `IssuesPage`, `ErrorBoundary` (including throwing-child render & reset test!), `ConfirmationModal`, and `document.title`; student parser-pill gating on `HistoryPage` & `.PDF, .DOCX, .BIB, .RIS` error copy; `375px` mobile stacked cards on `PromoManagementPage`; Solva `theme-color` & `<MotionConfig reducedMotion="user">`.
-- [ ] **Step 2 (Verify RED):** Run `cd web && npx vitest run src/__tests__/seHolisticAuditRemediation.test.tsx` and confirm failures.
-- [ ] **Step 3 (GREEN):** Implement all Track 4 fixes (keeping `en.json` & `vi.json` in 100% key parity, strictly Tailwind v3.4 tokens, and keeping `EssayPage` compiled chunk `< 500 kB`). Also add `web/tsconfig.e2e.json`, configure `testIgnore: ['**/prod-live-verification.spec.ts']` (with optional `prod-smoke` project) in `web/playwright.config.ts`, and replace flaky `waitForTimeout`s in E2E specs with web-first assertions.
-- [ ] **Step 4 (Verify GREEN, Bundle & E2E Typecheck):** Run `cd web && npm run lint && npx tsc --noEmit && npx tsc -p tsconfig.e2e.json --noEmit && npx vitest run && npm run build`.
-- [ ] **Step 5 (Triad Review & Critic):** Pass `@reviewer-fullstack` and `@critic-fullstack` with `0` open issues.
+- [x] **Step 2 (Verify RED):** Run `cd web && npx vitest run src/__tests__/seHolisticAuditRemediation.test.tsx` and confirm failures.
+- [x] **Step 3 (GREEN):** Implement all Track 4 fixes (keeping `en.json` & `vi.json` in 100% key parity, strictly Tailwind v3.4 tokens, and keeping `EssayPage` compiled chunk `< 500 kB`). Also add `web/tsconfig.e2e.json`, configure `testIgnore: ['**/prod-live-verification.spec.ts']` (with optional `prod-smoke` project) in `web/playwright.config.ts`, and replace flaky `waitForTimeout`s in E2E specs with web-first assertions.
+- [x] **Step 4 (Verify GREEN, Bundle & E2E Typecheck):** Run `cd web && npm run lint && npx tsc --noEmit && npx tsc -p tsconfig.e2e.json --noEmit && npx vitest run && npm run build`.
+- [x] **Step 5 (Triad Review & Critic):** Pass `@reviewer-frontend` and `@critic-frontend` with `0` open issues.
 
 ---
 
@@ -251,15 +251,15 @@
 - Modify: `scripts/bump_version.py`
 - Create Test: `tests/unit/test_se_audit_qa_scripts_and_packaging.py`
 
-- [ ] **Step 1 (RED):** Write failing regression tests in `tests/unit/test_se_audit_qa_scripts_and_packaging.py` covering:
+- [x] **Step 1 (RED):** Write failing regression tests in `tests/unit/test_se_audit_qa_scripts_and_packaging.py` covering:
   - `QA-01`: `collect_tdtu_idiscovery.py` and `collect_200_open_theses.py` contain zero `verify=False` and zero `disable_warnings` calls, defaulting to `verify=True` (with optional `--ca-bundle`).
   - `QA-02`: Dependency parity across `pyproject.toml`, `requirements.txt`, and `requirements-dev.txt` (`httpcore`, `torch` declared; dead `aiohttp`/`aiofiles`/`arxiv`/`black`/`isort` removed; `pytest`/`pytest-asyncio`/`pytest-cov` upper bounds aligned; `web/package-lock.json` version matches `web/package.json`).
   - `QA-03` & `QA-04`: Zero `@pytest.mark.integration` tests inside `tests/unit/`, `test_grobid_integration.py` performs zero HTTP calls at import/collection time and asserts `isinstance(report, AnalysisReport)`, and `tests/conftest.py` isolates `DATA_DIR`/`CACHE_DIR` to `tmp_path`, disposes SQLite engines, resets rate limiters/singletons, and strips live API keys (`SERPAPI_API_KEY`, `SERPER_API_KEY`) by default.
   - `QA-05`, `QA-06`, `QA-07`, `QA-12`: `test_acl_retrieval_accuracy.py` honors `use_external_apis=False` (`clients=[]`), increments `false_positives`, separates `partial_matches`, guards `total_cases == 0`, and seeds sampling; `populate_venues.py` uses word-boundary matching (`"Robert"` != `"BERT"`) without blanket source overwrites; `import_s2orc.py` handles `None` lines & `--categories`/`--limit`; `import_openalex.py` caps consecutive `RequestException` retries; `backfill_citation_confidence.py` preserves `orig_doi`/`orig_venue` & closes session; `bump_version.py` updates `web/package-lock.json`, validates ISO `--date`, and refuses to sweep dirty unstaged version files during `--post-commit`; `collect_style_corpora.py`, `build_local_db.py`, and `sync_from_api.py` have zero hardcoded `/Users/iannwendy` paths and non-vacuous CLI behavior.
-- [ ] **Step 2 (Verify RED):** Run `.venv/bin/python -m pytest tests/unit/test_se_audit_qa_scripts_and_packaging.py -v` and confirm failures.
-- [ ] **Step 3 (GREEN):** Implement all Track 5 fixes, configure `[tool.mypy]` in `pyproject.toml` (`no_implicit_optional = true`, `check_untyped_defs = true`, `warn_return_any = false`, `ignore_missing_imports = true`, without hardcoded `python_version = "3.11"`), and close leaked SQLite/socket handles in `conftest.py` & the 4 flagged unit test files.
-- [ ] **Step 4 (Verify GREEN & Zero Warnings):** Run `.venv/bin/python -m ruff check pyproject.toml tests/ scripts/` and `.venv/bin/python -m pytest tests/unit/test_se_audit_qa_scripts_and_packaging.py tests/unit/test_serpapi_client.py tests/unit/test_system_health.py tests/unit/test_teacher_role.py tests/unit/test_sse_stats_consensus_v370.py tests/unit/test_url_resource_and_wiring_v369.py tests/unit/test_wave3_eval_scripts_and_configs.py -W error::ResourceWarning -q`.
-- [ ] **Step 5 (Triad Review & Critic):** Pass `@reviewer-backend` and `@critic-backend` with `0` open issues.
+- [x] **Step 2 (Verify RED):** Run `.venv/bin/python -m pytest tests/unit/test_se_audit_qa_scripts_and_packaging.py -v` and confirm failures.
+- [x] **Step 3 (GREEN):** Implement all Track 5 fixes, configure `[tool.mypy]` in `pyproject.toml` (`no_implicit_optional = true`, `check_untyped_defs = true`, `warn_return_any = false`, `ignore_missing_imports = true`, without hardcoded `python_version = "3.11"`), and close leaked SQLite/socket handles in `conftest.py` & the 4 flagged unit test files.
+- [x] **Step 4 (Verify GREEN & Zero Warnings):** Run `.venv/bin/python -m ruff check pyproject.toml tests/ scripts/` and `.venv/bin/python -m pytest tests/unit/test_se_audit_qa_scripts_and_packaging.py tests/unit/test_serpapi_client.py tests/unit/test_system_health.py tests/unit/test_teacher_role.py tests/unit/test_sse_stats_consensus_v370.py tests/unit/test_url_resource_and_wiring_v369.py tests/unit/test_wave3_eval_scripts_and_configs.py -W error::ResourceWarning -q`.
+- [x] **Step 5 (Triad Review & Critic):** Pass `@reviewer-qa` and `@critic-qa` with `0` open issues.
 
 ---
 
@@ -292,21 +292,21 @@
 
 *(CRITICAL GUARDRAILS: Keep both HTTP `:80` and HTTPS `:443` `location ~ ^/api/essays/[0-9]+/events$` and `location /api/` blocks in `web/nginx.prod.conf` per `test_essay_sse_events.py:658`; keep `Makefile` free of substring `"-m integration"` per `test_wave3_eval_scripts_and_configs.py:652`; keep all required badges/version/benchmark tokens in `README.md`, `CLAUDE.md`, `BENCHMARK_120K_NEURO_SYMBOLIC_REPORT.md`!)*
 
-- [ ] **Step 1 (RED):** Write failing static/integration verification tests in `tests/unit/test_se_audit_devops_configs_and_docs.py` asserting:
+- [x] **Step 1 (RED):** Write failing static/integration verification tests in `tests/unit/test_se_audit_devops_configs_and_docs.py` asserting:
   - `OPS-01`: `docker-compose.prod.yml` does NOT contain `--forwarded-allow-ips="*"` (uses `127.0.0.1` or omits wildcard), and `web/nginx.prod.conf` + `web/nginx.conf` set `proxy_set_header X-Forwarded-For $remote_addr;` with zero `$proxy_add_x_forwarded_for` occurrences.
   - `OPS-02` & `OPS-08`: `.github/workflows/ci-cd.yml` has zero `docker rm -f`, captures `PREV_TAG` and rolls back on health failure, runs `docker image prune -f` *after* healthcheck passes, runs `mypy`, runs `tsc -p tsconfig.e2e.json --noEmit`, asserts 5-manifest SemVer parity, and rotates `SERPAPI_API_KEY` symmetrically with `SERPER_API_KEY`.
   - `OPS-04`, `OPS-05`, `OPS-06`, `OPS-07`: `Dockerfile` has no `TRANSFORMERS_CACHE`, merges `fonts-dejavu-core` into single `apt-get`, `chown`s `/app/src` to `appuser:appgroup`; `docker-compose.prod.yml` sets `no-new-privileges:true`, pins `--workers 1` for inline mode, and sets `web.depends_on.api.condition: service_started`; `.dockerignore` excludes `graphify-out/`, `FinalReport_TDTU/`, `FinalReport_TDTU_VN/`, `.superpowers/`, `tests/`, `.agents/`, `.github/`, `.githooks/`, `.playwright-mcp/`; `web/.dockerignore` excludes `tests/`, `*.md`, `playwright.config*.ts`, `vitest.config.ts`; `web/nginx.prod.conf` includes `Content-Security-Policy` on static asset blocks (`always`) and `X-Request-ID` propagation, and `web/nginx.conf` includes CSP + auth `limit_req`.
   - `OPS-10`..`OPS-14`: `.env.example` drops dead `*_BASE_URL` vars and documents active runtime vars; `docker-compose.yml` sets `APP_ENV=${APP_ENV:-development}`; `Makefile` installs `[dev,onnx]` + configures `.githooks` + adds `typecheck` target (without substring `"-m integration"`); root `package.json` sets `"license": "MIT"` & `"private": true` without `"main": "index.js"`; `README.md` fixes `citra.io.vn/docs` & prod demo-account guidance; `docs/architecture/*` & `docs/reports/*` contain **zero** `/Users/iannwendy/` hardcoded URIs; `FinalReport_TDTU/PhuLuc.tex` & `FinalReport_TDTU_VN/PhuLuc.tex` inline `.env.example` without fragile `../.env.example` parent traversal, and `FinalReport_TDTU_VN/TaiLieuThamKhao.tex` localizes English `"Accessed"` strings.
-- [ ] **Step 2 (Verify RED):** Run `.venv/bin/python -m pytest tests/unit/test_se_audit_devops_configs_and_docs.py -v` and confirm failures.
-- [ ] **Step 3 (GREEN):** Implement all Track 6 fixes cleanly across containers, Nginx, Compose, CI/CD, configs, docs, and LaTeX appendices.
-- [ ] **Step 4 (Verify GREEN & Guard Suites):** Run `.venv/bin/python -m ruff check tests/unit/test_se_audit_devops_configs_and_docs.py` and `.venv/bin/python -m pytest tests/unit/test_se_audit_devops_configs_and_docs.py tests/unit/test_essay_sse_events.py tests/unit/test_wave3_eval_scripts_and_configs.py -q` and `cd web && npx vitest run src/__tests__/wave1_2_3_remediation.test.tsx`.
-- [ ] **Step 5 (Triad Review & Critic):** Pass `@reviewer-fullstack` and `@critic-fullstack` with `0` open issues.
+- [x] **Step 2 (Verify RED):** Run `.venv/bin/python -m pytest tests/unit/test_se_audit_devops_configs_and_docs.py -v` and confirm failures.
+- [x] **Step 3 (GREEN):** Implement all Track 6 fixes cleanly across containers, Nginx, Compose, CI/CD, configs, docs, and LaTeX appendices.
+- [x] **Step 4 (Verify GREEN & Guard Suites):** Run `.venv/bin/python -m ruff check tests/unit/test_se_audit_devops_configs_and_docs.py` and `.venv/bin/python -m pytest tests/unit/test_se_audit_devops_configs_and_docs.py tests/unit/test_essay_sse_events.py tests/unit/test_wave3_eval_scripts_and_configs.py -q` and `cd web && npx vitest run src/__tests__/wave1_2_3_remediation.test.tsx`.
+- [x] **Step 5 (Triad Review & Critic):** Pass `@reviewer-devops` and `@critic-devops` with `0` open issues.
 
 ---
 
 ## Phase 4: Whole-System Integration, Hostile Convergence Audit & Knowledge Graph Sync
 
-- [ ] **Step 1 (Global Full-Suite Verification):**
+- [x] **Step 1 (Global Full-Suite Verification):**
   - `.venv/bin/python -m ruff check src/ tests/ scripts/` -> `0` errors
   - `.venv/bin/python -m mypy src/integrity_checker` -> `0` errors
   - `.venv/bin/python -m pytest tests/ -q -W error::ResourceWarning` -> `100%` passed, `0` `ResourceWarning`s

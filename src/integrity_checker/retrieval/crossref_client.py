@@ -30,6 +30,7 @@ from integrity_checker.retrieval.base import BaseScholarClient
 from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     author_match_score,
+    detect_and_strip_retraction_title,
     is_book_review_mismatch,
     normalize_doi,
     title_similarity,
@@ -96,20 +97,33 @@ class CrossrefClient(BaseScholarClient):
         Returns:
             SourceCandidate với found=True nếu tìm thấy, found=False + error nếu không.
         """
-        self._last_status_code = None
+        self._reset_http_telemetry()
 
         # 1. DOI exact lookup (priority)
         if citation.doi:
             doi_norm = self._normalize_doi(citation.doi)
-            result = await self._lookup_by_doi(doi_norm)
-            if result and result.found:
-                return result
-            if self._last_status_code == 429:
-                return SourceCandidate(
-                    source_name=self.name,
-                    found=False,
-                    error=f"Crossref: rate limited (429) for DOI '{doi_norm}'",
-                )
+            if not doi_norm or any(seg in {".", ".."} for seg in doi_norm.split("/")):
+                if not (citation.title and citation.title.strip()) and not citation.authors:
+                    return SourceCandidate(
+                        source_name=self.name,
+                        found=False,
+                        error="Crossref: invalid DOI format",
+                    )
+            else:
+                result = await self._lookup_by_doi(doi_norm)
+                if result and result.found:
+                    return result
+                if (
+                    self._last_status_code == 429
+                    or (self._last_status_code is not None and self._last_status_code >= 500)
+                    or self._last_transport_error
+                    or (not (citation.title and citation.title.strip()) and not citation.authors)
+                ):
+                    return self._build_miss_or_error_candidate(
+                        "Crossref",
+                        doi_norm,
+                        clean_miss_error=f"Crossref: no results for DOI '{doi_norm}'",
+                    )
 
         # 2. Bibliographic query fallback
         return await self._lookup_by_bibliographic(citation)
@@ -204,16 +218,10 @@ class CrossrefClient(BaseScholarClient):
         params = {"query.bibliographic": query, "rows": 5}
         data = await self._fetch_json_with_retry("/works", params=params)
         if not data:
-            if self._last_status_code == 429:
-                return SourceCandidate(
-                    source_name=self.name,
-                    found=False,
-                    error=f"Crossref: rate limited (429) for query '{query[:60]}'",
-                )
-            return SourceCandidate(
-                source_name=self.name,
-                found=False,
-                error=f"Crossref: no response for query '{query[:60]}'",
+            return self._build_miss_or_error_candidate(
+                "Crossref",
+                query[:60],
+                clean_miss_error=f"Crossref: no response for query '{query[:60]}'",
             )
 
         items = data.get("message", {}).get("items", [])
@@ -361,13 +369,8 @@ class CrossrefClient(BaseScholarClient):
 
     @staticmethod
     def _normalize_doi(doi: str) -> str:
-        """Normalize DOI: lowercase, strip 'doi:' prefix, strip trailing period."""
-        d = doi.strip().lower()
-        if d.startswith("doi:"):
-            d = d[4:].strip()
-        if d.startswith("https://doi.org/"):
-            d = d[16:].strip()
-        return d.rstrip(".")
+        """Normalize DOI: lowercase, strip DOI URL/prefix, strip trailing punctuation."""
+        return normalize_doi(doi) or ""
 
     @staticmethod
     def _build_bibliographic_query(citation: Citation) -> str:
@@ -438,19 +441,7 @@ class CrossrefClient(BaseScholarClient):
         subtitle = subtitles[0].strip() if subtitles and subtitles[0] else None
         if title and subtitle and subtitle.lower() not in title.lower():
             title = f"{title.rstrip(':')}: {subtitle}"
-        is_retracted_title = False
-        if isinstance(title, str) and re.match(
-            r"^\s*(?:\[?RETRACTED(?:\s+ARTICLE)?\]?|WITHDRAWN)\s*[:\-–—]\s*",
-            title,
-            re.IGNORECASE,
-        ):
-            is_retracted_title = True
-            title = re.sub(
-                r"^\s*(?:\[?RETRACTED(?:\s+ARTICLE)?\]?|WITHDRAWN)\s*[:\-–—]\s*",
-                "",
-                title,
-                flags=re.IGNORECASE,
-            ).strip()
+        title, is_retracted_title = detect_and_strip_retraction_title(title)
 
         # Authors
         authors: list[str] = []

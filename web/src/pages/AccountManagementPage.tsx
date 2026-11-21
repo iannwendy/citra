@@ -331,6 +331,7 @@ export function AccountManagementPage() {
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
+                  aria-label={t('dashboard.clearSearch')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
                   <X className="h-4 w-4" />
@@ -543,6 +544,11 @@ export function AccountManagementPage() {
                           onClick={() => handleEdit(u)}
                           className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition-colors cursor-pointer"
                           title={lang === 'vi' ? 'Chỉnh sửa người dùng' : 'Edit user'}
+                          aria-label={
+                            lang === 'vi'
+                              ? `Chỉnh sửa người dùng ${u.username}`
+                              : `Edit user ${u.username}`
+                          }
                         >
                           <UserCog className="h-4 w-4" />
                         </button>
@@ -557,6 +563,13 @@ export function AccountManagementPage() {
                               : lang === 'vi'
                                 ? 'Xóa người dùng'
                                 : 'Delete user'
+                          }
+                          aria-label={
+                            u.id === currentUser?.id
+                              ? t('admin.cannotDeleteSelf')
+                              : lang === 'vi'
+                                ? `Xóa người dùng ${u.username}`
+                                : `Delete user ${u.username}`
                           }
                         >
                           <X className="h-4 w-4" />

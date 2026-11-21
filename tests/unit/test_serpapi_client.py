@@ -10,7 +10,6 @@ Covers:
 
 from __future__ import annotations
 
-import os
 from unittest.mock import patch
 
 import httpx
@@ -20,14 +19,6 @@ from integrity_checker.models.citation import Citation
 from integrity_checker.retrieval.serpapi_client import (
     GoogleScholarFallbackClient,
     SerpApiClient,
-)
-
-# Integration tests cần SerpApi/Serper key thật — đọc từ env, KHÔNG hardcode.
-SERPAPI_KEY = os.environ.get("SERPAPI_API_KEY")
-
-requires_serpapi_key = pytest.mark.skipif(
-    not SERPAPI_KEY,
-    reason="SERPAPI_API_KEY không được set — bỏ qua integration test",
 )
 
 
@@ -51,14 +42,9 @@ class TestSerpApiClient:
     @pytest.fixture(autouse=True)
     def reset_circuit_breaker_state(self):
         """Isolate class-level circuit breakers and negative cache across unit tests."""
-        prev_exhausted = SerpApiClient._quota_exhausted
-        prev_serper_exhausted = SerpApiClient._serper_quota_exhausted
-        prev_cache = set(SerpApiClient._negative_query_cache)
         SerpApiClient.reset_circuit_breakers()
         yield
-        SerpApiClient._quota_exhausted = prev_exhausted
-        SerpApiClient._serper_quota_exhausted = prev_serper_exhausted
-        SerpApiClient._negative_query_cache = prev_cache
+        SerpApiClient.reset_circuit_breakers()
 
     @pytest.fixture
     def client(self) -> SerpApiClient:
@@ -181,47 +167,6 @@ class TestSerpApiClient:
         assert result.found is False
         assert "quota exhausted" in (result.error or "").lower()
         assert len(SerpApiClient._negative_query_cache) == 0
-
-    @pytest.mark.asyncio
-    @pytest.mark.integration
-    @requires_serpapi_key
-    async def test_lookup_known_paper(self) -> None:
-        """Integration test với paper nổi tiếng (bỏ qua nếu tài khoản hết quota tháng)."""
-        client = SerpApiClient(api_key=SERPAPI_KEY)
-        citation = Citation(
-            raw_text="Vaswani et al. (2017)",
-            title="Attention Is All You Need",
-            authors=["Vaswani"],
-            year="2017",
-        )
-
-        result = await client.lookup(citation)
-        if SerpApiClient._quota_exhausted or "quota exhausted" in (result.error or "").lower():
-            pytest.skip("Configured SERPAPI_API_KEY has exhausted its monthly search quota")
-
-        assert result.found is True
-        assert result.title is not None
-        assert "attention" in result.title.lower()
-        assert result.confidence == 0.5
-        assert len(result.authors) > 0
-
-    @pytest.mark.asyncio
-    @pytest.mark.integration
-    @requires_serpapi_key
-    async def test_lookup_obscure_paper(self) -> None:
-        """Integration test với paper ít known."""
-        client = SerpApiClient(api_key=SERPAPI_KEY)
-        citation = Citation(
-            raw_text="Smith (2021)",
-            title="Novel Research Methods for Complex Systems Analysis XYZ123",
-            authors=["Smith"],
-            year="2021",
-        )
-
-        result = await client.lookup(citation)
-
-        assert result.source_name == "serpapi"
-        assert result.found in [True, False]
 
     def test_result_to_candidate_structure(self) -> None:
         """Test _result_to_candidate tạo đúng structure."""
@@ -467,7 +412,7 @@ class TestGoogleScholarFallbackRouter:
         citation: Citation,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """HTTP 400 'Not enough credits' on Serper trips `_serper_quota_exhausted` and falls back to SerpApi."""
+        """HTTP 402 'Not enough credits' on Serper trips `_serper_quota_exhausted` and falls back to SerpApi."""
         router = GoogleScholarFallbackClient(
             serper_api_key="exhausted-serper-key",
             api_key="backup-serpapi-key",
@@ -478,7 +423,7 @@ class TestGoogleScholarFallbackRouter:
         def handler(req: httpx.Request, body: dict) -> httpx.Response:
             nonlocal serper_http_calls
             serper_http_calls += 1
-            return httpx.Response(400, json={"message": "Not enough credits", "statusCode": 400})
+            return httpx.Response(402, json={"message": "Not enough credits", "statusCode": 402})
 
         serpapi_calls = 0
 

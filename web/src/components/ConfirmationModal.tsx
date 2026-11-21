@@ -6,6 +6,7 @@
  */
 import { AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Dialog,
   DialogContent,
@@ -32,13 +33,18 @@ export function ConfirmationModal({
   isOpen,
   title,
   message,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   variant = 'default',
   onConfirm,
   onCancel,
 }: ConfirmationModalProps) {
+  const { i18n } = useTranslation();
+  const isVi = Boolean(i18n.language?.startsWith('vi'));
   const [submitting, setSubmitting] = useState(false);
+
+  const resolvedConfirmLabel = confirmLabel ?? (isVi ? 'Xác nhận' : 'Confirm');
+  const resolvedCancelLabel = cancelLabel ?? (isVi ? 'Hủy' : 'Cancel');
 
   const handleConfirm = async () => {
     if (submitting) return;
@@ -81,7 +87,7 @@ export function ConfirmationModal({
             data-testid="confirmation-cancel-btn"
             className="w-full sm:w-auto"
           >
-            {cancelLabel}
+            {resolvedCancelLabel}
           </Button>
           <Button
             type="button"
@@ -91,7 +97,11 @@ export function ConfirmationModal({
             data-testid="confirmation-confirm-btn"
             className="w-full sm:w-auto"
           >
-            {submitting ? 'Working...' : confirmLabel}
+            {submitting
+              ? isVi
+                ? 'Đang xử lý...'
+                : 'Working...'
+              : resolvedConfirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

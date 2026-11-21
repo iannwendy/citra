@@ -983,6 +983,11 @@ def test_admin_cache_clear_circuit_breaker_reset_and_audit_stats_over_25_rows(
     orch._singleflight.coalesced_hits = 3
     monkeypatch.setattr(deps, "_pipeline_singleton", SimpleNamespace(orchestrator=orch))
 
+    from integrity_checker.api.routes import health as health_mod
+    from tests.conftest import make_stopped_grobid_manager_stub
+
+    monkeypatch.setattr(health_mod, "get_grobid_manager", make_stopped_grobid_manager_stub)
+
     app = create_app()
     client = TestClient(app)
 

@@ -28,11 +28,19 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export { AuthContext };
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+const DEACTIVATED_ACCOUNT_RE = /account is deactivated|ACCOUNT_DEACTIVATED/i;
+
+function emitSessionCleared(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('citra:session-cleared'));
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const tokenRef = useRef<string | null>(null);
+  const userIdRef = useRef<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(() => {
     try {
       return typeof window !== 'undefined' && Boolean(localStorage.getItem('token'));
@@ -49,39 +57,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     queryClient.clear();
     tokenRef.current = null;
+    userIdRef.current = null;
     setToken(null);
     setUser(null);
+    emitSessionCleared();
   }, []);
 
-  const validateToken = useCallback(async (tokenToValidate: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/auth/me`, {
-        headers: { Authorization: `Bearer ${tokenToValidate}` },
-      });
-      // 401/403 = token expired or revoked — drop it silently. Other
-      // statuses (5xx, network) keep the token so a transient backend
-      // outage doesn't sign the user out.
-      if (res.ok) {
-        const userData: User = await res.json();
-        tokenRef.current = tokenToValidate;
-        setToken(tokenToValidate);
-        setUser(userData);
-      } else if (res.status === 401 || res.status === 403) {
-        try {
-          localStorage.removeItem('token');
-        } catch {
-          // Ignore storage errors
+  const validateToken = useCallback(
+    async (tokenToValidate: string) => {
+      try {
+        const res = await fetch(`${API_BASE}/auth/me`, {
+          headers: { Authorization: `Bearer ${tokenToValidate}` },
+        });
+        // 401/403 = token expired, revoked, or account deactivated — drop session cleanly.
+        if (res.ok) {
+          const userData: User = await res.json();
+          if (userIdRef.current !== null && userIdRef.current !== userData.id) {
+            emitSessionCleared();
+          }
+          tokenRef.current = tokenToValidate;
+          userIdRef.current = userData.id;
+          setToken(tokenToValidate);
+          setUser(userData);
+        } else if (res.status === 401) {
+          clearSessionState();
+        } else if (res.status === 403) {
+          const errText = await res.text().catch(() => '');
+          if (errText && DEACTIVATED_ACCOUNT_RE.test(errText)) {
+            clearSessionState();
+          }
         }
-        tokenRef.current = null;
-        setToken(null);
-        setUser(null);
+      } catch {
+        // Network error — keep the token; the next mount retries validation.
+      } finally {
+        setIsLoading(false);
       }
-    } catch {
-      // Network error — keep the token; the next mount retries validation.
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    },
+    [clearSessionState],
+  );
 
   // Check for existing session on mount
   useEffect(() => {
@@ -98,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [validateToken]);
 
-  // Listen for global 401 session expiry events emitted by api/client.ts
+  // Listen for global 401/deactivated session expiry events emitted by api/client.ts
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handleUnauthorized = () => {
@@ -127,7 +140,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (!res.ok) {
-      // Parse error body safely — backend may return JSON or plain text/empty
       let detail = `Login failed (HTTP ${res.status})`;
       try {
         const contentType = res.headers.get('content-type') ?? '';
@@ -136,7 +148,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (typeof error?.detail === 'string') {
             detail = error.detail;
           } else if (Array.isArray(error?.detail)) {
-            // FastAPI validation errors: [{loc, msg, type}, ...]
             detail =
               error.detail
                 .map((d: { msg?: string }) => d?.msg)
@@ -157,8 +168,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const data = await res.json();
     queryClient.clear();
+    emitSessionCleared();
     localStorage.setItem('token', data.token);
     tokenRef.current = data.token;
+    userIdRef.current = data.user?.id ?? null;
     setToken(data.token);
     setUser(data.user);
   }, []);
@@ -208,8 +221,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const data = await res.json();
     queryClient.clear();
+    emitSessionCleared();
     localStorage.setItem('token', data.token);
     tokenRef.current = data.token;
+    userIdRef.current = data.user?.id ?? null;
     setToken(data.token);
     setUser(data.user);
   }, []);
@@ -249,11 +264,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       if (res.ok) {
         const userData: User = await res.json();
+        if (userIdRef.current !== null && userIdRef.current !== userData.id) {
+          emitSessionCleared();
+        }
         tokenRef.current = activeToken;
+        userIdRef.current = userData.id;
         setToken(activeToken);
         setUser(userData);
       } else if (res.status === 401) {
         clearSessionState();
+      } else if (res.status === 403) {
+        const errText = await res.text().catch(() => '');
+        if (errText && DEACTIVATED_ACCOUNT_RE.test(errText)) {
+          clearSessionState();
+        }
       }
     } catch {
       // Silently ignore refresh errors

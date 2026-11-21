@@ -37,7 +37,7 @@ import re
 
 from integrity_checker.extraction.patterns.base import CompiledPattern, PatternType
 from integrity_checker.extraction.patterns.registry import register_format
-from integrity_checker.matching.author_parser import parse_authors
+from integrity_checker.matching.author_parser import Author, parse_authors
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
 # =============================================================================
@@ -756,16 +756,9 @@ class CSEFormat:
         citation.confidence = self._estimate_confidence(citation)
         return citation if citation.title or citation.year else None
 
-    def _parse_authors(self, authors_str: str) -> list[str]:
-        """Parse author string into list of authors.
-
-        Args:
-            authors_str: Author string
-
-        Returns:
-            List of author strings (via parse_authors)
-        """
-        return parse_authors(authors_str)
+    def _parse_authors(self, authors_str: str) -> list[Author | str]:
+        """Parse author string into list of authors."""
+        return list(parse_authors(authors_str))
 
     def _parse_venue(self, citation: Citation, venue_text: str) -> None:
         """Parse venue information from remaining text."""

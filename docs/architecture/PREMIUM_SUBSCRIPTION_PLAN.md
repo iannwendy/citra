@@ -1,5 +1,9 @@
 # Kế Hoạch Triển Khai Hệ Thống Premium Subscription & Stripe Billing — CITRA (`SourceLogic`)
 
+> [!NOTE]
+> **Historical SaaS Design Specification:** Since this initial plan, `v3.89.5` expanded verification to **15+ federated scholarly & technical registries**, direct `httpx` Stripe REST checkout paired with **VNPay v2.1.0 HMAC-SHA512** (`src/integrity_checker/billing/vnpay.py`), and the consolidated Solva report header (`EssayHeader.tsx` replacing early `EssayTabNav.tsx`). See [`../../README.md`](../../README.md).
+
+
 > [!IMPORTANT]
 > Tài liệu này thiết kế toàn diện mô hình thương mại hóa SaaS (**Freemium → Pro → Ultra**), chiến lược giá theo tháng/năm chuẩn tâm lý học Marketing, cơ chế kiểm soát hạn mức (**Quota & Feature Gating**), và luồng thanh toán **Stripe Demo** (hỗ trợ song song **Stripe Test Mode `sk_test_`** và **Interactive Stripe Sandbox** không cần cấu hình key ngoài khi chạy demo đồ án).
 
@@ -81,9 +85,9 @@ sequenceDiagram
 
 ## 3. Thiết Kế Cơ Sở Dữ Liệu & Cấu Hình Backend
 
-### 3.1. Mở rộng Model [`User`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/db/models.py#L22-L60) & Bảng Giao Dịch Mới
+### 3.1. Mở rộng Model [`User`](../../src/integrity_checker/db/models.py#L22-L60) & Bảng Giao Dịch Mới
 
-Cập nhật trong [models.py](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/db/models.py) và thêm inline migration tự động trong [session.py](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/db/session.py#L76-L188):
+Cập nhật trong [models.py](../../src/integrity_checker/db/models.py) và thêm inline migration tự động trong [session.py](../../src/integrity_checker/db/session.py#L76-L188):
 
 1. **Các cột bổ sung vào bảng `users`:**
    - `plan_tier`: `String(20)`, mặc định `"basic"` (`"basic" | "pro" | "ultra"`). Tài khoản `admin` mặc định được cấp `"ultra"`.
@@ -177,7 +181,7 @@ PLAN_CATALOG = {
 
 ### 3.3. Các Điểm Chặn Hạn Mức (Enforcement Hooks) Trên Backend
 
-1. **Chặn tại Endpoint Upload Tài liệu ([`src/integrity_checker/api/routes/essays.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/essays.py#L240-L320)):**
+1. **Chặn tại Endpoint Upload Tài liệu ([`src/integrity_checker/api/routes/essays.py`](../../src/integrity_checker/api/routes/essays.py#L240-L320)):**
    - **Bước 1 (Lazy Quota Reset):** Kiểm tra nếu `now >= user.quota_reset_at` (hoặc chưa khởi tạo), đặt lại `monthly_uploads_used = 0` và cộng thêm 30 ngày vào `quota_reset_at`. Nếu `current_period_end` của gói trả phí đã hết hạn mà `cancel_at_period_end == 1`, tự động hạ xuống `"basic"`.
    - **Bước 2 (Kiểm tra số lượt Upload tháng):** Nếu `user.monthly_uploads_used >= plan.max_uploads_per_month`, trả về `HTTP 402 Payment Required` với chi tiết:
      ```json
@@ -190,14 +194,14 @@ PLAN_CATALOG = {
        "limit": 3
      }
      ```
-   - **Bước 3 (Kiểm tra dung lượng file PDF):** Truyền `max_bytes = plan.max_file_size_mb * 1024 * 1024` vào hàm [`_read_pdf_upload_bounded()`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/essays.py#L217-L233). Nếu vượt quá (ví dụ file 8MB trên gói Basic 5MB), trả về `HTTP 413` kèm `code: "FILE_SIZE_LIMIT_EXCEEDED"`.
+   - **Bước 3 (Kiểm tra dung lượng file PDF):** Truyền `max_bytes = plan.max_file_size_mb * 1024 * 1024` vào hàm [`_read_pdf_upload_bounded()`](../../src/integrity_checker/api/routes/essays.py#L217-L233). Nếu vượt quá (ví dụ file 8MB trên gói Basic 5MB), trả về `HTTP 413` kèm `code: "FILE_SIZE_LIMIT_EXCEEDED"`.
    - **Bước 4 (Kiểm tra số trang PDF tức thì bằng PyMuPDF):** Mở buffer PDF bằng `fitz.open(stream=content, filetype="pdf")` để đếm `len(doc)`. Nếu `num_pages > plan.max_pages_per_pdf` (ví dụ bài 25 trang trên gói Basic giới hạn 15 trang), trả về `HTTP 402` kèm `code: "PAGE_LIMIT_EXCEEDED"`.
    - **Bước 5 (Tăng bộ đếm):** Sau khi tạo `EssayRecord` thành công, tăng `user.monthly_uploads_used += 1`.
 
 2. **Chặn tại Pipeline Kiểm chứng (`_run_pipeline_task`):**
    - Với gói `basic`: Giới hạn danh sách trích dẫn đưa vào bước Retrieval tối đa `30` trích dẫn đầu tiên (gắn cờ thông báo nếu bài có nhiều hơn 30 trích dẫn) và tắt `serpapi` fallback.
 
-3. **Chặn tại Endpoint Xuất Báo Cáo ([`src/integrity_checker/api/routes/report.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/report.py#L38-L76)):**
+3. **Chặn tại Endpoint Xuất Báo Cáo ([`src/integrity_checker/api/routes/report.py`](../../src/integrity_checker/api/routes/report.py#L38-L76)):**
    - Khi gọi `GET /api/essays/{id}/report?format=pdf|docx|csv`, kiểm tra `format in plan.allowed_export_formats`. Nếu user đang ở gói `basic`, trả về `HTTP 402` (`code: "EXPORT_FORMAT_LOCKED"`, `required_tier: "pro"`).
 
 4. **Endpoints Thanh toán mới (`src/integrity_checker/api/routes/billing.py`):**
@@ -220,10 +224,10 @@ PLAN_CATALOG = {
 | **1. Bảng Giá (Pricing Page & Section)** | `web/src/pages/PricingPage.tsx` & `LandingPage.tsx` | • Thanh chuyển đổi **Theo tháng / Theo năm (Tiết kiệm 20%)**.<br>• 3 Card gói cước: **Basic ($0)**, **Pro ($20/tháng — $16/tháng khi trả năm, viền sáng Indigo + badge Phổ Biến Nhất)**, **Ultra ($200/tháng — $160/tháng khi trả năm, phong cách Gold/Violet cao cấp)**.<br>• Bảng so sánh chi tiết tính năng (Feature Comparison Matrix) & FAQ thanh toán. |
 | **2. Giao diện Thanh toán Stripe Demo** | `web/src/pages/StripeDemoCheckoutPage.tsx` (`/billing/demo-checkout`) | • Giao diện chuẩn **Stripe Hosted Checkout** (cột trái: tóm tắt đơn hàng CITRA Pro/Ultra, số tiền, chu kỳ; cột phải: form thẻ tín dụng Stripe).<br>• Nút **"Điền nhanh thẻ Test Visa 4242"** (1-click autofill `4242 4242 4242 4242`, ngày hết hạn, CVC) để demo mượt mà trong 3 giây. |
 | **3. Trang Kết quả Thanh toán** | `web/src/pages/BillingSuccessPage.tsx` (`/billing/success`) | • Tự động gọi `verify-session`, làm mới `AuthContext`, hiển thị biên lai thanh toán, hạn mức mới và nút quay lại tải tài liệu ngay. |
-| **4. Thanh Hạn mức Sidebar (Quota Meter)** | [`web/src/components/AppLayout.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/components/AppLayout.tsx) | • Đặt ở góc dưới Sidebar (trên khu vực Profile): Hiển thị Badge gói (`BASIC` / `PRO` / `ULTRA`), thanh tiến trình `Đã dùng 2/3 bài tháng này`, và nút CTA **"Nâng cấp Pro ⚡"** cho user gói Basic. |
+| **4. Thanh Hạn mức Sidebar (Quota Meter)** | [`web/src/components/AppLayout.tsx`](../../web/src/components/AppLayout.tsx) | • Đặt ở góc dưới Sidebar (trên khu vực Profile): Hiển thị Badge gói (`BASIC` / `PRO` / `ULTRA`), thanh tiến trình `Đã dùng 2/3 bài tháng này`, và nút CTA **"Nâng cấp Pro ⚡"** cho user gói Basic. |
 | **5. Modal Nâng cấp Ngữ cảnh** | `web/src/components/UpgradeModal.tsx` | • Bật lên tự động khi: (1) Hết lượt upload tháng, (2) Chọn file PDF > 5MB hoặc > 15 trang ở gói Basic, (3) Bấm nút Xuất PDF/DOCX/CSV ở gói Basic, (4) Bấm vào tính năng Batch Upload. |
-| **6. Khóa Mềm (Soft Paywall) trên Trang Báo Cáo** | [`EssayTabNav.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/essay/EssayTabNav.tsx) & [`EssayActionBar.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/essay/EssayActionBar.tsx) | • Hiển thị biểu tượng `PRO` nhỏ cạnh nút xuất **PDF / DOCX / CSV** và các tab nâng cao (**Logic Trace, Document Inspector, Consistency**) đối với user gói Basic. Khi bấm vào sẽ mở `UpgradeModal` thay vì báo lỗi thô. |
-| **7. Quản lý Gói cước & Hóa đơn** | [`web/src/pages/SettingsPage.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/SettingsPage.tsx) | • Thêm khu vực **Gói cước & Thanh toán (Subscription & Billing)**: Xem gói hiện tại, ngày gia hạn, lịch sử hóa đơn (`BillingTransaction`), nút nâng cấp hoặc hủy gia hạn. |
+| **6. Khóa Mềm (Soft Paywall) trên Trang Báo Cáo** | `EssayTabNav.tsx` & [`EssayActionBar.tsx`](../../web/src/pages/essay/EssayActionBar.tsx) | • Hiển thị biểu tượng `PRO` nhỏ cạnh nút xuất **PDF / DOCX / CSV** và các tab nâng cao (**Logic Trace, Document Inspector, Consistency**) đối với user gói Basic. Khi bấm vào sẽ mở `UpgradeModal` thay vì báo lỗi thô. |
+| **7. Quản lý Gói cước & Hóa đơn** | [`web/src/pages/SettingsPage.tsx`](../../web/src/pages/SettingsPage.tsx) | • Thêm khu vực **Gói cước & Thanh toán (Subscription & Billing)**: Xem gói hiện tại, ngày gia hạn, lịch sử hóa đơn (`BillingTransaction`), nút nâng cấp hoặc hủy gia hạn. |
 | **8. Đa ngôn ngữ (VI / EN)** | `web/src/i18n/locales/vi.json` & `en.json` | • Bổ sung toàn bộ từ khóa song ngữ Việt – Anh cho bảng giá, thông báo hạn mức, và cổng thanh toán Stripe. |
 
 ---
@@ -232,22 +236,22 @@ PLAN_CATALOG = {
 
 ### Phase 1: Database Schema, Cấu hình Gói cước & Quota Service (Backend)
 - [ ] Tạo `src/integrity_checker/billing/__init__.py` và `src/integrity_checker/billing/plans.py` định nghĩa `PLAN_CATALOG` (Basic, Pro, Ultra) và helper kiểm tra quyền/hạn mức.
-- [ ] Cập nhật [`src/integrity_checker/db/models.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/db/models.py): Thêm các cột subscription/quota vào `User` và tạo model `BillingTransaction`.
-- [ ] Cập nhật [`src/integrity_checker/db/session.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/db/session.py): Bổ sung inline migration `ALTER TABLE users ADD COLUMN ...` cho các DB hiện hành và cấp mặc định gói `ultra` cho tài khoản `admin`.
+- [ ] Cập nhật [`src/integrity_checker/db/models.py`](../../src/integrity_checker/db/models.py): Thêm các cột subscription/quota vào `User` và tạo model `BillingTransaction`.
+- [ ] Cập nhật [`src/integrity_checker/db/session.py`](../../src/integrity_checker/db/session.py): Bổ sung inline migration `ALTER TABLE users ADD COLUMN ...` cho các DB hiện hành và cấp mặc định gói `ultra` cho tài khoản `admin`.
 - [ ] Cập nhật schema trả về của `/api/auth/me` và `/api/users/me` để gửi kèm thông tin `plan_tier`, `billing_cycle`, `subscription_status`, `quota` (`used`, `limit`, `max_file_size_mb`, `max_pages_per_pdf`, `reset_at`).
 
 ### Phase 2: Stripe Demo Billing API & Enforcement Hooks (Backend)
-- [ ] Tạo `src/integrity_checker/api/routes/billing.py` và đăng ký vào [`src/integrity_checker/api/main.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/main.py) dưới prefix `/api/billing`.
-- [ ] Tích hợp kiểm tra hạn mức (số lượt tháng, dung lượng file theo gói, số trang PDF) vào [`src/integrity_checker/api/routes/essays.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/essays.py).
-- [ ] Tích hợp kiểm tra quyền xuất báo cáo (`pdf`, `docx`, `csv`) vào [`src/integrity_checker/api/routes/report.py`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/src/integrity_checker/api/routes/report.py).
+- [ ] Tạo `src/integrity_checker/api/routes/billing.py` và đăng ký vào [`src/integrity_checker/api/main.py`](../../src/integrity_checker/api/main.py) dưới prefix `/api/billing`.
+- [ ] Tích hợp kiểm tra hạn mức (số lượt tháng, dung lượng file theo gói, số trang PDF) vào [`src/integrity_checker/api/routes/essays.py`](../../src/integrity_checker/api/routes/essays.py).
+- [ ] Tích hợp kiểm tra quyền xuất báo cáo (`pdf`, `docx`, `csv`) vào [`src/integrity_checker/api/routes/report.py`](../../src/integrity_checker/api/routes/report.py).
 
 ### Phase 3: Giao diện Bảng giá Chuẩn Marketing, Stripe Checkout & Paywall UI (Frontend)
-- [ ] Mở rộng kiểu `User` và API client trong [`web/src/api/client.ts`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/api/client.ts) + [`web/src/hooks/useRole.ts`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/hooks/useRole.ts) để hỗ trợ kiểm tra gói cước (`planTier`, `isPro`, `isUltra`, `quota`).
+- [ ] Mở rộng kiểu `User` và API client trong [`web/src/api/client.ts`](../../web/src/api/client.ts) + [`web/src/hooks/useRole.ts`](../../web/src/hooks/useRole.ts) để hỗ trợ kiểm tra gói cước (`planTier`, `isPro`, `isUltra`, `quota`).
 - [ ] Xây dựng `PricingPage.tsx` (hỗ trợ cả truy cập công khai và trong AppLayout), `StripeDemoCheckoutPage.tsx`, `BillingSuccessPage.tsx`, và `UpgradeModal.tsx`.
-- [ ] Bổ sung **Quota Usage Card** + **Plan Badge** vào Sidebar trong [`web/src/components/AppLayout.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/components/AppLayout.tsx).
-- [ ] Tích hợp kiểm tra kích thước file & hiển thị banner hạn mức trực quan trên [`UploadPage.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/UploadPage.tsx) và [`BatchUploadPage.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/BatchUploadPage.tsx).
-- [ ] Tích hợp Soft Paywall trên [`EssayActionBar.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/essay/EssayActionBar.tsx) (nút Export) và [`SettingsPage.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/SettingsPage.tsx) (quản lý gói & lịch sử hóa đơn).
-- [ ] Bổ sung Pricing Section vào [`LandingPage.tsx`](file:///Users/iannwendy/Desktop/DATN/essay-integrity-checker/web/src/pages/LandingPage.tsx) để thu hút khách truy cập ngay từ trang chủ.
+- [ ] Bổ sung **Quota Usage Card** + **Plan Badge** vào Sidebar trong [`web/src/components/AppLayout.tsx`](../../web/src/components/AppLayout.tsx).
+- [ ] Tích hợp kiểm tra kích thước file & hiển thị banner hạn mức trực quan trên [`UploadPage.tsx`](../../web/src/pages/UploadPage.tsx) và [`BatchUploadPage.tsx`](../../web/src/pages/BatchUploadPage.tsx).
+- [ ] Tích hợp Soft Paywall trên [`EssayActionBar.tsx`](../../web/src/pages/essay/EssayActionBar.tsx) (nút Export) và [`SettingsPage.tsx`](../../web/src/pages/SettingsPage.tsx) (quản lý gói & lịch sử hóa đơn).
+- [ ] Bổ sung Pricing Section vào [`LandingPage.tsx`](../../web/src/pages/LandingPage.tsx) để thu hút khách truy cập ngay từ trang chủ.
 
 ### Phase 4: Kiểm thử Tự động (Unit & Integration Tests)
 - [ ] Viết unit/integration tests cho luồng kiểm tra hạn mức Basic/Pro/Ultra, tạo phiên thanh toán Stripe Demo, xác thực nâng cấp gói và hạ cấp gói.

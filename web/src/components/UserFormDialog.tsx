@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { PlanTier, User, UserCreate, UserUpdate } from '@/api/client';
 import { api } from '@/api/client';
+import { validatePasswordClient } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -84,20 +85,9 @@ export function UserFormDialog({
     setError('');
 
     if (password) {
-      if (!password.trim() || password.length < 6) {
-        setError(
-          lang === 'vi'
-            ? 'Mật khẩu phải có ít nhất 6 ký tự và không chỉ gồm khoảng trắng.'
-            : 'Password must be at least 6 characters and not whitespace-only.',
-        );
-        return;
-      }
-      if (new TextEncoder().encode(password).length > 72) {
-        setError(
-          lang === 'vi'
-            ? 'Mật khẩu không được vượt quá 72 byte UTF-8.'
-            : 'Password must not exceed 72 UTF-8 bytes.',
-        );
+      const pwCheck = validatePasswordClient(password, lang);
+      if (!pwCheck.valid) {
+        setError(pwCheck.error || t('admin.genericError'));
         return;
       }
     }
@@ -159,8 +149,9 @@ export function UserFormDialog({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label>{t('admin.usernameRequiredLabel')}</Label>
+            <Label htmlFor="user-form-username">{t('admin.usernameRequiredLabel')}</Label>
             <Input
+              id="user-form-username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -173,7 +164,7 @@ export function UserFormDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>
+            <Label htmlFor="user-form-password">
               {isEdit
                 ? lang === 'vi'
                   ? 'Đặt lại mật khẩu (tùy chọn)'
@@ -181,13 +172,14 @@ export function UserFormDialog({
                 : t('admin.passwordRequiredLabel')}
             </Label>
             <Input
+              id="user-form-password"
               type="password"
               data-testid="user-form-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required={!isEdit}
               minLength={6}
-              maxLength={72}
+              maxLength={128}
               disabled={loading}
               placeholder={
                 isEdit
@@ -201,8 +193,9 @@ export function UserFormDialog({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>{t('admin.fullNameLabel')}</Label>
+              <Label htmlFor="user-form-fullname">{t('admin.fullNameLabel')}</Label>
               <Input
+                id="user-form-fullname"
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
@@ -213,8 +206,9 @@ export function UserFormDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label>{t('admin.emailLabel')}</Label>
+              <Label htmlFor="user-form-email">{t('admin.emailLabel')}</Label>
               <Input
+                id="user-form-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -225,8 +219,9 @@ export function UserFormDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>{t('admin.institutionClassLabel')}</Label>
+            <Label htmlFor="user-form-institution">{t('admin.institutionClassLabel')}</Label>
             <Input
+              id="user-form-institution"
               type="text"
               value={institution}
               onChange={(e) => setInstitution(e.target.value)}
@@ -238,8 +233,9 @@ export function UserFormDialog({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <Label>{t('admin.tableRole')}</Label>
+              <Label htmlFor="user-form-role">{t('admin.tableRole')}</Label>
               <Select
+                id="user-form-role"
                 value={role}
                 onChange={(e) => {
                   const nextRole = e.target.value as 'user' | 'teacher' | 'admin';
@@ -263,8 +259,11 @@ export function UserFormDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label>{lang === 'vi' ? 'Gói dịch vụ (Plan Tier)' : 'Plan Tier'}</Label>
+              <Label htmlFor="user-form-plan-tier-select">
+                {lang === 'vi' ? 'Gói dịch vụ (Plan Tier)' : 'Plan Tier'}
+              </Label>
               <Select
+                id="user-form-plan-tier-select"
                 data-testid="user-form-plan-tier"
                 value={planTier}
                 onChange={(e) => {
@@ -284,22 +283,32 @@ export function UserFormDialog({
           <div className="flex flex-wrap items-center gap-6 pt-1">
             <div className="flex items-center gap-3">
               <Switch
+                id="user-form-active-switch"
+                aria-labelledby="user-form-active-label"
                 checked={isActive}
                 onCheckedChange={setIsActive}
                 disabled={loading}
               />
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              <span
+                id="user-form-active-label"
+                className="text-sm font-medium text-slate-700 dark:text-slate-300"
+              >
                 {isActive ? t('admin.active') : t('admin.inactive')}
               </span>
             </div>
             {role !== 'user' && (
               <div className="flex items-center gap-3">
                 <Switch
+                  id="user-form-override-switch"
+                  aria-labelledby="user-form-override-label"
                   checked={canOverrideVerdicts}
                   onCheckedChange={setCanOverrideVerdicts}
                   disabled={loading}
                 />
-                <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                <span
+                  id="user-form-override-label"
+                  className="text-xs font-medium text-slate-600 dark:text-slate-400"
+                >
                   {t('admin.canOverrideVerdictsLabel')}
                 </span>
               </div>

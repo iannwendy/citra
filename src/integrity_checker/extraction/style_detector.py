@@ -31,11 +31,14 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from integrity_checker.config import StyleDetectionConfig
 from integrity_checker.models.citation import Citation, CitationStyle, CitationType
 
 # Optional import for patterns registry
+get_all_formats: Any
+get_format: Any
 try:
     from .patterns import get_all_formats, get_format
     REGISTRY_AVAILABLE = True

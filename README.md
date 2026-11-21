@@ -14,7 +14,7 @@
 [![Benchmark](https://img.shields.io/badge/Benchmark-120%2C000_Samples_%C2%B7_99.02%25_Neuro--Symbolic_%C2%B7_99.75%25_OOD_%C2%B7_0.0395_ECE-6B21A8?style=for-the-badge)](./data/models/neuro_symbolic_benchmark_report.json)
 [![PDF Corpus](https://img.shields.io/badge/PDF_Stress_Corpus-310_PDFs_%C2%B7_12_Styles_%C2%B7_100%25_Hard_Cases-0F766E?style=for-the-badge)](#3-310-pdf-multi-style--vietnamese-legal-corpus-evaluation-real-world--hard-case-stress-tests)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
-[![Pytest](https://img.shields.io/badge/Tests-2%2C197_Backend_%C2%B7_472_Frontend_%C2%B7_20_E2E_Suites-0A0A0A?style=for-the-badge&logo=pytest&logoColor=00E676)](./tests)
+[![Pytest](https://img.shields.io/badge/Tests-2%2C320_Backend_%C2%B7_487_Frontend_%C2%B7_20_E2E_Suites-0A0A0A?style=for-the-badge&logo=pytest&logoColor=00E676)](./tests)
 
 *An editorial-grade academic citation debugger and thesis integrity verification workspace engineered for researchers, instructors, and university committees — combining structural PDF parsing, smart domain-aware retrieval across 15+ scholarly & technical databases (including DataCite, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, Hugging Face, IETF RFC, Wayback Machine, and Retraction Watch), and transparent 5-stage Neuro-Symbolic decision traces.*
 
@@ -55,7 +55,7 @@
 
 ## Overview & Brand Philosophy
 
-**CITRA** (*Essay Integrity Checker v3.89.5*) is a full-stack academic citation verification and bibliographic debugging platform developed as a Capstone Graduation Thesis (*Đồ án Tốt nghiệp CNTT*) at **Ton Duc Thang University (TDTU)**.
+**CITRA** (*Essay Integrity Checker v3.90.0*) is a full-stack academic citation verification and bibliographic debugging platform developed as a Capstone Graduation Thesis (*Đồ án Tốt nghiệp CNTT*) at **Ton Duc Thang University (TDTU)**.
 
 Large Language Models (LLMs) frequently hallucinate plausible-sounding references, conflate author lists, or fabricate publication years (`METADATA_ERROR` / `SUSPECTED_HALLUCINATION`). Meanwhile, traditional similarity checkers (e.g., Turnitin) measure text overlap rather than verifying whether cited references actually exist in canonical scholarly registries or whether in-text citations map cleanly to the bibliography.
 
@@ -439,7 +439,7 @@ Beyond synthetic benchmarks and individual root PDFs, CITRA's structural extract
 | **Document Parsing & NLP** | GROBID 0.9.1 (TEI-XML REST Service), PyMuPDF (`fitz`) + TCVN3/VNI decoder + selective OCR, `pdfplumber`, `python-docx`, BibTeX/RIS parsers, `RapidFuzz`, `defusedxml` |
 | **Neuro-Symbolic & ML Engine** | `sentence-transformers` (`all-MiniLM-L6-v2` + `paraphrase-multilingual-MiniLM-L12-v2` ONNX INT8), `scikit-learn` & `scipy` (`HybridMLScorer` Multinomial Logistic Regression + `PlattCalibrator`), 16D Feature Engineering, `68` Deterministic Symbolic Rules (16 Groups) |
 | **Scholarly Knowledge & APIs** | SQLite FTS5 (`129,125` records / `128,105` unique papers with `82,877` full abstracts), Crossref, OpenAlex, DataCite, Global DOI RA, DOAJ, OpenAIRE/HAL, NCBI/bioRxiv, DBLP, arXiv, OpenLibrary, Europe PMC, Hugging Face, IETF RFC/PyPI, Wikidata/OpenCitations, Serper/SerpApi Scholar, SSRF-safe HTML & Wayback `LinkValidator` |
-| **Testing & DevOps** | Pytest (`2,197` passed / `2,203` backend unit & integration tests), Vitest (`472` passed across `62` files), Playwright E2E (`20` spec suites), Ruff, Docker Compose & GitHub Actions CI/CD |
+| **Testing & DevOps** | Pytest (`2,320` passed / `2,330` backend unit & integration tests), Vitest (`487` passed across `63` files), Playwright E2E (`20` spec suites), Ruff, Mypy, Docker Compose & GitHub Actions CI/CD |
 
 ---
 
@@ -450,7 +450,7 @@ essay-integrity-checker/
 ├── docker-compose.yml                  # Orchestrates web (:5173), api (:8000), and grobid (:8070)
 ├── docker-compose.prod.yml             # Production Nginx + TLS + FastAPI + GROBID deployment stack
 ├── Dockerfile                          # Python 3.11 + FastAPI + Sentence-BERT/ONNX backend image
-├── pyproject.toml                      # Python package metadata (v3.89.5), Ruff/Pytest config & `essay-check` CLI
+├── pyproject.toml                      # Python package metadata (v3.90.0), Ruff/Pytest config & `essay-check` CLI
 ├── CLAUDE.md                           # AI / Developer architectural quick-reference
 ├── README.md                           # Project documentation (this file)
 ├── src/
@@ -625,20 +625,21 @@ In local/development environments (`APP_ENV=development`), the database automati
 
 ### Running the Automated Test Suite & 120,000-Sample Benchmark
 
-The repository includes **2,197 passing backend unit & integration tests** (across a `2,203`-test suite), **472 frontend Vitest tests across 62 suites**, and **20 Playwright end-to-end browser suites** covering extraction, style detection, federated retrieval, SSRF-safe link validation, 16D feature matching, 68 symbolic rules, Platt calibration, CIS calculation, RBAC/billing security, Tailwind v3.4 + `<500 kB` bundle hygiene, and responsive Light/Dark UI:
+The repository includes **2,320 passing backend unit & integration tests** (across a `2,330`-test suite), **487 frontend Vitest tests across 63 suites**, and **20 Playwright end-to-end browser suites** covering extraction, style detection, federated retrieval, SSRF-safe link validation, 16D feature matching, 68 symbolic rules, Platt calibration, CIS calculation, RBAC/billing security, Tailwind v3.4 + `<500 kB` bundle hygiene, and responsive Light/Dark UI:
 
 ```bash
-# Lint backend, tests, and scripts (0 errors)
+# Lint & static type check backend, tests, and scripts (0 errors)
 .venv/bin/python -m ruff check src/ tests/ scripts/
+.venv/bin/python -m mypy src/integrity_checker
 
-# Run the complete backend test suite (2,197 passed, 0 failed)
+# Run the complete backend test suite (2,320 passed, 0 failed)
 .venv/bin/python -m pytest tests/ -q
 
 # Re-train & evaluate the 120,000-sample paper- & title-disjoint Neuro-Symbolic benchmark
 .venv/bin/python scripts/train_neuro_symbolic_model.py
 
-# Run frontend ESLint, TypeScript check, Vitest unit suite (472 passed / 62 files), & production build
-cd web && npm run lint && npx tsc --noEmit && npx vitest run && npm run build
+# Run frontend ESLint, TypeScript check, Vitest unit suite (487 passed / 63 files), & production build
+cd web && npm run lint && npx tsc --noEmit && npx tsc -p tsconfig.e2e.json --noEmit && npx vitest run && npm run build
 ```
 
 ---

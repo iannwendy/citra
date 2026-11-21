@@ -13,6 +13,7 @@ import threading
 import time
 import urllib.parse
 import zipfile
+from collections import OrderedDict
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -64,8 +65,10 @@ SANDBOX_VERIFY_MAX_REQUESTS: int = int(
 SANDBOX_VERIFY_WINDOW_SECONDS: float = float(
     os.getenv("CITRA_SANDBOX_VERIFY_WINDOW_SECONDS", "60")
 )
+_SANDBOX_VERIFY_MAX_BUCKET_KEYS: int = 4096
 _sandbox_verify_rate_lock = threading.Lock()
-_sandbox_verify_rate_buckets: dict[tuple[int, str], list[float]] = {}
+_sandbox_verify_rate_buckets: OrderedDict[int, list[float]] = OrderedDict()
+_background_retry_tasks: set[asyncio.Task[Any]] = set()
 
 PUBLIC_SANDBOX_MAX_REQUESTS: int = int(
     os.getenv("CITRA_PUBLIC_SANDBOX_MAX_REQUESTS", "6")
@@ -139,7 +142,7 @@ def _claim_monthly_upload_slot_and_create_essay(
             .values(monthly_uploads_used=func.coalesce(User.monthly_uploads_used, 0) + 1)
             .execution_options(synchronize_session=False)
         )
-        if (res.rowcount or 0) != 1:
+        if (getattr(res, "rowcount", 0) or 0) != 1:
             db.rollback()
             db.refresh(fresh_user)
             used_now = int(fresh_user.monthly_uploads_used or limit)
@@ -296,10 +299,16 @@ async def _run_pipeline_task(
                     except Exception:
                         pass
 
+    keep_file_for_retry = False
     try:
-        async with get_pipeline_admission_controller().acquire(essay_id, tracker=tracker) as admitted:
+        async with get_pipeline_admission_controller().acquire(
+            essay_id, tracker=tracker
+        ) as admitted:
             if not admitted:
-                logger.info(f"Queued essay {essay_id} was cancelled before pipeline execution")
+                tracker.clear(essay_id)
+                logger.info(
+                    f"Queued essay {essay_id} was cancelled before pipeline execution"
+                )
                 return
 
             status_session = get_session()
@@ -328,30 +337,35 @@ async def _run_pipeline_task(
 
             # Offload heavy CPU work to the default executor so the event loop
             # stays free to serve other requests (status polls, etc.).
-            # run_in_executor requires a sync callable; we wrap run_async in a
-            # sync runner that creates its own event loop in the worker thread.
             loop = asyncio.get_running_loop()
 
-            def _run_pipeline_sync() -> Any:
+            def _run_pipeline_sync(
+                _max_cit: int | None = max_citations,
+                _allow_serp: bool | None = allow_serpapi,
+                _path: str = tmp_path,
+            ) -> Any:
                 call_kwargs: dict[str, Any] = {
                     "essay_id": essay_id,
                     "progress_callback": _progress_to_threadlocal,
                 }
                 sig_params = inspect.signature(pipeline.run_async).parameters
                 has_var_kw = any(
-                    p.kind == inspect.Parameter.VAR_KEYWORD for p in sig_params.values()
+                    p.kind == inspect.Parameter.VAR_KEYWORD
+                    for p in sig_params.values()
                 )
                 if "max_citations" in sig_params or has_var_kw:
-                    call_kwargs["max_citations"] = max_citations
+                    call_kwargs["max_citations"] = _max_cit
                 if "allow_serpapi" in sig_params or has_var_kw:
-                    call_kwargs["allow_serpapi"] = allow_serpapi
-                if bypass_report_cache and ("bypass_report_cache" in sig_params or has_var_kw):
+                    call_kwargs["allow_serpapi"] = _allow_serp
+                if bypass_report_cache and (
+                    "bypass_report_cache" in sig_params or has_var_kw
+                ):
                     call_kwargs["bypass_report_cache"] = True
 
                 async def _runner() -> Any:
                     try:
                         try:
-                            return await pipeline.run_async(tmp_path, **call_kwargs)
+                            return await pipeline.run_async(_path, **call_kwargs)
                         except TypeError as type_exc:
                             if (
                                 "bypass_report_cache" in call_kwargs
@@ -359,7 +373,9 @@ async def _run_pipeline_task(
                             ):
                                 fallback_kwargs = dict(call_kwargs)
                                 fallback_kwargs.pop("bypass_report_cache", None)
-                                return await pipeline.run_async(tmp_path, **fallback_kwargs)
+                                return await pipeline.run_async(
+                                    _path, **fallback_kwargs
+                                )
                             raise
                     finally:
                         await close_loop_http_clients()
@@ -369,9 +385,15 @@ async def _run_pipeline_task(
             report = await loop.run_in_executor(None, _run_pipeline_sync)
 
         # Guard against completely unreadable / corrupted files that yielded 0 pages and 0 citations
-        if int(getattr(report, "num_pages", 0) or 0) == 0 and not getattr(report, "extracted_citations", None):
+        if int(getattr(report, "num_pages", 0) or 0) == 0 and not getattr(
+            report, "extracted_citations", None
+        ):
             sp_raw = getattr(report, "style_profile", None)
-            diag = sp_raw.get("document_diagnostics", {}) if isinstance(sp_raw, dict) else {}
+            diag = (
+                sp_raw.get("document_diagnostics", {})
+                if isinstance(sp_raw, dict)
+                else {}
+            )
             p_warns = diag.get("parser_warnings", []) if isinstance(diag, dict) else []
             if any("failed" in str(w).lower() for w in p_warns):
                 raise ValueError("Document file is corrupted or unreadable.")
@@ -380,25 +402,28 @@ async def _run_pipeline_task(
         session = get_session()
         try:
             repo = Repository(session)
-            # Update essay with page count (may have been 0 on creation)
             essay = repo.get_essay(essay_id)
             if essay:
                 essay.num_pages = report.num_pages
 
-            # Persist every extracted occurrence/entry so the Citations and
-            # References tabs reflect the real document, not the deduped
-            # verification set. Clear any partial rows from an interrupted run first.
-            session.query(CitationRecord).filter(CitationRecord.essay_id == essay_id).delete()
-            session.query(VerdictRecord).filter(VerdictRecord.essay_id == essay_id).delete()
+            session.query(CitationRecord).filter(
+                CitationRecord.essay_id == essay_id
+            ).delete()
+            session.query(VerdictRecord).filter(
+                VerdictRecord.essay_id == essay_id
+            ).delete()
             repo.add_citations(essay_id, report.extracted_citations)
             repo.add_verdicts(essay_id, report.verdicts)
 
-            # Persist full pipeline output for GET /report
             style_profile_dict = None
             if report.style_profile:
                 sp = report.style_profile
                 if isinstance(sp, dict):
-                    evidence = sp.get("evidence", {}) if isinstance(sp.get("evidence"), dict) else {}
+                    evidence = (
+                        sp.get("evidence", {})
+                        if isinstance(sp.get("evidence"), dict)
+                        else {}
+                    )
                     style_profile_dict = {
                         "style": sp.get("style", "UNKNOWN"),
                         "confidence": sp.get("confidence", 0.0),
@@ -410,19 +435,31 @@ async def _run_pipeline_task(
                         "ratios": evidence.get("ratios", {}),
                         "explanation": evidence.get("explanation", ""),
                         "document_diagnostics": sp.get("document_diagnostics"),
-                        "citations_truncated_by_plan": bool(sp.get("citations_truncated_by_plan", False)),
+                        "citations_truncated_by_plan": bool(
+                            sp.get("citations_truncated_by_plan", False)
+                        ),
                     }
                 else:
                     style_profile_dict = {
-                        "style": sp.style.value if hasattr(sp.style, "value") else str(sp.style),
+                        "style": sp.style.value
+                        if hasattr(sp.style, "value")
+                        else str(sp.style),
                         "confidence": sp.confidence,
                         "apa_count": getattr(sp, "apa_count", 0),
                         "ieee_count": getattr(sp, "ieee_count", 0),
                         "mixed_count": getattr(sp, "mixed_count", 0),
                         "numeric_count": getattr(sp, "numeric_count", 0),
-                        "features": getattr(sp, "evidence", {}).get("features", {}) if hasattr(sp, "evidence") else {},
-                        "ratios": getattr(sp, "evidence", {}).get("ratios", {}) if hasattr(sp, "evidence") else {},
-                        "explanation": getattr(sp, "evidence", {}).get("explanation", "") if hasattr(sp, "evidence") else "",
+                        "features": getattr(sp, "evidence", {}).get("features", {})
+                        if hasattr(sp, "evidence")
+                        else {},
+                        "ratios": getattr(sp, "evidence", {}).get("ratios", {})
+                        if hasattr(sp, "evidence")
+                        else {},
+                        "explanation": getattr(sp, "evidence", {}).get(
+                            "explanation", ""
+                        )
+                        if hasattr(sp, "evidence")
+                        else "",
                     }
 
             cis_dict = None
@@ -448,7 +485,8 @@ async def _run_pipeline_task(
                             for attr in dir(comp)
                             if not attr.startswith("_")
                             and not callable(getattr(comp, attr, None))
-                            and attr in [
+                            and attr
+                            in [
                                 "verified_ratio",
                                 "metadata_accuracy",
                                 "in_text_bib_consistency",
@@ -509,7 +547,8 @@ async def _run_pipeline_task(
             and _get_persisted_upload_path(essay_id).is_file()
             and tracker.can_auto_retry(essay_id)
         )
-        quota_charged_after_fail: bool = True
+        keep_file_for_retry = eligible_for_in_process_retry
+        quota_charged_after_fail = True
         if not eligible_for_in_process_retry:
             try:
                 err_session = get_session()
@@ -529,7 +568,7 @@ async def _run_pipeline_task(
                 )
         tracker.fail(essay_id, safe_err, quota_charged=quota_charged_after_fail)
     finally:
-        if cleanup_file:
+        if cleanup_file and not keep_file_for_retry:
             Path(tmp_path).unlink(missing_ok=True)  # noqa: ASYNC240 - tiny local unlink in cleanup
 
 
@@ -680,100 +719,104 @@ async def upload_essay(
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded document file is empty")
 
-    detected_pages = 1 if upload_ext in (".bib", ".ris") else 0
-    if upload_ext == ".pdf":
-        if b"%PDF-" not in content[:1024]:
-            raise HTTPException(status_code=400, detail="Invalid PDF file: missing %PDF- header")
-        try:
-            import fitz
+    def _validate_and_claim_upload_sync() -> EssayRecord:
+        detected_pages = 1 if upload_ext in (".bib", ".ris") else 0
+        if upload_ext == ".pdf":
+            if b"%PDF-" not in content[:1024]:
+                raise HTTPException(
+                    status_code=400, detail="Invalid PDF file: missing %PDF- header"
+                )
+            try:
+                import fitz
 
-            with fitz.open(stream=content, filetype="pdf") as pdf_doc:
-                detected_pages = len(pdf_doc)
-        except Exception as exc:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid or corrupted PDF file: unable to parse PDF structure",
-            ) from exc
-        if detected_pages <= 0:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid or empty PDF file: document contains 0 readable pages",
-            )
-    elif upload_ext == ".docx":
-        if not content.startswith(b"PK\x03\x04"):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid DOCX file: missing OOXML PK archive header",
-            )
-        from integrity_checker.export.docx_exporter import _docx_xml_is_safe
+                with fitz.open(stream=content, filetype="pdf") as pdf_doc:
+                    detected_pages = len(pdf_doc)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid or corrupted PDF file: unable to parse PDF structure",
+                ) from exc
+            if detected_pages <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid or empty PDF file: document contains 0 readable pages",
+                )
+        elif upload_ext == ".docx":
+            if not content.startswith(b"PK\x03\x04"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid DOCX file: missing OOXML PK archive header",
+                )
+            from integrity_checker.export.docx_exporter import _docx_xml_is_safe
 
-        if not _docx_xml_is_safe(io.BytesIO(content)):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid or unsafe DOCX file: failed OOXML security validation",
-            )
-        detected_pages = _estimate_docx_pages(content)
-    elif upload_ext == ".bib":
-        try:
-            bib_text = content.decode("utf-8").strip()
-        except UnicodeDecodeError as exc:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid BibTeX file: must be valid UTF-8 text",
-            ) from exc
-        if not bib_text or "@" not in bib_text:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid BibTeX file: missing @entry definitions",
-            )
-    elif upload_ext == ".ris":
-        import re as _re
+            if not _docx_xml_is_safe(io.BytesIO(content)):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid or unsafe DOCX file: failed OOXML security validation",
+                )
+            detected_pages = _estimate_docx_pages(content)
+        elif upload_ext == ".bib":
+            try:
+                bib_text = content.decode("utf-8").strip()
+            except UnicodeDecodeError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid BibTeX file: must be valid UTF-8 text",
+                ) from exc
+            if not bib_text or "@" not in bib_text:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid BibTeX file: missing @entry definitions",
+                )
+        elif upload_ext == ".ris":
+            import re as _re
 
-        try:
-            ris_text = content.decode("utf-8").strip()
-        except UnicodeDecodeError as exc:
+            try:
+                ris_text = content.decode("utf-8").strip()
+            except UnicodeDecodeError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid RIS file: must be valid UTF-8 text",
+                ) from exc
+            if not ris_text or not _re.search(r"(?:^|\n)\s*TY\s+-", ris_text):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid RIS file: missing TY  - record header",
+                )
+
+        if detected_pages > policy.max_pages_per_pdf:
             raise HTTPException(
-                status_code=400,
-                detail="Invalid RIS file: must be valid UTF-8 text",
-            ) from exc
-        if not ris_text or not _re.search(r"(?:^|\n)\s*TY\s+-", ris_text):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid RIS file: missing TY  - record header",
+                status_code=402,
+                detail=(
+                    f"PDF page limit exceeded ({detected_pages} pages uploaded; maximum allowed on "
+                    f"the {policy.name} plan is {policy.max_pages_per_pdf} pages). Please upgrade to Pro or Ultra."
+                ),
             )
 
-    if detected_pages > policy.max_pages_per_pdf:
-        raise HTTPException(
-            status_code=402,
-            detail=(
-                f"PDF page limit exceeded ({detected_pages} pages uploaded; maximum allowed on "
-                f"the {policy.name} plan is {policy.max_pages_per_pdf} pages). Please upgrade to Pro or Ultra."
-            ),
+        repo = Repository(db)
+        if class_id is not None:
+            cls = repo.get_class(class_id)
+            if not cls:
+                raise HTTPException(status_code=404, detail="Class not found")
+            if current_user.role == "teacher" and cls.teacher_id != current_user.id:
+                raise HTTPException(status_code=403, detail="Not your class")
+            if current_user.role == "user":
+                enrolled_ids = {c.id for c in repo.list_classes_for_student(current_user.id)}
+                if class_id not in enrolled_ids:
+                    raise HTTPException(status_code=403, detail="Not enrolled in this class")
+
+        return _claim_monthly_upload_slot_and_create_essay(
+            db,
+            current_user,
+            filename=safe_filename,
+            num_pages=detected_pages,
+            class_id=class_id,
+            structured_error=False,
+            upload_content=content,
+            upload_ext=upload_ext,
         )
 
-    repo = Repository(db)
-    if class_id is not None:
-        cls = repo.get_class(class_id)
-        if not cls:
-            raise HTTPException(status_code=404, detail="Class not found")
-        if current_user.role == "teacher" and cls.teacher_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Not your class")
-        if current_user.role == "user":
-            enrolled_ids = {c.id for c in repo.list_classes_for_student(current_user.id)}
-            if class_id not in enrolled_ids:
-                raise HTTPException(status_code=403, detail="Not enrolled in this class")
-
-    # Atomically claim 1 monthly upload slot, persist upload bytes, and create essay record
-    essay = _claim_monthly_upload_slot_and_create_essay(
-        db,
-        current_user,
-        filename=safe_filename,
-        num_pages=detected_pages,
-        class_id=class_id,
-        structured_error=False,
-        upload_content=content,
-        upload_ext=upload_ext,
-    )
+    essay = await asyncio.to_thread(_validate_and_claim_upload_sync)
 
     persisted_path = _get_persisted_upload_path(essay.id, ext=upload_ext)
     if _get_worker_mode() == "web_only":
@@ -851,15 +894,14 @@ def get_essay_status(
     if state is not None:
         # Auto-retry at most once if a prior background run failed solely due to transient sqlite I/O error
         if (
-            worker_mode != "web_only"
+            worker_mode == "inline"
             and state.status == "failed"
             and state.error
-            and "disk I/O error" in state.error
+            and "disk i/o error" in state.error.lower()
             and not is_test_runtime()
             and persisted_pdf.is_file()
-            and tracker.can_auto_retry(essay_id)
+            and (resumed_state := tracker.try_claim_auto_retry(essay_id)) is not None
         ):
-            resumed_state = tracker.init(essay_id, is_retry=True)
             background_tasks.add_task(
                 _run_pipeline_task,
                 essay.id,
@@ -871,7 +913,8 @@ def get_essay_status(
             resumed_snap = dict(resumed_state.to_snapshot())
             resumed_snap["quota_charged"] = quota_charged_bool
             return resumed_snap
-        live_snap = dict(state.to_snapshot())
+        latest_state = tracker.get(essay_id) or state
+        live_snap = dict(latest_state.to_snapshot())
         if live_snap.get("status") == "queued" and live_snap.get("queue_position") is None:
             live_snap["queue_position"] = compute_sqlite_fifo_queue_position(db, essay_id)
         live_snap["quota_charged"] = quota_charged_bool
@@ -1002,12 +1045,11 @@ def get_essay_status(
     # if the uploaded PDF is persisted on disk.
     persisted_pdf = _get_persisted_upload_path(essay_id)
     if (
-        worker_mode != "web_only"
+        worker_mode == "inline"
         and not is_test_runtime()
         and persisted_pdf.is_file()
-        and tracker.can_auto_retry(essay_id)
+        and (resumed_state := tracker.try_claim_auto_retry(essay_id)) is not None
     ):
-        resumed_state = tracker.init(essay_id, is_retry=True)
         background_tasks.add_task(
             _run_pipeline_task,
             essay.id,
@@ -1068,6 +1110,8 @@ async def stream_essay_events(
     if not repo.can_user_access_essay(current_user, essay):
         raise HTTPException(status_code=403, detail="Access denied")
 
+    essay_user_id = essay.user_id or current_user.id
+
     # Release the request-scoped DB connection before opening a long-lived SSE stream
     db.close()
 
@@ -1081,7 +1125,7 @@ async def stream_essay_events(
             essay_id,
             poll_interval=poll_interval,
             heartbeat_interval=heartbeat_interval,
-        ).__aiter__()
+        )
         next_task: asyncio.Task[dict[str, Any]] | None = None
         last_frame_at = time.monotonic()
 
@@ -1103,6 +1147,53 @@ async def stream_essay_events(
                         next_task = None
                         break
                     next_task = None
+
+                    if snapshot.get("status") == "failed":
+                        persisted_pdf = _get_persisted_upload_path(essay_id)
+                        if (
+                            _get_worker_mode() == "inline"
+                            and "disk i/o error" in str(snapshot.get("error") or "").lower()
+                            and not is_test_runtime()
+                            and persisted_pdf.is_file()
+                            and (resumed_state := tracker.try_claim_auto_retry(essay_id))
+                            is not None
+                        ):
+                            await sub_iter.aclose()
+                            retry_task = asyncio.create_task(
+                                _run_pipeline_task(
+                                    essay_id,
+                                    str(persisted_pdf),
+                                    essay_user_id,
+                                    get_pipeline(),
+                                    False,
+                                )
+                            )
+                            _background_retry_tasks.add(retry_task)
+                            retry_task.add_done_callback(_background_retry_tasks.discard)
+                            sub_iter = tracker.subscribe(
+                                essay_id,
+                                poll_interval=poll_interval,
+                                heartbeat_interval=heartbeat_interval,
+                            )
+                            resumed_snap = dict(resumed_state.to_snapshot())
+                            yield f"data: {json.dumps(resumed_snap, ensure_ascii=False)}\n\n"
+                            last_frame_at = time.monotonic()
+                            continue
+
+                        cur_state = tracker.get(essay_id)
+                        snap_retry = int(snapshot.get("retry_count") or 0)
+                        if cur_state is not None and (
+                            cur_state.status in ("queued", "processing", "completed")
+                            or cur_state.retry_count > snap_retry
+                        ):
+                            await sub_iter.aclose()
+                            sub_iter = tracker.subscribe(
+                                essay_id,
+                                poll_interval=poll_interval,
+                                heartbeat_interval=heartbeat_interval,
+                            )
+                            continue
+
                     yield f"data: {json.dumps(snapshot, ensure_ascii=False)}\n\n"
                     last_frame_at = time.monotonic()
                     if snapshot.get("status") in ("completed", "failed"):
@@ -1157,134 +1248,156 @@ async def reanalyze_essay(
     pipeline: IntegrityPipeline = Depends(get_pipeline),
 ) -> dict[str, Any]:
     """Re-run the verification pipeline in-place for an existing essay if its file is persisted on disk."""
-    repo = Repository(db)
-    essay = repo.get_essay(essay_id)
-    if not essay:
-        raise HTTPException(status_code=404, detail="Essay not found")
+    def _prepare_reanalyze_sync() -> tuple[EssayRecord | None, Path | None, dict[str, Any] | None]:
+        repo = Repository(db)
+        essay_obj = repo.get_essay(essay_id)
+        if not essay_obj:
+            raise HTTPException(status_code=404, detail="Essay not found")
 
-    if not repo.can_user_access_essay(current_user, essay):
-        raise HTTPException(status_code=403, detail="Access denied")
+        if not repo.can_user_access_essay(current_user, essay_obj):
+            raise HTTPException(status_code=403, detail="Access denied")
 
-    if _is_essay_genuinely_inflight(essay):
-        return {"status": essay.job_status, "essay_id": essay.id}
+        if _is_essay_genuinely_inflight(essay_obj):
+            return None, None, {"status": essay_obj.job_status, "essay_id": essay_obj.id}
 
-    lower_fname = str(essay.filename or "").lower()
-    if lower_fname.endswith(".docx"):
-        ext = ".docx"
-    elif lower_fname.endswith(".bib"):
-        ext = ".bib"
-    elif lower_fname.endswith(".ris"):
-        ext = ".ris"
-    else:
-        ext = ".pdf"
-    persisted_path = _get_persisted_upload_path(essay_id, ext=ext)
-    if not persisted_path.is_file():
-        found_alt = None
-        for alt_ext in ALLOWED_UPLOAD_EXTENSIONS:
-            alt_path = _get_persisted_upload_path(essay_id, ext=alt_ext)
-            if alt_path.is_file():
-                found_alt = alt_path
-                break
-        if found_alt is not None:
-            persisted_path = found_alt
+        lower_fname = str(essay_obj.filename or "").lower()
+        if lower_fname.endswith(".docx"):
+            ext = ".docx"
+        elif lower_fname.endswith(".bib"):
+            ext = ".bib"
+        elif lower_fname.endswith(".ris"):
+            ext = ".ris"
         else:
-            raise HTTPException(status_code=404, detail="Persisted document file not found on disk")
-
-    needs_quota_reclaim = (
-        getattr(essay, "job_status", None) == "failed"
-        and not bool(getattr(essay, "quota_charged", True))
-        and getattr(essay, "cis_json", None) is None
-    )
-    if needs_quota_reclaim:
-        with _QUOTA_CLAIM_LOCK:
-            db.expire(current_user)
-            db.expire(essay)
-            db.commit()
-
-            fresh_essay = db.get(EssayRecord, essay_id)
-            if fresh_essay is None:
-                raise HTTPException(status_code=404, detail="Essay not found")
-            if _is_essay_genuinely_inflight(fresh_essay):
-                return {"status": fresh_essay.job_status, "essay_id": fresh_essay.id}
-
-            if (
-                getattr(fresh_essay, "job_status", None) == "failed"
-                and not bool(getattr(fresh_essay, "quota_charged", True))
-                and getattr(fresh_essay, "cis_json", None) is None
-            ):
-                quota_owner_id = (
-                    fresh_essay.user_id
-                    if fresh_essay.user_id is not None
-                    else current_user.id
+            ext = ".pdf"
+        resolved_path = _get_persisted_upload_path(essay_id, ext=ext)
+        if not resolved_path.is_file():
+            found_alt = None
+            for alt_ext in ALLOWED_UPLOAD_EXTENSIONS:
+                alt_path = _get_persisted_upload_path(essay_id, ext=alt_ext)
+                if alt_path.is_file():
+                    found_alt = alt_path
+                    break
+            if found_alt is not None:
+                resolved_path = found_alt
+            else:
+                raise HTTPException(
+                    status_code=404, detail="Persisted document file not found on disk"
                 )
-                quota_user = db.get(User, quota_owner_id) or db.get(User, current_user.id)
-                if quota_user is None:
-                    raise HTTPException(status_code=401, detail="User not found")
-                if quota_user.role != "admin":
-                    if ensure_user_quota_current(quota_user):
-                        db.commit()
-                        db.refresh(quota_user)
-                    policy = get_user_plan_policy(quota_user)
-                    limit = int(policy.max_uploads_per_month)
-                    res = db.execute(
-                        update(User)
-                        .where(
-                            User.id == quota_user.id,
-                            func.coalesce(User.monthly_uploads_used, 0) < limit,
-                        )
-                        .values(monthly_uploads_used=func.coalesce(User.monthly_uploads_used, 0) + 1)
-                        .execution_options(synchronize_session=False)
-                    )
-                    if (res.rowcount or 0) != 1:
-                        db.rollback()
-                        db.refresh(quota_user)
-                        used_now = int(quota_user.monthly_uploads_used or limit)
-                        msg = (
-                            f"Monthly upload quota reached ({used_now}/{limit} documents "
-                            f"on the {policy.name} plan). Please upgrade to Pro or Ultra to continue analyzing manuscripts."
-                        )
-                        raise HTTPException(
-                            status_code=402,
-                            detail={
-                                "code": "MONTHLY_QUOTA_EXCEEDED",
-                                "message": msg,
-                                "used": used_now,
-                                "limit": limit,
-                                "current_tier": policy.tier,
-                            },
-                        )
-                fresh_essay.quota_charged = 1
+
+        needs_quota_reclaim = (
+            getattr(essay_obj, "job_status", None) == "failed"
+            and not bool(getattr(essay_obj, "quota_charged", True))
+            and getattr(essay_obj, "cis_json", None) is None
+        )
+        if needs_quota_reclaim:
+            with _QUOTA_CLAIM_LOCK:
+                db.expire(current_user)
+                db.expire(essay_obj)
                 db.commit()
-                db.refresh(fresh_essay)
-                db.refresh(quota_user)
-                if quota_user.id != current_user.id:
-                    db.refresh(current_user)
-            essay = fresh_essay
 
-    if _get_worker_mode() in {"web_only", "worker_only"}:
-        _clear_persisted_progress_snapshot(essay)
-        essay.job_status = "queued"
-        essay.job_heartbeat_at = datetime.now(UTC)
-        essay.job_error = None
+                fresh_essay = db.get(EssayRecord, essay_id)
+                if fresh_essay is None:
+                    raise HTTPException(status_code=404, detail="Essay not found")
+                if _is_essay_genuinely_inflight(fresh_essay):
+                    return None, None, {
+                        "status": fresh_essay.job_status,
+                        "essay_id": fresh_essay.id,
+                    }
+
+                if (
+                    getattr(fresh_essay, "job_status", None) == "failed"
+                    and not bool(getattr(fresh_essay, "quota_charged", True))
+                    and getattr(fresh_essay, "cis_json", None) is None
+                ):
+                    quota_owner_id = (
+                        fresh_essay.user_id
+                        if fresh_essay.user_id is not None
+                        else current_user.id
+                    )
+                    quota_user = db.get(User, quota_owner_id) or db.get(User, current_user.id)
+                    if quota_user is None:
+                        raise HTTPException(status_code=401, detail="User not found")
+                    if quota_user.role != "admin":
+                        if ensure_user_quota_current(quota_user):
+                            db.commit()
+                            db.refresh(quota_user)
+                        policy = get_user_plan_policy(quota_user)
+                        limit = int(policy.max_uploads_per_month)
+                        res = db.execute(
+                            update(User)
+                            .where(
+                                User.id == quota_user.id,
+                                func.coalesce(User.monthly_uploads_used, 0) < limit,
+                            )
+                            .values(
+                                monthly_uploads_used=func.coalesce(
+                                    User.monthly_uploads_used, 0
+                                )
+                                + 1
+                            )
+                            .execution_options(synchronize_session=False)
+                        )
+                        if (getattr(res, "rowcount", 0) or 0) != 1:
+                            db.rollback()
+                            db.refresh(quota_user)
+                            used_now = int(quota_user.monthly_uploads_used or limit)
+                            msg = (
+                                f"Monthly upload quota reached ({used_now}/{limit} documents "
+                                f"on the {policy.name} plan). Please upgrade to Pro or Ultra to continue analyzing manuscripts."
+                            )
+                            raise HTTPException(
+                                status_code=402,
+                                detail={
+                                    "code": "MONTHLY_QUOTA_EXCEEDED",
+                                    "message": msg,
+                                    "used": used_now,
+                                    "limit": limit,
+                                    "current_tier": policy.tier,
+                                },
+                            )
+                    fresh_essay.quota_charged = 1
+                    db.commit()
+                    db.refresh(fresh_essay)
+                    db.refresh(quota_user)
+                    if quota_user.id != current_user.id:
+                        db.refresh(current_user)
+                essay_obj = fresh_essay
+
+        if _get_worker_mode() in {"web_only", "worker_only"}:
+            _clear_persisted_progress_snapshot(essay_obj)
+            essay_obj.job_status = "queued"
+            essay_obj.job_heartbeat_at = datetime.now(UTC)
+            essay_obj.job_error = None
+            db.commit()
+            get_tracker().clear(essay_id)
+            return None, None, {"status": essay_obj.job_status, "essay_id": essay_obj.id}
+
+        peek_queued = (
+            get_pipeline_admission_controller().peek_queue_position_if_saturated()
+            is not None
+        )
+        _clear_persisted_progress_snapshot(essay_obj)
+        essay_obj.job_status = "queued" if peek_queued else "processing"
+        essay_obj.job_heartbeat_at = datetime.now(UTC)
+        essay_obj.job_error = None
         db.commit()
-        get_tracker().clear(essay_id)
-        return {"status": essay.job_status, "essay_id": essay.id}
 
-    peek_queued = (
-        get_pipeline_admission_controller().peek_queue_position_if_saturated() is not None
-    )
-    _clear_persisted_progress_snapshot(essay)
-    essay.job_status = "queued" if peek_queued else "processing"
-    essay.job_heartbeat_at = datetime.now(UTC)
-    essay.job_error = None
-    db.commit()
+        tracker = get_tracker()
+        init_state = tracker.init(essay_id, is_retry=True)
+        if (
+            init_state.status in ("queued", "processing")
+            and essay_obj.job_status != init_state.status
+        ):
+            db.refresh(essay_obj)
+            essay_obj.job_status = init_state.status
+            db.commit()
+        return essay_obj, resolved_path, None
 
-    tracker = get_tracker()
-    init_state = tracker.init(essay_id, is_retry=True)
-    if init_state.status in ("queued", "processing") and essay.job_status != init_state.status:
-        db.refresh(essay)
-        essay.job_status = init_state.status
-        db.commit()
+    maybe_essay, maybe_path, early_resp = await asyncio.to_thread(_prepare_reanalyze_sync)
+    if early_resp is not None or maybe_essay is None or maybe_path is None:
+        return early_resp or {"status": "processing", "essay_id": essay_id}
+    essay = maybe_essay
+    persisted_path = maybe_path
     if is_test_runtime():
         await _run_pipeline_task(
             essay.id,
@@ -1294,7 +1407,7 @@ async def reanalyze_essay(
             False,
             bypass_report_cache=True,
         )
-        db.refresh(essay)
+        await asyncio.to_thread(db.refresh, essay)
         return {"status": essay.job_status or "completed", "essay_id": essay.id}
 
     background_tasks.add_task(
@@ -1763,6 +1876,8 @@ def get_shared_essay_report(
     if essay.style_profile_json:
         try:
             style_profile_dict = json.loads(essay.style_profile_json)
+            if isinstance(style_profile_dict, dict):
+                style_profile_dict.pop("_progress_snapshot", None)
         except Exception:
             style_profile_dict = None
     if not isinstance(style_profile_dict, dict):
@@ -2680,8 +2795,34 @@ async def generate_sandbox_pdf_manuscript(
     """
     import base64
 
+    _enforce_sandbox_verify_rate_limit(current_user)
+
     items = payload.get("items") or []
     if not isinstance(items, list) or not items:
+        raise HTTPException(
+            status_code=400,
+            detail="Vui lòng chọn hoặc tạo ít nhất 1 bài báo trong danh sách Sandbox.",
+        )
+
+    bounded_items: list[dict[str, Any]] = []
+    for raw_it in items[:25]:
+        if not isinstance(raw_it, dict):
+            continue
+        it_copy = dict(raw_it)
+        for field_key, max_len in (
+            ("title", 300),
+            ("authors_text", 300),
+            ("venue", 200),
+            ("in_text_context", 600),
+            ("doi", 150),
+            ("url", 500),
+            ("year", 20),
+        ):
+            if isinstance(it_copy.get(field_key), str):
+                it_copy[field_key] = it_copy[field_key][:max_len]
+        bounded_items.append(it_copy)
+
+    if not bounded_items:
         raise HTTPException(
             status_code=400,
             detail="Vui lòng chọn hoặc tạo ít nhất 1 bài báo trong danh sách Sandbox.",
@@ -2691,21 +2832,42 @@ async def generate_sandbox_pdf_manuscript(
     doc_title = str(
         payload.get("title")
         or "Empirical Evaluation of Neural Language Representations in Computational Linguistics"
-    ).strip()
-    author_name = str(payload.get("author_name") or current_user.username or "CITRA Researcher").strip()
+    ).strip()[:300]
+    author_name = str(
+        payload.get("author_name") or current_user.username or "CITRA Researcher"
+    ).strip()[:120]
     download_only = bool(payload.get("download_only", False))
     run_verification = bool(payload.get("run_verification", not download_only))
-    custom_filename = str(payload.get("filename") or "").strip()
+    custom_filename = str(payload.get("filename") or "").strip()[:180]
 
-    pdf_bytes, num_pages, in_text_markers, ref_lines = _synthesize_academic_manuscript_pdf(
+    pdf_bytes, num_pages, in_text_markers, ref_lines = await asyncio.to_thread(
+        _synthesize_academic_manuscript_pdf,
         title=doc_title,
         author_name=author_name,
         style=style,
-        items=items[:25],
+        items=bounded_items,
     )
 
+    policy = get_user_plan_policy(current_user)
+    if len(pdf_bytes) > policy.max_file_size_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Generated PDF exceeds plan file size limit "
+                f"({len(pdf_bytes)} bytes > {policy.max_file_size_bytes} bytes)."
+            ),
+        )
+    if num_pages > policy.max_pages_per_pdf:
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                f"PDF page limit exceeded ({num_pages} pages generated; maximum allowed on "
+                f"the {policy.name} plan is {policy.max_pages_per_pdf} pages). Please upgrade to Pro or Ultra."
+            ),
+        )
+
     safe_style = "IEEE" if style == "ieee" else "APA"
-    default_sandbox_name = f"CITRA_ACL_Sandbox_{safe_style}_{len(items)}refs.pdf"
+    default_sandbox_name = f"CITRA_ACL_Sandbox_{safe_style}_{len(bounded_items)}refs.pdf"
     custom_filename = _sanitize_sandbox_pdf_filename(custom_filename, default_sandbox_name)
 
     if download_only and not run_verification:
@@ -2718,7 +2880,8 @@ async def generate_sandbox_pdf_manuscript(
         )
 
     # Atomically claim 1 monthly upload slot, persist PDF bytes, & launch full IntegrityPipeline
-    essay = _claim_monthly_upload_slot_and_create_essay(
+    essay = await asyncio.to_thread(
+        _claim_monthly_upload_slot_and_create_essay,
         db,
         current_user,
         filename=custom_filename,
@@ -2760,18 +2923,20 @@ async def generate_sandbox_pdf_manuscript(
 
 
 def _enforce_sandbox_verify_rate_limit(current_user: User) -> None:
-    """Enforce sliding-window per-user rate limit on /sandbox/verify."""
+    """Enforce sliding-window per-user rate limit on /sandbox/verify and /sandbox/generate-pdf."""
     max_reqs = max(1, int(SANDBOX_VERIFY_MAX_REQUESTS))
     window_s = max(1.0, float(SANDBOX_VERIFY_WINDOW_SECONDS))
-    bucket_key = (int(current_user.id or 0), str(current_user.username or ""))
+    bucket_key = int(current_user.id or 0)
     now = time.monotonic()
+    cutoff = now - window_s
     with _sandbox_verify_rate_lock:
-        timestamps = _sandbox_verify_rate_buckets.get(bucket_key, [])
-        cutoff = now - window_s
-        timestamps = [ts for ts in timestamps if ts > cutoff]
+        timestamps = [
+            ts for ts in _sandbox_verify_rate_buckets.get(bucket_key, []) if ts > cutoff
+        ]
         if len(timestamps) >= max_reqs:
             retry_after = max(1, int(math.ceil(window_s - (now - timestamps[0]))))
             _sandbox_verify_rate_buckets[bucket_key] = timestamps
+            _sandbox_verify_rate_buckets.move_to_end(bucket_key)
             raise HTTPException(
                 status_code=429,
                 detail=(
@@ -2782,6 +2947,17 @@ def _enforce_sandbox_verify_rate_limit(current_user: User) -> None:
             )
         timestamps.append(now)
         _sandbox_verify_rate_buckets[bucket_key] = timestamps
+        _sandbox_verify_rate_buckets.move_to_end(bucket_key)
+        if len(_sandbox_verify_rate_buckets) > _SANDBOX_VERIFY_MAX_BUCKET_KEYS:
+            expired_uids = [
+                uid_k
+                for uid_k, ts_list in _sandbox_verify_rate_buckets.items()
+                if not ts_list or ts_list[-1] <= cutoff
+            ]
+            for uid_k in expired_uids:
+                _sandbox_verify_rate_buckets.pop(uid_k, None)
+            while len(_sandbox_verify_rate_buckets) > _SANDBOX_VERIFY_MAX_BUCKET_KEYS:
+                _sandbox_verify_rate_buckets.popitem(last=False)
 
 
 def _enforce_public_sandbox_rate_limit(
@@ -2957,7 +3133,9 @@ async def verify_sandbox_citations_instant(
             ],
             parser_used="sandbox",
         )
-        parsed_citations = pipeline.ref_parser.parse_reference_section(fake_doc)
+        parsed_citations = await asyncio.to_thread(
+            pipeline.ref_parser.parse_reference_section, fake_doc
+        )
         if not parsed_citations:
             for line in [ln.strip() for ln in raw_references_text.splitlines() if len(ln.strip()) > 12][:15]:
                 parsed_citations.append(
@@ -3043,16 +3221,18 @@ async def _execute_instant_citations_verification(
                 except Exception:
                     pass
             orch = getattr(pipeline, "orchestrator", None)
-            if getattr(orch, "_local_db", None) is not None and callable(getattr(orch, "_lookup_local_db", None)):
-                try:
-                    local_hit = orch._lookup_local_db(c)
+            local_db_obj = getattr(orch, "_local_db", None) if orch is not None else None
+            lookup_fn = getattr(orch, "_lookup_local_db", None) if orch is not None else None
+            if local_db_obj is not None and callable(lookup_fn):
+                def _lookup_local_sync() -> SourceResult | None:
+                    local_hit = lookup_fn(c)
                     if isinstance(local_hit, SourceResult) and local_hit.candidates:
                         return local_hit
-                    if c.title and hasattr(orch._local_db, "search_by_title"):
+                    if c.title and hasattr(local_db_obj, "search_by_title"):
                         from integrity_checker.models.source import SourceCandidate
                         from integrity_checker.retrieval.utils import title_similarity
 
-                        title_hits = orch._local_db.search_by_title(c.title, limit=3) or []
+                        title_hits = local_db_obj.search_by_title(c.title, limit=3) or []
                         for p in title_hits:
                             if p.title and title_similarity(c.title, p.title) >= 0.92:
                                 cand = SourceCandidate(
@@ -3077,6 +3257,12 @@ async def _execute_instant_citations_verification(
                                     sources_succeeded=["local_db"],
                                     sources_failed={},
                                 )
+                    return None
+
+                try:
+                    hit_res = await asyncio.to_thread(_lookup_local_sync)
+                    if hit_res is not None:
+                        return hit_res
                 except Exception:
                     pass
             try:
@@ -3125,7 +3311,8 @@ async def _execute_instant_citations_verification(
 
     for idx, (citation, source) in enumerate(zip(parsed_citations, source_results, strict=False), start=1):
         used_local = "local_db" in (source.sources_succeeded or [])
-        verdict = pipeline.checker.check(
+        verdict = await asyncio.to_thread(
+            pipeline.checker.check,
             citation,
             source,
             citation_context=citation.context,
@@ -3355,7 +3542,7 @@ async def _execute_instant_citations_verification(
                     citation=citation,
                     mismatched_fields=list(verdict.mismatched_fields or []),
                 )
-                web_entry = {
+                web_entry: dict[str, Any] = {
                     "source": synth_name,
                     "source_name": synth_name,
                     "matched_fields": web_m_fields,
@@ -3436,7 +3623,8 @@ async def _execute_instant_citations_verification(
     remediation: dict[str, Any] | None = None
     remediated_apa: str | None = None
     if include_remediation:
-        remediation = build_remediated_bibliography(
+        remediation = await asyncio.to_thread(
+            build_remediated_bibliography,
             essay_id=0,
             verdicts=raw_verdict_dicts_for_remediation,
             style=style,
@@ -3685,8 +3873,12 @@ async def verify_public_guest_citations(
         ],
         parser_used="sandbox",
     )
-    split_entries = pipeline.ref_parser._split_entries(f"References\n{normalized_body}\n")
-    parsed_citations = pipeline.ref_parser.parse_reference_section(fake_doc)
+    def _parse_guest_refs_sync() -> tuple[list[str], list[Citation]]:
+        splits = pipeline.ref_parser._split_entries(f"References\n{normalized_body}\n")
+        parsed = pipeline.ref_parser.parse_reference_section(fake_doc)
+        return splits, parsed
+
+    split_entries, parsed_citations = await asyncio.to_thread(_parse_guest_refs_sync)
 
     boundary_estimate = _estimate_guest_reference_boundaries(raw_lines)
     estimated_reference_count = max(

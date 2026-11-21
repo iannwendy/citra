@@ -165,12 +165,14 @@ class OpenAIREHalClient(BaseScholarClient):
         else:
             return None
 
-        parsed_cands = [
+        raw_cands = [
             self._openaire_item_to_candidate(item)
             for item in results_list
             if isinstance(item, dict)
         ]
-        parsed_cands = [c for c in parsed_cands if c is not None and (c.title or c.doi)]
+        parsed_cands: list[SourceCandidate] = [
+            c for c in raw_cands if c is not None and (c.title or c.doi)
+        ]
         if not parsed_cands:
             return None
 
@@ -200,7 +202,7 @@ class OpenAIREHalClient(BaseScholarClient):
         self,
         candidates: list[SourceCandidate],
         query_title: str,
-        query_authors: list[str] | None = None,
+        query_authors: list[Any] | None = None,
         query_year: str | None = None,
     ) -> tuple[SourceCandidate | None, float]:
         best_cand: SourceCandidate | None = None

@@ -46,10 +46,11 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Minimal runtime deps + lightweight Tesseract language data (~5.6 MB) for PyMuPDF native OCR
+# Minimal runtime deps + DejaVu fonts (ReportLab PDF export) + Tesseract language data for PyMuPDF OCR
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         libsqlite3-0 \
+        fonts-dejavu-core \
         tesseract-ocr-eng \
         tesseract-ocr-vie \
     && for d in /usr/share/tesseract-ocr/5/tessdata /usr/share/tesseract-ocr/4.00/tessdata /usr/share/tesseract-ocr/*/tessdata; do \
@@ -73,7 +74,6 @@ WORKDIR /app
 
 ENV HOME=/home/appuser
 ENV HF_HOME=/home/appuser/.cache/huggingface
-ENV TRANSFORMERS_CACHE=/home/appuser/.cache/transformers
 
 # Copy Python deps từ stage 1
 COPY --from=deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
@@ -84,8 +84,8 @@ COPY --from=deps /opt/mupdf-libs/ /usr/local/lib/
 RUN ldconfig
 
 # Tạo data dirs + HuggingFace cache dirs với quyền appuser
-RUN mkdir -p data/essays data/essays/uploads data/avatars data/ground_truth data/cache data/cache/grobid \
-             /home/appuser/.cache/huggingface /home/appuser/.cache/transformers && \
+RUN mkdir -p data/models data/essays data/essays/uploads data/avatars data/ground_truth data/cache data/cache/grobid \
+             /home/appuser/.cache/huggingface && \
     chown -R appuser:appgroup /app data/ /home/appuser/.cache
 
 # Pre-download Sentence-BERT models (all-MiniLM-L6-v2 + quantized ONNX INT8 multilingual encoder)
@@ -95,14 +95,15 @@ RUN python -c "import platform; from sentence_transformers import SentenceTransf
 
 # Copy source (chỉ invalidate layer nhẹ cuối cùng khi code thay đổi)
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core && rm -rf /var/lib/apt/lists/*
 COPY --chown=appuser:appgroup pyproject.toml README.md ./
 COPY --chown=appuser:appgroup src/ ./src/
 COPY --chown=appuser:appgroup scripts/ ./scripts/
 COPY --chown=appuser:appgroup configs/ ./configs/
+COPY --chown=appuser:appgroup data/models/neuro_symbolic_weights.json ./data/models/neuro_symbolic_weights.json
 
-# Install package in editable mode (để import integrity_checker hoạt động)
-RUN pip install --no-cache-dir --no-build-isolation --no-deps -e .
+# Install package in editable mode & ensure .egg-info metadata stays owned by appuser:appgroup
+RUN pip install --no-cache-dir --no-build-isolation --no-deps -e . && \
+    chown -R appuser:appgroup /app/src
 
 # Switch to non-root user
 USER appuser

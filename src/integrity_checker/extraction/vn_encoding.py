@@ -189,9 +189,9 @@ def _build_vni_tables() -> tuple[dict[str, str], dict[str, str]]:
         ("e", "E", ("ê", "ế", "ề", "ể", "ễ", "ệ"), ("Ê", "Ế", "Ề", "Ể", "Ễ", "Ệ")),
         ("o", "O", ("ô", "ố", "ồ", "ổ", "ỗ", "ộ"), ("Ô", "Ố", "Ồ", "Ổ", "Ỗ", "Ộ")),
     )
-    for b_lo, b_hi, out_lo, out_hi in circ_families:
+    for b_lo, b_hi, circ_out_lo, circ_out_hi in circ_families:
         for mod_lo, mod_hi, ch_lo, ch_hi in zip(
-            circ_lower, circ_upper, out_lo, out_hi, strict=True
+            circ_lower, circ_upper, circ_out_lo, circ_out_hi, strict=True
         ):
             pairs_2char[b_lo + mod_lo] = ch_lo
             pairs_2char[b_hi + mod_hi] = ch_hi
@@ -399,6 +399,7 @@ def is_valid_vietnamese_syllable(word: str) -> tuple[bool, bool]:
             syllable_tone = t_id
 
     base_nucleus = "".join(base_chars)
+    allowed_codas: frozenset[str] | None
     if is_gi_onset and base_nucleus == "ê":
         # Vietnamese orthography coalesces "gi" + "iê" + coda into "giê" + coda
         # (e.g. "giếng", "giềng", "giêng", "giếc")

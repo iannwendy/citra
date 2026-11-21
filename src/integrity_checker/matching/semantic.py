@@ -488,8 +488,8 @@ class SemanticMatcher:
     _instance_lock = threading.Lock()
     _encode_lock = threading.Lock()
     _intent_cache_lock = threading.Lock()
-    _model_cache: dict[str, object] = {}
-    _intent_emb_cache: dict[str, Any] = {}
+    _model_cache: dict[str, Any] = {}
+    _intent_emb_cache: dict[tuple[int, str], Any] = {}
     _text_emb_cache: OrderedDict[tuple[int, str], Any] = OrderedDict()
     _TEXT_EMB_CACHE_MAX_SIZE = 4096
     _singleton: SemanticMatcher | None = None
@@ -514,8 +514,8 @@ class SemanticMatcher:
         self.cross_lingual_sim_boost = float(
             getattr(settings, "cross_lingual_sim_boost", 0.08)
         )
-        self._model = None  # lazy load
-        self._multilingual_model = None  # lazy load on-demand
+        self._model: Any = None  # lazy load
+        self._multilingual_model: Any = None  # lazy load on-demand
 
     @classmethod
     def get_instance(cls, model_name: str | None = None) -> SemanticMatcher:
@@ -532,12 +532,16 @@ class SemanticMatcher:
         """Reset singleton -- for testing only."""
         with cls._instance_lock:
             cls._singleton = None
+        with cls._intent_cache_lock:
+            cls._intent_emb_cache.clear()
 
     @classmethod
     def clear_embedding_cache(cls) -> None:
-        """Clear the bounded LRU text embedding cache."""
+        """Clear the bounded LRU text embedding cache and intent prototype cache."""
         with cls._encode_lock:
             cls._text_emb_cache.clear()
+        with cls._intent_cache_lock:
+            cls._intent_emb_cache.clear()
 
     @staticmethod
     def _load_sentence_transformer(model_name: str):
@@ -694,9 +698,9 @@ class SemanticMatcher:
                         and kwargs.get("convert_to_tensor") is True
                         and kwargs.get("normalize_embeddings") is True
                     )
-                    if use_cache:
+                    if use_cache and isinstance(texts, (list, tuple)):
                         model_id = id(model)
-                        str_texts: list[str] = [str(t) for t in texts]  # type: ignore[union-attr]
+                        str_texts: list[str] = [str(t) for t in texts]
                         missing_unique: list[str] = []
                         seen_missing: set[str] = set()
                         for t in str_texts:
@@ -810,7 +814,9 @@ class SemanticMatcher:
         # Protect common scholarly abbreviations before splitting into sentences
         protected = cls._protect_abbreviations(cleaned)
 
-        raw_parts = re.split(r"(?<=[.!?;;])\s+(?=[A-ZÀ-Ỹ0-9\[\(])", protected)
+        from integrity_checker.extraction.patterns.utils import _UPPER_LATIN_VN
+
+        raw_parts = re.split(rf"(?<=[.!?;;])\s+(?=(?:{_UPPER_LATIN_VN}|[0-9\[\(]))", protected)
         sentences = [
             p.replace("<DOT>", ".").strip()
             for p in raw_parts
@@ -1798,9 +1804,11 @@ class SemanticMatcher:
                     continue
                 win_lower = window.lower()
                 # Skip windows that are themselves bibliography entries on an unfiltered reference page
+                from integrity_checker.extraction.patterns.utils import _UPPER_LATIN_VN
+
                 is_bib_entry = bool(
                     re.search(
-                        r"\b[A-ZÀ-Ỹ][a-zà-ỹ]+,\s+[A-Z]\.(?:.*?\(\s*(?:19|20)\d{2}[a-z]?\s*\))",
+                        rf"\b{_UPPER_LATIN_VN}[a-zà-ỹ]+,\s+[A-Z]\.(?:.*?\(\s*(?:19|20)\d{{2}}[a-z]?\s*\))",
                         window,
                     )
                     or (len(norm_title_sub) >= 12 and norm_title_sub in win_lower and re.search(r"\b(?:19|20)\d{2}\b", win_lower))
@@ -1932,7 +1940,7 @@ class SemanticMatcher:
 
     def _get_intent_embeddings(self, model: object) -> Any:
         """Lazy-compute and cache embeddings for the 3 citation intent prototypes."""
-        key = self.model_name
+        key = (id(model), self.model_name)
         with self._intent_cache_lock:
             if key in self._intent_emb_cache:
                 return self._intent_emb_cache.get(key)

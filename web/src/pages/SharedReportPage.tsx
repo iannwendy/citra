@@ -28,6 +28,7 @@ import {
 import { FileFormatIcon } from '@/components/FileFormatIcon';
 import { useToast } from '@/contexts/ToastContext';
 import { copyTextToClipboard } from '@/lib/clipboard';
+import { toSafeDoiHref, toSafeExternalHref } from '@/lib/utils';
 import { encodeQrMatrix } from '@/lib/qrCode';
 import {
   extractObservedWebMeta,
@@ -967,20 +968,23 @@ export function SharedReportPage() {
                                 {t('sharedReport.matchedSourceLabel')}:{' '}
                                 {matchedSourceDisplay}
                               </span>
-                              {(matched.url || matched.doi) && (
-                                <a
-                                  href={
-                                    matched.url ||
-                                    `https://doi.org/${matched.doi}`
-                                  }
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline"
-                                >
-                                  {t('sharedReport.viewSourceLink')}{' '}
-                                  <ExternalLink className="h-3 w-3" />
-                                </a>
-                              )}
+                              {(() => {
+                                const safeMatchedHref =
+                                  toSafeExternalHref(matched.url) ??
+                                  toSafeDoiHref(matched.doi);
+                                if (!safeMatchedHref) return null;
+                                return (
+                                  <a
+                                    href={safeMatchedHref}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline"
+                                  >
+                                    {t('sharedReport.viewSourceLink')}{' '}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                );
+                              })()}
                             </div>
                             {matched.title && (
                               <div className="text-slate-800 dark:text-slate-200 font-medium">
@@ -1023,17 +1027,23 @@ export function SharedReportPage() {
                                   lang,
                                 )}
                               </span>
-                              {(observedWeb.url || v.cited_url) && (
-                                <a
-                                  href={observedWeb.url || v.cited_url || '#'}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline"
-                                >
-                                  {t('sharedReport.viewSourceLink')}{' '}
-                                  <ExternalLink className="h-3 w-3" />
-                                </a>
-                              )}
+                              {(() => {
+                                const safeObservedHref =
+                                  toSafeExternalHref(observedWeb.url) ??
+                                  toSafeExternalHref(v.cited_url);
+                                if (!safeObservedHref) return null;
+                                return (
+                                  <a
+                                    href={safeObservedHref}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:underline"
+                                  >
+                                    {t('sharedReport.viewSourceLink')}{' '}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                );
+                              })()}
                             </div>
                             {observedWeb.title && (
                               <div className="text-slate-800 dark:text-slate-200 font-medium">

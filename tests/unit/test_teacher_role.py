@@ -75,19 +75,20 @@ def _make_user(username: str, role: str = "user", email: str | None = None) -> i
     from integrity_checker.db.session import get_session
 
     session = get_session()
-    repo = Repository(session)
-    user = repo.create_user(
-        username=username,
-        password_hash=bcrypt.hashpw(b"testpass123", bcrypt.gensalt()).decode(),
-        role=role,
-        email=email,
-        full_name=username.title(),
-        is_active=True,
-    )
-    session.commit()
-    uid = user.id
-    session.close()
-    return uid
+    try:
+        repo = Repository(session)
+        user = repo.create_user(
+            username=username,
+            password_hash=bcrypt.hashpw(b"testpass123", bcrypt.gensalt()).decode(),
+            role=role,
+            email=email,
+            full_name=username.title(),
+            is_active=True,
+        )
+        session.commit()
+        return user.id
+    finally:
+        session.close()
 
 
 # ---------------------------------------------------------------------------
@@ -845,25 +846,24 @@ def clean_db():
     """Wipe sessions, users, classes, essays before each test so they start fresh."""
     from integrity_checker.db.session import get_session
 
-    session = get_session()
-    session.query(CitationRecord).delete()
-    session.query(EssayRecord).delete()
-    session.query(ClassMembership).delete()
-    session.query(ClassModel).delete()
-    session.query(SessionModel).delete()
-    session.query(User).delete()
-    session.commit()
-    session.close()
-    yield
-    session = get_session()
-    session.query(CitationRecord).delete()
-    session.query(EssayRecord).delete()
-    session.query(ClassMembership).delete()
-    session.query(ClassModel).delete()
-    session.query(SessionModel).delete()
-    session.query(User).delete()
-    session.commit()
-    session.close()
+    def _wipe() -> None:
+        session = get_session()
+        try:
+            session.query(CitationRecord).delete()
+            session.query(EssayRecord).delete()
+            session.query(ClassMembership).delete()
+            session.query(ClassModel).delete()
+            session.query(SessionModel).delete()
+            session.query(User).delete()
+            session.commit()
+        finally:
+            session.close()
+
+    _wipe()
+    try:
+        yield
+    finally:
+        _wipe()
 
 
 # ---------------------------------------------------------------------------
@@ -889,24 +889,38 @@ class TestFreshDbMigration:
 
         db_path = tmp_path / "fresh.db"
         engine = sa_create_engine(f"sqlite:///{db_path}")
-        # Test the actual fixed order
         try:
-            Base.metadata.create_all(bind=engine)
-            _run_inline_migrations(engine)
-        except Exception as e:
-            pytest.fail(f"init sequence raised on fresh DB: {e}")
+            # Test the actual fixed order
+            try:
+                Base.metadata.create_all(bind=engine)
+                _run_inline_migrations(engine)
+            except Exception as e:
+                pytest.fail(f"init sequence raised on fresh DB: {e}")
 
-        # Verify all expected tables exist
-        conn = sqlite3.connect(str(db_path))
-        tables = {row[0] for row in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()}
-        conn.close()
+            # Verify all expected tables exist
+            conn = sqlite3.connect(str(db_path))
+            try:
+                tables = {
+                    row[0]
+                    for row in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    ).fetchall()
+                }
+            finally:
+                conn.close()
 
-        # Core tables that should exist after init_db
-        for required in ("users", "essays", "citations", "classes",
-                         "class_memberships", "verdicts"):
-            assert required in tables, f"missing table: {required}"
+            # Core tables that should exist after init_db
+            for required in (
+                "users",
+                "essays",
+                "citations",
+                "classes",
+                "class_memberships",
+                "verdicts",
+            ):
+                assert required in tables, f"missing table: {required}"
+        finally:
+            engine.dispose()
 
     def test_old_migration_order_would_fail(self, tmp_path):
         """Demonstrates the bug: if ALTER ran before create_all, fresh DB fails."""
@@ -917,6 +931,9 @@ class TestFreshDbMigration:
 
         db_path = tmp_path / "fresh_bug.db"
         engine = sa_create_engine(f"sqlite:///{db_path}")
-        # Run ONLY migrations (without create_all) on fresh DB — must fail
-        with pytest.raises(Exception, match="no such table"):
-            _run_inline_migrations(engine)
+        try:
+            # Run ONLY migrations (without create_all) on fresh DB — must fail
+            with pytest.raises(Exception, match="no such table"):
+                _run_inline_migrations(engine)
+        finally:
+            engine.dispose()

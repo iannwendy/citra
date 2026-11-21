@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import threading
 import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
@@ -46,12 +47,17 @@ _CLEAN_MISS_MARKERS = (
     "no title match",
     "does not exist",
     "no matching",
+    "matched different author",
+)
+
+_INPUT_SKIP_MARKERS = (
     "empty title",
     "empty search query",
     "empty bibliographic query",
     "no title for search",
     "no title or",
-    "matched different author",
+    "citation has no doi",
+    "invalid doi format",
 )
 
 _DNS_NOT_FOUND_MARKERS = (
@@ -332,6 +338,9 @@ def _deserialize_source_result(data: dict) -> SourceResult:
 class PersistentVerificationCache:
     """SQLite-backed cross-essay TTL cache using the ``CitationCache`` ORM table."""
 
+    HIT_FLUSH_INTERVAL_SECONDS: float = 300.0
+    OPPORTUNISTIC_PRUNE_EVERY_N_SETS: int = 32
+
     def __init__(
         self,
         *,
@@ -342,8 +351,21 @@ class PersistentVerificationCache:
         self._session_factory = session_factory
         self._now_fn = now_fn or time.time
         self._require_isolated_test_db = require_isolated_test_db
+        self._stats_lock = threading.Lock()
+        self._pending_hit_deltas: dict[str, int] = {}
+        self._last_hit_flushed_at: dict[str, float] = {}
+        self._set_write_counter: int = 0
         self.hits: int = 0
         self.misses: int = 0
+
+    def _inc_hits(self, n: int = 1) -> None:
+        with self._stats_lock:
+            self.hits += n
+
+    def _inc_misses(self, n: int = 1) -> None:
+        if n > 0:
+            with self._stats_lock:
+                self.misses += n
 
     def _is_storage_enabled(self) -> bool:
         if self._session_factory is not None:
@@ -416,7 +438,7 @@ class PersistentVerificationCache:
                 err_no_quotes = _strip_quoted_query(err)
                 if _is_clean_miss_error(err_no_quotes):
                     clean_url_misses += 1
-                elif any(s in err_no_quotes for s in ("skipped", "circuit_open")):
+                elif any(s in err_no_quotes for s in ("skipped", "circuit_open", *_INPUT_SKIP_MARKERS)):
                     continue
                 else:
                     only_aux_skips = False
@@ -428,8 +450,9 @@ class PersistentVerificationCache:
         if has_transient:
             return None
 
-        # Clean negative miss: require >= 3 queried sources all returning clean HTTP-200 misses
-        # (including HTTP-200 queries whose noisy candidates were all quality-filtered out).
+        # Clean negative miss: require >= 3 queried sources with >= 2 genuine HTTP-200 misses
+        # (including HTTP-200 queries whose noisy candidates were quality-filtered out),
+        # allowing auxiliary input-skip markers only alongside >= 2 real misses.
         if (
             not result.candidates
             and not result.sources_succeeded
@@ -437,17 +460,21 @@ class PersistentVerificationCache:
             and len(result.sources_queried or []) >= 3
         ):
             clean_count = 0
+            skip_count = 0
             for err in (result.sources_failed or {}).values():
                 err_no_quotes = _strip_quoted_query(err)
                 if _is_clean_miss_error(err_no_quotes):
                     clean_count += 1
+                elif any(sm in err_no_quotes for sm in _INPUT_SKIP_MARKERS):
+                    skip_count += 1
                 else:
                     return None
             quality_filtered_count = max(
                 0,
                 len(set(result.sources_queried or [])) - len(result.sources_failed or {}),
             )
-            if clean_count + quality_filtered_count >= 3:
+            verified_miss_count = clean_count + quality_filtered_count
+            if verified_miss_count >= 2 and (verified_miss_count + skip_count) >= 3:
                 return CLEAN_MISS_TTL_SECONDS
 
         return None
@@ -477,10 +504,58 @@ class PersistentVerificationCache:
             logger.debug(f"PersistentVerificationCache decode error for {entry.cache_key!r}: {exc}")
             return None, True
 
+    def _record_row_hit(self, entry: CitationCache, key: str, now_ts: float) -> bool:
+        """Apply throttled hit_count / last_hit_at update; returns True iff SQLite commit needed."""
+        db_last_ts: float | None = None
+        if entry.last_hit_at is not None:
+            dt = entry.last_hit_at
+            db_last_ts = (dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt).timestamp()
+
+        with self._stats_lock:
+            self.hits += 1
+            last_flushed = self._last_hit_flushed_at.get(key, db_last_ts)
+            if last_flushed is None or (now_ts - last_flushed) >= self.HIT_FLUSH_INTERVAL_SECONDS:
+                delta = self._pending_hit_deltas.pop(key, 0) + 1
+                self._last_hit_flushed_at[key] = now_ts
+                should_flush = True
+            else:
+                self._pending_hit_deltas[key] = self._pending_hit_deltas.get(key, 0) + 1
+                delta = 0
+                should_flush = False
+
+        if should_flush:
+            entry.hit_count = int(entry.hit_count or 0) + delta
+            entry.last_hit_at = datetime.fromtimestamp(now_ts, tz=UTC)
+            return True
+        return False
+
+    def _opportunistic_prune_expired(self, session: Session, now_ts: float) -> None:
+        """Bounded opportunistic eviction of expired rows to prevent unbounded SQLite growth."""
+        from integrity_checker.db.models import CitationCache
+
+        with self._stats_lock:
+            self._set_write_counter += 1
+            if self._set_write_counter % self.OPPORTUNISTIC_PRUNE_EVERY_N_SETS != 0:
+                return
+
+        oldest_rows = (
+            session.query(CitationCache)
+            .order_by(CitationCache.created_at.asc())
+            .limit(64)
+            .all()
+        )
+        for row in oldest_rows:
+            _, expired = self._decode_row(row, now_ts)
+            if expired:
+                with self._stats_lock:
+                    self._pending_hit_deltas.pop(row.cache_key, None)
+                    self._last_hit_flushed_at.pop(row.cache_key, None)
+                session.delete(row)
+
     def get(self, key: str) -> SourceResult | None:
         """Fetch a cached ``SourceResult`` if present and unexpired, updating hit stats."""
         if not key or not self._is_storage_enabled():
-            self.misses += 1
+            self._inc_misses()
             return None
 
         from integrity_checker.db.models import CitationCache
@@ -494,41 +569,43 @@ class PersistentVerificationCache:
                     .first()
                 )
                 if entry is None:
-                    self.misses += 1
+                    self._inc_misses()
                     return None
 
                 decoded, expired = self._decode_row(entry, now_ts)
                 if expired or decoded is None:
+                    with self._stats_lock:
+                        self._pending_hit_deltas.pop(key, None)
+                        self._last_hit_flushed_at.pop(key, None)
                     session.delete(entry)
                     session.commit()
-                    self.misses += 1
+                    self._inc_misses()
                     return None
 
-                entry.hit_count = int(entry.hit_count or 0) + 1
-                entry.last_hit_at = datetime.now(UTC)
-                session.commit()
-                self.hits += 1
+                if self._record_row_hit(entry, key, now_ts):
+                    session.commit()
                 return decoded
         except OperationalError as exc:
             logger.debug(f"PersistentVerificationCache get skipped (DB uninitialized/busy): {exc}")
-            self.misses += 1
+            self._inc_misses()
             return None
         except Exception as exc:
             logger.debug(f"PersistentVerificationCache get failed for {key!r}: {exc}")
-            self.misses += 1
+            self._inc_misses()
             return None
 
     def get_many(self, keys: Iterable[str]) -> dict[str, SourceResult]:
         """Batch-fetch unexpired ``SourceResult`` entries in a single SQLite round-trip."""
         unique_keys = [k for k in dict.fromkeys(keys) if k]
         if not unique_keys or not self._is_storage_enabled():
-            self.misses += len(unique_keys)
+            self._inc_misses(len(unique_keys))
             return {}
 
         from integrity_checker.db.models import CitationCache
 
         now_ts = float(self._now_fn())
         out: dict[str, SourceResult] = {}
+        misses_recorded = 0
         try:
             with self._session_scope() as session:
                 rows: list[CitationCache] = []
@@ -541,22 +618,24 @@ class PersistentVerificationCache:
                     )
                 by_key = {row.cache_key: row for row in rows}
                 mutated = False
-                hit_dt = datetime.now(UTC)
                 for key in unique_keys:
                     entry = by_key.get(key)
                     if entry is None:
-                        self.misses += 1
+                        self._inc_misses()
+                        misses_recorded += 1
                         continue
                     decoded, expired = self._decode_row(entry, now_ts)
                     if expired or decoded is None:
+                        with self._stats_lock:
+                            self._pending_hit_deltas.pop(key, None)
+                            self._last_hit_flushed_at.pop(key, None)
                         session.delete(entry)
                         mutated = True
-                        self.misses += 1
+                        self._inc_misses()
+                        misses_recorded += 1
                         continue
-                    entry.hit_count = int(entry.hit_count or 0) + 1
-                    entry.last_hit_at = hit_dt
-                    mutated = True
-                    self.hits += 1
+                    if self._record_row_hit(entry, key, now_ts):
+                        mutated = True
                     out[key] = decoded
                 if mutated:
                     session.commit()
@@ -564,11 +643,11 @@ class PersistentVerificationCache:
             logger.debug(
                 f"PersistentVerificationCache get_many skipped (DB uninitialized/busy): {exc}"
             )
-            self.misses += len(unique_keys) - len(out)
+            self._inc_misses(len(unique_keys) - len(out) - misses_recorded)
             return {}
         except Exception as exc:
             logger.debug(f"PersistentVerificationCache get_many failed: {exc}")
-            self.misses += len(unique_keys) - len(out)
+            self._inc_misses(len(unique_keys) - len(out) - misses_recorded)
             return {}
         return out
 
@@ -623,9 +702,14 @@ class PersistentVerificationCache:
             ensure_ascii=False,
         )
 
+        with self._stats_lock:
+            self._pending_hit_deltas.pop(key, None)
+            self._last_hit_flushed_at.pop(key, None)
+
         try:
             with self._session_scope() as session:
                 try:
+                    self._opportunistic_prune_expired(session, now_ts)
                     existing = (
                         session.query(CitationCache)
                         .filter(CitationCache.cache_key == key)
@@ -636,6 +720,8 @@ class PersistentVerificationCache:
                         existing.raw_response = raw_json
                         existing.matched_fields = meta_json
                         existing.created_at = datetime.now(UTC)
+                        existing.last_hit_at = None
+                        existing.hit_count = 0
                     else:
                         session.add(
                             CitationCache(
@@ -659,6 +745,8 @@ class PersistentVerificationCache:
                         existing.raw_response = raw_json
                         existing.matched_fields = meta_json
                         existing.created_at = datetime.now(UTC)
+                        existing.last_hit_at = None
+                        existing.hit_count = 0
                         session.commit()
                         return True
         except OperationalError as exc:

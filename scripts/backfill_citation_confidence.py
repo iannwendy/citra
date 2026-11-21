@@ -136,117 +136,124 @@ def main() -> int:
     args = ap.parse_args()
 
     session = get_session()
-    rows = session.execute(
-        text(
-            "SELECT id, title, authors, year, doi, venue, confidence, raw_text "
-            "FROM citations ORDER BY id"
-        )
-    ).all()
-
-    changed = 0
-    doi_added = 0
-    venue_added = 0
-    titles_resolved = 0
-    samples: list[tuple[int, float, float]] = []
-
-    # Pre-load reference rows per essay so inline citations can be enriched.
-    ref_rows = session.execute(
-        text(
-            "SELECT id, essay_id, authors, year, title, doi, venue FROM citations "
-            "WHERE citation_type = 'reference_list'"
-        )
-    ).all()
-    refs_by_essay: dict[int, list[tuple]] = {}
-    for r in ref_rows:
-        refs_by_essay.setdefault(r.essay_id, []).append(
-            (r.id, r.authors, r.year, r.title, r.doi, r.venue)
-        )
-
-    essay_by_citation = {
-        row[0]: row[1]
-        for row in session.execute(
-            text("SELECT id, essay_id FROM citations")
+    try:
+        rows = session.execute(
+            text(
+                "SELECT id, title, authors, year, doi, venue, confidence, raw_text "
+                "FROM citations ORDER BY id"
+            )
         ).all()
-    }
 
-    for cid, title, authors_raw, year, doi, venue, current, raw_text in rows:
-        blob = " ".join(part for part in (title, venue, raw_text) if part)
+        changed = 0
+        doi_added = 0
+        venue_added = 0
+        titles_resolved = 0
+        samples: list[tuple[int, float, float]] = []
 
-        # 4. Resolve an inline citation against the essay bibliography.
-        new_title = title
-        new_authors = authors_raw
-        new_year = year
-        if not title and not doi:
-            surname, inline_year = _inline_surname_and_year(raw_text or "")
-            ref = _match_reference(
-                surname, inline_year, refs_by_essay.get(essay_by_citation.get(cid, -1), [])
+        # Pre-load reference rows per essay so inline citations can be enriched.
+        ref_rows = session.execute(
+            text(
+                "SELECT id, essay_id, authors, year, title, doi, venue FROM citations "
+                "WHERE citation_type = 'reference_list'"
             )
-            if ref is not None:
-                new_title, new_authors, new_year = ref[3], ref[1], ref[2]
-                if not doi and ref[4]:
-                    doi = ref[4]
-                if not venue and ref[5]:
-                    venue = ref[5]
-                if new_title:
-                    titles_resolved += 1
+        ).all()
+        refs_by_essay: dict[int, list[tuple]] = {}
+        for r in ref_rows:
+            refs_by_essay.setdefault(r.essay_id, []).append(
+                (r.id, r.authors, r.year, r.title, r.doi, r.venue)
+            )
 
-        new_doi = doi
-        if not doi:
-            recovered = _recover_doi(blob or "")
-            if recovered:
-                new_doi = recovered
-                doi_added += 1
+        essay_by_citation = {
+            row[0]: row[1]
+            for row in session.execute(
+                text("SELECT id, essay_id FROM citations")
+            ).all()
+        }
 
-        new_venue = venue
-        if not venue:
-            recovered_venue = _recover_venue(blob or "")
-            if recovered_venue:
-                new_venue = recovered_venue
-                venue_added += 1
+        for cid, title, authors_raw, year, doi, venue, current, raw_text in rows:
+            orig_doi = doi
+            orig_venue = venue
+            blob = " ".join(part for part in (title, venue, raw_text) if part)
 
-        citation = Citation(
-            raw_text="",
-            title=new_title,
-            authors=_authors_from_json(new_authors),
-            year=str(new_year) if new_year not in (None, "") else None,
-            doi=new_doi,
-            venue=new_venue,
-        )
-        new_conf = _estimate_reference_confidence(citation)
+            # 4. Resolve an inline citation against the essay bibliography.
+            new_title = title
+            new_authors = authors_raw
+            new_year = year
+            resolved_doi = doi
+            resolved_venue = venue
+            if not title and not doi:
+                surname, inline_year = _inline_surname_and_year(raw_text or "")
+                ref = _match_reference(
+                    surname, inline_year, refs_by_essay.get(essay_by_citation.get(cid, -1), [])
+                )
+                if ref is not None:
+                    new_title, new_authors, new_year = ref[3], ref[1], ref[2]
+                    if not resolved_doi and ref[4]:
+                        resolved_doi = ref[4]
+                    if not resolved_venue and ref[5]:
+                        resolved_venue = ref[5]
+                    if new_title:
+                        titles_resolved += 1
 
-        conf_changed = abs(new_conf - float(current or 0.0)) > 1e-9
-        if conf_changed:
-            changed += 1
-            if len(samples) < 8:
+            new_doi = resolved_doi
+            if not new_doi:
+                recovered = _recover_doi(blob or "")
+                if recovered:
+                    new_doi = recovered
+                    doi_added += 1
+
+            new_venue = resolved_venue
+            if not new_venue:
+                recovered_venue = _recover_venue(blob or "")
+                if recovered_venue:
+                    new_venue = recovered_venue
+                    venue_added += 1
+
+            citation = Citation(
+                raw_text="",
+                title=new_title,
+                authors=_authors_from_json(new_authors),
+                year=str(new_year) if new_year not in (None, "") else None,
+                doi=new_doi,
+                venue=new_venue,
+            )
+            new_conf = _estimate_reference_confidence(citation)
+
+            conf_changed = abs(new_conf - float(current or 0.0)) > 1e-9
+            if conf_changed and len(samples) < 8:
                 samples.append((cid, float(current or 0.0), new_conf))
-        row_changed = (
-            conf_changed
-            or new_doi != doi
-            or new_venue != venue
-            or new_title != title
-            or new_authors != authors_raw
-            or new_year != year
-        )
-        if args.apply and row_changed:
-            session.execute(
-                text(
-                    "UPDATE citations SET confidence = :c, doi = :d, venue = :v, "
-                    "title = :t, authors = :a, year = :y "
-                    "WHERE id = :i"
-                ),
-                {
-                    "c": new_conf,
-                    "d": new_doi,
-                    "v": new_venue,
-                    "t": new_title,
-                    "a": new_authors,
-                    "y": new_year,
-                    "i": cid,
-                },
+            row_changed = (
+                conf_changed
+                or new_doi != orig_doi
+                or new_venue != orig_venue
+                or new_title != title
+                or new_authors != authors_raw
+                or new_year != year
             )
+            if row_changed:
+                changed += 1
+            if args.apply and row_changed:
+                session.execute(
+                    text(
+                        "UPDATE citations SET confidence = :c, doi = :d, venue = :v, "
+                        "title = :t, authors = :a, year = :y "
+                        "WHERE id = :i"
+                    ),
+                    {
+                        "c": new_conf,
+                        "d": new_doi,
+                        "v": new_venue,
+                        "t": new_title,
+                        "a": new_authors,
+                        "y": new_year,
+                        "i": cid,
+                    },
+                )
 
-    if args.apply:
-        session.commit()
+        if args.apply:
+            session.commit()
+    finally:
+        session.close()
 
     mode = "APPLIED" if args.apply else "DRY-RUN"
     print(f"[{mode}] rows scanned={len(rows)} rows_changed={changed}")

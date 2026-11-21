@@ -47,9 +47,6 @@ from urllib.parse import quote
 
 import fitz  # PyMuPDF
 import requests
-import urllib3
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 PRIMO_BASE = "http://idiscovery.tdtu.edu.vn"
 PRIMO_SEARCH_URL = f"{PRIMO_BASE}/primo-explore/search?vid=tdtu"
@@ -89,10 +86,29 @@ def extract_service_url(linktorsrc_list: list[str] | None) -> str | None:
     return None
 
 
-def get_cas_pds_handle(username: str, password: str) -> str:
+def _resolve_tls_verify(ca_bundle: str | bool | None = True) -> str | bool:
+    """Return TLS verification setting (True or validated CA bundle file path; never False)."""
+    if ca_bundle is False:
+        raise ValueError("Disabling TLS certificate verification (ca_bundle=False) is forbidden")
+    if ca_bundle is None or ca_bundle is True:
+        return True
+    if isinstance(ca_bundle, str):
+        cleaned = ca_bundle.strip()
+        if not cleaned:
+            raise ValueError("Explicit ca_bundle path cannot be empty or whitespace")
+        if not Path(cleaned).is_file():
+            raise ValueError(f"CA bundle file does not exist: {cleaned}")
+        return cleaned
+    raise ValueError(f"Invalid ca_bundle value: {ca_bundle!r}")
+
+
+def get_cas_pds_handle(
+    username: str,
+    password: str,
+    ca_bundle: str | bool | None = True,
+) -> str:
     """Authenticate against TDTU CAS SSO via requests and return the Aleph PDS_HANDLE."""
-    s = requests.Session()
-    s.headers.update({"User-Agent": "Mozilla/5.0"})
+    tls_verify = _resolve_tls_verify(ca_bundle)
     service_target = (
         "http://catalog.tdtu.edu.vn/cas/pds_main?func=load-login&calling_system=primo"
         "&institute=TDT50&PDS_HANDLE=&url=http://idiscovery.tdtu.edu.vn:80/primo_library"
@@ -100,51 +116,63 @@ def get_cas_pds_handle(username: str, password: str) -> str:
         "%2Fsearch%3Fvid%3Dtdtu&from-new-ui=1&authenticationProfile=TDT&filler="
     )
     cas_url = "https://elink.tdtu.edu.vn:8443/cas/login"
-    r = s.get(cas_url, params={"service": service_target}, verify=False, timeout=12)
-    m_ex = re.search(r'name="execution"\s+value="([^"]+)"', r.text)
-    if not m_ex:
-        return "GUEST"
-    r2 = s.post(
-        cas_url,
-        params={"service": service_target},
-        data={
-            "username": username,
-            "password": password,
-            "execution": m_ex.group(1),
-            "_eventId": "submit",
-            "geolocation": "",
-            "submit": "LOGIN",
-        },
-        verify=False,
-        timeout=12,
-    )
+    with requests.Session() as s:
+        s.headers.update({"User-Agent": "Mozilla/5.0"})
+        r = s.get(cas_url, params={"service": service_target}, verify=tls_verify, timeout=12)
+        m_ex = re.search(r'name="execution"\s+value="([^"]+)"', r.text)
+        if not m_ex:
+            return "GUEST"
+        r2 = s.post(
+            cas_url,
+            params={"service": service_target},
+            data={
+                "username": username,
+                "password": password,
+                "execution": m_ex.group(1),
+                "_eventId": "submit",
+                "geolocation": "",
+                "submit": "LOGIN",
+            },
+            verify=tls_verify,
+            timeout=12,
+        )
     m_pds = re.search(r"pds_handle=(\d+)", r2.text)
     return m_pds.group(1) if m_pds else "GUEST"
 
 
-def resolve_aleph_pdf_path(service_url: str, pds_handle: str = "GUEST", timeout: int = 12) -> str | None:
+def resolve_aleph_pdf_path(
+    service_url: str,
+    pds_handle: str = "GUEST",
+    timeout: int = 12,
+    ca_bundle: str | bool | None = True,
+) -> str | None:
     """Fetch catalog.tdtu.edu.vn service page with PDS_HANDLE and extract the internal Aleph PDF path."""
     import html as html_lib
 
+    tls_verify = _resolve_tls_verify(ca_bundle)
     try:
-        s = requests.Session()
-        s.headers.update({"User-Agent": "Mozilla/5.0", "Referer": f"{PRIMO_BASE}/"})
-        resp = s.get(service_url, timeout=timeout, verify=False)
-        if resp.status_code == 200:
-            m = ALEPH_URL_RE.search(resp.text)
-            if m:
-                return m.group(1).strip()
-            m_sso = re.search(r"url=(http://catalog\.tdtu\.edu\.vn:80/F/[^\x27\"]+)", resp.text)
-            if m_sso:
-                direct_u = html_lib.unescape(m_sso.group(1))
-                if "pds_handle=" not in direct_u:
-                    direct_u += f"&pds_handle={pds_handle}"
-                resp2 = s.get(direct_u, timeout=timeout, verify=False)
-                m2 = ALEPH_URL_RE.search(resp2.text)
-                if m2:
-                    return m2.group(1).strip()
+        with requests.Session() as s:
+            s.headers.update({"User-Agent": "Mozilla/5.0", "Referer": f"{PRIMO_BASE}/"})
+            resp = s.get(service_url, timeout=timeout, verify=tls_verify)
+            if resp.status_code == 200:
+                m = ALEPH_URL_RE.search(resp.text)
+                if m:
+                    return m.group(1).strip()
+                m_sso = re.search(r"url=(http://catalog\.tdtu\.edu\.vn:80/F/[^\x27\"]+)", resp.text)
+                if m_sso:
+                    direct_u = html_lib.unescape(m_sso.group(1))
+                    if "pds_handle=" not in direct_u:
+                        direct_u += f"&pds_handle={pds_handle}"
+                    resp2 = s.get(direct_u, timeout=timeout, verify=tls_verify)
+                    m2 = ALEPH_URL_RE.search(resp2.text)
+                    if m2:
+                        return m2.group(1).strip()
+    except requests.RequestException:
+        return None
+    except (ValueError, OSError):
+        raise
     except Exception:
-        pass
+        return None
     return None
 
 
@@ -175,8 +203,10 @@ def prefetch_candidates_via_rest(
     username: str,
     password: str,
     desired_count: int = 140,
+    ca_bundle: str | bool = True,
 ) -> list[dict]:
     """Fast REST prefetch of TDTU thesis metadata and internal Aleph PDF paths."""
+    tls_verify = _resolve_tls_verify(ca_bundle)
     candidates: list[dict] = []
     seen_ids: set[str] = set()
 
@@ -194,9 +224,9 @@ def prefetch_candidates_via_rest(
             candidates = []
 
     print("[*] Authenticating against TDTU CAS SSO to obtain Aleph PDS_HANDLE...", flush=True)
-    pds_handle = get_cas_pds_handle(username, password)
+    pds_handle = get_cas_pds_handle(username, password, ca_bundle=tls_verify)
     print(f"[*] Obtained PDS_HANDLE={pds_handle}. Acquiring Primo REST API token...", flush=True)
-    r_jwt = requests.get(PRIMO_GUEST_JWT_URL, timeout=12)
+    r_jwt = requests.get(PRIMO_GUEST_JWT_URL, timeout=12, verify=tls_verify)
     jwt_token = r_jwt.text.strip('"')
     headers = {"Authorization": f'Bearer "{jwt_token}"', "User-Agent": "Mozilla/5.0"}
 
@@ -216,7 +246,7 @@ def prefetch_candidates_via_rest(
                 f"&sort=rank&tab=default_tab&vid=tdtu"
             )
             try:
-                resp = requests.get(api_url, headers=headers, timeout=15)
+                resp = requests.get(api_url, headers=headers, timeout=15, verify=tls_verify)
                 docs = resp.json().get("docs") or []
             except Exception:
                 break
@@ -251,7 +281,11 @@ def prefetch_candidates_via_rest(
         print(f"[*] Resolving internal Aleph PDF paths for {len(raw_items)} TDTU records in parallel...", flush=True)
 
         def _resolve(item: dict) -> dict:
-            item["aleph_pdf_path"] = resolve_aleph_pdf_path(item["service_url"], pds_handle=pds_handle)
+            item["aleph_pdf_path"] = resolve_aleph_pdf_path(
+                item["service_url"],
+                pds_handle=pds_handle,
+                ca_bundle=tls_verify,
+            )
             return item
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
@@ -270,6 +304,7 @@ def run_scraper(
     password: str,
     headless: bool = True,
     prefetch_only: bool = False,
+    ca_bundle: str | bool = True,
 ) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     candidates_path = output_dir / "tdtu_catalog_candidates.json"
@@ -280,6 +315,7 @@ def run_scraper(
         username=username,
         password=password,
         desired_count=max(target_n + 40, 140),
+        ca_bundle=ca_bundle,
     )
     if prefetch_only:
         return 0
@@ -310,7 +346,7 @@ def run_scraper(
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
-        context = browser.new_context(ignore_https_errors=True, accept_downloads=True)
+        context = browser.new_context(accept_downloads=True)
         page = context.new_page()
 
         print(f"[*] Navigating to {PRIMO_SEARCH_URL} ...", flush=True)
@@ -442,7 +478,13 @@ def main() -> int:
         action="store_true",
         help="Only fetch & resolve 100+ TDTU catalog candidates and Aleph PDF paths without downloading PDFs",
     )
+    parser.add_argument(
+        "--ca-bundle",
+        default=os.environ.get("TDTU_CA_BUNDLE") or None,
+        help="Optional path to custom PEM CA certificate bundle for university TLS verification",
+    )
     args = parser.parse_args()
+    tls_ca = _resolve_tls_verify(args.ca_bundle if args.ca_bundle is not None else True)
 
     return run_scraper(
         output_dir=Path(args.output),
@@ -451,6 +493,7 @@ def main() -> int:
         password=args.password,
         headless=not args.headed,
         prefetch_only=args.prefetch_only,
+        ca_bundle=tls_ca,
     )
 
 

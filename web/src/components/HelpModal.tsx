@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   X,
@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useModalA11y } from '@/hooks/useModalA11y';
 import {
   SCHOLARLY_APIS_LABEL,
   SYMBOLIC_RULES_COUNT,
@@ -38,21 +39,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
   const { t, i18n } = useTranslation();
   const isVi = i18n.language?.startsWith('vi');
   const [activeSection, setActiveSection] = useState<string>('overview');
-
-  // Handle Escape key to close modal
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  const { dialogProps, titleId } = useModalA11y<HTMLDivElement>(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -145,12 +132,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
   ];
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('help.title')}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm animate-fade-in"
@@ -158,7 +140,10 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
       />
 
       {/* Modal Container */}
-      <div className="relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xl w-full max-w-4xl h-[620px] max-h-[88dvh] overflow-hidden flex flex-col animate-scale-in">
+      <div
+        {...dialogProps}
+        className="relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-2xl w-full max-w-4xl h-[620px] max-h-[88dvh] overflow-hidden flex flex-col animate-scale-in outline-none"
+      >
         {/* Full-Width Executive Header */}
         <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/90 shrink-0">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
@@ -173,7 +158,10 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
             </span>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="font-display text-sm sm:text-base font-semibold text-slate-900 dark:text-white tracking-tight truncate">
+                <h2
+                  id={titleId}
+                  className="font-display text-sm sm:text-base font-semibold text-slate-900 dark:text-white tracking-tight truncate"
+                >
                   {t('help.title')}
                 </h2>
                 <span className="inline-flex items-center rounded-md bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 text-[10px] sm:text-[11px] font-medium text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-600/20">

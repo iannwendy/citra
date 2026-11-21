@@ -57,12 +57,9 @@ test.describe('Error Boundary', () => {
     // Reload to trigger the error
     await page.reload();
 
-    // Wait a moment for error handling
-    await page.waitForTimeout(2000);
-
-    // The app should handle this gracefully - body should be attached
-    const body = page.locator('body');
-    await expect(body).toBeAttached();
+    // The app should handle failed API requests gracefully without crashing #root into GlobalErrorFallback
+    await expect(page.locator('#root')).not.toBeEmpty();
+    await expect(page.getByText('Something went wrong')).toHaveCount(0);
   });
 });
 
@@ -101,11 +98,8 @@ test.describe('App Stability', () => {
     for (const pagePath of pages) {
       await page.goto(pagePath);
       await page.waitForLoadState('domcontentloaded');
-      await page.waitForTimeout(500);
-
-      // Verify no error boundary is shown
-      const hasErrorBoundary = await page.locator('text=Something went wrong').isVisible();
-      expect(hasErrorBoundary).toBe(false);
+      await expect(page.locator('main')).toBeVisible();
+      await expect(page.getByText('Something went wrong')).toHaveCount(0);
     }
   });
 });

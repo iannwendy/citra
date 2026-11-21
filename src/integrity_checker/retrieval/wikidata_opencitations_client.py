@@ -362,6 +362,7 @@ class WikidataOpenCitationsClient(BaseScholarClient):
 
         # Combine Wikidata label (e.g., "ISO/IEC 27001") and official P1476 title
         # (e.g., "Information security, cybersecurity and privacy protection...") strictly from Wikidata
+        title: str | None
         if clean_label and clean_p1476 and clean_label.lower() not in clean_p1476.lower():
             title = f"{clean_label}: {clean_p1476}"
         else:

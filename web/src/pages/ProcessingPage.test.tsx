@@ -28,6 +28,10 @@ describe('ProcessingPage FIFO Admission Queue UI', () => {
     await i18n.changeLanguage('en');
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('renders FIFO queue position badge and banner in English when status is queued', async () => {
     vi.spyOn(api, 'getEssayStatus').mockResolvedValue(queuedStatusFixture);
 
@@ -80,6 +84,7 @@ describe('ProcessingPage FIFO Admission Queue UI', () => {
   });
 
   it('progresses smoothly step-by-step from 01/08 to 04/08 without jumping over intermediate steps', async () => {
+    vi.useFakeTimers();
     vi.spyOn(api, 'getEssayStatus').mockResolvedValue({
       status: 'processing',
       queue_position: null,
@@ -106,21 +111,26 @@ describe('ProcessingPage FIFO Admission Queue UI', () => {
       },
     );
 
+    // Flush initial status resolution inside act(...)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
     // Initially starts at Step 01/08 active instead of teleporting straight to Step 04/08
-    const step1 = await screen.findByTestId('pipeline-step-1');
-    expect(step1.getAttribute('data-step-status')).toBe('active');
+    expect(screen.getByTestId('pipeline-step-1').getAttribute('data-step-status')).toBe('active');
     expect(screen.getByTestId('pipeline-step-4').getAttribute('data-step-status')).toBe('pending');
 
-    // After smooth step-by-step progression (~700ms for 3 steps at 220ms/step), Step 01..03 are completed and Step 04 is active
-    await vi.waitFor(
-      () => {
-        expect(screen.getByTestId('pipeline-step-1').getAttribute('data-step-status')).toBe('completed');
-        expect(screen.getByTestId('pipeline-step-2').getAttribute('data-step-status')).toBe('completed');
-        expect(screen.getByTestId('pipeline-step-3').getAttribute('data-step-status')).toBe('completed');
-        expect(screen.getByTestId('pipeline-step-4').getAttribute('data-step-status')).toBe('active');
-      },
-      { timeout: 2000 },
-    );
+    // After smooth step-by-step progression (3 chained 220ms effects), Step 01..03 are completed and Step 04 is active
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(250);
+      });
+    }
+
+    expect(screen.getByTestId('pipeline-step-1').getAttribute('data-step-status')).toBe('completed');
+    expect(screen.getByTestId('pipeline-step-2').getAttribute('data-step-status')).toBe('completed');
+    expect(screen.getByTestId('pipeline-step-3').getAttribute('data-step-status')).toBe('completed');
+    expect(screen.getByTestId('pipeline-step-4').getAttribute('data-step-status')).toBe('active');
   });
 });
 

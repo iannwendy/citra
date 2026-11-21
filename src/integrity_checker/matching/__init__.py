@@ -14,7 +14,6 @@ from integrity_checker.matching.author_parser import (
     normalize_author,
     parse_authors,
 )
-from integrity_checker.matching.consensus import ConsensusCalculator
 from integrity_checker.matching.features import FeatureCalculator
 from integrity_checker.matching.fuzzy import FuzzyMatcher
 from integrity_checker.matching.semantic import SemanticMatcher
@@ -23,7 +22,6 @@ __all__ = [
     "FuzzyMatcher",
     "SemanticMatcher",
     "FeatureCalculator",
-    "ConsensusCalculator",
     "Author",
     "normalize_author",
     "parse_authors",

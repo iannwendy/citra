@@ -764,15 +764,22 @@ class _ReadOnlyLocalDatabase:
     _VN_STD_PREFIX_RE = re.compile(r"\b(?:TCVN|QCVN)\s+[A-ZĐ0-9]", re.IGNORECASE)
 
     def __init__(self, db_path: Path) -> None:
+        import weakref
+
         self.db_path = Path(db_path)
         self._lock = threading.Lock()
-        self._conn = sqlite3.connect(
+        conn = sqlite3.connect(
             f"file:{self.db_path.resolve()}?mode=ro",
             uri=True,
             check_same_thread=False,
             timeout=5.0,
         )
-        self._conn.row_factory = sqlite3.Row
+        conn.row_factory = sqlite3.Row
+        self._conn = conn
+        self._finalizer = weakref.finalize(self, conn.close)
+
+    def close(self) -> None:
+        self._finalizer()
 
     def find_by_doi(self, doi: str | None) -> Paper | None:
         nd = normalize_doi(doi) if doi else None
@@ -1462,6 +1469,7 @@ async def predict_raw_references(
         _enable_local_hf_offline_if_cached()
 
     parser = ref_parser or ReferenceListParser()
+    owns_orchestrator = orchestrator is None
     active_orchestrator = orchestrator or (
         build_offline_orchestrator(use_local_db=use_local_db)
         if mode == "offline"
@@ -1469,50 +1477,57 @@ async def predict_raw_references(
     )
     active_checker = checker or NeuroSymbolicChecker()
 
-    parsed_citations: list[Citation] = []
-    for raw_text, ctx in inputs:
-        cit = parse_raw_bibliography(raw_text, ref_parser=parser)
-        if ctx:
-            cit.context = ctx
-        parsed_citations.append(cit)
+    try:
+        parsed_citations: list[Citation] = []
+        for raw_text, ctx in inputs:
+            cit = parse_raw_bibliography(raw_text, ref_parser=parser)
+            if ctx:
+                cit.context = ctx
+            parsed_citations.append(cit)
 
-    sem = asyncio.Semaphore(16 if mode == "offline" else 6)
+        sem = asyncio.Semaphore(16 if mode == "offline" else 6)
 
-    async def _retrieve_one(cit: Citation) -> SourceResult:
-        async with sem:
-            return await active_orchestrator.retrieve(
-                cit,
-                allow_serpapi=(None if mode == "live" else False),
+        async def _retrieve_one(cit: Citation) -> SourceResult:
+            async with sem:
+                return await active_orchestrator.retrieve(
+                    cit,
+                    allow_serpapi=(None if mode == "live" else False),
+                )
+
+        sources = await asyncio.gather(*(_retrieve_one(c) for c in parsed_citations))
+
+        batch_triples = [
+            (cit, src, ctx)
+            for cit, src, (_, ctx) in zip(parsed_citations, sources, inputs, strict=True)
+            if cit.matched_pattern != "vn_legal_document"
+            and any(getattr(c, "found", False) for c in (src.candidates or []))
+        ]
+        if batch_triples and hasattr(active_checker, "prewarm_comparison_batch"):
+            active_checker.prewarm_comparison_batch(batch_triples)
+
+        results: list[tuple[str, float, dict[str, Any]]] = []
+        for cit, src, (_, ctx) in zip(parsed_citations, sources, inputs, strict=True):
+            pre_feat = (
+                active_checker.compare_evidence(cit, src, ctx)
+                if hasattr(active_checker, "compare_evidence")
+                else None
             )
-
-    sources = await asyncio.gather(*(_retrieve_one(c) for c in parsed_citations))
-
-    batch_triples = [
-        (cit, src, ctx)
-        for cit, src, (_, ctx) in zip(parsed_citations, sources, inputs, strict=True)
-        if cit.matched_pattern != "vn_legal_document"
-        and any(getattr(c, "found", False) for c in (src.candidates or []))
-    ]
-    if batch_triples and hasattr(active_checker, "prewarm_comparison_batch"):
-        active_checker.prewarm_comparison_batch(batch_triples)
-
-    results: list[tuple[str, float, dict[str, Any]]] = []
-    for cit, src, (_, ctx) in zip(parsed_citations, sources, inputs, strict=True):
-        pre_feat = (
-            active_checker.compare_evidence(cit, src, ctx)
-            if hasattr(active_checker, "compare_evidence")
-            else None
-        )
-        pred_lbl, conf, meta = await evaluate_single_citation(
-            cit,
-            active_orchestrator,
-            active_checker,
-            citation_context=ctx,
-            precomputed_source=src,
-            precomputed_features=pre_feat,
-        )
-        results.append((pred_lbl, conf, meta))
-    return results
+            pred_lbl, conf, meta = await evaluate_single_citation(
+                cit,
+                active_orchestrator,
+                active_checker,
+                citation_context=ctx,
+                precomputed_source=src,
+                precomputed_features=pre_feat,
+            )
+            results.append((pred_lbl, conf, meta))
+        return results
+    finally:
+        if owns_orchestrator:
+            ldb = getattr(active_orchestrator, "local_db", None)
+            if ldb is not None and hasattr(ldb, "close"):
+                with contextlib.suppress(Exception):
+                    ldb.close()
 
 
 async def run_evaluation(

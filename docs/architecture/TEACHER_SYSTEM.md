@@ -160,12 +160,10 @@ const canOverride =
 
 **API:**
 ```
-PATCH /api/citations/override
+POST /api/essays/{essay_id}/verdicts/{verdict_id}/override
 Body: {
-  citation_id: string,
-  new_label: 'verified' | 'metadata_error' | 'unresolved',
-  reason: string,
-  teacher_override: true
+  label: 'verified' | 'metadata_error' | 'suspected_hallucination' | 'unresolved' | 'resource',
+  note?: string
 }
 ```
 
@@ -178,15 +176,22 @@ Body: {
 | GET | `/api/teacher/dashboard` | Tổng hợp stats + danh sách lớp | teacher, admin |
 | GET | `/api/teacher/classes` | Danh sách lớp của teacher | teacher, admin |
 | POST | `/api/teacher/classes` | Tạo lớp mới | teacher, admin |
-| GET | `/api/teacher/classes/{id}` | Chi tiết lớp | teacher (chỉ lớp của mình), admin |
-| PUT | `/api/teacher/classes/{id}` | Cập nhật lớp | teacher (chỉ lớp của mình), admin |
-| DELETE | `/api/teacher/classes/{id}` | Xóa lớp | teacher (chỉ lớp của mình), admin |
-| GET | `/api/teacher/classes/{id}/students` | Danh sách sinh viên | teacher, admin |
-| POST | `/api/teacher/classes/{id}/students` | Thêm sinh viên vào lớp | teacher, admin |
-| DELETE | `/api/teacher/classes/{id}/students/{studentId}` | Xóa sinh viên khỏi lớp | teacher, admin |
-| GET | `/api/teacher/classes/{id}/essays` | Danh sách bài nộp | teacher, admin |
-| GET | `/api/teacher/classes/{id}/pending-reviews` | Bài cần duyệt | teacher, admin |
-| PATCH | `/api/citations/override` | Override verdict | teacher (chỉ bài trong lớp), admin |
+| PATCH | `/api/teacher/classes/{class_id}` | Cập nhật lớp | teacher (chỉ lớp của mình), admin |
+| DELETE | `/api/teacher/classes/{class_id}` | Xóa lớp | teacher (chỉ lớp của mình), admin |
+| POST | `/api/teacher/classes/{class_id}/regenerate-code` | Tạo lại mã tham gia lớp | teacher (chỉ lớp của mình), admin |
+| POST | `/api/teacher/classes/join` | Sinh viên tham gia lớp bằng mã | user, teacher, admin |
+| GET | `/api/teacher/enrolled-classes` | Danh sách lớp đã tham gia | user, teacher, admin |
+| DELETE | `/api/teacher/classes/{class_id}/leave` | Rời lớp học | user, teacher, admin |
+| GET | `/api/teacher/students` | Tìm kiếm sinh viên để thêm vào lớp | teacher, admin |
+| GET | `/api/teacher/classes/{class_id}/students` | Danh sách sinh viên trong lớp | teacher, admin |
+| POST | `/api/teacher/classes/{class_id}/students` | Thêm sinh viên vào lớp | teacher, admin |
+| DELETE | `/api/teacher/classes/{class_id}/students/{student_id}` | Xóa sinh viên khỏi lớp | teacher, admin |
+| GET | `/api/teacher/classes/{class_id}/essays` | Danh sách bài nộp | teacher, admin |
+| GET | `/api/teacher/classes/{class_id}/pending-reviews` | Hàng đợi phán quyết cần duyệt | teacher, admin |
+| GET | `/api/teacher/classes/{class_id}/analytics` | Phân tích lớp & radar ảo giác chung | teacher, admin |
+| GET | `/api/teacher/classes/{class_id}/export.csv` | Xuất bảng điểm lớp `.csv` | teacher, admin |
+| GET | `/api/teacher/classes/{class_id}/export.zip` | Xuất trọn bộ báo cáo lớp `.zip` | teacher, admin |
+| POST | `/api/essays/{essay_id}/verdicts/{verdict_id}/override` | Ghi đè phán quyết & tính lại CIS | teacher (chỉ bài trong lớp), admin |
 
 ---
 

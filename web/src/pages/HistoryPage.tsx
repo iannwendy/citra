@@ -43,7 +43,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 export function HistoryPage() {
   const { t, i18n } = useTranslation();
   const toast = useToast();
-  const { isTeacher, isAdmin, canBatchUpload } = useRole();
+  const { isUser, isTeacher, isAdmin, canBatchUpload } = useRole();
   const {
     data: items = [],
     isLoading,
@@ -275,14 +275,16 @@ export function HistoryPage() {
                   : '—';
 
               return (
-              <Link
+              <div
                 key={essay.id}
-                to={targetHref}
-                data-testid="essay-item"
-                className="group block p-4 sm:p-5 rounded-2xl bg-slate-50/60 dark:bg-slate-950/60 border border-slate-200/90 dark:border-slate-800 hover:bg-white dark:hover:bg-slate-900 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-sm transition-all duration-200 overflow-hidden"
+                className="group relative p-4 sm:p-5 rounded-2xl bg-slate-50/60 dark:bg-slate-950/60 border border-slate-200/90 dark:border-slate-800 hover:bg-white dark:hover:bg-slate-900 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-sm transition-all duration-200 overflow-hidden"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 min-w-0">
-                  <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 w-full">
+                  <Link
+                    to={targetHref}
+                    data-testid="essay-item"
+                    className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 w-full after:absolute after:inset-0 after:rounded-2xl after:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-xl"
+                  >
                     <FileFormatIcon filename={essay.filename} size="lg" />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap min-w-0">
@@ -357,43 +359,47 @@ export function HistoryPage() {
                             }
                           )}
                         </span>
-                        <span>ID #{essay.id}</span>
-                        <span className="text-slate-300 dark:text-slate-700">·</span>
-                        {(() => {
-                          const fmt = getDocumentFormat(essay.filename);
-                          if (fmt === 'docx') {
-                            return (
-                              <span className="text-[#2563EB] dark:text-[#60A5FA] font-medium">
-                                WORD DOCX · OPENXML
-                              </span>
-                            );
-                          }
-                          if (fmt === 'bib') {
-                            return (
-                              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                                BIBTEX · .BIB
-                              </span>
-                            );
-                          }
-                          if (fmt === 'ris') {
-                            return (
-                              <span className="text-amber-600 dark:text-amber-400 font-medium">
-                                RIS · BIBLIOGRAPHY
-                              </span>
-                            );
-                          }
-                          return (
-                            <span className="text-emerald-600 dark:text-emerald-400">
-                              GROBID TEI
-                            </span>
-                          );
-                        })()}
+                        {!isUser && (
+                          <>
+                            <span>ID #{essay.id}</span>
+                            <span className="text-slate-300 dark:text-slate-700">·</span>
+                            {(() => {
+                              const fmt = getDocumentFormat(essay.filename);
+                              if (fmt === 'docx') {
+                                return (
+                                  <span className="text-[#2563EB] dark:text-[#60A5FA] font-medium">
+                                    WORD DOCX · OPENXML
+                                  </span>
+                                );
+                              }
+                              if (fmt === 'bib') {
+                                return (
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                    BIBTEX · .BIB
+                                  </span>
+                                );
+                              }
+                              if (fmt === 'ris') {
+                                return (
+                                  <span className="text-amber-600 dark:text-amber-400 font-medium">
+                                    RIS · BIBLIOGRAPHY
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="text-emerald-600 dark:text-emerald-400">
+                                  GROBID TEI
+                                </span>
+                              );
+                            })()}
+                          </>
+                        )}
                       </div>
                     </div>
-                  </div>
+                  </Link>
 
                   <div className="flex items-center justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200/60 dark:border-slate-800/60">
-                    <span className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 border border-indigo-200/80 dark:border-indigo-800/80 bg-indigo-50/80 dark:bg-indigo-950/80 rounded-xl text-indigo-700 dark:text-indigo-300 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-colors">
+                    <span className="pointer-events-none flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 border border-indigo-200/80 dark:border-indigo-800/80 bg-indigo-50/80 dark:bg-indigo-950/80 rounded-xl text-indigo-700 dark:text-indigo-300 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-colors">
                       {isInProgress
                         ? lang === 'vi'
                           ? 'Xem tiến trình'
@@ -405,15 +411,15 @@ export function HistoryPage() {
                           : t('dashboard.viewReport')}
                     </span>
                     <button
-                      onClickCapture={(e) => {
-                        e.preventDefault();
+                      type="button"
+                      onClick={(e) => {
                         e.stopPropagation();
                         setConfirmDeleteId(essay.id);
                       }}
                       disabled={deletingId === essay.id}
-                      className="p-2.5 min-h-10 min-w-10 rounded-xl text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors disabled:opacity-50"
+                      className="relative z-10 p-2.5 min-h-10 min-w-10 rounded-xl text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors disabled:opacity-50 cursor-pointer"
                       title={t('common.delete')}
-                      aria-label={`Delete ${essay.filename}`}
+                      aria-label={`${t('common.delete')} ${essay.filename}`}
                     >
                       {deletingId === essay.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -421,10 +427,10 @@ export function HistoryPage() {
                         <Trash2 className="h-4 w-4" />
                       )}
                     </button>
-                    <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
+                    <ChevronRight className="pointer-events-none h-5 w-5 text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
                   </div>
                 </div>
-              </Link>
+              </div>
               );
             })}
           </div>

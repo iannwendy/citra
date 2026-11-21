@@ -24,6 +24,7 @@ from integrity_checker.retrieval.base import BaseScholarClient
 from integrity_checker.retrieval.http_pool import get_shared_http_client
 from integrity_checker.retrieval.normalization import (
     author_match_score,
+    detect_and_strip_retraction_title,
     is_book_review_mismatch,
     normalize_doi,
     title_similarity,
@@ -72,8 +73,17 @@ class DOAJClient(BaseScholarClient):
                 by_doi = await self._lookup_by_doi(doi_norm, citation=citation)
                 if by_doi and by_doi.found:
                     return by_doi
-                if self._last_status_code == 429:
-                    return self._build_miss_or_error_candidate("DOAJ", doi_norm)
+                if (
+                    self._last_status_code == 429
+                    or (self._last_status_code is not None and self._last_status_code >= 500)
+                    or self._last_transport_error
+                    or not (citation.title and citation.title.strip())
+                ):
+                    return self._build_miss_or_error_candidate(
+                        "DOAJ",
+                        doi_norm,
+                        clean_miss_error=f"DOAJ: no results for DOI '{doi_norm}'",
+                    )
 
         return await self._lookup_by_title(citation)
 
@@ -201,7 +211,8 @@ class DOAJClient(BaseScholarClient):
 
     def _item_to_candidate(self, item: dict[str, Any]) -> SourceCandidate:
         bib = item.get("bibjson") or {}
-        title = self._clean_text(bib.get("title"))
+        raw_title = self._clean_text(bib.get("title"))
+        title, is_retracted = detect_and_strip_retraction_title(raw_title)
 
         authors: list[str] = []
         for a in bib.get("author") or []:
@@ -238,6 +249,8 @@ class DOAJClient(BaseScholarClient):
             ext_ids["doi"] = doi
         if item.get("id"):
             ext_ids["doaj_id"] = str(item["id"])
+        if is_retracted:
+            ext_ids["is_retracted"] = "true"
 
         return SourceCandidate(
             source_name=self.name,

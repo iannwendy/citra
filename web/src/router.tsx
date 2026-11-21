@@ -197,54 +197,64 @@ function withEditorialSuspense(LazyComponent: React.ComponentType) {
   );
 }
 
-const PAGE_TITLE_ROUTES: Array<{ pattern: string; title: string }> = [
-  { pattern: '/', title: 'Home' },
-  { pattern: '/login', title: 'Login' },
-  { pattern: '/register', title: 'Register' },
-  { pattern: '/forgot-password', title: 'Forgot Password' },
-  { pattern: '/activate-account', title: 'Activate Account' },
-  { pattern: '/reset-password', title: 'Reset Password' },
-  { pattern: '/dashboard', title: 'Dashboard' },
-  { pattern: '/upload', title: 'New Check' },
-  { pattern: '/sandbox', title: 'Live Sandbox' },
-  { pattern: '/batch-upload', title: 'Batch Check' },
-  { pattern: '/verification/processing', title: 'Processing' },
-  { pattern: '/verification/processing/:id', title: 'Processing' },
-  { pattern: '/verification/report/:id', title: 'Verification Report' },
-  { pattern: '/verification/report/:id/issues', title: 'Issues' },
-  { pattern: '/verification/report/:id/trace', title: 'Logic Trace' },
-  { pattern: '/verification/report/:id/document', title: 'Document Inspector' },
-  { pattern: '/verification/report/:id/consistency', title: 'Consistency' },
-  { pattern: '/history', title: 'History' },
-  { pattern: '/profile', title: 'Profile' },
-  { pattern: '/admin/users', title: 'Accounts' },
-  { pattern: '/admin/promos', title: 'Promo Codes' },
-  { pattern: '/admin/system', title: 'System Health' },
-  { pattern: '/admin/audit', title: 'Audit Log' },
-  { pattern: '/settings', title: 'Settings' },
-  { pattern: '/pricing', title: 'Pricing & Plans' },
-  { pattern: '/privacy', title: 'Privacy Policy' },
-  { pattern: '/terms', title: 'Terms of Service' },
-  { pattern: '/billing/checkout', title: 'Stripe Checkout' },
-  { pattern: '/billing/success', title: 'Payment Confirmed' },
-  { pattern: '/teacher/classes', title: 'My Classes' },
-  { pattern: '/teacher/classes/:classId', title: 'Class Detail' },
-  { pattern: '/teacher/reviews', title: 'Pending Reviews' },
-  { pattern: '/verify/share/:token', title: 'Digital Verification Receipt' },
+const PAGE_TITLE_ROUTES: Array<{ pattern: string; title: string; titleVi: string }> = [
+  { pattern: '/', title: 'Home', titleVi: 'Trang chủ' },
+  { pattern: '/login', title: 'Login', titleVi: 'Đăng nhập' },
+  { pattern: '/register', title: 'Register', titleVi: 'Đăng ký' },
+  { pattern: '/forgot-password', title: 'Forgot Password', titleVi: 'Quên mật khẩu' },
+  { pattern: '/activate-account', title: 'Activate Account', titleVi: 'Kích hoạt tài khoản' },
+  { pattern: '/reset-password', title: 'Reset Password', titleVi: 'Đặt lại mật khẩu' },
+  { pattern: '/dashboard', title: 'Dashboard', titleVi: 'Bảng điều khiển' },
+  { pattern: '/upload', title: 'New Check', titleVi: 'Kiểm tra mới' },
+  { pattern: '/sandbox', title: 'Live Sandbox', titleVi: 'Thử nghiệm trực tiếp' },
+  { pattern: '/batch-upload', title: 'Batch Check', titleVi: 'Kiểm tra hàng loạt' },
+  { pattern: '/verification/processing', title: 'Processing', titleVi: 'Đang xử lý' },
+  { pattern: '/verification/processing/:id', title: 'Processing', titleVi: 'Đang xử lý' },
+  { pattern: '/verification/report/:id', title: 'Verification Report', titleVi: 'Báo cáo xác minh' },
+  { pattern: '/verification/report/:id/issues', title: 'Issues', titleVi: 'Danh mục vấn đề' },
+  { pattern: '/verification/report/:id/trace', title: 'Logic Trace', titleVi: 'Truy vết suy diễn' },
+  { pattern: '/verification/report/:id/document', title: 'Document Inspector', titleVi: 'Xem trong bài viết' },
+  { pattern: '/verification/report/:id/consistency', title: 'Consistency', titleVi: 'Nhất quán trích dẫn' },
+  { pattern: '/history', title: 'History', titleVi: 'Lịch sử báo cáo' },
+  { pattern: '/profile', title: 'Profile', titleVi: 'Hồ sơ cá nhân' },
+  { pattern: '/admin/users', title: 'Accounts', titleVi: 'Quản lý tài khoản' },
+  { pattern: '/admin/promos', title: 'Promo Codes', titleVi: 'Mã giảm giá' },
+  { pattern: '/admin/system', title: 'System Health', titleVi: 'Sức khỏe hệ thống' },
+  { pattern: '/admin/audit', title: 'Audit Log', titleVi: 'Nhật ký kiểm toán' },
+  { pattern: '/settings', title: 'Settings', titleVi: 'Cài đặt' },
+  { pattern: '/pricing', title: 'Pricing & Plans', titleVi: 'Bảng giá & Gói dịch vụ' },
+  { pattern: '/privacy', title: 'Privacy Policy', titleVi: 'Chính sách bảo mật' },
+  { pattern: '/terms', title: 'Terms of Service', titleVi: 'Điều khoản dịch vụ' },
+  { pattern: '/billing/checkout', title: 'Stripe Checkout', titleVi: 'Thanh toán' },
+  { pattern: '/billing/success', title: 'Payment Confirmed', titleVi: 'Thanh toán thành công' },
+  { pattern: '/teacher/classes', title: 'My Classes', titleVi: 'Lớp học của tôi' },
+  { pattern: '/teacher/classes/:classId', title: 'Class Detail', titleVi: 'Chi tiết lớp học' },
+  { pattern: '/teacher/reviews', title: 'Pending Reviews', titleVi: 'Hàng đợi rà soát' },
+  { pattern: '/verify/share/:token', title: 'Digital Verification Receipt', titleVi: 'Chứng nhận xác thực số' },
 ];
 
-export function getDocumentTitle(pathname: string): string {
+export const PUBLIC_INDEXABLE_PATHS: ReadonlySet<string> = new Set([
+  '/',
+  '/pricing',
+  '/privacy',
+  '/terms',
+]);
+
+export function getDocumentTitle(pathname: string, lang: string = 'en'): string {
+  const isVi = Boolean(lang?.startsWith('vi'));
   for (const route of PAGE_TITLE_ROUTES) {
     if (matchPath({ path: route.pattern, end: true }, pathname)) {
-      return `CITRA - ${route.title}`;
+      return `CITRA - ${isVi ? route.titleVi : route.title}`;
     }
   }
-  return 'CITRA - Page Not Found';
+  return isVi ? 'CITRA - Không tìm thấy trang' : 'CITRA - Page Not Found';
 }
 
-function syncRobotsMeta(pathname: string): void {
+export function syncRobotsMeta(pathname: string): void {
   if (typeof document === 'undefined') return;
-  const isPublicIndexable = pathname === '/';
+  const normalizedPath =
+    pathname === '/' ? '/' : pathname.replace(/\/+$/, '') || '/';
+  const isPublicIndexable = PUBLIC_INDEXABLE_PATHS.has(normalizedPath);
   const content = isPublicIndexable ? 'index, follow' : 'noindex, nofollow';
   let meta = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
   if (!meta) {
@@ -260,17 +270,17 @@ function syncRobotsMeta(pathname: string): void {
     canonical.rel = 'canonical';
     document.head.appendChild(canonical);
   }
-  const normalizedPath = pathname === '/' ? '/' : pathname.replace(/\/+$/, '');
   canonical.href = `https://citra.io.vn${normalizedPath}`;
 }
 
 function RootLayout() {
   const { pathname } = useLocation();
+  const { i18n } = useTranslation();
 
   useEffect(() => {
-    document.title = getDocumentTitle(pathname);
+    document.title = getDocumentTitle(pathname, i18n.language);
     syncRobotsMeta(pathname);
-  }, [pathname]);
+  }, [pathname, i18n.language]);
 
   return <Outlet />;
 }
@@ -507,10 +517,9 @@ export const router = createBrowserRouter(appRoutes, {
 
 if (typeof document !== 'undefined' && typeof window !== 'undefined') {
   installChunkErrorHandlers();
-  document.title = getDocumentTitle(window.location.pathname);
-  router.subscribe((state) => {
-    document.title = getDocumentTitle(state.location.pathname);
-  });
+  const initialLang =
+    document.documentElement.getAttribute('lang') || 'en';
+  document.title = getDocumentTitle(window.location.pathname, initialLang);
 }
 
 /* ============================================================

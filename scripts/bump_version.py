@@ -11,9 +11,10 @@ Follows Conventional Commits specification (https://www.conventionalcommits.org)
 Synchronizes version across:
   1. web/src/version.ts (APP_VERSION & APP_BUILD_DATE used in UI)
   2. web/package.json
-  3. package.json
-  4. pyproject.toml
-  5. src/integrity_checker/__version__.py
+  3. web/package-lock.json
+  4. package.json
+  5. pyproject.toml
+  6. src/integrity_checker/__version__.py
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parent.parent
 WEB_VERSION_TS = ROOT_DIR / "web" / "src" / "version.ts"
 WEB_PACKAGE_JSON = ROOT_DIR / "web" / "package.json"
+WEB_PACKAGE_LOCK_JSON = ROOT_DIR / "web" / "package-lock.json"
 ROOT_PACKAGE_JSON = ROOT_DIR / "package.json"
 PYPROJECT_TOML = ROOT_DIR / "pyproject.toml"
 PY_VERSION_FILE = ROOT_DIR / "src" / "integrity_checker" / "__version__.py"
@@ -40,6 +42,7 @@ BENCHMARK_REPORT_MD = ROOT_DIR / "docs" / "reports" / "BENCHMARK_120K_NEURO_SYMB
 VERSION_FILES = [
     WEB_VERSION_TS,
     WEB_PACKAGE_JSON,
+    WEB_PACKAGE_LOCK_JSON,
     ROOT_PACKAGE_JSON,
     PYPROJECT_TOML,
     PY_VERSION_FILE,
@@ -73,6 +76,15 @@ def parse_semver(version: str) -> tuple[int, int, int]:
     if not match:
         raise ValueError(f"Invalid SemVer string: {version!r}")
     return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+
+def validate_build_date(build_date: str) -> str:
+    """Validate YYYY-MM-DD ISO calendar date."""
+    cleaned = (build_date or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", cleaned):
+        raise ValueError(f"Invalid ISO build date (expected YYYY-MM-DD): {build_date!r}")
+    dt.date.fromisoformat(cleaned)
+    return cleaned
 
 
 def bump_semver(version: str, bump_type: str) -> str:
@@ -112,6 +124,7 @@ def detect_bump_from_message(message: str) -> str | None:
 def update_all_version_files(new_version: str, build_date: str) -> None:
     """Write new_version and build_date across all project manifests and UI config."""
     parse_semver(new_version)
+    validated_date = validate_build_date(build_date)
 
     # 1. web/src/version.ts
     if WEB_VERSION_TS.exists():
@@ -123,7 +136,7 @@ def update_all_version_files(new_version: str, build_date: str) -> None:
         )
         text = re.sub(
             r"(export const APP_BUILD_DATE\s*=\s*['\"])[^'\"]+(['\"];)",
-            rf"\g<1>{build_date}\2",
+            rf"\g<1>{validated_date}\2",
             text,
         )
         WEB_VERSION_TS.write_text(text, encoding="utf-8")
@@ -139,6 +152,39 @@ def update_all_version_files(new_version: str, build_date: str) -> None:
                 count=1,
             )
             pkg_path.write_text(text, encoding="utf-8")
+
+    # 2b. web/package-lock.json (root version + packages[""].version, preserving npm formatting)
+    if WEB_PACKAGE_LOCK_JSON.exists():
+        raw_lock = WEB_PACKAGE_LOCK_JSON.read_text(encoding="utf-8")
+        patched_lock = re.sub(
+            r'(\A\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"version"\s*:\s*")[^"]+(")',
+            rf"\g<1>{new_version}\2",
+            raw_lock,
+            count=1,
+        )
+        patched_lock = re.sub(
+            r'("packages"\s*:\s*\{\s*""\s*:\s*\{[^{}]*?"version"\s*:\s*")[^"]+(")',
+            rf"\g<1>{new_version}\2",
+            patched_lock,
+            count=1,
+        )
+        verified_lock = json.loads(patched_lock)
+        if (
+            verified_lock.get("version") == new_version
+            and isinstance(verified_lock.get("packages"), dict)
+            and isinstance(verified_lock["packages"].get(""), dict)
+            and verified_lock["packages"][""].get("version") == new_version
+        ):
+            WEB_PACKAGE_LOCK_JSON.write_text(patched_lock, encoding="utf-8")
+        else:
+            verified_lock["version"] = new_version
+            pkgs = verified_lock.get("packages")
+            if isinstance(pkgs, dict) and isinstance(pkgs.get(""), dict):
+                pkgs[""]["version"] = new_version
+            WEB_PACKAGE_LOCK_JSON.write_text(
+                json.dumps(verified_lock, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
 
     # 3. pyproject.toml
     if PYPROJECT_TOML.exists():
@@ -180,6 +226,12 @@ def update_all_version_files(new_version: str, build_date: str) -> None:
     if CLAUDE_MD.exists():
         text = CLAUDE_MD.read_text(encoding="utf-8")
         text = re.sub(
+            r"(?m)^(-\s*\*\*Version:\*\*\s*v)\d+\.\d+\.\d+([^\n]*?—\s*)\d{4}-\d{2}-\d{2}(\))",
+            rf"\g<1>{new_version}\g<2>{validated_date}\3",
+            text,
+            count=1,
+        )
+        text = re.sub(
             r"(?m)^(-\s*\*\*Version:\*\*\s*v)\d+\.\d+\.\d+",
             rf"\g<1>{new_version}",
             text,
@@ -187,7 +239,7 @@ def update_all_version_files(new_version: str, build_date: str) -> None:
         )
         text = re.sub(
             r"(\(v)\d+\.\d+\.\d+(\s*—\s*)\d{4}-\d{2}-\d{2}(\))",
-            rf"\g<1>{new_version}\g<2>{build_date}\3",
+            rf"\g<1>{new_version}\g<2>{validated_date}\3",
             text,
         )
         CLAUDE_MD.write_text(text, encoding="utf-8")
@@ -228,8 +280,15 @@ def handle_post_commit() -> int:
     if os.environ.get("CITRA_SKIP_VERSION_BUMP") == "1":
         return 0
 
-    git_dir = ROOT_DIR / ".git"
-    for state_marker in ("MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD", "rebase-merge", "rebase-apply"):
+    raw_git_dir = _git_output("rev-parse", "--git-dir")
+    git_dir = (ROOT_DIR / raw_git_dir).resolve() if raw_git_dir else (ROOT_DIR / ".git")
+    for state_marker in (
+        "MERGE_HEAD",
+        "REBASE_HEAD",
+        "CHERRY_PICK_HEAD",
+        "rebase-merge",
+        "rebase-apply",
+    ):
         if (git_dir / state_marker).exists():
             return 0
 
@@ -239,6 +298,28 @@ def handle_post_commit() -> int:
     commit_msg = _git_output("log", "-1", "--pretty=%B")
     bump_type = detect_bump_from_message(commit_msg)
     if not bump_type:
+        return 0
+
+    # Guard against sweeping pre-staged non-version files (e.g. partial `git commit <file>`)
+    # as well as unstaged working-tree edits in version manifests.
+    dirty_staged_any = _git_output("diff", "--cached", "--name-only")
+    rel_paths = [str(p.relative_to(ROOT_DIR)) for p in VERSION_FILES if p.exists()]
+    dirty_unstaged_version = (
+        _git_output("diff", "--name-only", "--", *rel_paths) if rel_paths else ""
+    )
+    dirty_files = sorted(
+        {
+            ln.strip()
+            for ln in (dirty_staged_any + "\n" + dirty_unstaged_version).splitlines()
+            if ln.strip()
+        }
+    )
+    if dirty_files:
+        print(
+            "[SemVer] Skipping post-commit auto-bump because index or version files have uncommitted edits: "
+            f"{', '.join(dirty_files)}",
+            file=sys.stderr,
+        )
         return 0
 
     current_version = get_current_version()
@@ -293,6 +374,7 @@ def main() -> int:
     if args.post_commit:
         return handle_post_commit()
 
+    validated_date = validate_build_date(args.build_date)
     current = get_current_version()
     if args.set_version:
         target = args.set_version
@@ -302,8 +384,8 @@ def main() -> int:
         print(f"Current version: {current}")
         return 0
 
-    update_all_version_files(target, args.build_date)
-    print(f"[SemVer] Updated version: {current} -> {target} | Build Date: {args.build_date}")
+    update_all_version_files(target, validated_date)
+    print(f"[SemVer] Updated version: {current} -> {target} | Build Date: {validated_date}")
     return 0
 
 

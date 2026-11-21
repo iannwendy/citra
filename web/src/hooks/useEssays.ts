@@ -15,8 +15,11 @@ export function useDeleteEssay() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.deleteEssay(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ESSAYS_KEY });
+    onSuccess: (_data, deletedId) => {
+      qc.removeQueries({ queryKey: ['essay-report', deletedId] });
+      qc.removeQueries({ queryKey: ['orphan-report', deletedId] });
+      void qc.invalidateQueries({ queryKey: ESSAYS_KEY });
+      void qc.invalidateQueries({ queryKey: ['dashboard-stats'] });
     },
   });
 }

@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import os
+import re
 import threading
-from typing import Any
+import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,11 +31,24 @@ from integrity_checker.api.routes import (
     users,
     verdicts,
 )
-from integrity_checker.config import get_settings, is_test_runtime
+from integrity_checker.config import (
+    PROJECT_ROOT,
+    get_settings,
+    is_production_env,
+    is_test_runtime,
+)
+from integrity_checker.db import session as session_mod
 from integrity_checker.db.session import init_db
-from integrity_checker.logging import configure_logging, get_logger
+from integrity_checker.logging import (
+    configure_logging,
+    get_logger,
+    reset_request_id,
+    set_request_id,
+)
 
 logger = get_logger(__name__)
+
+_SAFE_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 
 class SSEPassthroughGZipMiddleware:
@@ -67,6 +86,49 @@ class SSEPassthroughGZipMiddleware:
         await self._gzip_app(scope, receive, send)
 
 
+class RequestIdMiddleware:
+    """Pure ASGI correlation-ID middleware propagating safe X-Request-ID into logs & responses."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    @staticmethod
+    def _resolve_request_id(scope: Scope) -> str:
+        for raw_key, raw_val in scope.get("headers") or ():
+            if raw_key.lower() == b"x-request-id":
+                try:
+                    candidate = raw_val.decode("ascii").strip()
+                except UnicodeDecodeError:
+                    break
+                if _SAFE_REQUEST_ID_RE.fullmatch(candidate):
+                    return candidate
+                break
+        return uuid.uuid4().hex
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        req_id = self._resolve_request_id(scope)
+        req_id_bytes = req_id.encode("ascii")
+        token = set_request_id(req_id)
+
+        async def _send_with_request_id(message: Message) -> None:
+            if message.get("type") == "http.response.start":
+                raw_headers = list(message.get("headers") or [])
+                existing = {k.lower() for k, _ in raw_headers}
+                if b"x-request-id" not in existing:
+                    raw_headers.append((b"x-request-id", req_id_bytes))
+                message = {**message, "headers": raw_headers}
+            await send(message)
+
+        try:
+            await self.app(scope, receive, _send_with_request_id)
+        finally:
+            reset_request_id(token)
+
+
 class SecurityHeadersMiddleware:
     """Pure ASGI security-header injector preserving zero-buffer streaming & disconnect detection."""
 
@@ -74,6 +136,8 @@ class SecurityHeadersMiddleware:
         (b"x-content-type-options", b"nosniff"),
         (b"x-frame-options", b"SAMEORIGIN"),
         (b"referrer-policy", b"strict-origin-when-cross-origin"),
+        (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
+        (b"cross-origin-resource-policy", b"same-site"),
     )
 
     def __init__(self, app: ASGIApp) -> None:
@@ -97,15 +161,36 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, _send_with_headers)
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Ensure DB is initialized on startup and pooled connections are disposed on shutdown."""
+    init_db()
+    try:
+        yield
+    finally:
+        eng = session_mod._engine
+        if eng is not None and ":memory:" not in str(getattr(eng, "url", "")):
+            eng.dispose()
+
+
+def _configured_uvicorn_workers() -> int:
+    workers = 1
+    for env_name in ("UVICORN_WORKERS", "WEB_CONCURRENCY"):
+        raw = (os.getenv(env_name) or "").strip()
+        if raw:
+            try:
+                workers = max(workers, int(raw))
+            except ValueError:
+                continue
+    return workers
+
+
 def create_app() -> FastAPI:
     """App factory — dễ test."""
     settings = get_settings()
     configure_logging()
 
-    is_prod = (
-        settings.app.env.strip().lower() in ("production", "prod", "live")
-        and not is_test_runtime()
-    )
+    is_prod = is_production_env() and not is_test_runtime()
 
     app = FastAPI(
         title="Essay Integrity Checker API",
@@ -117,22 +202,20 @@ def create_app() -> FastAPI:
         docs_url=None if is_prod else "/docs",
         redoc_url=None if is_prod else "/redoc",
         openapi_url=None if is_prod else "/openapi.json",
+        lifespan=_lifespan,
     )
 
-    # CORS configuration
-    # FIX: Don't use allow_credentials=True with allow_origins=["*"] (browsers reject this)
-    # Use environment-based allowed origins for production
-    import os
     allowed_origins = os.getenv("CORS_ALLOWED_ORIGINS", "")
     if allowed_origins:
-        # Split by comma and strip whitespace
         origins = [o.strip() for o in allowed_origins.split(",") if o.strip()]
     else:
-        # Default to localhost for development
-        origins = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173"]
+        origins = [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:5173",
+        ]
 
-    # Determine if credentials are allowed based on origins
-    # If using wildcard origins, don't allow credentials
     allow_credentials = "*" not in ",".join(origins) if origins else False
 
     app.add_middleware(
@@ -144,15 +227,23 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(SSEPassthroughGZipMiddleware, minimum_size=1000)
     app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(RequestIdMiddleware)
     logger.info(f"CORS configured with origins: {origins}, credentials: {allow_credentials}")
 
-    # Init DB (MVP)
+    # Idempotent init_db() so bare TestClient(app) callers without context manager still work
     init_db()
     logger.info("Database initialized")
 
     worker_mode = os.getenv("CITRA_WORKER_MODE", "inline").strip().lower() or "inline"
+    configured_workers = _configured_uvicorn_workers()
+    if worker_mode == "inline" and configured_workers > 1:
+        logger.warning(
+            f"CITRA_WORKER_MODE=inline with multiple Uvicorn workers ({configured_workers}) "
+            "duplicates SBERT/ONNX memory and splits in-memory SSE progress & admission queues. "
+            "Pin --workers 1 for inline mode or run CITRA_WORKER_MODE=web_only + standalone worker."
+        )
+
     if not is_test_runtime() and worker_mode == "inline":
-        import threading
 
         def _startup_background_maintenance() -> None:
             try:
@@ -186,13 +277,14 @@ def create_app() -> FastAPI:
 
         threading.Thread(target=_startup_background_maintenance, daemon=True).start()
 
-    # Ensure avatars directory exists before mounting
-    from integrity_checker.config import PROJECT_ROOT
-
-    avatars_dir = PROJECT_ROOT / "data" / "avatars"
+    env_avatars = (os.getenv("AVATARS_DIR") or "").strip()
+    avatars_dir = (
+        Path(env_avatars)
+        if env_avatars
+        else (Path(settings.paths.data_dir) / "avatars" if settings.paths.data_dir else PROJECT_ROOT / "data" / "avatars")
+    )
     avatars_dir.mkdir(parents=True, exist_ok=True)
 
-    # Serve uploaded avatars (user-uploaded profile pictures)
     app.mount(
         "/api/avatars",
         StaticFiles(directory=str(avatars_dir)),
@@ -200,7 +292,6 @@ def create_app() -> FastAPI:
     )
     logger.info("Avatar static mount registered at /api/avatars")
 
-    # Mount routes
     app.include_router(health.router, prefix="/api", tags=["health"])
     app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
     app.include_router(billing.router, prefix="/api/billing", tags=["billing"])
@@ -216,6 +307,9 @@ def create_app() -> FastAPI:
 
     return app
 
+
+if TYPE_CHECKING:
+    app: FastAPI
 
 _app_instance: FastAPI | None = None
 _app_lock = threading.Lock()

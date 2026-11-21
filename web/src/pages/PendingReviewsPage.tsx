@@ -32,6 +32,7 @@ import {
   type TeacherReviewGuidance,
 } from '@/lib/teacherGuidance';
 import { useToast } from '@/contexts/ToastContext';
+import { toSafeExternalHref } from '@/lib/utils';
 import { FileFormatIcon } from '@/components/FileFormatIcon';
 import { VerdictBadge } from '@/components/VerdictBadge';
 import { Card } from '@/components/ui/card';
@@ -422,23 +423,26 @@ export function PendingReviewsPage() {
                         ? 'Trang chặn bot'
                         : 'Protected Link'
                       : r.url_status === 'archived_alive'
-                        ? r.archive_url ? (
-                            <a
-                              href={r.archive_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="underline hover:text-amber-950 dark:hover:text-amber-100"
-                            >
-                              {lang === 'vi'
-                                ? '🏛️ Bản lưu Wayback'
-                                : '🏛️ Wayback Archived'}
-                            </a>
-                          ) : lang === 'vi' ? (
-                            '🏛️ Bản lưu Wayback'
-                          ) : (
-                            '🏛️ Wayback Archived'
-                          )
+                        ? (() => {
+                            const safeArchiveHref = toSafeExternalHref(r.archive_url);
+                            return safeArchiveHref ? (
+                              <a
+                                href={safeArchiveHref}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="underline hover:text-amber-950 dark:hover:text-amber-100"
+                              >
+                                {lang === 'vi'
+                                  ? '🏛️ Bản lưu Wayback'
+                                  : '🏛️ Wayback Archived'}
+                              </a>
+                            ) : lang === 'vi' ? (
+                              '🏛️ Bản lưu Wayback'
+                            ) : (
+                              '🏛️ Wayback Archived'
+                            );
+                          })()
                         : r.url_status === 'fake_domain'
                           ? lang === 'vi'
                             ? '✕ Tên miền không tồn tại'

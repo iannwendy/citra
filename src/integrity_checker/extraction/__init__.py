@@ -47,9 +47,17 @@ from integrity_checker.extraction.grobid_service import (
     reset_grobid_manager,
 )
 from integrity_checker.extraction.mupdf_parser import MuPdfParser
+from integrity_checker.extraction.patterns import (
+    CompiledPattern as CitationPattern,
+)
+from integrity_checker.extraction.patterns import (
+    get_in_text_patterns as _get_in_text_patterns,
+)
+from integrity_checker.extraction.patterns import (
+    get_utility_patterns as _get_utility_patterns,
+)
 from integrity_checker.extraction.pdfplumber_parser import PdfPlumberParser
 from integrity_checker.extraction.reference_parser import ReferenceListParser
-from integrity_checker.extraction.regex_patterns import CitationPattern, get_all_patterns
 from integrity_checker.extraction.section_segmenter import (
     DocumentSection,
     SectionSegmenter,
@@ -62,6 +70,18 @@ from integrity_checker.extraction.style_detector import (
 )
 from integrity_checker.extraction.text_preprocessor import TextPreprocessor
 from integrity_checker.extraction.vn_encoding import VietnameseLegacyTranscoder
+
+
+def get_all_patterns() -> list[CitationPattern]:
+    """Return all patterns (deprecated alias preserved without importing regex_patterns)."""
+    import warnings
+
+    warnings.warn(
+        "get_all_patterns() is deprecated. Use get_in_text_patterns() + get_utility_patterns() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return list(_get_in_text_patterns()) + list(_get_utility_patterns())
 
 __all__ = [
     "BasePDFParser",

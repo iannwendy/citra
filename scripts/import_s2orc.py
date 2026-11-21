@@ -19,6 +19,8 @@ Note: Download S2ORC from:
     https://github.com/allenai/s2orc
 """
 
+from __future__ import annotations
+
 import argparse
 import gzip
 import json
@@ -32,120 +34,105 @@ if str(REPO_ROOT / "src") not in sys.path:
 
 from integrity_checker.database import LocalDatabase, Paper  # noqa: E402
 
-# arXiv categories to include
 ARXIV_CS_CATEGORIES = {
-    'cs.CL', 'cs.LG', 'cs.AI', 'cs.CV', 'cs.NE',
-    'cs.CR', 'cs.IR', 'cs.IT', 'cs.RO'
+    "cs.CL",
+    "cs.LG",
+    "cs.AI",
+    "cs.CV",
+    "cs.NE",
+    "cs.CR",
+    "cs.IR",
+    "cs.IT",
+    "cs.RO",
 }
 
 
 def parse_s2orc_line(line: str) -> dict[str, Any] | None:
-    """Parse a single line from S2ORC JSONL.
-
-    Args:
-        line: JSON line from S2ORC
-
-    Returns:
-        Parsed paper dict or None if invalid
-    """
+    """Parse a single line from S2ORC JSONL."""
+    if not line or not line.strip():
+        return None
     try:
         data = json.loads(line.strip())
-        return data
+        return data if isinstance(data, dict) else None
     except json.JSONDecodeError:
         return None
 
 
-def s2orc_to_paper(s2orc_data: dict[str, Any]) -> Paper | None:
-    """Convert S2ORC paper to our Paper model.
-
-    Args:
-        s2orc_data: S2ORC paper data
-
-    Returns:
-        Paper object or None if invalid
-    """
-    # Check required fields
-    title = s2orc_data.get('title')
-    if not title:
+def s2orc_to_paper(
+    s2orc_data: dict[str, Any] | None,
+    allowed_categories: set[str] | None = None,
+) -> Paper | None:
+    """Convert S2ORC paper dict to our Paper model."""
+    if not s2orc_data or not isinstance(s2orc_data, dict):
         return None
 
-    # Extract DOI
-    doi = None
-    doi_field = s2orc_data.get('doi')
-    if doi_field:
-        doi = doi_field.strip()
-        if not doi:
-            doi = None
+    title = s2orc_data.get("title")
+    if not title or not str(title).strip():
+        return None
 
-    # Extract arXiv ID
+    raw_categories = s2orc_data.get("arxiv_categories") or []
+    target_categories = allowed_categories if allowed_categories is not None else ARXIV_CS_CATEGORIES
+    categories = [c for c in raw_categories if c in target_categories]
+
+    if allowed_categories is not None:
+        if not categories:
+            return None
+    elif raw_categories and not categories:
+        return None
+
+    doi = None
+    doi_field = s2orc_data.get("doi")
+    if doi_field:
+        doi = str(doi_field).strip() or None
+
     arxiv_id = None
-    for external_id in s2orc_data.get('external_ids', []):
-        if external_id.get('source') == 'arXiv':
-            arxiv_id = external_id.get('id')
+    for external_id in s2orc_data.get("external_ids") or []:
+        if isinstance(external_id, dict) and external_id.get("source") == "arXiv":
+            arxiv_id = external_id.get("id")
             break
 
-    # Extract authors
-    authors = []
-    for author in s2orc_data.get('authors', []):
-        name = author.get('name', '')
-        if name:
-            authors.append(name)
+    authors: list[str] = []
+    for author in s2orc_data.get("authors") or []:
+        if isinstance(author, dict):
+            name = author.get("name", "")
+            if name:
+                authors.append(str(name))
 
-    # Extract year
-    year = s2orc_data.get('year')
-    if year:
+    year = s2orc_data.get("year")
+    if year is not None:
         try:
             year = int(year)
         except (ValueError, TypeError):
             year = None
 
-    # Extract abstract
-    abstract = s2orc_data.get('abstract')
-    if not abstract:
-        abstract = None
-
-    # Extract venue
-    venue = s2orc_data.get('venue')
-    if venue and not venue.strip():
+    abstract = s2orc_data.get("abstract") or None
+    venue = s2orc_data.get("venue")
+    if venue and not str(venue).strip():
         venue = None
 
-    # Extract categories
-    categories = []
-    for category in s2orc_data.get('arxiv_categories', []):
-        if category in ARXIV_CS_CATEGORIES:
-            categories.append(category)
+    external_ids: dict[str, str] = {}
+    for ext_id in s2orc_data.get("external_ids") or []:
+        if isinstance(ext_id, dict):
+            source = str(ext_id.get("source", "")).lower()
+            ext_id_val = str(ext_id.get("id", ""))
+            if source and ext_id_val:
+                external_ids[source] = ext_id_val
 
-    # If no CS category, skip unless explicitly requested
-    if not categories:
-        # Check if any arxiv category exists
-        any_category = s2orc_data.get('arxiv_categories', [])
-        if any_category:
-            categories = any_category[:3]  # Take first 3
-
-    # Extract external IDs
-    external_ids = {}
-    for ext_id in s2orc_data.get('external_ids', []):
-        source = ext_id.get('source', '').lower()
-        ext_id_val = ext_id.get('id', '')
-        if source and ext_id_val:
-            external_ids[source] = ext_id_val
-
-    # Check S2ORC ID
-    s2orc_id = s2orc_data.get('paper_id')
+    s2orc_id = s2orc_data.get("paper_id")
     if s2orc_id:
-        external_ids['s2orc'] = str(s2orc_id)
+        external_ids["s2orc"] = str(s2orc_id)
 
     return Paper(
         doi=doi,
         arxiv_id=arxiv_id,
-        title=title.strip(),
+        title=str(title).strip(),
         authors=authors,
         year=year,
         venue=venue,
         abstract=abstract,
         categories=categories,
         external_ids=external_ids,
-        source='s2orc',
+        source="s2orc",
     )
 
 
@@ -155,57 +142,41 @@ def process_s2orc_file(
     limit: int | None = None,
     skip_existing: bool = True,
     batch_size: int = 1000,
+    allowed_categories: set[str] | None = None,
 ) -> tuple[int, int]:
-    """Process a S2ORC JSONL file and import to database.
+    """Process a S2ORC JSONL file and import to database."""
+    if limit is not None and limit <= 0:
+        return 0, 0
 
-    Args:
-        file_path: Path to S2ORC JSONL file
-        db: LocalDatabase instance
-        limit: Maximum papers to import
-        skip_existing: Skip papers with existing DOI
-        batch_size: Number of papers to process per batch
-
-    Returns:
-        (total_processed, total_added)
-    """
     total_processed = 0
     total_added = 0
-    batch = []
+    batch: list[Paper] = []
 
     print(f"Processing {file_path}...")
 
-    # Open file (handle gzipped)
-    if file_path.suffix == '.gz':
-        opener = gzip.open
-    else:
-        opener = open
+    opener = gzip.open if file_path.suffix == ".gz" else open
 
-    with opener(file_path, 'rt', encoding='utf-8') as f:
+    with opener(file_path, "rt", encoding="utf-8") as f:
         for line in f:
-            paper = s2orc_to_paper(parse_s2orc_line(line))
+            parsed = parse_s2orc_line(line)
+            if not parsed:
+                continue
+            paper = s2orc_to_paper(parsed, allowed_categories=allowed_categories)
             if paper:
                 batch.append(paper)
                 total_processed += 1
 
-                # Process batch
                 if len(batch) >= batch_size:
                     added = process_batch(db, batch, skip_existing)
                     total_added += added
                     batch = []
 
-                    # Progress
                     if total_processed % 10000 == 0:
                         print(f"  Processed: {total_processed}, Added: {total_added}")
 
-                    # Check limit
-                    if limit and total_processed >= limit:
-                        break
+                if limit is not None and total_processed >= limit:
+                    break
 
-            # Check limit
-            if limit and total_processed >= limit:
-                break
-
-    # Process remaining batch
     if batch:
         added = process_batch(db, batch, skip_existing)
         total_added += added
@@ -218,26 +189,14 @@ def process_batch(
     papers: list[Paper],
     skip_existing: bool = True,
 ) -> int:
-    """Process a batch of papers.
-
-    Args:
-        db: LocalDatabase instance
-        papers: List of papers to add
-        skip_existing: Skip papers with existing DOI
-
-    Returns:
-        Number of papers actually added
-    """
+    """Process a batch of papers."""
     if not skip_existing:
         return db.add_papers_bulk(papers)
 
-    # Filter out existing DOIs
-    new_papers = []
+    new_papers: list[Paper] = []
     for paper in papers:
-        if paper.doi:
-            existing = db.find_by_doi(paper.doi)
-            if existing:
-                continue
+        if paper.doi and db.find_by_doi(paper.doi):
+            continue
         new_papers.append(paper)
 
     if new_papers:
@@ -245,85 +204,111 @@ def process_batch(
     return 0
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Import papers from S2ORC into local database"
-    )
-    parser.add_argument(
-        '--s2orc-path',
-        type=Path,
-        required=True,
-        help='Path to S2ORC JSONL file or directory'
-    )
-    parser.add_argument(
-        '--db-path',
-        type=Path,
-        default=Path('./data/local_papers.db'),
-        help='Path to local database'
-    )
-    parser.add_argument(
-        '--limit',
-        type=int,
-        default=None,
-        help='Limit number of papers to import'
-    )
-    parser.add_argument(
-        '--categories',
-        nargs='+',
-        default=['cs.CL', 'cs.LG', 'cs.AI'],
-        help='arXiv categories to import'
-    )
-    parser.add_argument(
-        '--no-skip-existing',
-        action='store_true',
-        help='Do not skip existing papers'
-    )
+def import_s2orc_path(
+    s2orc_path: Path,
+    db: LocalDatabase,
+    limit: int | None = None,
+    skip_existing: bool = True,
+    batch_size: int = 1000,
+    allowed_categories: set[str] | None = None,
+) -> tuple[int, int]:
+    """Import S2ORC papers from a single JSONL(.gz) file or a directory of shards."""
+    if limit is not None and limit <= 0:
+        return 0, 0
 
-    args = parser.parse_args()
-
-    # Initialize database
-    db = LocalDatabase(args.db_path)
-    print(f"Database: {db.db_path}")
-
-    # Get files to process
-    path = args.s2orc_path
-    if path.is_dir():
-        files = list(path.glob('*.jsonl')) + list(path.glob('*.jsonl.gz'))
+    if s2orc_path.is_dir():
+        files = sorted(s2orc_path.glob("*.jsonl")) + sorted(s2orc_path.glob("*.jsonl.gz"))
         print(f"Found {len(files)} files in directory")
-    elif path.is_file():
-        files = [path]
+    elif s2orc_path.is_file():
+        files = [s2orc_path]
     else:
-        print(f"Path not found: {path}")
-        sys.exit(1)
+        raise FileNotFoundError(f"Path not found: {s2orc_path}")
 
-    # Process each file
     total_processed = 0
     total_added = 0
 
     for file_path in files:
+        remaining = (limit - total_processed) if limit is not None else None
+        if remaining is not None and remaining <= 0:
+            break
+
         print(f"\nProcessing: {file_path.name}")
         processed, added = process_s2orc_file(
             file_path,
             db,
-            limit=args.limit,
-            skip_existing=not args.no_skip_existing,
+            limit=remaining,
+            skip_existing=skip_existing,
+            batch_size=batch_size,
+            allowed_categories=allowed_categories,
         )
         total_processed += processed
         total_added += added
         print(f"  File: {processed} processed, {added} added")
 
-        if args.limit and total_processed >= args.limit:
+        if limit is not None and total_processed >= limit:
             break
+
+    return total_processed, total_added
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Import papers from S2ORC into local database")
+    parser.add_argument(
+        "--s2orc-path",
+        type=Path,
+        required=True,
+        help="Path to S2ORC JSONL file or directory",
+    )
+    parser.add_argument(
+        "--db-path",
+        type=Path,
+        default=Path("./data/local_papers.db"),
+        help="Path to local database",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Limit number of papers to import",
+    )
+    parser.add_argument(
+        "--categories",
+        nargs="+",
+        default=["cs.CL", "cs.LG", "cs.AI"],
+        help="arXiv categories to import",
+    )
+    parser.add_argument(
+        "--no-skip-existing",
+        action="store_true",
+        help="Do not skip existing papers",
+    )
+
+    args = parser.parse_args()
+
+    db = LocalDatabase(args.db_path)
+    print(f"Database: {db.db_path}")
+
+    allowed_cats = set(args.categories) if args.categories else None
+    try:
+        total_processed, total_added = import_s2orc_path(
+            args.s2orc_path,
+            db,
+            limit=args.limit,
+            skip_existing=not args.no_skip_existing,
+            allowed_categories=allowed_cats,
+        )
+    except FileNotFoundError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
 
     print(f"\nTotal: {total_processed} processed, {total_added} added")
 
-    # Show stats
     stats = db.get_stats()
     print("\nDatabase stats:")
     print(f"  Total papers: {stats['total_papers']}")
-    for source, count in stats['source_counts'].items():
+    for source, count in stats["source_counts"].items():
         print(f"  {source}: {count}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

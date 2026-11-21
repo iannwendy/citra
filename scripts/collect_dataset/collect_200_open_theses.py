@@ -29,9 +29,6 @@ from pathlib import Path
 
 import fitz  # PyMuPDF
 import requests
-import urllib3
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Domains known to use Cloudflare challenges, paywalls, or anti-bot gates
 BLOCKED_DOMAINS: tuple[str, ...] = (
@@ -103,7 +100,28 @@ def is_blocked_url(url: str) -> bool:
     return any(b in u_low for b in BLOCKED_DOMAINS)
 
 
-def download_pdf_bytes(url: str, timeout: tuple[float, float] = (5.0, 12.0)) -> bytes | None:
+def _resolve_tls_verify(ca_bundle: str | bool | None = True) -> str | bool:
+    """Return TLS verification setting (True or validated CA bundle file path; never False)."""
+    if ca_bundle is False:
+        raise ValueError("Disabling TLS certificate verification (ca_bundle=False) is forbidden")
+    if ca_bundle is None or ca_bundle is True:
+        return True
+    if isinstance(ca_bundle, str):
+        cleaned = ca_bundle.strip()
+        if not cleaned:
+            raise ValueError("Explicit ca_bundle path cannot be empty or whitespace")
+        if not Path(cleaned).is_file():
+            raise ValueError(f"CA bundle file does not exist: {cleaned}")
+        return cleaned
+    raise ValueError(f"Invalid ca_bundle value: {ca_bundle!r}")
+
+
+def download_pdf_bytes(
+    url: str,
+    timeout: tuple[float, float] = (5.0, 12.0),
+    ca_bundle: str | bool | None = True,
+) -> bytes | None:
+    tls_verify = _resolve_tls_verify(ca_bundle)
     if is_blocked_url(url):
         return None
     headers = {
@@ -111,7 +129,7 @@ def download_pdf_bytes(url: str, timeout: tuple[float, float] = (5.0, 12.0)) -> 
     }
     try:
         with requests.get(
-            url, headers=headers, timeout=timeout, stream=True, allow_redirects=True, verify=False
+            url, headers=headers, timeout=timeout, stream=True, allow_redirects=True, verify=tls_verify
         ) as r:
             if r.status_code != 200:
                 return None
@@ -138,6 +156,10 @@ def download_pdf_bytes(url: str, timeout: tuple[float, float] = (5.0, 12.0)) -> 
             if len(data) < 70_000 or not data.startswith(b"%PDF"):
                 return None
             return data
+    except requests.RequestException:
+        return None
+    except (ValueError, OSError):
+        raise
     except Exception:
         return None
 
@@ -250,63 +272,66 @@ def fetch_dspace7_candidates(
     queries: list[str],
     max_pages: int = 4,
     page_size: int = 40,
+    ca_bundle: str | bool | None = True,
 ) -> list[dict]:
     """Discover bitstream PDF URLs from a DSpace 7 REST API repository."""
-    session = requests.Session()
-    session.headers.update({"User-Agent": "EssayIntegrityChecker/1.0"})
+    tls_verify = _resolve_tls_verify(ca_bundle)
     seen_uuids: set[str] = set()
     items_to_resolve: list[tuple[str, str, str, str]] = []
 
-    for q in queries:
-        for page in range(max_pages):
-            try:
-                r = session.get(
-                    f"{api_base}/discover/search/objects",
-                    params={
-                        "query": q,
-                        "dsoType": "ITEM",
-                        "size": page_size,
-                        "page": page,
-                    },
-                    timeout=10,
-                )
-                if r.status_code != 200:
+    with requests.Session() as session:
+        session.headers.update({"User-Agent": "EssayIntegrityChecker/1.0"})
+        for q in queries:
+            for page in range(max_pages):
+                try:
+                    r = session.get(
+                        f"{api_base}/discover/search/objects",
+                        params={
+                            "query": q,
+                            "dsoType": "ITEM",
+                            "size": page_size,
+                            "page": page,
+                        },
+                        timeout=10,
+                        verify=tls_verify,
+                    )
+                    if r.status_code != 200:
+                        break
+                    objs = (
+                        r.json()
+                        .get("_embedded", {})
+                        .get("searchResult", {})
+                        .get("_embedded", {})
+                        .get("objects", [])
+                    )
+                    if not objs:
+                        break
+                    for o in objs:
+                        item = o.get("_embedded", {}).get("indexableObject", {})
+                        uuid = item.get("uuid")
+                        if not uuid or uuid in seen_uuids:
+                            continue
+                        metadata = item.get("metadata", {})
+                        lang_vals = [
+                            m.get("value", "")
+                            for m in metadata.get("dc.language.iso", []) + metadata.get("dc.language", [])
+                        ]
+                        if lang_vals and not any(
+                            lang.lower().startswith("en") for lang in lang_vals
+                        ):
+                            continue
+                        title = (item.get("name") or "Thesis").strip()
+                        authors = [
+                            m.get("value", "")
+                            for m in metadata.get("dc.contributor.author", [])
+                            + metadata.get("dc.creator", [])
+                        ]
+                        author_str = "; ".join(a for a in authors if a)[:120] or "Student Author"
+                        handle = item.get("handle") or uuid
+                        seen_uuids.add(uuid)
+                        items_to_resolve.append((uuid, title, author_str, str(handle)))
+                except Exception:
                     break
-                objs = (
-                    r.json()
-                    .get("_embedded", {})
-                    .get("searchResult", {})
-                    .get("_embedded", {})
-                    .get("objects", [])
-                )
-                if not objs:
-                    break
-                for o in objs:
-                    item = o.get("_embedded", {}).get("indexableObject", {})
-                    uuid = item.get("uuid")
-                    if not uuid or uuid in seen_uuids:
-                        continue
-                    metadata = item.get("metadata", {})
-                    lang_vals = [
-                        m.get("value", "")
-                        for m in metadata.get("dc.language.iso", []) + metadata.get("dc.language", [])
-                    ]
-                    if lang_vals and not any(
-                        lang.lower().startswith("en") for lang in lang_vals
-                    ):
-                        continue
-                    title = (item.get("name") or "Thesis").strip()
-                    authors = [
-                        m.get("value", "")
-                        for m in metadata.get("dc.contributor.author", [])
-                        + metadata.get("dc.creator", [])
-                    ]
-                    author_str = "; ".join(a for a in authors if a)[:120] or "Student Author"
-                    handle = item.get("handle") or uuid
-                    seen_uuids.add(uuid)
-                    items_to_resolve.append((uuid, title, author_str, str(handle)))
-            except Exception:
-                break
 
     print(f"[{repo_name}] Found {len(items_to_resolve)} English thesis items; resolving bitstreams...", flush=True)
 
@@ -315,7 +340,7 @@ def fetch_dspace7_candidates(
     def resolve_one(entry: tuple[str, str, str, str]) -> dict | None:
         uuid, title, author_str, handle = entry
         try:
-            rb = requests.get(f"{api_base}/core/items/{uuid}/bundles", timeout=8)
+            rb = requests.get(f"{api_base}/core/items/{uuid}/bundles", timeout=8, verify=tls_verify)
             if rb.status_code != 200:
                 return None
             bundles = rb.json().get("_embedded", {}).get("bundles", [])
@@ -324,7 +349,7 @@ def fetch_dspace7_candidates(
                     href = b.get("_links", {}).get("bitstreams", {}).get("href")
                     if not href:
                         continue
-                    rbs = requests.get(href, timeout=8)
+                    rbs = requests.get(href, timeout=8, verify=tls_verify)
                     if rbs.status_code != 200:
                         continue
                     for bs in rbs.json().get("_embedded", {}).get("bitstreams", []):
@@ -356,8 +381,12 @@ def fetch_dspace7_candidates(
     return candidates
 
 
-def fetch_zenodo_thesis_candidates(max_pages: int = 6) -> list[dict]:
+def fetch_zenodo_thesis_candidates(
+    max_pages: int = 6,
+    ca_bundle: str | bool | None = True,
+) -> list[dict]:
     """Fetch open-access English theses from Zenodo REST API."""
+    tls_verify = _resolve_tls_verify(ca_bundle)
     candidates: list[dict] = []
     seen_urls: set[str] = set()
     queries = [
@@ -372,6 +401,7 @@ def fetch_zenodo_thesis_candidates(max_pages: int = 6) -> list[dict]:
                     "https://zenodo.org/api/records",
                     params={"q": q, "size": 25, "page": page, "sort": "mostrecent"},
                     timeout=12,
+                    verify=tls_verify,
                 )
                 if r.status_code != 200:
                     break
@@ -414,8 +444,9 @@ def fetch_zenodo_thesis_candidates(max_pages: int = 6) -> list[dict]:
     return candidates
 
 
-def fetch_openalex_thesis_candidates() -> list[dict]:
+def fetch_openalex_thesis_candidates(ca_bundle: str | bool | None = True) -> list[dict]:
     """Fetch open-access English theses/dissertations from OpenAlex (excluding Cloudflare domains)."""
+    tls_verify = _resolve_tls_verify(ca_bundle)
     candidates: list[dict] = []
     seen_urls: set[str] = set()
     search_queries = [
@@ -443,6 +474,7 @@ def fetch_openalex_thesis_candidates() -> list[dict]:
                         "page": page,
                     },
                     timeout=12,
+                    verify=tls_verify,
                 )
                 if r.status_code != 200:
                     break
@@ -489,7 +521,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Collect 200 open-access English theses.")
     parser.add_argument("--target", type=int, default=200, help="Number of new theses to download")
     parser.add_argument("--workers", type=int, default=16, help="Concurrent download workers")
+    parser.add_argument(
+        "--ca-bundle",
+        default=os.environ.get("SSL_CERT_FILE") or None,
+        help="Optional path to custom CA certificate bundle for TLS verification",
+    )
     args = parser.parse_args()
+    tls_ca = _resolve_tls_verify(args.ca_bundle if args.ca_bundle is not None else True)
 
     workspace = Path(__file__).resolve().parents[2]
     dir_20 = workspace / "20-theses"
@@ -590,6 +628,7 @@ def main() -> int:
             ],
             max_pages=4,
             page_size=45,
+            ca_bundle=tls_ca,
         )
     )
 
@@ -609,14 +648,15 @@ def main() -> int:
             ],
             max_pages=4,
             page_size=45,
+            ca_bundle=tls_ca,
         )
     )
 
     # 3. Zenodo Open Theses
-    all_candidates.extend(fetch_zenodo_thesis_candidates(max_pages=6))
+    all_candidates.extend(fetch_zenodo_thesis_candidates(max_pages=6, ca_bundle=tls_ca))
 
     # 4. OpenAlex Open-Access Dissertations/Theses
-    all_candidates.extend(fetch_openalex_thesis_candidates())
+    all_candidates.extend(fetch_openalex_thesis_candidates(ca_bundle=tls_ca))
 
     # Interleave candidates across sources for maximum institutional & disciplinary diversity
     by_repo: dict[str, list[dict]] = {}
@@ -645,7 +685,7 @@ def main() -> int:
                 return False
             seen_urls.add(pdf_url)
 
-        pdf_bytes = download_pdf_bytes(pdf_url)
+        pdf_bytes = download_pdf_bytes(pdf_url, ca_bundle=tls_ca)
         if not pdf_bytes or stop_event.is_set():
             return False
 

@@ -83,6 +83,20 @@ class HuggingFaceClient(BaseScholarClient):
             "Accept": "application/json",
         }
 
+    @staticmethod
+    def _is_safe_hf_repo_path(repo: str) -> bool:
+        if not repo:
+            return False
+        segs = repo.split("/")
+        if not (1 <= len(segs) <= 2):
+            return False
+        return all(
+            bool(seg)
+            and seg not in {".", ".."}
+            and bool(re.fullmatch(r"[A-Za-z0-9_.-]+", seg))
+            for seg in segs
+        )
+
     @classmethod
     def extract_hf_target(cls, citation: Citation) -> tuple[str | None, str | None]:
         """Extract (kind, identifier) from a citation if it references Hugging Face.
@@ -104,18 +118,24 @@ class HuggingFaceClient(BaseScholarClient):
         if url_m:
             kind_raw = (url_m.group("kind") or "").lower()
             repo = url_m.group("repo").strip().rstrip(".,;:)\"'/")
+            if not cls._is_safe_hf_repo_path(repo):
+                return None, None
             first_seg = repo.split("/", 1)[0].lower()
             if first_seg not in _RESERVED_PATH_PREFIXES:
                 if kind_raw == "datasets":
                     return "datasets", repo
                 if kind_raw == "papers":
                     return "papers", repo
+                if "/" not in repo:
+                    return None, None
                 return "models", repo
 
         # Check if citation explicitly mentions Hugging Face and contains an org/repo identifier
         if re.search(r"\bhugging\s*face\b", combined, re.IGNORECASE):
             for m in _HF_REPO_ID_RE.finditer(combined):
                 candidate = m.group(1).strip().rstrip(".,;:)\"'")
+                if not cls._is_safe_hf_repo_path(candidate) or "/" not in candidate:
+                    continue
                 org, name = candidate.split("/", 1)
                 if (
                     org.lower() not in _RESERVED_PATH_PREFIXES
@@ -177,6 +197,8 @@ class HuggingFaceClient(BaseScholarClient):
         citation: Citation | None = None,
     ) -> SourceCandidate | None:
         clean_id = re.sub(r"v\d+$", "", arxiv_id.strip(), flags=re.IGNORECASE)
+        if not clean_id or clean_id in {".", ".."} or "/" in clean_id:
+            return None
         data = await self._fetch_json(f"/papers/{quote(clean_id, safe='')}")
         if not isinstance(data, dict) or not data.get("title"):
             return None
@@ -221,7 +243,10 @@ class HuggingFaceClient(BaseScholarClient):
         repo_id: str,
         citation: Citation | None = None,
     ) -> SourceCandidate | None:
-        endpoint = f"/{kind}/{quote(repo_id, safe='/')}"
+        if kind not in {"models", "datasets"} or not self._is_safe_hf_repo_path(repo_id):
+            return None
+        encoded_repo = "/".join(quote(seg, safe="") for seg in repo_id.split("/"))
+        endpoint = f"/{kind}/{encoded_repo}"
         data = await self._fetch_json(endpoint)
         if not isinstance(data, dict) or not (data.get("id") or data.get("modelId")):
             return None
@@ -233,9 +258,11 @@ class HuggingFaceClient(BaseScholarClient):
 
         card = data.get("cardData") or {}
         description = None
+        pretty_name = None
         if isinstance(card, dict):
+            pretty_name = self._clean_text(card.get("pretty_name") or card.get("title"))
             description = self._clean_text(
-                card.get("description") or card.get("summary") or card.get("pretty_name")
+                card.get("description") or card.get("summary") or pretty_name
             )
         if not description and data.get("description"):
             description = self._clean_text(data.get("description"))
@@ -248,30 +275,32 @@ class HuggingFaceClient(BaseScholarClient):
         doi = str(data.get("doi") or (f"10.48550/arxiv.{arxiv_tag}" if arxiv_tag else "")) or None
 
         authors_list = [author] if author else ["Hugging Face"]
-        title_val = canonical_id
-        repo_short = canonical_id.split("/", 1)[-1].lower()
+        if pretty_name and canonical_id.lower() not in pretty_name.lower():
+            title_val = f"{canonical_id}: {pretty_name}"
+        elif pretty_name:
+            title_val = pretty_name
+        else:
+            title_val = canonical_id
 
         # If the model/dataset links an arXiv paper tag, fetch paper metadata to enrich authors/year/title
         if arxiv_tag:
             paper_cand = await self._lookup_paper(arxiv_tag)
             if paper_cand and paper_cand.found:
                 if paper_cand.authors:
-                    authors_list = list(paper_cand.authors) + ([author] if author and author not in paper_cand.authors else [])
+                    authors_list = list(paper_cand.authors) + (
+                        [author] if author and author not in paper_cand.authors else []
+                    )
                 if not description and paper_cand.abstract:
                     description = paper_cand.abstract
-                if citation and citation.year and paper_cand.year and str(citation.year)[:4] == str(paper_cand.year)[:4] or not year and paper_cand.year:
+                if (
+                    citation
+                    and citation.year
+                    and paper_cand.year
+                    and str(citation.year)[:4] == str(paper_cand.year)[:4]
+                ) or (not year and paper_cand.year):
                     year = paper_cand.year
                 if paper_cand.title:
-                    if citation and citation.title and canonical_id.lower() in citation.title.lower():
-                        title_val = citation.title.strip()
-                    else:
-                        title_val = f"{canonical_id}: {paper_cand.title}"
-
-        # If citation explicitly names the repo ID or short model name in its title, align title
-        if citation and citation.title:
-            cit_t_low = citation.title.lower()
-            if canonical_id.lower() in cit_t_low or (len(repo_short) >= 4 and repo_short in cit_t_low):
-                title_val = citation.title.strip()
+                    title_val = f"{canonical_id}: {paper_cand.title}"
 
         ext_ids: dict[str, str] = {
             "hf_repo_id": canonical_id,
@@ -308,7 +337,8 @@ class HuggingFaceClient(BaseScholarClient):
             for item in papers:
                 if not isinstance(item, dict):
                     continue
-                paper_obj = item.get("paper") if isinstance(item.get("paper"), dict) else item
+                raw_paper = item.get("paper")
+                paper_obj: dict[str, Any] = raw_paper if isinstance(raw_paper, dict) else item
                 title = self._clean_text(paper_obj.get("title") or item.get("title"))
                 if not title:
                     continue
