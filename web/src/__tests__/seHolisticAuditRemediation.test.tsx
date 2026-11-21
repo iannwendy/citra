@@ -12,7 +12,7 @@ import {
   waitFor,
   act,
 } from '@testing-library/react';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import * as utilsMod from '@/lib/utils';
 import * as routerMod from '@/router';
@@ -781,7 +781,12 @@ describe('Track 4 Holistic SE Remediation Suite (FE-01..FE-15, QA-10, QA-11)', (
 
     it('useDeleteEssay purges essay-report and orphan-report caches for the deleted ID and invalidates dashboard-stats', async () => {
       vi.spyOn(api, 'deleteEssay').mockResolvedValue({ message: 'deleted' });
-      const qc = createTestQueryClient();
+      const qc = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false, gcTime: 60_000 },
+          mutations: { retry: false, gcTime: 60_000 },
+        },
+      });
       qc.setQueryData(['essay-report', 42], makeReport({ essay_id: 42 }));
       qc.setQueryData(['orphan-report', 42], makeReport({ essay_id: 42 }));
       qc.setQueryData(['essay-report', 99], makeReport({ essay_id: 99 }));

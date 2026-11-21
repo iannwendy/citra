@@ -385,10 +385,11 @@ def _upgrade_0007(conn: Connection, op: Operations) -> None:
             text("SELECT id FROM classes WHERE join_code IS NULL OR join_code = ''")
         ).fetchall()
         for (cid,) in rows:
-            code = f"CITRA-{1000 + int(cid):04d}"
+            cid_int = int(str(cid))
+            code = f"CITRA-{1000 + cid_int:04d}"
             conn.execute(
                 text("UPDATE classes SET join_code = :code WHERE id = :cid"),
-                {"code": code, "cid": int(cid)},
+                {"code": code, "cid": cid_int},
             )
 
     _add_column_if_missing(
