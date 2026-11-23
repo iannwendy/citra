@@ -87,14 +87,22 @@ class TestOps02AndOps08CiCdPipelineHardening:
         assert "trap 'sudo docker logout ghcr.io" in ci_text
         assert "PREV_TAG=" in ci_text
         pull_idx = ci_text.index("docker compose -f docker-compose.prod.yml pull api web")
+        pre_pull_prune_idx = ci_text.index("docker image prune -af")
+        assert pre_pull_prune_idx < pull_idx, (
+            "Pre-pull `docker image prune -af` must run BEFORE `pull api web` to prevent ENOSPC "
+            "while preserving currently running PREV_TAG containers for rollback"
+        )
         write_tag_idx = ci_text.index('printf "GHCR_OWNER=%s\\nCITRA_IMAGE_TAG=%s\\n"')
         assert write_tag_idx > pull_idx, (
             "CITRA_IMAGE_TAG must be persisted to /opt/citra/.env only AFTER `pull api web` succeeds"
         )
 
         health_idx = ci_text.index("HEALTHY=0")
-        prune_idx = ci_text.index("docker image prune -f")
-        assert prune_idx > health_idx, "docker image prune -f must run AFTER healthcheck succeeds"
+        prune_idx = ci_text.index("docker image prune -f -a")
+        assert prune_idx > health_idx, (
+            "Post-healthcheck `docker image prune -f -a` must run AFTER healthcheck succeeds "
+            "and pass `-a` so superseded SHA-tagged images are reclaimed"
+        )
 
         failure_idx = ci_text.index('if [ "$HEALTHY" -ne 1 ]')
         rollback_tail = ci_text[failure_idx:prune_idx]
@@ -212,8 +220,20 @@ class TestOps04Ops05Ops06Ops07ContainerAndNginxHardening:
             assert "no-new-privileges:true" in sec_opts, (
                 f"Service {svc_name} missing security_opt no-new-privileges:true"
             )
+            log_cfg = prod_cfg["services"][svc_name].get("logging", {})
+            assert log_cfg.get("driver") == "json-file"
+            assert log_cfg.get("options", {}).get("max-size"), (
+                f"Service {svc_name} missing bounded json-file log rotation max-size"
+            )
         api_cmd = str(prod_cfg["services"]["api"]["command"])
         assert "--workers 1" in api_cmd
+
+        web_dockerfile = (REPO_ROOT / "web" / "Dockerfile").read_text(encoding="utf-8")
+        media_copy_idx = web_dockerfile.index("COPY public/media /usr/share/nginx/html/media")
+        dist_copy_idx = web_dockerfile.index("COPY --from=build /app/dist /usr/share/nginx/html")
+        assert media_copy_idx < dist_copy_idx, (
+            "web/Dockerfile must copy unchanging public/media in a cached base layer before /app/dist"
+        )
 
     def test_dockerignore_excludes_bloat_and_anchors_negations(self) -> None:
         root_ignore = (REPO_ROOT / ".dockerignore").read_text(encoding="utf-8")

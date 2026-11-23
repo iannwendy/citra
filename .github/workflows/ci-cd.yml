@@ -273,6 +273,27 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$GCE_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
+          # Reclaim disk space FIRST (before sed/docker-login/git-fetch) in case rootfs hit ENOSPC.
+          # Running containers (integrity-api, integrity-web, essay-check-grobid) keep their active
+          # PREV_TAG images protected while all stale SHA-tagged images & aborted ingests are freed.
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$GCE_USER@$GCE_HOST" '
+            echo ">>> [0/4] Pre-flight VM disk space check & stale image/ingest reclamation..."
+            df -h / || true
+            if command -v ctr >/dev/null 2>&1; then
+              for ns in moby default; do
+                for ref in $(sudo ctr -n "$ns" content ingest ls -q 2>/dev/null || true); do
+                  sudo ctr -n "$ns" content abort "$ref" >/dev/null 2>&1 || true
+                done
+              done
+            fi
+            sudo docker container prune -f >/dev/null 2>&1 || true
+            sudo docker image prune -af >/dev/null 2>&1 || true
+            sudo docker builder prune -af >/dev/null 2>&1 || true
+            sudo journalctl --vacuum-size=100M >/dev/null 2>&1 || true
+            sudo apt-get clean >/dev/null 2>&1 || true
+            df -h / || true
+          '
+
           if [ -n "$SERPER_API_KEY" ]; then
             printf '%s' "$SERPER_API_KEY" | ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "$GCE_USER@$GCE_HOST" '
               VAL=$(cat)
@@ -313,6 +334,7 @@ jobs:
             git remote set-url origin "$REPO_GIT_URL"
             git fetch origin main
             git reset --hard origin/main
+            git gc --prune=now --quiet || true
 
             echo ">>> [2/4] Ensuring persistent data directory permissions for container UID 1000..."
             sudo mkdir -p /opt/citra/data/essays/uploads /opt/citra/data/avatars /opt/citra/data/cache/grobid /opt/citra/data/logs
@@ -351,6 +373,7 @@ jobs:
               sudo docker rmi lfoppiano/grobid:0.8.0 2>/dev/null || true
             fi
 
+            sudo docker image prune -af >/dev/null 2>&1 || true
             sudo GHCR_OWNER="$GHCR_OWNER" CITRA_IMAGE_TAG="$CITRA_IMAGE_TAG" \
               docker compose -f docker-compose.prod.yml pull api web
             if [ -f /opt/citra/.env ]; then
@@ -394,6 +417,7 @@ jobs:
             fi
 
             echo ">>> Pruning superseded container images after verified healthy rollout..."
-            sudo docker image prune -f >/dev/null 2>&1 || true
+            sudo docker image prune -f -a >/dev/null 2>&1 || true
             sudo docker builder prune -af >/dev/null 2>&1 || true
+            df -h / || true
           EOF
